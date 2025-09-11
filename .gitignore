@@ -1,6 +1,7 @@
 /target
 .DS_Store
 /docks.json
+/profile.json
 .vscode
 index.scip
 *.log

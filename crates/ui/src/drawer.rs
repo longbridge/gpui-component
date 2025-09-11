@@ -135,7 +135,7 @@ impl RenderOnce for Drawer {
         anchored()
             .position(point(
                 window_paddings.left,
-                window_paddings.top + titlebar_height - px(1.),
+                window_paddings.top + titlebar_height,
             ))
             .snap_to_window()
             .child(

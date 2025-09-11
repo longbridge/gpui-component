@@ -23,6 +23,7 @@ pub fn init(cx: &mut App) {
 pub struct TextareaStory {
     textarea: Entity<InputState>,
     textarea_auto_grow: Entity<InputState>,
+    textarea_no_wrap: Entity<InputState>,
 }
 
 impl super::Story for TextareaStory {
@@ -84,9 +85,18 @@ impl TextareaStory {
                 .default_value("Hello 世界，this is GPUI component.")
         });
 
+        let textarea_no_wrap = cx.new(|cx| {
+            InputState::new(window, cx)
+                .multi_line()
+                .rows(6)
+                .soft_wrap(false)
+                .default_value("This is a very long line of text to test if the horizontal scrolling function is working properly, and it should not wrap automatically but display a horizontal scrollbar.\nThe second line is also very long text, used to test the horizontal scrolling effect under multiple lines, and you can input more content to test.\nThe third line: Here you can input other long text content that requires horizontal scrolling.\n")
+        });
+
         Self {
             textarea,
             textarea_auto_grow,
+            textarea_no_wrap,
         }
     }
 
@@ -141,8 +151,6 @@ impl Render for TextareaStory {
             .id("textarea-story")
             .on_action(cx.listener(Self::tab))
             .on_action(cx.listener(Self::tab_prev))
-            .size_full()
-            .justify_start()
             .gap_3()
             .child(
                 section("Textarea").child(
@@ -179,12 +187,11 @@ impl Render for TextareaStory {
                         ),
                 ),
             )
+            .child(section("Textarea Auto Grow").child(TextInput::new(&self.textarea_auto_grow)))
             .child(
-                section("Textarea Auto Grow").child(
-                    v_flex()
-                        .w_full()
-                        .child(TextInput::new(&self.textarea_auto_grow)),
-                ),
+                section("No Wrap")
+                    .max_w_md()
+                    .child(TextInput::new(&self.textarea_no_wrap).h(px(200.))),
             )
     }
 }

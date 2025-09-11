@@ -4,7 +4,7 @@ const NUMBERED_PREFIXES_2: &str = "abcdefghijklmnopqrstuvwxyz";
 const BULLETS: [&str; 5] = ["▪", "•", "◦", "‣", "⁃"];
 
 /// Returns the prefix for a list item.
-pub fn list_item_prefix(ix: usize, ordered: bool, depth: usize) -> String {
+pub(super) fn list_item_prefix(ix: usize, ordered: bool, depth: usize) -> String {
     if ordered {
         if depth == 0 {
             return format!("{}. ", ix + 1);

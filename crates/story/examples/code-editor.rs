@@ -5,7 +5,7 @@ use gpui_component::{
     h_flex,
     highlighter::{Language, LanguageConfig, LanguageRegistry},
     input::{InputEvent, InputState, Marker, TabSize, TextInput},
-    v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
+    v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
 use story::Assets;
 
@@ -30,6 +30,7 @@ pub struct Example {
     language: Lang,
     line_number: bool,
     need_update: bool,
+    soft_wrap: bool,
     _subscribes: Vec<Subscription>,
 }
 
@@ -48,10 +49,18 @@ impl Lang {
     }
 }
 
-const LANGUAGES: [(Lang, &'static str); 10] = [
+const LANGUAGES: [(Lang, &'static str); 12] = [
     (
         Lang::BuiltIn(Language::Rust),
         include_str!("./fixtures/test.rs"),
+    ),
+    (
+        Lang::BuiltIn(Language::Markdown),
+        include_str!("./fixtures/test.md"),
+    ),
+    (
+        Lang::BuiltIn(Language::Html),
+        include_str!("./fixtures/test.html"),
     ),
     (
         Lang::BuiltIn(Language::JavaScript),
@@ -89,8 +98,17 @@ const LANGUAGES: [(Lang, &'static str); 10] = [
 ];
 
 impl Example {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = LANGUAGES[0].clone();
+    pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let default_language = if let Some(name) = default {
+            LANGUAGES
+                .iter()
+                .find(|s| s.0.name().starts_with(name.trim()))
+                .cloned()
+                .unwrap_or(LANGUAGES[0].clone())
+        } else {
+            LANGUAGES[0].clone()
+        };
+
         let editor = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
@@ -99,6 +117,7 @@ impl Example {
                     tab_size: 4,
                     hard_tabs: false,
                 })
+                .soft_wrap(false)
                 .default_value(default_language.1)
                 .placeholder("Enter your code here...")
         });
@@ -140,15 +159,12 @@ impl Example {
             language: default_language.0,
             line_number: true,
             need_update: false,
+            soft_wrap: false,
             _subscribes,
         }
     }
 
-    fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
-    }
-
-    fn set_markers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_markers(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if self.language.name() != "rust" {
             return;
         }
@@ -161,7 +177,6 @@ impl Example {
                     Marker::new("info", (25, 10), (25, 20), "This is a info message, this is a very long message, with **Markdown** support."),
                     Marker::new("hint", (36, 9), (40, 10), "This is a hint message."),
                 ],
-                window,
                 cx,
             );
         });
@@ -220,6 +235,14 @@ impl Example {
                 })
         });
     }
+
+    fn toggle_soft_wrap(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.soft_wrap = !self.soft_wrap;
+        self.editor.update(cx, |state, cx| {
+            state.set_soft_wrap(self.soft_wrap, window, cx);
+        });
+        cx.notify();
+    }
 }
 
 impl Render for Example {
@@ -232,7 +255,6 @@ impl Render for Example {
                 .id("source")
                 .w_full()
                 .flex_1()
-                .gap_2()
                 .child(
                     TextInput::new(&self.editor)
                         .bordered(false)
@@ -272,7 +294,15 @@ impl Render for Example {
                                             });
                                             cx.notify();
                                         })),
-                                ),
+                                )
+                                .child({
+                                    Button::new("soft-wrap")
+                                        .ghost()
+                                        .xsmall()
+                                        .label("Soft Wrap")
+                                        .selected(self.soft_wrap)
+                                        .on_click(cx.listener(Self::toggle_soft_wrap))
+                                }),
                         )
                         .child({
                             let loc = self.editor.read(cx).line_column();
@@ -281,7 +311,7 @@ impl Render for Example {
                             Button::new("line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{} ({} c)", loc, cursor.offset()))
+                                .label(format!("{} ({} c)", loc, cursor))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),
@@ -292,11 +322,19 @@ impl Render for Example {
 fn main() {
     let app = Application::new().with_assets(Assets);
 
+    // Parse `cargo run -- <story_name>`
+    let name = std::env::args().nth(1);
+
     app.run(move |cx| {
         story::init(cx);
         init(cx);
         cx.activate(true);
 
-        story::create_new_window("Code Editor", Example::view, cx);
+        story::create_new_window_with_size(
+            "Code Editor",
+            Some(size(px(1200.), px(960.))),
+            |window, cx| cx.new(|cx| Example::new(name, window, cx)),
+            cx,
+        );
     });
 }

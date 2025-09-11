@@ -1,7 +1,9 @@
 use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
-use gpui::{App, DefiniteLength, SharedString};
+use gpui::{App, SharedString};
+use rope::Rope;
+use tree_sitter::{InputEdit, Point};
 
 use crate::{highlighter::SyntaxHighlighter, input::marker::Marker};
 
@@ -41,7 +43,6 @@ pub enum InputMode {
     MultiLine {
         tab: TabSize,
         rows: usize,
-        height: Option<DefiniteLength>,
     },
     AutoGrow {
         rows: usize,
@@ -51,7 +52,6 @@ pub enum InputMode {
     CodeEditor {
         tab: TabSize,
         rows: usize,
-        height: Option<DefiniteLength>,
         /// Show line number
         line_number: bool,
         language: SharedString,
@@ -104,20 +104,8 @@ impl InputMode {
         }
     }
 
-    pub(super) fn set_height(&mut self, new_height: Option<DefiniteLength>) {
-        match self {
-            InputMode::MultiLine { height, .. } => {
-                *height = new_height;
-            }
-            InputMode::CodeEditor { height, .. } => {
-                *height = new_height;
-            }
-            _ => {}
-        }
-    }
-
     pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
-        let wrapped_lines = text_wrapper.wrapped_lines.len();
+        let wrapped_lines = text_wrapper.len();
         self.set_rows(wrapped_lines);
     }
 
@@ -152,14 +140,6 @@ impl InputMode {
         }
     }
 
-    pub(super) fn height(&self) -> Option<DefiniteLength> {
-        match self {
-            InputMode::MultiLine { height, .. } => *height,
-            InputMode::CodeEditor { height, .. } => *height,
-            _ => None,
-        }
-    }
-
     /// Return false if the mode is not [`InputMode::CodeEditor`].
     #[allow(unused)]
     #[inline]
@@ -182,8 +162,9 @@ impl InputMode {
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
-        full_text: &SharedString,
+        text: &Rope,
         new_text: &str,
+        force: bool,
         cx: &mut App,
     ) {
         match &self {
@@ -192,15 +173,51 @@ impl InputMode {
                 highlighter,
                 ..
             } => {
+                if !force && highlighter.borrow().is_some() {
+                    return;
+                }
+
                 let mut highlighter = highlighter.borrow_mut();
                 if highlighter.is_none() {
                     let new_highlighter = SyntaxHighlighter::new(language, cx);
                     highlighter.replace(new_highlighter);
                 }
 
-                if let Some(highlighter) = highlighter.as_mut() {
-                    highlighter.update(selected_range, full_text, new_text, cx);
-                }
+                let Some(highlighter) = highlighter.as_mut() else {
+                    return;
+                };
+
+                // When full text changed, the selected_range may be out of bound (The before version).
+                let mut selected_range = selected_range.clone();
+                selected_range.end = selected_range.end.min(text.len());
+
+                // If insert a chart, this is 1.
+                // If backspace or delete, this is -1.
+                // If selected to delete, this is the length of the selected text.
+                // let changed_len = new_text.len() as isize - selected_range.len() as isize;
+                let changed_len = new_text.len() as isize - selected_range.len() as isize;
+                let new_end = (selected_range.end as isize + changed_len) as usize;
+
+                let start_pos = text.offset_to_point(selected_range.start);
+                let old_end_pos = text.offset_to_point(selected_range.end);
+                let new_end_pos = text.offset_to_point(new_end);
+
+                let edit = InputEdit {
+                    start_byte: selected_range.start,
+                    old_end_byte: selected_range.end,
+                    new_end_byte: new_end,
+                    start_position: Point::new(start_pos.row as usize, start_pos.column as usize),
+                    old_end_position: Point::new(
+                        old_end_pos.row as usize,
+                        old_end_pos.column as usize,
+                    ),
+                    new_end_position: Point::new(
+                        new_end_pos.row as usize,
+                        new_end_pos.column as usize,
+                    ),
+                };
+
+                highlighter.update(Some(edit), text);
             }
             _ => {}
         }

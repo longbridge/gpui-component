@@ -107,7 +107,7 @@ where
             .flat_map(|v| self.y.iter().map(|y_fn| y_fn(v)))
             .chain(Some(Y::zero()))
             .collect::<Vec<_>>();
-        let y = ScaleLinear::new(domain, vec![10., height]);
+        let y = ScaleLinear::new(domain, vec![height, 10.]);
 
         // Draw X axis
         let data_len = self.data.len();
@@ -115,7 +115,13 @@ where
             if (i + 1) % self.tick_margin == 0 {
                 x.tick(&x_fn(d)).map(|x_tick| {
                     let align = match i {
-                        0 => TextAlign::Left,
+                        0 => {
+                            if data_len == 1 {
+                                TextAlign::Center
+                            } else {
+                                TextAlign::Left
+                            }
+                        }
                         i if i == data_len - 1 => TextAlign::Right,
                         _ => TextAlign::Center,
                     };

@@ -1,9 +1,8 @@
 use crate::{
     highlighter::HighlightTheme,
-    input::{InputState, LineColumn},
+    input::{InputState, LineColumn, RopeExt},
 };
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
-use itertools::Itertools;
 use std::ops::Range;
 
 /// Marker represents a diagnostic message, such as an error or warning, in the code editor.
@@ -36,45 +35,10 @@ impl Marker {
 
     /// Prepare the marker to convert line, column to byte offsets.
     pub(super) fn prepare(&mut self, state: &InputState) {
-        let Some(start_line) = state
-            .text_wrapper
-            .lines
-            .get(self.start.line.saturating_sub(1))
-        else {
-            return;
-        };
+        let start = state.text.line_column_to_offset(&self.start);
+        let end = state.text.line_column_to_offset(&self.end);
 
-        let Some(start_line_str) = state.text.get(start_line.range.clone()) else {
-            return;
-        };
-
-        let Some(end_line) = state
-            .text_wrapper
-            .lines
-            .get(self.end.line.saturating_sub(1))
-        else {
-            return;
-        };
-        let Some(end_line_str) = state.text.get(end_line.range.clone()) else {
-            return;
-        };
-
-        let start_byte = start_line.range.start
-            + start_line_str
-                .chars()
-                .take(self.start.column.saturating_sub(1))
-                .counts_by(|c| c.len_utf8())
-                .values()
-                .sum::<usize>();
-        let end_byte = end_line.range.start
-            + end_line_str
-                .chars()
-                .take(self.end.column.saturating_sub(1))
-                .counts_by(|c| c.len_utf8())
-                .values()
-                .sum::<usize>();
-
-        self.range = Some(start_byte..end_byte);
+        self.range = Some(start..end);
     }
 }
 

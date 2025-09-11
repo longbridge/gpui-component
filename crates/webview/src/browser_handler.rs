@@ -318,7 +318,7 @@ impl BrowserHandler for WebViewHandler {
                                 let callback = callback.clone();
                                 let input_state = input_state.clone();
                                 move |_, _, cx| {
-                                    callback.continue_(true, Some(input_state.read(cx).value()));
+                                    callback.continue_(true, Some(&input_state.read(cx).value()));
                                     true
                                 }
                             })

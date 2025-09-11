@@ -237,13 +237,16 @@ impl Root {
         }
     }
 
-    pub fn update<F>(window: &mut Window, cx: &mut App, f: F)
+    pub fn update<F, R>(window: &mut Window, cx: &mut App, f: F) -> R
     where
-        F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+        F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) -> R,
     {
-        if let Some(Some(root)) = window.root::<Root>() {
-            root.update(cx, |root, cx| f(root, window, cx));
-        }
+        let root = window
+            .root::<Root>()
+            .flatten()
+            .expect("BUG: window first layer should be a gpui_component::Root.");
+
+        root.update(cx, |root, cx| f(root, window, cx))
     }
 
     pub fn read<'a>(window: &'a Window, cx: &'a App) -> &'a Self {

@@ -6,38 +6,52 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants},
     popup_menu::PopupMenuExt,
-    IconName, Sizable, Theme, ThemeRegistry,
+    scroll::ScrollbarShow,
+    ActiveTheme, IconName, Sizable, Theme, ThemeRegistry,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::AppState;
 
 const STATE_FILE: &str = "target/state.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct State {
     theme: SharedString,
+    scrollbar_show: Option<ScrollbarShow>,
 }
 
 pub fn init(cx: &mut App) {
     // Load last theme state
     let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
     tracing::info!("Load themes...");
-    if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
-        if let Ok(state) = serde_json::from_str::<State>(&json) {
+    if let Ok(state) = serde_json::from_str::<State>(&json) {
+        if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
             if let Some(theme) = ThemeRegistry::global(cx)
                 .themes()
                 .get(&state.theme)
                 .cloned()
             {
-                AppState::global_mut(cx).theme_name = Some(state.theme.clone());
                 Theme::global_mut(cx).apply_config(&theme);
-                cx.refresh_windows();
             }
+        }) {
+            tracing::error!("Failed to watch themes directory: {}", err);
         }
-    }) {
-        tracing::error!("Failed to watch themes directory: {}", err);
+
+        if let Some(scrollbar_show) = state.scrollbar_show {
+            Theme::global_mut(cx).scrollbar_show = scrollbar_show;
+        }
+        cx.refresh_windows();
     }
+
+    cx.observe_global::<Theme>(|cx| {
+        let state = State {
+            theme: cx.theme().theme_name().clone(),
+            scrollbar_show: Some(cx.theme().scrollbar_show),
+        };
+
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        std::fs::write(STATE_FILE, json).unwrap();
+    })
+    .detach();
 }
 
 #[derive(Action, Clone, PartialEq)]
@@ -58,31 +72,17 @@ impl Render for ThemeSwitcher {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let theme_name = AppState::global(cx)
-            .theme_name
-            .clone()
-            .unwrap_or("default-light".into());
+        let theme_name = cx.theme().theme_name().clone();
 
         div()
             .id("theme-switcher")
             .on_action(cx.listener(|_, switch: &SwitchTheme, _, cx| {
                 let theme_name = switch.0.clone();
-                // Save AppState
-                let mut state = State {
-                    theme: theme_name.clone(),
-                };
-
                 if let Some(theme_config) =
                     ThemeRegistry::global(cx).themes().get(&theme_name).cloned()
                 {
                     Theme::global_mut(cx).apply_config(&theme_config);
-                    state.theme = theme_config.name.clone();
-                    AppState::global_mut(cx).theme_name = Some(theme_name.clone());
                 }
-
-                let json = serde_json::to_string_pretty(&state).unwrap();
-                std::fs::write(STATE_FILE, json).unwrap();
-
                 cx.notify();
             }))
             .child(

@@ -12,7 +12,7 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
-use gpui::{MouseDownEvent, Subscription};
+use gpui::{AsKeystroke, MouseDownEvent, Subscription};
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -634,7 +634,7 @@ impl PopupMenu {
                     key_binding
                         .keystrokes()
                         .into_iter()
-                        .map(|key| Kbd::format(key)),
+                        .map(|key| Kbd::format(key.as_keystroke())),
                 );
 
                 return Some(el);

@@ -386,13 +386,18 @@ impl Scrollbar {
     }
 
     fn style_for_normal(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
+        let (width, inset, radius) = match cx.theme().scrollbar_show {
+            ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
+            _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
+        };
+
         (
             cx.theme().scrollbar_thumb,
             cx.theme().scrollbar,
             gpui::transparent_black(),
-            THUMB_WIDTH,
-            THUMB_INSET,
-            THUMB_RADIUS,
+            width,
+            inset,
+            radius,
         )
     }
 
@@ -509,7 +514,7 @@ impl Element for Scrollbar {
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
             let margin_end = if has_both && !is_vertical {
-                THUMB_ACTIVE_WIDTH
+                WIDTH
             } else {
                 px(0.)
             };
@@ -551,7 +556,6 @@ impl Element for Scrollbar {
 
             let state = self.state.clone();
             let is_always_to_show = cx.theme().scrollbar_show.is_always();
-            let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
             let is_offset_changed = state.get().last_scroll_offset != self.scroll_handle.offset();
@@ -559,7 +563,7 @@ impl Element for Scrollbar {
             let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius) =
                 if state.get().dragged_axis == Some(axis) {
                     Self::style_for_active(cx)
-                } else if is_hover_to_show && (is_hovered_on_bar || is_hovered_on_thumb) {
+                } else if is_hovered_on_bar || is_hovered_on_thumb {
                     if is_hovered_on_thumb {
                         Self::style_for_hovered_thumb(cx)
                     } else {

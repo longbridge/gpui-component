@@ -1,158 +1,156 @@
 {
-    "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
-    "name": "Mandarin Square",
-    "author": "huacnlee",
-    "url": "https://en.wikipedia.org/wiki/Mandarin_square",
-    "themes": [
-        {
-            "name": "Mandarin Square",
-            "mode": "dark",
-            "colors": {
-                "accent.background": "#2B2525",
-                "accent.foreground": "#ebdbb2",
-                "accordion.active.background": "#504945",
-                "accordion.hover.background": "#665c54",
-                "background": "#110D10",
-                "border": "#312B32",
-                "danger.background": "#cc241d",
-                "danger.active.background": "#cc241d",
-                "danger.foreground": "#282828",
-                "danger.hover.background": "#fb4934",
-                "foreground": "#F0DBC6",
-                "input.border": "#504945",
-                "list.active.background": "#7F5B2128",
-                "list.active.border": "#D99832",
-                "list.even.background": "#28282899",
-                "muted.background": "#3c3836",
-                "muted.foreground": "#878787",
-                "panel.background": "#282828",
-                "popover.background": "#1B1717",
-                "popover.foreground": "#ebdbb2",
-                "primary.active.background": "#324a8f99",
-                "primary.background": "#324a8f",
-                "primary.foreground": "#c6cdf0",
-                "primary.hover.background": "#38519f",
-                "scrollbar.background": "#28282844",
-                "scrollbar.thumb.background": "#504945",
-                "secondary.background": "#312C31",
-                "secondary.active.background": "#201B20",
-                "secondary.foreground": "#D5BBA3",
-                "secondary.hover.background": "#3b353b",
-                "tab.active.background": "#110D10",
-                "tab.active.foreground": "#ebdbb2",
-                "tab.background": "#1B171700",
-                "tab.foreground": "#928d81",
-                "tab_bar.background": "#110D10",
-                "title_bar.background": "#110D10",
-                "title_bar.border": "#312B32",
-                "base.blue": "#33467F",
-                "base.cyan": "#A0C4D8",
-                "base.green": "#55743e",
-                "base.magenta": "#522431",
-                "base.magenta.light": "#52243188",
-                "base.red": "#B51E00",
-                "base.yellow": "#D99832",
-                "warning.foreground": "#282828",
-                "success.foreground": "#ebdbb2",
-                "info.foreground": "#282828"
-            },
-            "highlight": {
-                "editor.foreground": "#ebdbb2",
-                "editor.background": "#282828",
-                "editor.active_line.background": "#3c3836",
-                "editor.line_number": "#928374",
-                "editor.active_line_number": "#ebdbb2",
-                "conflict": "#cc241d",
-                "created": "#7c6f64",
-                "deleted": "#9d0006",
-                "error": "#cc241d",
-                "hidden": "#928374",
-                "hint": "#83a598",
-                "ignored": "#928374",
-                "info": "#83a598",
-                "modified": "#b57614",
-                "predictive": "#928374",
-                "renamed": "#b57614",
-                "success": "#7c6f64",
-                "unreachable": "#928374",
-                "warning": "#d79921",
-                "syntax": {
-                    "attribute": {
-                        "color": "#d79921"
-                    },
-                    "boolean": {
-                        "color": "#d79921"
-                    },
-                    "comment": {
-                        "color": "#928374",
-                        "font_style": "italic"
-                    },
-                    "comment.doc": {
-                        "color": "#928374",
-                        "font_style": "italic"
-                    },
-                    "constant": {
-                        "color": "#d79921"
-                    },
-                    "constructor": {
-                        "color": "#b57614"
-                    },
-                    "embedded": {
-                        "color": "#ebdbb2"
-                    },
-                    "function": {
-                        "color": "#d79921"
-                    },
-                    "keyword": {
-                        "color": "#cc241d"
-                    },
-                    "link_text": {
-                        "color": "#83a598",
-                        "font_style": "normal"
-                    },
-                    "link_uri": {
-                        "color": "#076678",
-                        "font_style": "italic"
-                    },
-                    "number": {
-                        "color": "#cc241d"
-                    },
-                    "string": {
-                        "color": "#7c6f64"
-                    },
-                    "string.escape": {
-                        "color": "#7c6f64"
-                    },
-                    "string.regex": {
-                        "color": "#7c6f64"
-                    },
-                    "string.special": {
-                        "color": "#d79921"
-                    },
-                    "string.special.symbol": {
-                        "color": "#d79921"
-                    },
-                    "tag": {
-                        "color": "#b57614"
-                    },
-                    "text.literal": {
-                        "color": "#d79921"
-                    },
-                    "title": {
-                        "color": "#b57614",
-                        "font_weight": 600
-                    },
-                    "type": {
-                        "color": "#b57614"
-                    },
-                    "property": {
-                        "color": "#ebdbb2"
-                    },
-                    "variable.special": {
-                        "color": "#cc241d"
-                    }
-                }
-            }
+  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
+  "name": "Mandarin Square",
+  "author": "huacnlee",
+  "url": "https://en.wikipedia.org/wiki/Mandarin_square",
+  "themes": [
+    {
+      "name": "Mandarin Square",
+      "mode": "dark",
+      "colors": {
+        "accent.background": "#2a2c33",
+        "accent.foreground": "#e3dbd3",
+        "background": "#110D10",
+        "border": "#312B32",
+        "danger.background": "#cc241d",
+        "danger.active.background": "#cc241d",
+        "danger.foreground": "#282828",
+        "danger.hover.background": "#fb4934",
+        "foreground": "#e3dbd3",
+        "input.border": "#504945",
+        "list.active.background": "#7F5B2128",
+        "list.active.border": "#D99832",
+        "list.even.background": "#28282899",
+        "muted.background": "#3c3836",
+        "muted.foreground": "#878787",
+        "panel.background": "#282828",
+        "popover.background": "#110D10",
+        "popover.foreground": "#e3dbd3",
+        "primary.active.background": "#324a8f99",
+        "primary.background": "#324a8f",
+        "primary.foreground": "#c6cdf0",
+        "primary.hover.background": "#38519f",
+        "scrollbar.background": "#28282844",
+        "scrollbar.thumb.background": "#504945",
+        "secondary.background": "#312C31",
+        "secondary.active.background": "#201B20",
+        "secondary.foreground": "#e3dbd3",
+        "secondary.hover.background": "#3b353b",
+        "tab.active.background": "#110D10",
+        "tab.active.foreground": "#ebdbb2",
+        "tab.background": "#1B171700",
+        "tab.foreground": "#928d81",
+        "tab_bar.background": "#110D10",
+        "title_bar.background": "#110D10",
+        "title_bar.border": "#312B32",
+        "base.blue": "#33467F",
+        "base.cyan": "#A0C4D8",
+        "base.green": "#55743e",
+        "base.magenta": "#522431",
+        "base.magenta.light": "#52243188",
+        "base.red": "#B51E00",
+        "base.yellow": "#D99832",
+        "warning.foreground": "#282828",
+        "success.foreground": "#ebdbb2",
+        "info.foreground": "#282828"
+      },
+      "highlight": {
+        "editor.foreground": "#ebdbb2",
+        "editor.background": "#282828",
+        "editor.active_line.background": "#3c3836",
+        "editor.line_number": "#928374",
+        "editor.active_line_number": "#ebdbb2",
+        "conflict": "#cc241d",
+        "created": "#7c6f64",
+        "deleted": "#9d0006",
+        "error": "#cc241d",
+        "hidden": "#928374",
+        "hint": "#83a598",
+        "ignored": "#928374",
+        "info": "#83a598",
+        "modified": "#b57614",
+        "predictive": "#928374",
+        "renamed": "#b57614",
+        "success": "#7c6f64",
+        "unreachable": "#928374",
+        "warning": "#d79921",
+        "syntax": {
+          "attribute": {
+            "color": "#d79921"
+          },
+          "boolean": {
+            "color": "#d79921"
+          },
+          "comment": {
+            "color": "#928374",
+            "font_style": "italic"
+          },
+          "comment.doc": {
+            "color": "#928374",
+            "font_style": "italic"
+          },
+          "constant": {
+            "color": "#d79921"
+          },
+          "constructor": {
+            "color": "#b57614"
+          },
+          "embedded": {
+            "color": "#ebdbb2"
+          },
+          "function": {
+            "color": "#d79921"
+          },
+          "keyword": {
+            "color": "#cc241d"
+          },
+          "link_text": {
+            "color": "#83a598",
+            "font_style": "normal"
+          },
+          "link_uri": {
+            "color": "#076678",
+            "font_style": "italic"
+          },
+          "number": {
+            "color": "#cc241d"
+          },
+          "string": {
+            "color": "#7c6f64"
+          },
+          "string.escape": {
+            "color": "#7c6f64"
+          },
+          "string.regex": {
+            "color": "#7c6f64"
+          },
+          "string.special": {
+            "color": "#d79921"
+          },
+          "string.special.symbol": {
+            "color": "#d79921"
+          },
+          "tag": {
+            "color": "#b57614"
+          },
+          "text.literal": {
+            "color": "#d79921"
+          },
+          "title": {
+            "color": "#b57614",
+            "font_weight": 600
+          },
+          "type": {
+            "color": "#b57614"
+          },
+          "property": {
+            "color": "#ebdbb2"
+          },
+          "variable.special": {
+            "color": "#cc241d"
+          }
         }
-    ]
+      }
+    }
+  ]
 }

@@ -378,8 +378,16 @@ where
         self.set_selected_col(col_ix, cx)
     }
 
+    fn has_selection(&self) -> bool {
+        self.selected_row.is_some() || self.selected_col.is_some()
+    }
+
     fn action_cancel(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        self.clear_selection(cx);
+        if self.has_selection() {
+            self.clear_selection(cx);
+            return;
+        }
+        cx.propagate();
     }
 
     fn action_select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
@@ -1045,7 +1053,9 @@ where
             let is_last_row = row_ix == rows_count - 1;
             let table_is_filled = extra_rows_count == 0;
             let need_render_border = if is_last_row {
-                if table_is_filled {
+                if is_selected {
+                    true
+                } else if table_is_filled {
                     false
                 } else {
                     !self.stripe
@@ -1054,15 +1064,17 @@ where
                 true
             };
 
-            self.delegate
-                .render_tr(row_ix, window, cx)
-                .h_flex()
+            let mut tr = self.delegate.render_tr(row_ix, window, cx);
+            let style = tr.style().clone();
+
+            tr.h_flex()
                 .w_full()
                 .h(self.size.table_row_height())
                 .when(need_render_border, |this| {
                     this.border_b_1().border_color(cx.theme().table_row_border)
                 })
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .refine_style(&style)
                 .hover(|this| {
                     if is_selected || self.right_clicked_row == Some(row_ix) {
                         this

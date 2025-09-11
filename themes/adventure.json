@@ -10,8 +10,6 @@
       "colors": {
         "accent.background": "#25292d",
         "accent.foreground": "#feffff",
-        "accordion.active.background": "#003a5b",
-        "accordion.hover.background": "#4b6479",
         "background": "#040404",
         "border": "#282828",
         "danger.background": "#d84a33",
@@ -164,8 +162,6 @@
       "colors": {
         "accent.background": "#36345f",
         "accent.foreground": "#f8dcc0",
-        "accordion.active.background": "#003a5b",
-        "accordion.hover.background": "#4b6479",
         "background": "#1f1d45",
         "border": "#333150",
         "foreground": "#f8dcc0",

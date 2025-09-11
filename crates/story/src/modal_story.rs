@@ -356,7 +356,7 @@ impl Render for ModalStory {
                                 .outline()
                                 .label("Scrollable Modal")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
+                                    window.open_modal(cx, move |modal, window, cx| {
                                         modal
                                             .h(px(450.))
                                             .overlay(modal_overlay)
@@ -365,6 +365,8 @@ impl Render for ModalStory {
                                             .child(TextView::markdown(
                                                 "markdown1",
                                                 include_str!("../../../README.md"),
+                                                window,
+                                                cx
                                             ))
                                     });
                                 })),

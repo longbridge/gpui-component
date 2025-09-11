@@ -54,7 +54,7 @@ impl Focusable for GroupBoxStory {
 }
 
 impl Render for GroupBoxStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().gap_6().child(
             v_flex()
                 .items_start()
@@ -141,6 +141,8 @@ impl Render for GroupBoxStory {
                                 "You can use `title_style` to customize the style \
                                 of the title. \n \
                                 And any style in `GroupBox` will apply to the content container.",
+                                window,
+                                cx,
                             )),
                     ),
                 ),

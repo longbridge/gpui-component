@@ -1,13 +1,14 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled,
-    Window,
+    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
+    Styled, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
 use crate::indicator::Indicator;
 use crate::input::clear_button;
+use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
 use crate::ActiveTheme;
 use crate::{h_flex, StyledExt};
@@ -153,7 +154,6 @@ impl RenderOnce for TextInput {
         let font_size = window.text_style().font_size.to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
-            state.mode.set_height(self.height);
             state.text_wrapper.set_font(font, font_size, cx);
             state.disabled = self.disabled;
         });
@@ -174,10 +174,8 @@ impl RenderOnce for TextInput {
 
         let prefix = self.prefix;
         let suffix = self.suffix;
-        let show_clear_button = self.cleanable
-            && !state.loading
-            && !state.text.is_empty()
-            && state.mode.is_single_line();
+        let show_clear_button =
+            self.cleanable && !state.loading && state.text.len() > 0 && state.mode.is_single_line();
         let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
 
         div()
@@ -299,19 +297,57 @@ impl RenderOnce for TextInput {
                 )
             })
             .refine_style(&self.style)
-            .when(state.mode.is_multi_line(), |this| {
-                if state.last_layout.is_some() {
+            .when(state.mode.is_multi_line(), |mut this| {
+                let paddings = this.style().padding.clone();
+                let base_size = window.text_style().font_size;
+                let rem_size = window.rem_size();
+
+                let paddings = gpui::Edges {
+                    left: paddings
+                        .left
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                    right: paddings
+                        .right
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                    top: paddings
+                        .top
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                    bottom: paddings
+                        .bottom
+                        .map(|v| v.to_pixels(base_size, rem_size))
+                        .unwrap_or(px(0.)),
+                };
+
+                if let Some(last_layout) = state.last_layout.as_ref() {
+                    let left = if last_layout.line_number_width.is_zero() {
+                        px(0.)
+                    } else {
+                        // Align left edge to the Line number.
+                        paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
+                    };
+
+                    let scroll_size = gpui::Size {
+                        width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
+                        height: state.scroll_size.height,
+                    };
+
+                    let scrollbar = if !state.soft_wrap {
+                        Scrollbar::both(&state.scroll_state, &state.scroll_handle)
+                    } else {
+                        Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
+                    };
+
                     this.relative().child(
                         div()
                             .absolute()
                             .top_0()
-                            .left_0()
-                            .right(px(1.))
+                            .left(left)
+                            .right_0()
                             .bottom_0()
-                            .child(
-                                Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
-                                    .scroll_size(state.scroll_size),
-                            ),
+                            .child(scrollbar.scroll_size(scroll_size)),
                     )
                 } else {
                     this

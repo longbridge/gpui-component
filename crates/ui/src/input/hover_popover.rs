@@ -116,7 +116,7 @@ impl Render for DiagnosticPopover {
                 .border_color(border)
                 .rounded(cx.theme().radius)
                 .shadow_xs()
-                .child(TextView::markdown("message", message))
+                .child(TextView::markdown("message", message, window, cx))
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
