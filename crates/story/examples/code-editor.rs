@@ -161,6 +161,7 @@ const COMPLETEION_ITEMS: &[&str] = &[
     "default",
     "macro_rules",
     "global_allocator",
+    "this_is_a_very_long_keyword_to_test_completion",
     "test",
     "bench",
     "cfg",
@@ -224,6 +225,9 @@ impl CompletionProvider for ExampleCompletionProvider {
         if trigger_character.is_empty() {
             return Task::ready(Ok(vec![]));
         }
+
+        // Simulate to delay for fetching completions
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let items = COMPLETEION_ITEMS
             .iter()

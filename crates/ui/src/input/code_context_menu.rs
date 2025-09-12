@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 use gpui::{
     canvas, deferred, div, prelude::FluentBuilder, px, relative, Action, AnyElement, App,
     AppContext, Bounds, Context, DismissEvent, Empty, Entity, EntityInputHandler, EventEmitter,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
-    SharedString, Styled, Subscription, Window,
+    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window,
 };
 use lsp_types::CompletionItem;
 
@@ -20,33 +22,44 @@ use crate::{
 struct ContextMenuDelegate {
     query: SharedString,
     menu: Entity<CompletionMenu>,
-    items: Vec<CompletionItem>,
+    items: Vec<Rc<CompletionItem>>,
     selected_ix: usize,
 }
 
 impl ContextMenuDelegate {
     fn set_items(&mut self, items: Vec<CompletionItem>) {
-        self.items = items;
+        self.items = items.into_iter().map(Rc::new).collect();
         self.selected_ix = 0;
     }
 
-    fn selected_item(&self) -> Option<&CompletionItem> {
+    fn selected_item(&self) -> Option<&Rc<CompletionItem>> {
         self.items.get(self.selected_ix)
     }
 }
 
 #[derive(IntoElement)]
 struct CompletionMenuItem {
+    ix: usize,
+    item: Rc<CompletionItem>,
     children: Vec<AnyElement>,
     selected: bool,
+    highlight_prefix_len: usize,
 }
 
 impl CompletionMenuItem {
-    pub fn new() -> Self {
+    fn new(ix: usize, item: Rc<CompletionItem>) -> Self {
         Self {
+            ix,
+            item,
             children: vec![],
             selected: false,
+            highlight_prefix_len: 0,
         }
+    }
+
+    fn highlight_prefix(mut self, len: usize) -> Self {
+        self.highlight_prefix_len = len;
+        self
     }
 }
 impl Selectable for CompletionMenuItem {
@@ -54,6 +67,7 @@ impl Selectable for CompletionMenuItem {
         self.selected = selected;
         self
     }
+
     fn is_selected(&self) -> bool {
         self.selected
     }
@@ -66,18 +80,41 @@ impl ParentElement for CompletionMenuItem {
 }
 impl RenderOnce for CompletionMenuItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let item = self.item;
+
+        let deprecated = item.deprecated.unwrap_or(false);
+        let matched_len = self.highlight_prefix_len;
+        let highlights = vec![(
+            0..matched_len,
+            HighlightStyle {
+                color: Some(cx.theme().blue),
+                ..Default::default()
+            },
+        )];
+
         h_flex()
+            .id(self.ix)
             .gap_2()
-            .py(px(2.))
-            .px_2()
+            .p_1()
             .text_xs()
             .line_height(relative(1.))
             .rounded_sm()
-            .children(self.children)
+            .when(item.deprecated.unwrap_or(false), |this| this.line_through())
+            .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
                 this.bg(cx.theme().accent)
                     .text_color(cx.theme().accent_foreground)
             })
+            .child(div().child(StyledText::new(item.label.clone()).with_highlights(highlights)))
+            .when(item.detail.is_some(), |this| {
+                this.child(
+                    Label::new(item.detail.as_deref().unwrap_or("").to_string())
+                        .text_color(cx.theme().muted_foreground)
+                        .when(deprecated, |this| this.line_through())
+                        .italic(),
+                )
+            })
+            .children(self.children)
     }
 }
 
@@ -94,27 +131,11 @@ impl ListDelegate for ContextMenuDelegate {
         &self,
         ix: crate::IndexPath,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
-        let deprecated = item.deprecated.unwrap_or(false);
-
-        Some(
-            CompletionMenuItem::new()
-                .child(
-                    Label::new(item.label.clone())
-                        .when(deprecated, |this| this.line_through())
-                        .highlights(self.query.clone()),
-                )
-                .when(item.detail.is_some(), |this| {
-                    this.child(
-                        Label::new(item.detail.as_deref().unwrap_or("").to_string())
-                            .text_color(cx.theme().muted_foreground)
-                            .when(deprecated, |this| this.line_through())
-                            .italic(),
-                    )
-                }),
-        )
+        let matched_len = self.query.len();
+        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(matched_len))
     }
 
     fn set_selected_index(
