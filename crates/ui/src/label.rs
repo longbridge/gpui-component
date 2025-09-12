@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-    div, prelude::FluentBuilder, rems, App, ArcCow, HighlightStyle, IntoElement, ParentElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, StyledText, Window,
+    div, prelude::FluentBuilder, rems, App, HighlightStyle, IntoElement, ParentElement, RenderOnce,
+    SharedString, StyleRefinement, Styled, StyledText, Window,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -29,9 +29,15 @@ impl HighlightsMatch {
     }
 }
 
-impl<T: Into<ArcCow<'static, str>>> From<T> for HighlightsMatch {
-    fn from(value: T) -> Self {
-        Self::Full(SharedString::from(value))
+impl From<&str> for HighlightsMatch {
+    fn from(value: &str) -> Self {
+        Self::Full(value.to_string().into())
+    }
+}
+
+impl From<SharedString> for HighlightsMatch {
+    fn from(value: SharedString) -> Self {
+        Self::Full(value)
     }
 }
 
