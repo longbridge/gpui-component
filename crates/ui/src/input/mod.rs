@@ -1,9 +1,11 @@
 mod blink_cursor;
 mod change;
 mod clear_button;
+mod code_context_menu;
 mod cursor;
 mod element;
 mod hover_popover;
+mod lsp;
 mod mask_pattern;
 mod mode;
 mod number_input;
@@ -15,6 +17,7 @@ mod text_wrapper;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
+pub use lsp::*;
 pub use mask_pattern::MaskPattern;
 pub use mode::TabSize;
 pub use number_input::{NumberInput, NumberInputEvent, StepAction};

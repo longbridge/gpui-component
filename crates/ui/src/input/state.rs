@@ -2,7 +2,15 @@
 //!
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
-use gpui::Action;
+use anyhow::Result;
+use gpui::{
+    actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
+    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
+    ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+    WrappedLine,
+};
 use rope::Rope;
 use serde::Deserialize;
 use smallvec::SmallVec;
@@ -11,14 +19,6 @@ use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
-
-use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, App, AppContext, Bounds, ClipboardItem,
-    Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
-};
 
 use super::{
     blink_cursor::BlinkCursor,
@@ -29,7 +29,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::input::{hover_popover::DiagnosticPopover, Position};
+use crate::input::{code_context_menu::CompletionMenu, hover_popover::DiagnosticPopover, Position};
 use crate::input::{RopeExt as _, Selection};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 use crate::{history::History, scroll::ScrollbarState, Root};
@@ -85,7 +85,7 @@ actions!(
         MoveToEnd,
         MoveToPreviousWord,
         MoveToNextWord,
-        Escape
+        Escape,
     ]
 );
 
@@ -275,10 +275,16 @@ pub struct InputState {
 
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
+    /// Completion menu
+    pub(super) completion_menu: Option<Entity<CompletionMenu>>,
+    /// A flag to indicate if we are currently inserting a completion item.
+    pub(super) completion_inserting: bool,
 
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
     preferred_column: Option<usize>,
     _subscriptions: Vec<Subscription>,
+
+    pub(super) _completion_task: Task<Result<()>>,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -347,7 +353,10 @@ impl InputState {
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             diagnostic_popover: None,
+            completion_menu: None,
+            completion_inserting: false,
             _subscriptions,
+            _completion_task: Task::ready(Ok(())),
         }
     }
 
@@ -400,8 +409,46 @@ impl InputState {
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
             diagnostics: DiagnosticSet::default(),
+            code_action_provider: None,
+            completion_provider: None,
         };
         self
+    }
+
+    /// Set the code action provider for the code editor mode.
+    ///
+    /// Only for `InputMode::CodeEditor`.
+    pub fn set_code_action_provider(
+        &mut self,
+        provider: Option<Rc<dyn super::CodeActionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        if let InputMode::CodeEditor {
+            code_action_provider,
+            ..
+        } = &mut self.mode
+        {
+            *code_action_provider = provider;
+            cx.notify();
+        }
+    }
+
+    /// Set the completion provider for the code editor mode.
+    ///
+    /// Only for `InputMode::CodeEditor`.
+    pub fn set_completion_provider(
+        &mut self,
+        provider: Option<Rc<dyn super::CompletionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        if let InputMode::CodeEditor {
+            completion_provider,
+            ..
+        } = &mut self.mode
+        {
+            *completion_provider = provider;
+            cx.notify();
+        }
     }
 
     /// Set placeholder
@@ -779,8 +826,11 @@ impl InputState {
     }
 
     /// Focus the input field.
-    pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window);
+        self.blink_cursor.update(cx, |cursor, cx| {
+            cursor.start(cx);
+        });
     }
 
     pub(super) fn left(&mut self, _: &MoveLeft, window: &mut Window, cx: &mut Context<Self>) {
@@ -801,7 +851,11 @@ impl InputState {
         }
     }
 
-    pub(super) fn up(&mut self, _: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.mode.is_single_line() {
             return;
         }
@@ -817,7 +871,11 @@ impl InputState {
         self.move_vertical(-1, window, cx);
     }
 
-    pub(super) fn down(&mut self, _: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.mode.is_single_line() {
             return;
         }
@@ -1217,6 +1275,10 @@ impl InputState {
     }
 
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.mode.is_multi_line() {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
@@ -1402,7 +1464,11 @@ impl InputState {
         self.replace_text("", window, cx);
     }
 
-    pub(super) fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.marked_range.is_some() {
             self.unmark_text(window, cx);
         }
@@ -1893,7 +1959,7 @@ impl InputState {
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
     pub(crate) fn show_cursor(&self, window: &Window, cx: &App) -> bool {
-        self.focus_handle.is_focused(window)
+        (self.focus_handle.is_focused(window) || self.is_completion_menu_open(cx))
             && self.blink_cursor.read(cx).visible()
             && window.is_window_active()
     }
@@ -1906,6 +1972,10 @@ impl InputState {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_completion_menu_open(cx) {
+            return;
+        }
+
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
@@ -2071,7 +2141,7 @@ impl EntityInputHandler for InputState {
         &mut self,
         range_utf16: Option<Range<usize>>,
         new_text: &str,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.disabled {
@@ -2117,6 +2187,7 @@ impl EntityInputHandler for InputState {
         self.update_preferred_column();
         self.update_scroll_offset(None, cx);
         self.mode.update_auto_grow(&self.text_wrapper);
+        self.handle_completion_trigger(&range, &new_text, window, cx);
         cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }
@@ -2271,5 +2342,6 @@ impl Render for InputState {
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
+            .children(self.completion_menu.clone())
     }
 }

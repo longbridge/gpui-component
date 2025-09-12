@@ -1,12 +1,15 @@
+use std::rc::Rc;
+
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
-    input::{self, InputEvent, InputState, TabSize, TextInput},
+    input::{self, CompletionProvider, InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
+use lsp_types::{CompletionContext, CompletionItem, CompletionResponse};
 use story::Assets;
 
 fn init(cx: &mut App) {
@@ -97,6 +100,157 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
+const COMPLETEION_ITEMS: &[&str] = &[
+    "as",
+    "break",
+    "const",
+    "continue",
+    "crate",
+    "else",
+    "enum",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "let",
+    "loop",
+    "match",
+    "mod",
+    "move",
+    "mut",
+    "pub",
+    "ref",
+    "return",
+    "self",
+    "Self",
+    "static",
+    "struct",
+    "super",
+    "trait",
+    "true",
+    "type",
+    "unsafe",
+    "use",
+    "where",
+    "while",
+    "abstract",
+    "alignof",
+    "become",
+    "box",
+    "do",
+    "final",
+    "macro",
+    "offsetof",
+    "override",
+    "priv",
+    "proc",
+    "pure",
+    "sizeof",
+    "typeof",
+    "unsized",
+    "virtual",
+    "yield",
+    "dyn",
+    "async",
+    "await",
+    "try",
+    "union",
+    "default",
+    "macro_rules",
+    "global_allocator",
+    "this_is_a_very_long_keyword_to_test_completion",
+    "test",
+    "bench",
+    "cfg",
+    "derive",
+    "doc",
+    "feature",
+    "inline",
+    "link",
+    "macro_use",
+    "no_mangle",
+    "non_exhaustive",
+    "panic_handler",
+    "repr",
+    "should_panic",
+    "target_feature",
+    "test_case",
+    "thread_local",
+    "allow",
+    "deny",
+    "forbid",
+    "warn",
+    "cfg_attr",
+    "deprecated",
+    "must_use",
+    "no_std",
+    "unstable",
+    "alloc",
+    "core",
+    "std",
+    "vec",
+    "format",
+    "println",
+    "eprintln",
+    "dbg",
+    "todo",
+    "unimplemented",
+    "unreachable",
+    "include",
+    "concat",
+    "env",
+    "option_env",
+    "line",
+    "column",
+    "file",
+    "module_path",
+    "assert",
+    "debug_assert",
+];
+
+pub struct ExampleCompletionProvider;
+
+impl CompletionProvider for ExampleCompletionProvider {
+    fn completions(
+        &self,
+        _offset: usize,
+        trigger: CompletionContext,
+        _: &mut Window,
+        _: &mut Context<InputState>,
+    ) -> Task<Result<Vec<CompletionResponse>>> {
+        let trigger_character = trigger.trigger_character.as_deref().unwrap_or("");
+        if trigger_character.is_empty() {
+            return Task::ready(Ok(vec![]));
+        }
+
+        // Simulate to delay for fetching completions
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let items = COMPLETEION_ITEMS
+            .iter()
+            .filter(|s| s.starts_with(trigger_character))
+            .map(|s| CompletionItem::new_simple(s.to_string(), "".to_string()))
+            .take(10)
+            .collect::<Vec<_>>();
+
+        let responses = vec![CompletionResponse::Array(items)];
+
+        Task::ready(Ok(responses))
+    }
+
+    fn is_completion_trigger(
+        &self,
+        _offset: usize,
+        _new_text: &str,
+        _cx: &mut Context<InputState>,
+    ) -> bool {
+        true
+    }
+}
+
 impl Example {
     pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = if let Some(name) = default {
@@ -109,8 +263,10 @@ impl Example {
             LANGUAGES[0].clone()
         };
 
+        let completion_provider = Rc::new(ExampleCompletionProvider);
+
         let editor = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut editor = InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
                 .line_number(true)
                 .tab_size(TabSize {
@@ -119,7 +275,11 @@ impl Example {
                 })
                 .soft_wrap(false)
                 .default_value(default_language.1)
-                .placeholder("Enter your code here...")
+                .placeholder("Enter your code here...");
+
+            editor.set_completion_provider(Some(completion_provider), cx);
+
+            editor
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
         let language_state = cx.new(|cx| {
