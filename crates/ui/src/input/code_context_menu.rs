@@ -146,18 +146,16 @@ impl Render for CompletionMenu {
         };
 
         let scroll_origin = self.state.read(cx).scroll_handle.offset();
-
-        let y = pos.y - self.bounds.size.height + scroll_origin.y;
-        let x = pos.x + scroll_origin.x;
-        let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - x);
+        let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
+        let pos = scroll_origin + pos;
 
         deferred(
             div()
                 .id("completion-menu")
                 .absolute()
                 .occlude()
-                .left(x)
-                .top(y)
+                .left(pos.x)
+                .top(pos.y)
                 .px_1()
                 .py_0p5()
                 .text_xs()
