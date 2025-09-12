@@ -277,6 +277,8 @@ pub struct InputState {
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
     /// Completion menu
     pub(super) completion_menu: Option<Entity<CompletionMenu>>,
+    /// A flag to indicate if we are currently inserting a completion item.
+    pub(super) completion_inserting: bool,
 
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
     preferred_column: Option<usize>,
@@ -352,6 +354,7 @@ impl InputState {
             mask_pattern: MaskPattern::default(),
             diagnostic_popover: None,
             completion_menu: None,
+            completion_inserting: false,
             _subscriptions,
             _completion_task: Task::ready(Ok(())),
         }
@@ -823,8 +826,11 @@ impl InputState {
     }
 
     /// Focus the input field.
-    pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window);
+        self.blink_cursor.update(cx, |cursor, cx| {
+            cursor.start(cx);
+        });
     }
 
     pub(super) fn left(&mut self, _: &MoveLeft, window: &mut Window, cx: &mut Context<Self>) {
@@ -845,7 +851,11 @@ impl InputState {
         }
     }
 
-    pub(super) fn up(&mut self, _: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.mode.is_single_line() {
             return;
         }
@@ -861,7 +871,11 @@ impl InputState {
         self.move_vertical(-1, window, cx);
     }
 
-    pub(super) fn down(&mut self, _: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.mode.is_single_line() {
             return;
         }
@@ -1261,6 +1275,10 @@ impl InputState {
     }
 
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.mode.is_multi_line() {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
@@ -1446,7 +1464,11 @@ impl InputState {
         self.replace_text("", window, cx);
     }
 
-    pub(super) fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+
         if self.marked_range.is_some() {
             self.unmark_text(window, cx);
         }
@@ -1937,7 +1959,7 @@ impl InputState {
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
     pub(crate) fn show_cursor(&self, window: &Window, cx: &App) -> bool {
-        self.focus_handle.is_focused(window)
+        (self.focus_handle.is_focused(window) || self.is_completion_menu_open(cx))
             && self.blink_cursor.read(cx).visible()
             && window.is_window_active()
     }
@@ -1950,6 +1972,10 @@ impl InputState {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_completion_menu_open(cx) {
+            return;
+        }
+
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
@@ -2156,12 +2182,12 @@ impl EntityInputHandler for InputState {
         self.text_wrapper.update(&self.text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
-        self.handle_completion_trigger(&range, &new_text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.marked_range.take();
         self.update_preferred_column();
         self.update_scroll_offset(None, cx);
         self.mode.update_auto_grow(&self.text_wrapper);
+        self.handle_completion_trigger(&range, &new_text, window, cx);
         cx.emit(InputEvent::Change(self.unmask_value()));
         cx.notify();
     }

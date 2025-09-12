@@ -1,7 +1,7 @@
 use std::{cell::RefCell, ops::Range, rc::Rc, sync::Arc};
 
 use anyhow::Result;
-use gpui::{App, Context, Task, Window};
+use gpui::{App, Context, EntityInputHandler, Task, Window};
 use lsp_types::{
     request::Completion, CodeAction, CompletionContext, CompletionItem, CompletionResponse,
 };
@@ -53,6 +53,35 @@ pub trait CodeActionProvider {
 }
 
 impl InputState {
+    pub(crate) fn is_completion_menu_open(&self, cx: &App) -> bool {
+        let Some(menu) = self.completion_menu.as_ref() else {
+            return false;
+        };
+
+        menu.read(cx).is_open()
+    }
+
+    /// Handles an action for the completion menu, if it exists.
+    ///
+    /// Return true if the action was handled, otherwise false.
+    pub fn handle_action_for_completion_menu(
+        &mut self,
+        action: Box<dyn gpui::Action>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(menu) = self.completion_menu.as_ref() else {
+            return false;
+        };
+
+        let mut handled = false;
+        _ = menu.update(cx, |menu, cx| {
+            handled = menu.handle_action(action, window, cx)
+        });
+
+        handled
+    }
+
     pub fn handle_completion_trigger(
         &mut self,
         range: &Range<usize>,
@@ -60,23 +89,58 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.completion_inserting {
+            return;
+        }
+
         let Some(provider) = self.mode.completion_provider().cloned() else {
             return;
         };
 
-        let offset = range.end;
-        let new_offset = offset.saturating_sub(new_text.len());
+        let start = range.end;
+        let new_offset = self.cursor();
 
-        if !provider.is_completion_trigger(offset, new_text, cx) {
+        if !provider.is_completion_trigger(start, new_text, cx) {
             return;
         }
 
-        let completion_context = CompletionContext {
-            trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
-            trigger_character: Some(new_text.to_string()),
+        // To create or get the existing completion menu.
+        let completion_menu = match self.completion_menu.as_ref() {
+            Some(menu) => menu.clone(),
+            None => {
+                let menu = CompletionMenu::new(cx.entity(), window, cx);
+                self.completion_menu = Some(menu.clone());
+                menu
+            }
         };
 
-        let provider_responses = provider.completions(offset, completion_context, window, cx);
+        let start_offset = completion_menu
+            .read(cx)
+            .trigger_start_offset
+            .unwrap_or(start);
+        if new_offset < start_offset {
+            return;
+        }
+
+        let query = self
+            .text_for_range(
+                self.range_to_utf16(&(start_offset..new_offset)),
+                &mut None,
+                window,
+                cx,
+            )
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        _ = completion_menu.update(cx, |menu, _| {
+            menu.update_query(start_offset, query.clone());
+        });
+
+        let completion_context = CompletionContext {
+            trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
+            trigger_character: Some(query),
+        };
+
+        let provider_responses = provider.completions(start_offset, completion_context, window, cx);
 
         self._completion_task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];
@@ -90,8 +154,8 @@ impl InputState {
             }
 
             if completions.is_empty() {
-                _ = editor.update_in(cx, |editor, _, cx| {
-                    editor.completion_menu = None;
+                _ = completion_menu.update(cx, |menu, cx| {
+                    menu.hide(cx);
                     cx.notify();
                 });
 
@@ -104,20 +168,10 @@ impl InputState {
                         return;
                     }
 
-                    if let Some(menu) = editor.completion_menu.as_mut() {
-                        menu.update(cx, |menu, cx| {
-                            menu.show(new_offset, completions, cx);
-                        })
-                    } else {
-                        editor.completion_menu = Some(CompletionMenu::new(
-                            cx.entity(),
-                            new_offset,
-                            completions,
-                            true,
-                            window,
-                            cx,
-                        ));
-                    };
+                    _ = completion_menu.update(cx, |menu, cx| {
+                        menu.show(new_offset, completions, window, cx);
+                    });
+
                     cx.notify();
                 })
                 .ok();

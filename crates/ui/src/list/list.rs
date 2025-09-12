@@ -365,7 +365,7 @@ where
         cx.notify();
     }
 
-    fn on_action_select_prev(
+    pub(crate) fn on_action_select_prev(
         &mut self,
         _: &SelectPrev,
         window: &mut Window,
@@ -381,7 +381,7 @@ where
         self.select_item(prev_ix, window, cx);
     }
 
-    fn on_action_select_next(
+    pub(crate) fn on_action_select_next(
         &mut self,
         _: &SelectNext,
         window: &mut Window,

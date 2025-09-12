@@ -100,25 +100,137 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
+const COMPLETEION_ITEMS: &[&str] = &[
+    "as",
+    "break",
+    "const",
+    "continue",
+    "crate",
+    "else",
+    "enum",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "let",
+    "loop",
+    "match",
+    "mod",
+    "move",
+    "mut",
+    "pub",
+    "ref",
+    "return",
+    "self",
+    "Self",
+    "static",
+    "struct",
+    "super",
+    "trait",
+    "true",
+    "type",
+    "unsafe",
+    "use",
+    "where",
+    "while",
+    "abstract",
+    "alignof",
+    "become",
+    "box",
+    "do",
+    "final",
+    "macro",
+    "offsetof",
+    "override",
+    "priv",
+    "proc",
+    "pure",
+    "sizeof",
+    "typeof",
+    "unsized",
+    "virtual",
+    "yield",
+    "dyn",
+    "async",
+    "await",
+    "try",
+    "union",
+    "default",
+    "macro_rules",
+    "global_allocator",
+    "test",
+    "bench",
+    "cfg",
+    "derive",
+    "doc",
+    "feature",
+    "inline",
+    "link",
+    "macro_use",
+    "no_mangle",
+    "non_exhaustive",
+    "panic_handler",
+    "repr",
+    "should_panic",
+    "target_feature",
+    "test_case",
+    "thread_local",
+    "allow",
+    "deny",
+    "forbid",
+    "warn",
+    "cfg_attr",
+    "deprecated",
+    "must_use",
+    "no_std",
+    "unstable",
+    "alloc",
+    "core",
+    "std",
+    "vec",
+    "format",
+    "println",
+    "eprintln",
+    "dbg",
+    "todo",
+    "unimplemented",
+    "unreachable",
+    "include",
+    "concat",
+    "env",
+    "option_env",
+    "line",
+    "column",
+    "file",
+    "module_path",
+    "assert",
+    "debug_assert",
+];
+
 pub struct ExampleCompletionProvider;
 
 impl CompletionProvider for ExampleCompletionProvider {
     fn completions(
         &self,
-        offset: usize,
+        _offset: usize,
         trigger: CompletionContext,
-        window: &mut Window,
-        cx: &mut Context<InputState>,
+        _: &mut Window,
+        _: &mut Context<InputState>,
     ) -> Task<Result<Vec<CompletionResponse>>> {
-        let items = vec![
-            CompletionItem::new_simple("println!".to_string(), "Prints to the console".to_string()),
-            CompletionItem::new_simple(
-                "eprintln!".to_string(),
-                "Prints to the console (stderr)".to_string(),
-            ),
-            CompletionItem::new_simple("format!".to_string(), "Formats a string".to_string()),
-            CompletionItem::new_simple("panic!".to_string(), "Causes a panic".to_string()),
-        ];
+        let trigger_character = trigger.trigger_character.as_deref().unwrap_or("");
+        if trigger_character.is_empty() {
+            return Task::ready(Ok(vec![]));
+        }
+
+        let items = COMPLETEION_ITEMS
+            .iter()
+            .filter(|s| s.starts_with(trigger_character))
+            .map(|s| CompletionItem::new_simple(s.to_string(), "".to_string()))
+            .take(10)
+            .collect::<Vec<_>>();
 
         let responses = vec![CompletionResponse::Array(items)];
 
@@ -127,9 +239,9 @@ impl CompletionProvider for ExampleCompletionProvider {
 
     fn is_completion_trigger(
         &self,
-        offset: usize,
-        new_text: &str,
-        cx: &mut Context<InputState>,
+        _offset: usize,
+        _new_text: &str,
+        _cx: &mut Context<InputState>,
     ) -> bool {
         true
     }
