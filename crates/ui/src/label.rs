@@ -35,6 +35,12 @@ impl From<&str> for HighlightsMatch {
     }
 }
 
+impl From<String> for HighlightsMatch {
+    fn from(value: String) -> Self {
+        Self::Full(value.into())
+    }
+}
+
 impl From<SharedString> for HighlightsMatch {
     fn from(value: SharedString) -> Self {
         Self::Full(value)
