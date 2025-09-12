@@ -5,9 +5,10 @@ use gpui::{
 
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
+    checkbox::Checkbox,
     green_500, h_flex,
     input::{InputEvent, InputState, TextInput},
-    label::Label,
+    label::{HighlightsMatch, Label},
     v_flex, IconName, StyledExt,
 };
 
@@ -18,6 +19,7 @@ pub struct LabelStory {
     masked: bool,
     highlights_text: SharedString,
     highlights_input: Entity<InputState>,
+    prefix: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -58,6 +60,7 @@ impl LabelStory {
             masked: false,
             highlights_text: Default::default(),
             highlights_input,
+            prefix: false,
             _subscriptions,
         }
     }
@@ -70,6 +73,14 @@ impl LabelStory {
     fn on_click(checked: &bool, window: &mut Window, cx: &mut App) {
         println!("Check value changed: {}", checked);
     }
+
+    fn highlights_text(&self) -> HighlightsMatch {
+        if self.prefix {
+            HighlightsMatch::Prefix(self.highlights_text.clone())
+        } else {
+            HighlightsMatch::Full(self.highlights_text.clone())
+        }
+    }
 }
 impl Focusable for LabelStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
@@ -78,15 +89,30 @@ impl Focusable for LabelStory {
 }
 impl Render for LabelStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let ht = self.highlights_text();
+
         v_flex()
             .gap_6()
-            .child(TextInput::new(&self.highlights_input).cleanable().w_1_3())
+            .child(
+                h_flex()
+                    .gap_x_3()
+                    .child(TextInput::new(&self.highlights_input).cleanable().w_1_3())
+                    .child(
+                        Checkbox::new("prefix")
+                            .label("Prefix")
+                            .checked(self.prefix)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.prefix = !view.prefix;
+                                cx.notify();
+                            })),
+                    ),
+            )
             .child(
                 section("Label").max_w_md().items_start().child(
                     v_flex()
                         .gap_y_4()
-                        .child(Label::new("This is a label ").highlights(&self.highlights_text))
-                        .child(Label::new("这是一个标签").highlights(&self.highlights_text)),
+                        .child(Label::new("This is a label").highlights(ht.clone()))
+                        .child(Label::new("这是一个标签").highlights(ht.clone())),
                 ),
             )
             .child(
@@ -96,7 +122,7 @@ impl Render for LabelStory {
                     .child(
                         Label::new("Company Address")
                             .secondary("(optional)")
-                            .highlights(&self.highlights_text),
+                            .highlights(ht.clone()),
                     ),
             )
             .child(
@@ -104,16 +130,16 @@ impl Render for LabelStory {
                     v_flex()
                         .w_full()
                         .gap_4()
-                        .child(Label::new("Text align left").highlights(&self.highlights_text))
+                        .child(Label::new("Text align left").highlights(ht.clone()))
                         .child(
                             Label::new("Text align center")
                                 .text_center()
-                                .highlights(&self.highlights_text),
+                                .highlights(ht.clone()),
                         )
                         .child(
                             Label::new("Text align right")
                                 .text_right()
-                                .highlights(&self.highlights_text),
+                                .highlights(ht.clone()),
                         ),
                 ),
             )
@@ -121,7 +147,7 @@ impl Render for LabelStory {
                 section("Label with color").max_w_md().child(
                     Label::new("Color Label")
                         .text_color(green_500())
-                        .highlights(&self.highlights_text),
+                        .highlights(ht.clone()),
                 ),
             )
             .child(
@@ -130,7 +156,7 @@ impl Render for LabelStory {
                         .text_size(px(20.))
                         .font_semibold()
                         .line_height(rems(1.8))
-                        .highlights(&self.highlights_text),
+                        .highlights(ht.clone()),
                 ),
             )
             .child(
@@ -143,7 +169,7 @@ impl Render for LabelStory {
                                 if the text is too long, it should wrap to the next line.",
                             )
                             .line_height(rems(1.8))
-                            .highlights(&self.highlights_text),
+                            .highlights(ht.clone()),
                         ),
                     ),
             )
@@ -158,7 +184,7 @@ impl Render for LabelStory {
                                     Label::new("9,182,1 USD")
                                         .text_2xl()
                                         .masked(self.masked)
-                                        .highlights(&self.highlights_text),
+                                        .highlights(ht.clone()),
                                 )
                                 .child(
                                     Button::new("btn-mask")
@@ -177,7 +203,7 @@ impl Render for LabelStory {
                             Label::new("500 USD")
                                 .text_xl()
                                 .masked(self.masked)
-                                .highlights(&self.highlights_text),
+                                .highlights(ht.clone()),
                         ),
                 ),
             )
