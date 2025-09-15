@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Duration};
+use std::{rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
@@ -100,118 +100,22 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
-const COMPLETION_ITEMS: &[&str] = &[
-    "as",
-    "break",
-    "const",
-    "continue",
-    "crate",
-    "else",
-    "enum",
-    "extern",
-    "false",
-    "fn",
-    "for",
-    "if",
-    "impl",
-    "in",
-    "let",
-    "loop",
-    "match",
-    "mod",
-    "move",
-    "mut",
-    "pub",
-    "ref",
-    "return",
-    "self",
-    "Self",
-    "static",
-    "struct",
-    "super",
-    "trait",
-    "true",
-    "type",
-    "unsafe",
-    "use",
-    "where",
-    "while",
-    "abstract",
-    "alignof",
-    "become",
-    "box",
-    "do",
-    "final",
-    "macro",
-    "offsetof",
-    "override",
-    "priv",
-    "proc",
-    "pure",
-    "sizeof",
-    "typeof",
-    "unsized",
-    "virtual",
-    "yield",
-    "dyn",
-    "async",
-    "await",
-    "try",
-    "union",
-    "default",
-    "macro_rules",
-    "global_allocator",
-    "this_is_a_very_long_keyword_to_test_completion",
-    "test",
-    "bench",
-    "cfg",
-    "derive",
-    "doc",
-    "feature",
-    "inline",
-    "link",
-    "macro_use",
-    "no_mangle",
-    "non_exhaustive",
-    "panic_handler",
-    "repr",
-    "should_panic",
-    "target_feature",
-    "test_case",
-    "thread_local",
-    "allow",
-    "deny",
-    "forbid",
-    "warn",
-    "cfg_attr",
-    "deprecated",
-    "must_use",
-    "no_std",
-    "unstable",
-    "alloc",
-    "core",
-    "std",
-    "vec",
-    "format",
-    "println",
-    "eprintln",
-    "dbg",
-    "todo",
-    "unimplemented",
-    "unreachable",
-    "include",
-    "concat",
-    "env",
-    "option_env",
-    "line",
-    "column",
-    "file",
-    "module_path",
-    "assert",
-    "debug_assert",
-];
+pub struct ExampleCompletionProvider {
+    items: Arc<Vec<CompletionItem>>,
+}
 
-pub struct ExampleCompletionProvider;
+impl ExampleCompletionProvider {
+    pub fn new() -> Self {
+        let items = serde_json::from_slice::<Vec<CompletionItem>>(include_bytes!(
+            "./fixtures/completion_items.json"
+        ))
+        .unwrap();
+
+        Self {
+            items: Arc::new(items),
+        }
+    }
+}
 
 impl CompletionProvider for ExampleCompletionProvider {
     fn completions(
@@ -231,15 +135,16 @@ impl CompletionProvider for ExampleCompletionProvider {
         }
 
         // Simulate to delay for fetching completions
+        let items = self.items.clone();
         cx.background_executor().spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(100)).await;
 
-            let items = COMPLETION_ITEMS
+            let items = items
                 .iter()
-                .filter(|s| s.starts_with(&trigger_character))
-                .map(|s| CompletionItem::new_simple(s.to_string(), "".to_string()))
+                .filter(|item| item.label.starts_with(&trigger_character))
                 .take(10)
+                .map(|item| item.clone())
                 .collect::<Vec<_>>();
 
             let responses = vec![CompletionResponse::Array(items)];
@@ -270,7 +175,7 @@ impl Example {
             LANGUAGES[0].clone()
         };
 
-        let completion_provider = Rc::new(ExampleCompletionProvider);
+        let completion_provider = Rc::new(ExampleCompletionProvider::new());
 
         let editor = cx.new(|cx| {
             let mut editor = InputState::new(window, cx)

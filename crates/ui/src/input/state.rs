@@ -1672,6 +1672,7 @@ impl InputState {
         self.selected_range = (offset..offset).into();
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
+        self.completion_menu = None;
         cx.notify()
     }
 
