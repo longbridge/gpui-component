@@ -74,9 +74,10 @@ impl ColorPickerState {
         let _subscriptions = vec![cx.subscribe_in(
             &state,
             window,
-            |this, _, ev: &InputEvent, window, cx| match ev {
-                InputEvent::Change(value) => {
-                    if let Ok(color) = Hsla::parse_hex(value) {
+            |this, state, ev: &InputEvent, window, cx| match ev {
+                InputEvent::Change => {
+                    let value = state.read(cx).value();
+                    if let Ok(color) = Hsla::parse_hex(value.as_str()) {
                         this.value = Some(color);
                         this.hovered_color = Some(color);
                     }

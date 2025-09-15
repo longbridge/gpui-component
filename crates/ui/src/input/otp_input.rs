@@ -133,7 +133,7 @@ impl OtpState {
         self.value = SharedString::from(chars.iter().collect::<String>());
 
         if self.value.chars().count() == self.length {
-            cx.emit(InputEvent::Change(self.value.clone()));
+            cx.emit(InputEvent::Change);
         }
         cx.notify()
     }

@@ -115,9 +115,10 @@ impl DivInspector {
             cx.subscribe_in(
                 &json_input_state,
                 window,
-                |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
-                    InputEvent::Change(new_style) => {
-                        this.edit_json(new_style, window, cx);
+                |this: &mut DivInspector, state, event: &InputEvent, window, cx| match event {
+                    InputEvent::Change => {
+                        let new_style = state.read(cx).value();
+                        this.edit_json(new_style.as_str(), window, cx);
                     }
                     _ => {}
                 },
@@ -125,9 +126,10 @@ impl DivInspector {
             cx.subscribe_in(
                 &rust_input_state,
                 window,
-                |this: &mut DivInspector, _, event: &InputEvent, window, cx| match event {
-                    InputEvent::Change(new_style) => {
-                        this.edit_rust(new_style, window, cx);
+                |this: &mut DivInspector, state, event: &InputEvent, window, cx| match event {
+                    InputEvent::Change => {
+                        let new_style = state.read(cx).value();
+                        this.edit_rust(new_style.as_str(), window, cx);
                     }
                     _ => {}
                 },

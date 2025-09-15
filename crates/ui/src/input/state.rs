@@ -95,7 +95,7 @@ actions!(
 
 #[derive(Clone)]
 pub enum InputEvent {
-    Change(SharedString),
+    Change,
     PressEnter { secondary: bool },
     Focus,
     Blur,
@@ -2236,7 +2236,7 @@ impl EntityInputHandler for InputState {
         self.update_scroll_offset(None, cx);
         self.mode.update_auto_grow(&self.text_wrapper);
         self.handle_completion_trigger(&range, &new_text, window, cx);
-        cx.emit(InputEvent::Change(self.unmask_value()));
+        cx.emit(InputEvent::Change);
         cx.notify();
     }
 
@@ -2289,7 +2289,7 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change(self.unmask_value()));
+        cx.emit(InputEvent::Change);
         cx.notify();
     }
 

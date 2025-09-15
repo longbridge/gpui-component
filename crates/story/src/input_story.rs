@@ -134,13 +134,16 @@ impl InputStory {
 
     fn on_input_event(
         &mut self,
-        _: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &InputEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => println!("Change: {}", text),
+            InputEvent::Change => {
+                let text = state.read(_cx).value();
+                println!("Change: {}", text)
+            }
             InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),

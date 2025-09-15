@@ -22,7 +22,7 @@ impl Gallery {
     pub fn new(init_story: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
-            InputEvent::Change(_) => {
+            InputEvent::Change => {
                 this.active_group_index = Some(0);
                 this.active_index = Some(0);
                 cx.notify()

@@ -132,22 +132,23 @@ impl NumberInputStory {
 
     fn on_input_event(
         &mut self,
-        this: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &InputEvent,
         _: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => {
-                if this == &self.number_input1 {
+            InputEvent::Change => {
+                let text = state.read(cx).value();
+                if state == &self.number_input1 {
                     if let Ok(value) = text.parse::<i64>() {
                         self.number_input1_value = value;
                     }
-                } else if this == &self.number_input2 {
+                } else if state == &self.number_input2 {
                     if let Ok(value) = text.parse::<u64>() {
                         self.number_input2_value = value;
                     }
-                } else if this == &self.number_input3 {
+                } else if state == &self.number_input3 {
                     if let Ok(value) = text.parse::<f64>() {
                         self.number_input3_value = value;
                     }

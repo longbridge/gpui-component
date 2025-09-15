@@ -47,9 +47,9 @@ impl LabelStory {
 
         let _subscriptions =
             vec![
-                cx.subscribe(&highlights_input, |this, _, e: &InputEvent, cx| {
-                    if let InputEvent::Change(v) = e {
-                        this.highlights_text = v.clone();
+                cx.subscribe(&highlights_input, |this, state, e: &InputEvent, cx| {
+                    if let InputEvent::Change = e {
+                        this.highlights_text = state.read(cx).value();
                         cx.notify();
                     }
                 }),

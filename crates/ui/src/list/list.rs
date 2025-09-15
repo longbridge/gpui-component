@@ -238,13 +238,14 @@ where
 
     fn on_query_input_event(
         &mut self,
-        _: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &InputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => {
+            InputEvent::Change => {
+                let text = state.read(cx).value();
                 let text = text.trim().to_string();
                 if Some(&text) == self.last_query.as_ref() {
                     return;
