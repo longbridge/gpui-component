@@ -176,7 +176,7 @@ impl CompletionProvider for ExampleLspStore {
 
 impl CodeActionProvider for ExampleLspStore {
     fn id(&self) -> SharedString {
-        "Example".into()
+        "LspStore".into()
     }
 
     fn code_actions(
@@ -233,7 +233,7 @@ struct TextConvertor;
 
 impl CodeActionProvider for TextConvertor {
     fn id(&self) -> SharedString {
-        "TextCoverter".into()
+        "TextConvertor".into()
     }
 
     fn code_actions(
