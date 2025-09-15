@@ -29,7 +29,10 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
-use crate::input::{code_context_menu::CompletionMenu, hover_popover::DiagnosticPopover, Position};
+use crate::input::{
+    popovers::{ContextMenu, DiagnosticPopover},
+    Position,
+};
 use crate::input::{RopeExt as _, Selection};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 use crate::{history::History, scroll::ScrollbarState, Root};
@@ -86,6 +89,7 @@ actions!(
         MoveToPreviousWord,
         MoveToNextWord,
         Escape,
+        ToggleCodeActions,
     ]
 );
 
@@ -208,6 +212,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-z", Undo, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-y", Redo, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-.", ToggleCodeActions, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-.", ToggleCodeActions, Some(CONTEXT)),
     ]);
 
     number_input::init(cx);
@@ -277,8 +285,8 @@ pub struct InputState {
 
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
-    /// Completion menu
-    pub(super) completion_menu: Option<Entity<CompletionMenu>>,
+    /// Completion/CodeAction context menu
+    pub(super) context_menu: Option<ContextMenu>,
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
 
@@ -286,7 +294,7 @@ pub struct InputState {
     preferred_column: Option<usize>,
     _subscriptions: Vec<Subscription>,
 
-    pub(super) _completion_task: Task<Result<()>>,
+    pub(super) _context_menu_task: Task<Result<()>>,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -355,10 +363,10 @@ impl InputState {
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             diagnostic_popover: None,
-            completion_menu: None,
+            context_menu: None,
             completion_inserting: false,
             _subscriptions,
-            _completion_task: Task::ready(Ok(())),
+            _context_menu_task: Task::ready(Ok(())),
         }
     }
 
@@ -411,26 +419,50 @@ impl InputState {
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
             diagnostics: DiagnosticSet::default(),
-            code_action_provider: None,
+            code_action_providers: vec![],
             completion_provider: None,
         };
         self
     }
 
-    /// Set the code action provider for the code editor mode.
+    /// Add a code action provider for the code editor mode.
     ///
     /// Only for `InputMode::CodeEditor`.
-    pub fn set_code_action_provider(
+    pub fn add_code_action_provider(
         &mut self,
-        provider: Option<Rc<dyn super::CodeActionProvider>>,
+        provider: Rc<dyn super::CodeActionProvider>,
         cx: &mut Context<Self>,
     ) {
         if let InputMode::CodeEditor {
-            code_action_provider,
+            code_action_providers,
             ..
         } = &mut self.mode
         {
-            *code_action_provider = provider;
+            code_action_providers.push(provider);
+            cx.notify();
+        }
+    }
+
+    /// Remove a code action provider for the code editor mode.
+    pub fn remove_code_action_provider(&mut self, id: &str, cx: &mut Context<Self>) {
+        if let InputMode::CodeEditor {
+            code_action_providers,
+            ..
+        } = &mut self.mode
+        {
+            code_action_providers.retain(|p| p.id().as_str() != id);
+            cx.notify();
+        }
+    }
+
+    /// Clear all code action providers for the code editor mode.
+    pub fn clear_code_action_providers(&mut self, cx: &mut Context<Self>) {
+        if let InputMode::CodeEditor {
+            code_action_providers,
+            ..
+        } = &mut self.mode
+        {
+            code_action_providers.clear();
             cx.notify();
         }
     }
@@ -795,6 +827,11 @@ impl InputState {
         self.mask_pattern.unmask(&self.text.to_string()).into()
     }
 
+    /// Return the text [`Rope`] of the input field.
+    pub fn text(&self) -> &Rope {
+        &self.text
+    }
+
     /// Return the (0-based) [`Position`] of the cursor.
     pub fn cursor_position(&self) -> Position {
         let offset = self.cursor();
@@ -855,7 +892,7 @@ impl InputState {
     }
 
     pub(super) fn up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
             return;
         }
 
@@ -875,7 +912,7 @@ impl InputState {
     }
 
     pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
             return;
         }
 
@@ -1278,7 +1315,7 @@ impl InputState {
     }
 
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
             return;
         }
 
@@ -1468,7 +1505,7 @@ impl InputState {
     }
 
     pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_completion_menu(Box::new(action.clone()), window, cx) {
+        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
             return;
         }
 
@@ -1481,6 +1518,15 @@ impl InputState {
         }
 
         cx.propagate();
+    }
+
+    pub(super) fn toggle_code_actions(
+        &mut self,
+        _: &ToggleCodeActions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.handle_code_action_trigger(window, cx)
     }
 
     pub(super) fn on_mouse_down(
@@ -1672,7 +1718,7 @@ impl InputState {
         self.selected_range = (offset..offset).into();
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
-        self.completion_menu = None;
+        self.hide_context_menu(cx);
         cx.notify()
     }
 
@@ -1963,7 +2009,7 @@ impl InputState {
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
     pub(crate) fn show_cursor(&self, window: &Window, cx: &App) -> bool {
-        (self.focus_handle.is_focused(window) || self.is_completion_menu_open(cx))
+        (self.focus_handle.is_focused(window) || self.is_context_menu_open(cx))
             && self.blink_cursor.read(cx).visible()
             && window.is_window_active()
     }
@@ -1976,7 +2022,7 @@ impl InputState {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.is_completion_menu_open(cx) {
+        if !self.is_context_menu_open(cx) {
             return;
         }
 
@@ -2346,6 +2392,6 @@ impl Render for InputState {
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
-            .children(self.completion_menu.clone())
+            .children(self.context_menu.as_ref().map(|menu| menu.render()))
     }
 }

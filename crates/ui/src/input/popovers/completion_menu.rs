@@ -170,7 +170,7 @@ pub struct CompletionMenu {
     bounds: Bounds<Pixels>,
 
     /// The offset of the first character that triggered the completion.
-    pub(super) trigger_start_offset: Option<usize>,
+    pub(crate) trigger_start_offset: Option<usize>,
     query: SharedString,
     _subscriptions: Vec<Subscription>,
 }
@@ -179,7 +179,7 @@ impl CompletionMenu {
     /// Creates a new `CompletionMenu` with the given offset and completion items.
     ///
     /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
-    pub(super) fn new(
+    pub(crate) fn new(
         state: Entity<InputState>,
         window: &mut Window,
         cx: &mut App,
@@ -253,7 +253,7 @@ impl CompletionMenu {
         self.hide(cx);
     }
 
-    pub(super) fn handle_action(
+    pub(crate) fn handle_action(
         &mut self,
         action: Box<dyn Action>,
         window: &mut Window,
@@ -302,26 +302,26 @@ impl CompletionMenu {
         });
     }
 
-    pub(super) fn is_open(&self) -> bool {
+    pub(crate) fn is_open(&self) -> bool {
         self.open
     }
 
     /// Hide the completion menu and reset the trigger start offset.
-    pub(super) fn hide(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
         self.open = false;
         self.trigger_start_offset = None;
         cx.notify();
     }
 
     /// Sets the trigger start offset if it is not already set.
-    pub(super) fn update_query(&mut self, start_offset: usize, query: impl Into<SharedString>) {
+    pub(crate) fn update_query(&mut self, start_offset: usize, query: impl Into<SharedString>) {
         if self.trigger_start_offset.is_none() {
             self.trigger_start_offset = Some(start_offset);
         }
         self.query = query.into();
     }
 
-    pub(super) fn show(
+    pub(crate) fn show(
         &mut self,
         offset: usize,
         items: impl Into<Vec<CompletionItem>>,

@@ -1,15 +1,14 @@
 mod blink_cursor;
 mod change;
 mod clear_button;
-mod code_context_menu;
 mod cursor;
 mod element;
-mod hover_popover;
 mod lsp;
 mod mask_pattern;
 mod mode;
 mod number_input;
 mod otp_input;
+mod popovers;
 mod rope_ext;
 mod state;
 mod text_input;

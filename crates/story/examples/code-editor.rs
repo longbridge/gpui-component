@@ -1,15 +1,22 @@
-use std::{rc::Rc, sync::Arc, time::Duration};
+use std::{cell::RefCell, ops::Range, rc::Rc, str::FromStr, sync::Arc, time::Duration};
 
+use anyhow::Ok;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
-    input::{self, CompletionProvider, InputEvent, InputState, TabSize, TextInput},
+    input::{
+        self, CodeActionProvider, CompletionProvider, InputEvent, InputState, Position, RopeExt,
+        TabSize, TextInput,
+    },
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
-use lsp_types::{CompletionContext, CompletionItem, CompletionResponse};
+use lsp_types::{
+    CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse, TextEdit,
+    WorkspaceEdit,
+};
 use story::Assets;
 
 fn init(cx: &mut App) {
@@ -34,7 +41,8 @@ pub struct Example {
     line_number: bool,
     need_update: bool,
     soft_wrap: bool,
-    _subscribes: Vec<Subscription>,
+    lsp_store: ExampleLspStore,
+    _subscriptions: Vec<Subscription>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,24 +108,27 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
-pub struct ExampleCompletionProvider {
-    items: Arc<Vec<CompletionItem>>,
+#[derive(Clone)]
+pub struct ExampleLspStore {
+    completions: Arc<Vec<CompletionItem>>,
+    code_actions: Rc<RefCell<Vec<(Range<usize>, CodeAction)>>>,
 }
 
-impl ExampleCompletionProvider {
+impl ExampleLspStore {
     pub fn new() -> Self {
-        let items = serde_json::from_slice::<Vec<CompletionItem>>(include_bytes!(
+        let completions = serde_json::from_slice::<Vec<CompletionItem>>(include_bytes!(
             "./fixtures/completion_items.json"
         ))
         .unwrap();
 
         Self {
-            items: Arc::new(items),
+            completions: Arc::new(completions),
+            code_actions: Rc::new(RefCell::new(vec![])),
         }
     }
 }
 
-impl CompletionProvider for ExampleCompletionProvider {
+impl CompletionProvider for ExampleLspStore {
     fn completions(
         &self,
         _offset: usize,
@@ -135,7 +146,7 @@ impl CompletionProvider for ExampleCompletionProvider {
         }
 
         // Simulate to delay for fetching completions
-        let items = self.items.clone();
+        let items = self.completions.clone();
         cx.background_executor().spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(100)).await;
@@ -163,6 +174,268 @@ impl CompletionProvider for ExampleCompletionProvider {
     }
 }
 
+impl CodeActionProvider for ExampleLspStore {
+    fn id(&self) -> SharedString {
+        "Example".into()
+    }
+
+    fn code_actions(
+        &self,
+        _state: Entity<InputState>,
+        range: Range<usize>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<Result<Vec<CodeAction>>> {
+        let mut actions = vec![];
+        for (node_range, code_action) in self.code_actions.borrow().iter() {
+            if !(range.start >= node_range.start && range.end <= node_range.end) {
+                continue;
+            }
+
+            actions.push(code_action.clone());
+        }
+
+        Task::ready(Ok(actions))
+    }
+
+    fn perform_code_action(
+        &self,
+        state: Entity<InputState>,
+        action: CodeAction,
+        _push_to_history: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Task<Result<()>> {
+        let Some(edit) = action.edit else {
+            return Task::ready(Ok(()));
+        };
+
+        let changes = if let Some(changes) = edit.changes {
+            changes
+        } else {
+            return Task::ready(Ok(()));
+        };
+
+        let Some((_, text_edits)) = changes.into_iter().next() else {
+            return Task::ready(Ok(()));
+        };
+
+        let state = state.downgrade();
+        window.spawn(cx, async move |cx| {
+            state.update_in(cx, |state, window, cx| {
+                state.apply_lsp_edits(&text_edits, window, cx);
+            })
+        })
+    }
+}
+
+struct TextConvertor;
+
+impl CodeActionProvider for TextConvertor {
+    fn id(&self) -> SharedString {
+        "TextCoverter".into()
+    }
+
+    fn code_actions(
+        &self,
+        state: Entity<InputState>,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Task<Result<Vec<CodeAction>>> {
+        let mut actions = vec![];
+        if range.is_empty() {
+            return Task::ready(Ok(actions));
+        }
+
+        let state = state.read(cx);
+        let document_uri = lsp_types::Uri::from_str("file://example").unwrap();
+
+        let old_text = state.text().slice(range.clone()).to_string();
+        let start_pos = state.text().offset_to_position(range.start);
+        let end_pos = state.text().offset_to_position(range.end);
+
+        let range = lsp_types::Range {
+            start: lsp_types::Position {
+                line: start_pos.line as u32,
+                character: start_pos.character as u32,
+            },
+            end: lsp_types::Position {
+                line: end_pos.line as u32,
+                character: end_pos.character as u32,
+            },
+        };
+
+        actions.push(CodeAction {
+            title: "Convert to Uppercase".into(),
+            kind: Some(CodeActionKind::REFACTOR),
+            edit: Some(WorkspaceEdit {
+                changes: Some(
+                    std::iter::once((
+                        document_uri.clone(),
+                        vec![TextEdit {
+                            range,
+                            new_text: old_text.to_uppercase(),
+                            ..Default::default()
+                        }],
+                    ))
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        actions.push(CodeAction {
+            title: "Convert to Lowercase".into(),
+            kind: Some(CodeActionKind::REFACTOR),
+            edit: Some(WorkspaceEdit {
+                changes: Some(
+                    std::iter::once((
+                        document_uri.clone(),
+                        vec![TextEdit {
+                            range: range.clone(),
+                            new_text: old_text.to_lowercase(),
+                            ..Default::default()
+                        }],
+                    ))
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        actions.push(CodeAction {
+            title: "Titleize".into(),
+            kind: Some(CodeActionKind::REFACTOR),
+            edit: Some(WorkspaceEdit {
+                changes: Some(
+                    std::iter::once((
+                        document_uri.clone(),
+                        vec![TextEdit {
+                            range: range.clone(),
+                            new_text: old_text
+                                .split_whitespace()
+                                .map(|word| {
+                                    let mut chars = word.chars();
+                                    chars
+                                        .next()
+                                        .map(|c| c.to_uppercase().collect::<String>())
+                                        .unwrap_or_default()
+                                        + chars.as_str()
+                                })
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                            ..Default::default()
+                        }],
+                    ))
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        actions.push(CodeAction {
+            title: "Capitalize".into(),
+            kind: Some(CodeActionKind::REFACTOR),
+            edit: Some(WorkspaceEdit {
+                changes: Some(
+                    std::iter::once((
+                        document_uri.clone(),
+                        vec![TextEdit {
+                            range,
+                            new_text: old_text
+                                .chars()
+                                .enumerate()
+                                .map(|(i, c)| {
+                                    if i == 0 {
+                                        c.to_uppercase().to_string()
+                                    } else {
+                                        c.to_string()
+                                    }
+                                })
+                                .collect(),
+                            ..Default::default()
+                        }],
+                    ))
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        // snake_case
+        actions.push(CodeAction {
+            title: "Convert to snake_case".into(),
+            kind: Some(CodeActionKind::REFACTOR),
+            edit: Some(WorkspaceEdit {
+                changes: Some(
+                    std::iter::once((
+                        document_uri.clone(),
+                        vec![TextEdit {
+                            range,
+                            new_text: old_text
+                                .chars()
+                                .enumerate()
+                                .map(|(i, c)| {
+                                    if c.is_uppercase() {
+                                        if i != 0 {
+                                            format!("_{}", c.to_lowercase())
+                                        } else {
+                                            c.to_lowercase().to_string()
+                                        }
+                                    } else {
+                                        c.to_string()
+                                    }
+                                })
+                                .collect(),
+                            ..Default::default()
+                        }],
+                    ))
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        Task::ready(Ok(actions))
+    }
+
+    fn perform_code_action(
+        &self,
+        state: Entity<InputState>,
+        action: CodeAction,
+        _push_to_history: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Task<Result<()>> {
+        let Some(edit) = action.edit else {
+            return Task::ready(Ok(()));
+        };
+
+        let changes = if let Some(changes) = edit.changes {
+            changes
+        } else {
+            return Task::ready(Ok(()));
+        };
+
+        let Some((_, text_edits)) = changes.into_iter().next() else {
+            return Task::ready(Ok(()));
+        };
+
+        let state = state.downgrade();
+        window.spawn(cx, async move |cx| {
+            state.update_in(cx, |state, window, cx| {
+                state.apply_lsp_edits(&text_edits, window, cx);
+            })
+        })
+    }
+}
+
 impl Example {
     pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = if let Some(name) = default {
@@ -175,7 +448,7 @@ impl Example {
             LANGUAGES[0].clone()
         };
 
-        let completion_provider = Rc::new(ExampleCompletionProvider::new());
+        let lsp_store = ExampleLspStore::new();
 
         let editor = cx.new(|cx| {
             let mut editor = InputState::new(window, cx)
@@ -189,7 +462,9 @@ impl Example {
                 .default_value(default_language.1)
                 .placeholder("Enter your code here...");
 
-            editor.set_completion_provider(Some(completion_provider), cx);
+            editor.set_completion_provider(Some(Rc::new(lsp_store.clone())), cx);
+            editor.add_code_action_provider(Rc::new(lsp_store.clone()), cx);
+            editor.add_code_action_provider(Rc::new(TextConvertor), cx);
 
             editor
         });
@@ -203,7 +478,7 @@ impl Example {
             )
         });
 
-        let _subscribes = vec![
+        let _subscriptions = vec![
             cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
                 this.lint_document(cx);
             }),
@@ -232,7 +507,8 @@ impl Example {
             line_number: true,
             need_update: false,
             soft_wrap: false,
-            _subscribes,
+            lsp_store,
+            _subscriptions,
         }
     }
 
@@ -306,7 +582,9 @@ impl Example {
         let value = self.editor.read(cx).value().clone();
         let result = autocorrect::lint_for(value.as_str(), self.language.name());
 
+        let mut code_actions = vec![];
         self.editor.update(cx, |state, cx| {
+            let text = state.text().clone();
             state.diagnostics_mut().map(|diagnostics| {
                 diagnostics.clear();
                 for item in result.lines.iter() {
@@ -323,6 +601,47 @@ impl Example {
                     let end = (line, col + item.old.chars().count());
                     let message = format!("AutoCorrect: {}", item.new);
                     diagnostics.push(Diagnostic::new(start..end, message).with_severity(severity));
+
+                    let range = text.position_to_offset(&Position::new(start.0, start.1))
+                        ..text.position_to_offset(&Position::new(end.0, end.1));
+
+                    let text_edit = TextEdit {
+                        range: lsp_types::Range {
+                            start: lsp_types::Position {
+                                line: start.0 as u32,
+                                character: start.1 as u32,
+                            },
+                            end: lsp_types::Position {
+                                line: end.0 as u32,
+                                character: end.1 as u32,
+                            },
+                        },
+                        new_text: item.new.clone(),
+                        ..Default::default()
+                    };
+
+                    let edit = WorkspaceEdit {
+                        changes: Some(
+                            std::iter::once((
+                                lsp_types::Uri::from_str("file://example").unwrap(),
+                                vec![text_edit],
+                            ))
+                            .collect(),
+                        ),
+                        ..Default::default()
+                    };
+
+                    code_actions.push((
+                        range,
+                        CodeAction {
+                            title: format!("Change to '{}'", item.new),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            edit: Some(edit),
+                            ..Default::default()
+                        },
+                    ));
+
+                    self.lsp_store.code_actions.replace(code_actions.clone());
                 }
             });
 

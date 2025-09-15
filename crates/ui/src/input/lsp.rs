@@ -1,12 +1,15 @@
-use std::{cell::RefCell, ops::Range, rc::Rc, sync::Arc};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use anyhow::Result;
-use gpui::{App, Context, EntityInputHandler, Task, Window};
+use gpui::{App, Context, Entity, EntityInputHandler, SharedString, Task, Window};
 use lsp_types::{
     request::Completion, CodeAction, CompletionContext, CompletionItem, CompletionResponse,
 };
 
-use crate::input::{code_context_menu::CompletionMenu, InputState};
+use crate::input::{
+    popovers::{CodeActionItem, CodeActionMenu, CompletionMenu, ContextMenu},
+    InputState, RopeExt,
+};
 
 /// A trait for providing code completions based on the current input state and context.
 pub trait CompletionProvider {
@@ -41,43 +44,70 @@ pub trait CompletionProvider {
 
 pub trait CodeActionProvider {
     /// The id for this CodeAction.
-    fn id(&self) -> Arc<str>;
+    fn id(&self) -> SharedString;
 
     /// Fetches code actions for the specified range.
     fn code_actions(
         &self,
+        state: Entity<InputState>,
         range: Range<usize>,
         window: &mut Window,
         cx: &mut App,
     ) -> Task<Result<Vec<CodeAction>>>;
+
+    /// Performs the specified code action.
+    fn perform_code_action(
+        &self,
+        state: Entity<InputState>,
+        action: CodeAction,
+        push_to_history: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Task<Result<()>>;
 }
 
 impl InputState {
-    pub(crate) fn is_completion_menu_open(&self, cx: &App) -> bool {
-        let Some(menu) = self.completion_menu.as_ref() else {
+    pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
+        self.context_menu = None;
+        self._context_menu_task = Task::ready(Ok(()));
+        cx.notify();
+    }
+
+    pub(crate) fn is_context_menu_open(&self, cx: &App) -> bool {
+        let Some(menu) = self.context_menu.as_ref() else {
             return false;
         };
 
-        menu.read(cx).is_open()
+        menu.is_open(cx)
     }
 
     /// Handles an action for the completion menu, if it exists.
     ///
     /// Return true if the action was handled, otherwise false.
-    pub fn handle_action_for_completion_menu(
+    pub fn handle_action_for_context_menu(
         &mut self,
         action: Box<dyn gpui::Action>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(menu) = self.completion_menu.as_ref() else {
+        let Some(menu) = self.context_menu.as_ref() else {
             return false;
         };
 
         let mut handled = false;
-        _ = menu.update(cx, |menu, cx| {
-            handled = menu.handle_action(action, window, cx)
-        });
+
+        match menu {
+            ContextMenu::Completion(menu) => {
+                _ = menu.update(cx, |menu, cx| {
+                    handled = menu.handle_action(action, window, cx)
+                });
+            }
+            ContextMenu::CodeAction(menu) => {
+                _ = menu.update(cx, |menu, cx| {
+                    handled = menu.handle_action(action, window, cx)
+                });
+            }
+        };
 
         handled
     }
@@ -104,20 +134,22 @@ impl InputState {
             return;
         }
 
+        let menu = match self.context_menu.as_ref() {
+            Some(ContextMenu::Completion(menu)) => Some(menu),
+            _ => None,
+        };
+
         // To create or get the existing completion menu.
-        let completion_menu = match self.completion_menu.as_ref() {
+        let menu = match menu {
             Some(menu) => menu.clone(),
             None => {
                 let menu = CompletionMenu::new(cx.entity(), window, cx);
-                self.completion_menu = Some(menu.clone());
+                self.context_menu = Some(ContextMenu::Completion(menu.clone()));
                 menu
             }
         };
 
-        let start_offset = completion_menu
-            .read(cx)
-            .trigger_start_offset
-            .unwrap_or(start);
+        let start_offset = menu.read(cx).trigger_start_offset.unwrap_or(start);
         if new_offset < start_offset {
             return;
         }
@@ -131,7 +163,7 @@ impl InputState {
             )
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        _ = completion_menu.update(cx, |menu, _| {
+        _ = menu.update(cx, |menu, _| {
             menu.update_query(start_offset, query.clone());
         });
 
@@ -142,7 +174,7 @@ impl InputState {
 
         let provider_responses = provider.completions(start_offset, completion_context, window, cx);
 
-        self._completion_task = cx.spawn_in(window, async move |editor, cx| {
+        self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];
             if let Some(provider_responses) = provider_responses.await.ok() {
                 for resp in provider_responses {
@@ -154,7 +186,7 @@ impl InputState {
             }
 
             if completions.is_empty() {
-                _ = completion_menu.update(cx, |menu, cx| {
+                _ = menu.update(cx, |menu, cx| {
                     menu.hide(cx);
                     cx.notify();
                 });
@@ -168,7 +200,7 @@ impl InputState {
                         return;
                     }
 
-                    _ = completion_menu.update(cx, |menu, cx| {
+                    _ = menu.update(cx, |menu, cx| {
                         menu.show(new_offset, completions, window, cx);
                     });
 
@@ -178,5 +210,114 @@ impl InputState {
 
             Ok(())
         });
+    }
+
+    /// Show code actions for the cursor.
+    pub(super) fn handle_code_action_trigger(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let providers = self.mode.code_action_providers();
+        let menu = match self.context_menu.as_ref() {
+            Some(ContextMenu::CodeAction(menu)) => Some(menu),
+            _ => None,
+        };
+
+        let menu = match menu {
+            Some(menu) => menu.clone(),
+            None => {
+                let menu = CodeActionMenu::new(cx.entity(), window, cx);
+                self.context_menu = Some(ContextMenu::CodeAction(menu.clone()));
+                menu
+            }
+        };
+
+        let range = self.selected_range.start..self.selected_range.end;
+
+        let state = cx.entity();
+        self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
+            let mut provider_responses = vec![];
+            _ = cx.update(|window, cx| {
+                for provider in providers {
+                    let task = provider.code_actions(state.clone(), range.clone(), window, cx);
+                    provider_responses.push((provider.id(), task));
+                }
+            });
+
+            let mut code_actions: Vec<CodeActionItem> = vec![];
+            for (provider_id, provider_responses) in provider_responses {
+                if let Some(responses) = provider_responses.await.ok() {
+                    code_actions.extend(responses.into_iter().map(|action| CodeActionItem {
+                        provider_id: provider_id.clone(),
+                        action,
+                    }))
+                }
+            }
+
+            if code_actions.is_empty() {
+                _ = menu.update(cx, |menu, cx| {
+                    menu.hide(cx);
+                    cx.notify();
+                });
+
+                return Ok(());
+            }
+            editor
+                .update_in(cx, |editor, window, cx| {
+                    if !editor.focus_handle.is_focused(window) {
+                        return;
+                    }
+
+                    _ = menu.update(cx, |menu, cx| {
+                        menu.show(editor.cursor(), code_actions, window, cx);
+                    });
+
+                    cx.notify();
+                })
+                .ok();
+
+            Ok(())
+        });
+    }
+
+    pub(crate) fn perform_code_action(
+        &mut self,
+        item: &CodeActionItem,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let providers = self.mode.code_action_providers();
+        let Some(provider) = providers
+            .iter()
+            .filter(|provider| provider.id() == item.provider_id)
+            .next()
+        else {
+            return;
+        };
+
+        let state = cx.entity();
+        let task = provider.perform_code_action(state, item.action.clone(), true, window, cx);
+
+        cx.spawn_in(window, async move |_, _| {
+            let _ = task.await;
+        })
+        .detach();
+    }
+
+    /// Apply a list of [`lsp_types::TextEdit`] to mutate the text.
+    pub fn apply_lsp_edits(
+        &mut self,
+        text_edits: &Vec<lsp_types::TextEdit>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for edit in text_edits {
+            let start = self.text.position_to_offset(&edit.range.start.into());
+            let end = self.text.position_to_offset(&edit.range.end.into());
+
+            let range_utf16 = self.range_to_utf16(&(start..end));
+            self.replace_text_in_range(Some(range_utf16), &edit.new_text, window, cx);
+        }
     }
 }

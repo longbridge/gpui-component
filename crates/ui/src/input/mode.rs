@@ -60,7 +60,7 @@ pub enum InputMode {
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         diagnostics: DiagnosticSet,
         completion_provider: Option<Rc<dyn CompletionProvider>>,
-        code_action_provider: Option<Rc<dyn CodeActionProvider>>,
+        code_action_providers: Vec<Rc<dyn CodeActionProvider>>,
     },
 }
 
@@ -252,13 +252,13 @@ impl InputMode {
         }
     }
 
-    pub(super) fn code_action_provider(&self) -> Option<&Rc<dyn CodeActionProvider>> {
+    pub(super) fn code_action_providers(&self) -> Vec<Rc<dyn CodeActionProvider>> {
         match self {
             InputMode::CodeEditor {
-                code_action_provider,
+                code_action_providers,
                 ..
-            } => code_action_provider.as_ref(),
-            _ => None,
+            } => code_action_providers.clone(),
+            _ => vec![],
         }
     }
 }

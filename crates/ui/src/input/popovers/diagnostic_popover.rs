@@ -9,7 +9,7 @@ use crate::{highlighter::DiagnosticEntry, input::InputState, text::TextView, Act
 
 pub struct DiagnosticPopover {
     state: Entity<InputState>,
-    pub(super) diagnostic: Rc<DiagnosticEntry>,
+    pub(crate) diagnostic: Rc<DiagnosticEntry>,
     bounds: Bounds<Pixels>,
     open: bool,
 }
@@ -42,17 +42,17 @@ impl DiagnosticPopover {
         start_pos.map(|pos| pos + Point::new(line_number_width, px(0.)))
     }
 
-    pub(super) fn show(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn show(&mut self, cx: &mut Context<Self>) {
         self.open = true;
         cx.notify();
     }
 
-    pub(super) fn hide(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
         self.open = false;
         cx.notify();
     }
 
-    pub(super) fn check_to_hide(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
+    pub(crate) fn check_to_hide(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
         if !self.open {
             return;
         }
