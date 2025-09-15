@@ -100,7 +100,7 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
     (Lang::External("navi"), include_str!("./fixtures/test.nv")),
 ];
 
-const COMPLETEION_ITEMS: &[&str] = &[
+const COMPLETION_ITEMS: &[&str] = &[
     "as",
     "break",
     "const",
@@ -229,7 +229,7 @@ impl CompletionProvider for ExampleCompletionProvider {
         // Simulate to delay for fetching completions
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let items = COMPLETEION_ITEMS
+        let items = COMPLETION_ITEMS
             .iter()
             .filter(|s| s.starts_with(trigger_character))
             .map(|s| CompletionItem::new_simple(s.to_string(), "".to_string()))
