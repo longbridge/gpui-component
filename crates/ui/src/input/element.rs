@@ -64,7 +64,7 @@ impl TextElement {
         &self,
         last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut App,
     ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
         let state = self.state.read(cx);
@@ -209,17 +209,15 @@ impl TextElement {
                 }
             }
 
-            if state.show_cursor(window, cx) {
-                // cursor blink
-                let cursor_height = line_height;
-                cursor_bounds = Some(Bounds::new(
-                    point(
-                        bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x,
-                        bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
-                    ),
-                    size(CURSOR_WIDTH, cursor_height),
-                ));
-            };
+            // cursor bounds
+            let cursor_height = line_height;
+            cursor_bounds = Some(Bounds::new(
+                point(
+                    bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x,
+                    bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
+                ),
+                size(CURSOR_WIDTH, cursor_height),
+            ));
         }
 
         bounds.origin = bounds.origin + scroll_offset;
@@ -739,7 +737,7 @@ impl Element for TextElement {
             (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
         );
 
-        let last_layout = LastLayout {
+        let mut last_layout = LastLayout {
             visible_range,
             visible_top,
             visible_start_offset,
@@ -747,6 +745,7 @@ impl Element for TextElement {
             wrap_width,
             line_number_width,
             lines: Rc::new(lines),
+            cursor_bounds: None,
         };
 
         // `position_for_index` for example
@@ -782,6 +781,7 @@ impl Element for TextElement {
 
         let (cursor_bounds, cursor_scroll_offset, current_row) =
             self.layout_cursor(&last_layout, &mut bounds, window, cx);
+        last_layout.cursor_bounds = cursor_bounds;
 
         let selection_path = self.layout_selections(&last_layout, &mut bounds, window, cx);
 
@@ -856,6 +856,7 @@ impl Element for TextElement {
         cx: &mut App,
     ) {
         let focus_handle = self.state.read(cx).focus_handle.clone();
+        let show_cursor = self.state.read(cx).show_cursor(window, cx);
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
         let selected_range = self.state.read(cx).selected_range;
@@ -954,7 +955,7 @@ impl Element for TextElement {
         }
 
         // Paint blinking cursor
-        if focused {
+        if focused && show_cursor {
             if let Some(mut cursor_bounds) = prepaint.cursor_bounds.take() {
                 cursor_bounds.origin.y += prepaint.cursor_scroll_offset.y;
                 window.paint_quad(fill(cursor_bounds, cx.theme().caret));

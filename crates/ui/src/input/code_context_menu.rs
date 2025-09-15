@@ -344,13 +344,16 @@ impl CompletionMenu {
         let Some(last_layout) = state.last_layout.as_ref() else {
             return None;
         };
+        let Some(cursor_origin) = last_layout.cursor_bounds.map(|b| b.origin) else {
+            return None;
+        };
 
-        let line_number_width = last_layout.line_number_width;
-        let (_, _, start_pos) = state.line_and_position_for_offset(self.offset.saturating_sub(1));
-        start_pos.map(|pos| {
-            pos + Point::new(line_number_width, last_layout.line_height)
-                + Point::new(px(0.), px(4.))
-        })
+        let scroll_origin = self.state.read(cx).scroll_handle.offset();
+
+        Some(
+            scroll_origin + cursor_origin - state.input_bounds.origin
+                + Point::new(-px(4.), last_layout.line_height + px(4.)),
+        )
     }
 }
 
@@ -371,9 +374,7 @@ impl Render for CompletionMenu {
             return Empty.into_any_element();
         };
 
-        let scroll_origin = self.state.read(cx).scroll_handle.offset();
         let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
-        let pos = scroll_origin + pos;
 
         deferred(
             div()

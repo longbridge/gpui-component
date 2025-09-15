@@ -229,6 +229,8 @@ pub(super) struct LastLayout {
     pub(super) wrap_width: Option<Pixels>,
     /// The line number area width of text layout, if not line number, this will be 0px.
     pub(super) line_number_width: Pixels,
+    /// The cursor position (top, left) in pixels.
+    pub(super) cursor_bounds: Option<Bounds<Pixels>>,
 }
 
 /// InputState to keep editing state of the [`super::TextInput`].
@@ -570,6 +572,7 @@ impl InputState {
     /// - The index of the line (zero-based) containing the offset.
     /// - The index of the sub-line (zero-based) within the line containing the offset.
     /// - The position of the offset.
+    #[allow(unused)]
     pub(super) fn line_and_position_for_offset(
         &self,
         offset: usize,
