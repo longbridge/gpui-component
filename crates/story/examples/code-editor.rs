@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
@@ -219,26 +219,33 @@ impl CompletionProvider for ExampleCompletionProvider {
         _offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
-        _: &mut Context<InputState>,
+        cx: &mut Context<InputState>,
     ) -> Task<Result<Vec<CompletionResponse>>> {
-        let trigger_character = trigger.trigger_character.as_deref().unwrap_or("");
+        let trigger_character = trigger
+            .trigger_character
+            .as_deref()
+            .unwrap_or("")
+            .to_string();
         if trigger_character.is_empty() {
             return Task::ready(Ok(vec![]));
         }
 
         // Simulate to delay for fetching completions
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        cx.background_executor().spawn(async move {
+            // Simulate a slow completion source, to test Editor async handling.
+            smol::Timer::after(Duration::from_millis(100)).await;
 
-        let items = COMPLETION_ITEMS
-            .iter()
-            .filter(|s| s.starts_with(trigger_character))
-            .map(|s| CompletionItem::new_simple(s.to_string(), "".to_string()))
-            .take(10)
-            .collect::<Vec<_>>();
+            let items = COMPLETION_ITEMS
+                .iter()
+                .filter(|s| s.starts_with(&trigger_character))
+                .map(|s| CompletionItem::new_simple(s.to_string(), "".to_string()))
+                .take(10)
+                .collect::<Vec<_>>();
 
-        let responses = vec![CompletionResponse::Array(items)];
+            let responses = vec![CompletionResponse::Array(items)];
 
-        Task::ready(Ok(responses))
+            Ok(responses)
+        })
     }
 
     fn is_completion_trigger(

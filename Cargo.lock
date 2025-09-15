@@ -7754,6 +7754,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "smol 1.3.0",
  "tracing",
  "tracing-subscriber",
  "tree-sitter-navi",
