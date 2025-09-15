@@ -150,7 +150,7 @@ impl CompletionProvider for ExampleLspStore {
         let items = self.completions.clone();
         cx.background_executor().spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
-            smol::Timer::after(Duration::from_millis(500)).await;
+            smol::Timer::after(Duration::from_millis(20)).await;
 
             let items = items
                 .iter()
