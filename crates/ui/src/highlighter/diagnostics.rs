@@ -337,6 +337,7 @@ impl DiagnosticSet {
 
 #[cfg(test)]
 mod tests {
+    use crate::input::Position;
 
     #[test]
     fn test_diagnostic() {
@@ -348,11 +349,14 @@ mod tests {
         let mut diagnostics = DiagnosticSet::new(&text);
 
         diagnostics.push(
-            Diagnostic::new((0, 7)..(0, 17), "Spelling mistake")
-                .with_severity(DiagnosticSeverity::Warning),
+            Diagnostic::new(
+                Position::new(0, 7)..Position::new(0, 17),
+                "Spelling mistake",
+            )
+            .with_severity(DiagnosticSeverity::Warning),
         );
         diagnostics.push(
-            Diagnostic::new((2, 9)..(2, 14), "Syntax error")
+            Diagnostic::new(Position::new(2, 9)..Position::new(2, 14), "Syntax error")
                 .with_severity(DiagnosticSeverity::Error),
         );
 
@@ -378,7 +382,8 @@ mod tests {
         assert_eq!(item.message.as_str(), "Syntax error");
 
         diagnostics.push(
-            Diagnostic::new((1, 5)..(1, 7), "Info message").with_severity(DiagnosticSeverity::Info),
+            Diagnostic::new(Position::new(1, 5)..Position::new(1, 7), "Info message")
+                .with_severity(DiagnosticSeverity::Info),
         );
         assert_eq!(diagnostics.len(), 3);
 

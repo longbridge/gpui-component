@@ -107,11 +107,11 @@ impl RopeExt for Rope {
     }
 
     fn position_to_offset(&self, pos: &Position) -> usize {
-        let line = self.line(pos.line);
-        self.line_start_offset(pos.line)
+        let line = self.line(pos.line as usize);
+        self.line_start_offset(pos.line as usize)
             + line
                 .chars()
-                .take(pos.character)
+                .take(pos.character as usize)
                 .map(|c| c.len_utf8())
                 .sum::<usize>()
     }
@@ -120,7 +120,7 @@ impl RopeExt for Rope {
         let point = self.offset_to_point(offset);
         let line = self.line(point.row as usize);
         let character = line.slice(0..point.column as usize).chars().count();
-        Position::new(point.row as usize, character)
+        Position::new(point.row, character as u32)
     }
 
     fn line_end_offset(&self, row: usize) -> usize {

@@ -849,10 +849,8 @@ impl InputState {
     ) {
         let position: Position = position.into();
         let max_point = self.text.max_point();
-        let row = position.line.min(max_point.row as usize);
-        let col = position
-            .character
-            .min(self.text.line_len(row as u32) as usize);
+        let row = position.line.min(max_point.row);
+        let col = position.character.min(self.text.line_len(row));
 
         let offset = self
             .text

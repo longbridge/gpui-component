@@ -131,6 +131,7 @@ impl ExampleLspStore {
 impl CompletionProvider for ExampleLspStore {
     fn completions(
         &self,
+        _state: Entity<InputState>,
         _offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
@@ -149,7 +150,7 @@ impl CompletionProvider for ExampleLspStore {
         let items = self.completions.clone();
         cx.background_executor().spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
-            smol::Timer::after(Duration::from_millis(100)).await;
+            smol::Timer::after(Duration::from_millis(500)).await;
 
             let items = items
                 .iter()
@@ -252,19 +253,9 @@ impl CodeActionProvider for TextConvertor {
         let document_uri = lsp_types::Uri::from_str("file://example").unwrap();
 
         let old_text = state.text().slice(range.clone()).to_string();
-        let start_pos = state.text().offset_to_position(range.start);
-        let end_pos = state.text().offset_to_position(range.end);
-
-        let range = lsp_types::Range {
-            start: lsp_types::Position {
-                line: start_pos.line as u32,
-                character: start_pos.character as u32,
-            },
-            end: lsp_types::Position {
-                line: end_pos.line as u32,
-                character: end_pos.character as u32,
-            },
-        };
+        let start = state.text().offset_to_position(range.start);
+        let end = state.text().offset_to_position(range.end);
+        let range = lsp_types::Range { start, end };
 
         actions.push(CodeAction {
             title: "Convert to Uppercase".into(),
@@ -534,7 +525,11 @@ impl Example {
         window.open_modal(cx, move |modal, window, cx| {
             input_state.update(cx, |state, cx| {
                 let cursor_pos = editor.read(cx).cursor_position();
-                state.set_placeholder(format!("{}", cursor_pos), window, cx);
+                state.set_placeholder(
+                    format!("{}:{}", cursor_pos.line, cursor_pos.character),
+                    window,
+                    cx,
+                );
                 state.focus(window, cx);
             });
 
@@ -556,8 +551,10 @@ impl Example {
                             return false;
                         };
                         let column = parts.next().and_then(|c| c).unwrap_or(1);
-                        let position =
-                            input::Position::new(line.saturating_sub(1), column.saturating_sub(1));
+                        let position = input::Position::new(
+                            line.saturating_sub(1) as u32,
+                            column.saturating_sub(1) as u32,
+                        );
 
                         editor.update(cx, |state, cx| {
                             state.set_cursor_position(position, window, cx);
@@ -597,25 +594,15 @@ impl Example {
                     let line = item.line.saturating_sub(1); // Convert to 0-based index
                     let col = item.col.saturating_sub(1); // Convert to 0-based index
 
-                    let start = (line, col);
-                    let end = (line, col + item.old.chars().count());
+                    let start = Position::new(line as u32, col as u32);
+                    let end = Position::new(line as u32, (col + item.old.chars().count()) as u32);
                     let message = format!("AutoCorrect: {}", item.new);
                     diagnostics.push(Diagnostic::new(start..end, message).with_severity(severity));
 
-                    let range = text.position_to_offset(&Position::new(start.0, start.1))
-                        ..text.position_to_offset(&Position::new(end.0, end.1));
+                    let range = text.position_to_offset(&start)..text.position_to_offset(&end);
 
                     let text_edit = TextEdit {
-                        range: lsp_types::Range {
-                            start: lsp_types::Position {
-                                line: start.0 as u32,
-                                character: start.1 as u32,
-                            },
-                            end: lsp_types::Position {
-                                line: end.0 as u32,
-                                character: end.1 as u32,
-                            },
-                        },
+                        range: lsp_types::Range { start, end },
                         new_text: item.new.clone(),
                         ..Default::default()
                     };
@@ -715,7 +702,10 @@ impl Render for Example {
                             Button::new("line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{} ({} byte)", position, cursor))
+                                .label(format!(
+                                    "{}:{} ({} byte)",
+                                    position.line, position.character, cursor
+                                ))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),

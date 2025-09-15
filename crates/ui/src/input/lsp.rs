@@ -16,6 +16,7 @@ pub trait CompletionProvider {
     /// Fetches completions based on the given byte offset.
     fn completions(
         &self,
+        state: Entity<InputState>,
         offset: usize,
         trigger: CompletionContext,
         window: &mut Window,
@@ -172,7 +173,8 @@ impl InputState {
             trigger_character: Some(query),
         };
 
-        let provider_responses = provider.completions(start_offset, completion_context, window, cx);
+        let provider_responses =
+            provider.completions(cx.entity(), start_offset, completion_context, window, cx);
 
         self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];

@@ -2,7 +2,7 @@ use gpui::*;
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{InputEvent, InputState, TabSize, TextInput},
+    input::{self, InputEvent, InputState, TabSize, TextInput},
     v_flex, ActiveTheme, ContextModal, Selectable, Sizable,
 };
 use story::Assets;
@@ -55,7 +55,12 @@ impl Example {
 
         window.open_modal(cx, move |modal, window, cx| {
             input_state.update(cx, |state, cx| {
-                state.set_placeholder(format!("{}", editor.read(cx).cursor_position()), window, cx);
+                let position = editor.read(cx).cursor_position();
+                state.set_placeholder(
+                    format!("{}:{}", position.line, position.character),
+                    window,
+                    cx,
+                );
                 state.focus(window, cx);
             });
 
@@ -80,7 +85,11 @@ impl Example {
                         let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
 
                         editor.update(cx, |state, cx| {
-                            state.set_cursor_position((line, column), window, cx);
+                            state.set_cursor_position(
+                                input::Position::new(line as u32, column as u32),
+                                window,
+                                cx,
+                            );
                         });
 
                         true
@@ -136,7 +145,7 @@ impl Render for Example {
                             Button::new("line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{} ({} c)", loc, cursor))
+                                .label(format!("{}:{} ({} c)", loc.line, loc.character, cursor))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),
