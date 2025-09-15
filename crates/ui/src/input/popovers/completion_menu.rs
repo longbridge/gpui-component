@@ -446,10 +446,15 @@ impl Render for CompletionMenu {
                                 .px_2()
                                 .child(
                                     TextView::markdown("doc", doc, window, cx)
-                                        .style(TextViewStyle {
-                                            paragraph_gap: rems(0.5),
-                                            ..Default::default()
-                                        })
+                                        .style(
+                                            TextViewStyle::default()
+                                                .paragraph_gap(rems(0.5))
+                                                .heading_font_size(|level, rem_size| match level {
+                                                    1 | 2 | 3 => rem_size * 1,
+                                                    4 => rem_size * 0.9,
+                                                    _ => rem_size * 0.8,
+                                                }),
+                                        )
                                         .selectable(),
                                 ),
                         ),

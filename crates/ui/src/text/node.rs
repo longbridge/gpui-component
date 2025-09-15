@@ -867,7 +867,10 @@ impl Node {
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
-                let text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
+                let mut text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
+                if let Some(f) = node_cx.style.heading_font_size.as_ref() {
+                    text_size = (f)(*level, node_cx.style.heading_base_font_size);
+                }
 
                 h_flex()
                     .id(("h", *level as usize))

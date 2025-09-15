@@ -1,7 +1,7 @@
 [
   {
     "label": "as",
-    "documentation": "Perform a safe type cast.\n\n**Example:**\n```rust\nlet x: u32 = 42;\nlet y: u64 = x as u64;\n```"
+    "documentation": "Perform a safe type cast.\n\n## Example:\n```rust\nlet x: u32 = 42;\nlet y: u64 = x as u64;\n```"
   },
   {
     "label": "break",

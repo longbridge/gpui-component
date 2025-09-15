@@ -277,6 +277,11 @@ pub struct TextViewStyle {
     pub paragraph_gap: Rems,
     /// Base font size for headings, default is 14px.
     pub heading_base_font_size: Pixels,
+    /// Function to calculate heading font size based on heading level (1-6).
+    ///
+    /// The first parameter is the heading level (1-6), the second parameter is the base font size.
+    /// The second parameter is the base font size.
+    pub heading_font_size: Option<Rc<dyn Fn(u8, Pixels) -> Pixels + 'static>>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
     pub is_dark: bool,
@@ -295,6 +300,7 @@ impl Default for TextViewStyle {
         Self {
             paragraph_gap: rems(1.),
             heading_base_font_size: px(14.),
+            heading_font_size: None,
             highlight_theme: HighlightTheme::default_light().clone(),
             is_dark: false,
         }
@@ -305,6 +311,14 @@ impl TextViewStyle {
     /// Set paragraph gap, default is 1 rem.
     pub fn paragraph_gap(mut self, gap: Rems) -> Self {
         self.paragraph_gap = gap;
+        self
+    }
+
+    pub fn heading_font_size<F>(mut self, f: F) -> Self
+    where
+        F: Fn(u8, Pixels) -> Pixels + 'static,
+    {
+        self.heading_font_size = Some(Rc::new(f));
         self
     }
 }
