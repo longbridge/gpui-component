@@ -292,8 +292,7 @@ impl InputState {
         let providers = self.mode.code_action_providers();
         let Some(provider) = providers
             .iter()
-            .filter(|provider| provider.id() == item.provider_id)
-            .next()
+            .find(|provider| provider.id() == item.provider_id)
         else {
             return;
         };
@@ -315,8 +314,8 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         for edit in text_edits {
-            let start = self.text.position_to_offset(&edit.range.start.into());
-            let end = self.text.position_to_offset(&edit.range.end.into());
+            let start = self.text.position_to_offset(&edit.range.start);
+            let end = self.text.position_to_offset(&edit.range.end);
 
             let range_utf16 = self.range_to_utf16(&(start..end));
             self.replace_text_in_range(Some(range_utf16), &edit.new_text, window, cx);

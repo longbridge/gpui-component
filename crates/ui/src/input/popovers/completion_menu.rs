@@ -398,13 +398,8 @@ impl Render for CompletionMenu {
         }
 
         let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
-        let vertical_layout = if pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
-            > window.bounds().size.width
-        {
-            true
-        } else {
-            false
-        };
+        let vertical_layout = pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
+            > window.bounds().size.width;
 
         deferred(
             div()
@@ -450,7 +445,7 @@ impl Render for CompletionMenu {
                                             TextViewStyle::default()
                                                 .paragraph_gap(rems(0.5))
                                                 .heading_font_size(|level, rem_size| match level {
-                                                    1 | 2 | 3 => rem_size * 1,
+                                                    1..=3 => rem_size * 1,
                                                     4 => rem_size * 0.9,
                                                     _ => rem_size * 0.8,
                                                 }),
