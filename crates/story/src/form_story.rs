@@ -197,6 +197,7 @@ impl Render for FormStory {
                     .layout(self.layout)
                     .with_size(self.size)
                     .column(self.column)
+                    .label_width(px(if is_multi_column { 100. } else { 140. }))
                     .child(
                         form_field().label_fn(|_, _| "Name").child(
                             h_flex()
