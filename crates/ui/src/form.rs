@@ -37,6 +37,7 @@ struct FieldProps {
     layout: Axis,
     /// Field gap
     gap: Option<Pixels>,
+    column: u16,
 }
 
 impl Default for FieldProps {
@@ -47,6 +48,7 @@ impl Default for FieldProps {
             layout: Axis::Vertical,
             size: Size::default(),
             gap: None,
+            column: 1,
         }
     }
 }
@@ -102,6 +104,14 @@ impl Form {
     /// Add multiple children to the form.
     pub fn children(mut self, fields: impl IntoIterator<Item = FormField>) -> Self {
         self.fields.extend(fields);
+        self
+    }
+
+    /// Set the column count for the form.
+    ///
+    /// Default is 1.
+    pub fn column(mut self, column: u16) -> Self {
+        self.props.column = column;
         self
     }
 }
@@ -186,6 +196,7 @@ pub struct FormField {
     /// Alignment of the form field.
     align_items: Option<AlignItems>,
     props: FieldProps,
+    col_span: u16,
 }
 
 impl FormField {
@@ -202,6 +213,7 @@ impl FormField {
             focus_handle: None,
             align_items: None,
             props: FieldProps::default(),
+            col_span: 1,
         }
     }
 
@@ -302,6 +314,14 @@ impl FormField {
         self.align_items = Some(AlignItems::Center);
         self
     }
+
+    /// Set the column span for the form field.
+    ///
+    /// Default is 1.
+    pub fn col_span(mut self, col_span: u16) -> Self {
+        self.col_span = col_span;
+        self
+    }
 }
 impl ParentElement for FormField {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
@@ -351,6 +371,7 @@ impl RenderOnce for FormField {
         v_flex()
             .flex_1()
             .gap(gap / 2.)
+            .col_span(self.col_span)
             .child(
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
@@ -433,11 +454,17 @@ impl RenderOnce for Form {
             _ => px(8.),
         };
 
-        v_flex().w_full().gap(gap).children(
-            self.fields
-                .into_iter()
-                .enumerate()
-                .map(|(ix, field)| field.props(ix, props)),
-        )
+        v_flex()
+            .w_full()
+            .gap_x(gap * 3.)
+            .gap_y(gap)
+            .grid()
+            .grid_cols(props.column)
+            .children(
+                self.fields
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, field)| field.props(ix, props)),
+            )
     }
 }
