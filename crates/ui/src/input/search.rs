@@ -289,8 +289,9 @@ impl Render for SearchPanel {
                     .flex_1()
                     .gap_1()
                     .child(
-                        div().flex_1().child(
+                        div().flex_1().mr_2().child(
                             TextInput::new(&self.search_input)
+                                .prefix(IconName::Search)
                                 .small()
                                 .w_full()
                                 .cleanable()
@@ -309,7 +310,7 @@ impl Render for SearchPanel {
                                 cx.notify();
                             })),
                     )
-                    .child(Divider::vertical())
+                    .child(Divider::vertical().mx_1())
                     .child(
                         Button::new("prev")
                             .xsmall()

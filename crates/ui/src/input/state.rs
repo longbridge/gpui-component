@@ -1066,7 +1066,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.move_to(0, window, cx);
-        self.select_to(self.text.len(), window, cx)
+        self.select_to(self.text.len(), window, cx);
     }
 
     pub(super) fn home(&mut self, _: &MoveHome, window: &mut Window, cx: &mut Context<Self>) {

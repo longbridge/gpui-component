@@ -413,7 +413,10 @@ impl TextElement {
             (selected_range.end, selected_range.start)
         };
 
-        Self::layout_match_range(start_ix..end_ix, &last_layout, bounds)
+        let range = start_ix.max(last_layout.visible_range_offset.start)
+            ..end_ix.min(last_layout.visible_range_offset.end);
+
+        Self::layout_match_range(range, &last_layout, bounds)
     }
 
     /// Calculate the visible range of lines in the viewport.
@@ -652,10 +655,10 @@ impl Element for TextElement {
 
         // Calculate the width of the line numbers
         let empty_line_number = window.text_system().shape_line(
-            "+++++".into(),
+            "++++++".into(),
             font_size,
             &[TextRun {
-                len: 5,
+                len: 6,
                 font: style.font(),
                 color: gpui::black(),
                 background_color: None,
@@ -844,11 +847,7 @@ impl Element for TextElement {
         last_layout.cursor_bounds = cursor_bounds;
 
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
-        let selection_path = if search_match_paths.is_empty() {
-            self.layout_selections(&last_layout, &mut bounds, cx)
-        } else {
-            None
-        };
+        let selection_path = self.layout_selections(&last_layout, &mut bounds, cx);
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
@@ -876,7 +875,7 @@ impl Element for TextElement {
                 let ix = last_layout.visible_range.start + ix;
                 let line_no = ix + 1;
 
-                let mut line_no_text = format!("{:>5}", line_no);
+                let mut line_no_text = format!("{:>6}", line_no);
                 if !line.wrap_boundaries.is_empty() {
                     line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
                 }
