@@ -242,7 +242,6 @@ impl Render for FormStory {
                         form_field()
                             .label("Please select your birthday")
                             .description("Select your birthday, we will send you a gift.")
-                            .when(is_multi_column, |this| this.col_span(2))
                             .child(DatePicker::new(&self.date)),
                     )
                     .child(
@@ -250,6 +249,7 @@ impl Render for FormStory {
                             .when(is_horizontal && is_multi_column, |this| {
                                 this.no_label_indent()
                             })
+                            .when(is_multi_column, |this| this.col_start(1))
                             .child(
                                 Switch::new("subscribe-newsletter")
                                     .label("Subscribe our newsletter")

@@ -197,6 +197,8 @@ pub struct FormField {
     align_items: Option<AlignItems>,
     props: FieldProps,
     col_span: u16,
+    col_start: Option<i16>,
+    col_end: Option<i16>,
 }
 
 impl FormField {
@@ -214,6 +216,8 @@ impl FormField {
             align_items: None,
             props: FieldProps::default(),
             col_span: 1,
+            col_start: None,
+            col_end: None,
         }
     }
 
@@ -315,11 +319,23 @@ impl FormField {
         self
     }
 
-    /// Set the column span for the form field.
+    /// Sets the column span for the form field.
     ///
     /// Default is 1.
     pub fn col_span(mut self, col_span: u16) -> Self {
         self.col_span = col_span;
+        self
+    }
+
+    /// Sets the column start of this form field.
+    pub fn col_start(mut self, col_start: i16) -> Self {
+        self.col_start = Some(col_start);
+        self
+    }
+
+    /// Sets the column end of this form field.
+    pub fn col_end(mut self, col_end: i16) -> Self {
+        self.col_end = Some(col_end);
         self
     }
 }
@@ -372,6 +388,8 @@ impl RenderOnce for FormField {
             .flex_1()
             .gap(gap / 2.)
             .col_span(self.col_span)
+            .when_some(self.col_start, |this, start| this.col_start(start))
+            .when_some(self.col_end, |this, end| this.col_end(end))
             .child(
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
