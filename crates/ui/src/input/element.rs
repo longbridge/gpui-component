@@ -371,8 +371,11 @@ impl TextElement {
     ) -> Vec<(Path<Pixels>, bool)> {
         let search_panel = self.state.read(cx).search_panel.clone();
         let Some((ranges, current_match_ix)) = search_panel.and_then(|panel| {
-            let matcher = panel.read(cx).matcher();
-            Some((matcher.matched_ranges.clone(), matcher.current_match_ix))
+            if let Some(matcher) = panel.read(cx).matcher() {
+                Some((matcher.matched_ranges.clone(), matcher.current_match_ix))
+            } else {
+                None
+            }
         }) else {
             return vec![];
         };
@@ -1002,14 +1005,11 @@ impl Element for TextElement {
         // Paint selections
         if window.is_window_active() {
             for (path, is_active) in prepaint.search_match_paths.iter() {
-                window.paint_path(
-                    path.clone(),
-                    if *is_active {
-                        cx.theme().selection
-                    } else {
-                        cx.theme().selection.opacity(0.75)
-                    },
-                );
+                window.paint_path(path.clone(), cx.theme().selection.opacity(0.5));
+
+                if *is_active {
+                    window.paint_path(path.clone(), cx.theme().selection);
+                }
             }
 
             if let Some(path) = prepaint.selection_path.take() {

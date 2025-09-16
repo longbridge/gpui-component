@@ -2,21 +2,23 @@ use aho_corasick::AhoCorasick;
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    div, App, AppContext as _, Context, Empty, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, Styled, Subscription, Window,
+    div, App, AppContext as _, Context, Empty, Entity, Half, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window,
 };
 use rope::Rope;
 
 use crate::{
+    button::{Button, ButtonVariants},
+    divider::Divider,
+    h_flex,
     input::{Enter, Escape, InputEvent, InputState, RopeExt, Search, TextInput},
-    v_flex, ActiveTheme, Sizable,
+    ActiveTheme, IconName, Selectable, Sizable,
 };
 
 #[derive(Debug, Clone)]
 pub struct SearchMatcher {
     text: Rope,
     pub query: Option<AhoCorasick>,
-    pub case_sensitive: bool,
 
     pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
     pub(super) current_match_ix: usize,
@@ -27,12 +29,12 @@ impl SearchMatcher {
         Self {
             text: "".into(),
             query: None,
-            case_sensitive: false,
             matched_ranges: Rc::new(Vec::new()),
             current_match_ix: 0,
         }
     }
 
+    /// Update source text and re-match
     pub(crate) fn update(&mut self, text: &Rope) {
         if self.text.eq(text) {
             return;
@@ -52,10 +54,10 @@ impl SearchMatcher {
                 new_ranges.push(query_match.range());
             }
         }
-        self.current_match_ix = 0;
         self.matched_ranges = Rc::new(new_ranges);
     }
 
+    /// Update the search query and reset the current match index.
     pub fn update_query(&mut self, query: &str, case_insensitive: bool) {
         if query.len() > 0 {
             self.query = Some(
@@ -69,30 +71,20 @@ impl SearchMatcher {
         }
         self.update_matches();
     }
-
-    pub fn len(&self) -> usize {
-        self.matched_ranges.len()
-    }
-
-    pub(super) fn clear(&mut self) {
-        self.query = None;
-        self.current_match_ix = 0;
-        self.matched_ranges = Rc::new(Vec::new());
-    }
 }
 
 impl Iterator for SearchMatcher {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let item = self.matched_ranges[self.current_match_ix].clone();
+        let item = self.matched_ranges.get(self.current_match_ix).cloned();
         if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
             self.current_match_ix += 1;
         } else {
             self.current_match_ix = 0;
         }
 
-        Some(item)
+        item
     }
 }
 
@@ -193,25 +185,74 @@ impl SearchPanel {
     pub(super) fn show(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = true;
         self.search_input.read(cx).focus_handle.focus(window);
+
+        self.update_search(cx);
+        self.search_input.update(cx, |this, cx| {
+            this.select_all(&super::SelectAll, window, cx);
+        });
         cx.notify();
     }
 
-    pub(super) fn hide(&mut self, cx: &mut Context<Self>) {
+    fn update_search(&mut self, cx: &mut Context<Self>) {
+        let query = self.search_input.read(cx).value();
+        self.matcher
+            .update_query(query.as_str(), self.case_insensitive);
+        self.update_text_selection(cx);
+    }
+
+    pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = false;
-        self.matcher.clear();
+        self.text_state.read(cx).focus_handle.focus(window);
         cx.notify();
     }
 
-    fn on_escape(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
-        self.hide(cx);
+    fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        self.hide(window, cx);
     }
 
     fn on_enter(&mut self, _: &Enter, _: &mut Window, cx: &mut Context<Self>) {
         _ = self.matcher.next();
+        cx.notify();
     }
 
-    pub(super) fn matcher(&self) -> &SearchMatcher {
-        &self.matcher
+    fn update_text_selection(&mut self, cx: &mut Context<Self>) {
+        if let Some(range) = self
+            .matcher
+            .matched_ranges
+            .get(self.matcher.current_match_ix)
+            .cloned()
+        {
+            let state = self.text_state.clone();
+            cx.spawn(async move |_, cx| {
+                _ = cx.update(|cx| {
+                    state.update(cx, |state, cx| {
+                        state.selected_range = range.into();
+                        cx.notify();
+                    });
+                });
+            })
+            .detach();
+        }
+    }
+
+    fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(_) = self.matcher.next_back() {
+            self.update_text_selection(cx)
+        }
+    }
+
+    fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(_) = self.matcher.next() {
+            self.update_text_selection(cx)
+        }
+    }
+
+    pub(super) fn matcher(&self) -> Option<&SearchMatcher> {
+        if !self.open {
+            return None;
+        }
+
+        Some(&self.matcher)
     }
 }
 
@@ -221,23 +262,76 @@ impl Render for SearchPanel {
             return Empty.into_any_element();
         }
 
-        v_flex()
+        h_flex()
             .id("search-panel")
-            .occlude()
-            .on_action(cx.listener(Self::on_escape))
             .absolute()
-            .right_1()
-            .top_1()
+            .top_0()
+            .right_0()
+            .items_center()
+            .on_action(cx.listener(Self::on_escape))
+            .on_action(cx.listener(Self::on_enter))
             .p_2()
-            .w_72()
+            .w_96()
+            .gap_4()
             .bg(cx.theme().popover)
-            .rounded(cx.theme().radius)
             .border_1()
+            .rounded(cx.theme().radius.half())
             .border_color(cx.theme().border)
-            .child(TextInput::new(&self.search_input).small())
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.hide(cx);
-            }))
+            .justify_between()
+            .child(
+                h_flex()
+                    .flex_1()
+                    .gap_2()
+                    .child(
+                        div().flex_1().child(
+                            TextInput::new(&self.search_input)
+                                .small()
+                                .w_full()
+                                .cleanable()
+                                .shadow_none(),
+                        ),
+                    )
+                    .child(
+                        Button::new("case-insensitive")
+                            .selected(!self.case_insensitive)
+                            .small()
+                            .ghost()
+                            .icon(IconName::CaseSensitive)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.case_insensitive = !this.case_insensitive;
+                                this.update_search(cx);
+                                cx.notify();
+                            })),
+                    )
+                    .child(Divider::vertical())
+                    .child(
+                        Button::new("prev")
+                            .small()
+                            .ghost()
+                            .icon(IconName::ArrowLeft)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.prev(window, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("next")
+                            .small()
+                            .ghost()
+                            .icon(IconName::ArrowRight)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.next(window, cx);
+                            })),
+                    ),
+            )
+            .child(
+                Button::new("close")
+                    .small()
+                    .ghost()
+                    .icon(IconName::Close)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.on_escape(&Escape, window, cx);
+                    })),
+            )
             .into_any_element()
     }
 }
