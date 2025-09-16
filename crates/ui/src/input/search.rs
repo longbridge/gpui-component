@@ -3,13 +3,13 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     div, App, AppContext as _, Context, Empty, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, SharedString, Styled, Subscription, Window,
+    IntoElement, ParentElement as _, Render, Styled, Subscription, Window,
 };
 use rope::Rope;
 
 use crate::{
-    input::{Escape, InputEvent, InputState, RopeExt, Search, TextInput},
-    v_flex, ActiveTheme,
+    input::{Enter, Escape, InputEvent, InputState, RopeExt, Search, TextInput},
+    v_flex, ActiveTheme, Sizable,
 };
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct SearchMatcher {
     pub case_sensitive: bool,
 
     pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
-    current_match_ix: usize,
+    pub(super) current_match_ix: usize,
 }
 
 impl SearchMatcher {
@@ -57,17 +57,27 @@ impl SearchMatcher {
     }
 
     pub fn update_query(&mut self, query: &str, case_insensitive: bool) {
-        self.query = Some(
-            AhoCorasick::builder()
-                .ascii_case_insensitive(case_insensitive)
-                .build(&[query.to_string()])
-                .unwrap(),
-        );
+        if query.len() > 0 {
+            self.query = Some(
+                AhoCorasick::builder()
+                    .ascii_case_insensitive(case_insensitive)
+                    .build(&[query.to_string()])
+                    .unwrap(),
+            );
+        } else {
+            self.query = None;
+        }
         self.update_matches();
     }
 
     pub fn len(&self) -> usize {
         self.matched_ranges.len()
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.query = None;
+        self.current_match_ix = 0;
+        self.matched_ranges = Rc::new(Vec::new());
     }
 }
 
@@ -75,23 +85,27 @@ impl Iterator for SearchMatcher {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(range) = self.matched_ranges.get(self.current_match_ix) {
+        let item = self.matched_ranges[self.current_match_ix].clone();
+        if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
             self.current_match_ix += 1;
-            Some(range.clone())
         } else {
-            None
+            self.current_match_ix = 0;
         }
+
+        Some(item)
     }
 }
 
 impl DoubleEndedIterator for SearchMatcher {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.current_match_ix == 0 {
-            None
-        } else {
-            self.current_match_ix -= 1;
-            self.matched_ranges.get(self.current_match_ix).cloned()
+            self.current_match_ix = self.matched_ranges.len();
         }
+
+        let item = self.matched_ranges[self.current_match_ix - 1].clone();
+        self.current_match_ix -= 1;
+
+        Some(item)
     }
 }
 
@@ -106,6 +120,7 @@ pub(super) struct SearchPanel {
 }
 
 impl InputState {
+    /// Update the search matcher when text changes.
     pub(super) fn update_search(&mut self, cx: &mut App) {
         let Some(search_panel) = self.search_panel.as_ref() else {
             return;
@@ -183,11 +198,20 @@ impl SearchPanel {
 
     pub(super) fn hide(&mut self, cx: &mut Context<Self>) {
         self.open = false;
+        self.matcher.clear();
         cx.notify();
     }
 
     fn on_escape(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
         self.hide(cx);
+    }
+
+    fn on_enter(&mut self, _: &Enter, _: &mut Window, cx: &mut Context<Self>) {
+        _ = self.matcher.next();
+    }
+
+    pub(super) fn matcher(&self) -> &SearchMatcher {
+        &self.matcher
     }
 }
 
@@ -199,17 +223,18 @@ impl Render for SearchPanel {
 
         v_flex()
             .id("search-panel")
+            .occlude()
             .on_action(cx.listener(Self::on_escape))
             .absolute()
-            .right_2()
-            .top_2()
+            .right_1()
+            .top_1()
             .p_2()
-            .w_96()
+            .w_72()
             .bg(cx.theme().popover)
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
-            .child(TextInput::new(&self.search_input))
+            .child(TextInput::new(&self.search_input).small())
             .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                 this.hide(cx);
             }))
@@ -224,18 +249,21 @@ mod tests {
     #[test]
     fn test_search() {
         let mut search = SearchMatcher::new();
-        search.update(&Rope::from("Hello 世界 this is a test string."));
+        search.update(&Rope::from("Hello 世界 this is a Is test string."));
         search.update_query("Is", true);
 
-        assert_eq!(search.len(), 2);
+        assert_eq!(search.len(), 3);
         let mut matches = search.clone().into_iter();
         assert_eq!(matches.next(), Some(15..17));
         assert_eq!(matches.next(), Some(18..20));
-        assert_eq!(matches.next(), None);
-        assert_eq!(matches.current_match_ix, 2);
+        assert_eq!(matches.next(), Some(23..25));
+        assert_eq!(matches.current_match_ix, 0);
+
+        assert_eq!(matches.next_back(), Some(23..25));
         assert_eq!(matches.next_back(), Some(18..20));
         assert_eq!(matches.next_back(), Some(15..17));
-        assert_eq!(matches.next_back(), None);
+        assert_eq!(matches.current_match_ix, 0);
+        assert_eq!(matches.next_back(), Some(23..25));
 
         search.update_query("IS", false);
         assert_eq!(search.len(), 0);

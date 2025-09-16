@@ -233,8 +233,8 @@ pub(super) struct LastLayout {
     pub(super) visible_range: Range<usize>,
     /// The first visible line top position in scroll viewport.
     pub(super) visible_top: Pixels,
-    /// The start byte offset of the first visible line.
-    pub(super) visible_start_offset: usize,
+    /// The range of byte offset of the visible lines.
+    pub(super) visible_range_offset: Range<usize>,
     /// The last layout lines (Only have visible lines).
     pub(super) lines: Rc<SmallVec<[WrappedLine; 1]>>,
     /// The line_height of text layout, this will change will InputElement painted.
@@ -651,7 +651,7 @@ impl InputState {
         };
         let line_height = last_layout.line_height;
 
-        let mut prev_lines_offset = last_layout.visible_start_offset;
+        let mut prev_lines_offset = last_layout.visible_range_offset.start;
         let mut y_offset = last_layout.visible_top;
         for (line_index, line) in last_layout.lines.iter().enumerate() {
             let local_offset = offset.saturating_sub(prev_lines_offset);
@@ -1826,7 +1826,7 @@ impl InputState {
         // - included the scroll offset.
         let inner_position = position - bounds.origin - point(line_number_width, px(0.));
 
-        let mut index = last_layout.visible_start_offset;
+        let mut index = last_layout.visible_range_offset.start;
         let mut y_offset = last_layout.visible_top;
         for (ix, line) in self
             .text_wrapper
@@ -2370,7 +2370,7 @@ impl EntityInputHandler for InputState {
         let mut end_origin = None;
         let line_number_origin = point(line_number_width, px(0.));
         let mut y_offset = last_layout.visible_top;
-        let mut index_offset = last_layout.visible_start_offset;
+        let mut index_offset = last_layout.visible_range_offset.start;
 
         for line in last_layout.lines.iter() {
             if start_origin.is_some() && end_origin.is_some() {
@@ -2418,7 +2418,7 @@ impl EntityInputHandler for InputState {
         let last_layout = self.last_layout.as_ref()?;
         let line_height = last_layout.line_height;
         let line_point = self.last_bounds?.localize(&point)?;
-        let offset = last_layout.visible_start_offset;
+        let offset = last_layout.visible_range_offset.start;
 
         for line in last_layout.lines.iter() {
             if let Ok(utf8_index) = line.index_for_position(line_point, line_height) {

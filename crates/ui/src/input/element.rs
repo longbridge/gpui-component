@@ -230,35 +230,29 @@ impl TextElement {
         (cursor_bounds, scroll_offset, current_row)
     }
 
-    fn layout_selections(
-        &self,
+    fn layout_match_range(
+        range: Range<usize>,
         last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
-        _: &mut Window,
-        cx: &mut App,
     ) -> Option<Path<Pixels>> {
-        let line_height = last_layout.line_height;
-        let visible_top = last_layout.visible_top;
-        let visible_start_offset = last_layout.visible_start_offset;
-        let lines = &last_layout.lines;
-        let line_number_width = last_layout.line_number_width;
-
-        let state = self.state.read(cx);
-        let mut selected_range = state.selected_range;
-        if let Some(ime_marked_range) = &state.ime_marked_range {
-            if !ime_marked_range.is_empty() {
-                selected_range = (ime_marked_range.end..ime_marked_range.end).into();
-            }
-        }
-        if selected_range.is_empty() {
+        if range.is_empty() {
             return None;
         }
 
-        let (start_ix, end_ix) = if selected_range.start < selected_range.end {
-            (selected_range.start, selected_range.end)
-        } else {
-            (selected_range.end, selected_range.start)
-        };
+        if range.start < last_layout.visible_range_offset.start
+            || range.end > last_layout.visible_range_offset.end
+        {
+            return None;
+        }
+
+        let line_height = last_layout.line_height;
+        let visible_top = last_layout.visible_top;
+        let visible_start_offset = last_layout.visible_range_offset.start;
+        let lines = &last_layout.lines;
+        let line_number_width = last_layout.line_number_width;
+
+        let start_ix = range.start;
+        let end_ix = range.end;
 
         let mut prev_lines_offset = visible_start_offset;
         let mut offset_y = visible_top;
@@ -369,6 +363,56 @@ impl TextElement {
         builder.build().ok()
     }
 
+    fn layout_search_matches(
+        &self,
+        last_layout: &LastLayout,
+        bounds: &mut Bounds<Pixels>,
+        cx: &mut App,
+    ) -> Vec<(Path<Pixels>, bool)> {
+        let search_panel = self.state.read(cx).search_panel.clone();
+        let Some((ranges, current_match_ix)) = search_panel.and_then(|panel| {
+            let matcher = panel.read(cx).matcher();
+            Some((matcher.matched_ranges.clone(), matcher.current_match_ix))
+        }) else {
+            return vec![];
+        };
+
+        let mut paths = Vec::new();
+        for (index, range) in ranges.as_ref().iter().enumerate() {
+            if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
+                paths.push((path, current_match_ix == index));
+            }
+        }
+
+        paths
+    }
+
+    fn layout_selections(
+        &self,
+        last_layout: &LastLayout,
+        bounds: &mut Bounds<Pixels>,
+        cx: &mut App,
+    ) -> Option<Path<Pixels>> {
+        let state = self.state.read(cx);
+        let mut selected_range = state.selected_range;
+        if let Some(ime_marked_range) = &state.ime_marked_range {
+            if !ime_marked_range.is_empty() {
+                selected_range = (ime_marked_range.end..ime_marked_range.end).into();
+            }
+        }
+        if selected_range.is_empty() {
+            return None;
+        }
+
+        let (start_ix, end_ix) = if selected_range.start < selected_range.end {
+            (selected_range.start, selected_range.end)
+        } else {
+            (selected_range.end, selected_range.start)
+        };
+
+        Self::layout_match_range(start_ix..end_ix, &last_layout, bounds)
+    }
+
     /// Calculate the visible range of lines in the viewport.
     ///
     /// Returns
@@ -470,6 +514,7 @@ pub(super) struct PrepaintState {
     /// row index (zero based), no wrap, same line as the cursor.
     current_row: Option<usize>,
     selection_path: Option<Path<Pixels>>,
+    search_match_paths: Vec<(Path<Pixels>, bool)>,
     bounds: Bounds<Pixels>,
 }
 
@@ -752,7 +797,7 @@ impl Element for TextElement {
         let mut last_layout = LastLayout {
             visible_range,
             visible_top,
-            visible_start_offset,
+            visible_range_offset: visible_start_offset..visible_end_offset,
             line_height,
             wrap_width,
             line_number_width,
@@ -795,7 +840,12 @@ impl Element for TextElement {
             self.layout_cursor(&last_layout, &mut bounds, window, cx);
         last_layout.cursor_bounds = cursor_bounds;
 
-        let selection_path = self.layout_selections(&last_layout, &mut bounds, window, cx);
+        let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
+        let selection_path = if search_match_paths.is_empty() {
+            self.layout_selections(&last_layout, &mut bounds, cx)
+        } else {
+            None
+        };
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
@@ -854,6 +904,7 @@ impl Element for TextElement {
             cursor_scroll_offset,
             current_row,
             selection_path,
+            search_match_paths,
         }
     }
 
@@ -950,6 +1001,17 @@ impl Element for TextElement {
 
         // Paint selections
         if window.is_window_active() {
+            for (path, is_active) in prepaint.search_match_paths.iter() {
+                window.paint_path(
+                    path.clone(),
+                    if *is_active {
+                        cx.theme().selection
+                    } else {
+                        cx.theme().selection.opacity(0.75)
+                    },
+                );
+            }
+
             if let Some(path) = prepaint.selection_path.take() {
                 window.paint_path(path, cx.theme().selection);
             }
