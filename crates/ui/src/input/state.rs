@@ -2451,6 +2451,5 @@ impl Render for InputState {
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
             .children(self.context_menu.as_ref().map(|menu| menu.render()))
-            .children(self.search_panel.clone())
     }
 }

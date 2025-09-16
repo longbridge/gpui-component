@@ -333,11 +333,11 @@ impl Size {
 
     pub fn input_py(&self) -> Pixels {
         match self {
-            Size::Large => px(16.),
-            Size::Medium => px(8.),
-            Size::Small => px(4.),
+            Size::Large => px(10.),
+            Size::Medium => px(5.),
+            Size::Small => px(2.),
             Size::XSmall => px(0.),
-            _ => px(4.),
+            _ => px(2.),
         }
     }
 }

@@ -71,6 +71,13 @@ impl SearchMatcher {
         }
         self.update_matches();
     }
+
+    /// Returns the number of matches found.
+    #[allow(unused)]
+    #[inline]
+    fn len(&self) -> usize {
+        self.matched_ranges.len()
+    }
 }
 
 impl Iterator for SearchMatcher {
@@ -264,24 +271,23 @@ impl Render for SearchPanel {
 
         h_flex()
             .id("search-panel")
-            .absolute()
-            .top_0()
-            .right_0()
+            .font_family(".SystemUIFont")
             .items_center()
             .on_action(cx.listener(Self::on_escape))
             .on_action(cx.listener(Self::on_enter))
-            .p_2()
-            .w_96()
-            .gap_4()
+            .py_2()
+            .px_3()
+            .w_full()
+            .gap_5()
             .bg(cx.theme().popover)
-            .border_1()
+            .border_b_1()
             .rounded(cx.theme().radius.half())
             .border_color(cx.theme().border)
             .justify_between()
             .child(
                 h_flex()
                     .flex_1()
-                    .gap_2()
+                    .gap_1()
                     .child(
                         div().flex_1().child(
                             TextInput::new(&self.search_input)
@@ -294,7 +300,7 @@ impl Render for SearchPanel {
                     .child(
                         Button::new("case-insensitive")
                             .selected(!self.case_insensitive)
-                            .small()
+                            .xsmall()
                             .ghost()
                             .icon(IconName::CaseSensitive)
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -306,7 +312,7 @@ impl Render for SearchPanel {
                     .child(Divider::vertical())
                     .child(
                         Button::new("prev")
-                            .small()
+                            .xsmall()
                             .ghost()
                             .icon(IconName::ArrowLeft)
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -315,7 +321,7 @@ impl Render for SearchPanel {
                     )
                     .child(
                         Button::new("next")
-                            .small()
+                            .xsmall()
                             .ghost()
                             .icon(IconName::ArrowRight)
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -325,7 +331,7 @@ impl Render for SearchPanel {
             )
             .child(
                 Button::new("close")
-                    .small()
+                    .xsmall()
                     .ghost()
                     .icon(IconName::Close)
                     .on_click(cx.listener(|this, _, window, cx| {

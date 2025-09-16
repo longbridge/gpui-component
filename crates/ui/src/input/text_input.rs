@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement as _,
-    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
-    Styled, Window,
+    div, px, relative, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity,
+    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Pixels, Rems,
+    RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -10,8 +10,8 @@ use crate::indicator::Indicator;
 use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
-use crate::ActiveTheme;
 use crate::{h_flex, StyledExt};
+use crate::{v_flex, ActiveTheme};
 use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
 
@@ -139,6 +139,76 @@ impl TextInput {
                 }
             })
     }
+
+    /// This method must after the refine_style.
+    fn render_editor(
+        paddings: EdgesRefinement<DefiniteLength>,
+        input_state: &Entity<InputState>,
+        state: &InputState,
+        window: &Window,
+        _cx: &App,
+    ) -> impl IntoElement {
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+
+        let paddings = Edges {
+            left: paddings
+                .left
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+            right: paddings
+                .right
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+            top: paddings
+                .top
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+            bottom: paddings
+                .bottom
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+        };
+
+        const MIN_SCROLL_PADDING: Pixels = px(2.0);
+
+        v_flex()
+            .size_full()
+            .children(state.search_panel.clone())
+            .child(div().flex_1().child(input_state.clone()).map(|this| {
+                if let Some(last_layout) = state.last_layout.as_ref() {
+                    let left = if last_layout.line_number_width.is_zero() {
+                        px(0.)
+                    } else {
+                        // Align left edge to the Line number.
+                        paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
+                    };
+
+                    let scroll_size = gpui::Size {
+                        width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
+                        height: state.scroll_size.height,
+                    };
+
+                    let scrollbar = if !state.soft_wrap {
+                        Scrollbar::both(&state.scroll_state, &state.scroll_handle)
+                    } else {
+                        Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
+                    };
+
+                    this.relative().child(
+                        div()
+                            .absolute()
+                            .top(-paddings.top + MIN_SCROLL_PADDING)
+                            .left(left)
+                            .right(-paddings.right + MIN_SCROLL_PADDING)
+                            .bottom(-paddings.bottom + MIN_SCROLL_PADDING)
+                            .child(scrollbar.scroll_size(scroll_size)),
+                    )
+                } else {
+                    this
+                }
+            }))
+    }
 }
 
 impl Styled for TextInput {
@@ -247,10 +317,12 @@ impl RenderOnce for TextInput {
             .on_scroll_wheel(window.listener_for(&self.state, InputState::on_scroll_wheel))
             .size_full()
             .line_height(LINE_HEIGHT)
+            .input_px(self.size)
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
             .text_size(font_size)
+            .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
@@ -267,11 +339,23 @@ impl RenderOnce for TextInput {
                             })
                     })
             })
-            .input_px(self.size)
             .items_center()
             .gap(gap_x)
+            .refine_style(&self.style)
             .children(prefix)
-            .child(self.state.clone())
+            .when(state.mode.is_multi_line(), |mut this| {
+                let paddings = this.style().padding.clone();
+                this.child(Self::render_editor(
+                    paddings,
+                    &self.state,
+                    &state,
+                    window,
+                    cx,
+                ))
+            })
+            .when(!state.mode.is_multi_line(), |this| {
+                this.child(self.state.clone())
+            })
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px() / 2.).child(
                     h_flex()
@@ -297,63 +381,6 @@ impl RenderOnce for TextInput {
                         })
                         .children(suffix),
                 )
-            })
-            .refine_style(&self.style)
-            .when(state.mode.is_multi_line(), |mut this| {
-                let paddings = this.style().padding.clone();
-                let base_size = window.text_style().font_size;
-                let rem_size = window.rem_size();
-
-                let paddings = gpui::Edges {
-                    left: paddings
-                        .left
-                        .map(|v| v.to_pixels(base_size, rem_size))
-                        .unwrap_or(px(0.)),
-                    right: paddings
-                        .right
-                        .map(|v| v.to_pixels(base_size, rem_size))
-                        .unwrap_or(px(0.)),
-                    top: paddings
-                        .top
-                        .map(|v| v.to_pixels(base_size, rem_size))
-                        .unwrap_or(px(0.)),
-                    bottom: paddings
-                        .bottom
-                        .map(|v| v.to_pixels(base_size, rem_size))
-                        .unwrap_or(px(0.)),
-                };
-
-                if let Some(last_layout) = state.last_layout.as_ref() {
-                    let left = if last_layout.line_number_width.is_zero() {
-                        px(0.)
-                    } else {
-                        // Align left edge to the Line number.
-                        paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
-                    };
-
-                    let scroll_size = gpui::Size {
-                        width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
-                        height: state.scroll_size.height,
-                    };
-
-                    let scrollbar = if !state.soft_wrap {
-                        Scrollbar::both(&state.scroll_state, &state.scroll_handle)
-                    } else {
-                        Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
-                    };
-
-                    this.relative().child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left(left)
-                            .right_0()
-                            .bottom_0()
-                            .child(scrollbar.scroll_size(scroll_size)),
-                    )
-                } else {
-                    this
-                }
             })
     }
 }

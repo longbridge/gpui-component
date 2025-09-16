@@ -26,6 +26,7 @@ impl Example {
                     tab_size: 2,
                     ..Default::default()
                 })
+                .searchable(true)
                 .placeholder("Enter your Markdown here...")
                 .default_value(EXAMPLE)
         });
@@ -66,6 +67,7 @@ impl Render for Example {
                         .child(
                             TextInput::new(&self.input_state)
                                 .h_full()
+                                .p_0()
                                 .appearance(false)
                                 .focus_bordered(false),
                         ),
