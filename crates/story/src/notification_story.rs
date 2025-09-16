@@ -1,13 +1,13 @@
 use gpui::{
-    div, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    ParentElement, Render, Styled, Window,
 };
 
 use gpui_component::{
     button::{Button, ButtonVariants},
     notification::{Notification, NotificationType},
     text::TextView,
-    ContextModal as _,
+    v_flex, ContextModal as _,
 };
 
 use crate::section;
@@ -57,10 +57,11 @@ impl Focusable for NotificationStory {
 
 impl Render for NotificationStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
+        v_flex()
             .id("notification-story")
             .track_focus(&self.focus_handle)
             .size_full()
+            .gap_3()
             .child(
                 section("Simple Notification").child(
                     Button::new("show-notify-0")
