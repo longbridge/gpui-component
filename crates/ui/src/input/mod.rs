@@ -10,6 +10,7 @@ mod number_input;
 mod otp_input;
 mod popovers;
 mod rope_ext;
+mod search;
 mod state;
 mod text_input;
 mod text_wrapper;

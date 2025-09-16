@@ -76,8 +76,8 @@ impl TextElement {
         let line_number_width = last_layout.line_number_width;
 
         let mut selected_range = state.selected_range;
-        if let Some(marked_range) = &state.marked_range {
-            selected_range = (marked_range.end..marked_range.end).into();
+        if let Some(ime_marked_range) = &state.ime_marked_range {
+            selected_range = (ime_marked_range.end..ime_marked_range.end).into();
         }
 
         let cursor = state.cursor();
@@ -245,9 +245,9 @@ impl TextElement {
 
         let state = self.state.read(cx);
         let mut selected_range = state.selected_range;
-        if let Some(marked_range) = &state.marked_range {
-            if !marked_range.is_empty() {
-                selected_range = (marked_range.end..marked_range.end).into();
+        if let Some(ime_marked_range) = &state.ime_marked_range {
+            if !ime_marked_range.is_empty() {
+                selected_range = (ime_marked_range.end..ime_marked_range.end).into();
             }
         }
         if selected_range.is_empty() {
@@ -649,8 +649,10 @@ impl Element for TextElement {
 
                 runs.extend(highlight_styles.iter().map(|(range, style)| {
                     let mut run = text_style.clone().highlight(*style).to_run(range.len());
-                    if let Some(marked_range) = &state.marked_range {
-                        if range.start >= marked_range.start && range.end <= marked_range.end {
+                    if let Some(ime_marked_range) = &state.ime_marked_range {
+                        if range.start >= ime_marked_range.start
+                            && range.end <= ime_marked_range.end
+                        {
                             run.color = marked_run.color;
                             run.strikethrough = marked_run.strikethrough;
                             run.underline = marked_run.underline;
@@ -664,20 +666,20 @@ impl Element for TextElement {
             } else {
                 vec![run]
             }
-        } else if let Some(marked_range) = &state.marked_range {
+        } else if let Some(ime_marked_range) = &state.ime_marked_range {
             // IME marked text
             vec![
                 TextRun {
-                    len: marked_range.start,
+                    len: ime_marked_range.start,
                     ..run.clone()
                 },
                 TextRun {
-                    len: marked_range.end - marked_range.start,
+                    len: ime_marked_range.end - ime_marked_range.start,
                     underline: marked_run.underline,
                     ..run.clone()
                 },
                 TextRun {
-                    len: display_text.len() - marked_range.end,
+                    len: display_text.len() - ime_marked_range.end,
                     ..run.clone()
                 },
             ]

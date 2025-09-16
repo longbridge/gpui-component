@@ -31,6 +31,7 @@ use super::{
 };
 use crate::input::{
     popovers::{ContextMenu, DiagnosticPopover},
+    search::SearchPanel,
     Position,
 };
 use crate::input::{RopeExt as _, Selection};
@@ -90,6 +91,7 @@ actions!(
         MoveToNextWord,
         Escape,
         ToggleCodeActions,
+        Search,
     ]
 );
 
@@ -216,6 +218,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-.", ToggleCodeActions, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-.", ToggleCodeActions, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-f", Search, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
     ]);
 
     number_input::init(cx);
@@ -255,11 +261,13 @@ pub struct InputState {
     /// - "Hello 世界💝" = 16
     /// - "💝" = 4
     pub(super) selected_range: Selection,
+    pub(super) search_panel: Option<Entity<SearchPanel>>,
+    pub(super) searchable: bool,
     /// Range for save the selected word, use to keep word range when drag move.
     pub(super) selected_word_range: Option<Selection>,
     pub(super) selection_reversed: bool,
     /// The marked range is the temporary insert text on IME typing.
-    pub(super) marked_range: Option<Selection>,
+    pub(super) ime_marked_range: Option<Selection>,
     pub(super) last_layout: Option<LastLayout>,
     pub(super) last_cursor: Option<usize>,
     /// The input container bounds
@@ -342,9 +350,11 @@ impl InputState {
             blink_cursor,
             history,
             selected_range: Selection::default(),
+            search_panel: None,
+            searchable: false,
             selected_word_range: None,
             selection_reversed: false,
-            marked_range: None,
+            ime_marked_range: None,
             input_bounds: Bounds::default(),
             selecting: false,
             disabled: false,
@@ -425,6 +435,13 @@ impl InputState {
             code_action_providers: vec![],
             completion_provider: None,
         };
+        self.searchable = true;
+        self
+    }
+
+    /// Set this input is searchable, default is false (Default true for Code Editor).
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
         self
     }
 
@@ -1549,7 +1566,7 @@ impl InputState {
             return;
         }
 
-        if self.marked_range.is_some() {
+        if self.ime_marked_range.is_some() {
             self.unmark_text(window, cx);
         }
 
@@ -1577,9 +1594,9 @@ impl InputState {
     ) {
         // If there have IME marked range and is empty (Means pressed Esc to abort IME typing)
         // Clear the marked range.
-        if let Some(marked_range) = &self.marked_range {
-            if marked_range.len() == 0 {
-                self.marked_range = None;
+        if let Some(ime_marked_range) = &self.ime_marked_range {
+            if ime_marked_range.len() == 0 {
+                self.ime_marked_range = None;
             }
         }
 
@@ -1766,8 +1783,8 @@ impl InputState {
     ///
     /// The offset is the UTF-8 offset.
     pub fn cursor(&self) -> usize {
-        if let Some(marked_range) = &self.marked_range {
-            return marked_range.end;
+        if let Some(ime_marked_range) = &self.ime_marked_range {
+            return ime_marked_range.end;
         }
 
         if self.selection_reversed {
@@ -2215,12 +2232,12 @@ impl EntityInputHandler for InputState {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<Range<usize>> {
-        self.marked_range
+        self.ime_marked_range
             .map(|range| self.range_to_utf16(&range.into()))
     }
 
     fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
-        self.marked_range = None;
+        self.ime_marked_range = None;
     }
 
     /// Replace text in range.
@@ -2243,7 +2260,7 @@ impl EntityInputHandler for InputState {
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
-            .or(self.marked_range.map(|range| range.into()))
+            .or(self.ime_marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
 
         let old_text = self.text.clone();
@@ -2273,9 +2290,10 @@ impl EntityInputHandler for InputState {
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
-        self.marked_range.take();
+        self.ime_marked_range.take();
         self.update_preferred_column();
         self.update_scroll_offset(None, cx);
+        self.update_search(cx);
         self.mode.update_auto_grow(&self.text_wrapper);
         self.handle_completion_trigger(&range, &new_text, window, cx);
         cx.emit(InputEvent::Change);
@@ -2298,7 +2316,7 @@ impl EntityInputHandler for InputState {
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
-            .or(self.marked_range.map(|range| range.into()))
+            .or(self.ime_marked_range.map(|range| range.into()))
             .unwrap_or(self.selected_range.into());
 
         let old_text = self.text.clone();
@@ -2320,9 +2338,9 @@ impl EntityInputHandler for InputState {
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
             self.selected_range = (range.start..range.start).into();
-            self.marked_range = None;
+            self.ime_marked_range = None;
         } else {
-            self.marked_range = Some((range.start..range.start + new_text.len()).into());
+            self.ime_marked_range = Some((range.start..range.start + new_text.len()).into());
             self.selected_range = new_selected_range_utf16
                 .as_ref()
                 .map(|range_utf16| self.range_from_utf16(range_utf16))
@@ -2433,5 +2451,6 @@ impl Render for InputState {
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
             .children(self.context_menu.as_ref().map(|menu| menu.render()))
+            .children(self.search_panel.clone())
     }
 }

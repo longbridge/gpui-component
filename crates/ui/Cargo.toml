@@ -91,6 +91,7 @@ chrono = "0.4.38"
 
 # Code Editor
 lsp-types.workspace = true
+aho-corasick = "1.1.3"
 tree-sitter = "0.25.4"
 tree-sitter-json = "0.24.8"
 tree-sitter-bash = { version = "0.23.3", optional = true }
