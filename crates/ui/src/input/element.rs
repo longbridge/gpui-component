@@ -599,10 +599,10 @@ impl Element for TextElement {
 
         // Calculate the width of the line numbers
         let empty_line_number = window.text_system().shape_line(
-            "++++".into(),
+            "+++++".into(),
             font_size,
             &[TextRun {
-                len: 4,
+                len: 5,
                 font: style.font(),
                 color: gpui::black(),
                 background_color: None,
@@ -612,7 +612,7 @@ impl Element for TextElement {
             None,
         );
         let line_number_width = if state.mode.line_number() {
-            empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
+            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
         } else {
             px(0.)
         };
@@ -811,7 +811,7 @@ impl Element for TextElement {
                 let ix = last_layout.visible_range.start + ix;
                 let line_no = ix + 1;
 
-                let mut line_no_text = format!("{:>4}", line_no);
+                let mut line_no_text = format!("{:>5}", line_no);
                 if !line.wrap_boundaries.is_empty() {
                     line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
                 }
@@ -972,7 +972,7 @@ impl Element for TextElement {
                 Bounds {
                     origin: input_bounds.origin,
                     size: size(
-                        prepaint.last_layout.line_number_width,
+                        prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN,
                         input_bounds.size.height,
                     ),
                 },

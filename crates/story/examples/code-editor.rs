@@ -649,6 +649,7 @@ impl Render for Example {
                 .child(
                     TextInput::new(&self.editor)
                         .bordered(false)
+                        .p_0()
                         .h_full()
                         .font_family("Monaco")
                         .text_size(px(12.))
