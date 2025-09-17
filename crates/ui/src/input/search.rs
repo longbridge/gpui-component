@@ -11,7 +11,6 @@ use rope::Rope;
 use crate::{
     actions::SelectPrev,
     button::{Button, ButtonVariants},
-    divider::Divider,
     h_flex,
     input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt, Search, TextInput},
     ActiveTheme, IconName, Selectable, Sizable,
@@ -330,6 +329,19 @@ impl Render for SearchPanel {
                         div().flex_1().mr_2().child(
                             TextInput::new(&self.search_input)
                                 .prefix(IconName::Search)
+                                .suffix(
+                                    Button::new("case-insensitive")
+                                        .selected(!self.case_insensitive)
+                                        .xsmall()
+                                        .compact()
+                                        .ghost()
+                                        .icon(IconName::CaseSensitive)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.case_insensitive = !this.case_insensitive;
+                                            this.update_search(cx);
+                                            cx.notify();
+                                        })),
+                                )
                                 .small()
                                 .w_full()
                                 .cleanable()
@@ -337,23 +349,10 @@ impl Render for SearchPanel {
                         ),
                     )
                     .child(
-                        Button::new("case-insensitive")
-                            .selected(!self.case_insensitive)
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::CaseSensitive)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.case_insensitive = !this.case_insensitive;
-                                this.update_search(cx);
-                                cx.notify();
-                            })),
-                    )
-                    .child(Divider::vertical().mx_1())
-                    .child(
                         Button::new("prev")
                             .xsmall()
                             .ghost()
-                            .icon(IconName::ArrowLeft)
+                            .icon(IconName::ChevronLeft)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.prev(window, cx);
                             })),
@@ -362,7 +361,7 @@ impl Render for SearchPanel {
                         Button::new("next")
                             .xsmall()
                             .ghost()
-                            .icon(IconName::ArrowRight)
+                            .icon(IconName::ChevronRight)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.next(window, cx);
                             })),
