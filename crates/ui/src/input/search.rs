@@ -78,7 +78,7 @@ impl SearchMatcher {
                 AhoCorasick::builder()
                     .ascii_case_insensitive(case_insensitive)
                     .build(&[query.to_string()])
-                    .unwrap(),
+                    .expect("failed to build AhoCorasick query in SearchMatcher"),
             );
         } else {
             self.query = None;
