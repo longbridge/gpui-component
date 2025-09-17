@@ -87,10 +87,13 @@ impl TextElement {
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
         let top_bottom_margin = if state.mode.is_auto_grow() {
-            px(0.) + line_height
+            line_height
+        } else if visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
+            line_height
         } else {
             BOTTOM_MARGIN_ROWS * line_height
         };
+
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
         let mut cursor_start = None;
@@ -179,17 +182,16 @@ impl TextElement {
 
                 // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
                 // So, here we just adjust offset by `line_height` for move smooth.
-                scroll_offset.y = if scroll_offset.y + cursor_pos.y + line_height
-                    > bounds.size.height - top_bottom_margin
-                {
-                    // cursor is out of bottom
-                    scroll_offset.y - line_height
-                } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
-                    // cursor is out of top
-                    (scroll_offset.y + line_height).min(px(0.))
-                } else {
-                    scroll_offset.y
-                };
+                scroll_offset.y =
+                    if scroll_offset.y + cursor_pos.y > bounds.size.height - top_bottom_margin {
+                        // cursor is out of bottom
+                        scroll_offset.y - line_height
+                    } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
+                        // cursor is out of top
+                        (scroll_offset.y + line_height).min(px(0.))
+                    } else {
+                        scroll_offset.y
+                    };
 
                 if state.selection_reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
