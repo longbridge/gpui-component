@@ -2237,6 +2237,10 @@ impl InputState {
             }
         }
     }
+
+    pub(super) fn selected_text(&self) -> Rope {
+        self.text.slice(self.selected_range.into())
+    }
 }
 
 impl EntityInputHandler for InputState {

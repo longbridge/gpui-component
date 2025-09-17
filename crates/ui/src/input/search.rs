@@ -169,10 +169,11 @@ impl InputState {
 
         let text = self.text.clone();
         let text_state = cx.entity();
+        let selected_text = self.selected_text();
         search_panel.update(cx, |this, cx| {
             this.text_state = text_state;
             this.matcher.update(&text);
-            this.show(window, cx);
+            this.show(&selected_text, window, cx);
         });
         self.search_panel = Some(search_panel);
         cx.notify();
@@ -211,14 +212,22 @@ impl SearchPanel {
         })
     }
 
-    pub(super) fn show(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show(
+        &mut self,
+        selected_text: &Rope,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.open = true;
         self.search_input.read(cx).focus_handle.focus(window);
 
-        self.update_search(cx);
         self.search_input.update(cx, |this, cx| {
+            if selected_text.len() > 0 {
+                this.set_value(selected_text.to_string(), window, cx);
+            }
             this.select_all(&super::SelectAll, window, cx);
         });
+        self.update_search(cx);
         cx.notify();
     }
 
