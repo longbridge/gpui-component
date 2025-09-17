@@ -1808,6 +1808,7 @@ impl InputState {
     fn move_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
         let offset = offset.clamp(0, self.text.len());
         self.selected_range = (offset..offset).into();
+        self.scroll_to(offset, cx);
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
         self.hide_context_menu(cx);
