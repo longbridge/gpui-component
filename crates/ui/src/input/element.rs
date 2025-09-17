@@ -11,7 +11,7 @@ use smallvec::SmallVec;
 
 use crate::{
     input::{blink_cursor::CURSOR_WIDTH, RopeExt as _},
-    ActiveTheme as _, Root,
+    ActiveTheme as _, Colorize, Root,
 };
 
 use super::{mode::InputMode, InputState, LastLayout};
@@ -1004,7 +1004,7 @@ impl Element for TextElement {
         // Paint selections
         if window.is_window_active() {
             for (path, is_active) in prepaint.search_match_paths.iter() {
-                window.paint_path(path.clone(), cx.theme().selection.opacity(0.5));
+                window.paint_path(path.clone(), cx.theme().selection.saturation(0.1));
 
                 if *is_active {
                     window.paint_path(path.clone(), cx.theme().selection);
