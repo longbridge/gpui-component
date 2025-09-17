@@ -225,9 +225,12 @@ impl SearchPanel {
         self.hide(window, cx);
     }
 
-    fn on_enter(&mut self, _: &Enter, _: &mut Window, cx: &mut Context<Self>) {
-        _ = self.matcher.next();
-        cx.notify();
+    fn on_enter(&mut self, enter: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        if enter.secondary {
+            self.prev(window, cx);
+        } else {
+            self.next(window, cx);
+        }
     }
 
     fn update_text_selection(&mut self, cx: &mut Context<Self>) {
@@ -251,14 +254,20 @@ impl SearchPanel {
     }
 
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(_) = self.matcher.next_back() {
-            self.update_text_selection(cx)
+        if let Some(range) = self.matcher.next_back() {
+            self.text_state.update(cx, |state, cx| {
+                let row = state.text.offset_to_point(range.start).row as usize;
+                state.scroll_to_row(row, cx);
+            });
         }
     }
 
     fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(_) = self.matcher.next() {
-            self.update_text_selection(cx)
+        if let Some(range) = self.matcher.next() {
+            self.text_state.update(cx, |state, cx| {
+                let row = state.text.offset_to_point(range.start).row as usize;
+                state.scroll_to_row(row, cx);
+            });
         }
     }
 

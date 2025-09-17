@@ -5,7 +5,7 @@
 use anyhow::Result;
 use gpui::{
     actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, Half,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
@@ -30,6 +30,7 @@ use super::{
     text_wrapper::TextWrapper,
 };
 use crate::input::{
+    element::BOTTOM_MARGIN_ROWS,
     popovers::{ContextMenu, DiagnosticPopover},
     search::SearchPanel,
     Position,
@@ -1689,6 +1690,37 @@ impl InputState {
         offset.x = offset.x.clamp(safe_x_range.start, safe_x_range.end);
         self.scroll_handle.set_offset(offset);
         cx.notify();
+    }
+
+    pub(crate) fn scroll_to_row(&mut self, row: usize, cx: &mut Context<Self>) {
+        let Some(last_layout) = self.last_layout.as_ref() else {
+            return;
+        };
+        let Some(bounds) = self.last_bounds.as_ref() else {
+            return;
+        };
+
+        let mut scroll_offset = self.scroll_handle.offset();
+        let line_height = last_layout.line_height;
+
+        let mut row_offset_y = px(0.);
+        for (ix, wrap_line) in self.text_wrapper.lines.iter().enumerate() {
+            if ix == row {
+                break;
+            }
+
+            row_offset_y += wrap_line.height(line_height);
+        }
+
+        // Check if row_offset_y is out of the viewport
+        let viewport_height = (bounds.size.height - (2 * line_height)).max(line_height);
+        dbg!(scroll_offset.y, row_offset_y, viewport_height);
+        let scroll_end = scroll_offset.y + viewport_height;
+        let scroll_start = scroll_end - viewport_height;
+        if row_offset_y < scroll_start || row_offset_y > scroll_end {
+            scroll_offset.y = -(row_offset_y - bounds.size.height.half());
+            self.update_scroll_offset(Some(scroll_offset), cx);
+        }
     }
 
     pub(super) fn show_character_palette(
