@@ -584,7 +584,6 @@
         "editor.active_line.background": "#363a4f",
         "editor.line_number": "#b8c0e0",
         "editor.active_line_number": "#cad3f5",
-
         "conflict": "#ed8796",
         "created": "#a6da95",
         "deleted": "#ed8796",
@@ -730,7 +729,7 @@
       "highlight": {
         "editor.foreground": "#cdd6f4",
         "editor.background": "#181825",
-        "editor.active_line.background": "#302d41",
+        "editor.active_line.background": "#222230AA",
         "editor.line_number": "#6c7086",
         "editor.active_line_number": "#cdd6f4",
         "conflict": "#f38ba8",

@@ -16,7 +16,7 @@ use crate::{
 
 use super::{mode::InputMode, InputState, LastLayout};
 
-const BOTTOM_MARGIN_ROWS: usize = 3;
+pub(super) const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 
@@ -1049,11 +1049,7 @@ impl Element for TextElement {
                         input_bounds.size.height,
                     ),
                 },
-                cx.theme()
-                    .highlight_theme
-                    .style
-                    .background
-                    .unwrap_or(cx.theme().input),
+                cx.theme().background,
             ));
 
             // Each item is the normal lines.
