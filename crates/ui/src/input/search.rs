@@ -88,14 +88,13 @@ impl Iterator for SearchMatcher {
             return None;
         }
 
-        let item = self.matched_ranges.get(self.current_match_ix).cloned();
         if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
             self.current_match_ix += 1;
         } else {
             self.current_match_ix = 0;
         }
 
-        item
+        self.matched_ranges.get(self.current_match_ix).cloned()
     }
 }
 
@@ -256,8 +255,7 @@ impl SearchPanel {
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(range) = self.matcher.next_back() {
             self.text_state.update(cx, |state, cx| {
-                let row = state.text.offset_to_point(range.start).row as usize;
-                state.scroll_to_row(row, cx);
+                state.scroll_to(range.start, cx);
             });
         }
     }
@@ -265,8 +263,7 @@ impl SearchPanel {
     fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(range) = self.matcher.next() {
             self.text_state.update(cx, |state, cx| {
-                let row = state.text.offset_to_point(range.start).row as usize;
-                state.scroll_to_row(row, cx);
+                state.scroll_to(range.end, cx);
             });
         }
     }

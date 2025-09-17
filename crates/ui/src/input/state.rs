@@ -30,7 +30,6 @@ use super::{
     text_wrapper::TextWrapper,
 };
 use crate::input::{
-    element::BOTTOM_MARGIN_ROWS,
     popovers::{ContextMenu, DiagnosticPopover},
     search::SearchPanel,
     Position,
@@ -1692,7 +1691,7 @@ impl InputState {
         cx.notify();
     }
 
-    pub(crate) fn scroll_to_row(&mut self, row: usize, cx: &mut Context<Self>) {
+    pub(crate) fn scroll_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         let Some(last_layout) = self.last_layout.as_ref() else {
             return;
         };
@@ -1702,6 +1701,9 @@ impl InputState {
 
         let mut scroll_offset = self.scroll_handle.offset();
         let line_height = last_layout.line_height;
+
+        let point = self.text.offset_to_point(offset);
+        let row = point.row as usize;
 
         let mut row_offset_y = px(0.);
         for (ix, wrap_line) in self.text_wrapper.lines.iter().enumerate() {
@@ -1713,14 +1715,15 @@ impl InputState {
         }
 
         // Check if row_offset_y is out of the viewport
-        let viewport_height = (bounds.size.height - (2 * line_height)).max(line_height);
-        dbg!(scroll_offset.y, row_offset_y, viewport_height);
-        let scroll_end = scroll_offset.y + viewport_height;
-        let scroll_start = scroll_end - viewport_height;
-        if row_offset_y < scroll_start || row_offset_y > scroll_end {
+        // If row offset is not in the viewport, scroll to make it visible
+        if row_offset_y < -scroll_offset.y {
+            // Scroll up
+            scroll_offset.y = -row_offset_y - line_height + bounds.size.height.half();
+        } else if row_offset_y + line_height > -scroll_offset.y + bounds.size.height {
+            // Scroll down
             scroll_offset.y = -(row_offset_y - bounds.size.height.half());
-            self.update_scroll_offset(Some(scroll_offset), cx);
         }
+        self.update_scroll_offset(Some(scroll_offset), cx);
     }
 
     pub(super) fn show_character_palette(

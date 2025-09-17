@@ -16,7 +16,7 @@ use crate::{
 
 use super::{mode::InputMode, InputState, LastLayout};
 
-pub(super) const BOTTOM_MARGIN_ROWS: usize = 3;
+const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 

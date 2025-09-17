@@ -137,11 +137,7 @@ impl CompletionProvider for ExampleLspStore {
         _: &mut Window,
         cx: &mut Context<InputState>,
     ) -> Task<Result<Vec<CompletionResponse>>> {
-        let trigger_character = trigger
-            .trigger_character
-            .as_deref()
-            .unwrap_or("")
-            .to_string();
+        let trigger_character = trigger.trigger_character.unwrap_or_default();
         if trigger_character.is_empty() {
             return Task::ready(Ok(vec![]));
         }
