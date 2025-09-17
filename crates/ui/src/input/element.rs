@@ -2,9 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, HighlightStyle, IntoElement, LayoutId, MouseButton, MouseMoveEvent,
-    Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun, UnderlineStyle, Window,
-    WrappedLine,
+    Entity, GlobalElementId, Half, HighlightStyle, IntoElement, LayoutId, MouseButton,
+    MouseMoveEvent, Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun,
+    UnderlineStyle, Window, WrappedLine,
 };
 use rope::Rope;
 use smallvec::SmallVec;
@@ -16,8 +16,8 @@ use crate::{
 
 use super::{mode::InputMode, InputState, LastLayout};
 
+const BOTTOM_MARGIN_ROWS: usize = 4;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
-const BOTTOM_MARGIN_ROWS: usize = 1;
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 
 pub(super) struct TextElement {
@@ -86,10 +86,10 @@ impl TextElement {
         let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let bottom_margin = if state.mode.is_auto_grow() {
+        let top_bottom_margin = if state.mode.is_auto_grow() {
             px(0.) + line_height
         } else {
-            BOTTOM_MARGIN_ROWS * line_height + line_height
+            BOTTOM_MARGIN_ROWS * line_height
         };
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
@@ -176,14 +176,15 @@ impl TextElement {
                 } else {
                     scroll_offset.x
                 };
+
                 scroll_offset.y = if scroll_offset.y + cursor_pos.y + line_height
-                    > bounds.size.height - bottom_margin
+                    > bounds.size.height - top_bottom_margin
                 {
                     // cursor is out of bottom
-                    bounds.size.height - bottom_margin - cursor_pos.y
-                } else if scroll_offset.y + cursor_pos.y < px(0.) {
+                    bounds.size.height - top_bottom_margin - cursor_pos.y
+                } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
                     // cursor is out of top
-                    scroll_offset.y - cursor_pos.y
+                    (scroll_offset.y + top_bottom_margin).min(px(0.))
                 } else {
                     scroll_offset.y
                 };
@@ -727,14 +728,19 @@ impl Element for TextElement {
         }
 
         let total_wrapped_lines = state.text_wrapper.len();
-
+        let empty_bottom_height = bounds
+            .size
+            .height
+            .half()
+            .max(BOTTOM_MARGIN_ROWS * line_height);
         let scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
             } else {
                 longest_line_width
             },
-            (total_wrapped_lines as f32 * line_height).max(bounds.size.height),
+            (total_wrapped_lines as f32 * line_height + empty_bottom_height)
+                .max(bounds.size.height),
         );
 
         let mut last_layout = LastLayout {
