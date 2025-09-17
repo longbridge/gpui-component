@@ -402,9 +402,10 @@ mod tests {
 
         assert_eq!(search.len(), 3);
         let mut matches = search.clone().into_iter();
-        assert_eq!(matches.next(), Some(15..17));
         assert_eq!(matches.next(), Some(18..20));
         assert_eq!(matches.next(), Some(23..25));
+        assert_eq!(matches.current_match_ix, 2);
+        assert_eq!(matches.next(), Some(15..17));
         assert_eq!(matches.current_match_ix, 0);
 
         assert_eq!(matches.next_back(), Some(23..25));
