@@ -84,6 +84,10 @@ impl Iterator for SearchMatcher {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.matched_ranges.is_empty() {
+            return None;
+        }
+
         let item = self.matched_ranges.get(self.current_match_ix).cloned();
         if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
             self.current_match_ix += 1;
@@ -97,6 +101,10 @@ impl Iterator for SearchMatcher {
 
 impl DoubleEndedIterator for SearchMatcher {
     fn next_back(&mut self) -> Option<Self::Item> {
+        if self.matched_ranges.is_empty() {
+            return None;
+        }
+
         if self.current_match_ix == 0 {
             self.current_match_ix = self.matched_ranges.len();
         }
@@ -368,5 +376,7 @@ mod tests {
 
         search.update_query("IS", false);
         assert_eq!(search.len(), 0);
+        assert_eq!(search.next(), None);
+        assert_eq!(search.next_back(), None);
     }
 }
