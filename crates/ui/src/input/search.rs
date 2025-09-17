@@ -68,6 +68,7 @@ impl SearchMatcher {
             }
         }
         self.matched_ranges = Rc::new(new_ranges);
+        self.current_match_ix = 0;
     }
 
     /// Update the search query and reset the current match index.
@@ -121,8 +122,8 @@ impl DoubleEndedIterator for SearchMatcher {
             self.current_match_ix = self.matched_ranges.len();
         }
 
-        let item = self.matched_ranges[self.current_match_ix - 1].clone();
         self.current_match_ix -= 1;
+        let item = self.matched_ranges[self.current_match_ix].clone();
 
         Some(item)
     }
@@ -402,14 +403,16 @@ mod tests {
 
         assert_eq!(search.len(), 3);
         let mut matches = search.clone().into_iter();
+        assert_eq!(matches.current_match_ix, 0);
         assert_eq!(matches.next(), Some(18..20));
         assert_eq!(matches.next(), Some(23..25));
         assert_eq!(matches.current_match_ix, 2);
         assert_eq!(matches.next(), Some(15..17));
         assert_eq!(matches.current_match_ix, 0);
-
         assert_eq!(matches.next_back(), Some(23..25));
+        assert_eq!(matches.current_match_ix, 2);
         assert_eq!(matches.next_back(), Some(18..20));
+        assert_eq!(matches.current_match_ix, 1);
         assert_eq!(matches.next_back(), Some(15..17));
         assert_eq!(matches.current_match_ix, 0);
         assert_eq!(matches.next_back(), Some(23..25));
