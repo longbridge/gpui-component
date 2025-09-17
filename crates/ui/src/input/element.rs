@@ -16,7 +16,7 @@ use crate::{
 
 use super::{mode::InputMode, InputState, LastLayout};
 
-const BOTTOM_MARGIN_ROWS: usize = 4;
+const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 
@@ -184,7 +184,7 @@ impl TextElement {
                     bounds.size.height - top_bottom_margin - cursor_pos.y
                 } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
                     // cursor is out of top
-                    (scroll_offset.y + top_bottom_margin).min(px(0.))
+                    (scroll_offset.y + line_height).min(px(0.))
                 } else {
                     scroll_offset.y
                 };
