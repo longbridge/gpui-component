@@ -742,7 +742,7 @@ impl Element for TextElement {
         };
 
         let wrap_width = if multi_line && state.soft_wrap {
-            Some(bounds.size.width - line_number_width)
+            Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
         } else {
             None
         };
@@ -759,8 +759,8 @@ impl Element for TextElement {
             .expect("failed to shape text");
         // measure.end();
 
-        let mut longest_line_width = px(0.);
-        if state.mode.is_multi_line() && lines.len() > 1 {
+        let mut longest_line_width = wrap_width.unwrap_or(px(0.));
+        if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
             let longtest_line: SharedString = state
                 .text
                 .line(state.text.summary().longest_row as usize)
