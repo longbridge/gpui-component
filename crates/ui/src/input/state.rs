@@ -31,7 +31,7 @@ use super::{
 };
 use crate::input::{
     popovers::{ContextMenu, DiagnosticPopover},
-    search::SearchPanel,
+    search::{self, SearchPanel},
     Position,
 };
 use crate::input::{RopeExt as _, Selection};
@@ -224,6 +224,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
     ]);
 
+    search::init(cx);
     number_input::init(cx);
 }
 

@@ -2,18 +2,32 @@ use aho_corasick::AhoCorasick;
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    div, App, AppContext as _, Context, Empty, Entity, Half, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window,
+    actions, div, App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, Styled,
+    Subscription, Window,
 };
 use rope::Rope;
 
 use crate::{
+    actions::SelectPrev,
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
-    input::{Enter, Escape, InputEvent, InputState, RopeExt, Search, TextInput},
+    input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt, Search, TextInput},
     ActiveTheme, IconName, Selectable, Sizable,
 };
+
+const KEY_CONTEXT: &'static str = "SearchPanel";
+
+actions!(input, [Tab]);
+
+pub(super) fn init(cx: &mut App) {
+    cx.bind_keys(vec![KeyBinding::new(
+        "shift-enter",
+        SelectPrev,
+        Some(KEY_CONTEXT),
+    )]);
+}
 
 #[derive(Debug, Clone)]
 pub struct SearchMatcher {
@@ -116,6 +130,7 @@ impl DoubleEndedIterator for SearchMatcher {
 }
 
 pub(super) struct SearchPanel {
+    focus_handle: FocusHandle,
     text_state: Entity<InputState>,
     search_input: Entity<InputState>,
     case_insensitive: bool,
@@ -186,6 +201,7 @@ impl SearchPanel {
             )];
 
             Self {
+                focus_handle: cx.focus_handle(),
                 text_state,
                 search_input,
                 case_insensitive: true,
@@ -220,16 +236,20 @@ impl SearchPanel {
         cx.notify();
     }
 
-    fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+        self.prev(window, cx);
+    }
+
+    fn on_action_next(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        self.next(window, cx);
+    }
+
+    fn on_action_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         self.hide(window, cx);
     }
 
-    fn on_enter(&mut self, enter: &Enter, window: &mut Window, cx: &mut Context<Self>) {
-        if enter.secondary {
-            self.prev(window, cx);
-        } else {
-            self.next(window, cx);
-        }
+    fn on_action_tab(&mut self, _: &IndentInline, window: &mut Window, cx: &mut Context<Self>) {
+        self.text_state.focus_handle(cx).focus(window);
     }
 
     fn update_text_selection(&mut self, cx: &mut Context<Self>) {
@@ -285,10 +305,14 @@ impl Render for SearchPanel {
 
         h_flex()
             .id("search-panel")
+            .track_focus(&self.focus_handle)
+            .key_context(KEY_CONTEXT)
+            .on_action(cx.listener(Self::on_action_prev))
+            .on_action(cx.listener(Self::on_action_next))
+            .on_action(cx.listener(Self::on_action_escape))
+            .on_action(cx.listener(Self::on_action_tab))
             .font_family(".SystemUIFont")
             .items_center()
-            .on_action(cx.listener(Self::on_escape))
-            .on_action(cx.listener(Self::on_enter))
             .py_2()
             .px_3()
             .w_full()
@@ -350,7 +374,7 @@ impl Render for SearchPanel {
                     .ghost()
                     .icon(IconName::Close)
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.on_escape(&Escape, window, cx);
+                        this.on_action_escape(&Escape, window, cx);
                     })),
             )
             .into_any_element()
