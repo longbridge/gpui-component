@@ -1,10 +1,11 @@
 use aho_corasick::AhoCorasick;
+use rust_i18n::t;
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    actions, div, App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, Styled,
-    Subscription, Window,
+    actions, div, prelude::FluentBuilder as _, App, AppContext as _, Context, Empty, Entity,
+    EntityInputHandler, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement,
+    KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
 };
 use rope::Rope;
 
@@ -13,7 +14,7 @@ use crate::{
     button::{Button, ButtonVariants},
     h_flex,
     input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt, Search, TextInput},
-    ActiveTheme, IconName, Selectable, Sizable,
+    v_flex, ActiveTheme, IconName, Selectable, Sizable,
 };
 
 const KEY_CONTEXT: &'static str = "SearchPanel";
@@ -35,6 +36,8 @@ pub struct SearchMatcher {
 
     pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
     pub(super) current_match_ix: usize,
+    /// Is in replacing mode, if true, the next update will not reset the current match index.
+    replacing: bool,
 }
 
 impl SearchMatcher {
@@ -44,6 +47,7 @@ impl SearchMatcher {
             query: None,
             matched_ranges: Rc::new(Vec::new()),
             current_match_ix: 0,
+            replacing: false,
         }
     }
 
@@ -68,7 +72,10 @@ impl SearchMatcher {
             }
         }
         self.matched_ranges = Rc::new(new_ranges);
-        self.current_match_ix = 0;
+        if !self.replacing {
+            self.current_match_ix = 0;
+            self.replacing = false;
+        }
     }
 
     /// Update the search query and reset the current match index.
@@ -91,6 +98,10 @@ impl SearchMatcher {
     #[inline]
     fn len(&self) -> usize {
         self.matched_ranges.len()
+    }
+
+    fn peek(&self) -> Option<Range<usize>> {
+        self.matched_ranges.get(self.current_match_ix + 1).cloned()
     }
 }
 
@@ -130,10 +141,11 @@ impl DoubleEndedIterator for SearchMatcher {
 }
 
 pub(super) struct SearchPanel {
-    focus_handle: FocusHandle,
     text_state: Entity<InputState>,
     search_input: Entity<InputState>,
+    replace_input: Entity<InputState>,
     case_insensitive: bool,
+    replace_mode: bool,
     matcher: SearchMatcher,
 
     open: bool,
@@ -183,7 +195,8 @@ impl InputState {
 
 impl SearchPanel {
     pub fn new(text_state: Entity<InputState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
-        let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
+        let search_input = cx.new(|cx| InputState::new(window, cx));
+        let replace_input = cx.new(|cx| InputState::new(window, cx));
 
         cx.new(|cx| {
             let _subscriptions = vec![cx.subscribe(
@@ -202,10 +215,11 @@ impl SearchPanel {
             )];
 
             Self {
-                focus_handle: cx.focus_handle(),
                 text_state,
                 search_input,
+                replace_input,
                 case_insensitive: true,
+                replace_mode: false,
                 matcher: SearchMatcher::new(),
                 open: true,
                 _subscriptions,
@@ -304,6 +318,72 @@ impl SearchPanel {
 
         Some(&self.matcher)
     }
+
+    fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let new_text = self.replace_input.read(cx).value();
+        self.matcher.replacing = true;
+        if let Some(range) = self
+            .matcher
+            .matched_ranges
+            .get(self.matcher.current_match_ix)
+            .cloned()
+        {
+            let text_state = self.text_state.clone();
+
+            let next_range = self.matcher.peek().unwrap_or(range.clone());
+            cx.spawn_in(window, async move |_, cx| {
+                cx.update(|window, cx| {
+                    text_state.update(cx, |state, cx| {
+                        let range_utf16 = state.range_to_utf16(&range);
+                        state.scroll_to(next_range.end, cx);
+                        state.replace_text_in_range(
+                            Some(range_utf16),
+                            new_text.as_str(),
+                            window,
+                            cx,
+                        );
+                    });
+                })
+            })
+            .detach();
+        }
+    }
+
+    fn replace_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let new_text = self.replace_input.read(cx).value();
+        self.matcher.replacing = true;
+        let ranges = self.matcher.matched_ranges.clone();
+        if ranges.is_empty() {
+            return;
+        }
+
+        let text_state = self.text_state.clone();
+        cx.spawn_in(window, async move |_, cx| {
+            cx.update(|window, cx| {
+                text_state.update(cx, |state, cx| {
+                    // Replace from the end to avoid messing up the ranges.
+                    let mut rope = state.text.clone();
+                    for range in ranges.iter().rev() {
+                        rope.replace(range.clone(), new_text.as_str());
+                    }
+                    state.replace_text_in_range(
+                        Some(0..state.text.len()),
+                        &rope.to_string(),
+                        window,
+                        cx,
+                    );
+                    state.scroll_to(0, cx);
+                });
+            })
+        })
+        .detach();
+    }
+}
+
+impl Focusable for SearchPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.search_input.read(cx).focus_handle.clone()
+    }
 }
 
 impl Render for SearchPanel {
@@ -312,10 +392,10 @@ impl Render for SearchPanel {
             return Empty.into_any_element();
         }
 
-        h_flex()
+        v_flex()
             .id("search-panel")
             .occlude()
-            .track_focus(&self.focus_handle)
+            .track_focus(&self.focus_handle(cx))
             .key_context(KEY_CONTEXT)
             .on_action(cx.listener(Self::on_action_prev))
             .on_action(cx.listener(Self::on_action_next))
@@ -326,20 +406,19 @@ impl Render for SearchPanel {
             .py_2()
             .px_3()
             .w_full()
-            .gap_5()
+            .gap_1()
             .bg(cx.theme().popover)
             .border_b_1()
             .rounded(cx.theme().radius.half())
             .border_color(cx.theme().border)
-            .justify_between()
             .child(
                 h_flex()
-                    .flex_1()
-                    .gap_1()
+                    .w_full()
+                    .gap_2()
                     .child(
-                        div().flex_1().mr_2().child(
+                        div().flex_1().gap_1().child(
                             TextInput::new(&self.search_input)
-                                .prefix(IconName::Search)
+                                .focus_bordered(false)
                                 .suffix(
                                     Button::new("case-insensitive")
                                         .selected(!self.case_insensitive)
@@ -360,6 +439,18 @@ impl Render for SearchPanel {
                         ),
                     )
                     .child(
+                        Button::new("replace-mode")
+                            .xsmall()
+                            .ghost()
+                            .icon(IconName::Replace)
+                            .selected(self.replace_mode)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.replace_mode = !this.replace_mode;
+                                this.replace_input.read(cx).focus_handle.focus(window);
+                                cx.notify();
+                            })),
+                    )
+                    .child(
                         Button::new("prev")
                             .xsmall()
                             .ghost()
@@ -376,17 +467,48 @@ impl Render for SearchPanel {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.next(window, cx);
                             })),
+                    )
+                    .child(div().w_5())
+                    .child(
+                        Button::new("close")
+                            .xsmall()
+                            .ghost()
+                            .icon(IconName::Close)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.on_action_escape(&Escape, window, cx);
+                            })),
                     ),
             )
-            .child(
-                Button::new("close")
-                    .xsmall()
-                    .ghost()
-                    .icon(IconName::Close)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.on_action_escape(&Escape, window, cx);
-                    })),
-            )
+            .when(self.replace_mode, |this| {
+                this.child(
+                    h_flex()
+                        .w_full()
+                        .gap_2()
+                        .child(
+                            TextInput::new(&self.replace_input)
+                                .focus_bordered(false)
+                                .small()
+                                .w_full()
+                                .shadow_none(),
+                        )
+                        .child(
+                            Button::new("replace-one")
+                                .small()
+                                .label(t!("Input.Replace"))
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.replace_next(window, cx);
+                                })),
+                        )
+                        .child(
+                            Button::new("replace-all")
+                                .small()
+                                .label(t!("Input.Replace All"))
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.replace_all(window, cx);
+                                })),
+                        ),
+                )
+            })
             .into_any_element()
     }
 }

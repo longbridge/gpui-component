@@ -155,3 +155,14 @@ List:
     zh-CN: 搜索...
     zh-HK: 搜索...
     it: Ricerca...
+Input:
+  Replace:
+    en: Replace
+    zh-CN: 替换
+    zh-HK: 替換
+    it: Sostituisci
+  Replace All:
+    en: Replace All
+    zh-CN: 全部替换
+    zh-HK: 全部替換
+    it: Sostituisci tutto
