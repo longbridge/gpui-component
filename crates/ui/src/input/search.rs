@@ -313,6 +313,7 @@ impl Render for SearchPanel {
 
         h_flex()
             .id("search-panel")
+            .occlude()
             .track_focus(&self.focus_handle)
             .key_context(KEY_CONTEXT)
             .on_action(cx.listener(Self::on_action_prev))
