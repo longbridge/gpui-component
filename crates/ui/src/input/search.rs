@@ -446,7 +446,11 @@ impl Render for SearchPanel {
                             .selected(self.replace_mode)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.replace_mode = !this.replace_mode;
-                                this.replace_input.read(cx).focus_handle.focus(window);
+                                if this.replace_mode {
+                                    this.replace_input.read(cx).focus_handle.focus(window);
+                                } else {
+                                    this.search_input.read(cx).focus_handle.focus(window);
+                                }
                                 cx.notify();
                             })),
                     )
