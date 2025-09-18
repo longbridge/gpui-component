@@ -106,7 +106,7 @@ impl Render for HoverPopover {
         let scroll_origin = self.editor.read(cx).scroll_handle.offset();
 
         // +2px to move down to cover the text to overlap the block mouse move events
-        let y = pos.y - self.bounds.size.height + scroll_origin.y + px(2.);
+        let y = pos.y - self.bounds.size.height + scroll_origin.y + px(1.);
         let x = pos.x + scroll_origin.x - px(2.);
         let max_width = px(500.).min(window.bounds().size.width - x).max(px(200.));
 
