@@ -3,9 +3,9 @@ use rust_i18n::t;
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, App, AppContext as _, Context, Empty, Entity,
-    EntityInputHandler, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
+    actions, canvas, div, prelude::FluentBuilder as _, App, AppContext as _, Context, Empty,
+    Entity, EntityInputHandler, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement,
+    KeyBinding, ParentElement as _, Pixels, Render, Styled, Subscription, Window,
 };
 use rope::Rope;
 
@@ -148,6 +148,7 @@ pub(super) struct SearchPanel {
     case_insensitive: bool,
     replace_mode: bool,
     matcher: SearchMatcher,
+    input_width: Pixels,
 
     open: bool,
     _subscriptions: Vec<Subscription>,
@@ -223,6 +224,7 @@ impl SearchPanel {
                 replace_mode: false,
                 matcher: SearchMatcher::new(),
                 open: true,
+                input_width: Pixels::ZERO,
                 _subscriptions,
             }
         })
@@ -419,26 +421,44 @@ impl Render for SearchPanel {
                     .w_full()
                     .gap_2()
                     .child(
-                        div().flex_1().gap_1().child(
-                            TextInput::new(&self.search_input)
-                                .focus_bordered(false)
-                                .suffix(
-                                    Button::new("case-insensitive")
-                                        .selected(!self.case_insensitive)
-                                        .xsmall()
-                                        .compact()
-                                        .ghost()
-                                        .icon(IconName::CaseSensitive)
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.case_insensitive = !this.case_insensitive;
-                                            this.update_search(cx);
-                                            cx.notify();
-                                        })),
+                        div()
+                            .flex_1()
+                            .gap_1()
+                            .child(
+                                TextInput::new(&self.search_input)
+                                    .focus_bordered(false)
+                                    .suffix(
+                                        Button::new("case-insensitive")
+                                            .selected(!self.case_insensitive)
+                                            .xsmall()
+                                            .compact()
+                                            .ghost()
+                                            .icon(IconName::CaseSensitive)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.case_insensitive = !this.case_insensitive;
+                                                this.update_search(cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .small()
+                                    .w_full()
+                                    .shadow_none(),
+                            )
+                            .child(
+                                canvas(
+                                    {
+                                        let view = cx.entity();
+                                        move |bounds, _, cx| {
+                                            view.update(cx, |r, _| {
+                                                r.input_width = bounds.size.width
+                                            })
+                                        }
+                                    },
+                                    |_, _, _, _| {},
                                 )
-                                .small()
-                                .w_full()
-                                .shadow_none(),
-                        ),
+                                .absolute()
+                                .size_full(),
+                            ),
                     )
                     .child(
                         Button::new("replace-mode")
@@ -484,7 +504,7 @@ impl Render for SearchPanel {
                         ))
                         .min_w_16(),
                     )
-                    .child(div().w_5())
+                    .child(div().w_7())
                     .child(
                         Button::new("close")
                             .xsmall()
@@ -504,7 +524,7 @@ impl Render for SearchPanel {
                             TextInput::new(&self.replace_input)
                                 .focus_bordered(false)
                                 .small()
-                                .w_full()
+                                .w(self.input_width)
                                 .shadow_none(),
                         )
                         .child(
