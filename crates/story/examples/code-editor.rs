@@ -1,4 +1,10 @@
-use std::{cell::RefCell, ops::Range, rc::Rc, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    ops::Range,
+    rc::Rc,
+    str::FromStr,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use anyhow::Ok;
 use gpui::{prelude::FluentBuilder, *};
@@ -43,6 +49,7 @@ pub struct Example {
     soft_wrap: bool,
     lsp_store: ExampleLspStore,
     _subscriptions: Vec<Subscription>,
+    _lint_task: Task<()>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,7 +118,9 @@ const LANGUAGES: [(Lang, &'static str); 12] = [
 #[derive(Clone)]
 pub struct ExampleLspStore {
     completions: Arc<Vec<CompletionItem>>,
-    code_actions: Rc<RefCell<Vec<(Range<usize>, CodeAction)>>>,
+    code_actions: Arc<RwLock<Vec<(Range<usize>, CodeAction)>>>,
+    diagnostics: Arc<RwLock<Vec<Diagnostic>>>,
+    dirty: Arc<RwLock<bool>>,
 }
 
 impl ExampleLspStore {
@@ -123,8 +132,37 @@ impl ExampleLspStore {
 
         Self {
             completions: Arc::new(completions),
-            code_actions: Rc::new(RefCell::new(vec![])),
+            code_actions: Arc::new(RwLock::new(vec![])),
+            diagnostics: Arc::new(RwLock::new(vec![])),
+            dirty: Arc::new(RwLock::new(false)),
         }
+    }
+
+    fn diagnostics(&self) -> Vec<Diagnostic> {
+        let guard = self.diagnostics.read().unwrap();
+        guard.clone()
+    }
+
+    fn update_diagnostics(&self, diagnostics: Vec<Diagnostic>) {
+        let mut guard = self.diagnostics.write().unwrap();
+        *guard = diagnostics;
+        *self.dirty.write().unwrap() = true;
+    }
+
+    fn code_actions(&self) -> Vec<(Range<usize>, CodeAction)> {
+        let guard = self.code_actions.read().unwrap();
+        guard.clone()
+    }
+
+    fn update_code_actions(&self, code_actions: Vec<(Range<usize>, CodeAction)>) {
+        let mut guard = self.code_actions.write().unwrap();
+        *guard = code_actions;
+        *self.dirty.write().unwrap() = true;
+    }
+
+    fn is_dirty(&self) -> bool {
+        let guard = self.dirty.read().unwrap();
+        *guard
     }
 }
 
@@ -146,7 +184,7 @@ impl CompletionProvider for ExampleLspStore {
 
         // Simulate to delay for fetching completions
         let items = self.completions.clone();
-        cx.background_executor().spawn(async move {
+        cx.background_spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(20)).await;
 
@@ -186,7 +224,7 @@ impl CodeActionProvider for ExampleLspStore {
         _cx: &mut App,
     ) -> Task<Result<Vec<CodeAction>>> {
         let mut actions = vec![];
-        for (node_range, code_action) in self.code_actions.borrow().iter() {
+        for (node_range, code_action) in self.code_actions().iter() {
             if !(range.start >= node_range.start && range.end <= node_range.end) {
                 continue;
             }
@@ -498,6 +536,7 @@ impl Example {
             soft_wrap: false,
             lsp_store,
             _subscriptions,
+            _lint_task: Task::ready(()),
         }
     }
 
@@ -572,65 +611,65 @@ impl Example {
         cx.notify();
     }
 
-    fn lint_document(&self, cx: &mut Context<Self>) {
-        // Subscribe to input changes and perform linting with AutoCorrect for markers example.
-        let value = self.editor.read(cx).value().clone();
-        let result = autocorrect::lint_for(value.as_str(), self.language.name());
+    fn lint_document(&mut self, cx: &mut Context<Self>) {
+        let language = self.language.name().to_string();
+        let lsp_store = self.lsp_store.clone();
+        let text = self.editor.read(cx).text().clone();
 
-        let mut code_actions = vec![];
-        self.editor.update(cx, |state, cx| {
-            let text = state.text().clone();
-            state.diagnostics_mut().map(|diagnostics| {
-                diagnostics.clear();
-                for item in result.lines.iter() {
-                    let severity = match item.severity {
-                        autocorrect::Severity::Error => DiagnosticSeverity::Warning,
-                        autocorrect::Severity::Warning => DiagnosticSeverity::Hint,
-                        autocorrect::Severity::Pass => DiagnosticSeverity::Info,
-                    };
+        self._lint_task = cx.background_spawn(async move {
+            let value = text.to_string();
+            let result = autocorrect::lint_for(value.as_str(), &language);
 
-                    let line = item.line.saturating_sub(1); // Convert to 0-based index
-                    let col = item.col.saturating_sub(1); // Convert to 0-based index
+            let mut code_actions = vec![];
+            let mut diagnostics = vec![];
 
-                    let start = Position::new(line as u32, col as u32);
-                    let end = Position::new(line as u32, (col + item.old.chars().count()) as u32);
-                    let message = format!("AutoCorrect: {}", item.new);
-                    diagnostics.push(Diagnostic::new(start..end, message).with_severity(severity));
+            for item in result.lines.iter() {
+                let severity = match item.severity {
+                    autocorrect::Severity::Error => DiagnosticSeverity::Warning,
+                    autocorrect::Severity::Warning => DiagnosticSeverity::Hint,
+                    autocorrect::Severity::Pass => DiagnosticSeverity::Info,
+                };
 
-                    let range = text.position_to_offset(&start)..text.position_to_offset(&end);
+                let line = item.line.saturating_sub(1); // Convert to 0-based index
+                let col = item.col.saturating_sub(1); // Convert to 0-based index
 
-                    let text_edit = TextEdit {
-                        range: lsp_types::Range { start, end },
-                        new_text: item.new.clone(),
+                let start = Position::new(line as u32, col as u32);
+                let end = Position::new(line as u32, (col + item.old.chars().count()) as u32);
+                let message = format!("AutoCorrect: {}", item.new);
+                diagnostics.push(Diagnostic::new(start..end, message).with_severity(severity));
+
+                let range = text.position_to_offset(&start)..text.position_to_offset(&end);
+
+                let text_edit = TextEdit {
+                    range: lsp_types::Range { start, end },
+                    new_text: item.new.clone(),
+                    ..Default::default()
+                };
+
+                let edit = WorkspaceEdit {
+                    changes: Some(
+                        std::iter::once((
+                            lsp_types::Uri::from_str("file://example").unwrap(),
+                            vec![text_edit],
+                        ))
+                        .collect(),
+                    ),
+                    ..Default::default()
+                };
+
+                code_actions.push((
+                    range,
+                    CodeAction {
+                        title: format!("Change to '{}'", item.new),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        edit: Some(edit),
                         ..Default::default()
-                    };
+                    },
+                ));
+            }
 
-                    let edit = WorkspaceEdit {
-                        changes: Some(
-                            std::iter::once((
-                                lsp_types::Uri::from_str("file://example").unwrap(),
-                                vec![text_edit],
-                            ))
-                            .collect(),
-                        ),
-                        ..Default::default()
-                    };
-
-                    code_actions.push((
-                        range,
-                        CodeAction {
-                            title: format!("Change to '{}'", item.new),
-                            kind: Some(CodeActionKind::QUICKFIX),
-                            edit: Some(edit),
-                            ..Default::default()
-                        },
-                    ));
-
-                    self.lsp_store.code_actions.replace(code_actions.clone());
-                }
-            });
-
-            cx.notify();
+            lsp_store.update_code_actions(code_actions.clone());
+            lsp_store.update_diagnostics(diagnostics.clone());
         });
     }
 }
@@ -638,6 +677,18 @@ impl Example {
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.update_highlighter(window, cx);
+
+        // Update diagnostics
+        if self.lsp_store.is_dirty() {
+            let diagnostics = self.lsp_store.diagnostics();
+            self.editor.update(cx, |state, cx| {
+                state.diagnostics_mut().map(|set| {
+                    set.clear();
+                    set.extend(diagnostics);
+                });
+                cx.notify();
+            });
+        }
 
         v_flex().size_full().child(
             v_flex()
