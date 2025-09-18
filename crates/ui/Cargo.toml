@@ -48,7 +48,7 @@ tree-sitter-languages = [
 ]
 
 [dependencies]
-gpui.workspace = true
+gpui = { workspace = true, "features" = ["test-support"] }
 sum_tree.workspace = true
 gpui_macros.workspace = true
 rope.workspace = true

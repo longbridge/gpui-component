@@ -14,7 +14,8 @@ use crate::{
     button::{Button, ButtonVariants},
     h_flex,
     input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt, Search, TextInput},
-    v_flex, ActiveTheme, IconName, Selectable, Sizable,
+    label::Label,
+    v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable,
 };
 
 const KEY_CONTEXT: &'static str = "SearchPanel";
@@ -392,6 +393,8 @@ impl Render for SearchPanel {
             return Empty.into_any_element();
         }
 
+        let has_matches = self.matcher.len() > 0;
+
         v_flex()
             .id("search-panel")
             .occlude()
@@ -434,7 +437,6 @@ impl Render for SearchPanel {
                                 )
                                 .small()
                                 .w_full()
-                                .cleanable()
                                 .shadow_none(),
                         ),
                     )
@@ -459,6 +461,7 @@ impl Render for SearchPanel {
                             .xsmall()
                             .ghost()
                             .icon(IconName::ChevronLeft)
+                            .disabled(!has_matches)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.prev(window, cx);
                             })),
@@ -468,9 +471,18 @@ impl Render for SearchPanel {
                             .xsmall()
                             .ghost()
                             .icon(IconName::ChevronRight)
+                            .disabled(!has_matches)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.next(window, cx);
                             })),
+                    )
+                    .child(
+                        Label::new(format!(
+                            "{}/{}",
+                            self.matcher.current_match_ix + 1,
+                            self.matcher.matched_ranges.len()
+                        ))
+                        .min_w_16(),
                     )
                     .child(div().w_5())
                     .child(
@@ -499,6 +511,7 @@ impl Render for SearchPanel {
                             Button::new("replace-one")
                                 .small()
                                 .label(t!("Input.Replace"))
+                                .disabled(!has_matches)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.replace_next(window, cx);
                                 })),
@@ -507,6 +520,7 @@ impl Render for SearchPanel {
                             Button::new("replace-all")
                                 .small()
                                 .label(t!("Input.Replace All"))
+                                .disabled(!has_matches)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.replace_all(window, cx);
                                 })),
