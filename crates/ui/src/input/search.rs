@@ -499,9 +499,17 @@ impl Render for SearchPanel {
                     .child(
                         Label::new(format!(
                             "{}/{}",
-                            self.matcher.current_match_ix + 1,
+                            if has_matches {
+                                self.matcher.current_match_ix + 1
+                            } else {
+                                0
+                            },
                             self.matcher.matched_ranges.len()
                         ))
+                        .when(!has_matches, |this| {
+                            this.text_color(cx.theme().muted_foreground)
+                        })
+                        .text_left()
                         .min_w_16(),
                     )
                     .child(div().w_7())
