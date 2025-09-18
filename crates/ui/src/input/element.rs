@@ -397,8 +397,7 @@ impl TextElement {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let hover_popover = self.state.read(cx).hover_popover.clone();
-        let Some(symbol_range) =
-            hover_popover.and_then(|popover| Some(popover.read(cx).symbol_range.clone()))
+        let Some(symbol_range) = hover_popover.map(|popover| popover.read(cx).symbol_range.clone())
         else {
             return None;
         };
