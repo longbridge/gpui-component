@@ -601,7 +601,7 @@ impl InputState {
             let local_offset = offset.saturating_sub(prev_lines_offset);
             if let Some(pos) = line.position_for_index(local_offset, line_height) {
                 let sub_line_index = (pos.y.0 / line_height.0) as usize;
-                let adjusted_pos = point(pos.x, pos.y + y_offset);
+                let adjusted_pos = point(pos.x + last_layout.line_number_width, pos.y + y_offset);
                 return (line_index, sub_line_index, Some(adjusted_pos));
             }
 

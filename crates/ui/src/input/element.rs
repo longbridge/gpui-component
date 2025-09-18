@@ -397,13 +397,13 @@ impl TextElement {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let hover_popover = self.state.read(cx).hover_popover.clone();
-        let Some(hover_range) =
-            hover_popover.and_then(|popover| Some(popover.read(cx).range.clone()))
+        let Some(symbol_range) =
+            hover_popover.and_then(|popover| Some(popover.read(cx).symbol_range.clone()))
         else {
             return None;
         };
 
-        Self::layout_match_range(hover_range, last_layout, bounds)
+        Self::layout_match_range(symbol_range, last_layout, bounds)
     }
 
     fn layout_selections(
