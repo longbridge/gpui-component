@@ -107,6 +107,21 @@ pub trait HoverProvider {
     }
 }
 
+/// Definition provider
+///
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition
+pub trait DefinitionProvider {
+    fn definition(
+        &self,
+        _text: &Rope,
+        _offset: usize,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<Result<Option<lsp_types::Location>>> {
+        Task::ready(Ok(None))
+    }
+}
+
 impl InputState {
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
         self.context_menu = None;
