@@ -50,8 +50,8 @@ impl HoverPopover {
         start_pos.map(|pos| pos + Point::new(line_number_width, px(0.)))
     }
 
-    pub(crate) fn is_same(&self, ofset: usize) -> bool {
-        self.range.contains(&ofset)
+    pub(crate) fn is_same(&self, offset: usize) -> bool {
+        self.range.contains(&offset)
     }
 
     #[allow(unused)]
