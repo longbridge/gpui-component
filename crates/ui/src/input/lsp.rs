@@ -8,14 +8,13 @@ use lsp_types::{
 use rope::Rope;
 
 use crate::input::{
-    popovers::{CodeActionItem, CodeActionMenu, CompletionMenu, ContextMenu},
+    popovers::{CodeActionItem, CodeActionMenu, CompletionMenu, ContextMenu, HoverPopover},
     InputState, RopeExt,
 };
 
 /// LSP ServerCapabilities
 ///
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#serverCapabilities
-#[derive(Clone, Default)]
 pub struct Lsp {
     /// The completion provider.
     pub completion_provider: Option<Rc<dyn CompletionProvider>>,
@@ -23,9 +22,19 @@ pub struct Lsp {
     pub code_action_providers: Vec<Rc<dyn CodeActionProvider>>,
     /// The hover provider.
     pub hover_provider: Option<Rc<dyn HoverProvider>>,
+    _hover_task: Task<Result<()>>,
 }
 
-impl Lsp {}
+impl Default for Lsp {
+    fn default() -> Self {
+        Self {
+            completion_provider: None,
+            code_action_providers: vec![],
+            hover_provider: None,
+            _hover_task: Task::ready(Ok(())),
+        }
+    }
+}
 
 /// A trait for providing code completions based on the current input state and context.
 pub trait CompletionProvider {
@@ -350,5 +359,43 @@ impl InputState {
             let range_utf16 = self.range_to_utf16(&(start..end));
             self.replace_text_in_range(Some(range_utf16), &edit.new_text, window, cx);
         }
+    }
+
+    /// Handle hover trigger LSP request.
+    pub(super) fn handle_hover(
+        &mut self,
+        offset: usize,
+        window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) {
+        let Some(provider) = self.lsp.hover_provider.clone() else {
+            return;
+        };
+
+        if let Some(hover_popover) = self.hover_popover.as_ref() {
+            if hover_popover.read(cx).is_same(offset) {
+                return;
+            }
+        }
+
+        // Currently not implemented.
+        let task = provider.hover(&self.text, offset, window, cx);
+        let word_range = self.text.word_range(offset).unwrap_or(offset..offset);
+        let editor = cx.entity();
+        self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
+            let result = task.await?;
+
+            _ = editor.update(cx, |editor, cx| match result {
+                Some(hover) => {
+                    let hover_popover = HoverPopover::new(cx.entity(), word_range, &hover, cx);
+                    editor.hover_popover = Some(hover_popover);
+                }
+                None => {
+                    editor.hover_popover = None;
+                }
+            });
+
+            Ok(())
+        });
     }
 }

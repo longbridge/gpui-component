@@ -14,8 +14,8 @@ use gpui_component::{
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
-        self, CodeActionProvider, CompletionProvider, InputEvent, InputState, Position, Rope,
-        RopeExt, TabSize, TextInput,
+        self, CodeActionProvider, CompletionProvider, HoverProvider, InputEvent, InputState,
+        Position, Rope, RopeExt, TabSize, TextInput,
     },
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
@@ -266,6 +266,41 @@ impl CodeActionProvider for ExampleLspStore {
     }
 }
 
+impl HoverProvider for ExampleLspStore {
+    fn hover(
+        &self,
+        text: &Rope,
+        offset: usize,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<Result<Option<lsp_types::Hover>>> {
+        let word = text.word_at(offset);
+        if word.is_empty() {
+            return Task::ready(Ok(None));
+        }
+
+        let Some(item) = self.completions.iter().find(|item| item.label == word) else {
+            return Task::ready(Ok(None));
+        };
+
+        let contents = if let Some(doc) = &item.documentation {
+            match doc {
+                lsp_types::Documentation::String(s) => s.clone(),
+                lsp_types::Documentation::MarkupContent(mc) => mc.value.clone(),
+            }
+        } else {
+            "No documentation available.".to_string()
+        };
+
+        let hover = lsp_types::Hover {
+            contents: lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(contents)),
+            range: None,
+        };
+
+        Task::ready(Ok(Some(hover)))
+    }
+}
+
 struct TextConvertor;
 
 impl CodeActionProvider for TextConvertor {
@@ -489,9 +524,10 @@ impl Example {
                 .default_value(default_language.1)
                 .placeholder("Enter your code here...");
 
-            editor.lsp.completion_provider = Some(Rc::new(lsp_store.clone()));
-            editor.lsp.code_action_providers =
-                vec![Rc::new(lsp_store.clone()), Rc::new(TextConvertor)];
+            let lsp_store = Rc::new(lsp_store.clone());
+            editor.lsp.completion_provider = Some(lsp_store.clone());
+            editor.lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
+            editor.lsp.hover_provider = Some(lsp_store.clone());
 
             editor
         });

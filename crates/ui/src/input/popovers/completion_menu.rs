@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    canvas, deferred, div, prelude::FluentBuilder, px, relative, rems, Action, AnyElement, App,
-    AppContext, Bounds, Context, DismissEvent, Div, ElementId, Empty, Entity, EntityInputHandler,
-    EventEmitter, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    Point, Render, RenderOnce, SharedString, Stateful, Styled, StyledText, Subscription, Window,
+    canvas, deferred, div, prelude::FluentBuilder, px, relative, Action, AnyElement, App,
+    AppContext, Bounds, Context, DismissEvent, Empty, Entity, EntityInputHandler, EventEmitter,
+    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window,
 };
 use lsp_types::CompletionItem;
 
@@ -14,10 +14,13 @@ const POPOVER_GAP: Pixels = px(4.);
 
 use crate::{
     actions, h_flex,
-    input::{self, InputState},
+    input::{
+        self,
+        popovers::{popover, render_markdown},
+        InputState,
+    },
     label::Label,
     list::{List, ListDelegate, ListEvent},
-    text::{TextView, TextViewStyle},
     ActiveTheme, IndexPath, Selectable,
 };
 
@@ -382,21 +385,6 @@ impl Render for CompletionMenu {
             .selected_item()
             .and_then(|item| item.documentation.clone());
 
-        fn popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
-            div()
-                .id(id)
-                .flex_none()
-                .occlude()
-                .p_1()
-                .text_xs()
-                .text_color(cx.theme().popover_foreground)
-                .bg(cx.theme().popover)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(cx.theme().radius)
-                .shadow_md()
-        }
-
         let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
         let vertical_layout = pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
             > window.bounds().size.width;
@@ -439,19 +427,7 @@ impl Render for CompletionMenu {
                             popover("completion-menu", cx)
                                 .w(MAX_MENU_WIDTH)
                                 .px_2()
-                                .child(
-                                    TextView::markdown("doc", doc, window, cx)
-                                        .style(
-                                            TextViewStyle::default()
-                                                .paragraph_gap(rems(0.5))
-                                                .heading_font_size(|level, rem_size| match level {
-                                                    1..=3 => rem_size * 1,
-                                                    4 => rem_size * 0.9,
-                                                    _ => rem_size * 0.8,
-                                                }),
-                                        )
-                                        .selectable(),
-                                ),
+                                .child(render_markdown("doc", doc, window, cx)),
                         ),
                     )
                 })

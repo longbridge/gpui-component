@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use rope::{Point, Rope};
 
 use crate::input::Position;
@@ -43,6 +45,12 @@ pub trait RopeExt {
 
     /// Get the line, column [`Position`] (0-based) from the given byte offset.
     fn offset_to_position(&self, offset: usize) -> Position;
+
+    /// Get the word byte range at the given offset (byte).
+    fn word_range(&self, offset: usize) -> Option<Range<usize>>;
+
+    /// Get word at the given offset (byte).
+    fn word_at(&self, offset: usize) -> String;
 }
 
 /// An iterator over the lines of a `Rope`.
@@ -152,7 +160,47 @@ impl RopeExt for Rope {
             return None;
         }
 
+        let offset = self.clip_offset(offset, sum_tree::Bias::Left);
         self.slice(offset..self.len()).chars().next()
+    }
+
+    fn word_range(&self, offset: usize) -> Option<Range<usize>> {
+        if offset >= self.len() {
+            return None;
+        }
+
+        let offset = self.clip_offset(offset, sum_tree::Bias::Left);
+
+        let mut left = String::new();
+        for c in self.reversed_chars_at(offset) {
+            if c.is_alphanumeric() || c == '_' {
+                left.insert(0, c);
+            } else {
+                break;
+            }
+        }
+        let start = offset.saturating_sub(left.len());
+
+        let right = self
+            .chars_at(offset)
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect::<String>();
+
+        let end = offset + right.len();
+
+        if start == end {
+            None
+        } else {
+            Some(start..end)
+        }
+    }
+
+    fn word_at(&self, offset: usize) -> String {
+        if let Some(range) = self.word_range(offset) {
+            self.slice(range).to_string()
+        } else {
+            String::new()
+        }
     }
 }
 
@@ -266,5 +314,25 @@ mod tests {
         assert_eq!(rope.char_at(34), Some('🎉'));
         assert_eq!(rope.char_at(38), Some('\n'));
         assert_eq!(rope.char_at(50), None);
+    }
+
+    #[test]
+    fn test_word_at() {
+        let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文 世界\nRope");
+        assert_eq!(rope.word_at(0), "Hello");
+        assert_eq!(rope.word_range(0), Some(0..5));
+        assert_eq!(rope.word_at(8), "World");
+        assert_eq!(rope.word_range(8), Some(6..11));
+        assert_eq!(rope.word_at(12), "");
+        assert_eq!(rope.word_range(12), None);
+        assert_eq!(rope.word_at(13), "This");
+        assert_eq!(rope.word_range(13), Some(13..17));
+        assert_eq!(rope.word_at(31), "中文");
+        assert_eq!(rope.word_range(31), Some(28..34));
+        assert_eq!(rope.word_at(38), "世界");
+        assert_eq!(rope.word_range(38), Some(35..41));
+        assert_eq!(rope.word_at(44), "Rope");
+        assert_eq!(rope.word_range(44), Some(42..46));
+        assert_eq!(rope.word_at(45), "Rope");
     }
 }

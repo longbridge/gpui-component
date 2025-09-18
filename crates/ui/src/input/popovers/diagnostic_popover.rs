@@ -1,11 +1,16 @@
 use std::rc::Rc;
 
 use gpui::{
-    canvas, deferred, div, px, App, AppContext as _, Bounds, Context, Empty, Entity,
-    InteractiveElement, IntoElement, ParentElement as _, Pixels, Point, Render, Styled, Window,
+    canvas, deferred, div, prelude::FluentBuilder as _, px, App, AppContext as _, Bounds, Context,
+    Empty, Entity, InteractiveElement, IntoElement, ParentElement as _, Pixels, Point, Render,
+    Styled, Window,
 };
 
-use crate::{highlighter::DiagnosticEntry, input::InputState, text::TextView, ActiveTheme as _};
+use crate::{
+    highlighter::DiagnosticEntry,
+    input::{popovers::render_markdown, InputState},
+    ActiveTheme as _,
+};
 
 pub struct DiagnosticPopover {
     state: Entity<InputState>,
@@ -109,10 +114,18 @@ impl Render for DiagnosticPopover {
                 .border_color(border)
                 .rounded(cx.theme().radius)
                 .shadow_md()
-                .child(TextView::markdown("message", message, window, cx).selectable())
+                .when(self.bounds.is_empty(), |s| s.invisible())
+                .child(render_markdown("message", message, window, cx))
                 .child(
                     canvas(
-                        move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
+                        move |bounds, _, cx| {
+                            view.update(cx, |r, cx| {
+                                if r.bounds != bounds {
+                                    r.bounds = bounds;
+                                    cx.notify();
+                                }
+                            })
+                        },
                         |_, _, _, _| {},
                     )
                     .top_0()

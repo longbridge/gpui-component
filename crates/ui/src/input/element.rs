@@ -390,6 +390,22 @@ impl TextElement {
         paths
     }
 
+    fn layout_hover_highlight(
+        &self,
+        last_layout: &LastLayout,
+        bounds: &mut Bounds<Pixels>,
+        cx: &mut App,
+    ) -> Option<Path<Pixels>> {
+        let hover_popover = self.state.read(cx).hover_popover.clone();
+        let Some(hover_range) =
+            hover_popover.and_then(|popover| Some(popover.read(cx).range.clone()))
+        else {
+            return None;
+        };
+
+        Self::layout_match_range(hover_range, last_layout, bounds)
+    }
+
     fn layout_selections(
         &self,
         last_layout: &LastLayout,
@@ -520,6 +536,7 @@ pub(super) struct PrepaintState {
     /// row index (zero based), no wrap, same line as the cursor.
     current_row: Option<usize>,
     selection_path: Option<Path<Pixels>>,
+    hover_highlight_path: Option<Path<Pixels>>,
     search_match_paths: Vec<(Path<Pixels>, bool)>,
     bounds: Bounds<Pixels>,
 }
@@ -848,6 +865,7 @@ impl Element for TextElement {
 
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
         let selection_path = self.layout_selections(&last_layout, &mut bounds, cx);
+        let hover_highlight_path = self.layout_hover_highlight(&last_layout, &mut bounds, cx);
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
@@ -907,6 +925,7 @@ impl Element for TextElement {
             current_row,
             selection_path,
             search_match_paths,
+            hover_highlight_path,
         }
     }
 
@@ -1003,8 +1022,9 @@ impl Element for TextElement {
 
         // Paint selections
         if window.is_window_active() {
+            let secondary_selection = cx.theme().selection.saturation(0.1);
             for (path, is_active) in prepaint.search_match_paths.iter() {
-                window.paint_path(path.clone(), cx.theme().selection.saturation(0.1));
+                window.paint_path(path.clone(), secondary_selection);
 
                 if *is_active {
                     window.paint_path(path.clone(), cx.theme().selection);
@@ -1013,6 +1033,11 @@ impl Element for TextElement {
 
             if let Some(path) = prepaint.selection_path.take() {
                 window.paint_path(path, cx.theme().selection);
+            }
+
+            // Paint hover highlight
+            if let Some(path) = prepaint.hover_highlight_path.take() {
+                window.paint_path(path, secondary_selection);
             }
         }
 
