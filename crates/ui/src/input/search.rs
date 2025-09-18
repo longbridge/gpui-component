@@ -256,7 +256,7 @@ impl SearchPanel {
 
         self.search_input.update(cx, |this, cx| {
             if selected_text.len() > 0 {
-                /// Set value will emit to update_search_query
+                // Set value will emit to update_search_query
                 this.set_value(selected_text.to_string(), window, cx);
             }
             this.select_all(&super::SelectAll, window, cx);
