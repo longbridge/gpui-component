@@ -17,14 +17,14 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 const ITEM_HEIGHT: Pixels = px(26.);
+const CONTEXT: &str = "PopupMenu";
 
 pub fn init(cx: &mut App) {
-    let context = Some("PopupMenu");
     cx.bind_keys([
-        KeyBinding::new("enter", Confirm { secondary: false }, context),
-        KeyBinding::new("escape", Cancel, context),
-        KeyBinding::new("up", SelectPrev, context),
-        KeyBinding::new("down", SelectNext, context),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
+        KeyBinding::new("down", SelectNext, Some(CONTEXT)),
     ]);
 }
 
@@ -86,6 +86,19 @@ enum PopupMenuItem {
 impl PopupMenuItem {
     fn is_clickable(&self) -> bool {
         !matches!(self, PopupMenuItem::Separator)
+            && matches!(
+                self,
+                PopupMenuItem::Item {
+                    disabled: false,
+                    ..
+                } | PopupMenuItem::ElementItem {
+                    disabled: false,
+                    ..
+                } | PopupMenuItem::Submenu {
+                    disabled: false,
+                    ..
+                }
+            )
     }
 
     fn is_separator(&self) -> bool {
@@ -103,7 +116,6 @@ pub struct PopupMenu {
     min_width: Option<Pixels>,
     max_width: Option<Pixels>,
     max_height: Option<Pixels>,
-    hovered_menu_ix: Option<usize>,
     bounds: Bounds<Pixels>,
 
     scrollable: bool,
@@ -140,7 +152,6 @@ impl PopupMenu {
                 max_width: None,
                 max_height: None,
                 has_icon: false,
-                hovered_menu_ix: None,
                 bounds: Bounds::default(),
                 scrollable: false,
                 scroll_handle: ScrollHandle::default(),
@@ -516,7 +527,7 @@ impl PopupMenu {
     }
 
     pub(crate) fn active_submenu(&self) -> Option<Entity<PopupMenu>> {
-        if let Some(ix) = self.hovered_menu_ix {
+        if let Some(ix) = self.selected_index {
             if let Some(item) = self.menu_items.get(ix) {
                 return match item {
                     PopupMenuItem::Submenu { menu, .. } => Some(menu.clone()),
@@ -566,38 +577,49 @@ impl PopupMenu {
         }
     }
 
-    fn select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
-        let count = self.clickable_menu_items().count();
-        if count > 0 {
-            let last_ix = count.saturating_sub(1);
-            let ix = self
-                .selected_index
-                .map(|index| if index == last_ix { 0 } else { index + 1 })
-                .unwrap_or(0);
-
+    fn set_selected_index(&mut self, ix: usize, cx: &mut Context<Self>) {
+        if self.selected_index != Some(ix) {
             self.selected_index = Some(ix);
+            self.scroll_handle.scroll_to_item(ix);
             cx.notify();
         }
     }
 
-    fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
-        let count = self.clickable_menu_items().count();
-        if count > 0 {
-            let last_ix = count.saturating_sub(1);
+    fn select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(ix) = self.selected_index else {
+            self.set_selected_index(0, cx);
+            return;
+        };
 
-            let ix = self
-                .selected_index
-                .map(|index| {
-                    if index == last_ix {
-                        0
-                    } else {
-                        index.saturating_sub(1)
-                    }
-                })
-                .unwrap_or(last_ix);
-            self.selected_index = Some(ix);
-            cx.notify();
+        while let Some((next_ix, _)) = self
+            .menu_items
+            .iter()
+            .enumerate()
+            .find(|(i, item)| *i > ix && item.is_clickable())
+        {
+            self.set_selected_index(next_ix, cx);
+            return;
         }
+
+        self.set_selected_index(0, cx);
+    }
+
+    fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
+        let ix = self.selected_index.unwrap_or(0);
+
+        while let Some((prev_ix, _)) = self
+            .menu_items
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(i, item)| *i < ix && item.is_clickable())
+        {
+            self.set_selected_index(prev_ix, cx);
+            return;
+        }
+
+        let last_clickable_ix = self.clickable_menu_items().last().map(|(ix, _)| ix);
+        self.set_selected_index(last_clickable_ix.unwrap_or(0), cx);
     }
 
     fn dismiss(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -618,7 +640,7 @@ impl PopupMenu {
 
         // Dismiss parent menu, when this menu is dismissed
         _ = parent_menu.update(cx, |view, cx| {
-            view.hovered_menu_ix = None;
+            view.selected_index = None;
             view.dismiss(&Cancel, window, cx);
         });
     }
@@ -683,7 +705,7 @@ impl PopupMenu {
         let bounds = self.bounds;
         let max_width = state.max_width;
         let has_icon = self.has_icon;
-        let hovered = self.hovered_menu_ix == Some(ix);
+        let hovered = self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(8.);
         const INNER_PADDING: Pixels = px(4.);
 
@@ -694,20 +716,17 @@ impl PopupMenu {
             .px(INNER_PADDING)
             .rounded(state.radius)
             .items_center()
-            .on_mouse_enter(cx.listener(move |this, _, _, cx| {
-                this.hovered_menu_ix = Some(ix);
-                cx.notify();
-            }));
+            .hovered(hovered);
 
         match item {
-            PopupMenuItem::Separator => this.h_auto().p_0().disabled(true).child(
-                div()
-                    .rounded_none()
-                    .h(px(1.))
-                    .mx_neg_1()
-                    .my_0p5()
-                    .bg(cx.theme().border),
-            ),
+            PopupMenuItem::Separator => this
+                .h_auto()
+                .p_0()
+                .my_0p5()
+                .mx_neg_1()
+                .h(px(1.))
+                .bg(cx.theme().border)
+                .disabled(true),
             PopupMenuItem::Label(label) => this.disabled(true).cursor_default().child(
                 h_flex()
                     .cursor_default()
@@ -877,7 +896,7 @@ impl Render for PopupMenu {
 
         v_flex()
             .id("popup-menu")
-            .key_context("PopupMenu")
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_next))
             .on_action(cx.listener(Self::select_prev))
@@ -899,41 +918,34 @@ impl Render for PopupMenu {
             .text_color(cx.theme().popover_foreground)
             .relative()
             .child(
-                div()
+                v_flex()
                     .id("items")
+                    .p_1()
+                    .gap_y_0p5()
+                    .min_w(rems(8.))
+                    .when_some(self.min_width, |this, min_width| this.min_w(min_width))
+                    .max_w(max_width)
                     .when(self.scrollable, |this| {
                         this.max_h(max_height)
                             .overflow_y_scroll()
                             .track_scroll(&self.scroll_handle)
                     })
-                    .child(
-                        v_flex()
-                            .p_1()
-                            .gap_y_0p5()
-                            .min_w(rems(8.))
-                            .when_some(self.min_width, |this, min_width| this.min_w(min_width))
-                            .max_w(max_width)
-                            .child({
-                                canvas(
-                                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                                    |_, _, _, _| {},
-                                )
-                                .absolute()
-                                .size_full()
-                            })
-                            .children(
-                                self.menu_items
-                                    .iter()
-                                    .enumerate()
-                                    // Ignore last separator
-                                    .filter(|(ix, item)| {
-                                        !(*ix + 1 == items_count && item.is_separator())
-                                    })
-                                    .map(|(ix, item)| {
-                                        self.render_item(ix, item, item_state, window, cx)
-                                    }),
-                            ),
-                    ),
+                    .children(
+                        self.menu_items
+                            .iter()
+                            .enumerate()
+                            // Ignore last separator
+                            .filter(|(ix, item)| !(*ix + 1 == items_count && item.is_separator()))
+                            .map(|(ix, item)| self.render_item(ix, item, item_state, window, cx)),
+                    )
+                    .child({
+                        canvas(
+                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full()
+                    }),
             )
             .when(self.scrollable, |this| {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
