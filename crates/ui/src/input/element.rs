@@ -21,7 +21,7 @@ pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 
 pub(super) struct TextElement {
-    state: Entity<InputState>,
+    pub(crate) state: Entity<InputState>,
     placeholder: SharedString,
 }
 
@@ -230,7 +230,8 @@ impl TextElement {
         (cursor_bounds, scroll_offset, current_row)
     }
 
-    fn layout_match_range(
+    /// Layout the match range to a Path.
+    pub(crate) fn layout_match_range(
         range: Range<usize>,
         last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
@@ -515,6 +516,11 @@ impl TextElement {
         }
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
+
+        // hover definition style
+        if let Some(hover_style) = self.layout_hover_definition(cx) {
+            styles.push(hover_style);
+        }
 
         // Combine marker styles
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();

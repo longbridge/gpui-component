@@ -42,6 +42,9 @@ impl HelloWorld {
     }
 
     // Greets multiple people asynchronously with configurable delay
+    //
+    // Use `Command-click` on `Duration` will jump to its definition.
+    // Use `Control-click` on `String`, `HashMap` or `Result` will open its documentation page.
     pub async fn greet<T: AsRef<str>>(&self, names: &[T]) -> Result<()> {
         for name in names {
             time::sleep(Duration::from_millis(100)).await;

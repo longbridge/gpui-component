@@ -32,7 +32,7 @@ use super::{
 use crate::input::{
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
     search::{self, SearchPanel},
-    Lsp, Position,
+    HoverDefinition, Lsp, Position,
 };
 use crate::input::{RopeExt as _, Selection};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
@@ -299,6 +299,8 @@ pub struct InputState {
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
+    /// The LSP definitions locations for "Go to Definition" feature.
+    pub(super) hover_definition: Option<HoverDefinition>,
 
     pub lsp: Lsp,
 
@@ -384,6 +386,7 @@ impl InputState {
             context_menu: None,
             completion_inserting: false,
             hover_popover: None,
+            hover_definition: None,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
         }
@@ -614,7 +617,7 @@ impl InputState {
     /// Move the cursor vertically by one line (up or down) while preserving the column if possible.
     ///
     /// move_lines: Number of lines to move vertically (positive for down, negative for up).
-    fn move_vertical(&mut self, move_lines: isize, window: &mut Window, cx: &mut Context<Self>) {
+    fn move_vertical(&mut self, move_lines: isize, _: &mut Window, cx: &mut Context<Self>) {
         if self.mode.is_single_line() {
             return;
         }
@@ -653,7 +656,7 @@ impl InputState {
             }
         }
         self.pause_blink_cursor(cx);
-        self.move_to(new_offset, window, cx);
+        self.move_to(new_offset, cx);
         // Set back the preferred_column
         self.preferred_column = was_preferred_column;
         cx.notify();
@@ -861,7 +864,7 @@ impl InputState {
 
         // TODO: Scroll to make the row in center of viewport.
 
-        self.move_to(offset, window, cx);
+        self.move_to(offset, cx);
         self.update_preferred_column();
         self.focus(window, cx);
     }
@@ -874,21 +877,21 @@ impl InputState {
         });
     }
 
-    pub(super) fn left(&mut self, _: &MoveLeft, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn left(&mut self, _: &MoveLeft, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
-            self.move_to(self.previous_boundary(self.cursor()), window, cx);
+            self.move_to(self.previous_boundary(self.cursor()), cx);
         } else {
-            self.move_to(self.selected_range.start, window, cx)
+            self.move_to(self.selected_range.start, cx)
         }
     }
 
-    pub(super) fn right(&mut self, _: &MoveRight, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn right(&mut self, _: &MoveRight, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
-            self.move_to(self.next_boundary(self.selected_range.end), window, cx);
+            self.move_to(self.next_boundary(self.selected_range.end), cx);
         } else {
-            self.move_to(self.selected_range.end, window, cx)
+            self.move_to(self.selected_range.end, cx)
         }
     }
 
@@ -904,7 +907,6 @@ impl InputState {
         if !self.selected_range.is_empty() {
             self.move_to(
                 self.previous_boundary(self.selected_range.start.saturating_sub(1)),
-                window,
                 cx,
             );
         }
@@ -924,7 +926,6 @@ impl InputState {
         if !self.selected_range.is_empty() {
             self.move_to(
                 self.next_boundary(self.selected_range.end.saturating_sub(1)),
-                window,
                 cx,
             );
         }
@@ -964,162 +965,137 @@ impl InputState {
         self.move_vertical(display_lines, window, cx);
     }
 
-    pub(super) fn select_left(
-        &mut self,
-        _: &SelectLeft,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.select_to(self.previous_boundary(self.cursor()), window, cx);
+    pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_to(self.previous_boundary(self.cursor()), cx);
     }
 
-    pub(super) fn select_right(
-        &mut self,
-        _: &SelectRight,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.select_to(self.next_boundary(self.cursor()), window, cx);
+    pub(super) fn select_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_to(self.next_boundary(self.cursor()), cx);
     }
 
-    pub(super) fn select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
         if self.mode.is_single_line() {
             return;
         }
         let offset = self.start_of_line().saturating_sub(1);
-        self.select_to(self.previous_boundary(offset), window, cx);
+        self.select_to(self.previous_boundary(offset), cx);
     }
 
-    pub(super) fn select_down(
-        &mut self,
-        _: &SelectDown,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
         if self.mode.is_single_line() {
             return;
         }
         let offset = (self.end_of_line() + 1).min(self.text.len());
-        self.select_to(self.next_boundary(offset), window, cx);
+        self.select_to(self.next_boundary(offset), cx);
     }
 
-    pub(super) fn select_all(
-        &mut self,
-        _: &SelectAll,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.move_to(0, window, cx);
-        self.select_to(self.text.len(), window, cx);
+    pub(super) fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        self.move_to(0, cx);
+        self.select_to(self.text.len(), cx);
     }
 
-    pub(super) fn home(&mut self, _: &MoveHome, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn home(&mut self, _: &MoveHome, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.start_of_line();
-        self.move_to(offset, window, cx);
+        self.move_to(offset, cx);
     }
 
-    pub(super) fn end(&mut self, _: &MoveEnd, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn end(&mut self, _: &MoveEnd, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line();
-        self.move_to(offset, window, cx);
+        self.move_to(offset, cx);
     }
 
     pub(super) fn move_to_start(
         &mut self,
         _: &MoveToStart,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.move_to(0, window, cx);
+        self.move_to(0, cx);
     }
 
-    pub(super) fn move_to_end(
-        &mut self,
-        _: &MoveToEnd,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.move_to(self.text.len(), window, cx);
+    pub(super) fn move_to_end(&mut self, _: &MoveToEnd, _: &mut Window, cx: &mut Context<Self>) {
+        self.move_to(self.text.len(), cx);
     }
 
     pub(super) fn move_to_previous_word(
         &mut self,
         _: &MoveToPreviousWord,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.previous_start_of_word();
-        self.move_to(offset, window, cx);
+        self.move_to(offset, cx);
     }
 
     pub(super) fn move_to_next_word(
         &mut self,
         _: &MoveToNextWord,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.next_end_of_word();
-        self.move_to(offset, window, cx);
+        self.move_to(offset, cx);
     }
 
     pub(super) fn select_to_start(
         &mut self,
         _: &SelectToStart,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.select_to(0, window, cx);
+        self.select_to(0, cx);
     }
 
     pub(super) fn select_to_end(
         &mut self,
         _: &SelectToEnd,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let end = self.text.len();
-        self.select_to(end, window, cx);
+        self.select_to(end, cx);
     }
 
     pub(super) fn select_to_start_of_line(
         &mut self,
         _: &SelectToStartOfLine,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.start_of_line();
-        self.select_to(offset, window, cx);
+        self.select_to(offset, cx);
     }
 
     pub(super) fn select_to_end_of_line(
         &mut self,
         _: &SelectToEndOfLine,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.end_of_line();
-        self.select_to(offset, window, cx);
+        self.select_to(offset, cx);
     }
 
     pub(super) fn select_to_previous_word(
         &mut self,
         _: &SelectToPreviousWordStart,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.previous_start_of_word();
-        self.select_to(offset, window, cx);
+        self.select_to(offset, cx);
     }
 
     pub(super) fn select_to_next_word(
         &mut self,
         _: &SelectToNextWordEnd,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.next_end_of_word();
-        self.select_to(offset, window, cx);
+        self.select_to(offset, cx);
     }
 
     /// Return the start offset of the previous word.
@@ -1230,7 +1206,7 @@ impl InputState {
 
     pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
-            self.select_to(self.previous_boundary(self.cursor()), window, cx)
+            self.select_to(self.previous_boundary(self.cursor()), cx)
         }
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
@@ -1238,7 +1214,7 @@ impl InputState {
 
     pub(super) fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
-            self.select_to(self.next_boundary(self.cursor()), window, cx)
+            self.select_to(self.next_boundary(self.cursor()), cx)
         }
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
@@ -1546,6 +1522,11 @@ impl InputState {
 
         self.selecting = true;
         let offset = self.index_for_mouse_position(event.position, window, cx);
+
+        if self.handle_click_hover_definition(event, offset, window, cx) {
+            return;
+        }
+
         // Double click to select word
         if event.button == MouseButton::Left && event.click_count == 2 {
             self.select_word(offset, window, cx);
@@ -1553,9 +1534,9 @@ impl InputState {
         }
 
         if event.modifiers.shift {
-            self.select_to(offset, window, cx);
+            self.select_to(offset, cx);
         } else {
-            self.move_to(offset, window, cx)
+            self.move_to(offset, cx)
         }
     }
 
@@ -1577,7 +1558,7 @@ impl InputState {
     ) {
         // Show diagnostic popover on mouse move
         let offset = self.index_for_mouse_position(event.position, window, cx);
-        self.handle_hover(offset, window, cx);
+        self.handle_mouse_move(offset, event, window, cx);
 
         if self.mode.is_code_editor() {
             if let Some(diagnostic) = self
@@ -1659,6 +1640,7 @@ impl InputState {
 
             row_offset_y += wrap_line.height(line_height);
         }
+        dbg!(row_offset_y);
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
@@ -1669,6 +1651,7 @@ impl InputState {
             // Scroll down
             scroll_offset.y = -(row_offset_y - bounds.size.height.half());
         }
+
         self.update_scroll_offset(Some(scroll_offset), cx);
     }
 
@@ -1751,7 +1734,7 @@ impl InputState {
     /// The offset is the UTF-8 offset.
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
-    fn move_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         let offset = offset.clamp(0, self.text.len());
         self.selected_range = (offset..offset).into();
         self.scroll_to(offset, cx);
@@ -1776,7 +1759,7 @@ impl InputState {
         }
     }
 
-    fn index_for_mouse_position(
+    pub(crate) fn index_for_mouse_position(
         &self,
         position: Point<Pixels>,
         _window: &Window,
@@ -1895,7 +1878,7 @@ impl InputState {
     /// The offset is the UTF-8 offset.
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
-    fn select_to(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         let offset = offset.clamp(0, self.text.len());
         if self.selection_reversed {
             self.selected_range.start = offset
@@ -2107,7 +2090,7 @@ impl InputState {
         }
 
         let offset = self.index_for_mouse_position(event.position, window, cx);
-        self.select_to(offset, window, cx);
+        self.select_to(offset, cx);
     }
 
     fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {

@@ -14,8 +14,8 @@ use gpui_component::{
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
-        self, CodeActionProvider, CompletionProvider, HoverProvider, InputEvent, InputState,
-        Position, Rope, RopeExt, TabSize, TextInput,
+        self, CodeActionProvider, CompletionProvider, DefinitionProvider, HoverProvider,
+        InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
     },
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
@@ -301,6 +301,84 @@ impl HoverProvider for ExampleLspStore {
     }
 }
 
+const RUST_DOC_URLS: &[(&str, &str)] = &[
+    ("String", "string/struct.String"),
+    ("Debug", "fmt/trait.Debug"),
+    ("Clone", "clone/trait.Clone"),
+    ("Option", "option/enum.Option"),
+    ("Result", "result/enum.Result"),
+    ("Vec", "vec/struct.Vec"),
+    ("HashMap", "collections/hash_map/struct.HashMap"),
+    ("HashSet", "collections/hash_set/struct.HashSet"),
+    ("Arc", "sync/struct.Arc"),
+    ("RwLock", "sync/struct.RwLock"),
+    ("Duration", "time/struct.Duration"),
+];
+
+impl DefinitionProvider for ExampleLspStore {
+    fn definitions(
+        &self,
+        text: &Rope,
+        offset: usize,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<Result<Vec<lsp_types::Location>>> {
+        let word = text.word_at(offset);
+        if word.is_empty() {
+            return Task::ready(Ok(vec![]));
+        }
+
+        let document_uri = lsp_types::Uri::from_str("file://example").unwrap();
+
+        if word == "Duration" {
+            return Task::ready(Ok(vec![lsp_types::Location {
+                uri: document_uri,
+                range: lsp_types::Range {
+                    start: lsp_types::Position {
+                        line: 2,
+                        character: 4,
+                    },
+                    end: lsp_types::Position {
+                        line: 2,
+                        character: 23,
+                    },
+                },
+            }]));
+        }
+
+        let names = RUST_DOC_URLS
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        for (ix, t) in names.iter().enumerate() {
+            if *t == word {
+                let url = RUST_DOC_URLS[ix].1;
+                let location = lsp_types::Location {
+                    uri: lsp_types::Uri::from_str(&format!(
+                        "https://doc.rust-lang.org/std/{}.html",
+                        url
+                    ))
+                    .unwrap(),
+                    range: lsp_types::Range {
+                        start: lsp_types::Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: lsp_types::Position {
+                            line: 0,
+                            character: 0,
+                        },
+                    },
+                };
+
+                return Task::ready(Ok(vec![location]));
+            }
+        }
+
+        Task::ready(Ok(vec![]))
+    }
+}
+
 struct TextConvertor;
 
 impl CodeActionProvider for TextConvertor {
@@ -528,6 +606,7 @@ impl Example {
             editor.lsp.completion_provider = Some(lsp_store.clone());
             editor.lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
             editor.lsp.hover_provider = Some(lsp_store.clone());
+            editor.lsp.definition_provider = Some(lsp_store.clone());
 
             editor
         });
