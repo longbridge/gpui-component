@@ -154,8 +154,7 @@ where
 
         if let Some(label) = self.label.as_ref() {
             let label = label.clone();
-            bar =
-                bar.label(move |d, p| Text::new(label(d), p, label_color).align(TextAlign::Center));
+            bar = bar.label(move |d, p| vec![Text::new(label(d), p, label_color)]);
         }
 
         bar.paint(&bounds, window, cx);
