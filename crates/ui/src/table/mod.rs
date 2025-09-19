@@ -1032,7 +1032,7 @@ where
             )
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::manual_is_multiple_of)]
     fn render_table_row(
         &mut self,
         row_ix: usize,
