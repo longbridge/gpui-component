@@ -7,6 +7,7 @@ use gpui::{
     UnderlineStyle, Window,
 };
 use rope::Rope;
+use smallvec::SmallVec;
 
 use crate::{
     input::{blink_cursor::CURSOR_WIDTH, RopeExt as _},
@@ -533,8 +534,8 @@ pub(super) struct PrepaintState {
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
     ///
-    /// Each item is soft line.
-    line_numbers: Option<Vec<ShapedLine>>,
+    /// The child is the soft lines.
+    line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
     cursor_bounds: Option<Bounds<Pixels>>,
@@ -906,15 +907,17 @@ impl Element for TextElement {
                     &other_line_runs
                 };
 
-                line_numbers.push(window.text_system().shape_line(
+                let mut sub_lines: SmallVec<[ShapedLine; 1]> = SmallVec::new();
+                sub_lines.push(window.text_system().shape_line(
                     line_no_text.into(),
                     font_size,
                     &runs,
                     None,
                 ));
                 for _ in 0..line.wrap_boundaries.len() {
-                    line_numbers.push(ShapedLine::default());
+                    sub_lines.push(ShapedLine::default());
                 }
+                line_numbers.push(sub_lines);
             }
             Some(line_numbers)
         } else {
@@ -1009,20 +1012,21 @@ impl Element for TextElement {
             offset_y += invisible_top_padding;
 
             // Each item is the normal lines.
-            for (ix, _) in line_numbers.iter().enumerate() {
+            for (ix, lines) in line_numbers.iter().enumerate() {
                 let row = visible_range.start + ix;
                 let is_active = prepaint.current_row == Some(row);
                 let p = point(input_bounds.origin.x, origin.y + offset_y);
+                let height = line_height * lines.len() as f32;
                 // Paint the current line background
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            Bounds::new(p, size(bounds.size.width, line_height)),
+                            Bounds::new(p, size(bounds.size.width, height)),
                             bg_color,
                         ));
                     }
                 }
-                offset_y += line_height;
+                offset_y += height;
             }
         }
 
@@ -1084,27 +1088,27 @@ impl Element for TextElement {
             ));
 
             // Each item is the normal lines.
-            for (ix, line) in line_numbers.iter().enumerate() {
+            for (ix, lines) in line_numbers.iter().enumerate() {
                 let row = visible_range.start + ix;
 
                 let p = point(input_bounds.origin.x, origin.y + offset_y);
                 let is_active = prepaint.current_row == Some(row);
 
+                let height = line_height * lines.len() as f32;
                 // paint active line number background
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            Bounds::new(
-                                p,
-                                size(prepaint.last_layout.line_number_width, line_height),
-                            ),
+                            Bounds::new(p, size(prepaint.last_layout.line_number_width, height)),
                             bg_color,
                         ));
                     }
                 }
 
-                _ = line.paint(p, line_height, window, cx);
-                offset_y += line_height;
+                for line in lines {
+                    _ = line.paint(p, line_height, window, cx);
+                    offset_y += line_height;
+                }
             }
         }
 
