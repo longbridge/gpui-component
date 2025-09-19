@@ -1,7 +1,9 @@
 use std::{ops::Range, rc::Rc};
 
 use anyhow::Result;
-use gpui::{px, App, Context, HighlightStyle, MouseDownEvent, Task, UnderlineStyle, Window};
+use gpui::{
+    px, App, Context, HighlightStyle, Hitbox, MouseDownEvent, Task, UnderlineStyle, Window,
+};
 use rope::Rope;
 
 use crate::{
@@ -152,5 +154,26 @@ impl TextElement {
         });
 
         Some((hover_definition.symbol_range.clone(), highlight_style))
+    }
+
+    pub(crate) fn layout_hover_definition_hitbox(
+        &self,
+        editor: &InputState,
+        window: &mut Window,
+        _cx: &App,
+    ) -> Option<Hitbox> {
+        if !editor.mode.is_code_editor() {
+            return None;
+        }
+
+        let Some(hover_definition) = editor.hover_definition.as_ref() else {
+            return None;
+        };
+
+        let Some(bounds) = editor.range_to_bounds(&hover_definition.symbol_range) else {
+            return None;
+        };
+
+        Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal))
     }
 }

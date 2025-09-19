@@ -2,7 +2,7 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, Half, HighlightStyle, IntoElement, LayoutId, MouseButton,
+    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, IntoElement, LayoutId, MouseButton,
     MouseMoveEvent, Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun,
     UnderlineStyle, Window, WrappedLine,
 };
@@ -543,6 +543,7 @@ pub(super) struct PrepaintState {
     selection_path: Option<Path<Pixels>>,
     hover_highlight_path: Option<Path<Pixels>>,
     search_match_paths: Vec<(Path<Pixels>, bool)>,
+    hover_definition_hitbox: Option<Hitbox>,
     bounds: Bounds<Pixels>,
 }
 
@@ -920,6 +921,8 @@ impl Element for TextElement {
             None
         };
 
+        let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
+
         PrepaintState {
             bounds,
             last_layout,
@@ -931,6 +934,7 @@ impl Element for TextElement {
             selection_path,
             search_match_paths,
             hover_highlight_path,
+            hover_definition_hitbox,
         }
     }
 
@@ -1122,6 +1126,10 @@ impl Element for TextElement {
                 .set_offset(prepaint.cursor_scroll_offset);
             cx.notify();
         });
+
+        if let Some(hitbox) = prepaint.hover_definition_hitbox.as_ref() {
+            window.set_cursor_style(gpui::CursorStyle::PointingHand, &hitbox);
+        }
 
         self.paint_mouse_listeners(window, cx);
     }

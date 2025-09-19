@@ -1640,7 +1640,6 @@ impl InputState {
 
             row_offset_y += wrap_line.height(line_height);
         }
-        dbg!(row_offset_y);
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
@@ -2168,6 +2167,31 @@ impl InputState {
 
     pub(super) fn selected_text(&self) -> Rope {
         self.text.slice(self.selected_range.into())
+    }
+
+    pub(crate) fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
+        let Some(last_layout) = self.last_layout.as_ref() else {
+            return None;
+        };
+
+        let Some(last_bounds) = self.last_bounds else {
+            return None;
+        };
+
+        let (_, _, start_pos) = self.line_and_position_for_offset(range.start);
+        let (_, _, end_pos) = self.line_and_position_for_offset(range.end);
+
+        let Some(start_pos) = start_pos else {
+            return None;
+        };
+        let Some(end_pos) = end_pos else {
+            return None;
+        };
+
+        Some(Bounds::from_corners(
+            last_bounds.origin + start_pos,
+            last_bounds.origin + end_pos + point(px(0.), last_layout.line_height),
+        ))
     }
 }
 
