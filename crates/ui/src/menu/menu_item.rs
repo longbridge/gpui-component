@@ -133,13 +133,6 @@ impl RenderOnce for MenuItem {
             .when(self.disabled, |this| {
                 this.text_color(cx.theme().muted_foreground)
             })
-            .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .justify_between()
-                    .gap_x_1()
-                    .child(div().w_full().children(self.children)),
-            )
+            .children(self.children)
     }
 }
