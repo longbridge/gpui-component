@@ -213,3 +213,142 @@ impl TextWrapper {
         self.update(text, &(0..text.len()), &text, force, cx);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{px, Boundary, FontFeatures, FontStyle, FontWeight};
+
+    #[test]
+    fn test_update() {
+        let font = gpui::Font {
+            family: "Arial".into(),
+            weight: FontWeight::default(),
+            style: FontStyle::Normal,
+            features: FontFeatures::default(),
+            fallbacks: None,
+        };
+
+        let mut wrapper = TextWrapper::new(font, px(14.), None);
+        let mut text =
+            Rope::from("Hello, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。");
+
+        fn fake_wrap_line(_line_str: &str, _wrap_width: Pixels) -> Vec<Boundary> {
+            vec![]
+        }
+
+        wrapper._update(&text, &(0..text.len()), &text, false, &mut fake_wrap_line);
+        assert_eq!(wrapper.lines.len(), 4);
+
+        // Add a new text to end
+        let range = text.len()..text.len();
+        let new_text = "New text";
+        text.replace(range.clone(), new_text);
+        wrapper._update(
+            &text,
+            &range,
+            &Rope::from(new_text),
+            false,
+            &mut fake_wrap_line,
+        );
+        assert_eq!(
+            text.to_string(),
+            "Hello, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
+        );
+        assert_eq!(wrapper.lines.len(), 4);
+
+        // Replace first line `Hello` to `AAA`
+        let range = 0..5;
+        let new_text = "AAA";
+        text.replace(range.clone(), new_text);
+        wrapper._update(
+            &text,
+            &range,
+            &Rope::from(new_text),
+            false,
+            &mut fake_wrap_line,
+        );
+        assert_eq!(
+            text.to_string(),
+            "AAA, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
+        );
+        assert_eq!(wrapper.lines.len(), 4);
+
+        // Remove the second line
+        let start_offset = text.line_start_offset(1);
+        let end_offset = text.line_end_offset(1);
+        let range = start_offset..end_offset + 1;
+        text.replace(range.clone(), "");
+        wrapper._update(&text, &range, &Rope::from(""), false, &mut fake_wrap_line);
+        assert_eq!(
+            text.to_string(),
+            "AAA, 世界!\nThis is third line.\n这里是第 4 行。New text"
+        );
+        assert_eq!(wrapper.lines.len(), 3);
+
+        // Replace the first 2 lines to "This is a new line."
+        let range = text.line_start_offset(0)..text.line_end_offset(1) + 1;
+        let new_text = "This is a new line.\nThis is new line 2.\n";
+        text.replace(range.clone(), new_text);
+        wrapper._update(
+            &text,
+            &range,
+            &Rope::from(new_text),
+            false,
+            &mut fake_wrap_line,
+        );
+        assert_eq!(
+            text.to_string(),
+            "This is a new line.\nThis is new line 2.\n这里是第 4 行。New text"
+        );
+        assert_eq!(wrapper.lines.len(), 3);
+
+        // Add a new line at the end
+        let range = text.len()..text.len();
+        let new_text = "\nThis is a new line at the end.";
+        text.replace(range.clone(), new_text);
+        wrapper._update(
+            &text,
+            &range,
+            &Rope::from(new_text),
+            false,
+            &mut fake_wrap_line,
+        );
+        assert_eq!(
+            text.to_string(),
+            "This is a new line.\nThis is new line 2.\n这里是第 4 行。New text\nThis is a new line at the end."
+        );
+        assert_eq!(wrapper.lines.len(), 4);
+
+        // Add a new line at the beginning
+        let range = 0..0;
+        let new_text = "This is a new line at the beginning.\n";
+        text.replace(range.clone(), new_text);
+        wrapper._update(
+            &text,
+            &range,
+            &Rope::from(new_text),
+            false,
+            &mut fake_wrap_line,
+        );
+        assert_eq!(
+            text.to_string(),
+            "This is a new line at the beginning.\nThis is a new line.\nThis is new line 2.\n这里是第 4 行。New text\nThis is a new line at the end."
+        );
+        assert_eq!(wrapper.lines.len(), 5);
+
+        // Remove all to at least one line in `lines`.
+        let range = 0..text.len();
+        let new_text = "";
+        text.replace(range.clone(), new_text);
+        wrapper._update(
+            &text,
+            &range,
+            &Rope::from(new_text),
+            false,
+            &mut fake_wrap_line,
+        );
+        assert_eq!(text.to_string(), "");
+        assert_eq!(wrapper.lines.len(), 1);
+    }
+}
