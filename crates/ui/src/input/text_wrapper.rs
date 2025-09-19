@@ -118,6 +118,32 @@ impl TextWrapper {
         force: bool,
         cx: &mut App,
     ) {
+        let mut line_wrapper = cx
+            .text_system()
+            .line_wrapper(self.font.clone(), self.font_size);
+        self._update(
+            changed_text,
+            range,
+            new_text,
+            force,
+            &mut |line_str, wrap_width| {
+                line_wrapper
+                    .wrap_line(&[LineFragment::text(line_str)], wrap_width)
+                    .collect()
+            },
+        );
+    }
+
+    fn _update<F>(
+        &mut self,
+        changed_text: &Rope,
+        range: &Range<usize>,
+        new_text: &Rope,
+        force: bool,
+        wrap_line: &mut F,
+    ) where
+        F: FnMut(&str, Pixels) -> Vec<gpui::Boundary>,
+    {
         if self.text.eq(changed_text) && !force {
             return;
         }
@@ -141,9 +167,7 @@ impl TextWrapper {
         let mut new_lines = vec![];
 
         let wrap_width = self.wrap_width;
-        let mut line_wrapper = cx
-            .text_system()
-            .line_wrapper(self.font.clone(), self.font_size);
+
         for line in changed_text.slice(new_range).lines() {
             let line_str = line.to_string();
             let mut wrapped_lines = vec![];
@@ -152,8 +176,7 @@ impl TextWrapper {
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
             if let Some(wrap_width) = wrap_width {
                 // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
-                for boundary in line_wrapper.wrap_line(&[LineFragment::text(&line_str)], wrap_width)
-                {
+                for boundary in wrap_line(&line_str, wrap_width) {
                     wrapped_lines.push(prev_boundary_ix..boundary.ix);
                     prev_boundary_ix = boundary.ix;
                 }
