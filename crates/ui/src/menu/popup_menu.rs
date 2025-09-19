@@ -809,11 +809,16 @@ impl PopupMenu {
                         .when(!show_link_icon, |this| this.child(label.clone()))
                         .when(show_link_icon, |this| {
                             this.child(
-                                h_flex().gap_1p5().child(label.clone()).child(
-                                    Icon::new(IconName::ExternalLink)
-                                        .xsmall()
-                                        .text_color(cx.theme().muted_foreground),
-                                ),
+                                h_flex()
+                                    .w_full()
+                                    .justify_between()
+                                    .gap_1p5()
+                                    .child(label.clone())
+                                    .child(
+                                        Icon::new(IconName::ExternalLink)
+                                            .xsmall()
+                                            .text_color(cx.theme().muted_foreground),
+                                    ),
                             )
                         })
                         .children(key),

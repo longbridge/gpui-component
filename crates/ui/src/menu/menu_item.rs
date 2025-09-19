@@ -1,6 +1,6 @@
 use crate::{h_flex, ActiveTheme, Disableable, Selectable, StyledExt};
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
+    prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
     IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
