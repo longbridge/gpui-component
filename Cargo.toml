@@ -57,6 +57,7 @@ single_range_in_vec_init = "allow"
 style = { level = "allow", priority = -1 }
 todo = "deny"
 type_complexity = "allow"
+manual_is_multiple_of = "allow"
 
 [profile.dev]
 codegen-units = 16
