@@ -131,7 +131,7 @@ impl TextWrapper {
             }
 
             // Reset of the line
-            if !line_str[prev_boundary_ix..].is_empty() {
+            if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
                 wrapped_lines.push(prev_boundary_ix..line.len());
             }
 
