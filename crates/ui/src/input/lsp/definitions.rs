@@ -23,18 +23,18 @@ pub trait DefinitionProvider {
         _offset: usize,
         _window: &mut Window,
         _cx: &mut App,
-    ) -> Task<Result<Vec<lsp_types::Location>>>;
+    ) -> Task<Result<Vec<lsp_types::LocationLink>>>;
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct HoverDefinition {
     /// The range of the symbol that triggered the hover.
     symbol_range: Range<usize>,
-    pub(crate) locations: Rc<Vec<lsp_types::Location>>,
+    pub(crate) locations: Rc<Vec<lsp_types::LocationLink>>,
 }
 
 impl HoverDefinition {
-    pub(crate) fn new(symbol_range: Range<usize>, locations: Vec<lsp_types::Location>) -> Self {
+    pub(crate) fn new(symbol_range: Range<usize>, locations: Vec<lsp_types::LocationLink>) -> Self {
         Self {
             symbol_range,
             locations: Rc::new(locations),
@@ -64,7 +64,7 @@ impl InputState {
 
         // Currently not implemented.
         let task = provider.definitions(&self.text, offset, window, cx);
-        let symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
+        let mut symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
         let editor = cx.entity();
         self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
             let locations = task.await?;
@@ -73,6 +73,14 @@ impl InputState {
                 if locations.is_empty() {
                     editor.hover_definition = None;
                 } else {
+                    if let Some(location) = locations.first() {
+                        if let Some(range) = location.origin_selection_range {
+                            let start = editor.text.position_to_offset(&range.start);
+                            let end = editor.text.position_to_offset(&range.end);
+                            symbol_range = start..end;
+                        }
+                    }
+
                     editor.hover_definition = Some(HoverDefinition::new(symbol_range, locations));
                 }
                 cx.notify();
@@ -106,15 +114,15 @@ impl InputState {
         };
 
         if location
-            .uri
+            .target_uri
             .scheme()
             .map(|s| s.as_str() == "https" || s.as_str() == "http")
             == Some(true)
         {
-            cx.open_url(&location.uri.to_string());
+            cx.open_url(&location.target_uri.to_string());
         } else {
             // Move to the location.
-            let target_range = location.range;
+            let target_range = location.target_range;
             let start = self.text.position_to_offset(&target_range.start);
             let end = self.text.position_to_offset(&target_range.end);
 

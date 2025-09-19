@@ -322,27 +322,33 @@ impl DefinitionProvider for ExampleLspStore {
         offset: usize,
         _window: &mut Window,
         _cx: &mut App,
-    ) -> Task<Result<Vec<lsp_types::Location>>> {
-        let word = text.word_at(offset);
-        if word.is_empty() {
+    ) -> Task<Result<Vec<lsp_types::LocationLink>>> {
+        let Some(word_range) = text.word_range(offset) else {
             return Task::ready(Ok(vec![]));
-        }
+        };
+        let word = text.slice(word_range.clone()).to_string();
 
         let document_uri = lsp_types::Uri::from_str("file://example").unwrap();
+        let start = text.offset_to_position(word_range.start);
+        let end = text.offset_to_position(word_range.end);
+        let symbol_range = lsp_types::Range { start, end };
 
         if word == "Duration" {
-            return Task::ready(Ok(vec![lsp_types::Location {
-                uri: document_uri,
-                range: lsp_types::Range {
-                    start: lsp_types::Position {
-                        line: 2,
-                        character: 4,
-                    },
-                    end: lsp_types::Position {
-                        line: 2,
-                        character: 23,
-                    },
+            let target_range = lsp_types::Range {
+                start: lsp_types::Position {
+                    line: 2,
+                    character: 4,
                 },
+                end: lsp_types::Position {
+                    line: 2,
+                    character: 23,
+                },
+            };
+            return Task::ready(Ok(vec![lsp_types::LocationLink {
+                target_uri: document_uri,
+                target_range: target_range,
+                target_selection_range: target_range,
+                origin_selection_range: Some(symbol_range),
             }]));
         }
 
@@ -353,22 +359,15 @@ impl DefinitionProvider for ExampleLspStore {
         for (ix, t) in names.iter().enumerate() {
             if *t == word {
                 let url = RUST_DOC_URLS[ix].1;
-                let location = lsp_types::Location {
-                    uri: lsp_types::Uri::from_str(&format!(
+                let location = lsp_types::LocationLink {
+                    target_uri: lsp_types::Uri::from_str(&format!(
                         "https://doc.rust-lang.org/std/{}.html",
                         url
                     ))
                     .unwrap(),
-                    range: lsp_types::Range {
-                        start: lsp_types::Position {
-                            line: 0,
-                            character: 0,
-                        },
-                        end: lsp_types::Position {
-                            line: 0,
-                            character: 0,
-                        },
-                    },
+                    target_selection_range: lsp_types::Range::default(),
+                    target_range: lsp_types::Range::default(),
+                    origin_selection_range: Some(symbol_range),
                 };
 
                 return Task::ready(Ok(vec![location]));
