@@ -122,7 +122,6 @@ impl TextWrapper {
         let end_row = self.text.offset_to_point(range.end).row as usize;
         let end_row = end_row.min(self.lines.len().saturating_sub(1));
         let rows_range = start_row..=end_row;
-        dbg!(&rows_range);
 
         // To add the new lines.
         let new_start_row = text.offset_to_point(range.start).row as usize;
@@ -132,37 +131,35 @@ impl TextWrapper {
         let new_range = new_start_offset..new_end_offset;
 
         let mut new_lines = vec![];
-        if new_range.len() > 0 {
-            let wrap_width = self.wrap_width;
-            let mut line_wrapper = cx
-                .text_system()
-                .line_wrapper(self.font.clone(), self.font_size);
-            for line in text.slice(new_range).lines() {
-                let line_str = line.to_string();
-                let mut wrapped_lines = vec![];
-                let mut prev_boundary_ix = 0;
 
-                // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
-                if let Some(wrap_width) = wrap_width {
-                    // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
-                    for boundary in
-                        line_wrapper.wrap_line(&[LineFragment::text(&line_str)], wrap_width)
-                    {
-                        wrapped_lines.push(prev_boundary_ix..boundary.ix);
-                        prev_boundary_ix = boundary.ix;
-                    }
+        let wrap_width = self.wrap_width;
+        let mut line_wrapper = cx
+            .text_system()
+            .line_wrapper(self.font.clone(), self.font_size);
+        for line in text.slice(new_range).lines() {
+            let line_str = line.to_string();
+            let mut wrapped_lines = vec![];
+            let mut prev_boundary_ix = 0;
+
+            // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
+            if let Some(wrap_width) = wrap_width {
+                // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
+                for boundary in line_wrapper.wrap_line(&[LineFragment::text(&line_str)], wrap_width)
+                {
+                    wrapped_lines.push(prev_boundary_ix..boundary.ix);
+                    prev_boundary_ix = boundary.ix;
                 }
-
-                // Reset of the line
-                if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
-                    wrapped_lines.push(prev_boundary_ix..line.len());
-                }
-
-                new_lines.push(LineItem {
-                    line: line.clone(),
-                    wrapped_lines,
-                });
             }
+
+            // Reset of the line
+            if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
+                wrapped_lines.push(prev_boundary_ix..line.len());
+            }
+
+            new_lines.push(LineItem {
+                line: line.clone(),
+                wrapped_lines,
+            });
         }
 
         // dbg!(&new_lines.len());
