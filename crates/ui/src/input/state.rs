@@ -2282,7 +2282,8 @@ impl EntityInputHandler for InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
-        self.text_wrapper.update(&self.text, false, cx);
+        self.text_wrapper
+            .update(&self.text, &range, new_text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
@@ -2331,7 +2332,8 @@ impl EntityInputHandler for InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
-        self.text_wrapper.update(&self.text, false, cx);
+        self.text_wrapper
+            .update(&self.text, &range, new_text, false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         if new_text.is_empty() {
@@ -2437,7 +2439,7 @@ impl Focusable for InputState {
 
 impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.text_wrapper.update(&self.text, false, cx);
+        self.text_wrapper.update_all(&self.text, false, cx);
         self.mode
             .update_highlighter(&(0..0), &self.text, "", false, cx);
 

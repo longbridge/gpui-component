@@ -3,7 +3,7 @@ use std::ops::Range;
 use gpui::{App, Font, LineFragment, Pixels};
 use rope::Rope;
 
-use crate::input::RopeExt as _;
+use crate::input::RopeExt;
 
 /// A line with soft wrapped lines info.
 #[derive(Clone)]
@@ -88,7 +88,7 @@ impl TextWrapper {
         }
 
         self.wrap_width = wrap_width;
-        self.update(&self.text.clone(), true, cx);
+        self.update_all(&self.text.clone(), true, cx);
     }
 
     pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
@@ -98,13 +98,97 @@ impl TextWrapper {
 
         self.font = font;
         self.font_size = font_size;
-        self.update(&self.text.clone(), true, cx);
+        self.update_all(&self.text.clone(), true, cx);
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
     ///
     /// If the `text` is the same as the current text, do nothing.
-    pub(super) fn update(&mut self, text: &Rope, force: bool, cx: &mut App) {
+    pub(super) fn update(
+        &mut self,
+        text: &Rope,
+        range: &Range<usize>,
+        new_text: &str,
+        force: bool,
+        cx: &mut App,
+    ) {
+        if self.text.eq(text) && !force {
+            return;
+        }
+
+        // Remove the old changed lines.
+        let start_row = self.text.offset_to_point(range.start).row as usize;
+        let start_row = start_row.min(self.lines.len().saturating_sub(1));
+        let end_row = self.text.offset_to_point(range.end).row as usize;
+        let end_row = end_row.min(self.lines.len().saturating_sub(1));
+        let rows_range = start_row..=end_row;
+
+        // To add the new lines.
+        let new_start_row = text.offset_to_point(range.start).row as usize;
+        let new_start_offset = text.line_start_offset(new_start_row);
+        let new_end_row = text.offset_to_point(range.start + new_text.len()).row as usize;
+        let new_end_offset = text.line_end_offset(new_end_row);
+        let new_range = new_start_offset..new_end_offset;
+
+        let mut new_lines = vec![];
+        if new_range.len() > 0 {
+            let wrap_width = self.wrap_width;
+            let mut line_wrapper = cx
+                .text_system()
+                .line_wrapper(self.font.clone(), self.font_size);
+            for line in text.slice(new_range).lines() {
+                let line_str = line.to_string();
+                let mut wrapped_lines = vec![];
+                let mut prev_boundary_ix = 0;
+
+                // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
+                if let Some(wrap_width) = wrap_width {
+                    // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
+                    for boundary in
+                        line_wrapper.wrap_line(&[LineFragment::text(&line_str)], wrap_width)
+                    {
+                        wrapped_lines.push(prev_boundary_ix..boundary.ix);
+                        prev_boundary_ix = boundary.ix;
+                    }
+                }
+
+                // Reset of the line
+                if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
+                    wrapped_lines.push(prev_boundary_ix..line.len());
+                }
+
+                new_lines.push(LineItem {
+                    line: line.clone(),
+                    wrapped_lines,
+                });
+            }
+        }
+
+        // dbg!(&new_lines.len());
+        // dbg!(self.lines.len());
+        if self.lines.len() == 0 {
+            self.lines = new_lines;
+        } else {
+            self.lines.splice(rows_range, new_lines);
+        }
+
+        // dbg!(self.lines.len());
+
+        // At least one line
+        if self.lines.len() == 0 {
+            self.lines.push(LineItem {
+                line: Rope::new(),
+                wrapped_lines: vec![],
+            });
+        }
+        self.text = text.clone();
+        self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
+    }
+
+    /// Update the text wrapper and recalculate the wrapped lines.
+    ///
+    /// If the `text` is the same as the current text, do nothing.
+    pub(crate) fn update_all(&mut self, text: &Rope, force: bool, cx: &mut App) {
         if self.text.eq(text) && !force {
             return;
         }
