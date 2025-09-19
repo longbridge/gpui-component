@@ -104,15 +104,21 @@ impl TextWrapper {
     /// Update the text wrapper and recalculate the wrapped lines.
     ///
     /// If the `text` is the same as the current text, do nothing.
+    ///
+    /// - `changed_text`: The text [`Rope`] that has changed.
+    /// - `range`: The `selected_range` before change.
+    /// - `new_text`: The inserted text.
+    /// - `force`: Whether to force the update, if false, the update will be skipped if the text is the same.
+    /// - `cx`: The application context.
     pub(super) fn update(
         &mut self,
-        text: &Rope,
+        changed_text: &Rope,
         range: &Range<usize>,
-        new_text: &str,
+        new_text: &Rope,
         force: bool,
         cx: &mut App,
     ) {
-        if self.text.eq(text) && !force {
+        if self.text.eq(changed_text) && !force {
             return;
         }
 
@@ -124,10 +130,12 @@ impl TextWrapper {
         let rows_range = start_row..=end_row;
 
         // To add the new lines.
-        let new_start_row = text.offset_to_point(range.start).row as usize;
-        let new_start_offset = text.line_start_offset(new_start_row);
-        let new_end_row = text.offset_to_point(range.start + new_text.len()).row as usize;
-        let new_end_offset = text.line_end_offset(new_end_row);
+        let new_start_row = changed_text.offset_to_point(range.start).row as usize;
+        let new_start_offset = changed_text.line_start_offset(new_start_row);
+        let new_end_row = changed_text
+            .offset_to_point(range.start + new_text.len())
+            .row as usize;
+        let new_end_offset = changed_text.line_end_offset(new_end_row);
         let new_range = new_start_offset..new_end_offset;
 
         let mut new_lines = vec![];
@@ -136,7 +144,7 @@ impl TextWrapper {
         let mut line_wrapper = cx
             .text_system()
             .line_wrapper(self.font.clone(), self.font_size);
-        for line in text.slice(new_range).lines() {
+        for line in changed_text.slice(new_range).lines() {
             let line_str = line.to_string();
             let mut wrapped_lines = vec![];
             let mut prev_boundary_ix = 0;
@@ -171,7 +179,7 @@ impl TextWrapper {
         }
 
         // dbg!(self.lines.len());
-        self.text = text.clone();
+        self.text = changed_text.clone();
         self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
     }
 
@@ -179,43 +187,6 @@ impl TextWrapper {
     ///
     /// If the `text` is the same as the current text, do nothing.
     pub(crate) fn update_all(&mut self, text: &Rope, force: bool, cx: &mut App) {
-        if self.text.eq(text) && !force {
-            return;
-        }
-
-        let wrap_width = self.wrap_width;
-        let mut line_wrapper = cx
-            .text_system()
-            .line_wrapper(self.font.clone(), self.font_size);
-
-        self.lines.clear();
-        for line in text.lines() {
-            let line_str = line.to_string();
-            let mut wrapped_lines = vec![];
-            let mut prev_boundary_ix = 0;
-
-            // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
-            if let Some(wrap_width) = wrap_width {
-                // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
-                for boundary in line_wrapper.wrap_line(&[LineFragment::text(&line_str)], wrap_width)
-                {
-                    wrapped_lines.push(prev_boundary_ix..boundary.ix);
-                    prev_boundary_ix = boundary.ix;
-                }
-            }
-
-            // Reset of the line
-            if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
-                wrapped_lines.push(prev_boundary_ix..line.len());
-            }
-
-            self.lines.push(LineItem {
-                line: line.clone(),
-                wrapped_lines,
-            });
-        }
-
-        self.text = text.clone();
-        self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
+        self.update(text, &(0..text.len()), &text, force, cx);
     }
 }

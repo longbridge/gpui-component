@@ -2283,7 +2283,7 @@ impl EntityInputHandler for InputState {
             diagnostics.reset(&self.text)
         }
         self.text_wrapper
-            .update(&self.text, &range, new_text, false, cx);
+            .update(&self.text, &range, &Rope::from(new_text), false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
@@ -2333,7 +2333,7 @@ impl EntityInputHandler for InputState {
             diagnostics.reset(&self.text)
         }
         self.text_wrapper
-            .update(&self.text, &range, new_text, false, cx);
+            .update(&self.text, &range, &Rope::from(new_text), false, cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         if new_text.is_empty() {
