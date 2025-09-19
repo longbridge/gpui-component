@@ -350,5 +350,16 @@ mod tests {
         );
         assert_eq!(text.to_string(), "");
         assert_eq!(wrapper.lines.len(), 1);
+
+        // Test update_all
+        let range = 0..text.len();
+        let new_text = "This is a full text.\nThis is a second line.";
+        text.replace(range.clone(), new_text);
+        wrapper._update(&text, &range, &text, false, &mut fake_wrap_line);
+        assert_eq!(
+            text.to_string(),
+            "This is a full text.\nThis is a second line."
+        );
+        assert_eq!(wrapper.lines.len(), 2);
     }
 }
