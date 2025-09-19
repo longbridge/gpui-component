@@ -122,6 +122,7 @@ impl TextWrapper {
         let end_row = self.text.offset_to_point(range.end).row as usize;
         let end_row = end_row.min(self.lines.len().saturating_sub(1));
         let rows_range = start_row..=end_row;
+        dbg!(&rows_range);
 
         // To add the new lines.
         let new_start_row = text.offset_to_point(range.start).row as usize;
@@ -173,14 +174,6 @@ impl TextWrapper {
         }
 
         // dbg!(self.lines.len());
-
-        // At least one line
-        if self.lines.len() == 0 {
-            self.lines.push(LineItem {
-                line: Rope::new(),
-                wrapped_lines: vec![],
-            });
-        }
         self.text = text.clone();
         self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
     }
