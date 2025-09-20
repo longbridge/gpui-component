@@ -1,6 +1,6 @@
 use crate::{h_flex, ActiveTheme, Disableable, Selectable, StyledExt};
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
+    prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
     IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
@@ -12,6 +12,7 @@ pub struct MenuItem {
     style: StyleRefinement,
     disabled: bool,
     selected: bool,
+    hovered: bool,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     on_mouse_enter: Option<Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
@@ -25,6 +26,7 @@ impl MenuItem {
             style: StyleRefinement::default(),
             disabled: false,
             selected: false,
+            hovered: false,
             on_click: None,
             on_mouse_enter: None,
             children: SmallVec::new(),
@@ -42,6 +44,11 @@ impl MenuItem {
         self
     }
 
+    pub fn hovered(mut self, hovered: bool) -> Self {
+        self.hovered = hovered;
+        self
+    }
+
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -50,6 +57,8 @@ impl MenuItem {
         self
     }
 
+    /// Set a handler for when the mouse enters the MenuItem.
+    #[allow(unused)]
     pub fn on_mouse_enter(
         mut self,
         handler: impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
@@ -103,11 +112,13 @@ impl RenderOnce for MenuItem {
             .justify_between()
             .refine_style(&self.style)
             .when(!self.disabled, |this| {
-                this.when(!self.selected, |this| {
-                    this.hover(|this| {
-                        this.bg(cx.theme().accent)
-                            .text_color(cx.theme().accent_foreground)
-                    })
+                this.when(self.hovered, |this| {
+                    this.bg(cx.theme().accent)
+                        .text_color(cx.theme().accent_foreground)
+                })
+                .hover(|this| {
+                    this.bg(cx.theme().accent)
+                        .text_color(cx.theme().accent_foreground)
                 })
                 .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
                     this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
@@ -122,13 +133,6 @@ impl RenderOnce for MenuItem {
             .when(self.disabled, |this| {
                 this.text_color(cx.theme().muted_foreground)
             })
-            .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .justify_between()
-                    .gap_x_1()
-                    .child(div().w_full().children(self.children)),
-            )
+            .children(self.children)
     }
 }

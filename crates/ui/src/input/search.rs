@@ -568,7 +568,7 @@ mod tests {
         matcher.update_query("Is", true);
 
         assert_eq!(matcher.len(), 3);
-        let mut matches = matcher.clone().into_iter();
+        let mut matches = matcher.clone();
         assert_eq!(matches.current_match_ix, 0);
         assert_eq!(matches.next(), Some(18..20));
         assert_eq!(matches.next(), Some(23..25));
