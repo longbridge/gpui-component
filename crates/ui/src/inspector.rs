@@ -16,7 +16,6 @@ use crate::{
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
     description_list::DescriptionList,
-    dropdown::{Dropdown, DropdownState, SearchableVec},
     h_flex,
     input::{CompletionProvider, InputEvent, InputState, RopeExt, TabSize, TextInput},
     link::Link,
@@ -70,7 +69,6 @@ struct EditorState {
 pub struct DivInspector {
     inspector_id: Option<InspectorElementId>,
     inspector_state: Option<DivInspectorState>,
-    rust_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
     rust_state: EditorState,
     json_state: EditorState,
     /// Initial style before any edits
@@ -78,79 +76,6 @@ pub struct DivInspector {
     /// Part of the initial style that could not be converted to Rust code
     unconvertible_style: StyleRefinement,
     _subscriptions: Vec<Subscription>,
-}
-
-struct LspProvider {}
-
-impl CompletionProvider for LspProvider {
-    fn completions(
-        &self,
-        rope: &rope::Rope,
-        offset: usize,
-        _: lsp_types::CompletionContext,
-        _: &mut Window,
-        cx: &mut Context<InputState>,
-    ) -> Task<Result<CompletionResponse>> {
-        let mut left_offset = 0;
-        while left_offset < 100 {
-            match rope.char_at(offset.saturating_sub(left_offset)) {
-                Some(c) if c == '.' => {
-                    break;
-                }
-                None => break,
-                _ => {}
-            }
-            left_offset += 1;
-        }
-        let start = offset.saturating_sub(left_offset);
-        let trigger_character = rope.slice(start..offset).to_string();
-        if !trigger_character.starts_with('.') {
-            return Task::ready(Ok(CompletionResponse::Array(vec![])));
-        }
-
-        dbg!(&trigger_character);
-
-        let start_pos = rope.offset_to_position(start);
-        let end_pos = rope.offset_to_position(offset);
-
-        cx.background_spawn(async move {
-            let styles = StyleMethods::get()
-                .map
-                .iter()
-                .filter_map(|(name, method)| {
-                    let prefix = &trigger_character[1..];
-                    if name.starts_with(&prefix) {
-                        Some(CompletionItem {
-                            label: name.to_string(),
-                            filter_text: Some(prefix.to_string()),
-                            kind: Some(CompletionItemKind::METHOD),
-                            detail: Some("()".to_string()),
-                            documentation: method
-                                .documentation
-                                .as_ref()
-                                .map(|doc| lsp_types::Documentation::String(doc.to_string())),
-                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-                                range: lsp_types::Range {
-                                    start: start_pos,
-                                    end: end_pos,
-                                },
-                                new_text: format!(".{}()", name),
-                            })),
-                            ..Default::default()
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            Ok(CompletionResponse::Array(styles))
-        })
-    }
-
-    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputState>) -> bool {
-        true
-    }
 }
 
 impl DivInspector {
@@ -174,23 +99,6 @@ impl DivInspector {
 
             editor.lsp.completion_provider = Some(lsp_provider.clone());
             editor
-        });
-
-        let rust_dropdown = cx.new(|cx| {
-            DropdownState::new(
-                SearchableVec::new({
-                    let mut methods: Vec<_> = StyleMethods::get()
-                        .table
-                        .iter()
-                        .map(|(_, method)| method.name.into())
-                        .collect();
-                    methods.sort();
-                    methods
-                }),
-                None,
-                window,
-                cx,
-            )
         });
 
         let _subscriptions = vec![
@@ -233,7 +141,6 @@ impl DivInspector {
         Self {
             inspector_id: None,
             inspector_state: None,
-            rust_dropdown,
             rust_state,
             json_state,
             initial_style: Default::default(),
@@ -354,24 +261,6 @@ impl DivInspector {
             rust_style
         })
     }
-
-    fn rust_add_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(method) = self.rust_dropdown.read(cx).selected_value() {
-            let code = self.rust_state.state.read(cx).value();
-            let new_code = format!("        .{method}()\n");
-            let Some(insert_pos) = code.rfind('}') else {
-                self.rust_state.error = Some("Failed to add method: Could not find `}`".into());
-                return;
-            };
-            let code = format!("{}{}{}", &code[..insert_pos], new_code, &code[insert_pos..]);
-
-            self.rust_state.editing = true;
-            self.rust_state.state.update(cx, |state, cx| {
-                state.set_value(code, window, cx);
-                // an edit event will be triggered, the style will be updated there
-            });
-        }
-    }
 }
 
 fn style_to_json(style: &StyleRefinement) -> String {
@@ -483,31 +372,18 @@ impl Render for DivInspector {
                 .child(
                     v_flex()
                         .flex_1()
+                        .h_2_5()
                         .gap_y_3()
                         .child(
-                            v_flex().gap_y_2().child("Rust Styles").child(
-                                h_flex()
-                                    .gap_x_2()
-                                    .child(
-                                        Dropdown::new(&self.rust_dropdown)
-                                            .icon(IconName::Search)
-                                            .small()
-                                            .cleanable()
-                                            .flex_1(),
-                                    )
-                                    .child(Button::new("rust-add").label("Add").small().on_click(
-                                        cx.listener(|this, _, window, cx| {
-                                            this.rust_add_style(window, cx);
-                                        }),
-                                    ))
-                                    .child(
-                                        Button::new("rust-reset").label("Reset").small().on_click(
-                                            cx.listener(|this, _, window, cx| {
-                                                this.reset_style(window, cx);
-                                            }),
-                                        ),
-                                    ),
-                            ),
+                            h_flex()
+                                .justify_between()
+                                .gap_x_2()
+                                .child("Rust Styles")
+                                .child(Button::new("rust-reset").label("Reset").small().on_click(
+                                    cx.listener(|this, _, window, cx| {
+                                        this.reset_style(window, cx);
+                                    }),
+                                )),
                         )
                         .child(
                             v_flex()
@@ -523,8 +399,9 @@ impl Render for DivInspector {
                 )
                 .child(
                     v_flex()
+                        .flex_1()
                         .gap_y_3()
-                        .h_3_5()
+                        .h_2_5()
                         .flex_shrink_0()
                         .child(
                             h_flex()
@@ -635,4 +512,77 @@ fn render_inspector(
                 .children(inspector.render_inspector_states(window, cx)),
         )
         .into_any_element()
+}
+
+struct LspProvider {}
+
+impl CompletionProvider for LspProvider {
+    fn completions(
+        &self,
+        rope: &rope::Rope,
+        offset: usize,
+        _: lsp_types::CompletionContext,
+        _: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<CompletionResponse>> {
+        let mut left_offset = 0;
+        while left_offset < 100 {
+            match rope.char_at(offset.saturating_sub(left_offset)) {
+                Some(c) if c == '.' => {
+                    break;
+                }
+                None => break,
+                _ => {}
+            }
+            left_offset += 1;
+        }
+        let start = offset.saturating_sub(left_offset);
+        let trigger_character = rope.slice(start..offset).to_string();
+        if !trigger_character.starts_with('.') {
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
+        }
+
+        dbg!(&trigger_character);
+
+        let start_pos = rope.offset_to_position(start);
+        let end_pos = rope.offset_to_position(offset);
+
+        cx.background_spawn(async move {
+            let styles = StyleMethods::get()
+                .map
+                .iter()
+                .filter_map(|(name, method)| {
+                    let prefix = &trigger_character[1..];
+                    if name.starts_with(&prefix) {
+                        Some(CompletionItem {
+                            label: name.to_string(),
+                            filter_text: Some(prefix.to_string()),
+                            kind: Some(CompletionItemKind::METHOD),
+                            detail: Some("()".to_string()),
+                            documentation: method
+                                .documentation
+                                .as_ref()
+                                .map(|doc| lsp_types::Documentation::String(doc.to_string())),
+                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                range: lsp_types::Range {
+                                    start: start_pos,
+                                    end: end_pos,
+                                },
+                                new_text: format!(".{}()", name),
+                            })),
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            Ok(CompletionResponse::Array(styles))
+        })
+    }
+
+    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputState>) -> bool {
+        true
+    }
 }
