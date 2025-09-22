@@ -1,4 +1,4 @@
-use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, sync::OnceLock};
+use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, rc::Rc, sync::OnceLock};
 
 use anyhow::Result;
 use gpui::{
@@ -7,7 +7,9 @@ use gpui::{
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
     SharedString, StyleRefinement, Styled, Subscription, Task, Window,
 };
-use lsp_types::CompletionResponse;
+use lsp_types::{
+    CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, TextEdit,
+};
 
 use crate::{
     alert::Alert,
@@ -16,7 +18,7 @@ use crate::{
     description_list::DescriptionList,
     dropdown::{Dropdown, DropdownState, SearchableVec},
     h_flex,
-    input::{CompletionProvider, InputEvent, InputState, TabSize, TextInput},
+    input::{CompletionProvider, InputEvent, InputState, RopeExt, TabSize, TextInput},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
@@ -78,35 +80,83 @@ pub struct DivInspector {
     _subscriptions: Vec<Subscription>,
 }
 
-impl CompletionProvider for DivInspector {
+struct LspProvider {}
+
+impl CompletionProvider for LspProvider {
     fn completions(
         &self,
-        text: &rope::Rope,
+        rope: &rope::Rope,
         offset: usize,
-        trigger: lsp_types::CompletionContext,
-        window: &mut Window,
+        _: lsp_types::CompletionContext,
+        _: &mut Window,
         cx: &mut Context<InputState>,
     ) -> Task<Result<CompletionResponse>> {
-        let trigger_character = trigger.trigger_character.unwrap_or_default().to_string();
-        if !trigger_character.starts_with(".") {
+        let mut left_offset = 0;
+        while left_offset < 100 {
+            match rope.char_at(offset.saturating_sub(left_offset)) {
+                Some(c) if c == '.' => {
+                    break;
+                }
+                None => break,
+                _ => {}
+            }
+            left_offset += 1;
+        }
+        let start = offset.saturating_sub(left_offset);
+        let trigger_character = rope.slice(start..offset).to_string();
+        if !trigger_character.starts_with('.') {
             return Task::ready(Ok(CompletionResponse::Array(vec![])));
         }
 
-        Task::ready(Ok(CompletionResponse::Array(vec![])))
+        dbg!(&trigger_character);
+
+        let start_pos = rope.offset_to_position(start);
+        let end_pos = rope.offset_to_position(offset);
+
+        cx.background_spawn(async move {
+            let styles = StyleMethods::get()
+                .map
+                .iter()
+                .filter_map(|(name, method)| {
+                    let prefix = &trigger_character[1..];
+                    if name.starts_with(&prefix) {
+                        Some(CompletionItem {
+                            label: name.to_string(),
+                            filter_text: Some(prefix.to_string()),
+                            kind: Some(CompletionItemKind::METHOD),
+                            detail: Some("()".to_string()),
+                            documentation: method
+                                .documentation
+                                .as_ref()
+                                .map(|doc| lsp_types::Documentation::String(doc.to_string())),
+                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                range: lsp_types::Range {
+                                    start: start_pos,
+                                    end: end_pos,
+                                },
+                                new_text: format!(".{}()", name),
+                            })),
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            Ok(CompletionResponse::Array(styles))
+        })
     }
 
-    fn is_completion_trigger(
-        &self,
-        offset: usize,
-        new_text: &str,
-        cx: &mut Context<InputState>,
-    ) -> bool {
+    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputState>) -> bool {
         true
     }
 }
 
 impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let lsp_provider = Rc::new(LspProvider {});
+
         let json_input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
@@ -114,13 +164,16 @@ impl DivInspector {
         });
 
         let rust_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut editor = InputState::new(window, cx)
                 .code_editor("rust")
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
-                })
+                });
+
+            editor.lsp.completion_provider = Some(lsp_provider.clone());
+            editor
         });
 
         let rust_dropdown = cx.new(|cx| {
