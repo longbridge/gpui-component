@@ -143,7 +143,9 @@ impl Element for ContextMenu {
                                 .anchor(anchor)
                                 .when_some(menu_view, |this, menu| {
                                     // Focus the menu, so that can be handle the action.
-                                    menu.focus_handle(cx).focus(window);
+                                    if !menu.focus_handle(cx).contains_focused(window, cx) {
+                                        menu.focus_handle(cx).focus(window);
+                                    }
 
                                     this.child(div().occlude().child(menu.clone()))
                                 }),
