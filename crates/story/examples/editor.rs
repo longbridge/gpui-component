@@ -200,12 +200,12 @@ impl CompletionProvider for ExampleLspStore {
             return Task::ready(Ok(vec![]));
         }
 
-        let _ = rope.to_string(); // Just to use the rope parameter.
-        let pos = rope.offset_to_position(offset);
-
         // Simulate to delay for fetching completions
+        let rope = rope.clone();
         let items = self.completions.clone();
         cx.background_spawn(async move {
+            let pos = rope.offset_to_position(offset);
+
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(20)).await;
 
@@ -940,7 +940,7 @@ fn main() {
         cx.activate(true);
 
         story::create_new_window_with_size(
-            "Code Editor",
+            "Editor",
             Some(size(px(1200.), px(960.))),
             |window, cx| cx.new(|cx| Example::new(name, window, cx)),
             cx,
