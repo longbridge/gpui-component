@@ -48,7 +48,7 @@ struct CompletionMenuItem {
     item: Rc<CompletionItem>,
     children: Vec<AnyElement>,
     selected: bool,
-    highlight_prefix_len: usize,
+    highlight_prefix: SharedString,
 }
 
 impl CompletionMenuItem {
@@ -58,12 +58,12 @@ impl CompletionMenuItem {
             item,
             children: vec![],
             selected: false,
-            highlight_prefix_len: 0,
+            highlight_prefix: "".into(),
         }
     }
 
-    fn highlight_prefix(mut self, len: usize) -> Self {
-        self.highlight_prefix_len = len;
+    fn highlight_prefix(mut self, s: impl Into<SharedString>) -> Self {
+        self.highlight_prefix = s.into();
         self
     }
 }
@@ -88,7 +88,12 @@ impl RenderOnce for CompletionMenuItem {
         let item = self.item;
 
         let deprecated = item.deprecated.unwrap_or(false);
-        let matched_len = self.highlight_prefix_len;
+        let matched_len = item
+            .filter_text
+            .as_ref()
+            .map(|s| s.len())
+            .unwrap_or(self.highlight_prefix.len());
+
         let highlights = vec![(
             0..matched_len,
             HighlightStyle {
@@ -139,8 +144,7 @@ impl ListDelegate for ContextMenuDelegate {
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
-        let matched_len = self.query.len();
-        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(matched_len))
+        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
     }
 
     fn set_selected_index(

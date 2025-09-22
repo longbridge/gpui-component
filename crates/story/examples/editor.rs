@@ -167,7 +167,7 @@ impl ExampleLspStore {
 }
 
 fn completion_item(
-    range: &lsp_types::Range,
+    replace_range: &lsp_types::Range,
     label: &str,
     replace_text: &str,
     documentation: &str,
@@ -177,8 +177,8 @@ fn completion_item(
         kind: Some(lsp_types::CompletionItemKind::FUNCTION),
         text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
             new_text: replace_text.to_string(),
-            insert: range.clone(),
-            replace: range.clone(),
+            insert: replace_range.clone(),
+            replace: replace_range.clone(),
         })),
         documentation: Some(lsp_types::Documentation::String(documentation.to_string())),
         insert_text: None,
@@ -204,33 +204,28 @@ impl CompletionProvider for ExampleLspStore {
         let rope = rope.clone();
         let items = self.completions.clone();
         cx.background_spawn(async move {
-            let pos = rope.offset_to_position(offset);
-
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(20)).await;
 
-            let range = lsp_types::Range::new(
-                pos,
-                lsp_types::Position {
-                    line: pos.line,
-                    character: pos.character + 1,
-                },
-            );
-
             if trigger_character.starts_with("/") {
+                let start = offset.saturating_sub(trigger_character.len());
+                let start_pos = rope.offset_to_position(start);
+                let end_pos = rope.offset_to_position(offset);
+                let replace_range = lsp_types::Range::new(start_pos, end_pos);
+
                 let items = vec![
                     completion_item(
-                        &range,
+                        &replace_range,
                         "/date",
                         format!("{}", chrono::Local::now().date_naive()).as_str(),
                         "Insert current date",
                     ),
-                    completion_item(&range, "/thanks", "Thank you!", "Insert Thank you!"),
-                    completion_item(&range, "/+1", "👍", "Insert 👍"),
-                    completion_item(&range, "/-1", "👎", "Insert 👎"),
-                    completion_item(&range, "/smile", "😊", "Insert 😊"),
-                    completion_item(&range, "/sad", "😢", "Insert 😢"),
-                    completion_item(&range, "/launch", "🚀", "Insert 🚀"),
+                    completion_item(&replace_range, "/thanks", "Thank you!", "Insert Thank you!"),
+                    completion_item(&replace_range, "/+1", "👍", "Insert 👍"),
+                    completion_item(&replace_range, "/-1", "👎", "Insert 👎"),
+                    completion_item(&replace_range, "/smile", "😊", "Insert 😊"),
+                    completion_item(&replace_range, "/sad", "😢", "Insert 😢"),
+                    completion_item(&replace_range, "/launch", "🚀", "Insert 🚀"),
                 ];
                 return Ok(CompletionResponse::Array(items));
             }
