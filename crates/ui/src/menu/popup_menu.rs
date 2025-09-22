@@ -801,7 +801,7 @@ impl PopupMenu {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let has_icon = self.has_icon;
-        let actived = self.selected_index == Some(ix);
+        let selected = self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(8.);
         const INNER_PADDING: Pixels = px(4.);
 
@@ -812,7 +812,7 @@ impl PopupMenu {
             .px(INNER_PADDING)
             .rounded(state.radius)
             .items_center()
-            .hovered(actived)
+            .hovered(selected)
             .on_mouse_enter(cx.listener(move |this, _, _, cx| {
                 if this.selected_index == Some(ix) {
                     return;
@@ -909,7 +909,7 @@ impl PopupMenu {
                 menu,
                 disabled,
             } => this
-                .selected(actived)
+                .selected(selected)
                 .disabled(*disabled)
                 .items_start()
                 .child(
@@ -929,7 +929,7 @@ impl PopupMenu {
                                 .child(IconName::ChevronRight),
                         ),
                 )
-                .when(actived, |this| {
+                .when(selected, |this| {
                     let (anchor, left) = self.child_menu_anchor(window);
                     let is_bottom_pos = matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
 
