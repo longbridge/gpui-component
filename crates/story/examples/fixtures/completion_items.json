@@ -176,35 +176,39 @@
     "documentation": "Standard library for Rust."
   },
   {
-    "label": "vec",
+    "label": "vec!",
     "documentation": "Create a growable array.\n\n**Example:**\n```rust\nlet mut v = Vec::new();\nv.push(1);\nv.push(2);\n```"
   },
   {
-    "label": "format",
+    "label": "format!",
     "documentation": "Format a string."
   },
   {
-    "label": "println",
+    "label": "println!",
     "documentation": "Print to the standard output.\n\n**Example:**\n```rust\nprintln!(\"Hello, world!\");\n```"
   },
   {
-    "label": "eprintln",
+    "label": "eprintln!",
     "documentation": "Print to the standard error."
   },
   {
-    "label": "dbg",
+    "label": "dbg!",
     "documentation": "Debug print a value."
   },
   {
-    "label": "todo",
+    "label": "todo!",
     "documentation": "Mark unfinished code."
   },
   {
-    "label": "unimplemented",
+    "label": "unimplemented!",
     "documentation": "Mark unimplemented code."
   },
   {
-    "label": "unreachable",
+    "label": "unreachable!",
     "documentation": "Mark code that should never be executed."
+  },
+  {
+    "label": "unimplemented!(\"your format message: {}\", ...)",
+    "documentation": "Mark unimplemented code with a custom message."
   }
 ]

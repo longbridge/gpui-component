@@ -353,9 +353,17 @@ impl CompletionMenu {
         self.offset = offset;
         self.open = true;
         self.list.update(cx, |this, cx| {
+            let longest_ix = items
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, item)| item.label.len())
+                .map(|(ix, _)| ix)
+                .unwrap_or(0);
+
             this.delegate_mut().query = self.query.clone();
             this.delegate_mut().set_items(items);
             this.set_selected_index(Some(IndexPath::new(0)), window, cx);
+            this.set_item_to_measure_index(IndexPath::new(longest_ix), window, cx);
         });
 
         cx.notify();
