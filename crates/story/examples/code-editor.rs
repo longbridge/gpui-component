@@ -239,7 +239,11 @@ impl CompletionProvider for ExampleLspStore {
                 .iter()
                 .filter(|item| item.label.starts_with(&trigger_character))
                 .take(10)
-                .map(|item| item.clone())
+                .map(|item| {
+                    let mut item = item.clone();
+                    item.insert_text = Some(item.label.replace(&trigger_character, ""));
+                    item
+                })
                 .collect::<Vec<_>>();
 
             let responses = vec![CompletionResponse::Array(items)];

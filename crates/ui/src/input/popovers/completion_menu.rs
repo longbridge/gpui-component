@@ -232,7 +232,6 @@ impl CompletionMenu {
         let offset = self.offset;
         let item = item.clone();
         let mut range = self.trigger_start_offset.unwrap_or(self.offset)..self.offset;
-        let mut new_text = item.label.clone();
 
         let state = self.state.clone();
 
@@ -240,6 +239,7 @@ impl CompletionMenu {
             state.update_in(cx, |state, window, cx| {
                 state.completion_inserting = true;
 
+                let mut new_text = item.label.clone();
                 if let Some(text_edit) = item.text_edit.as_ref() {
                     match text_edit {
                         CompletionTextEdit::Edit(edit) => {
