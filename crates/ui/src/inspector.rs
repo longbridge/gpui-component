@@ -542,8 +542,6 @@ impl CompletionProvider for LspProvider {
             return Task::ready(Ok(CompletionResponse::Array(vec![])));
         }
 
-        dbg!(&trigger_character);
-
         let start_pos = rope.offset_to_position(start);
         let end_pos = rope.offset_to_position(offset);
 

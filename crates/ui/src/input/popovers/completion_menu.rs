@@ -9,7 +9,7 @@ use gpui::{
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
 const MAX_MENU_WIDTH: Pixels = px(320.);
-const MAX_MENU_HEIGHT: Pixels = px(480.);
+const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
 
 use crate::{
@@ -171,7 +171,7 @@ impl ListDelegate for ContextMenuDelegate {
 /// A context menu for code completions and code actions.
 pub struct CompletionMenu {
     offset: usize,
-    state: Entity<InputState>,
+    editor: Entity<InputState>,
     list: Entity<List<ContextMenuDelegate>>,
     open: bool,
     bounds: Bounds<Pixels>,
@@ -187,7 +187,7 @@ impl CompletionMenu {
     ///
     /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
     pub(crate) fn new(
-        state: Entity<InputState>,
+        editor: Entity<InputState>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -221,7 +221,7 @@ impl CompletionMenu {
 
             Self {
                 offset: 0,
-                state,
+                editor,
                 list,
                 open: false,
                 trigger_start_offset: None,
@@ -237,24 +237,24 @@ impl CompletionMenu {
         let item = item.clone();
         let mut range = self.trigger_start_offset.unwrap_or(self.offset)..self.offset;
 
-        let state = self.state.clone();
+        let editor = self.editor.clone();
 
         cx.spawn_in(window, async move |_, cx| {
-            state.update_in(cx, |state, window, cx| {
-                state.completion_inserting = true;
+            editor.update_in(cx, |editor, window, cx| {
+                editor.completion_inserting = true;
 
                 let mut new_text = item.label.clone();
                 if let Some(text_edit) = item.text_edit.as_ref() {
                     match text_edit {
                         CompletionTextEdit::Edit(edit) => {
                             new_text = edit.new_text.clone();
-                            range.start = state.text.position_to_offset(&edit.range.start);
-                            range.end = state.text.position_to_offset(&edit.range.end);
+                            range.start = editor.text.position_to_offset(&edit.range.start);
+                            range.end = editor.text.position_to_offset(&edit.range.end);
                         }
                         CompletionTextEdit::InsertAndReplace(edit) => {
                             new_text = edit.new_text.clone();
-                            range.start = state.text.position_to_offset(&edit.replace.start);
-                            range.end = state.text.position_to_offset(&edit.replace.end);
+                            range.start = editor.text.position_to_offset(&edit.replace.start);
+                            range.end = editor.text.position_to_offset(&edit.replace.end);
                         }
                     }
                 } else if let Some(insert_text) = item.insert_text.clone() {
@@ -262,15 +262,15 @@ impl CompletionMenu {
                     range = offset..offset;
                 }
 
-                state.replace_text_in_range(
-                    Some(state.range_to_utf16(&range)),
+                editor.replace_text_in_range(
+                    Some(editor.range_to_utf16(&range)),
                     &new_text,
                     window,
                     cx,
                 );
-                state.completion_inserting = false;
+                editor.completion_inserting = false;
                 // FIXME: Input not get the focus
-                state.focus(window, cx);
+                editor.focus(window, cx);
             })
         })
         .detach();
@@ -374,18 +374,18 @@ impl CompletionMenu {
     }
 
     fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
-        let state = self.state.read(cx);
-        let Some(last_layout) = state.last_layout.as_ref() else {
+        let editor = self.editor.read(cx);
+        let Some(last_layout) = editor.last_layout.as_ref() else {
             return None;
         };
         let Some(cursor_origin) = last_layout.cursor_bounds.map(|b| b.origin) else {
             return None;
         };
 
-        let scroll_origin = self.state.read(cx).scroll_handle.offset();
+        let scroll_origin = self.editor.read(cx).scroll_handle.offset();
 
         Some(
-            scroll_origin + cursor_origin - state.input_bounds.origin
+            scroll_origin + cursor_origin - editor.input_bounds.origin
                 + Point::new(-px(4.), last_layout.line_height + px(4.)),
         )
     }
@@ -416,8 +416,10 @@ impl Render for CompletionMenu {
             .and_then(|item| item.documentation.clone());
 
         let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
-        let vertical_layout = pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
-            > window.bounds().size.width;
+        let abs_pos = self.editor.read(cx).input_bounds.origin + pos;
+        let vertical_layout =
+            abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
+                > window.bounds().size.width;
 
         deferred(
             div()
