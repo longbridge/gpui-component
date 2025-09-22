@@ -1,11 +1,13 @@
 use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, sync::OnceLock};
 
+use anyhow::Result;
 use gpui::{
     actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px, AnyElement,
     App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
-    SharedString, StyleRefinement, Styled, Subscription, Window,
+    SharedString, StyleRefinement, Styled, Subscription, Task, Window,
 };
+use lsp_types::CompletionResponse;
 
 use crate::{
     alert::Alert,
@@ -14,7 +16,7 @@ use crate::{
     description_list::DescriptionList,
     dropdown::{Dropdown, DropdownState, SearchableVec},
     h_flex,
-    input::{InputEvent, InputState, TabSize, TextInput},
+    input::{CompletionProvider, InputEvent, InputState, TabSize, TextInput},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
@@ -74,6 +76,33 @@ pub struct DivInspector {
     /// Part of the initial style that could not be converted to Rust code
     unconvertible_style: StyleRefinement,
     _subscriptions: Vec<Subscription>,
+}
+
+impl CompletionProvider for DivInspector {
+    fn completions(
+        &self,
+        text: &rope::Rope,
+        offset: usize,
+        trigger: lsp_types::CompletionContext,
+        window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<CompletionResponse>> {
+        let trigger_character = trigger.trigger_character.unwrap_or_default().to_string();
+        if !trigger_character.starts_with(".") {
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
+        }
+
+        Task::ready(Ok(CompletionResponse::Array(vec![])))
+    }
+
+    fn is_completion_trigger(
+        &self,
+        offset: usize,
+        new_text: &str,
+        cx: &mut Context<InputState>,
+    ) -> bool {
+        true
+    }
 }
 
 impl DivInspector {
