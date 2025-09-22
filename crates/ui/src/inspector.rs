@@ -528,7 +528,7 @@ impl CompletionProvider for LspProvider {
         let mut left_offset = 0;
         while left_offset < 100 {
             match rope.char_at(offset.saturating_sub(left_offset)) {
-                Some(c) if c == '.' => {
+                Some('.') => {
                     break;
                 }
                 None => break,
