@@ -1968,18 +1968,22 @@ impl InputState {
         cx.notify()
     }
 
+    #[inline]
     pub(super) fn offset_from_utf16(&self, offset: usize) -> usize {
         self.text.offset_utf16_to_offset(OffsetUtf16(offset))
     }
 
+    #[inline]
     pub(super) fn offset_to_utf16(&self, offset: usize) -> usize {
         self.text.offset_to_offset_utf16(offset).0
     }
 
+    #[inline]
     pub(super) fn range_to_utf16(&self, range: &Range<usize>) -> Range<usize> {
         self.offset_to_utf16(range.start)..self.offset_to_utf16(range.end)
     }
 
+    #[inline]
     pub(super) fn range_from_utf16(&self, range_utf16: &Range<usize>) -> Range<usize> {
         self.offset_from_utf16(range_utf16.start)..self.offset_from_utf16(range_utf16.end)
     }
