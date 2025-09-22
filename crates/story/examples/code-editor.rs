@@ -230,7 +230,7 @@ impl CompletionProvider for ExampleLspStore {
                     completion_item(&range, "/-1", "👎", "Insert 👎"),
                     completion_item(&range, "/smile", "😊", "Insert 😊"),
                     completion_item(&range, "/sad", "😢", "Insert 😢"),
-                    completion_item(&range, "/lanuch", "🚀", "Insert 🚀"),
+                    completion_item(&range, "/launch", "🚀", "Insert 🚀"),
                 ];
                 return Ok(vec![CompletionResponse::Array(items)]);
             }
