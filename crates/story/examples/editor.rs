@@ -194,10 +194,10 @@ impl CompletionProvider for ExampleLspStore {
         trigger: CompletionContext,
         _: &mut Window,
         cx: &mut Context<InputState>,
-    ) -> Task<Result<Vec<CompletionResponse>>> {
+    ) -> Task<Result<CompletionResponse>> {
         let trigger_character = trigger.trigger_character.unwrap_or_default();
         if trigger_character.is_empty() {
-            return Task::ready(Ok(vec![]));
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
         }
 
         // Simulate to delay for fetching completions
@@ -232,7 +232,7 @@ impl CompletionProvider for ExampleLspStore {
                     completion_item(&range, "/sad", "😢", "Insert 😢"),
                     completion_item(&range, "/launch", "🚀", "Insert 🚀"),
                 ];
-                return Ok(vec![CompletionResponse::Array(items)]);
+                return Ok(CompletionResponse::Array(items));
             }
 
             let items = items
@@ -246,9 +246,7 @@ impl CompletionProvider for ExampleLspStore {
                 })
                 .collect::<Vec<_>>();
 
-            let responses = vec![CompletionResponse::Array(items)];
-
-            Ok(responses)
+            Ok(CompletionResponse::Array(items))
         })
     }
 
