@@ -205,10 +205,10 @@ impl DivInspector {
 
         let (new_style, diagnostics) = rust_to_style(self.unconvertible_style.clone(), code);
         self.rust_state.state.update(cx, |state, cx| {
-            state.diagnostics_mut().map(|set| {
+            if let Some(set) = state.diagnostics_mut() {
                 set.clear();
                 set.extend(diagnostics);
-            });
+            }
             cx.notify();
         });
         self.json_state.error = None;
@@ -382,7 +382,7 @@ fn rust_to_style(mut style: StyleRefinement, source: &str) -> (StyleRefinement, 
         match style_methods.map.get(method.as_str()) {
             Some(method_reflection) => style = method_reflection.invoke(style),
             None => {
-                let message = format!("unknown method `{}`", method).into();
+                let message = format!("unknown method `{}`", method);
                 let start = rope.offset_to_position(offset.saturating_sub(method.len()));
                 let end = rope.offset_to_position(offset);
                 let diagnostic = lsp_types::Diagnostic {
