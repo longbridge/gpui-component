@@ -1612,7 +1612,11 @@ impl InputState {
         let safe_x_range =
             (-self.scroll_size.width + self.input_bounds.size.width).min(px(0.0))..px(0.);
 
-        offset.y = offset.y.clamp(safe_y_range.start, safe_y_range.end);
+        offset.y = if self.mode.is_single_line() {
+            px(0.)
+        } else {
+            offset.y.clamp(safe_y_range.start, safe_y_range.end)
+        };
         offset.x = offset.x.clamp(safe_x_range.start, safe_x_range.end);
         self.scroll_handle.set_offset(offset);
         cx.notify();
