@@ -2193,6 +2193,27 @@ impl InputState {
             last_bounds.origin + end_pos + point(px(0.), last_layout.line_height),
         ))
     }
+
+    /// Replace text by [`lsp_types::Range`].
+    ///
+    /// See also: [`EntityInputHandler::replace_text_in_range`]
+    #[allow(unused)]
+    pub(crate) fn replace_text_in_lsp_range(
+        &mut self,
+        lsp_range: &lsp_types::Range,
+        new_text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let start = self.text.position_to_offset(&lsp_range.start);
+        let end = self.text.position_to_offset(&lsp_range.end);
+        self.replace_text_in_range(
+            Some(self.range_to_utf16(&(start..end))),
+            new_text,
+            window,
+            cx,
+        );
+    }
 }
 
 impl EntityInputHandler for InputState {

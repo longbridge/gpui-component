@@ -20,8 +20,8 @@ use gpui_component::{
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
 use lsp_types::{
-    CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse, TextEdit,
-    WorkspaceEdit,
+    CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
+    CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
 };
 use story::Assets;
 
@@ -166,11 +166,31 @@ impl ExampleLspStore {
     }
 }
 
+fn completion_item(
+    range: &lsp_types::Range,
+    label: &str,
+    replace_text: &str,
+    documentation: &str,
+) -> CompletionItem {
+    CompletionItem {
+        label: label.to_string(),
+        kind: Some(lsp_types::CompletionItemKind::FUNCTION),
+        text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+            new_text: replace_text.to_string(),
+            insert: range.clone(),
+            replace: range.clone(),
+        })),
+        documentation: Some(lsp_types::Documentation::String(documentation.to_string())),
+        insert_text: None,
+        ..Default::default()
+    }
+}
+
 impl CompletionProvider for ExampleLspStore {
     fn completions(
         &self,
         rope: &Rope,
-        _offset: usize,
+        offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
         cx: &mut Context<InputState>,
@@ -181,12 +201,39 @@ impl CompletionProvider for ExampleLspStore {
         }
 
         let _ = rope.to_string(); // Just to use the rope parameter.
+        let pos = rope.offset_to_position(offset);
 
         // Simulate to delay for fetching completions
         let items = self.completions.clone();
         cx.background_spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(20)).await;
+
+            let range = lsp_types::Range::new(
+                pos,
+                lsp_types::Position {
+                    line: pos.line,
+                    character: pos.character + 1,
+                },
+            );
+
+            if trigger_character.starts_with("/") {
+                let items = vec![
+                    completion_item(
+                        &range,
+                        "/date",
+                        format!("{}", chrono::Local::now().date_naive()).as_str(),
+                        "Insert current date",
+                    ),
+                    completion_item(&range, "/thanks", "Thank you!", "Insert Thank you!"),
+                    completion_item(&range, "/+1", "👍", "Insert 👍"),
+                    completion_item(&range, "/-1", "👎", "Insert 👎"),
+                    completion_item(&range, "/smile", "😊", "Insert 😊"),
+                    completion_item(&range, "/sad", "😢", "Insert 😢"),
+                    completion_item(&range, "/lanuch", "🚀", "Insert 🚀"),
+                ];
+                return Ok(vec![CompletionResponse::Array(items)]);
+            }
 
             let items = items
                 .iter()

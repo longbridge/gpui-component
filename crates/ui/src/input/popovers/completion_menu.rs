@@ -6,7 +6,7 @@ use gpui::{
     HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
     RenderOnce, SharedString, Styled, StyledText, Subscription, Window,
 };
-use lsp_types::CompletionItem;
+use lsp_types::{CompletionItem, CompletionTextEdit};
 
 const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(480.);
@@ -17,7 +17,7 @@ use crate::{
     input::{
         self,
         popovers::{popover, render_markdown},
-        InputState,
+        InputState, RopeExt,
     },
     label::Label,
     list::{List, ListDelegate, ListEvent},
@@ -229,20 +229,38 @@ impl CompletionMenu {
     }
 
     fn select_item(&mut self, item: &CompletionItem, window: &mut Window, cx: &mut Context<Self>) {
-        let range = self.trigger_start_offset.unwrap_or(self.offset)..self.offset;
-        let insert_text = item
-            .insert_text
-            .as_deref()
-            .unwrap_or(&item.label)
-            .to_string();
+        let offset = self.offset;
+        let item = item.clone();
+        let mut range = self.trigger_start_offset.unwrap_or(self.offset)..self.offset;
+        let mut new_text = item.label.clone();
+
         let state = self.state.clone();
 
         cx.spawn_in(window, async move |_, cx| {
             state.update_in(cx, |state, window, cx| {
                 state.completion_inserting = true;
+
+                if let Some(text_edit) = item.text_edit.as_ref() {
+                    match text_edit {
+                        CompletionTextEdit::Edit(edit) => {
+                            new_text = edit.new_text.clone();
+                            range.start = state.text.position_to_offset(&edit.range.start);
+                            range.end = state.text.position_to_offset(&edit.range.end);
+                        }
+                        CompletionTextEdit::InsertAndReplace(edit) => {
+                            new_text = edit.new_text.clone();
+                            range.start = state.text.position_to_offset(&edit.replace.start);
+                            range.end = state.text.position_to_offset(&edit.replace.end);
+                        }
+                    }
+                } else if let Some(insert_text) = item.insert_text.clone() {
+                    new_text = insert_text;
+                    range = offset..offset;
+                }
+
                 state.replace_text_in_range(
                     Some(state.range_to_utf16(&range)),
-                    &insert_text,
+                    &new_text,
                     window,
                     cx,
                 );
