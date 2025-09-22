@@ -15,7 +15,8 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **High Performance**: Virtualized Table and List components for smooth large-data rendering.
 - **Content Rendering**: Native support for Markdown and simple HTML.
 - **Charting**: Built-in charts for visualization your data.
-- **Code Highlighting**: Code Editor and Syntax highlighting.
+- **Editor**: High performance code editor (support up to 200K lines) with LSP (diagnostics, completion, hover, etc).
+- **Syntax Highlighting**: Syntax highlighting for editor and markdown components using Tree Sitter.
 - **Wef**: (Experimental) Offscreen rendering webview based on [CEF](https://github.com/chromiumembedded/cef).
 
 ## Showcase
@@ -87,7 +88,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 | Syntax Highlight      | [Tree Sitter]                  | [Syntect]   | [Syntect]             | [QSyntaxHighlighter]           |
 | Markdown Rendering    | Yes                            | Yes         | Basic                 | No                             |
 | Markdown mix HTML     | Yes                            | No          | No                    | No                             |
-| HTML Rendering        | Basic                          | No          | No                    | Basic                            |
+| HTML Rendering        | Basic                          | No          | No                    | Basic                          |
 | Text Selection        | TextView                       | No          | Any Label             | No                             |
 | Themes                | Yes                            | No          | No                    | No                             |
 | I18n                  | Yes                            | Yes         | Yes                   | Yes                            |
