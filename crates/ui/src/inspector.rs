@@ -8,8 +8,10 @@ use gpui::{
     SharedString, StyleRefinement, Styled, Subscription, Task, Window,
 };
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, TextEdit,
+    CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, Diagnostic,
+    DiagnosticSeverity, Position, TextEdit,
 };
+use rope::Rope;
 
 use crate::{
     alert::Alert,
@@ -201,8 +203,14 @@ impl DivInspector {
             return;
         }
 
-        let (new_style, err) = rust_to_style(self.unconvertible_style.clone(), code);
-        self.rust_state.error = err;
+        let (new_style, diagnostics) = rust_to_style(self.unconvertible_style.clone(), code);
+        self.rust_state.state.update(cx, |state, cx| {
+            state.diagnostics_mut().map(|set| {
+                set.clear();
+                set.extend(diagnostics);
+            });
+            cx.notify();
+        });
         self.json_state.error = None;
         self.json_state.editing = false;
         self.update_json_from_style(&new_style, window, cx);
@@ -319,40 +327,77 @@ fn style_to_rust(input_style: &StyleRefinement) -> (String, StyleRefinement) {
     (code, style)
 }
 
-fn rust_to_style(
-    mut style: StyleRefinement,
-    rust_code: &str,
-) -> (StyleRefinement, Option<SharedString>) {
-    // remove line comments
-    let rust_code = rust_code
-        .lines()
-        .map(|line| line.find("//").map_or(line, |i| &line[..i]).trim())
-        .collect::<Vec<_>>()
-        .concat();
+fn rust_to_style(mut style: StyleRefinement, source: &str) -> (StyleRefinement, Vec<Diagnostic>) {
+    let rope = Rope::from(source);
+    let Some(begin) = source.find("div()").map(|i| i + "div()".len()) else {
+        let start_pos = Position::new(0, 0);
+        let end_pos = rope.offset_to_position(rope.len());
 
-    let Some(begin) = rust_code.find("div()").map(|i| i + "div()".len()) else {
-        return (style, Some("Expected `div()`".into()));
+        return (
+            style,
+            vec![Diagnostic {
+                range: lsp_types::Range::new(start_pos, end_pos),
+                severity: Some(DiagnosticSeverity::ERROR),
+                message: "expected `div()`".into(),
+                ..Default::default()
+            }],
+        );
     };
 
-    let mut err = String::new();
-    let methods = rust_code[begin..]
-        .split(&['.', '(', ')', '{', '}'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    let mut methods = vec![];
+    let mut offset = 0;
+    let mut method_offset = 0;
+    let mut method = String::new();
+    for line in rope.lines() {
+        if line.to_string().trim().starts_with("//") {
+            offset += line.len() + 1;
+            continue;
+        }
+
+        for c in line.chars() {
+            offset += c.len_utf8();
+            if offset < begin {
+                continue;
+            }
+
+            if c.is_ascii_alphanumeric() || c == '_' {
+                method.push(c);
+                method_offset = offset;
+            } else {
+                if !method.is_empty() {
+                    methods.push((method_offset, method.clone()));
+                }
+                method.clear();
+            }
+        }
+
+        // +1 \n
+        offset += 1;
+    }
+
+    let mut diagnostics = vec![];
     let style_methods = StyleMethods::get();
-    for method in methods {
-        match style_methods.map.get(method) {
+
+    for (offset, method) in methods {
+        match style_methods.map.get(method.as_str()) {
             Some(method_reflection) => style = method_reflection.invoke(style),
-            None => _ = writeln!(err, "Unknown method: {method}"),
+            None => {
+                let message = format!("unknown method `{}`", method).into();
+                let start = rope.offset_to_position(offset.saturating_sub(method.len()));
+                let end = rope.offset_to_position(offset);
+                let diagnostic = lsp_types::Diagnostic {
+                    range: lsp_types::Range::new(start, end),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    message,
+                    ..Default::default()
+                };
+
+                diagnostics.push(diagnostic);
+            }
         }
     }
 
-    let err = if err.is_empty() {
-        None
-    } else {
-        Some(err.trim_end().to_string().into())
-    };
-    (style, err)
+    (style, diagnostics)
 }
 
 impl Render for DivInspector {
@@ -582,5 +627,59 @@ impl CompletionProvider for LspProvider {
 
     fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputState>) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{rems, AbsoluteLength, DefiniteLength, Length};
+    use indoc::indoc;
+    use lsp_types::Position;
+
+    #[test]
+    fn test_rust_to_style() {
+        let (style, diagnostics) = super::rust_to_style(
+            Default::default(),
+            indoc! {r#"
+            fn build() -> Div {
+                div()
+                    .p_1()
+                    // This is a comment
+                    .mx_2()
+            }
+            "#},
+        );
+        assert_eq!(diagnostics, vec![]);
+        assert_eq!(
+            style.padding.left,
+            Some(DefiniteLength::Absolute(AbsoluteLength::Rems(rems(0.25))))
+        );
+        assert_eq!(
+            style.margin.left,
+            Some(Length::Definite(DefiniteLength::Absolute(
+                AbsoluteLength::Rems(rems(0.5))
+            )))
+        );
+
+        let (_, diagnostics) = super::rust_to_style(
+            Default::default(),
+            indoc! {r#"
+            fn build() -> Div {
+                div()
+                    .p_1()
+                    // This is a comment
+                    .unknown_method
+                    .bad_method()
+            }
+            "#},
+        );
+
+        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics[0].message, "unknown method `unknown_method`");
+        assert_eq!(diagnostics[0].range.start, Position::new(4, 9));
+        assert_eq!(diagnostics[0].range.end, Position::new(4, 23));
+        assert_eq!(diagnostics[1].message, "unknown method `bad_method`");
+        assert_eq!(diagnostics[1].range.start, Position::new(5, 9));
+        assert_eq!(diagnostics[1].range.end, Position::new(5, 19));
     }
 }

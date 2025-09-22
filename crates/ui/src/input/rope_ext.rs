@@ -24,7 +24,7 @@ pub trait RopeExt {
 
     /// Return the lines iterator.
     ///
-    /// Each line is including the `\n` at the end, but not `\n`.
+    /// Each line is including the `\r` at the end, but not `\n`.
     fn lines(&self) -> RopeLines;
 
     /// Check is equal to another rope.

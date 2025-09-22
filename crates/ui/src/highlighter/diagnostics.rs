@@ -259,7 +259,8 @@ impl DiagnosticSet {
         self.clear();
     }
 
-    pub fn push(&mut self, diagnostic: Diagnostic) {
+    pub fn push(&mut self, diagnostic: impl Into<Diagnostic>) {
+        let diagnostic = diagnostic.into();
         let start = self.text.position_to_offset(&diagnostic.range.start);
         let end = self.text.position_to_offset(&diagnostic.range.end);
 
@@ -272,12 +273,13 @@ impl DiagnosticSet {
         );
     }
 
-    pub fn extend<I>(&mut self, diagnostics: I)
+    pub fn extend<D, I>(&mut self, diagnostics: D)
     where
-        I: IntoIterator<Item = Diagnostic>,
+        D: IntoIterator<Item = I>,
+        I: Into<Diagnostic>,
     {
         for diagnostic in diagnostics {
-            self.push(diagnostic);
+            self.push(diagnostic.into());
         }
     }
 
