@@ -262,7 +262,7 @@ impl CompletionMenu {
                     range = offset..offset;
                 }
 
-                editor.replace_text_in_range_slient(
+                editor.replace_text_in_range_silent(
                     Some(editor.range_to_utf16(&range)),
                     &new_text,
                     window,
