@@ -5,7 +5,7 @@
 use anyhow::Result;
 use gpui::{
     actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, Half,
+    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
@@ -886,8 +886,6 @@ impl InputState {
             .text
             .point_to_offset(rope::Point::new(row as u32, col as u32));
 
-        // TODO: Scroll to make the row in center of viewport.
-
         self.move_to(offset, cx);
         self.update_preferred_column();
         self.focus(window, cx);
@@ -1671,12 +1669,13 @@ impl InputState {
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
-        if row_offset_y < -scroll_offset.y {
+        let edge_height = 3 * line_height;
+        if row_offset_y - edge_height < -scroll_offset.y {
             // Scroll up
-            scroll_offset.y = -row_offset_y - line_height + bounds.size.height.half();
-        } else if row_offset_y + line_height > -scroll_offset.y + bounds.size.height {
+            scroll_offset.y = -row_offset_y + edge_height;
+        } else if row_offset_y + edge_height > -scroll_offset.y + bounds.size.height {
             // Scroll down
-            scroll_offset.y = -(row_offset_y - bounds.size.height.half());
+            scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
         }
 
         self.update_scroll_offset(Some(scroll_offset), cx);
@@ -1719,6 +1718,7 @@ impl InputState {
             }
 
             self.replace_text_in_range_silent(None, &new_text, window, cx);
+            self.scroll_to(self.cursor(), cx);
         }
     }
 
