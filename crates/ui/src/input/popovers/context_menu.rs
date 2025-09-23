@@ -12,6 +12,7 @@ use crate::{
 
 /// Context menu for mouse right clicks.
 pub(crate) struct MouseContextMenu {
+    editor: Entity<InputState>,
     menu: Entity<PopupMenu>,
     mouse_position: Point<Pixels>,
     open: bool,
@@ -78,18 +79,22 @@ impl InputState {
 }
 
 impl MouseContextMenu {
-    pub(crate) fn new(_editor: Entity<InputState>, _: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub(crate) fn new(
+        editor: Entity<InputState>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
         cx.new(|cx| {
             let menu = cx.new(|cx| PopupMenu::new(cx).small());
 
-            let _subscriptions = vec![cx.subscribe(&menu, {
-                move |this: &mut Self, _, _: &DismissEvent, cx| {
-                    this.open = false;
-                    cx.notify();
+            let _subscriptions = vec![cx.subscribe_in(&menu, window, {
+                move |this: &mut Self, _, _: &DismissEvent, window, cx| {
+                    this.close(window, cx);
                 }
             })];
 
             Self {
+                editor,
                 menu,
                 mouse_position: Point::default(),
                 open: false,
@@ -101,6 +106,14 @@ impl MouseContextMenu {
     #[inline]
     pub(crate) fn is_open(&self) -> bool {
         self.open
+    }
+
+    #[inline]
+    pub(crate) fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open = false;
+        self.editor.update(cx, |this, cx| {
+            this.focus(window, cx);
+        });
     }
 }
 
