@@ -990,8 +990,8 @@ impl InputState {
     }
 
     pub(super) fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(0, cx);
-        self.select_to(self.text.len(), cx);
+        self.selected_range = (0..self.text.len()).into();
+        cx.notify();
     }
 
     pub(super) fn home(&mut self, _: &MoveHome, _: &mut Window, cx: &mut Context<Self>) {
