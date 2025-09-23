@@ -1689,8 +1689,10 @@ impl InputState {
             scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
         }
 
-        self.update_scroll_offset(Some(scroll_offset), cx);
+        scroll_offset.x = scroll_offset.x.min(px(0.));
+        scroll_offset.y = scroll_offset.y.min(px(0.));
         self.deferred_scroll_offset = Some(scroll_offset);
+        cx.notify();
     }
 
     pub(super) fn show_character_palette(
