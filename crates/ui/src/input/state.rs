@@ -304,7 +304,7 @@ pub struct InputState {
     pub(super) completion_inserting: bool,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
     /// The LSP definitions locations for "Go to Definition" feature.
-    pub(super) hover_definition: Option<HoverDefinition>,
+    pub(super) hover_definition: HoverDefinition,
 
     pub lsp: Lsp,
 
@@ -396,7 +396,7 @@ impl InputState {
             mouse_context_menu,
             completion_inserting: false,
             hover_popover: None,
-            hover_definition: None,
+            hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
@@ -1563,13 +1563,7 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            if !self.selected_range.contains(offset) {
-                self.move_to(offset, cx);
-            }
-            self.context_menu = Some(ContextMenu::MouseContext(self.mouse_context_menu.clone()));
-            self.mouse_context_menu.update(cx, |menu, cx| {
-                menu.show(event.position, cx);
-            });
+            self.handle_right_click_menu(event, offset, window, cx);
             return;
         }
 

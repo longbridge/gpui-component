@@ -31,14 +31,31 @@ pub(crate) struct HoverDefinition {
     /// The range of the symbol that triggered the hover.
     symbol_range: Range<usize>,
     pub(crate) locations: Rc<Vec<lsp_types::LocationLink>>,
+    last_location: Option<(Range<usize>, Rc<Vec<lsp_types::LocationLink>>)>,
 }
 
 impl HoverDefinition {
-    pub(crate) fn new(symbol_range: Range<usize>, locations: Vec<lsp_types::LocationLink>) -> Self {
-        Self {
-            symbol_range,
-            locations: Rc::new(locations),
+    pub(crate) fn update(
+        &mut self,
+        symbol_range: Range<usize>,
+        locations: Vec<lsp_types::LocationLink>,
+    ) {
+        self.clear();
+        self.symbol_range = symbol_range;
+        self.locations = Rc::new(locations);
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.locations.is_empty()
+    }
+
+    pub(crate) fn clear(&mut self) {
+        if !self.locations.is_empty() {
+            self.last_location = Some((self.symbol_range.clone(), self.locations.clone()));
         }
+
+        self.symbol_range = 0..0;
+        self.locations = Rc::new(vec![]);
     }
 
     pub(crate) fn is_same(&self, offset: usize) -> bool {
@@ -47,19 +64,18 @@ impl HoverDefinition {
 }
 
 impl InputState {
-    pub(super) fn handle_hover_definition(
+    pub(crate) fn handle_hover_definition(
         &mut self,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<Self>,
     ) {
         let Some(provider) = self.lsp.definition_provider.clone() else {
             return;
         };
-        if let Some(hover_definition) = self.hover_definition.as_ref() {
-            if hover_definition.is_same(offset) {
-                return;
-            }
+
+        if self.hover_definition.is_same(offset) {
+            return;
         }
 
         // Currently not implemented.
@@ -71,7 +87,7 @@ impl InputState {
 
             _ = editor.update(cx, |editor, cx| {
                 if locations.is_empty() {
-                    editor.hover_definition = None;
+                    editor.hover_definition.clear();
                 } else {
                     if let Some(location) = locations.first() {
                         if let Some(range) = location.origin_selection_range {
@@ -81,7 +97,9 @@ impl InputState {
                         }
                     }
 
-                    editor.hover_definition = Some(HoverDefinition::new(symbol_range, locations));
+                    editor
+                        .hover_definition
+                        .update(symbol_range.clone(), locations.clone());
                 }
                 cx.notify();
             });
@@ -93,12 +111,19 @@ impl InputState {
     pub(crate) fn on_action_go_to_definition(
         &mut self,
         _: &GoToDefinition,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.cursor();
-        self.handle_hover_definition(offset, window, cx);
-        self.handle_click_hover_definition(&MouseDownEvent::default(), offset, window, cx);
+        if let Some((symbol_range, locations)) = self.hover_definition.last_location.clone() {
+            if !(symbol_range.start..=symbol_range.end).contains(&offset) {
+                return;
+            }
+
+            if let Some(location) = locations.first().cloned() {
+                self.go_to_definition(&location, cx);
+            }
+        }
     }
 
     /// Return true if handled.
@@ -113,17 +138,27 @@ impl InputState {
             return false;
         }
 
-        let Some(hover_definition) = self.hover_definition.as_ref() else {
+        if self.hover_definition.is_empty() {
             return false;
         };
-        if !hover_definition.is_same(offset) {
+        if !self.hover_definition.is_same(offset) {
             return false;
         }
 
-        let Some(location) = hover_definition.locations.first().cloned() else {
+        let Some(location) = self.hover_definition.locations.first().cloned() else {
             return false;
         };
 
+        self.go_to_definition(&location, cx);
+
+        true
+    }
+
+    pub(crate) fn go_to_definition(
+        &mut self,
+        location: &lsp_types::LocationLink,
+        cx: &mut Context<Self>,
+    ) {
         if location
             .target_uri
             .scheme()
@@ -140,8 +175,6 @@ impl InputState {
             self.move_to(start, cx);
             self.select_to(end, cx);
         }
-
-        true
     }
 }
 
@@ -155,7 +188,7 @@ impl TextElement {
             return None;
         }
 
-        let Some(hover_definition) = editor.hover_definition.as_ref() else {
+        if editor.hover_definition.is_empty() {
             return None;
         };
 
@@ -171,7 +204,10 @@ impl TextElement {
             ..UnderlineStyle::default()
         });
 
-        Some((hover_definition.symbol_range.clone(), highlight_style))
+        Some((
+            editor.hover_definition.symbol_range.clone(),
+            highlight_style,
+        ))
     }
 
     pub(crate) fn layout_hover_definition_hitbox(
@@ -184,11 +220,11 @@ impl TextElement {
             return None;
         }
 
-        let Some(hover_definition) = editor.hover_definition.as_ref() else {
+        if editor.hover_definition.is_empty() {
             return None;
         };
 
-        let Some(bounds) = editor.range_to_bounds(&hover_definition.symbol_range) else {
+        let Some(bounds) = editor.range_to_bounds(&editor.hover_definition.symbol_range) else {
             return None;
         };
 
