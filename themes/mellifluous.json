@@ -202,7 +202,7 @@
       "highlight": {
         "editor.foreground": "#abb2bf",
         "editor.background": "#1A1A1A",
-        "editor.active_line.background": "#292929",
+        "editor.active_line.background": "#29292977",
         "editor.line_number": "#828997",
         "editor.active_line_number": "#abb2bf",
         "conflict": "#e06c75",

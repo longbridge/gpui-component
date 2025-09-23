@@ -188,7 +188,7 @@
       },
       "highlight": {
         "editor.foreground": "#DDDDDD",
-        "editor.background": "#000000",
+        "editor.background": "#002B36",
         "editor.active_line.background": "#073642",
         "editor.line_number": "#8F8F8F",
         "editor.active_line_number": "#DDDDDD",

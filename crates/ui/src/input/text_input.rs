@@ -239,7 +239,11 @@ impl RenderOnce for TextInput {
         let bg = if state.disabled {
             cx.theme().muted
         } else {
-            cx.theme().background
+            cx.theme()
+                .highlight_theme
+                .style
+                .background
+                .unwrap_or(cx.theme().background)
         };
 
         let prefix = self.prefix;
