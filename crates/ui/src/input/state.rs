@@ -2198,7 +2198,7 @@ impl InputState {
     ) {
         let start = self.text.position_to_offset(&lsp_range.start);
         let end = self.text.position_to_offset(&lsp_range.end);
-        self.replace_text_in_range(
+        self.replace_text_in_range_slient(
             Some(self.range_to_utf16(&(start..end))),
             new_text,
             window,

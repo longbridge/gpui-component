@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::{
     canvas, deferred, div, prelude::FluentBuilder, px, relative, Action, AnyElement, App,
-    AppContext, Bounds, Context, DismissEvent, Empty, Entity, EntityInputHandler, EventEmitter,
-    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window,
+    AppContext, Bounds, Context, DismissEvent, Empty, Entity, EventEmitter, HighlightStyle,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
+    SharedString, Styled, StyledText, Subscription, Window,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -262,7 +262,7 @@ impl CompletionMenu {
                     range = offset..offset;
                 }
 
-                editor.replace_text_in_range(
+                editor.replace_text_in_range_slient(
                     Some(editor.range_to_utf16(&range)),
                     &new_text,
                     window,
