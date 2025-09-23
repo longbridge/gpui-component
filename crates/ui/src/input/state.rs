@@ -452,6 +452,7 @@ impl InputState {
 
     /// Set this input is searchable, default is false (Default true for Code Editor).
     pub fn searchable(mut self, searchable: bool) -> Self {
+        debug_assert!(self.mode.is_multi_line());
         self.searchable = searchable;
         self
     }
@@ -464,6 +465,7 @@ impl InputState {
 
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
     pub fn line_number(mut self, line_number: bool) -> Self {
+        debug_assert!(self.mode.is_code_editor());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -472,6 +474,7 @@ impl InputState {
 
     /// Set line number, only for [`InputMode::CodeEditor`] mode.
     pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
+        debug_assert!(self.mode.is_code_editor());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -482,6 +485,7 @@ impl InputState {
     ///
     /// Only for [`InputMode::MultiLine`] and [`InputMode::CodeEditor`] mode.
     pub fn tab_size(mut self, tab: TabSize) -> Self {
+        debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
         match &mut self.mode {
             InputMode::MultiLine { tab: t, .. } => *t = tab,
             InputMode::CodeEditor { tab: t, .. } => *t = tab,
@@ -1123,6 +1127,7 @@ impl InputState {
     /// Return the start offset of the previous word.
     fn previous_start_of_word(&mut self) -> usize {
         let offset = self.selected_range.start;
+        let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         // FIXME: Avoid to_string
         let left_part = self.text.slice(0..offset).to_string();
 
@@ -1136,6 +1141,7 @@ impl InputState {
     /// Return the next end offset of the next word.
     fn next_end_of_word(&mut self) -> usize {
         let offset = self.cursor();
+        let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         let right_part = self.text.slice(offset..self.text.len()).to_string();
 
         UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
@@ -1479,6 +1485,7 @@ impl InputState {
             // Selected none
             let start_offset = self.selected_range.start;
             let offset = self.start_of_line_of_selection(window, cx);
+            let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
             // FIXME: To improve performance
             if self
                 .text
@@ -2177,7 +2184,9 @@ impl InputState {
     }
 
     pub(super) fn selected_text(&self) -> Rope {
-        self.text.slice(self.selected_range.into())
+        let range_utf16 = self.range_to_utf16(&self.selected_range.into());
+        let range = self.range_from_utf16(&range_utf16);
+        self.text.slice(range)
     }
 
     pub(crate) fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
