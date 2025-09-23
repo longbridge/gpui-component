@@ -164,10 +164,8 @@ impl TextElement {
         if let (Some(cursor_pos), Some(cursor_start), Some(cursor_end)) =
             (cursor_pos, cursor_start, cursor_end)
         {
-            let cursor_moved = state.last_cursor != Some(cursor);
             let selection_changed = state.last_selected_range != Some(selected_range);
-
-            if cursor_moved || selection_changed {
+            if selection_changed {
                 scroll_offset.x = if scroll_offset.x + cursor_pos.x
                     > (bounds.size.width - line_number_width - RIGHT_MARGIN)
                 {
@@ -1084,11 +1082,7 @@ impl Element for TextElement {
                         input_bounds.size.height,
                     ),
                 },
-                cx.theme()
-                    .highlight_theme
-                    .style
-                    .background
-                    .unwrap_or(cx.theme().background),
+                cx.theme().background,
             ));
 
             // Each item is the normal lines.
