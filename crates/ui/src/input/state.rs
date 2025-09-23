@@ -743,13 +743,19 @@ impl InputState {
     }
 
     /// Set with password masked state.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode.
     pub fn masked(mut self, masked: bool) -> Self {
+        debug_assert!(self.mode.is_single_line());
         self.masked = masked;
         self
     }
 
     /// Set the password masked state of the input field.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode.
     pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
+        debug_assert!(self.mode.is_single_line());
         self.masked = masked;
         cx.notify();
     }
@@ -762,12 +768,14 @@ impl InputState {
 
     /// Set the soft wrap mode for multi-line input, default is true.
     pub fn soft_wrap(mut self, wrap: bool) -> Self {
+        debug_assert!(self.mode.is_multi_line());
         self.soft_wrap = wrap;
         self
     }
 
     /// Update the soft wrap mode for multi-line input, default is true.
     pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
+        debug_assert!(self.mode.is_multi_line());
         self.soft_wrap = wrap;
         if wrap {
             let wrap_width = self
@@ -789,29 +797,41 @@ impl InputState {
     }
 
     /// Set the regular expression pattern of the input field.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode.
     pub fn pattern(mut self, pattern: regex::Regex) -> Self {
+        debug_assert!(self.mode.is_single_line());
         self.pattern = Some(pattern);
         self
     }
 
     /// Set the regular expression pattern of the input field with reference.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode.
     pub fn set_pattern(
         &mut self,
         pattern: regex::Regex,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
+        debug_assert!(self.mode.is_single_line());
         self.pattern = Some(pattern);
     }
 
     /// Set the validation function of the input field.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode.
     pub fn validate(mut self, f: impl Fn(&str, &mut Context<Self>) -> bool + 'static) -> Self {
+        debug_assert!(self.mode.is_single_line());
         self.validate = Some(Box::new(f));
         self
     }
 
     /// Set true to show indicator at the input right.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode.
     pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
+        debug_assert!(self.mode.is_single_line());
         self.loading = loading;
         cx.notify();
     }
@@ -2289,20 +2309,23 @@ impl EntityInputHandler for InputState {
         let old_text = self.text.clone();
         self.text.replace(range.clone(), new_text);
 
-        let pending_text = self.text.to_string();
-        // Check if the new text is valid
-        if !self.is_valid_input(&pending_text, cx) {
-            self.text = old_text;
-            return;
-        }
-
         let mut new_offset = (range.start + new_text.len()).min(self.text.len());
-        if !self.mask_pattern.is_none() {
-            let mask_text = self.mask_pattern.mask(&pending_text);
-            self.text = Rope::from(mask_text.as_str());
-            let new_text_len =
-                (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
-            new_offset = (range.start + new_text_len).min(mask_text.len());
+
+        if self.mode.is_single_line() {
+            let pending_text = self.text.to_string();
+            // Check if the new text is valid
+            if !self.is_valid_input(&pending_text, cx) {
+                self.text = old_text;
+                return;
+            }
+
+            if !self.mask_pattern.is_none() {
+                let mask_text = self.mask_pattern.mask(&pending_text);
+                self.text = Rope::from(mask_text.as_str());
+                let new_text_len =
+                    (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
+                new_offset = (range.start + new_text_len).min(mask_text.len());
+            }
         }
 
         self.push_history(&old_text, &range, &new_text);
@@ -2316,7 +2339,6 @@ impl EntityInputHandler for InputState {
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
         self.update_preferred_column();
-        self.update_scroll_offset(None, cx);
         self.update_search(cx);
         self.mode.update_auto_grow(&self.text_wrapper);
         if !self.silent_replace_text {
@@ -2350,11 +2372,13 @@ impl EntityInputHandler for InputState {
 
         let old_text = self.text.clone();
         self.text.replace(range.clone(), new_text);
-        let pending_text = self.text.to_string();
 
-        if !self.is_valid_input(&pending_text, cx) {
-            self.text = old_text;
-            return;
+        if self.mode.is_single_line() {
+            let pending_text = self.text.to_string();
+            if !self.is_valid_input(&pending_text, cx) {
+                self.text = old_text;
+                return;
+            }
         }
 
         self.push_history(&old_text, &range, new_text);

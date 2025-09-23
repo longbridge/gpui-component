@@ -105,6 +105,10 @@ impl InputMode {
     }
 
     pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
+        if self.is_single_line() {
+            return;
+        }
+
         let wrapped_lines = text_wrapper.len();
         self.set_rows(wrapped_lines);
     }
