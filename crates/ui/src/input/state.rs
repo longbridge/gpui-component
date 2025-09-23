@@ -304,6 +304,9 @@ pub struct InputState {
 
     pub lsp: Lsp,
 
+    /// A flag to indicate if we should ignore the next completion event.
+    pub(super) slient_replace_text: bool,
+
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
     ///
     /// The first element is the x-coordinate (Pixels), preferred to use this.
@@ -387,6 +390,7 @@ impl InputState {
             completion_inserting: false,
             hover_popover: None,
             hover_definition: None,
+            slient_replace_text: false,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
         }
@@ -699,7 +703,7 @@ impl InputState {
     ) {
         let text: SharedString = text.into();
         let range_utf16 = self.range_to_utf16(&(self.cursor()..self.cursor()));
-        self.replace_text_in_range(Some(range_utf16), &text, window, cx);
+        self.replace_text_in_range_slient(Some(range_utf16), &text, window, cx);
         self.selected_range = (self.selected_range.end..self.selected_range.end).into();
     }
 
@@ -713,7 +717,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let text: SharedString = text.into();
-        self.replace_text_in_range(None, &text, window, cx);
+        self.replace_text_in_range_slient(None, &text, window, cx);
         self.selected_range = (self.selected_range.end..self.selected_range.end).into();
     }
 
@@ -725,7 +729,7 @@ impl InputState {
     ) {
         let text: SharedString = text.into();
         let range = 0..self.text.chars().map(|c| c.len_utf16()).sum();
-        self.replace_text_in_range(Some(range), &text, window, cx);
+        self.replace_text_in_range_slient(Some(range), &text, window, cx);
         self.reset_highlighter(cx);
     }
 
@@ -1230,7 +1234,7 @@ impl InputState {
         if offset == self.cursor() {
             offset = offset.saturating_sub(1);
         }
-        self.replace_text_in_range(
+        self.replace_text_in_range_slient(
             Some(self.range_to_utf16(&(offset..self.cursor()))),
             "",
             window,
@@ -1250,7 +1254,7 @@ impl InputState {
         if offset == self.cursor() {
             offset = (offset + 1).clamp(0, self.text.len());
         }
-        self.replace_text_in_range(
+        self.replace_text_in_range_slient(
             Some(self.range_to_utf16(&(self.cursor()..offset))),
             "",
             window,
@@ -1266,7 +1270,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let offset = self.previous_start_of_word();
-        self.replace_text_in_range(
+        self.replace_text_in_range_slient(
             Some(self.range_to_utf16(&(offset..self.cursor()))),
             "",
             window,
@@ -1282,7 +1286,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let offset = self.next_end_of_word();
-        self.replace_text_in_range(
+        self.replace_text_in_range_slient(
             Some(self.range_to_utf16(&(self.cursor()..offset))),
             "",
             window,
@@ -1306,7 +1310,7 @@ impl InputState {
 
             // Add newline and indent
             let new_line_text = format!("\n{}", indent);
-            self.replace_text_in_range(None, &new_line_text, window, cx);
+            self.replace_text_in_range_slient(None, &new_line_text, window, cx);
         } else {
             // Single line input, just emit the event (e.g.: In a modal dialog to confirm).
             cx.propagate();
@@ -1372,7 +1376,7 @@ impl InputState {
                 .unwrap_or("".into());
 
             for line in selected_text.split('\n') {
-                self.replace_text_in_range(
+                self.replace_text_in_range_slient(
                     Some(self.range_to_utf16(&(offset..offset))),
                     &tab_indent,
                     window,
@@ -1392,7 +1396,7 @@ impl InputState {
         } else {
             // Selected none
             let offset = self.selected_range.start;
-            self.replace_text_in_range(
+            self.replace_text_in_range_slient(
                 Some(self.range_to_utf16(&(offset..offset))),
                 &tab_indent,
                 window,
@@ -1430,7 +1434,7 @@ impl InputState {
 
             for line in selected_text.split('\n') {
                 if line.starts_with(tab_indent.as_ref()) {
-                    self.replace_text_in_range(
+                    self.replace_text_in_range_slient(
                         Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
                         "",
                         window,
@@ -1464,7 +1468,7 @@ impl InputState {
                 .to_string()
                 .starts_with(tab_indent.as_ref())
             {
-                self.replace_text_in_range(
+                self.replace_text_in_range_slient(
                     Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
                     "",
                     window,
@@ -1683,7 +1687,8 @@ impl InputState {
 
         let selected_text = self.text.slice(self.selected_range.into()).to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
-        self.replace_text_in_range(None, "", window, cx);
+
+        self.replace_text_in_range_slient(None, "", window, cx);
     }
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
@@ -1693,7 +1698,7 @@ impl InputState {
                 new_text = new_text.replace('\n', "");
             }
 
-            self.replace_text_in_range(None, &new_text, window, cx);
+            self.replace_text_in_range_slient(None, &new_text, window, cx);
         }
     }
 
@@ -1715,7 +1720,7 @@ impl InputState {
         if let Some(changes) = self.history.undo() {
             for change in changes {
                 let range_utf16 = self.range_to_utf16(&change.new_range.into());
-                self.replace_text_in_range(Some(range_utf16), &change.old_text, window, cx);
+                self.replace_text_in_range_slient(Some(range_utf16), &change.old_text, window, cx);
             }
         }
         self.history.ignore = false;
@@ -1726,7 +1731,7 @@ impl InputState {
         if let Some(changes) = self.history.redo() {
             for change in changes {
                 let range_utf16 = self.range_to_utf16(&change.old_range.into());
-                self.replace_text_in_range(Some(range_utf16), &change.new_text, window, cx);
+                self.replace_text_in_range_slient(Some(range_utf16), &change.new_text, window, cx);
             }
         }
         self.history.ignore = false;
@@ -2200,6 +2205,21 @@ impl InputState {
             cx,
         );
     }
+
+    /// Replace text in range in slient.
+    ///
+    /// This will not trigger any UI interaction, such as auto-completion.
+    pub(crate) fn replace_text_in_range_slient(
+        &mut self,
+        range_utf16: Option<Range<usize>>,
+        new_text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.slient_replace_text = true;
+        self.replace_text_in_range(range_utf16, new_text, window, cx);
+        self.slient_replace_text = false;
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -2299,7 +2319,9 @@ impl EntityInputHandler for InputState {
         self.update_scroll_offset(None, cx);
         self.update_search(cx);
         self.mode.update_auto_grow(&self.text_wrapper);
-        self.handle_completion_trigger(&range, &new_text, window, cx);
+        if !self.slient_replace_text {
+            self.handle_completion_trigger(&range, &new_text, window, cx);
+        }
         cx.emit(InputEvent::Change);
         cx.notify();
     }
