@@ -6,7 +6,7 @@ use rope::Rope;
 use std::{ops::Range, rc::Rc};
 
 use crate::{
-    input::{element::TextElement, InputState, RopeExt},
+    input::{element::TextElement, GoToDefinition, InputState, RopeExt},
     ActiveTheme,
 };
 
@@ -88,6 +88,17 @@ impl InputState {
 
             Ok(())
         });
+    }
+
+    pub(crate) fn on_action_go_to_definition(
+        &mut self,
+        _: &GoToDefinition,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let offset = self.cursor();
+        self.handle_hover_definition(offset, window, cx);
+        self.handle_click_hover_definition(&MouseDownEvent::default(), offset, window, cx);
     }
 
     /// Return true if handled.

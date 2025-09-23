@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use crate::input::{
     popovers::{CodeActionItem, CodeActionMenu, ContextMenu},
-    InputState,
+    InputState, ToggleCodeActions,
 };
 
 pub trait CodeActionProvider {
@@ -37,6 +37,15 @@ pub trait CodeActionProvider {
 }
 
 impl InputState {
+    pub(crate) fn on_action_toggle_code_actions(
+        &mut self,
+        _: &ToggleCodeActions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.handle_code_action_trigger(window, cx)
+    }
+
     /// Show code actions for the cursor.
     pub(crate) fn handle_code_action_trigger(
         &mut self,

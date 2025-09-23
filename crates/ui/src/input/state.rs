@@ -30,7 +30,7 @@ use super::{
     text_wrapper::TextWrapper,
 };
 use crate::input::{
-    popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
+    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
     HoverDefinition, Lsp, Position,
 };
@@ -92,6 +92,7 @@ actions!(
         Escape,
         ToggleCodeActions,
         Search,
+        GoToDefinition,
     ]
 );
 
@@ -298,6 +299,7 @@ pub struct InputState {
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
     /// Completion/CodeAction context menu
     pub(super) context_menu: Option<ContextMenu>,
+    pub(super) mouse_context_menu: Entity<MouseContextMenu>,
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
@@ -349,6 +351,7 @@ impl InputState {
         ];
 
         let text_style = window.text_style();
+        let mouse_context_menu = MouseContextMenu::new(cx.entity(), window, cx);
 
         Self {
             focus_handle: focus_handle.clone(),
@@ -390,6 +393,7 @@ impl InputState {
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu: None,
+            mouse_context_menu,
             completion_inserting: false,
             hover_popover: None,
             hover_definition: None,
@@ -1530,15 +1534,6 @@ impl InputState {
         cx.propagate();
     }
 
-    pub(super) fn toggle_code_actions(
-        &mut self,
-        _: &ToggleCodeActions,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.handle_code_action_trigger(window, cx)
-    }
-
     pub(super) fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
@@ -1563,6 +1558,18 @@ impl InputState {
         // Double click to select word
         if event.button == MouseButton::Left && event.click_count == 2 {
             self.select_word(offset, window, cx);
+            return;
+        }
+
+        // Show Mouse context menu
+        if event.button == MouseButton::Right {
+            if !self.selected_range.contains(offset) {
+                self.move_to(offset, cx);
+            }
+            self.context_menu = Some(ContextMenu::MouseContext(self.mouse_context_menu.clone()));
+            self.mouse_context_menu.update(cx, |menu, cx| {
+                menu.show(event.position, cx);
+            });
             return;
         }
 

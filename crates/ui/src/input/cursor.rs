@@ -25,6 +25,11 @@ impl Selection {
         self.start = 0;
         self.end = 0;
     }
+
+    /// Checks if the given offset is within the selection range.
+    pub fn contains(&self, offset: usize) -> bool {
+        offset >= self.start && offset < self.end
+    }
 }
 
 impl From<Range<usize>> for Selection {

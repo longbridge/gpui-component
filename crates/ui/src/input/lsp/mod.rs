@@ -82,6 +82,7 @@ impl InputState {
                     handled = menu.handle_action(action, window, cx)
                 });
             }
+            ContextMenu::MouseContext(..) => {}
         };
 
         handled

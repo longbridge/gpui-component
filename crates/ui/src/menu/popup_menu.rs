@@ -6,18 +6,17 @@ use crate::{
     button::Button, h_flex, popover::Popover, v_flex, ActiveTheme, Icon, IconName, Selectable,
     Sizable as _,
 };
-use crate::{Kbd, Side, StyledExt};
+use crate::{Kbd, Side, Size, StyledExt};
 use gpui::{
     anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
     Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
-use gpui::{AsKeystroke, MouseDownEvent, Subscription};
+use gpui::{AsKeystroke, Half, MouseDownEvent, Subscription};
 use std::ops::Deref;
 use std::rc::Rc;
 
-const ITEM_HEIGHT: Pixels = px(26.);
 const CONTEXT: &str = "PopupMenu";
 
 pub fn init(cx: &mut App) {
@@ -120,6 +119,7 @@ pub struct PopupMenu {
     max_width: Option<Pixels>,
     max_height: Option<Pixels>,
     bounds: Bounds<Pixels>,
+    size: Size,
 
     scrollable: bool,
     external_link_icon: bool,
@@ -155,6 +155,7 @@ impl PopupMenu {
                 scroll_handle: ScrollHandle::default(),
                 scroll_state: ScrollbarState::default(),
                 external_link_icon: true,
+                size: Size::default(),
                 _subscriptions,
             };
             f(menu, window, cx)
@@ -426,6 +427,12 @@ impl PopupMenu {
         Rc::new(move |window, cx| {
             window.dispatch_action(action.boxed_clone(), cx);
         })
+    }
+
+    /// Use small size, the menu item will have smaller height.
+    pub(crate) fn small(mut self) -> Self {
+        self.size = Size::Small;
+        self
     }
 
     /// Add a separator Menu Item
@@ -805,12 +812,17 @@ impl PopupMenu {
         const EDGE_PADDING: Pixels = px(8.);
         const INNER_PADDING: Pixels = px(4.);
 
+        let (item_height, radius) = match self.size {
+            Size::Small => (px(20.), state.radius.half()),
+            _ => (px(26.), state.radius),
+        };
+
         let this = MenuItem::new(ix)
             .relative()
             .text_sm()
             .py_0()
             .px(INNER_PADDING)
-            .rounded(state.radius)
+            .rounded(radius)
             .items_center()
             .hovered(selected)
             .on_mouse_enter(cx.listener(move |this, _, _, cx| {
@@ -853,7 +865,7 @@ impl PopupMenu {
                 .disabled(*disabled)
                 .child(
                     h_flex()
-                        .min_h(ITEM_HEIGHT)
+                        .min_h(item_height)
                         .items_center()
                         .gap_x_1()
                         .children(Self::render_icon(has_icon, icon.clone(), window, cx))
@@ -877,7 +889,7 @@ impl PopupMenu {
                     )
                 })
                 .disabled(*disabled)
-                .h(ITEM_HEIGHT)
+                .h(item_height)
                 .children(Self::render_icon(has_icon, icon.clone(), window, cx))
                 .child(
                     h_flex()
@@ -914,7 +926,7 @@ impl PopupMenu {
                 .items_start()
                 .child(
                     h_flex()
-                        .min_h(ITEM_HEIGHT)
+                        .min_h(item_height)
                         .size_full()
                         .items_center()
                         .gap_x_1()

@@ -8,7 +8,7 @@ mod mask_pattern;
 mod mode;
 mod number_input;
 mod otp_input;
-mod popovers;
+pub(crate) mod popovers;
 mod rope_ext;
 mod search;
 mod state;

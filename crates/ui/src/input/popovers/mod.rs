@@ -1,10 +1,12 @@
 mod code_action_menu;
 mod completion_menu;
+mod context_menu;
 mod diagnostic_popover;
 mod hover_popover;
 
 pub(crate) use code_action_menu::*;
 pub(crate) use completion_menu::*;
+pub(crate) use context_menu::*;
 pub(crate) use diagnostic_popover::*;
 pub(crate) use hover_popover::*;
 
@@ -21,6 +23,7 @@ use crate::{
 pub(crate) enum ContextMenu {
     Completion(Entity<CompletionMenu>),
     CodeAction(Entity<CodeActionMenu>),
+    MouseContext(Entity<MouseContextMenu>),
 }
 
 impl ContextMenu {
@@ -28,6 +31,7 @@ impl ContextMenu {
         match self {
             ContextMenu::Completion(menu) => menu.read(cx).is_open(),
             ContextMenu::CodeAction(menu) => menu.read(cx).is_open(),
+            ContextMenu::MouseContext(menu) => menu.read(cx).is_open(),
         }
     }
 
@@ -35,6 +39,7 @@ impl ContextMenu {
         match self {
             ContextMenu::Completion(menu) => menu.clone().into_any_element(),
             ContextMenu::CodeAction(menu) => menu.clone().into_any_element(),
+            ContextMenu::MouseContext(menu) => menu.clone().into_any_element(),
         }
     }
 }
