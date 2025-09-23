@@ -457,8 +457,8 @@ impl TextElement {
         }
 
         let total_lines = state.text_wrapper.len();
-        let scroll_top = if let Some(deffered_scroll_offset) = state.deferred_scroll_offset {
-            deffered_scroll_offset.y
+        let scroll_top = if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
+            deferred_scroll_offset.y
         } else {
             state.scroll_handle.offset().y
         };
