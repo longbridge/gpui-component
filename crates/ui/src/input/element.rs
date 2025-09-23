@@ -223,6 +223,10 @@ impl TextElement {
             ));
         }
 
+        if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
+            scroll_offset = deferred_scroll_offset;
+        }
+
         bounds.origin = bounds.origin + scroll_offset;
 
         (cursor_bounds, scroll_offset, current_row)
@@ -453,7 +457,11 @@ impl TextElement {
         }
 
         let total_lines = state.text_wrapper.len();
-        let scroll_top = state.scroll_handle.offset().y;
+        let scroll_top = if let Some(deffered_scroll_offset) = state.deferred_scroll_offset {
+            deffered_scroll_offset.y
+        } else {
+            state.scroll_handle.offset().y
+        };
 
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
@@ -1120,6 +1128,8 @@ impl Element for TextElement {
             state
                 .scroll_handle
                 .set_offset(prepaint.cursor_scroll_offset);
+            state.deferred_scroll_offset = None;
+
             cx.notify();
         });
 

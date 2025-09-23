@@ -284,6 +284,8 @@ pub struct InputState {
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
+    /// The deferred scroll offset to apply on next layout.
+    pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     pub(super) scroll_state: ScrollbarState,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
@@ -381,6 +383,7 @@ impl InputState {
             scroll_handle: ScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
+            deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
@@ -1686,6 +1689,7 @@ impl InputState {
         }
 
         self.update_scroll_offset(Some(scroll_offset), cx);
+        self.deferred_scroll_offset = Some(scroll_offset);
     }
 
     pub(super) fn show_character_palette(
