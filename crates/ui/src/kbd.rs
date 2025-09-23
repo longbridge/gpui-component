@@ -165,8 +165,13 @@ impl Kbd {
                 if key_str.len() == 1 {
                     keys.push_str(&key_str.to_uppercase());
                 } else {
-                    if let Some(first_char) = key_str.chars().next() {
-                        keys.push_str(&format!("{}{}", first_char.to_uppercase(), &key_str[1..]));
+                    let mut chars = key_str.chars();
+                    if let Some(first_char) = chars.next() {
+                        keys.push_str(&format!(
+                            "{}{}",
+                            first_char.to_uppercase(),
+                            chars.collect::<String>()
+                        ));
                     } else {
                         keys.push_str(&key_str);
                     }
