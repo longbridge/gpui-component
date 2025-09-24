@@ -79,7 +79,7 @@ impl RopeExt for Rope {
         }
 
         let line = self.line(row, LineType::LF_CR);
-        if line.len() > 0 && line.char(line.len() - 1) == '\n' {
+        if line.len() > 0 && line.chars().last() == Some('\n') {
             line.slice(..line.len().saturating_sub(1))
         } else {
             line
@@ -101,6 +101,7 @@ impl RopeExt for Rope {
     }
 
     fn offset_to_point(&self, offset: usize) -> Point {
+        let offset = self.clip_offset(offset, Bias::Left);
         let row = self.byte_to_line_idx(offset, LineType::LF_CR);
         let line_start = self.line_to_byte_idx(row, LineType::LF_CR);
         let column = offset.saturating_sub(line_start);
@@ -108,6 +109,10 @@ impl RopeExt for Rope {
     }
 
     fn point_to_offset(&self, point: Point) -> usize {
+        if point.row >= self.lines_len() {
+            return self.len();
+        }
+
         let line_start = self.line_to_byte_idx(point.row, LineType::LF_CR);
         line_start + point.column
     }
