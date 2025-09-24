@@ -1090,7 +1090,11 @@ impl Element for TextElement {
                         input_bounds.size.height,
                     ),
                 },
-                cx.theme().background,
+                cx.theme()
+                    .highlight_theme
+                    .style
+                    .background
+                    .unwrap_or(cx.theme().background),
             ));
 
             // Each item is the normal lines.
