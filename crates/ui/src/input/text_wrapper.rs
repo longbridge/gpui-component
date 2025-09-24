@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{App, Font, LineFragment, Pixels};
-use ropey::{LineType, Rope, RopeSlice};
+use ropey::{LineType, Rope};
 
 use crate::input::RopeExt;
 

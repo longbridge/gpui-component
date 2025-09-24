@@ -1,4 +1,4 @@
-use crate::{highlighter::LanguageRegistry, input::RopeExt as _, ActiveTheme};
+use crate::{highlighter::LanguageRegistry, ActiveTheme};
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
@@ -326,8 +326,12 @@ impl SyntaxHighlighter {
 
         let new_tree = self.parser.parse_with_options(
             &mut move |offset, _| {
-                let (chunk, _) = text.chunk(offset);
-                chunk.as_bytes()
+                if offset >= text.len() {
+                    ""
+                } else {
+                    let (chunk, chunk_byte_ix) = text.chunk(offset);
+                    &chunk[offset - chunk_byte_ix..]
+                }
             },
             Some(&old_tree),
             None,

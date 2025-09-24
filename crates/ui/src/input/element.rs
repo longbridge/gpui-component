@@ -6,7 +6,7 @@ use gpui::{
     MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, TextAlign, TextRun,
     UnderlineStyle, Window,
 };
-use ropey::{LineType, Rope};
+use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
@@ -508,7 +508,7 @@ impl TextElement {
         let mut styles = vec![];
 
         for line in text
-            .lines(LineType::LF_CR)
+            .rows()
             .skip(visible_range.start)
             .take(visible_range.len())
         {

@@ -166,7 +166,7 @@ impl RopeExt for Rope {
             return None;
         }
 
-        self.chars_at(offset).next()
+        self.get_char(offset).ok()
     }
 
     fn word_range(&self, offset: usize) -> Option<Range<usize>> {
@@ -243,7 +243,7 @@ impl RopeExt for Rope {
 
 #[cfg(test)]
 mod tests {
-    use ropey::{LineType, Rope};
+    use ropey::Rope;
 
     use crate::input::{Point, Position, RopeExt};
 
