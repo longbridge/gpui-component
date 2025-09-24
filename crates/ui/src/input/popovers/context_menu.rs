@@ -1,7 +1,7 @@
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context,
-    DismissEvent, Entity, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point, Render,
-    Styled, Subscription, Window,
+    Corner, DismissEvent, Entity, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point,
+    Render, Styled, Subscription, Window,
 };
 use rust_i18n::t;
 
@@ -46,6 +46,7 @@ impl InputState {
         let is_selected = is_enable && !self.selected_range.is_empty();
         let has_paste = is_enable && cx.read_from_clipboard().is_some();
 
+        let action_context = self.focus_handle.clone();
         self.mouse_context_menu.update(cx, |this, cx| {
             this.mouse_position = event.position;
             this.menu.update(cx, |menu, cx| {
@@ -74,6 +75,7 @@ impl InputState {
                     .menu(t!("Input.Select All"), Box::new(input::SelectAll));
 
                 menu.menu_items = new_menu.menu_items;
+                menu.action_context = Some(action_context);
                 cx.notify();
             });
             this.open = true;
@@ -128,13 +130,11 @@ impl Render for MouseContextMenu {
             return div().into_any_element();
         }
 
-        let pos = self.mouse_position;
-
         deferred(
             anchored()
                 .snap_to_window_with_margin(px(8.))
-                .anchor(gpui::Corner::TopLeft)
-                .position(pos)
+                .anchor(Corner::TopLeft)
+                .position(self.mouse_position)
                 .child(
                     div()
                         .font_family(".SystemUIFont")
