@@ -40,7 +40,10 @@ pub struct SyntaxHighlighter {
 }
 
 struct TextProvider<'a>(&'a Rope);
-struct ByteChunks<'a>((ChunkCursor<'a>, usize));
+struct ByteChunks<'a> {
+    cursor: ChunkCursor<'a>,
+    end: usize,
+}
 impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
     type I = ByteChunks<'a>;
 
@@ -48,7 +51,10 @@ impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
         let range = node.byte_range();
         let cursor = self.0.chunk_cursor_at(range.start);
 
-        ByteChunks((cursor, range.end))
+        ByteChunks {
+            cursor,
+            end: range.end,
+        }
     }
 }
 
@@ -56,8 +62,9 @@ impl<'a> Iterator for ByteChunks<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cursor = &mut self.0 .0;
-        let end = self.0 .1;
+        let cursor = &mut self.cursor;
+        let end = self.end;
+
         if cursor.next() && cursor.byte_offset() < end {
             Some(cursor.chunk().as_bytes())
         } else {
