@@ -48,6 +48,8 @@ pub(super) struct TextWrapper {
     font_size: Pixels,
     /// If is none, it means the text is not wrapped
     wrap_width: Option<Pixels>,
+    /// The longest (row, bytes len) in characters, used to calculate the horizontal scroll width.
+    pub(super) longest_row: (usize, usize),
     /// The lines by split \n
     pub(super) lines: Vec<LineItem>,
 }
@@ -61,6 +63,7 @@ impl TextWrapper {
             font_size,
             wrap_width,
             soft_lines: 0,
+            longest_row: (0, 0),
             lines: Vec::new(),
         }
     }
@@ -155,6 +158,13 @@ impl TextWrapper {
         let end_row = end_row.min(self.lines.len().saturating_sub(1));
         let rows_range = start_row..=end_row;
 
+        if rows_range.contains(&self.longest_row.0) {
+            self.longest_row = (0, 0);
+        }
+
+        let mut longest_row_ix = self.longest_row.0;
+        let mut longest_row_len = self.longest_row.1;
+
         // To add the new lines.
         let new_start_row = changed_text.offset_to_point(range.start).row as usize;
         let new_start_offset = changed_text.line_start_offset(new_start_row);
@@ -168,10 +178,21 @@ impl TextWrapper {
 
         let wrap_width = self.wrap_width;
 
-        for line in changed_text.slice(new_range).lines(LineType::LF_CR) {
+        for (ix, line) in changed_text
+            .slice(new_range)
+            .lines(LineType::LF_CR)
+            .enumerate()
+        {
+            // Remove the last `\n`
+            let line = line.slice(..line.len().saturating_sub(1));
             let line_str = line.to_string();
             let mut wrapped_lines = vec![];
             let mut prev_boundary_ix = 0;
+
+            if line_str.len() > longest_row_len {
+                longest_row_ix = new_start_row + ix;
+                longest_row_len = line_str.len();
+            }
 
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
             if let Some(wrap_width) = wrap_width {
@@ -204,6 +225,7 @@ impl TextWrapper {
         // dbg!(self.lines.len());
         self.text = changed_text.clone();
         self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
+        self.longest_row = (longest_row_ix, longest_row_len);
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
