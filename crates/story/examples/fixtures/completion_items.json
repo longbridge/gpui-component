@@ -1,6 +1,7 @@
 [
   {
     "label": "as",
+    "detail": "as TYPE",
     "documentation": "Perform a safe type cast.\n\n## Example:\n```rust\nlet x: u32 = 42;\nlet y: u64 = x as u64;\n```"
   },
   {
@@ -9,6 +10,7 @@
   },
   {
     "label": "const",
+    "detail": "const NAME: Type = ..;",
     "documentation": "Define a constant value.\n\n**Note:** Constants are immutable and must have their type explicitly declared."
   },
   {

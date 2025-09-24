@@ -16,7 +16,7 @@ use crate::{
     actions, h_flex,
     input::{
         self,
-        popovers::{popover, render_markdown},
+        popovers::{editor_popover, render_markdown},
         InputState, RopeExt,
     },
     label::Label,
@@ -360,7 +360,9 @@ impl CompletionMenu {
             let longest_ix = items
                 .iter()
                 .enumerate()
-                .max_by_key(|(_, item)| item.label.len())
+                .max_by_key(|(_, item)| {
+                    item.label.len() + item.detail.as_ref().map(|d| d.len()).unwrap_or(0)
+                })
                 .map(|(ix, _)| ix)
                 .unwrap_or(0);
 
@@ -432,7 +434,7 @@ impl Render for CompletionMenu {
                 .items_start()
                 .when(vertical_layout, |this| this.flex_col())
                 .child(
-                    popover("completion-menu", cx)
+                    editor_popover("completion-menu", cx)
                         .max_w(max_width)
                         .min_w(px(120.))
                         .child(self.list.clone())
@@ -456,7 +458,7 @@ impl Render for CompletionMenu {
 
                     this.child(
                         div().child(
-                            popover("completion-menu", cx)
+                            editor_popover("completion-menu", cx)
                                 .w(MAX_MENU_WIDTH)
                                 .px_2()
                                 .child(render_markdown("doc", doc, window, cx)),

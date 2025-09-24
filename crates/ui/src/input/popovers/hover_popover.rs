@@ -8,7 +8,7 @@ use gpui::{
 
 use crate::{
     input::{popovers::render_markdown, InputState},
-    ActiveTheme as _, StyledExt,
+    StyledExt,
 };
 
 pub struct HoverPopover {
@@ -194,11 +194,7 @@ impl Element for Popover {
                 .occlude()
                 .p_1()
                 .text_xs()
-                .text_color(cx.theme().popover_foreground)
-                .bg(cx.theme().popover)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(cx.theme().radius)
+                .popover_style(cx)
                 .shadow_md()
                 .max_w(max_width)
                 .refine_style(&self.style)

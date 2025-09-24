@@ -17,7 +17,7 @@ use gpui::{
 
 use crate::{
     text::{TextView, TextViewStyle},
-    ActiveTheme as _,
+    StyledExt as _,
 };
 
 pub(crate) enum ContextMenu {
@@ -63,17 +63,13 @@ pub(super) fn render_markdown(
         .selectable()
 }
 
-pub(super) fn popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
+pub(super) fn editor_popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
     div()
         .id(id)
         .flex_none()
         .occlude()
-        .p_1()
-        .text_xs()
-        .text_color(cx.theme().popover_foreground)
-        .bg(cx.theme().popover)
-        .border_1()
-        .border_color(cx.theme().border)
-        .rounded(cx.theme().radius)
+        .popover_style(cx)
         .shadow_md()
+        .text_xs()
+        .p_1()
 }

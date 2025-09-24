@@ -190,8 +190,9 @@ pub trait StyledExt: Styled + Sized {
 
     /// Set as Popover style
     #[inline]
-    fn popover_style(self, cx: &mut App) -> Self {
+    fn popover_style(self, cx: &App) -> Self {
         self.bg(cx.theme().popover)
+            .text_color(cx.theme().popover_foreground)
             .border_1()
             .border_color(cx.theme().border)
             .shadow_lg()
