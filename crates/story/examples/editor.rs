@@ -912,7 +912,9 @@ impl Render for Example {
                                 .xsmall()
                                 .label(format!(
                                     "{}:{} ({} byte)",
-                                    position.line, position.character, cursor
+                                    position.line + 1,
+                                    position.character + 1,
+                                    cursor
                                 ))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
