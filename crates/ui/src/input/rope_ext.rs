@@ -31,9 +31,6 @@ pub trait RopeExt {
     /// Return the length of the row (0-based) in characters, including `\r` if present, but not `\n`.
     fn line_len(&self, row: usize) -> usize;
 
-    /// Return the bottom, right point of the rope.
-    fn max_point(&self) -> Point;
-
     /// Total number of characters in the rope.
     fn chars_count(&self) -> usize;
 
@@ -101,12 +98,6 @@ impl RopeExt for Rope {
 
     fn line_start_offset(&self, row: usize) -> usize {
         self.point_to_offset(Point::new(row, 0))
-    }
-
-    fn max_point(&self) -> Point {
-        let row = self.lines_len().saturating_sub(1);
-        let column = self.line_len(row);
-        Point::new(row, column)
     }
 
     fn offset_to_point(&self, offset: usize) -> Point {
