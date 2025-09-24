@@ -7,13 +7,13 @@ use gpui::{
     Entity, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
     ParentElement as _, Pixels, Render, Styled, Subscription, Window,
 };
-use rope::Rope;
+use ropey::Rope;
 
 use crate::{
     actions::SelectPrev,
     button::{Button, ButtonVariants},
     h_flex,
-    input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt, Search, TextInput},
+    input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt as _, Search, TextInput},
     label::Label,
     v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable,
 };
@@ -65,7 +65,9 @@ impl SearchMatcher {
     fn update_matches(&mut self) {
         let mut new_ranges = Vec::new();
         if let Some(query) = &self.query {
-            let matches = query.stream_find_iter(self.text.bytes_in_range(0..self.text.len()));
+            let text = self.text.to_string();
+            // FIXME: Use stream find
+            let matches = query.stream_find_iter(text.as_bytes());
 
             for query_match in matches.into_iter() {
                 let query_match = query_match.expect("query match for select all action");
@@ -201,7 +203,7 @@ impl InputState {
 
         let text = self.text.clone();
         let editor = cx.entity();
-        let selected_text = self.selected_text();
+        let selected_text = Rope::from(self.selected_text());
         search_panel.update(cx, |this, cx| {
             this.editor = editor;
             this.matcher.update(&text);

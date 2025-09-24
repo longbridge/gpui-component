@@ -2,12 +2,13 @@ use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
 use gpui::{App, SharedString};
-use rope::Rope;
+use ropey::Rope;
 use tree_sitter::{InputEdit, Point};
 
 use super::text_wrapper::TextWrapper;
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
+use crate::input::RopeExt as _;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TabSize {

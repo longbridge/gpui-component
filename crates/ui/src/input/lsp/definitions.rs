@@ -2,7 +2,7 @@ use anyhow::Result;
 use gpui::{
     px, App, Context, HighlightStyle, Hitbox, MouseDownEvent, Task, UnderlineStyle, Window,
 };
-use rope::Rope;
+use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
 use crate::{

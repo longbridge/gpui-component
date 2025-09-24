@@ -53,7 +53,7 @@ gpui = { workspace = true }
 gpui-component-macros.workspace = true
 gpui_macros.workspace = true
 notify.workspace = true
-rope.workspace = true
+ropey.workspace = true
 rust-i18n.workspace = true
 schemars.workspace = true
 serde.workspace = true

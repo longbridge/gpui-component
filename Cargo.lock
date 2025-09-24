@@ -757,7 +757,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "lazy_static",
  "lazycell",
  "log",
@@ -780,7 +780,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3225,7 +3225,7 @@ dependencies = [
  "once_cell",
  "paste",
  "regex",
- "rope",
+ "ropey",
  "rust-i18n",
  "rust_decimal",
  "schemars",
@@ -3690,7 +3690,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -4980,7 +4980,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.3.0",
  "proc-macro2",
  "quote",
  "syn 2.0.105",
@@ -6754,18 +6754,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rope"
-version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#4532765ae845b8c98c73c88cc916f7d771b429d5"
+name = "ropey"
+version = "2.0.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4045a00dc327d084a2bbf126976e14125b54f23bd30511d45b842eba76c52d74"
 dependencies = [
- "arrayvec",
- "log",
- "rayon",
- "smallvec",
- "sum_tree",
- "unicode-segmentation",
- "util",
- "workspace-hack",
+ "str_indices",
 ]
 
 [[package]]
@@ -7801,6 +7795,12 @@ dependencies = [
  "tree-sitter-navi",
  "unindent",
 ]
+
+[[package]]
+name = "str_indices"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d08889ec5408683408db66ad89e0e1f93dff55c73a4ccc71c427d5b277ee47e6"
 
 [[package]]
 name = "streaming-iterator"

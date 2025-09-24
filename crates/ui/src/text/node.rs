@@ -7,7 +7,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
-use rope::Rope;
+use ropey::Rope;
 
 use crate::{
     h_flex,
@@ -291,7 +291,7 @@ impl CodeBlock {
         let mut styles = vec![];
         if let Some(lang) = &lang {
             let mut highlighter = SyntaxHighlighter::new(&lang, cx);
-            highlighter.update(None, &Rope::from(code.as_str()));
+            highlighter.update(None, &Rope::from_str(code.as_str()));
             styles = highlighter.styles(&(0..code.len()), cx);
         };
 

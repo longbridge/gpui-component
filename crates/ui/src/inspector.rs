@@ -11,7 +11,7 @@ use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, Diagnostic,
     DiagnosticSeverity, Position, TextEdit,
 };
-use rope::Rope;
+use ropey::{LineType, Rope};
 
 use crate::{
     alert::Alert,
@@ -348,7 +348,7 @@ fn rust_to_style(mut style: StyleRefinement, source: &str) -> (StyleRefinement, 
     let mut offset = 0;
     let mut method_offset = 0;
     let mut method = String::new();
-    for line in rope.lines() {
+    for line in rope.lines(LineType::LF_CR) {
         if line.to_string().trim().starts_with("//") {
             offset += line.len() + 1;
             continue;
@@ -564,7 +564,7 @@ struct LspProvider {}
 impl CompletionProvider for LspProvider {
     fn completions(
         &self,
-        rope: &rope::Rope,
+        rope: &ropey::Rope,
         offset: usize,
         _: lsp_types::CompletionContext,
         _: &mut Window,

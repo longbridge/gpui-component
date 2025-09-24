@@ -22,7 +22,7 @@ pub use mask_pattern::MaskPattern;
 pub use mode::TabSize;
 pub use number_input::{NumberInput, NumberInputEvent, StepAction};
 pub use otp_input::*;
-pub use rope::Rope;
 pub use rope_ext::*;
+pub use ropey::Rope;
 pub use state::*;
 pub use text_input::*;

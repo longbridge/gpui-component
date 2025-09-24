@@ -1,7 +1,7 @@
 use anyhow::Result;
 use gpui::{Context, EntityInputHandler, Task, Window};
 use lsp_types::{request::Completion, CompletionContext, CompletionItem, CompletionResponse};
-use rope::Rope;
+use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use crate::input::{

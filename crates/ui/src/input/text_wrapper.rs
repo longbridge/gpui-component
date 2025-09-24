@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{App, Font, LineFragment, Pixels};
-use rope::Rope;
+use ropey::{LineType, Rope, RopeSlice};
 
 use crate::input::RopeExt;
 
@@ -168,7 +168,7 @@ impl TextWrapper {
 
         let wrap_width = self.wrap_width;
 
-        for line in changed_text.slice(new_range).lines() {
+        for line in changed_text.slice(new_range).lines(LineType::LF_CR) {
             let line_str = line.to_string();
             let mut wrapped_lines = vec![];
             let mut prev_boundary_ix = 0;
@@ -188,7 +188,7 @@ impl TextWrapper {
             }
 
             new_lines.push(LineItem {
-                line: line.clone(),
+                line: Rope::from(line),
                 wrapped_lines,
             });
         }

@@ -5,7 +5,7 @@ use std::{
 };
 
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
-use rope::Rope;
+use ropey::Rope;
 use sum_tree::{Bias, SeekTarget, SumTree};
 
 use crate::{
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic() {
-        use rope::Rope;
+        use ropey::Rope;
 
         use super::{Diagnostic, DiagnosticSet, DiagnosticSeverity};
 

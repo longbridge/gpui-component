@@ -6,7 +6,7 @@ use gpui::{
     MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, TextAlign, TextRun,
     UnderlineStyle, Window,
 };
-use rope::Rope;
+use ropey::{LineType, Rope};
 use smallvec::SmallVec;
 
 use crate::{
@@ -508,7 +508,7 @@ impl TextElement {
         let mut styles = vec![];
 
         for line in text
-            .lines()
+            .lines(LineType::LF_CR)
             .skip(visible_range.start)
             .take(visible_range.len())
         {
@@ -781,7 +781,7 @@ impl Element for TextElement {
         // NOTE: Here 50 lines about 150µs
         // let measure = crate::Measure::new("shape_text");
         let visible_text = display_text
-            .slice_rows(visible_range.start as u32..visible_range.end as u32)
+            .slice_rows(visible_range.start..visible_range.end)
             .to_string();
 
         let lines = window
@@ -792,11 +792,13 @@ impl Element for TextElement {
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
         if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
-            let longtest_line: SharedString = state
-                .text
-                .line(state.text.summary().longest_row as usize)
-                .to_string()
-                .into();
+            // TODO: get longest row
+            let longtest_line = SharedString::default();
+            // let longtest_line: SharedString = state
+            //     .text
+            //     .line(state.text.summary().longest_row as usize)
+            //     .to_string()
+            //     .into();
             longest_line_width = window
                 .text_system()
                 .shape_line(

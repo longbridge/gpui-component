@@ -1,6 +1,6 @@
 use anyhow::Result;
 use gpui::{App, Context, Task, Window};
-use rope::Rope;
+use ropey::Rope;
 
 use crate::input::{popovers::HoverPopover, InputState, RopeExt};
 
