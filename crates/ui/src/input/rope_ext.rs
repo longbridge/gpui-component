@@ -160,6 +160,7 @@ impl RopeExt for Rope {
         }
 
         let mut left = String::new();
+        let offset = self.clip_offset(offset, Bias::Left);
         for c in self.chars_at(offset).reversed() {
             if c.is_alphanumeric() || c == '_' {
                 left.insert(0, c);
