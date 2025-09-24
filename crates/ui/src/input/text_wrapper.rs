@@ -184,7 +184,12 @@ impl TextWrapper {
             .enumerate()
         {
             // Remove the last `\n`
-            let line = line.slice(..line.len().saturating_sub(1));
+            let line = if line.len() > 0 && line.chars().last() == Some('\n') {
+                line.slice(..line.len().saturating_sub(1))
+            } else {
+                line
+            };
+
             let line_str = line.to_string();
             let mut wrapped_lines = vec![];
             let mut prev_boundary_ix = 0;

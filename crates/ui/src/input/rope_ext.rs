@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use ropey::{LineType, Rope, RopeSlice};
+use sum_tree::Bias;
 
 /// Rope point.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -55,9 +56,8 @@ pub trait RopeExt {
 
     /// Get char at the given offset (byte).
     ///
-    /// If the offset is in the middle of a multi-byte character will panic.
-    ///
-    /// If the offset is out of bounds, return None.
+    /// - If the offset is in the middle of a multi-byte character will panic.
+    /// - If the offset is out of bounds, return None.
     fn char_at(&self, offset: usize) -> Option<char>;
 
     /// Get the byte offset from the given line, column [`Position`] (0-based).
@@ -80,12 +80,19 @@ pub trait RopeExt {
 
     /// Convert offset (byte) to offset_utf16.
     fn offset_to_offset_utf16(&self, offset: usize) -> usize;
+
+    /// Get a clipped offset (avoid in a char boundary).
+    ///
+    /// - If Bias::Left and inside the char boundary, return the ix - 1;
+    /// - If Bias::Right and in inside char boundary, return the ix + 1;
+    /// - Otherwise return the ix.
+    fn clip_offset(&self, offset: usize, bias: Bias) -> usize;
 }
 
 impl RopeExt for Rope {
     fn slice_row(&self, row: usize) -> RopeSlice<'_> {
         if row >= self.lines_len() {
-            return self.slice(self.len()..self.len());
+            return self.slice(0..0);
         }
 
         let line = self.line(row, LineType::LF_CR);
@@ -141,7 +148,8 @@ impl RopeExt for Rope {
     fn offset_to_position(&self, offset: usize) -> Position {
         let point = self.offset_to_point(offset);
         let line = self.slice_row(point.row as usize);
-        let character = line.slice(..point.column).chars().count();
+        let offset = line.utf16_to_byte_idx(line.byte_to_utf16_idx(point.column));
+        let character = line.slice(..offset).chars().count();
         Position::new(point.row as u32, character as u32)
     }
 
@@ -220,11 +228,28 @@ impl RopeExt for Rope {
         self.remove(range.clone());
         self.insert(range.start, new_text);
     }
+
+    fn clip_offset(&self, offset: usize, bias: Bias) -> usize {
+        if offset > self.len() {
+            return self.len();
+        }
+
+        if self.is_char_boundary(offset) {
+            return offset;
+        }
+
+        if bias == Bias::Left {
+            self.floor_char_boundary(offset)
+        } else {
+            self.ceil_char_boundary(offset)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use ropey::Rope;
+    use sum_tree::Bias;
 
     use crate::input::{Point, Position, RopeExt};
 
@@ -414,5 +439,28 @@ mod tests {
             rope.to_string(),
             "Hi\nUniverse\r\nThis is a test 中文\nString"
         );
+    }
+
+    #[test]
+    fn test_clip_offset() {
+        let rope = Rope::from("Hello 中文🎉 test\nRope");
+        // Inside multi-byte character '中' (3 bytes)
+        assert_eq!(rope.clip_offset(5, Bias::Left), 5);
+        assert_eq!(rope.clip_offset(7, Bias::Left), 6);
+        assert_eq!(rope.clip_offset(7, Bias::Right), 9);
+        assert_eq!(rope.clip_offset(9, Bias::Left), 9);
+
+        // Inside multi-byte character '🎉' (4 bytes)
+        assert_eq!(rope.clip_offset(13, Bias::Left), 12);
+        assert_eq!(rope.clip_offset(13, Bias::Right), 16);
+        assert_eq!(rope.clip_offset(16, Bias::Left), 16);
+
+        // At character boundary
+        assert_eq!(rope.clip_offset(5, Bias::Left), 5);
+        assert_eq!(rope.clip_offset(5, Bias::Right), 5);
+
+        // Out of bounds
+        assert_eq!(rope.clip_offset(26, Bias::Left), 26);
+        assert_eq!(rope.clip_offset(100, Bias::Left), 26);
     }
 }
