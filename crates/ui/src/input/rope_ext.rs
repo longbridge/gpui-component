@@ -206,33 +206,14 @@ impl RopeExt for Rope {
         }
     }
 
+    #[inline]
     fn offset_utf16_to_offset(&self, offset_utf16: usize) -> usize {
-        let mut utf8_offset = 0;
-        let mut utf16_count = 0;
-        for ch in self.chars() {
-            if utf16_count >= offset_utf16 {
-                break;
-            }
-            utf16_count += ch.len_utf16();
-            utf8_offset += ch.len_utf8();
-        }
-
-        utf8_offset
+        self.utf16_to_byte_idx(offset_utf16)
     }
 
+    #[inline]
     fn offset_to_offset_utf16(&self, offset: usize) -> usize {
-        let mut utf16_offset = 0;
-        let mut utf8_count = 0;
-
-        for ch in self.chars() {
-            if utf8_count >= offset {
-                break;
-            }
-            utf8_count += ch.len_utf8();
-            utf16_offset += ch.len_utf16();
-        }
-
-        utf16_offset
+        self.byte_to_utf16_idx(offset)
     }
 
     fn replace(&mut self, range: Range<usize>, new_text: &str) {
