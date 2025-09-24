@@ -152,9 +152,9 @@ impl TextWrapper {
         }
 
         // Remove the old changed lines.
-        let start_row = self.text.offset_to_point(range.start).row as usize;
+        let start_row = self.text.offset_to_point(range.start).row;
         let start_row = start_row.min(self.lines.len().saturating_sub(1));
-        let end_row = self.text.offset_to_point(range.end).row as usize;
+        let end_row = self.text.offset_to_point(range.end).row;
         let end_row = end_row.min(self.lines.len().saturating_sub(1));
         let rows_range = start_row..=end_row;
 
@@ -166,11 +166,11 @@ impl TextWrapper {
         let mut longest_row_len = self.longest_row.1;
 
         // To add the new lines.
-        let new_start_row = changed_text.offset_to_point(range.start).row as usize;
+        let new_start_row = changed_text.offset_to_point(range.start).row;
         let new_start_offset = changed_text.line_start_offset(new_start_row);
         let new_end_row = changed_text
             .offset_to_point(range.start + new_text.len())
-            .row as usize;
+            .row;
         let new_end_offset = changed_text.line_end_offset(new_end_row);
         let new_range = new_start_offset..new_end_offset;
 

@@ -2,21 +2,7 @@ use std::ops::Range;
 
 use ropey::{LineType, Rope, RopeSlice};
 use sum_tree::Bias;
-
-/// Rope point.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Point {
-    /// 0-based row index.
-    pub row: usize,
-    /// 0-based column index (in bytes).
-    pub column: usize,
-}
-
-impl Point {
-    pub fn new(row: usize, column: usize) -> Self {
-        Self { row, column }
-    }
-}
+use tree_sitter::Point;
 
 use crate::input::Position;
 
@@ -147,7 +133,7 @@ impl RopeExt for Rope {
 
     fn offset_to_position(&self, offset: usize) -> Position {
         let point = self.offset_to_point(offset);
-        let line = self.slice_row(point.row as usize);
+        let line = self.slice_row(point.row);
         let offset = line.utf16_to_byte_idx(line.byte_to_utf16_idx(point.column));
         let character = line.slice(..offset).chars().count();
         Position::new(point.row as u32, character as u32)
@@ -250,8 +236,9 @@ impl RopeExt for Rope {
 mod tests {
     use ropey::Rope;
     use sum_tree::Bias;
+    use tree_sitter::Point;
 
-    use crate::input::{Point, Position, RopeExt};
+    use crate::input::{Position, RopeExt};
 
     #[test]
     fn test_line() {

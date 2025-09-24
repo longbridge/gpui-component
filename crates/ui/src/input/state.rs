@@ -643,8 +643,10 @@ impl InputState {
         let was_preferred_column = self.preferred_column;
 
         let row = self.text.offset_to_point(offset).row;
-        let new_row = row.saturating_add_signed(move_lines as isize);
-        let line_start_offset = self.text.point_to_offset(super::Point::new(new_row, 0));
+        let new_row = row.saturating_add_signed(move_lines);
+        let line_start_offset = self
+            .text
+            .point_to_offset(tree_sitter::Point::new(new_row, 0));
 
         let mut new_offset = line_start_offset;
 
@@ -653,7 +655,6 @@ impl InputState {
             new_offset = line_start_offset + new_column;
 
             // If in visible range, prefer to use position to get column.
-            let new_row = new_row as usize;
             if new_row >= last_layout.visible_range.start {
                 let visible_row = new_row.saturating_sub(last_layout.visible_range.start);
                 if let Some(line) = last_layout.lines.get(visible_row) {
@@ -1157,7 +1158,7 @@ impl InputState {
         }
 
         let row = self.text.offset_to_point(self.cursor()).row;
-        self.text.line_start_offset(row as usize)
+        self.text.line_start_offset(row)
     }
 
     /// Get end of line byte offset of cursor
@@ -1167,7 +1168,7 @@ impl InputState {
         }
 
         let row = self.text.offset_to_point(self.cursor()).row;
-        self.text.line_end_offset(row as usize)
+        self.text.line_end_offset(row)
     }
 
     /// Get start line of selection start or end (The min value).
@@ -1661,7 +1662,7 @@ impl InputState {
         let line_height = last_layout.line_height;
 
         let point = self.text.offset_to_point(offset);
-        let row = point.row as usize;
+        let row = point.row;
 
         let mut row_offset_y = px(0.);
         for (ix, wrap_line) in self.text_wrapper.lines.iter().enumerate() {

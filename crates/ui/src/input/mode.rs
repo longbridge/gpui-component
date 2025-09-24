@@ -3,7 +3,7 @@ use std::{cell::RefCell, ops::Range};
 
 use gpui::{App, SharedString};
 use ropey::Rope;
-use tree_sitter::{InputEdit, Point};
+use tree_sitter::InputEdit;
 
 use super::text_wrapper::TextWrapper;
 use crate::highlighter::DiagnosticSet;
@@ -211,15 +211,9 @@ impl InputMode {
                     start_byte: selected_range.start,
                     old_end_byte: selected_range.end,
                     new_end_byte: new_end,
-                    start_position: Point::new(start_pos.row as usize, start_pos.column as usize),
-                    old_end_position: Point::new(
-                        old_end_pos.row as usize,
-                        old_end_pos.column as usize,
-                    ),
-                    new_end_position: Point::new(
-                        new_end_pos.row as usize,
-                        new_end_pos.column as usize,
-                    ),
+                    start_position: start_pos,
+                    old_end_position: old_end_pos,
+                    new_end_position: new_end_pos,
                 };
 
                 highlighter.update(Some(edit), text);
