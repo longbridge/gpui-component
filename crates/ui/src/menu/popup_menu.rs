@@ -13,8 +13,7 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
-use gpui::{AsKeystroke, Half, MouseDownEvent, Subscription};
-use std::ops::Deref;
+use gpui::{Half, MouseDownEvent, Subscription};
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
@@ -109,10 +108,10 @@ impl PopupMenuItem {
 }
 
 pub struct PopupMenu {
-    /// The parent menu of this menu, if this is a submenu
-    parent_menu: Option<WeakEntity<Self>>,
     focus_handle: FocusHandle,
     pub(crate) menu_items: Vec<PopupMenuItem>,
+    /// The focus handle of Entity to handle actions.
+    pub(crate) action_context: Option<FocusHandle>,
     has_icon: bool,
     selected_index: Option<usize>,
     min_width: Option<Pixels>,
@@ -121,12 +120,13 @@ pub struct PopupMenu {
     bounds: Bounds<Pixels>,
     size: Size,
 
+    /// The parent menu of this menu, if this is a submenu
+    parent_menu: Option<WeakEntity<Self>>,
     scrollable: bool,
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
     scroll_state: ScrollbarState,
 
-    previous_focus_handle: Option<FocusHandle>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -134,7 +134,7 @@ impl PopupMenu {
     pub(crate) fn new(cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            previous_focus_handle: None,
+            action_context: None,
             parent_menu: None,
             menu_items: Vec::new(),
             selected_index: None,
@@ -159,7 +159,7 @@ impl PopupMenu {
     ) -> Entity<Self> {
         cx.new(|cx| {
             let mut menu = Self::new(cx);
-            menu.previous_focus_handle = window.focused(cx);
+            menu.action_context = window.focused(cx);
             f(menu, window, cx)
         })
     }
@@ -725,8 +725,8 @@ impl PopupMenu {
         cx.emit(DismissEvent);
 
         // Focus back to the previous focused handle.
-        if let Some(previous_focus_handle) = self.previous_focus_handle.as_ref() {
-            window.focus(previous_focus_handle);
+        if let Some(action_context) = self.action_context.as_ref() {
+            window.focus(action_context);
         }
 
         let Some(parent_menu) = self.parent_menu.clone() else {
@@ -743,22 +743,11 @@ impl PopupMenu {
     fn render_key_binding(
         action: Option<Box<dyn Action>>,
         window: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        if let Some(action) = action {
-            if let Some(key_binding) = window.bindings_for_action(action.deref()).first() {
-                let el = div().text_color(cx.theme().muted_foreground).children(
-                    key_binding
-                        .keystrokes()
-                        .into_iter()
-                        .map(|key| Kbd::format(key.as_keystroke())),
-                );
-
-                return Some(el);
-            }
-        }
-
-        return None;
+        let action = action?;
+        Kbd::binding_for_action(action.as_ref(), None, window)
+            .map(|this| this.p_0().border_0().bg(gpui::transparent_white()))
     }
 
     fn render_icon(

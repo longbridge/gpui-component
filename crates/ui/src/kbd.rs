@@ -45,18 +45,18 @@ impl Kbd {
         window: &Window,
     ) -> Option<Self> {
         let key_context = context.and_then(|context| KeyContext::parse(context).ok());
-        let bindings = match key_context {
-            Some(context) => window.bindings_for_action_in_context(action, context),
-            None => window.bindings_for_action(action),
-        };
-
-        bindings.first().and_then(|binding| {
-            if let Some(key) = binding.keystrokes().first() {
-                Some(Self::new(key.as_keystroke().clone()))
-            } else {
-                None
+        let binding = match key_context {
+            Some(context) => {
+                window.highest_precedence_binding_for_action_in_context(action, context)
             }
-        })
+            None => window.highest_precedence_binding_for_action(action),
+        }?;
+
+        if let Some(key) = binding.keystrokes().first() {
+            Some(Self::new(key.as_keystroke().clone()))
+        } else {
+            None
+        }
     }
 
     /// Return the Platform specific keybinding string by KeyStroke
