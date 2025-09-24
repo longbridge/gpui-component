@@ -202,11 +202,19 @@ impl RopeExt for Rope {
 
     #[inline]
     fn offset_utf16_to_offset(&self, offset_utf16: usize) -> usize {
+        if offset_utf16 > self.len_utf16() {
+            return self.len();
+        }
+
         self.utf16_to_byte_idx(offset_utf16)
     }
 
     #[inline]
     fn offset_to_offset_utf16(&self, offset: usize) -> usize {
+        if offset > self.len() {
+            return self.len_utf16();
+        }
+
         self.byte_to_utf16_idx(offset)
     }
 
@@ -399,11 +407,13 @@ mod tests {
         assert_eq!(rope.offset_to_offset_utf16("hello 中".len()), 7);
         assert_eq!(rope.offset_to_offset_utf16("hello 中文".len()), 8);
         assert_eq!(rope.offset_to_offset_utf16("hello 中文🎉".len()), 10);
+        assert_eq!(rope.offset_to_offset_utf16(100), 20);
 
         assert_eq!(rope.offset_utf16_to_offset(5), "hello".len());
         assert_eq!(rope.offset_utf16_to_offset(7), "hello 中".len());
         assert_eq!(rope.offset_utf16_to_offset(8), "hello 中文".len());
         assert_eq!(rope.offset_utf16_to_offset(10), "hello 中文🎉".len());
+        assert_eq!(rope.offset_utf16_to_offset(100), rope.len());
     }
 
     #[test]
