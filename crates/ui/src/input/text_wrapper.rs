@@ -37,6 +37,14 @@ impl LineItem {
     }
 }
 
+#[derive(Debug, Default)]
+pub(super) struct LongestRow {
+    /// The 0-based row index.
+    pub row: usize,
+    /// The bytes length of the longest line.
+    pub len: usize,
+}
+
 /// Used to prepare the text with soft wrap to be get lines to displayed in the Editor.
 ///
 /// After use lines to calculate the scroll size of the Editor.
@@ -49,7 +57,7 @@ pub(super) struct TextWrapper {
     /// If is none, it means the text is not wrapped
     wrap_width: Option<Pixels>,
     /// The longest (row, bytes len) in characters, used to calculate the horizontal scroll width.
-    pub(super) longest_row: (usize, usize),
+    pub(super) longest_row: LongestRow,
     /// The lines by split \n
     pub(super) lines: Vec<LineItem>,
 }
@@ -63,7 +71,7 @@ impl TextWrapper {
             font_size,
             wrap_width,
             soft_lines: 0,
-            longest_row: (0, 0),
+            longest_row: LongestRow::default(),
             lines: Vec::new(),
         }
     }
@@ -158,12 +166,12 @@ impl TextWrapper {
         let end_row = end_row.min(self.lines.len().saturating_sub(1));
         let rows_range = start_row..=end_row;
 
-        if rows_range.contains(&self.longest_row.0) {
-            self.longest_row = (0, 0);
+        if rows_range.contains(&self.longest_row.row) {
+            self.longest_row = LongestRow::default();
         }
 
-        let mut longest_row_ix = self.longest_row.0;
-        let mut longest_row_len = self.longest_row.1;
+        let mut longest_row_ix = self.longest_row.row;
+        let mut longest_row_len = self.longest_row.len;
 
         // To add the new lines.
         let new_start_row = changed_text.offset_to_point(range.start).row;
@@ -230,7 +238,10 @@ impl TextWrapper {
         // dbg!(self.lines.len());
         self.text = changed_text.clone();
         self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
-        self.longest_row = (longest_row_ix, longest_row_len);
+        self.longest_row = LongestRow {
+            row: longest_row_ix,
+            len: longest_row_len,
+        }
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
