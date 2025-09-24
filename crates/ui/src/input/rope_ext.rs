@@ -29,6 +29,10 @@ pub trait RopeExt {
 
     fn slice_rows(&self, rows_range: Range<usize>) -> RopeSlice<'_>;
 
+    fn rows(&self) -> impl Iterator<Item = RopeSlice<'_>> + '_ {
+        (0..self.lines_len()).map(|row| self.slice_row(row))
+    }
+
     /// Line the end offset (including `\n`) of the line at the given row (0-based) index.
     ///
     /// Return the end of the rope if the row is out of bounds.
@@ -80,7 +84,16 @@ pub trait RopeExt {
 
 impl RopeExt for Rope {
     fn slice_row(&self, row: usize) -> RopeSlice<'_> {
-        self.line(row, LineType::LF_CR)
+        if row >= self.lines_len() {
+            return self.slice(self.len()..self.len());
+        }
+
+        let line = self.line(row, LineType::LF_CR);
+        if line.len() > 0 && line.char(line.len() - 1) == '\n' {
+            line.slice(..line.len().saturating_sub(1))
+        } else {
+            line
+        }
     }
 
     fn slice_rows(&self, rows_range: Range<usize>) -> RopeSlice<'_> {
@@ -128,7 +141,7 @@ impl RopeExt for Rope {
     fn offset_to_position(&self, offset: usize) -> Position {
         let point = self.offset_to_point(offset);
         let line = self.slice_row(point.row as usize);
-        let character = line.chars_at(point.column).count();
+        let character = line.slice(..point.column).chars().count();
         Position::new(point.row as u32, character as u32)
     }
 
@@ -141,7 +154,7 @@ impl RopeExt for Rope {
     }
 
     fn lines_len(&self) -> usize {
-        self.max_point().row as usize + 1
+        self.len_lines(LineType::LF_CR)
     }
 
     fn chars_count(&self) -> usize {
@@ -194,27 +207,32 @@ impl RopeExt for Rope {
     }
 
     fn offset_utf16_to_offset(&self, offset_utf16: usize) -> usize {
-        let mut offset = 0;
-        let mut offset_utf8 = 0;
-        for c in self.chars() {
-            let char_len_utf16 = c.len_utf16();
-            if offset + char_len_utf16 > offset_utf16 {
+        let mut utf8_offset = 0;
+        let mut utf16_count = 0;
+        for ch in self.chars() {
+            if utf16_count >= offset_utf16 {
                 break;
             }
-            offset += char_len_utf16;
-            offset_utf8 += c.len_utf8();
+            utf16_count += ch.len_utf16();
+            utf8_offset += ch.len_utf8();
         }
 
-        offset_utf8
+        utf8_offset
     }
 
     fn offset_to_offset_utf16(&self, offset: usize) -> usize {
-        let mut offset_utf16 = 0;
-        for c in self.chars_at(offset) {
-            offset_utf16 += c.len_utf16();
+        let mut utf16_offset = 0;
+        let mut utf8_count = 0;
+
+        for ch in self.chars() {
+            if utf8_count >= offset {
+                break;
+            }
+            utf8_count += ch.len_utf8();
+            utf16_offset += ch.len_utf16();
         }
 
-        offset_utf16
+        utf16_offset
     }
 
     fn replace(&mut self, range: Range<usize>, new_text: &str) {
@@ -227,17 +245,14 @@ impl RopeExt for Rope {
 mod tests {
     use ropey::{LineType, Rope};
 
-    use crate::input::{Point, Position, RopeExt as _};
+    use crate::input::{Point, Position, RopeExt};
 
     #[test]
     fn test_line() {
         let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope");
         assert_eq!(rope.slice_row(0).to_string(), "Hello");
         assert_eq!(rope.slice_row(1).to_string(), "World\r");
-        assert_eq!(
-            rope.line(2, LineType::LF_CR).to_string(),
-            "This is a test 中文"
-        );
+        assert_eq!(rope.slice_row(2).to_string(), "This is a test 中文");
         assert_eq!(rope.slice_row(3).to_string(), "Rope");
 
         // over bounds
@@ -265,9 +280,9 @@ mod tests {
     }
 
     #[test]
-    fn test_lines() {
+    fn test_rows() {
         let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope");
-        let lines: Vec<_> = rope.lines(LineType::LF_CR).map(|r| r.to_string()).collect();
+        let lines: Vec<_> = rope.rows().map(|r| r.to_string()).collect();
         assert_eq!(
             lines,
             vec!["Hello", "World\r", "This is a test 中文", "Rope"]
@@ -331,7 +346,7 @@ mod tests {
         let rope = Rope::from("a 中文🎉 test\nRope");
         assert_eq!(rope.offset_to_point(0), Point::new(0, 0));
         assert_eq!(rope.offset_to_point(1), Point::new(0, 1));
-        assert_eq!(rope.offset_to_point("a 中".len()), Point::new(0, 4));
+        assert_eq!(rope.offset_to_point("a 中".len()), Point::new(0, 5));
         assert_eq!(rope.offset_to_point("a 中文🎉".len()), Point::new(0, 12));
         assert_eq!(
             rope.offset_to_point("a 中文🎉 test\nR".len()),
@@ -344,7 +359,7 @@ mod tests {
         let rope = Rope::from("a 中文🎉 test\nRope");
         assert_eq!(rope.point_to_offset(Point::new(0, 0)), 0);
         assert_eq!(rope.point_to_offset(Point::new(0, 1)), 1);
-        assert_eq!(rope.point_to_offset(Point::new(0, 4)), "a 中".len());
+        assert_eq!(rope.point_to_offset(Point::new(0, 5)), "a 中".len());
         assert_eq!(rope.point_to_offset(Point::new(0, 12)), "a 中文🎉".len());
         assert_eq!(
             rope.point_to_offset(Point::new(1, 1)),
@@ -386,13 +401,16 @@ mod tests {
 
     #[test]
     fn test_offset_utf16_conversion() {
-        let rope = Rope::from("a 中文🎉 test\nRope");
-        let offset_utf8 = rope.position_to_offset(&Position::new(0, 5)); // "a 中文🎉"
-        let offset_utf16 = rope.offset_to_offset_utf16(offset_utf8);
-        assert_eq!(offset_utf16, 7); // "a" (1) + " " (1) + "中" (1) + "文" (1) + "🎉" (2) = 7
+        let rope = Rope::from("hello 中文🎉 test\nRope");
+        assert_eq!(rope.offset_to_offset_utf16("hello".len()), 5);
+        assert_eq!(rope.offset_to_offset_utf16("hello 中".len()), 7);
+        assert_eq!(rope.offset_to_offset_utf16("hello 中文".len()), 8);
+        assert_eq!(rope.offset_to_offset_utf16("hello 中文🎉".len()), 10);
 
-        let converted_offset_utf8 = rope.offset_utf16_to_offset(offset_utf16);
-        assert_eq!(converted_offset_utf8, offset_utf8);
+        assert_eq!(rope.offset_utf16_to_offset(5), "hello".len());
+        assert_eq!(rope.offset_utf16_to_offset(7), "hello 中".len());
+        assert_eq!(rope.offset_utf16_to_offset(8), "hello 中文".len());
+        assert_eq!(rope.offset_utf16_to_offset(10), "hello 中文🎉".len());
     }
 
     #[test]
