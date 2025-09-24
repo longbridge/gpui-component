@@ -30,6 +30,7 @@ use super::{
     text_wrapper::TextWrapper,
 };
 use crate::input::{
+    element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
     HoverDefinition, Lsp, Position,
@@ -1671,6 +1672,23 @@ impl InputState {
             }
 
             row_offset_y += wrap_line.height(line_height);
+        }
+
+        if let Some(line) = last_layout
+            .lines
+            .get(row.saturating_sub(last_layout.visible_range.start))
+        {
+            // Check to scroll horizontally
+            if let Some(pos) = line.position_for_index(point.column, line_height) {
+                let bounds_width = bounds.size.width - last_layout.line_number_width;
+                let col_offset_x = pos.x;
+                if col_offset_x - RIGHT_MARGIN < -scroll_offset.x {
+                    // If the position is out of the visible area, scroll to make it visible
+                    scroll_offset.x = -col_offset_x + RIGHT_MARGIN;
+                } else if col_offset_x + RIGHT_MARGIN > -scroll_offset.x + bounds_width {
+                    scroll_offset.x = -(col_offset_x - bounds_width + RIGHT_MARGIN);
+                }
+            }
         }
 
         // Check if row_offset_y is out of the viewport
