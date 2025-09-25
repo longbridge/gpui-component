@@ -89,7 +89,7 @@ impl ButtonGroup {
     /// The `&Vec<usize>` is the indices of the clicked (selected in `multiple` mode) buttons.
     /// For example: `[0, 2, 3]` is means the first, third and fourth buttons are clicked.
     ///
-    /// ```rust
+    /// ```ignore
     /// ButtonGroup::new("size-button")
     ///    .child(Button::new("large").label("Large").selected(self.size == Size::Large))
     ///    .child(Button::new("medium").label("Medium").selected(self.size == Size::Medium))

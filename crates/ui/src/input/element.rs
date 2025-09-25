@@ -508,7 +508,7 @@ impl TextElement {
         let mut styles = vec![];
 
         for line in text
-            .rows()
+            .iter_lines()
             .skip(visible_range.start)
             .take(visible_range.len())
         {
@@ -675,7 +675,7 @@ impl Element for TextElement {
             )
         } else if state.masked {
             (
-                Rope::from("*".repeat(text.chars_count())),
+                Rope::from("*".repeat(text.chars().count())),
                 cx.theme().foreground,
             )
         } else {
@@ -781,7 +781,7 @@ impl Element for TextElement {
         // NOTE: Here 50 lines about 150µs
         // let measure = crate::Measure::new("shape_text");
         let visible_text = display_text
-            .slice_rows(visible_range.start..visible_range.end)
+            .slice_lines(visible_range.start..visible_range.end)
             .to_string();
 
         let lines = window
@@ -793,7 +793,7 @@ impl Element for TextElement {
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
         if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
             let longest_row = state.text_wrapper.longest_row.row;
-            let longtest_line: SharedString = state.text.slice_row(longest_row).to_string().into();
+            let longtest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
                 .text_system()
                 .shape_line(

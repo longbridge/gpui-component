@@ -652,7 +652,7 @@ impl InputState {
         let mut new_offset = line_start_offset;
 
         if let Some((preferred_x, column)) = was_preferred_column {
-            let new_column = column.min(self.text.slice_row(new_row).len());
+            let new_column = column.min(self.text.slice_line(new_row).len());
             new_offset = line_start_offset + new_column;
 
             // If in visible range, prefer to use position to get column.

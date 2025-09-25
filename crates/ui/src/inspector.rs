@@ -348,7 +348,7 @@ fn rust_to_style(mut style: StyleRefinement, source: &str) -> (StyleRefinement, 
     let mut offset = 0;
     let mut method_offset = 0;
     let mut method = String::new();
-    for line in rope.rows() {
+    for line in rope.iter_lines() {
         if line.to_string().trim().starts_with("//") {
             offset += line.len() + 1;
             continue;
