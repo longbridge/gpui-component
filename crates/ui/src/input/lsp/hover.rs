@@ -28,6 +28,10 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<InputState>,
     ) {
+        if self.selecting {
+            return;
+        }
+
         let Some(provider) = self.lsp.hover_provider.clone() else {
             return;
         };
