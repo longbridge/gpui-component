@@ -1,7 +1,7 @@
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context,
-    Corner, DismissEvent, Entity, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point,
-    Render, Styled, Subscription, Window,
+    Corner, DismissEvent, Entity, Focusable, IntoElement, MouseDownEvent, ParentElement as _,
+    Pixels, Point, Render, Styled, Subscription, Window,
 };
 use rust_i18n::t;
 

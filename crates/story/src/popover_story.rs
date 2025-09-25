@@ -18,25 +18,25 @@ use serde::Deserialize;
 struct Info(usize);
 
 actions!(popover_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
-
+const CONTEXT: &str = "popover-story";
 pub fn init(cx: &mut App) {
     cx.bind_keys([
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-c", Copy, None),
+        KeyBinding::new("ctrl-c", Copy, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-v", Paste, None),
+        KeyBinding::new("cmd-v", Paste, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-v", Paste, None),
+        KeyBinding::new("ctrl-v", Paste, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-x", Cut, None),
+        KeyBinding::new("cmd-x", Cut, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-x", Cut, None),
+        KeyBinding::new("ctrl-x", Cut, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-shift-f", SearchAll, None),
+        KeyBinding::new("cmd-shift-f", SearchAll, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-shift-f", SearchAll, None),
+        KeyBinding::new("ctrl-shift-f", SearchAll, Some(CONTEXT)),
     ])
 }
 
@@ -159,6 +159,7 @@ impl Render for PopoverStory {
         let form = self.form.clone();
 
         v_flex()
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))

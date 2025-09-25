@@ -208,6 +208,8 @@ impl RenderOnce for Kbd {
             .rounded_sm()
             .line_height(relative(1.))
             .text_xs()
+            .whitespace_normal()
+            .flex_shrink_0()
             .refine_style(&self.style)
             .child(Self::format(&self.stroke))
             .into_any_element()

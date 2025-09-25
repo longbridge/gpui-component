@@ -746,8 +746,12 @@ impl PopupMenu {
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         let action = action?;
-        Kbd::binding_for_action(action.as_ref(), None, window)
-            .map(|this| this.p_0().border_0().bg(gpui::transparent_white()))
+        Kbd::binding_for_action(action.as_ref(), None, window).map(|this| {
+            this.p_0()
+                .flex_nowrap()
+                .border_0()
+                .bg(gpui::transparent_white())
+        })
     }
 
     fn render_icon(
