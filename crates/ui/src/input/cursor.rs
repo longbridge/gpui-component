@@ -52,8 +52,6 @@ impl RangeBounds<usize> for Selection {
     }
 }
 
-pub type Position = lsp_types::Position;
-
 #[cfg(test)]
 mod tests {
     use crate::input::Position;

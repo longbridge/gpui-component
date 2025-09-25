@@ -54,7 +54,7 @@ impl<'a> Iterator for RopeLines<'a> {
 impl std::iter::ExactSizeIterator for RopeLines<'_> {}
 impl std::iter::FusedIterator for RopeLines<'_> {}
 
-/// An extension trait for `Rope` to provide additional utility methods.
+/// An extension trait for [`Rope`] to provide additional utility methods.
 pub trait RopeExt {
     /// Start offset of the line at the given row (0-based) index.
     ///
