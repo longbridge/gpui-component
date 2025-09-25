@@ -2362,7 +2362,7 @@ impl EntityInputHandler for InputState {
             diagnostics.reset(&self.text)
         }
         self.text_wrapper
-            .update(&self.text, &range, &Rope::from(new_text), false, cx);
+            .update(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.selected_range = (new_offset..new_offset).into();
@@ -2415,7 +2415,7 @@ impl EntityInputHandler for InputState {
             diagnostics.reset(&self.text)
         }
         self.text_wrapper
-            .update(&self.text, &range, &Rope::from(new_text), false, cx);
+            .update(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         if new_text.is_empty() {
@@ -2521,7 +2521,6 @@ impl Focusable for InputState {
 
 impl Render for InputState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.text_wrapper.update_all(&self.text, false, cx);
         self.mode
             .update_highlighter(&(0..0), &self.text, "", false, cx);
 
