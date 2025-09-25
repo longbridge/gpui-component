@@ -221,16 +221,20 @@ pub trait RopeExt {
 
 impl RopeExt for Rope {
     fn slice_line(&self, row: usize) -> RopeSlice<'_> {
-        if row >= self.lines_len() {
+        let total_lines = self.lines_len();
+        if row >= total_lines {
             return self.slice(0..0);
         }
 
         let line = self.line(row, LineType::LF_CR);
-        if line.len() > 0 && line.chars().last() == Some('\n') {
-            line.slice(..line.len().saturating_sub(1))
-        } else {
-            line
+        if line.len() > 0 {
+            let line_end = line.len() - 1;
+            if line.is_char_boundary(line_end) && line.char(line_end) == '\n' {
+                return line.slice(..line_end);
+            }
         }
+
+        line
     }
 
     fn slice_lines(&self, rows_range: Range<usize>) -> RopeSlice<'_> {
