@@ -4,7 +4,7 @@ use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, Half, HighlightStyle, Hitbox, IntoElement, LayoutId, MouseButton,
     MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, TextAlign, TextRun,
-    UnderlineStyle, Window,
+    TextStyle, UnderlineStyle, Window,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -483,6 +483,45 @@ impl TextElement {
         (visible_range, visible_top)
     }
 
+    /// Return (line_number_width, line_number_len)
+    fn layout_line_numbers(
+        state: &InputState,
+        text: &Rope,
+        font_size: Pixels,
+        style: &TextStyle,
+        window: &mut Window,
+    ) -> (Pixels, usize) {
+        let total_lines = text.lines_len();
+        let line_number_len = match total_lines {
+            0..=9999 => 5,
+            10000..=99999 => 6,
+            100000..=999999 => 7,
+            _ => 8,
+        };
+
+        let line_number_width = if state.mode.line_number() {
+            let empty_line_number = window.text_system().shape_line(
+                "+".repeat(line_number_len).into(),
+                font_size,
+                &[TextRun {
+                    len: line_number_len,
+                    font: style.font(),
+                    color: gpui::black(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+
+            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
+        } else {
+            px(0.)
+        };
+
+        (line_number_width, line_number_len)
+    }
+
     /// First usize is the offset of skipped.
     fn highlight_lines(
         &mut self,
@@ -685,24 +724,8 @@ impl Element for TextElement {
         let text_style = window.text_style();
 
         // Calculate the width of the line numbers
-        let empty_line_number = window.text_system().shape_line(
-            "++++++".into(),
-            font_size,
-            &[TextRun {
-                len: 6,
-                font: style.font(),
-                color: gpui::black(),
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }],
-            None,
-        );
-        let line_number_width = if state.mode.line_number() {
-            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
-        } else {
-            px(0.)
-        };
+        let (line_number_width, line_number_len) =
+            Self::layout_line_numbers(&state, &text, font_size, &text_style, window);
 
         let run = TextRun {
             len: display_text.len(),
@@ -902,7 +925,7 @@ impl Element for TextElement {
             // build line numbers
             for (ix, line) in last_layout.lines.iter().enumerate() {
                 let ix = last_layout.visible_range.start + ix;
-                let line_no_text = format!("{:>6}", ix + 1);
+                let line_no = format!("{:>width$}", ix + 1, width = line_number_len).into();
 
                 let runs = if current_row == Some(ix) {
                     &current_line_runs
@@ -911,12 +934,11 @@ impl Element for TextElement {
                 };
 
                 let mut sub_lines: SmallVec<[ShapedLine; 1]> = SmallVec::new();
-                sub_lines.push(window.text_system().shape_line(
-                    line_no_text.into(),
-                    font_size,
-                    &runs,
-                    None,
-                ));
+                sub_lines.push(
+                    window
+                        .text_system()
+                        .shape_line(line_no, font_size, &runs, None),
+                );
                 for _ in 0..line.wrap_boundaries.len() {
                     sub_lines.push(ShapedLine::default());
                 }
