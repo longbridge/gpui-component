@@ -1,18 +1,20 @@
-use std::{rc::Rc, sync::Arc, time::Instant};
+use std::{rc::Rc, time::Instant};
 
 use gpui::{
-    div, px, rems, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
+    div, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
     GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point, Rems, RenderOnce,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point, RenderOnce,
     SharedString, Size, Window,
 };
 
 use super::format::{html::HtmlElement, markdown::MarkdownElement};
 use crate::{
     global_state::GlobalState,
-    highlighter::HighlightTheme,
     input::{self},
-    text::node::{self, NodeContext},
+    text::{
+        node::{self, NodeContext},
+        TextViewStyle,
+    },
 };
 
 const CONTEXT: &'static str = "TextView";
@@ -267,59 +269,6 @@ impl RenderOnce for Text {
             Self::String(s) => s.into_any_element(),
             Self::TextView(e) => e.into_any_element(),
         }
-    }
-}
-
-/// TextViewStyle used to customize the style for [`TextView`].
-#[derive(Clone)]
-pub struct TextViewStyle {
-    /// Gap of each paragraphs, default is 1 rem.
-    pub paragraph_gap: Rems,
-    /// Base font size for headings, default is 14px.
-    pub heading_base_font_size: Pixels,
-    /// Function to calculate heading font size based on heading level (1-6).
-    ///
-    /// The first parameter is the heading level (1-6), the second parameter is the base font size.
-    /// The second parameter is the base font size.
-    pub heading_font_size: Option<Rc<dyn Fn(u8, Pixels) -> Pixels + 'static>>,
-    /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
-    pub highlight_theme: Arc<HighlightTheme>,
-    pub is_dark: bool,
-}
-
-impl PartialEq for TextViewStyle {
-    fn eq(&self, other: &Self) -> bool {
-        self.paragraph_gap == other.paragraph_gap
-            && self.heading_base_font_size == other.heading_base_font_size
-            && self.highlight_theme == other.highlight_theme
-    }
-}
-
-impl Default for TextViewStyle {
-    fn default() -> Self {
-        Self {
-            paragraph_gap: rems(1.),
-            heading_base_font_size: px(14.),
-            heading_font_size: None,
-            highlight_theme: HighlightTheme::default_light().clone(),
-            is_dark: false,
-        }
-    }
-}
-
-impl TextViewStyle {
-    /// Set paragraph gap, default is 1 rem.
-    pub fn paragraph_gap(mut self, gap: Rems) -> Self {
-        self.paragraph_gap = gap;
-        self
-    }
-
-    pub fn heading_font_size<F>(mut self, f: F) -> Self
-    where
-        F: Fn(u8, Pixels) -> Pixels + 'static,
-    {
-        self.heading_font_size = Some(Rc::new(f));
-        self
     }
 }
 

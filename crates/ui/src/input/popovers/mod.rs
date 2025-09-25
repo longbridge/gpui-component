@@ -12,12 +12,12 @@ pub(crate) use hover_popover::*;
 
 use gpui::{
     div, rems, App, Div, ElementId, Entity, InteractiveElement as _, IntoElement, SharedString,
-    Stateful, Styled as _, Window,
+    Stateful, StyleRefinement, Styled as _, Window,
 };
 
 use crate::{
     text::{TextView, TextViewStyle},
-    StyledExt as _,
+    ActiveTheme, StyledExt as _,
 };
 
 pub(crate) enum ContextMenu {
@@ -58,7 +58,13 @@ pub(super) fn render_markdown(
                     1..=3 => rem_size * 1,
                     4 => rem_size * 0.9,
                     _ => rem_size * 0.8,
-                }),
+                })
+                .code_block(
+                    StyleRefinement::default()
+                        .bg(cx.theme().transparent)
+                        .p_0()
+                        .text_xs(),
+                ),
         )
         .selectable()
 }

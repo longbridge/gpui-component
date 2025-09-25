@@ -3,7 +3,7 @@ use std::{collections::HashMap, ops::Range};
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    IntoElement, Length, ObjectFit, ParentElement, Rems, SharedString, SharedUri,
+    IntoElement, Length, ObjectFit, ParentElement, SharedString, SharedUri,
     StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
@@ -14,7 +14,7 @@ use crate::{
     highlighter::SyntaxHighlighter,
     text::inline::{Inline, InlineState},
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Icon, IconName,
+    v_flex, ActiveTheme as _, Icon, IconName, StyledExt,
 };
 
 use super::{utils::list_item_prefix, TextViewStyle};
@@ -318,16 +318,19 @@ impl CodeBlock {
         text
     }
 
-    fn render(&self, mb: Rems, _: &mut Window, cx: &mut App) -> AnyElement {
+    fn render(&self, node_cx: &NodeContext, _: &mut Window, cx: &mut App) -> AnyElement {
+        let style = &node_cx.style;
+
         div()
             .id("codeblock")
-            .mb(mb)
+            .mb(style.paragraph_gap)
             .p_3()
             .rounded(cx.theme().radius)
             .bg(cx.theme().accent)
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()
+            .refine_style(&style.code_block)
             .child(Inline::new(
                 "code",
                 self.state.clone(),
@@ -927,7 +930,7 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => code_block.render(mb, window, cx),
+            Node::CodeBlock(code_block) => code_block.render(node_cx, window, cx),
             Node::Table { .. } => Self::render_table(&self, node_cx, window, cx).into_any_element(),
             Node::Divider => div()
                 .id("divider")
