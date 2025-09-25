@@ -452,7 +452,7 @@ impl InputState {
             language,
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
-            diagnostics: DiagnosticSet::default(),
+            diagnostics: DiagnosticSet::new(&Rope::new()),
         };
         self.searchable = true;
         self

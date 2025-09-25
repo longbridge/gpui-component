@@ -211,8 +211,8 @@ impl sum_tree::Item for DiagnosticEntry {
 }
 
 impl sum_tree::Summary for DiagnosticSummary {
-    type Context = ();
-    fn zero(_: &Self::Context) -> Self {
+    type Context<'a> = &'a ();
+    fn zero(_: Self::Context<'_>) -> Self {
         DiagnosticSummary {
             count: 0,
             start: usize::MIN,
@@ -220,7 +220,7 @@ impl sum_tree::Summary for DiagnosticSummary {
         }
     }
 
-    fn add_summary(&mut self, other: &Self, _: &Self::Context) {
+    fn add_summary(&mut self, other: &Self, _: Self::Context<'_>) {
         self.start = other.start;
         self.end = other.end;
         self.count += other.count;
@@ -240,7 +240,7 @@ impl SeekTarget<'_, DiagnosticSummary, DiagnosticSummary> for usize {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct DiagnosticSet {
     text: Rope,
     diagnostics: SumTree<DiagnosticEntry>,
