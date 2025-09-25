@@ -58,7 +58,7 @@ pub struct Diagnostic {
 impl From<lsp_types::Diagnostic> for Diagnostic {
     fn from(value: lsp_types::Diagnostic) -> Self {
         Self {
-            range: Position::from(value.range.start)..Position::from(value.range.end),
+            range: value.range.start..value.range.end,
             severity: value
                 .severity
                 .map(Into::into)
