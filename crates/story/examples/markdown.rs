@@ -1,10 +1,9 @@
 use gpui::*;
 use gpui_component::{
-    highlighter::{HighlightTheme, Language},
+    highlighter::Language,
     input::{InputEvent, InputState, TabSize, TextInput},
     resizable::{h_resizable, resizable_panel, ResizableState},
-    text::{TextView, TextViewStyle},
-    ActiveTheme as _,
+    text::TextView,
 };
 use story::Assets;
 
@@ -48,14 +47,6 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = if cx.theme().mode.is_dark() {
-            HighlightTheme::default_dark()
-        } else {
-            HighlightTheme::default_light()
-        };
-
-        let is_dark = cx.theme().mode.is_dark();
-
         h_resizable("container", self.resizable_state.clone())
             .child(
                 resizable_panel().child(
@@ -68,7 +59,7 @@ impl Render for Example {
                             TextInput::new(&self.input_state)
                                 .h_full()
                                 .p_0()
-                                .appearance(false)
+                                .border_0()
                                 .focus_bordered(false),
                         ),
                 ),
@@ -87,12 +78,7 @@ impl Render for Example {
                                 window,
                                 cx,
                             )
-                            .selectable()
-                            .style(TextViewStyle {
-                                highlight_theme: theme.clone(),
-                                is_dark,
-                                ..Default::default()
-                            }),
+                            .selectable(),
                         ),
                 ),
             )

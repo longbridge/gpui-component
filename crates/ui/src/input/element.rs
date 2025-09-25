@@ -904,9 +904,8 @@ impl Element for TextElement {
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
             let mut line_numbers = vec![];
-            let run_len = 6;
             let other_line_runs = vec![TextRun {
-                len: run_len,
+                len: line_number_len,
                 font: style.font(),
                 color: cx.theme().muted_foreground,
                 background_color: None,
@@ -914,7 +913,7 @@ impl Element for TextElement {
                 strikethrough: None,
             }];
             let current_line_runs = vec![TextRun {
-                len: run_len,
+                len: line_number_len,
                 font: style.font(),
                 color: cx.theme().foreground,
                 background_color: None,
