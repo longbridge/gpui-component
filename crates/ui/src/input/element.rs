@@ -670,16 +670,16 @@ impl Element for TextElement {
 
         let (display_text, text_color) = if is_empty {
             (
-                Rope::from(placeholder.as_str()),
+                &Rope::from(placeholder.as_str()),
                 cx.theme().muted_foreground,
             )
         } else if state.masked {
             (
-                Rope::from("*".repeat(text.chars().count())),
+                &Rope::from("*".repeat(text.chars().count())),
                 cx.theme().foreground,
             )
         } else {
-            (text.clone(), cx.theme().foreground)
+            (&text, cx.theme().foreground)
         };
 
         let text_style = window.text_style();
