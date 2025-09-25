@@ -11,7 +11,7 @@ pub(crate) use diagnostic_popover::*;
 pub(crate) use hover_popover::*;
 
 use gpui::{
-    div, rems, App, Div, ElementId, Entity, InteractiveElement as _, IntoElement, SharedString,
+    div, px, rems, App, Div, ElementId, Entity, InteractiveElement as _, IntoElement, SharedString,
     Stateful, StyleRefinement, Styled as _, Window,
 };
 
@@ -63,7 +63,7 @@ pub(super) fn render_markdown(
                     StyleRefinement::default()
                         .bg(cx.theme().transparent)
                         .p_0()
-                        .text_xs(),
+                        .text_size(px(11.)),
                 ),
         )
         .selectable()
