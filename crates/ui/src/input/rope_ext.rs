@@ -367,6 +367,8 @@ impl RopeExt for Rope {
     }
 
     fn replace(&mut self, range: Range<usize>, new_text: &str) {
+        let range =
+            self.clip_offset(range.start, Bias::Left)..self.clip_offset(range.end, Bias::Right);
         self.remove(range.clone());
         self.insert(range.start, new_text);
     }
