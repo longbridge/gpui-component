@@ -1,7 +1,8 @@
 use std::ops::Range;
 
-use gpui::{App, Font, LineFragment, Pixels};
+use gpui::{point, px, size, App, Font, LineFragment, Pixels, Point, ShapedLine, Size, Window};
 use ropey::Rope;
+use smallvec::SmallVec;
 
 use crate::input::RopeExt;
 
@@ -15,7 +16,7 @@ pub(super) struct LineItem {
     /// FIXME: Here in somecase, the `line_wrapper.wrap_line` has returned different
     /// like the `window.text_system().shape_text`. So, this value may not equal
     /// the actual rendered lines.
-    wrapped_lines: Vec<Range<usize>>,
+    pub(super) wrapped_lines: Vec<Range<usize>>,
 }
 
 impl LineItem {
@@ -234,6 +235,148 @@ impl TextWrapper {
     /// If the `text` is the same as the current text, do nothing.
     fn update_all(&mut self, text: &Rope, cx: &mut App) {
         self.update(text, &(0..text.len()), &text, cx);
+    }
+}
+
+pub(crate) struct LineLayout {
+    /// Total bytes length of this line.
+    len: usize,
+    /// The start offset of this line in the whole text.
+    pub(crate) start_offset: usize,
+    /// The soft wrapped lines of this line (Include the first line).
+    pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
+    pub(crate) longest_width: Pixels,
+}
+
+impl LineLayout {
+    pub(crate) fn new(start_offset: usize) -> Self {
+        Self {
+            start_offset,
+            len: 0,
+            longest_width: px(0.),
+            wrapped_lines: SmallVec::new(),
+        }
+    }
+
+    pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
+        self.len = wrapped_lines.iter().map(|l| l.text.len()).sum();
+        let width = self
+            .wrapped_lines
+            .iter()
+            .map(|l| l.width)
+            .max()
+            .unwrap_or_default();
+        self.longest_width = width;
+        self.wrapped_lines = wrapped_lines;
+    }
+
+    #[inline]
+    pub(super) fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Get the position (x, y) for the given index in this line layout.
+    ///
+    /// - The `offset` is a local byte index in this line layout.
+    /// - The return value is relative to the top-left corner of this line layout, start from (0, 0)
+    pub(crate) fn position_for_index(
+        &self,
+        offset: usize,
+        line_height: Pixels,
+    ) -> Option<Point<Pixels>> {
+        let mut acc_len = 0;
+        let mut offset_y = px(0.);
+        for line in self.wrapped_lines.iter() {
+            let range = acc_len..=line.len();
+            if range.contains(&offset) {
+                let x = line.x_for_index(offset.saturating_sub(acc_len));
+                return Some(point(x, offset_y));
+            }
+            acc_len += line.text.len();
+            offset_y += line_height;
+        }
+
+        None
+    }
+
+    pub(super) fn closest_index_for_x(&self, x: Pixels) -> usize {
+        let mut acc_len = 0;
+        for line in self.wrapped_lines.iter() {
+            if x <= line.width {
+                let ix = line.closest_index_for_x(x);
+                return acc_len + ix;
+            }
+            acc_len += line.text.len();
+        }
+
+        acc_len
+    }
+
+    /// Get the index for the given position (x, y) in this line layout.
+    ///
+    /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
+    /// The return value is a local byte index in this line layout, start from 0.
+    pub(super) fn closest_index_for_position(
+        &self,
+        pos: Point<Pixels>,
+        line_height: Pixels,
+    ) -> Option<usize> {
+        let mut offset = 0;
+        let mut line_top = px(0.);
+        for line in self.wrapped_lines.iter() {
+            let line_bottom = line_top + line_height;
+            if pos.y >= line_top && pos.y < line_bottom {
+                let ix = line.closest_index_for_x(pos.x);
+                return Some(offset + ix);
+            }
+
+            offset += line.text.len();
+            line_top = line_bottom;
+        }
+
+        None
+    }
+
+    pub(super) fn index_for_position(
+        &self,
+        pos: Point<Pixels>,
+        line_height: Pixels,
+    ) -> Option<usize> {
+        let mut offset = 0;
+        let mut line_top = px(0.);
+        for line in self.wrapped_lines.iter() {
+            let line_bottom = line_top + line_height;
+            if pos.y >= line_top && pos.y < line_bottom {
+                let ix = line.index_for_x(pos.x)?;
+                return Some(offset + ix);
+            }
+
+            offset += line.text.len();
+            line_top = line_bottom;
+        }
+
+        None
+    }
+
+    pub(super) fn size(&self, line_height: Pixels) -> Size<Pixels> {
+        size(self.longest_width, self.wrapped_lines.len() * line_height)
+    }
+
+    pub(super) fn paint(
+        &self,
+        pos: Point<Pixels>,
+        line_height: Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        for (ix, line) in self.wrapped_lines.iter().enumerate() {
+            _ = line.paint(
+                pos + point(px(0.), ix * line_height),
+                line_height,
+                window,
+                cx,
+            );
+        }
     }
 }
 
