@@ -1,4 +1,4 @@
-use std::{ops::Range, rc::Rc};
+use std::{collections::VecDeque, ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
@@ -530,7 +530,6 @@ impl TextElement {
         text: &Rope,
         text_wrapper: &TextWrapper,
         visible_range: &Range<usize>,
-        visible_byte_range: Range<usize>,
         font_size: Pixels,
         runs: &[TextRun],
         window: &mut Window,
@@ -540,29 +539,41 @@ impl TextElement {
             .to_string();
 
         let mut lines = vec![];
-        let mut start_offset = visible_byte_range.start;
+        let mut offset = 0;
+        let mut run_offset = 0;
+        let mut runs = VecDeque::from(runs.to_vec());
         for (ix, line) in visible_text.split("\n").enumerate() {
             let line_item = text_wrapper
                 .lines
                 .get(visible_range.start + ix)
                 .expect("line should exists in text_wrapper");
-            let mut line_layout = LineLayout::new(start_offset);
+            let mut line_layout = LineLayout::new();
             let mut wrapped_lines = SmallVec::with_capacity(1);
-            for boundary in &line_item.wrapped_lines {
-                let line: SharedString = line[boundary.clone()].to_string().into();
+            for range in &line_item.wrapped_lines {
+                let mut line_runs = vec![];
+                while let Some(run) = runs.pop_front() {
+                    run_offset += run.len;
+                    line_runs.push(run);
+                    if run_offset > offset + range.len() {
+                        break;
+                    }
+                }
+                let sub_line: SharedString = line[range.clone()].to_string().into();
                 let shaped_line =
                     window
                         .text_system()
-                        .shape_line(line.into(), font_size, runs, None);
+                        .shape_line(sub_line.into(), font_size, &line_runs, None);
 
                 wrapped_lines.push(shaped_line);
+
+                offset += range.len();
             }
 
             line_layout.set_wrapped_lines(wrapped_lines);
             lines.push(line_layout);
 
-            // +1 for \n
-            start_offset += line.len() + 1;
+            // +1 for the `\n`
+            offset += 1;
         }
 
         lines
@@ -853,7 +864,6 @@ impl Element for TextElement {
             &text,
             &state.text_wrapper,
             &visible_range,
-            visible_start_offset..visible_end_offset,
             font_size,
             &runs,
             window,
@@ -985,7 +995,7 @@ impl Element for TextElement {
                         .text_system()
                         .shape_line(line_no, font_size, &runs, None),
                 );
-                for _ in 0..line.wrapped_lines.len() {
+                for _ in 0..line.wrapped_lines.len().saturating_sub(1) {
                     sub_lines.push(ShapedLine::default());
                 }
                 line_numbers.push(sub_lines);

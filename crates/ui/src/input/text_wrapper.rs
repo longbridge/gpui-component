@@ -241,17 +241,14 @@ impl TextWrapper {
 pub(crate) struct LineLayout {
     /// Total bytes length of this line.
     len: usize,
-    /// The start offset of this line in the whole text.
-    pub(crate) start_offset: usize,
     /// The soft wrapped lines of this line (Include the first line).
     pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
     pub(crate) longest_width: Pixels,
 }
 
 impl LineLayout {
-    pub(crate) fn new(start_offset: usize) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            start_offset,
             len: 0,
             longest_width: px(0.),
             wrapped_lines: SmallVec::new(),
@@ -286,8 +283,9 @@ impl LineLayout {
     ) -> Option<Point<Pixels>> {
         let mut acc_len = 0;
         let mut offset_y = px(0.);
+
         for line in self.wrapped_lines.iter() {
-            let range = acc_len..=line.len();
+            let range = acc_len..=(acc_len + line.len());
             if range.contains(&offset) {
                 let x = line.x_for_index(offset.saturating_sub(acc_len));
                 return Some(point(x, offset_y));
