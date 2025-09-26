@@ -9,11 +9,9 @@ use gpui::{
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
-    WrappedLine,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
-use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
@@ -33,6 +31,7 @@ use crate::input::{
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
+    text_wrapper::LineLayout,
     HoverDefinition, Lsp, Position,
 };
 use crate::input::{RopeExt as _, Selection};
@@ -239,7 +238,7 @@ pub(super) struct LastLayout {
     /// The range of byte offset of the visible lines.
     pub(super) visible_range_offset: Range<usize>,
     /// The last layout lines (Only have visible lines).
-    pub(super) lines: Rc<SmallVec<[WrappedLine; 1]>>,
+    pub(super) lines: Rc<Vec<LineLayout>>,
     /// The line_height of text layout, this will change will InputElement painted.
     pub(super) line_height: Pixels,
     /// The wrap width of text layout, this will change will InputElement painted.
@@ -659,7 +658,7 @@ impl InputState {
             if new_row >= last_layout.visible_range.start {
                 let visible_row = new_row.saturating_sub(last_layout.visible_range.start);
                 if let Some(line) = last_layout.lines.get(visible_row) {
-                    if let Ok(x) = line.closest_index_for_position(
+                    if let Some(x) = line.closest_index_for_position(
                         Point {
                             x: preferred_x,
                             y: px(0.),
@@ -1868,31 +1867,19 @@ impl InputState {
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                return rendered_line.unwrapped_layout.closest_index_for_x(pos.x);
+                return rendered_line.closest_index_for_x(pos.x);
             }
 
-            let index_result = rendered_line.closest_index_for_position(pos, line_height);
-            if let Ok(v) = index_result {
+            if let Some(v) = rendered_line.closest_index_for_position(pos, line_height) {
                 index += v;
                 break;
-            } else if let Ok(_) =
+            } else if let Some(v) =
                 rendered_line.index_for_position(point(px(0.), pos.y), line_height)
             {
                 // Click in the this line but not in the text, move cursor to the end of the line.
                 // The fallback index is saved in Err from `index_for_position` method.
-                index += index_result.unwrap_err();
+                index += v;
                 break;
-            } else if rendered_line.text.trim_end_matches(|c| c == '\r').len() == 0 {
-                // empty line on Windows is `\r`, other is ''
-                let line_bounds = Bounds {
-                    origin: line_origin,
-                    size: gpui::size(bounds.size.width, line_height),
-                };
-                let pos = inner_position;
-                index += rendered_line.len();
-                if line_bounds.contains(&pos) {
-                    break;
-                }
             } else {
                 index += rendered_line.len();
             }
@@ -2504,7 +2491,7 @@ impl EntityInputHandler for InputState {
         let offset = last_layout.visible_range_offset.start;
 
         for line in last_layout.lines.iter() {
-            if let Ok(utf8_index) = line.index_for_position(line_point, line_height) {
+            if let Some(utf8_index) = line.index_for_position(line_point, line_height) {
                 return Some(self.offset_to_utf16(offset + utf8_index));
             }
         }

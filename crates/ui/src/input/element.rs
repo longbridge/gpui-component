@@ -3,14 +3,18 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, Half, HighlightStyle, Hitbox, IntoElement, LayoutId, MouseButton,
-    MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, TextAlign, TextRun,
-    TextStyle, UnderlineStyle, Window,
+    MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, TextRun, TextStyle,
+    UnderlineStyle, Window,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    input::{blink_cursor::CURSOR_WIDTH, RopeExt as _},
+    input::{
+        blink_cursor::CURSOR_WIDTH,
+        text_wrapper::{LineLayout, TextWrapper},
+        RopeExt as _,
+    },
     ActiveTheme as _, Colorize, Root,
 };
 
@@ -522,6 +526,48 @@ impl TextElement {
         (line_number_width, line_number_len)
     }
 
+    fn layout_lines(
+        text: &Rope,
+        text_wrapper: &TextWrapper,
+        visible_range: &Range<usize>,
+        visible_byte_range: Range<usize>,
+        font_size: Pixels,
+        runs: &[TextRun],
+        window: &mut Window,
+    ) -> Vec<LineLayout> {
+        let visible_text = text
+            .slice_lines(visible_range.start..visible_range.end)
+            .to_string();
+
+        let mut lines = vec![];
+        let mut start_offset = visible_byte_range.start;
+        for (ix, line) in visible_text.split("\n").enumerate() {
+            let line_item = text_wrapper
+                .lines
+                .get(visible_range.start + ix)
+                .expect("line should exists in text_wrapper");
+            let mut line_layout = LineLayout::new(start_offset);
+            let mut wrapped_lines = SmallVec::with_capacity(1);
+            for boundary in &line_item.wrapped_lines {
+                let line: SharedString = line[boundary.clone()].to_string().into();
+                let shaped_line =
+                    window
+                        .text_system()
+                        .shape_line(line.into(), font_size, runs, None);
+
+                wrapped_lines.push(shaped_line);
+            }
+
+            line_layout.set_wrapped_lines(wrapped_lines);
+            lines.push(line_layout);
+
+            // +1 for \n
+            start_offset += line.len() + 1;
+        }
+
+        lines
+    }
+
     /// First usize is the offset of skipped.
     fn highlight_lines(
         &mut self,
@@ -803,14 +849,15 @@ impl Element for TextElement {
 
         // NOTE: Here 50 lines about 150µs
         // let measure = crate::Measure::new("shape_text");
-        let visible_text = display_text
-            .slice_lines(visible_range.start..visible_range.end)
-            .to_string();
-
-        let lines = window
-            .text_system()
-            .shape_text(visible_text.into(), font_size, &runs, wrap_width, None)
-            .expect("failed to shape text");
+        let lines = Self::layout_lines(
+            &text,
+            &state.text_wrapper,
+            &visible_range,
+            visible_start_offset..visible_end_offset,
+            font_size,
+            &runs,
+            window,
+        );
         // measure.end();
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
@@ -938,7 +985,7 @@ impl Element for TextElement {
                         .text_system()
                         .shape_line(line_no, font_size, &runs, None),
                 );
-                for _ in 0..line.wrap_boundaries.len() {
+                for _ in 0..line.wrapped_lines.len() {
                     sub_lines.push(ShapedLine::default());
                 }
                 line_numbers.push(sub_lines);
@@ -1082,7 +1129,7 @@ impl Element for TextElement {
                 origin.x + prepaint.last_layout.line_number_width,
                 origin.y + offset_y,
             );
-            _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+            _ = line.paint(p, line_height, window, cx);
             offset_y += line.size(line_height).height;
         }
 
