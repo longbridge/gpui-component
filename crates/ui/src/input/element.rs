@@ -526,6 +526,55 @@ impl TextElement {
         (line_number_width, line_number_len)
     }
 
+    /// Get the runs for the given range.
+    ///
+    /// The range is the byte range of the wrapped line.
+    fn runs_for_range(runs: &[TextRun], line_offset: usize, range: &Range<usize>) -> Vec<TextRun> {
+        let mut result = vec![];
+        let range = line_offset + range.start..line_offset + range.end;
+        let mut cursor = 0;
+        for run in runs {
+            let run_end = cursor + run.len;
+            if range.start >= run_end {
+                cursor = run_end;
+                continue;
+            }
+
+            if range.start > cursor {
+                let run_len = range.start - cursor;
+                result.push(TextRun {
+                    len: run_len,
+                    ..run.clone()
+                });
+                cursor = range.start;
+            }
+            if range.end > cursor {
+                let run_len = range.end - cursor;
+                result.push(TextRun {
+                    len: run_len,
+                    ..run.clone()
+                });
+                cursor = range.end;
+            }
+
+            if cursor < run_end {
+                let run_len = run_end - cursor;
+                result.push(TextRun {
+                    len: run_len,
+                    ..run.clone()
+                });
+            }
+            cursor = run_end;
+            if range.end >= run_end {
+                break;
+            }
+        }
+
+        dbg!(&result);
+
+        result
+    }
+
     fn layout_lines(
         text: &Rope,
         text_wrapper: &TextWrapper,
@@ -540,8 +589,6 @@ impl TextElement {
 
         let mut lines = vec![];
         let mut offset = 0;
-        let mut run_offset = 0;
-        let mut runs = VecDeque::from(runs.to_vec());
         for (ix, line) in visible_text.split("\n").enumerate() {
             let line_item = text_wrapper
                 .lines
@@ -550,14 +597,8 @@ impl TextElement {
             let mut line_layout = LineLayout::new();
             let mut wrapped_lines = SmallVec::with_capacity(1);
             for range in &line_item.wrapped_lines {
-                let mut line_runs = vec![];
-                while let Some(run) = runs.pop_front() {
-                    run_offset += run.len;
-                    line_runs.push(run);
-                    if run_offset > offset + range.len() {
-                        break;
-                    }
-                }
+                let line_runs = Self::runs_for_range(runs, offset, &range);
+
                 let sub_line: SharedString = line[range.clone()].to_string().into();
                 let shaped_line =
                     window
