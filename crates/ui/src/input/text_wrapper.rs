@@ -441,6 +441,17 @@ mod tests {
             "Hello, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
         assert_eq!(wrapper.lines.len(), 4);
+        assert_eq!(wrapper.lines.len(), 4);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["Hello, 世界!"],
+                &["This is second line."],
+                &["This is third line."],
+                &["这里是第 4 行。New text"],
+            ],
+        );
 
         // Replace first line `Hello` to `AAA`
         let range = 0..5;
@@ -452,6 +463,16 @@ mod tests {
             "AAA, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
         assert_eq!(wrapper.lines.len(), 4);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["AAA, 世界!"],
+                &["This is second line."],
+                &["This is third line."],
+                &["这里是第 4 行。New text"],
+            ],
+        );
 
         // Remove the second line
         let start_offset = text.line_start_offset(1);
@@ -464,6 +485,15 @@ mod tests {
             "AAA, 世界!\nThis is third line.\n这里是第 4 行。New text"
         );
         assert_eq!(wrapper.lines.len(), 3);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["AAA, 世界!"],
+                &["This is third line."],
+                &["这里是第 4 行。New text"],
+            ],
+        );
 
         // Replace the first 2 lines to "This is a new line."
         let range = text.line_start_offset(0)..text.line_end_offset(1) + 1;
@@ -475,6 +505,15 @@ mod tests {
             "This is a new line.\nThis is new line 2.\n这里是第 4 行。New text"
         );
         assert_eq!(wrapper.lines.len(), 3);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["This is a new line."],
+                &["This is new line 2."],
+                &["这里是第 4 行。New text"],
+            ],
+        );
 
         // Add a new line at the end
         let range = text.len()..text.len();
@@ -486,6 +525,16 @@ mod tests {
             "This is a new line.\nThis is new line 2.\n这里是第 4 行。New text\nThis is a new line at the end."
         );
         assert_eq!(wrapper.lines.len(), 4);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["This is a new line."],
+                &["This is new line 2."],
+                &["这里是第 4 行。New text"],
+                &["This is a new line at the end."],
+            ],
+        );
 
         // Add a new line at the beginning
         let range = 0..0;

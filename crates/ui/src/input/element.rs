@@ -545,6 +545,9 @@ impl TextElement {
                 .lines
                 .get(visible_range.start + ix)
                 .expect("line should exists in text_wrapper");
+            if line_item.len() != line.len() {
+                dbg!(&line, &line_item.wrapped_lines);
+            }
             debug_assert_eq!(line_item.len(), line.len());
 
             let mut line_layout = LineLayout::new();
@@ -849,8 +852,6 @@ impl Element for TextElement {
             None
         };
 
-        // NOTE: Here 50 lines about 150µs
-        // let measure = crate::Measure::new("shape_text");
         let lines = Self::layout_lines(
             &text,
             &state.text_wrapper,
@@ -859,7 +860,6 @@ impl Element for TextElement {
             &runs,
             window,
         );
-        // measure.end();
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
         if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
