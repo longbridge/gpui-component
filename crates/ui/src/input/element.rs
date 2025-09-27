@@ -565,7 +565,7 @@ impl TextElement {
             lines.push(line_layout);
 
             // +1 for the `\n`
-            offset += line_item.len() + 1;
+            offset += line.len() + 1;
         }
 
         lines
