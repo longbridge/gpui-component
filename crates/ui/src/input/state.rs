@@ -1543,7 +1543,7 @@ impl InputState {
         }
 
         self.selecting = true;
-        let offset = self.index_for_mouse_position(event.position, window, cx);
+        let offset = self.index_for_mouse_position(event.position);
 
         if self.handle_click_hover_definition(event, offset, window, cx) {
             return;
@@ -1585,7 +1585,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         // Show diagnostic popover on mouse move
-        let offset = self.index_for_mouse_position(event.position, window, cx);
+        let offset = self.index_for_mouse_position(event.position);
         self.handle_mouse_move(offset, event, window, cx);
 
         if self.mode.is_code_editor() {
@@ -1813,12 +1813,7 @@ impl InputState {
         }
     }
 
-    pub(crate) fn index_for_mouse_position(
-        &self,
-        position: Point<Pixels>,
-        _window: &Window,
-        _cx: &App,
-    ) -> usize {
+    pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
         // If the text is empty, always return 0
         if self.text.len() == 0 {
             return 0;
@@ -2113,7 +2108,7 @@ impl InputState {
             return;
         }
 
-        let offset = self.index_for_mouse_position(event.position, window, cx);
+        let offset = self.index_for_mouse_position(event.position);
         self.select_to(offset, cx);
     }
 
