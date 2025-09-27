@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Range, rc::Rc};
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
@@ -526,55 +526,6 @@ impl TextElement {
         (line_number_width, line_number_len)
     }
 
-    /// Get the runs for the given range.
-    ///
-    /// The range is the byte range of the wrapped line.
-    fn runs_for_range(runs: &[TextRun], line_offset: usize, range: &Range<usize>) -> Vec<TextRun> {
-        let mut result = vec![];
-        let range = line_offset + range.start..line_offset + range.end;
-        let mut cursor = 0;
-        for run in runs {
-            let run_end = cursor + run.len;
-            if range.start >= run_end {
-                cursor = run_end;
-                continue;
-            }
-
-            if range.start > cursor {
-                let run_len = range.start - cursor;
-                result.push(TextRun {
-                    len: run_len,
-                    ..run.clone()
-                });
-                cursor = range.start;
-            }
-            if range.end > cursor {
-                let run_len = range.end - cursor;
-                result.push(TextRun {
-                    len: run_len,
-                    ..run.clone()
-                });
-                cursor = range.end;
-            }
-
-            if cursor < run_end {
-                let run_len = run_end - cursor;
-                result.push(TextRun {
-                    len: run_len,
-                    ..run.clone()
-                });
-            }
-            cursor = run_end;
-            if range.end >= run_end {
-                break;
-            }
-        }
-
-        dbg!(&result);
-
-        result
-    }
-
     fn layout_lines(
         text: &Rope,
         text_wrapper: &TextWrapper,
@@ -596,8 +547,9 @@ impl TextElement {
                 .expect("line should exists in text_wrapper");
             let mut line_layout = LineLayout::new();
             let mut wrapped_lines = SmallVec::with_capacity(1);
+
             for range in &line_item.wrapped_lines {
-                let line_runs = Self::runs_for_range(runs, offset, &range);
+                let line_runs = runs_for_range(runs, offset, &range);
 
                 let sub_line: SharedString = line[range.clone()].to_string().into();
                 let shaped_line =
@@ -1258,5 +1210,105 @@ impl Element for TextElement {
         }
 
         self.paint_mouse_listeners(window, cx);
+    }
+}
+/// Get the runs for the given range.
+///
+/// The range is the byte range of the wrapped line.
+pub(super) fn runs_for_range(
+    runs: &[TextRun],
+    line_offset: usize,
+    range: &Range<usize>,
+) -> Vec<TextRun> {
+    let mut result = vec![];
+    let range = (line_offset + range.start)..(line_offset + range.end);
+    let mut cursor = 0;
+
+    for run in runs {
+        let run_start = cursor;
+        let run_end = cursor + run.len;
+
+        if run_end <= range.start {
+            cursor = run_end;
+            continue;
+        }
+
+        if run_start >= range.end {
+            break;
+        }
+
+        let start = range.start.max(run_start) - run_start;
+        let end = range.end.min(run_end) - run_start;
+        let len = end - start;
+
+        if len > 0 {
+            result.push(TextRun { len, ..run.clone() });
+        }
+
+        cursor = run_end;
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_runs_for_range() {
+        let run = TextRun {
+            len: 0,
+            font: gpui::font(".SystemUIFont"),
+            color: gpui::black(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+
+        // use hello this-is-test
+        let runs = vec![
+            // use
+            TextRun {
+                len: 3,
+                ..run.clone()
+            },
+            // \s
+            TextRun {
+                len: 1,
+                ..run.clone()
+            },
+            // hello
+            TextRun {
+                len: 5,
+                ..run.clone()
+            },
+            // \s
+            TextRun {
+                len: 1,
+                ..run.clone()
+            },
+            // this-is-test
+            TextRun {
+                len: 12,
+                ..run.clone()
+            },
+        ];
+
+        #[track_caller]
+        fn assert_runs(actual: Vec<TextRun>, expected: &[usize]) {
+            let left = actual.iter().map(|run| run.len).collect::<Vec<_>>();
+            assert_eq!(left, expected);
+        }
+
+        assert_runs(runs_for_range(&runs, 0, &(0..0)), &[]);
+        assert_runs(runs_for_range(&runs, 0, &(0..100)), &[3, 1, 5, 1, 12]);
+
+        assert_runs(runs_for_range(&runs, 0, &(0..6)), &[3, 1, 2]);
+        assert_runs(runs_for_range(&runs, 0, &(1..6)), &[2, 1, 2]);
+        assert_runs(runs_for_range(&runs, 0, &(3..10)), &[1, 5, 1]);
+        assert_runs(runs_for_range(&runs, 0, &(5..8)), &[3]);
+        assert_runs(runs_for_range(&runs, 3, &(0..3)), &[1, 2]);
+        assert_runs(runs_for_range(&runs, 3, &(2..10)), &[4, 1, 3]);
     }
 }
