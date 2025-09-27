@@ -226,7 +226,7 @@ impl RopeExt for Rope {
             return self.slice(0..0);
         }
 
-        let line = self.line(row, LineType::LF_CR);
+        let line = self.line(row, LineType::LF);
         if line.len() > 0 {
             let line_end = line.len() - 1;
             if line.is_char_boundary(line_end) && line.char(line_end) == '\n' {
@@ -257,8 +257,8 @@ impl RopeExt for Rope {
 
     fn offset_to_point(&self, offset: usize) -> Point {
         let offset = self.clip_offset(offset, Bias::Left);
-        let row = self.byte_to_line_idx(offset, LineType::LF_CR);
-        let line_start = self.line_to_byte_idx(row, LineType::LF_CR);
+        let row = self.byte_to_line_idx(offset, LineType::LF);
+        let line_start = self.line_to_byte_idx(row, LineType::LF);
         let column = offset.saturating_sub(line_start);
         Point::new(row, column)
     }
@@ -268,7 +268,7 @@ impl RopeExt for Rope {
             return self.len();
         }
 
-        let line_start = self.line_to_byte_idx(point.row, LineType::LF_CR);
+        let line_start = self.line_to_byte_idx(point.row, LineType::LF);
         line_start + point.column
     }
 
@@ -299,7 +299,7 @@ impl RopeExt for Rope {
     }
 
     fn lines_len(&self) -> usize {
-        self.len_lines(LineType::LF_CR)
+        self.len_lines(LineType::LF)
     }
 
     fn char_at(&self, offset: usize) -> Option<char> {
@@ -399,7 +399,7 @@ mod tests {
     use crate::input::{Position, RopeExt};
 
     #[test]
-    fn test_line() {
+    fn test_slice_line() {
         let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope");
         assert_eq!(rope.slice_line(0).to_string(), "Hello");
         assert_eq!(rope.slice_line(1).to_string(), "World\r");
@@ -408,6 +408,11 @@ mod tests {
 
         // over bounds
         assert_eq!(rope.slice_line(6).to_string(), "");
+
+        // only have \r end
+        let rope = Rope::from("Hello\r");
+        assert_eq!(rope.slice_line(0).to_string(), "Hello\r");
+        assert_eq!(rope.slice_line(1).to_string(), "");
     }
 
     #[test]
@@ -418,15 +423,19 @@ mod tests {
         assert_eq!(rope.lines_len(), 1);
         let rope = Rope::from("Single line");
         assert_eq!(rope.lines_len(), 1);
+
+        // only have \r end
+        let rope = Rope::from("Hello\r");
+        assert_eq!(rope.lines_len(), 1);
     }
 
     #[test]
     fn test_lines() {
-        let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope");
+        let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文\nRope\r");
         let lines: Vec<_> = rope.iter_lines().map(|r| r.to_string()).collect();
         assert_eq!(
             lines,
-            vec!["Hello", "World\r", "This is a test 中文", "Rope"]
+            vec!["Hello", "World\r", "This is a test 中文", "Rope\r"]
         );
     }
 
