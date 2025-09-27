@@ -550,7 +550,6 @@ impl TextElement {
 
             for range in &line_item.wrapped_lines {
                 let line_runs = runs_for_range(runs, offset, &range);
-
                 let sub_line: SharedString = line[range.clone()].to_string().into();
                 let shaped_line =
                     window
@@ -1212,6 +1211,7 @@ impl Element for TextElement {
         self.paint_mouse_listeners(window, cx);
     }
 }
+
 /// Get the runs for the given range.
 ///
 /// The range is the byte range of the wrapped line.
@@ -1310,5 +1310,6 @@ mod tests {
         assert_runs(runs_for_range(&runs, 0, &(5..8)), &[3]);
         assert_runs(runs_for_range(&runs, 3, &(0..3)), &[1, 2]);
         assert_runs(runs_for_range(&runs, 3, &(2..10)), &[4, 1, 3]);
+        assert_runs(runs_for_range(&runs, 9, &(0..8)), &[1, 7]);
     }
 }
