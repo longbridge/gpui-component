@@ -545,11 +545,14 @@ impl TextElement {
                 .lines
                 .get(visible_range.start + ix)
                 .expect("line should exists in text_wrapper");
+            debug_assert_eq!(line_item.len(), line.len());
+
             let mut line_layout = LineLayout::new();
             let mut wrapped_lines = SmallVec::with_capacity(1);
 
             for range in &line_item.wrapped_lines {
                 let line_runs = runs_for_range(runs, offset, &range);
+                // the `line` not have `\n`, but the `wrapped_lines` range contains `\n` len
                 let sub_line: SharedString = line[range.clone()].to_string().into();
                 let shaped_line =
                     window

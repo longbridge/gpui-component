@@ -177,9 +177,9 @@ impl TextWrapper {
         let new_range = new_start_offset..new_end_offset;
 
         let mut new_lines = vec![];
-
         let wrap_width = self.wrap_width;
 
+        // line not contains `\n`.
         for (ix, line) in Rope::from(changed_text.slice(new_range))
             .iter_lines()
             .enumerate()
@@ -397,12 +397,39 @@ mod tests {
         let mut text =
             Rope::from("Hello, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。");
 
-        fn fake_wrap_line(_line_str: &str, _wrap_width: Pixels) -> Vec<Boundary> {
+        fn fake_wrap_line(_line: &str, _wrap_width: Pixels) -> Vec<Boundary> {
             vec![]
+        }
+
+        #[track_caller]
+        fn assert_wrapper_lines(text: &Rope, wrapper: &TextWrapper, expected_lines: &[&[&str]]) {
+            let mut actual_lines = vec![];
+            let mut offset = 0;
+            for line in wrapper.lines.iter() {
+                actual_lines.push(
+                    line.wrapped_lines
+                        .iter()
+                        .map(|range| text.slice(offset + range.start..offset + range.end))
+                        .collect::<Vec<_>>(),
+                );
+                // +1 \n
+                offset += line.len() + 1;
+            }
+            assert_eq!(actual_lines, expected_lines);
         }
 
         wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
         assert_eq!(wrapper.lines.len(), 4);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["Hello, 世界!"],
+                &["This is second line."],
+                &["This is third line."],
+                &["这里是第 4 行。"],
+            ],
+        );
 
         // Add a new text to end
         let range = text.len()..text.len();
