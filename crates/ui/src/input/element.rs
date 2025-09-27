@@ -560,9 +560,8 @@ impl TextElement {
                         .shape_line(sub_line.into(), font_size, &line_runs, None);
 
                 wrapped_lines.push(shaped_line);
-
-                offset += range.len();
             }
+            offset += line_item.len();
 
             line_layout.set_wrapped_lines(wrapped_lines);
             lines.push(line_layout);
