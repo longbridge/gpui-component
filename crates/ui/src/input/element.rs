@@ -554,20 +554,18 @@ impl TextElement {
                 let line_runs = runs_for_range(runs, offset, &range);
                 // the `line` not have `\n`, but the `wrapped_lines` range contains `\n` len
                 let sub_line: SharedString = line[range.clone()].to_string().into();
-                let shaped_line =
-                    window
-                        .text_system()
-                        .shape_line(sub_line.into(), font_size, &line_runs, None);
+                let shaped_line = window
+                    .text_system()
+                    .shape_line(sub_line, font_size, &line_runs, None);
 
                 wrapped_lines.push(shaped_line);
             }
-            offset += line_item.len();
 
             line_layout.set_wrapped_lines(wrapped_lines);
             lines.push(line_layout);
 
             // +1 for the `\n`
-            offset += 1;
+            offset += line_item.len() + 1;
         }
 
         lines
