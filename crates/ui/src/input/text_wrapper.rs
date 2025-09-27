@@ -546,6 +546,17 @@ mod tests {
             "This is a new line at the beginning.\nThis is a new line.\nThis is new line 2.\n这里是第 4 行。New text\nThis is a new line at the end."
         );
         assert_eq!(wrapper.lines.len(), 5);
+        assert_wrapper_lines(
+            &text,
+            &wrapper,
+            &[
+                &["This is a new line at the beginning."],
+                &["This is a new line."],
+                &["This is new line 2."],
+                &["这里是第 4 行。New text"],
+                &["This is a new line at the end."],
+            ],
+        );
 
         // Remove all to at least one line in `lines`.
         let range = 0..text.len();
@@ -554,6 +565,7 @@ mod tests {
         wrapper._update(&text, &range, &Rope::from(new_text), &mut fake_wrap_line);
         assert_eq!(text.to_string(), "");
         assert_eq!(wrapper.lines.len(), 1);
+        assert_eq!(wrapper.lines[0].wrapped_lines, vec![0..0]);
 
         // Test update_all
         let range = 0..text.len();
