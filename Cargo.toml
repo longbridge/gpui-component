@@ -23,7 +23,7 @@ gpui-component = { path = "crates/ui" }
 gpui-component-macros = { path = "crates/macros" }
 story = { path = "crates/story" }
 wef = { path = "crates/wef" }
-ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16"] }
+ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16", "metric_lines_lf"] }
 
 anyhow = "1"
 log = "0.4"
