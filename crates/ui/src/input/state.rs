@@ -1852,7 +1852,7 @@ impl InputState {
             let line_origin = self.line_origin_with_y_offset(&mut y_offset, line, line_height);
             let pos = inner_position - line_origin;
 
-            let Some(rendered_line) = last_layout.lines.get(ix) else {
+            let Some(line_layout) = last_layout.lines.get(ix) else {
                 if pos.y < line_origin.y + line_height {
                     break;
                 }
@@ -1862,25 +1862,18 @@ impl InputState {
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                return rendered_line.closest_index_for_x(pos.x);
+                return line_layout.closest_index_for_x(pos.x);
             }
 
-            if let Some(v) = rendered_line.closest_index_for_position(pos, line_height) {
+            if let Some(v) = line_layout.closest_index_for_position(pos, line_height) {
                 index += v;
                 break;
-            } else if let Some(v) =
-                rendered_line.index_for_position(point(px(0.), pos.y), line_height)
-            {
-                // Click in the this line but not in the text, move cursor to the end of the line.
-                // The fallback index is saved in Err from `index_for_position` method.
-                index += v;
+            } else if pos.y < px(0.) {
                 break;
-            } else {
-                index += rendered_line.len();
             }
 
-            // +1 for revert `lines` split `\n`
-            index += 1;
+            // +1 for `\n`
+            index += line_layout.len() + 1;
         }
 
         if index > self.text.len() {
