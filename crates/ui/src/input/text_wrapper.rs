@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 use crate::input::RopeExt;
 
 /// A line with soft wrapped lines info.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(super) struct LineItem {
     /// The original line text.
     line: Rope,
@@ -394,8 +394,9 @@ mod tests {
         };
 
         let mut wrapper = TextWrapper::new(font, px(14.), None);
-        let mut text =
-            Rope::from("Hello, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。");
+        let mut text = Rope::from(
+            "Hello, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。",
+        );
 
         fn fake_wrap_line(_line: &str, _wrap_width: Pixels) -> Vec<Boundary> {
             vec![]
@@ -424,7 +425,7 @@ mod tests {
             &text,
             &wrapper,
             &[
-                &["Hello, 世界!"],
+                &["Hello, 世界!\r"],
                 &["This is second line."],
                 &["This is third line."],
                 &["这里是第 4 行。"],
@@ -438,7 +439,7 @@ mod tests {
         wrapper._update(&text, &range, &Rope::from(new_text), &mut fake_wrap_line);
         assert_eq!(
             text.to_string(),
-            "Hello, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
+            "Hello, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
         assert_eq!(wrapper.lines.len(), 4);
         assert_eq!(wrapper.lines.len(), 4);
@@ -446,7 +447,7 @@ mod tests {
             &text,
             &wrapper,
             &[
-                &["Hello, 世界!"],
+                &["Hello, 世界!\r"],
                 &["This is second line."],
                 &["This is third line."],
                 &["这里是第 4 行。New text"],
@@ -460,14 +461,15 @@ mod tests {
         wrapper._update(&text, &range, &Rope::from(new_text), &mut fake_wrap_line);
         assert_eq!(
             text.to_string(),
-            "AAA, 世界!\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
+            "AAA, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
+        dbg!(&wrapper.lines);
         assert_eq!(wrapper.lines.len(), 4);
         assert_wrapper_lines(
             &text,
             &wrapper,
             &[
-                &["AAA, 世界!"],
+                &["AAA, 世界!\r"],
                 &["This is second line."],
                 &["This is third line."],
                 &["这里是第 4 行。New text"],
@@ -482,14 +484,14 @@ mod tests {
         wrapper._update(&text, &range, &Rope::from(""), &mut fake_wrap_line);
         assert_eq!(
             text.to_string(),
-            "AAA, 世界!\nThis is third line.\n这里是第 4 行。New text"
+            "AAA, 世界!\r\nThis is third line.\n这里是第 4 行。New text"
         );
         assert_eq!(wrapper.lines.len(), 3);
         assert_wrapper_lines(
             &text,
             &wrapper,
             &[
-                &["AAA, 世界!"],
+                &["AAA, 世界!\r"],
                 &["This is third line."],
                 &["这里是第 4 行。New text"],
             ],
