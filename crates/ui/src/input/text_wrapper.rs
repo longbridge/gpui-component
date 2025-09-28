@@ -256,7 +256,7 @@ impl LineLayout {
     }
 
     pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
-        self.len = wrapped_lines.iter().map(|l| l.text.len()).sum();
+        self.len = wrapped_lines.iter().map(|l| l.len).sum();
         let width = wrapped_lines
             .iter()
             .map(|l| l.width)
@@ -578,5 +578,17 @@ mod tests {
             "This is a full text.\nThis is a second line."
         );
         assert_eq!(wrapper.lines.len(), 2);
+    }
+
+    #[test]
+    fn test_line_layout() {
+        let mut line_layout = LineLayout::new();
+
+        let line1 = ShapedLine::default().with_len(100);
+        let line2 = ShapedLine::default().with_len(50);
+        let wrapped_lines = smallvec::smallvec![line1, line2];
+        line_layout.set_wrapped_lines(wrapped_lines);
+        assert_eq!(line_layout.len(), 150);
+        assert_eq!(line_layout.wrapped_lines.len(), 2);
     }
 }
