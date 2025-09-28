@@ -257,8 +257,7 @@ impl LineLayout {
 
     pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
         self.len = wrapped_lines.iter().map(|l| l.text.len()).sum();
-        let width = self
-            .wrapped_lines
+        let width = wrapped_lines
             .iter()
             .map(|l| l.width)
             .max()
