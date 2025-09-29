@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::Cell, rc::Rc};
 
 use gpui::{
     div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, Element, ElementId, Entity,
@@ -60,16 +60,16 @@ impl<T: 'static, E: 'static + Render> ResizeHandle<T, E> {
 
 #[derive(Default, Debug, Clone)]
 struct ResizeHandleState {
-    active: Rc<RefCell<bool>>,
+    active: Cell<bool>,
 }
 
 impl ResizeHandleState {
     fn set_active(&self, active: bool) {
-        *self.active.borrow_mut() = active;
+        self.active.set(active);
     }
 
     fn is_active(&self) -> bool {
-        *self.active.borrow()
+        self.active.get()
     }
 }
 

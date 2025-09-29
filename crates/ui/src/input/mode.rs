@@ -184,7 +184,7 @@ impl InputMode {
 
                 let mut highlighter = highlighter.borrow_mut();
                 if highlighter.is_none() {
-                    let new_highlighter = SyntaxHighlighter::new(language, cx);
+                    let new_highlighter = SyntaxHighlighter::new(language);
                     highlighter.replace(new_highlighter);
                 }
 

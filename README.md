@@ -17,7 +17,6 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **Charting**: Built-in charts for visualization your data.
 - **Editor**: High performance code editor (support up to 200K lines) with LSP (diagnostics, completion, hover, etc).
 - **Syntax Highlighting**: Syntax highlighting for editor and markdown components using Tree Sitter.
-- **Wef**: (Experimental) Offscreen rendering webview based on [CEF](https://github.com/chromiumembedded/cef).
 
 ## Showcase
 

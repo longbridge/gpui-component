@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use gpui::{px, rems, Pixels, Rems, StyleRefinement};
 
@@ -15,7 +15,7 @@ pub struct TextViewStyle {
     ///
     /// The first parameter is the heading level (1-6), the second parameter is the base font size.
     /// The second parameter is the base font size.
-    pub heading_font_size: Option<Rc<dyn Fn(u8, Pixels) -> Pixels + 'static>>,
+    pub heading_font_size: Option<Arc<dyn Fn(u8, Pixels) -> Pixels + Send + Sync + 'static>>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
@@ -53,9 +53,9 @@ impl TextViewStyle {
 
     pub fn heading_font_size<F>(mut self, f: F) -> Self
     where
-        F: Fn(u8, Pixels) -> Pixels + 'static,
+        F: Fn(u8, Pixels) -> Pixels + Send + Sync + 'static,
     {
-        self.heading_font_size = Some(Rc::new(f));
+        self.heading_font_size = Some(Arc::new(f));
         self
     }
 

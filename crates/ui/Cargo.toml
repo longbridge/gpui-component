@@ -73,7 +73,7 @@ unicode-segmentation = "1.12.0"
 uuid = "1.10"
 
 # WebView
-wry = { version = "0.48.0", optional = true }
+wry = { git = "https://github.com/longbridge/wry", optional = true }
 
 # Chart
 num-traits = "0.2"

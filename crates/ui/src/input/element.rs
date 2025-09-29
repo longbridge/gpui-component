@@ -619,7 +619,7 @@ impl TextElement {
             // +1 for `\n`
             let line_len = line.len() + 1;
             let range = offset..offset + line_len;
-            let line_styles = highlighter.styles(&range, cx);
+            let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
             styles = gpui::combine_highlights(styles, line_styles).collect();
 
             offset = range.end;

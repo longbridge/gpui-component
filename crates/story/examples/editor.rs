@@ -25,8 +25,8 @@ use lsp_types::{
 };
 use story::Assets;
 
-fn init(cx: &mut App) {
-    LanguageRegistry::global_mut(cx).register(
+fn init() {
+    LanguageRegistry::singleton().register(
         "navi",
         &LanguageConfig::new(
             "navi",
@@ -931,7 +931,7 @@ fn main() {
 
     app.run(move |cx| {
         story::init(cx);
-        init(cx);
+        init();
         cx.activate(true);
 
         story::create_new_window_with_size(

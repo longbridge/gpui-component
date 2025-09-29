@@ -1,4 +1,8 @@
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::HashMap,
+    ops::Range,
+    sync::{Arc, Mutex},
+};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
@@ -11,7 +15,7 @@ use ropey::Rope;
 
 use crate::{
     h_flex,
-    highlighter::SyntaxHighlighter,
+    highlighter::{HighlightTheme, SyntaxHighlighter},
     text::inline::{Inline, InlineState},
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Icon, IconName, StyledExt,
@@ -98,11 +102,16 @@ impl ImageNode {
 
 impl PartialEq for ImageNode {
     fn eq(&self, other: &Self) -> bool {
-        self.url == other.url && self.title == other.title && self.alt == other.alt
+        self.url == other.url
+            && self.link == other.link
+            && self.title == other.title
+            && self.alt == other.alt
+            && self.width == other.width
+            && self.height == other.height
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub(crate) struct InlineNode {
     /// The text content.
     pub(crate) text: SharedString,
@@ -110,7 +119,13 @@ pub(crate) struct InlineNode {
     /// The text styles, each tuple contains the range of the text and the style.
     pub(crate) marks: Vec<(Range<usize>, TextMark)>,
 
-    state: InlineState,
+    state: Arc<Mutex<InlineState>>,
+}
+
+impl PartialEq for InlineNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text && self.image == other.image && self.marks == other.marks
+    }
 }
 
 impl InlineNode {
@@ -119,7 +134,7 @@ impl InlineNode {
             text: text.into(),
             image: None,
             marks: vec![],
-            state: InlineState::default(),
+            state: Arc::new(Mutex::new(InlineState::default())),
         }
     }
 
@@ -139,7 +154,7 @@ impl InlineNode {
 ///
 /// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default)]
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
@@ -148,7 +163,15 @@ pub(crate) struct Paragraph {
     /// The key is the identifier, the value is the url.
     pub(super) link_refs: HashMap<SharedString, SharedString>,
 
-    pub(crate) state: InlineState,
+    pub(crate) state: Arc<Mutex<InlineState>>,
+}
+
+impl PartialEq for Paragraph {
+    fn eq(&self, other: &Self) -> bool {
+        self.span == other.span
+            && self.children == other.children
+            && self.link_refs == other.link_refs
+    }
 }
 
 impl Paragraph {
@@ -157,20 +180,24 @@ impl Paragraph {
             span: None,
             children: vec![InlineNode::new(&text)],
             link_refs: HashMap::new(),
-            state: InlineState::default(),
+            state: Arc::new(Mutex::new(InlineState::default())),
         }
     }
 
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
+
         for c in self.children.iter() {
-            if let Some(selection) = c.state.selection.borrow().as_ref() {
-                let part_text = c.state.text.borrow().clone();
+            let state = c.state.lock().unwrap();
+            if let Some(selection) = &state.selection {
+                let part_text = state.text.clone();
                 text.push_str(&part_text[selection.start..selection.end]);
             }
         }
-        if let Some(selection) = self.state.selection.borrow().as_ref() {
-            let all_text = self.state.text.borrow().clone();
+
+        let state = self.state.lock().unwrap();
+        if let Some(selection) = &state.selection {
+            let all_text = state.text.clone();
             text.push_str(&all_text[selection.start..selection.end]);
         }
 
@@ -178,7 +205,7 @@ impl Paragraph {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct Table {
     pub children: Vec<TableRow>,
     pub column_aligns: Vec<ColumnumnAlign>,
@@ -191,7 +218,7 @@ impl Table {
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub(super) enum ColumnumnAlign {
+pub(crate) enum ColumnumnAlign {
     #[default]
     Left,
     Center,
@@ -209,22 +236,28 @@ impl From<mdast::AlignKind> for ColumnumnAlign {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct TableRow {
     pub children: Vec<TableCell>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct TableCell {
     pub children: Paragraph,
     pub width: Option<DefiniteLength>,
 }
 
 impl Paragraph {
-    pub(crate) fn reset(&mut self) {
-        self.span = None;
-        self.children.clear();
-        self.state = InlineState::default();
+    pub(crate) fn take(&mut self) -> Paragraph {
+        std::mem::replace(
+            self,
+            Paragraph {
+                span: None,
+                children: vec![],
+                link_refs: Default::default(),
+                state: Arc::new(Mutex::new(InlineState::default())),
+            },
+        )
     }
 
     pub(crate) fn is_image(&self) -> bool {
@@ -265,20 +298,22 @@ impl Paragraph {
             .sum::<usize>()
     }
 
-    /// Try to merge two paragraphs, if they are both text elements.
-    ///
-    /// - Returns `true` if other have merge into self.
-    /// - Returns `false` if not able to merge.
-    pub(crate) fn merge(&mut self, other: &Self) {
-        self.children.extend(other.children.clone());
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.children.extend(other.children);
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
-    state: InlineState,
+    state: Arc<Mutex<InlineState>>,
+}
+
+impl PartialEq for CodeBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.lang == other.lang && self.styles == other.styles
+    }
 }
 
 impl CodeBlock {
@@ -286,17 +321,17 @@ impl CodeBlock {
         code: SharedString,
         lang: Option<SharedString>,
         _: &TextViewStyle,
-        cx: &App,
+        highlight_theme: &HighlightTheme,
     ) -> Self {
         let mut styles = vec![];
         if let Some(lang) = &lang {
-            let mut highlighter = SyntaxHighlighter::new(&lang, cx);
+            let mut highlighter = SyntaxHighlighter::new(&lang);
             highlighter.update(None, &Rope::from_str(code.as_str()));
-            styles = highlighter.styles(&(0..code.len()), cx);
+            styles = highlighter.styles(&(0..code.len()), highlight_theme);
         };
 
-        let state = InlineState::default();
-        state.set_text(code);
+        let state = Arc::new(Mutex::new(InlineState::default()));
+        state.lock().unwrap().set_text(code);
 
         Self {
             lang,
@@ -306,13 +341,14 @@ impl CodeBlock {
     }
 
     fn code(&self) -> SharedString {
-        self.state.text.borrow().clone()
+        self.state.lock().unwrap().text.clone()
     }
 
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
-        if let Some(selection) = self.state.selection.borrow().as_ref() {
-            let part_text = self.state.text.borrow().clone();
+        let state = self.state.lock().unwrap();
+        if let Some(selection) = &state.selection {
+            let part_text = state.text.clone();
             text.push_str(&part_text[selection.start..selection.end]);
         }
         text
@@ -355,7 +391,7 @@ impl NodeContext {
 }
 
 /// The AST Node of the rich text.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Node {
     Root {
         children: Vec<Node>,
@@ -404,17 +440,10 @@ impl Node {
     }
 
     /// Combine all children, omitting the empt parent nodes.
-    pub(super) fn compact(&self) -> Node {
+    pub(super) fn compact(self) -> Node {
         match self {
-            Self::Root { children } => {
-                let children = children.iter().map(|c| c.compact()).collect::<Vec<_>>();
-                if children.len() == 1 {
-                    children.first().unwrap().compact()
-                } else {
-                    self.clone()
-                }
-            }
-            _ => self.clone(),
+            Self::Root { mut children } if children.len() == 1 => children.remove(0).compact(),
+            _ => self,
         }
     }
 
@@ -524,7 +553,11 @@ impl Paragraph {
 
             if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
-                    inline_node.state.set_text(text.clone().into());
+                    inline_node
+                        .state
+                        .lock()
+                        .unwrap()
+                        .set_text(text.clone().into());
                     child_nodes.push(
                         Inline::new(
                             ix,
@@ -609,7 +642,7 @@ impl Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
-            self.state.set_text(text.into());
+            self.state.lock().unwrap().set_text(text.into());
             child_nodes
                 .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
         }
@@ -644,13 +677,14 @@ impl Node {
                 .when(*spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
+
                     for (child_ix, child) in children.iter().enumerate() {
-                        match &child {
+                        match child {
                             Node::Paragraph(_) => {
                                 let last_not_list = child_ix > 0
                                     && !matches!(children[child_ix - 1], Node::List { .. });
 
-                                let text = child.clone().render(
+                                let text = child.render(
                                     Some(ListState {
                                         depth: state.depth + 1,
                                         ordered: state.ordered,
@@ -714,7 +748,7 @@ impl Node {
                                 );
                             }
                             Node::List { .. } => {
-                                items.push(div().ml(rems(1.)).child(child.clone().render(
+                                items.push(div().ml(rems(1.)).child(child.render(
                                     Some(ListState {
                                         depth: state.depth + 1,
                                         ordered: state.ordered,
@@ -725,7 +759,7 @@ impl Node {
                                     node_cx,
                                     window,
                                     cx,
-                                )))
+                                )));
                             }
                             _ => {}
                         }
@@ -911,7 +945,7 @@ impl Node {
                         let is_item = item.is_list_item();
 
                         items.push(Self::render_list_item(
-                            &item,
+                            item,
                             ix,
                             ListState {
                                 ordered: *ordered,
@@ -931,7 +965,7 @@ impl Node {
                 })
                 .into_any_element(),
             Node::CodeBlock(code_block) => code_block.render(node_cx, window, cx),
-            Node::Table { .. } => Self::render_table(&self, node_cx, window, cx).into_any_element(),
+            Node::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
             Node::Divider => div()
                 .id("divider")
                 .bg(cx.theme().border)

@@ -1,7 +1,7 @@
-use crate::{highlighter::LanguageRegistry, ActiveTheme};
+use crate::highlighter::{HighlightTheme, LanguageRegistry};
 
 use anyhow::{anyhow, Context, Result};
-use gpui::{App, HighlightStyle, SharedString};
+use gpui::{HighlightStyle, SharedString};
 
 use ropey::{ChunkCursor, Rope};
 use std::{
@@ -155,15 +155,15 @@ impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
 
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
-    pub fn new(lang: &str, cx: &App) -> Self {
-        match Self::build_combined_injections_query(&lang, cx) {
+    pub fn new(lang: &str) -> Self {
+        match Self::build_combined_injections_query(&lang) {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(
                     "SyntaxHighlighter init failed, fallback to use `text`, {}",
                     err
                 );
-                Self::build_combined_injections_query("text", cx).unwrap()
+                Self::build_combined_injections_query("text").unwrap()
             }
         }
     }
@@ -171,9 +171,8 @@ impl SyntaxHighlighter {
     /// Build the combined injections query for the given language.
     ///
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
-    fn build_combined_injections_query(lang: &str, cx: &App) -> Result<Self> {
-        let registry = LanguageRegistry::global(cx);
-        let Some(config) = registry.language(&lang) else {
+    fn build_combined_injections_query(lang: &str) -> Result<Self> {
+        let Some(config) = LanguageRegistry::singleton().language(&lang) else {
             return Err(anyhow!(
                 "language {:?} is not registered in `LanguageRegistry`",
                 lang
@@ -266,7 +265,7 @@ impl SyntaxHighlighter {
 
         let mut injection_queries = HashMap::new();
         for inj_language in config.injection_languages.iter() {
-            if let Some(inj_config) = registry.language(&inj_language) {
+            if let Some(inj_config) = LanguageRegistry::singleton().language(&inj_language) {
                 match Query::new(&inj_config.language, &inj_config.highlights) {
                     Ok(q) => {
                         injection_queries.insert(inj_config.name.clone(), q);
@@ -353,7 +352,7 @@ impl SyntaxHighlighter {
     }
 
     /// Match the visible ranges of nodes in the Tree for highlighting.
-    fn match_styles(&self, range: Range<usize>, cx: &App) -> Vec<HighlightItem> {
+    fn match_styles(&self, range: Range<usize>) -> Vec<HighlightItem> {
         let mut highlights = vec![];
         let Some(tree) = &self.tree else {
             return highlights;
@@ -376,7 +375,7 @@ impl SyntaxHighlighter {
             if let (Some(language_name), Some(content_node), _) =
                 self.injection_for_match(None, query, query_match)
             {
-                let styles = self.handle_injection(&language_name, content_node, cx);
+                let styles = self.handle_injection(&language_name, content_node);
                 for (node_range, highlight_name) in styles {
                     highlights.push(HighlightItem::new(node_range.clone(), highlight_name));
                 }
@@ -433,7 +432,6 @@ impl SyntaxHighlighter {
         &self,
         injection_language: &str,
         node: Node,
-        cx: &App,
     ) -> Vec<(Range<usize>, String)> {
         let start_offset = node.start_byte();
         let end_offset = node.end_byte();
@@ -449,7 +447,7 @@ impl SyntaxHighlighter {
         // FIXME: Avoid to_string.
         let content = content.to_string();
 
-        let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
+        let Some(config) = LanguageRegistry::singleton().language(injection_language) else {
             return cache;
         };
         let mut parser = Parser::new();
@@ -569,14 +567,12 @@ impl SyntaxHighlighter {
     pub(crate) fn styles(
         &self,
         range: &Range<usize>,
-        cx: &App,
+        theme: &HighlightTheme,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        let theme = &cx.theme().highlight_theme;
-
         let mut styles = vec![];
         let start_offset = range.start;
 
-        let highlights = self.match_styles(range.clone(), cx);
+        let highlights = self.match_styles(range.clone());
 
         // let mut iter_count = 0;
         for item in highlights {

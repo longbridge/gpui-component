@@ -1,13 +1,19 @@
-use std::{rc::Rc, time::Instant};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Poll;
+use std::time::Duration;
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
-    GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point, RenderOnce,
-    SharedString, Size, Window,
+    div, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId, Entity,
+    EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement, IntoElement,
+    KeyBinding, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Point, RenderOnce, SharedString, Size, Styled, Timer, Window,
 };
+use smol::stream::StreamExt;
 
-use super::format::{html::HtmlElement, markdown::MarkdownElement};
+use crate::highlighter::HighlightTheme;
 use crate::{
     global_state::GlobalState,
     input::{self},
@@ -16,6 +22,7 @@ use crate::{
         TextViewStyle,
     },
 };
+use crate::{v_flex, ActiveTheme};
 
 const CONTEXT: &'static str = "TextView";
 
@@ -29,17 +36,30 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 #[derive(IntoElement, Clone)]
-enum TextViewElement {
-    Markdown(MarkdownElement),
-    Html(HtmlElement),
+struct TextViewElement {
+    state: Entity<TextViewState>,
 }
 
 impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        match self {
-            Self::Markdown(el) => el.render(window, cx).into_any_element(),
-            Self::Html(el) => el.render(window, cx).into_any_element(),
-        }
+        self.state.update(cx, |state, cx| {
+            div().map(|this| match &mut state.parsed_result {
+                Ok(content) => this.child(content.root_node.render(
+                    None,
+                    true,
+                    true,
+                    &content.node_cx,
+                    window,
+                    cx,
+                )),
+                Err(err) => this.child(
+                    v_flex()
+                        .gap_1()
+                        .child("Failed to parse content")
+                        .child(err.to_string()),
+                ),
+            })
+        })
     }
 }
 
@@ -63,16 +83,112 @@ impl RenderOnce for TextViewElement {
 pub struct TextView {
     id: ElementId,
     state: Entity<TextViewState>,
-    element: TextViewElement,
     selectable: bool,
+    tx: smol::channel::Sender<Update>,
 }
 
-#[derive(Default, Clone, PartialEq)]
-pub(crate) struct TextViewState {
-    root: Option<Result<Rc<node::Node>, SharedString>>,
-    pub(crate) node_cx: Rc<node::NodeContext>,
+#[derive(PartialEq)]
+pub(crate) struct ParsedContent {
+    pub(crate) root_node: node::Node,
+    pub(crate) node_cx: node::NodeContext,
+}
 
-    raw: SharedString,
+/// The type of the text view.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TextViewType {
+    /// Markdown view
+    Markdown,
+    /// HTML view
+    Html,
+}
+
+enum Update {
+    Text(SharedString),
+    Style(Box<TextViewStyle>),
+}
+
+struct UpdateFuture {
+    type_: TextViewType,
+    highlight_theme: Arc<HighlightTheme>,
+    current_style: TextViewStyle,
+    current_text: SharedString,
+    timer: Timer,
+    rx: smol::channel::Receiver<Update>,
+    tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
+    delay: Duration,
+}
+
+impl UpdateFuture {
+    fn new(
+        type_: TextViewType,
+        highlight_theme: Arc<HighlightTheme>,
+        rx: smol::channel::Receiver<Update>,
+        tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
+        delay: Duration,
+    ) -> Self {
+        Self {
+            type_,
+            highlight_theme,
+            current_style: TextViewStyle::default(),
+            current_text: SharedString::default(),
+            timer: Timer::never(),
+            rx,
+            tx_result,
+            delay,
+        }
+    }
+}
+
+impl Future for UpdateFuture {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match self.rx.poll_next(cx) {
+                Poll::Ready(Some(update)) => {
+                    let changed = match update {
+                        Update::Text(text) if self.current_text != text => {
+                            self.current_text = text;
+                            true
+                        }
+                        Update::Style(style) if self.current_style != *style => {
+                            self.current_style = *style;
+                            true
+                        }
+                        _ => false,
+                    };
+                    if changed {
+                        let delay = self.delay;
+                        self.timer.set_after(delay);
+                    }
+                    continue;
+                }
+                Poll::Ready(None) => return Poll::Ready(()),
+                Poll::Pending => {}
+            }
+
+            match self.timer.poll_next(cx) {
+                Poll::Ready(Some(_)) => {
+                    let res = parse_content(
+                        self.type_,
+                        &self.current_text,
+                        self.current_style.clone(),
+                        &self.highlight_theme,
+                    );
+                    _ = self.tx_result.try_send(res);
+                    continue;
+                }
+                Poll::Ready(None) | Poll::Pending => return Poll::Pending,
+            }
+        }
+    }
+}
+
+pub(crate) struct TextViewState {
+    parent_entity: Option<EntityId>,
+    tx: smol::channel::Sender<Update>,
+    parsed_result: Result<ParsedContent, SharedString>,
+
     focus_handle: Option<FocusHandle>,
 
     /// The bounds of the text view
@@ -82,20 +198,50 @@ pub(crate) struct TextViewState {
     /// Is current in selection.
     is_selecting: bool,
     is_selectable: bool,
-
-    _last_parsed: Option<Instant>,
 }
 
 impl TextViewState {
-    pub fn new(cx: &mut App) -> Self {
+    fn new(
+        type_: TextViewType,
+        content: &str,
+        window: &mut Window,
+        cx: &mut Context<TextViewState>,
+    ) -> Self {
         let focus_handle = cx.focus_handle();
+        let (tx, rx) = smol::channel::unbounded::<Update>();
+        let (tx_result, rx_result) =
+            smol::channel::unbounded::<Result<ParsedContent, SharedString>>();
+        let highlight_theme = cx.theme().highlight_theme.clone();
+        let parsed_result = parse_content(type_, content, Default::default(), &highlight_theme);
+
+        cx.spawn_in(window, async move |this, cx| {
+            while let Ok(parsed_result) = rx_result.recv().await {
+                _ = this.update(cx, |state, cx| {
+                    state.parsed_result = parsed_result;
+                    if let Some(parent_entity) = state.parent_entity {
+                        let app = &mut **cx;
+                        app.notify(parent_entity);
+                    }
+                    state.clear_selection();
+                });
+            }
+        })
+        .detach();
+
+        cx.background_spawn(UpdateFuture::new(
+            type_,
+            highlight_theme,
+            rx,
+            tx_result,
+            Duration::from_millis(200),
+        ))
+        .detach();
 
         Self {
-            raw: SharedString::default(),
+            parent_entity: None,
+            tx,
             focus_handle: Some(focus_handle),
-            root: None,
-            node_cx: Rc::new(NodeContext::default()),
-            _last_parsed: None,
+            parsed_result,
             bounds: Bounds::default(),
             selection_positions: (None, None),
             is_selecting: false,
@@ -105,50 +251,6 @@ impl TextViewState {
 }
 
 impl TextViewState {
-    pub(super) fn root(&self) -> Result<Rc<node::Node>, SharedString> {
-        self.root
-            .clone()
-            .expect("The `root` should call `parse_if_needed` before to use.")
-    }
-
-    pub(super) fn parse_if_needed(
-        &mut self,
-        new_text: SharedString,
-        is_html: bool,
-        style: &TextViewStyle,
-        cx: &mut App,
-    ) {
-        let is_changed = self.raw != new_text || self.node_cx.style != *style;
-
-        if self.root.is_some() && !is_changed {
-            return;
-        }
-
-        if let Some(last_parsed) = self._last_parsed {
-            if last_parsed.elapsed().as_millis() < 500 {
-                return;
-            }
-        }
-
-        let mut node_cx = NodeContext::default();
-        node_cx.style = style.clone();
-        self.raw = new_text;
-        // NOTE: About 100ms
-        // let measure = crate::Measure::new("parse_markdown");
-        self.root = Some(
-            if is_html {
-                super::format::html::parse(&self.raw, &mut node_cx)
-            } else {
-                super::format::markdown::parse(&self.raw, &style, &mut node_cx, cx)
-            }
-            .map(Rc::new),
-        );
-        self.node_cx = Rc::new(node_cx);
-        // measure.end();
-        self._last_parsed = Some(Instant::now());
-        self.clear_selection();
-    }
-
     /// Save bounds and unselect if bounds changed.
     fn update_bounds(&mut self, bounds: Bounds<Pixels>) {
         if self.bounds.size != bounds.size {
@@ -193,38 +295,22 @@ impl TextViewState {
 
     /// Return the bounds of the selection in window coordinates.
     pub(crate) fn selection_bounds(&self) -> Bounds<Pixels> {
-        if let (Some(start), Some(end)) = self.selection_positions {
-            let start = start + self.bounds.origin;
-            let end = end + self.bounds.origin;
-
-            let origin = Point {
-                x: start.x.min(end.x),
-                y: start.y.min(end.y),
-            };
-            let size = Size {
-                width: (start.x - end.x).abs(),
-                height: (start.y - end.y).abs(),
-            };
-
-            return Bounds { origin, size };
-        }
-
-        Bounds::default()
+        selection_bounds(
+            self.selection_positions.0,
+            self.selection_positions.1,
+            self.bounds,
+        )
     }
 
     fn selection_text(&self) -> Option<String> {
-        let Some(Ok(root)) = &self.root else {
-            return None;
-        };
-
-        Some(root.selected_text())
+        Some(self.parsed_result.as_ref().ok()?.root_node.selected_text())
     }
 }
 
 #[derive(IntoElement, Clone)]
 pub enum Text {
     String(SharedString),
-    TextView(Box<TextView>),
+    TextView(TextView),
 }
 
 impl From<SharedString> for Text {
@@ -247,7 +333,7 @@ impl From<String> for Text {
 
 impl From<TextView> for Text {
     fn from(e: TextView) -> Self {
-        Self::TextView(Box::new(e))
+        Self::TextView(e)
     }
 }
 
@@ -258,7 +344,7 @@ impl Text {
     pub fn style(self, style: TextViewStyle) -> Self {
         match self {
             Self::String(s) => Self::String(s),
-            Self::TextView(e) => Self::TextView(Box::new(e.style(style))),
+            Self::TextView(e) => Self::TextView(e.style(style)),
         }
     }
 }
@@ -276,65 +362,82 @@ impl TextView {
     /// Create a new markdown text view.
     pub fn markdown(
         id: impl Into<ElementId>,
-        raw: impl Into<SharedString>,
+        markdown: impl Into<SharedString>,
         window: &mut Window,
         cx: &mut App,
     ) -> Self {
         let id: ElementId = id.into();
-        let state =
-            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
-                TextViewState::new(cx)
+        let markdown = markdown.into();
+        let mut is_new_state = false;
+        let state = window.use_keyed_state(
+            SharedString::from(format!("{}/state", id)),
+            cx,
+            |window, cx| {
+                is_new_state = true;
+                TextViewState::new(TextViewType::Markdown, &markdown, window, cx)
+            },
+        );
+        let tx = state.read(cx).tx.clone();
+        if !is_new_state {
+            state.update(cx, move |state, _| {
+                _ = state.tx.try_send(Update::Text(markdown));
             });
+        }
         Self {
             id,
-            state: state.clone(),
-            element: TextViewElement::Markdown(MarkdownElement::new(raw, state)),
+            state,
             selectable: false,
+            tx,
         }
     }
 
     /// Create a new html text view.
     pub fn html(
         id: impl Into<ElementId>,
-        raw: impl Into<SharedString>,
+        html: impl Into<SharedString>,
         window: &mut Window,
         cx: &mut App,
     ) -> Self {
         let id: ElementId = id.into();
-        let state =
-            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
-                TextViewState::new(cx)
+        let html = html.into();
+        let mut is_new_state = false;
+        let state = window.use_keyed_state(
+            SharedString::from(format!("{}/state", id)),
+            cx,
+            |window, cx| {
+                is_new_state = true;
+                TextViewState::new(TextViewType::Html, &html, window, cx)
+            },
+        );
+        let tx = state.read(cx).tx.clone();
+        if !is_new_state {
+            state.update(cx, move |state, _| {
+                _ = state.tx.try_send(Update::Text(html));
             });
-
+        }
         Self {
             id,
-            state: state.clone(),
-            element: TextViewElement::Html(HtmlElement::new(raw, state)),
+            state,
             selectable: false,
+            tx,
         }
+    }
+
+    /// Set the source text of the text view.
+    pub fn text(self, raw: impl Into<SharedString>) -> Self {
+        _ = self.tx.try_send(Update::Text(raw.into()));
+        self
+    }
+
+    /// Set [`TextViewStyle`].
+    pub fn style(self, style: TextViewStyle) -> Self {
+        _ = self.tx.try_send(Update::Style(Box::new(style)));
+        self
     }
 
     /// Set the text view to be selectable, default is false.
     pub fn selectable(mut self) -> Self {
         self.selectable = true;
-        self
-    }
-
-    /// Set the source text of the text view.
-    pub fn text(mut self, raw: impl Into<SharedString>) -> Self {
-        self.element = match self.element {
-            TextViewElement::Markdown(el) => TextViewElement::Markdown(el.text(raw)),
-            TextViewElement::Html(el) => TextViewElement::Html(el.text(raw)),
-        };
-        self
-    }
-
-    /// Set [`TextViewStyle`].
-    pub fn style(mut self, style: TextViewStyle) -> Self {
-        self.element = match self.element {
-            TextViewElement::Markdown(el) => TextViewElement::Markdown(el.style(style)),
-            TextViewElement::Html(el) => TextViewElement::Html(el.style(style)),
-        };
         self
     }
 
@@ -390,7 +493,9 @@ impl Element for TextView {
                     Self::on_action_copy(&state, cx);
                 }
             })
-            .child(self.element.clone())
+            .child(TextViewElement {
+                state: self.state.clone(),
+            })
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, el)
@@ -422,6 +527,7 @@ impl Element for TextView {
         let is_selectable = self.selectable;
 
         self.state.update(cx, |state, _| {
+            state.parent_entity = Some(entity_id);
             state.update_bounds(bounds);
             state.is_selectable = is_selectable;
         });
@@ -494,36 +600,67 @@ impl Element for TextView {
     }
 }
 
+fn parse_content(
+    type_: TextViewType,
+    text: &str,
+    style: TextViewStyle,
+    highlight_theme: &HighlightTheme,
+) -> Result<ParsedContent, SharedString> {
+    let mut node_cx = NodeContext {
+        style: style.clone(),
+        ..NodeContext::default()
+    };
+
+    let res = match type_ {
+        TextViewType::Markdown => {
+            super::format::markdown::parse(text, &style, &mut node_cx, highlight_theme)
+        }
+        TextViewType::Html => super::format::html::parse(text, &mut node_cx),
+    };
+    res.map(move |root_node| ParsedContent { root_node, node_cx })
+}
+
+fn selection_bounds(
+    start: Option<Point<Pixels>>,
+    end: Option<Point<Pixels>>,
+    bounds: Bounds<Pixels>,
+) -> Bounds<Pixels> {
+    if let (Some(start), Some(end)) = (start, end) {
+        let start = start + bounds.origin;
+        let end = end + bounds.origin;
+
+        let origin = Point {
+            x: start.x.min(end.x),
+            y: start.y.min(end.y),
+        };
+        let size = Size {
+            width: (start.x - end.x).abs(),
+            height: (start.y - end.y).abs(),
+        };
+
+        return Bounds { origin, size };
+    }
+
+    Bounds::default()
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use gpui::{point, px, size, Bounds};
-
-    use crate::text::TextViewState;
 
     #[test]
     fn test_text_view_state_selection_bounds() {
         assert_eq!(
-            TextViewState {
-                selection_positions: (None, None),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(None, None, Default::default()),
             Bounds::default()
         );
         assert_eq!(
-            TextViewState {
-                selection_positions: (None, Some(point(px(10.), px(20.)))),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(None, Some(point(px(10.), px(20.))), Default::default()),
             Bounds::default()
         );
         assert_eq!(
-            TextViewState {
-                selection_positions: (Some(point(px(10.), px(20.))), None),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(Some(point(px(10.), px(20.))), None, Default::default()),
             Bounds::default()
         );
 
@@ -533,11 +670,11 @@ mod tests {
         //   |------|
         //         50,50
         assert_eq!(
-            TextViewState {
-                selection_positions: (Some(point(px(10.), px(10.))), Some(point(px(50.), px(50.)))),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(
+                Some(point(px(10.), px(10.))),
+                Some(point(px(50.), px(50.))),
+                Default::default()
+            ),
             Bounds {
                 origin: point(px(10.), px(10.)),
                 size: size(px(40.), px(40.))
@@ -549,11 +686,11 @@ mod tests {
         //   |------|
         //         50,50 start
         assert_eq!(
-            TextViewState {
-                selection_positions: (Some(point(px(50.), px(50.))), Some(point(px(10.), px(10.))),),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(
+                Some(point(px(50.), px(50.))),
+                Some(point(px(10.), px(10.))),
+                Default::default()
+            ),
             Bounds {
                 origin: point(px(10.), px(10.)),
                 size: size(px(40.), px(40.))
@@ -565,11 +702,11 @@ mod tests {
         //   |------|
         // 10,50
         assert_eq!(
-            TextViewState {
-                selection_positions: (Some(point(px(50.), px(10.))), Some(point(px(10.), px(50.)))),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(
+                Some(point(px(50.), px(10.))),
+                Some(point(px(10.), px(50.))),
+                Default::default()
+            ),
             Bounds {
                 origin: point(px(10.), px(10.)),
                 size: size(px(40.), px(40.))
@@ -581,11 +718,11 @@ mod tests {
         //   |------|
         // 10,50 start
         assert_eq!(
-            TextViewState {
-                selection_positions: (Some(point(px(10.), px(50.))), Some(point(px(50.), px(10.)))),
-                ..Default::default()
-            }
-            .selection_bounds(),
+            selection_bounds(
+                Some(point(px(10.), px(50.))),
+                Some(point(px(50.), px(10.))),
+                Default::default()
+            ),
             Bounds {
                 origin: point(px(10.), px(10.)),
                 size: size(px(40.), px(40.))
