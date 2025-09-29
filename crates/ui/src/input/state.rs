@@ -1206,7 +1206,7 @@ impl InputState {
         let mut next_indent = String::new();
         let current_line_start_pos = self.start_of_line();
         let next_line_start_pos = self.end_of_line();
-        for c in self.text.chars().skip(current_line_start_pos) {
+        for c in self.text.slice(current_line_start_pos..).chars() {
             if !c.is_whitespace() {
                 break;
             }
@@ -1216,7 +1216,7 @@ impl InputState {
             current_indent.push(c);
         }
 
-        for c in self.text.chars().skip(next_line_start_pos) {
+        for c in self.text.slice(next_line_start_pos..).chars() {
             if !c.is_whitespace() {
                 break;
             }
