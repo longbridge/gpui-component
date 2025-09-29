@@ -1,9 +1,0 @@
-[package]
-name = "bin3"
-version = "0.5.2"
-edition = "2024"
-
-[package.metadata.bundle.bin.bin3]
-name = "test-bin2"
-identifier = "io.github.longbridge.wef.tests.bin3"
-category = "Utility"
