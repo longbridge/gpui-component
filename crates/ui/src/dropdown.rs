@@ -868,7 +868,9 @@ where
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx).tab_stop(!self.disabled))
+            .when(!self.disabled, |this| {
+                this.track_focus(&self.focus_handle(cx).tab_stop(true))
+            })
             .on_action(window.listener_for(&self.state, DropdownState::up))
             .on_action(window.listener_for(&self.state, DropdownState::down))
             .on_action(window.listener_for(&self.state, DropdownState::enter))

@@ -43,7 +43,7 @@ impl InputState {
         let is_enable = !self.disabled;
         let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
         let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
-        let is_selected = is_enable && !self.selected_range.is_empty();
+        let is_selected = !self.selected_range.is_empty();
         let has_paste = is_enable && cx.read_from_clipboard().is_some();
 
         let action_context = self.focus_handle.clone();
