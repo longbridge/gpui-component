@@ -530,7 +530,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
             return self;
         }
 
-        const RING_BORDER_WIDTH: Pixels = px(3.);
+        const RING_BORDER_WIDTH: Pixels = px(1.5);
         let rem_size = window.rem_size();
         let style = self.style();
 
