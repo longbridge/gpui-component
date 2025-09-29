@@ -10463,7 +10463,7 @@ checksum = "ea2f10b9bb0928dfb1b42b65e1f9e36f7f54dbdf08457afefb38afcdec4fa2bb"
 [[package]]
 name = "wry"
 version = "0.53.3"
-source = "git+https://github.com/longportapp/wry#1b0e5d57dd9d4ebea11adfb981718e265c21ec1d"
+source = "git+https://github.com/longbridge/wry#1b0e5d57dd9d4ebea11adfb981718e265c21ec1d"
 dependencies = [
  "base64",
  "block2 0.6.1",
