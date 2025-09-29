@@ -83,6 +83,7 @@ impl TextElement {
         if let Some(ime_marked_range) = &state.ime_marked_range {
             selected_range = (ime_marked_range.end..ime_marked_range.end).into();
         }
+        let is_selected_all = selected_range.len() == state.text.len();
 
         let cursor = state.cursor();
         let mut current_row = None;
@@ -169,7 +170,7 @@ impl TextElement {
             (cursor_pos, cursor_start, cursor_end)
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
-            if selection_changed {
+            if selection_changed && !is_selected_all {
                 scroll_offset.x = if scroll_offset.x + cursor_pos.x
                     > (bounds.size.width - line_number_width - RIGHT_MARGIN)
                 {
