@@ -2058,10 +2058,13 @@ impl InputState {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.is_context_menu_open(cx) {
+        if self.is_context_menu_open(cx) {
             return;
         }
-        dbg!("----------- on blur");
+
+        self.hover_popover = None;
+        self.diagnostic_popover = None;
+        self.context_menu = None;
         self.unselect(window, cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
@@ -2070,6 +2073,7 @@ impl InputState {
             root.focused_input = None;
         });
         cx.emit(InputEvent::Blur);
+        cx.notify();
     }
 
     fn pause_blink_cursor(&mut self, cx: &mut Context<Self>) {
