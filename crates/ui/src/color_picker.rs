@@ -261,8 +261,11 @@ impl ColorPicker {
                         .shadow_xs()
                 })
                 .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-                .on_mouse_move(window.listener_for(&state, move |state, _, _, cx| {
+                .on_mouse_move(window.listener_for(&state, move |state, _, window, cx| {
                     state.hovered_color = Some(color);
+                    state.state.update(cx, |input, cx| {
+                        input.set_value(color.to_hex(), window, cx);
+                    });
                     cx.notify();
                 }))
                 .on_click(window.listener_for(
@@ -329,7 +332,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(TextInput::new(&state.read(cx).state)),
+                        .child(TextInput::new(&state.read(cx).state).small()),
                 )
             })
     }
