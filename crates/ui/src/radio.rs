@@ -1,23 +1,14 @@
 use std::rc::Rc;
 
 use crate::{
-    actions::Confirm, checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme,
-    AxisExt, FocusableExt as _, Sizable, Size, StyledExt,
+    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme, AxisExt,
+    FocusableExt as _, Sizable, Size, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder, px, relative, rems, AnyElement, App, Axis, Div, ElementId,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
+    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
-
-const KEY_CONTENT: &str = "Radio";
-pub(super) fn init(cx: &mut App) {
-    cx.bind_keys(vec![
-        // Add key bindings for button actions if needed
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(KEY_CONTENT)),
-        KeyBinding::new("space", Confirm { secondary: false }, Some(KEY_CONTENT)),
-    ]);
-}
 
 /// A Radio element.
 ///
@@ -149,21 +140,11 @@ impl RenderOnce for Radio {
         div().child(
             self.base
                 .id(self.id.clone())
-                .key_context(KEY_CONTENT)
                 .track_focus(
                     &focus_handle
                         .tab_stop(self.tab_stop)
                         .tab_index(self.tab_index),
                 )
-                .when(!self.disabled, |this| {
-                    this.on_action({
-                        let on_click = self.on_click.clone();
-                        move |_: &Confirm, window, cx| {
-                            Self::handle_click(&on_click, !checked, window, cx);
-                            window.refresh();
-                        }
-                    })
-                })
                 .h_flex()
                 .gap_x_2()
                 .text_color(cx.theme().foreground)

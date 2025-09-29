@@ -1,23 +1,14 @@
 use std::{rc::Rc, time::Duration};
 
 use crate::{
-    actions::Confirm, text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName,
-    Selectable, Sizable, Size, StyledExt as _,
+    text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName, Selectable, Sizable,
+    Size, StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, Animation, AnimationExt, AnyElement,
-    App, Div, ElementId, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
+    App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
-
-const KEY_CONTENT: &str = "Checkbox";
-pub(super) fn init(cx: &mut App) {
-    cx.bind_keys(vec![
-        // Add key bindings for button actions if needed
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(KEY_CONTENT)),
-        KeyBinding::new("space", Confirm { secondary: false }, Some(KEY_CONTENT)),
-    ]);
-}
 
 /// A Checkbox element.
 #[derive(IntoElement)]
@@ -217,21 +208,11 @@ impl RenderOnce for Checkbox {
         div().child(
             self.base
                 .id(self.id.clone())
-                .key_context(KEY_CONTENT)
                 .track_focus(
                     &focus_handle
                         .tab_stop(self.tab_stop)
                         .tab_index(self.tab_index),
                 )
-                .when(!self.disabled, |this| {
-                    this.on_action({
-                        let on_click = self.on_click.clone();
-                        move |_: &Confirm, window, cx| {
-                            Self::handle_click(&on_click, !checked, window, cx);
-                            window.refresh();
-                        }
-                    })
-                })
                 .h_flex()
                 .gap_2()
                 .items_start()

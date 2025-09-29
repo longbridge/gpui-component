@@ -20,10 +20,7 @@ use crate::{
 const CONTEXT: &'static str = "ColorPicker";
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
-    ])
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
 #[derive(Clone)]

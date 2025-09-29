@@ -1,24 +1,15 @@
 use std::rc::Rc;
 
 use crate::{
-    actions::Confirm, h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _,
-    Disableable, FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
+    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
+    FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
-    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, KeyBinding,
-    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window,
+    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, ParentElement,
+    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window,
 };
-
-const KEY_CONTENT: &str = "Button";
-pub(super) fn init(cx: &mut App) {
-    cx.bind_keys(vec![
-        // Add key bindings for button actions if needed
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(KEY_CONTENT)),
-        KeyBinding::new("space", Confirm { secondary: false }, Some(KEY_CONTENT)),
-    ]);
-}
 
 #[derive(Default, Clone, Copy)]
 pub enum ButtonRounded {

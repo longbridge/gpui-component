@@ -108,9 +108,6 @@ pub fn init(cx: &mut App) {
     popover::init(cx);
     menu::init(cx);
     table::init(cx);
-    button::init(cx);
-    checkbox::init(cx);
-    radio::init(cx);
     text::init(cx);
 }
 
