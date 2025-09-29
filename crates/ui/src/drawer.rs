@@ -34,6 +34,7 @@ pub struct Drawer {
     content: Div,
     margin_top: Pixels,
     overlay: bool,
+    overlay_closable: bool,
 }
 
 impl Drawer {
@@ -48,6 +49,7 @@ impl Drawer {
             content: v_flex().px_4().py_3(),
             margin_top: TITLE_BAR_HEIGHT,
             overlay: true,
+            overlay_closable: true,
             on_close: Rc::new(|_, _, _| {}),
         }
     }
@@ -90,6 +92,12 @@ impl Drawer {
         self
     }
 
+    /// Set whether the drawer should be closable by clicking the overlay, default is `true`.
+    pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
+        self.overlay_closable = overlay_closable;
+        self
+    }
+
     /// Listen to the close event of the drawer.
     pub fn on_close(
         mut self,
@@ -127,7 +135,7 @@ impl RenderOnce for Drawer {
         anchored()
             .position(point(
                 window_paddings.left,
-                window_paddings.top + titlebar_height - px(1.),
+                window_paddings.top + titlebar_height,
             ))
             .snap_to_window()
             .child(
@@ -136,7 +144,7 @@ impl RenderOnce for Drawer {
                     .w(size.width)
                     .h(size.height - titlebar_height)
                     .bg(overlay_color(self.overlay, cx))
-                    .when(self.overlay, |this| {
+                    .when(self.overlay_closable, |this| {
                         this.on_mouse_down(MouseButton::Left, {
                             let on_close = self.on_close.clone();
                             move |_, window, cx| {
@@ -148,7 +156,7 @@ impl RenderOnce for Drawer {
                     .child(
                         v_flex()
                             .id("drawer")
-                            .tab_group()
+                            // .tab_group()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle.tab_stop(true))
                             .on_action({
@@ -185,7 +193,8 @@ impl RenderOnce for Drawer {
                                 // TitleBar
                                 h_flex()
                                     .justify_between()
-                                    .px_4()
+                                    .pl_4()
+                                    .pr_3()
                                     .py_2()
                                     .w_full()
                                     .font_semibold()

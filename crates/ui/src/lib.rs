@@ -1,12 +1,13 @@
 mod event;
+mod global_state;
 mod icon;
+mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
 mod kbd;
 mod menu;
 mod root;
 mod styled;
-mod svg_img;
 mod time;
 mod title_bar;
 mod virtual_list;
@@ -31,6 +32,7 @@ pub mod dock;
 pub mod drawer;
 pub mod dropdown;
 pub mod form;
+pub mod group_box;
 pub mod highlighter;
 pub mod history;
 pub mod indicator;
@@ -67,6 +69,7 @@ pub use wry;
 
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
+pub use index_path::IndexPath;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
 pub use menu::{context_menu, popup_menu};
@@ -74,12 +77,11 @@ pub use root::{ContextModal, Root};
 pub use styled::*;
 pub use time::*;
 pub use title_bar::*;
-pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList};
+pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList, VirtualListScrollHandle};
 pub use window_border::{window_border, window_paddings, WindowBorder};
 
 pub use icon::*;
 pub use kbd::*;
-pub use svg_img::*;
 pub use theme::*;
 
 use std::ops::Deref;
@@ -91,6 +93,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 /// You must initialize the components at your application's entry point.
 pub fn init(cx: &mut App) {
     theme::init(cx);
+    global_state::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
 
@@ -110,6 +113,7 @@ pub fn init(cx: &mut App) {
     button::init(cx);
     checkbox::init(cx);
     radio::init(cx);
+    text::init(cx);
 }
 
 #[inline]

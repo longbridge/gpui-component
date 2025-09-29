@@ -190,9 +190,9 @@ impl ButtonVariant {
 /// A Button element.
 #[derive(IntoElement)]
 pub struct Button {
-    pub base: Div,
-    style: StyleRefinement,
     id: ElementId,
+    base: Div,
+    style: StyleRefinement,
     icon: Option<Icon>,
     label: Option<SharedString>,
     children: Vec<AnyElement>,
@@ -227,9 +227,9 @@ impl From<Button> for AnyElement {
 impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
-            base: div(),
-            style: StyleRefinement::default(),
             id: id.into(),
+            base: div().flex_shrink_0(),
+            style: StyleRefinement::default(),
             icon: None,
             label: None,
             disabled: false,
@@ -365,10 +365,6 @@ impl Disableable for Button {
 }
 
 impl Selectable for Button {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -427,25 +423,9 @@ impl RenderOnce for Button {
         let is_focused = focus_handle.is_focused(window);
 
         self.base
-            .id(self.id)
-            .key_context(KEY_CONTENT)
-            .track_focus(
-                &focus_handle
-                    .clone()
-                    .tab_stop(self.tab_stop)
-                    .tab_index(self.tab_index),
-            )
-            .when_some(
-                self.on_click.clone().filter(|_| clickable),
-                |this, on_click| {
-                    this.on_action({
-                        move |_: &Confirm, window, cx| {
-                            (on_click)(&ClickEvent::default(), window, cx);
-                        }
-                    })
-                },
-            )
-            .relative()
+            .id(self.id.clone())
+            .flex_shrink_0()
+            .cursor_default()
             .flex()
             .flex_shrink_0()
             .items_center()
@@ -953,13 +933,7 @@ impl ButtonVariant {
             ButtonVariant::Secondary => cx.theme().secondary.opacity(1.5),
             ButtonVariant::Custom(style) => style.color.opacity(0.15),
         };
-        let fg = match self {
-            ButtonVariant::Link | ButtonVariant::Text | ButtonVariant::Ghost => {
-                cx.theme().link.grayscale()
-            }
-            _ => cx.theme().secondary_foreground.opacity(0.5).grayscale(),
-        };
-
+        let fg = cx.theme().muted_foreground.opacity(0.5);
         let (bg, border) = if outline {
             (cx.theme().transparent, cx.theme().border.opacity(0.5))
         } else {

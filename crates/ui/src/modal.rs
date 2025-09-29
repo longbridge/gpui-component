@@ -2,9 +2,9 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
-    AnyElement, App, Axis, Bounds, ClickEvent, Div, FocusHandle, Hsla, InteractiveElement,
-    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window,
+    AnyElement, App, Axis, Bounds, BoxShadow, ClickEvent, Div, Edges, FocusHandle, Hsla,
+    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -354,14 +354,25 @@ impl RenderOnce for Modal {
         let y = self.margin_top.unwrap_or(view_size.height / 10.) + offset_top;
         let x = bounds.center().x - self.width / 2.;
 
-        let mut padding_right = px(24.);
-        let mut padding_left = px(24.);
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+
+        let mut paddings = Edges::all(px(24.));
         if let Some(pl) = self.style.padding.left {
-            padding_left = pl.to_pixels(self.width.into(), window.rem_size());
+            paddings.left = pl.to_pixels(base_size, rem_size);
         }
         if let Some(pr) = self.style.padding.right {
-            padding_right = pr.to_pixels(self.width.into(), window.rem_size());
+            paddings.right = pr.to_pixels(base_size, rem_size);
         }
+        if let Some(pt) = self.style.padding.top {
+            paddings.top = pt.to_pixels(base_size, rem_size);
+        }
+        if let Some(pb) = self.style.padding.bottom {
+            paddings.bottom = pb.to_pixels(base_size, rem_size);
+        }
+
+        let animation = Animation::new(Duration::from_secs_f64(0.25))
+            .with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
@@ -369,7 +380,6 @@ impl RenderOnce for Modal {
             .child(
                 div()
                     .id("modal")
-                    .tab_group()
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
@@ -398,10 +408,10 @@ impl RenderOnce for Modal {
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(cx.theme().radius_lg)
-                            .shadow_xl()
                             .min_h_24()
-                            .py_6()
-                            .gap_4()
+                            .pt(paddings.top)
+                            .pb(paddings.bottom)
+                            .gap(paddings.top.min(px(16.)))
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
@@ -447,60 +457,72 @@ impl RenderOnce for Modal {
                             .when_some(self.title, |this, title| {
                                 this.child(
                                     div()
-                                        .font_semibold()
-                                        .pl(padding_left)
-                                        .pr(padding_right)
+                                        .pl(paddings.left)
+                                        .pr(paddings.right)
                                         .line_height(relative(1.))
+                                        .font_semibold()
                                         .child(title),
                                 )
                             })
-                            .when(self.show_close, |this| {
-                                this.child(
-                                    Button::new("close")
-                                        .absolute()
-                                        .top_4()
-                                        .right_4()
-                                        .small()
-                                        .ghost()
-                                        .icon(IconName::Close)
-                                        .on_click(move |_, window, cx| {
+                            .children(self.show_close.then(|| {
+                                Button::new("close")
+                                    .absolute()
+                                    .top(paddings.top - px(3.))
+                                    .right(paddings.right - px(3.))
+                                    .small()
+                                    .ghost()
+                                    .icon(IconName::Close)
+                                    .on_click({
+                                        let on_cancel = self.on_cancel.clone();
+                                        let on_close = self.on_close.clone();
+                                        move |_, window, cx| {
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
                                             window.close_modal(cx);
-                                        }),
-                                )
-                            })
+                                        }
+                                    })
+                            }))
                             .child(
                                 div().w_full().flex_1().overflow_hidden().child(
                                     v_flex()
-                                        .pl(padding_left)
-                                        .pr(padding_right)
+                                        .pl(paddings.left)
+                                        .pr(paddings.right)
                                         .scrollable(Axis::Vertical)
                                         .child(self.content),
                                 ),
                             )
-                            .when(self.footer.is_some(), |this| {
-                                let footer = self.footer.unwrap();
-
+                            .when_some(self.footer, |this, footer| {
                                 this.child(
                                     h_flex()
                                         .gap_2()
-                                        .pl(padding_left)
-                                        .pr(padding_right)
+                                        .pl(paddings.left)
+                                        .pr(paddings.right)
+                                        .line_height(relative(1.))
                                         .justify_end()
                                         .children(footer(render_ok, render_cancel, window, cx)),
                                 )
                             })
-                            .with_animation(
-                                "slide-down",
-                                Animation::new(Duration::from_secs_f64(0.25))
-                                    .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
-                                move |this, delta| {
-                                    let y_offset = px(0.) + delta * px(30.);
-                                    this.top(y + y_offset)
-                                },
-                            ),
-                    ),
+                            .with_animation("slide-down", animation.clone(), move |this, delta| {
+                                let y_offset = px(0.) + delta * px(30.);
+                                // This is equivalent to `shadow_xl` with an extra opacity.
+                                let shadow = vec![
+                                    BoxShadow {
+                                        color: hsla(0., 0., 0., 0.1 * delta),
+                                        offset: point(px(0.), px(20.)),
+                                        blur_radius: px(25.),
+                                        spread_radius: px(-5.),
+                                    },
+                                    BoxShadow {
+                                        color: hsla(0., 0., 0., 0.1 * delta),
+                                        offset: point(px(0.), px(8.)),
+                                        blur_radius: px(10.),
+                                        spread_radius: px(-6.),
+                                    },
+                                ];
+                                this.top(y + y_offset).shadow(shadow)
+                            }),
+                    )
+                    .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),
             )
     }
 }

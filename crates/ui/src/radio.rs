@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-    actions::Confirm, h_flex, text::Text, v_flex, ActiveTheme, AxisExt, FocusableExt as _,
-    IconName, StyledExt,
+    actions::Confirm, checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme,
+    AxisExt, FocusableExt as _, Sizable, Size, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, relative, svg, AnyElement, App, Axis, Div, ElementId,
+    div, prelude::FluentBuilder, px, relative, rems, AnyElement, App, Axis, Div, ElementId,
     InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
@@ -33,6 +33,7 @@ pub struct Radio {
     disabled: bool,
     tab_stop: bool,
     tab_index: isize,
+    size: Size,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
@@ -48,6 +49,7 @@ impl Radio {
             disabled: false,
             tab_index: 0,
             tab_stop: true,
+            size: Size::default(),
             on_click: None,
         }
     }
@@ -97,6 +99,13 @@ impl Radio {
     }
 }
 
+impl Sizable for Radio {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl Styled for Radio {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         &mut self.style
@@ -123,13 +132,14 @@ impl RenderOnce for Radio {
             .read(cx)
             .clone();
         let is_focused = focus_handle.is_focused(window);
+        let disabled = self.disabled;
 
         let (border_color, bg) = if checked {
             (cx.theme().primary, cx.theme().primary)
         } else {
             (cx.theme().input, cx.theme().input.opacity(0.3))
         };
-        let (border_color, bg) = if self.disabled {
+        let (border_color, bg) = if disabled {
             (border_color.opacity(0.5), bg.opacity(0.5))
         } else {
             (border_color, bg)
@@ -138,7 +148,7 @@ impl RenderOnce for Radio {
         // wrap a flex to patch for let Radio display inline
         div().child(
             self.base
-                .id(self.id)
+                .id(self.id.clone())
                 .key_context(KEY_CONTENT)
                 .track_focus(
                     &focus_handle
@@ -161,35 +171,36 @@ impl RenderOnce for Radio {
                 .line_height(relative(1.))
                 .rounded(cx.theme().radius * 0.5)
                 .focus_ring(is_focused, px(2.), window, cx)
+                .map(|this| match self.size {
+                    Size::XSmall => this.text_xs(),
+                    Size::Small => this.text_sm(),
+                    Size::Medium => this.text_base(),
+                    Size::Large => this.text_lg(),
+                    _ => this,
+                })
                 .refine_style(&self.style)
                 .child(
                     div()
                         .relative()
-                        .size_4()
+                        .map(|this| match self.size {
+                            Size::XSmall => this.size_3(),
+                            Size::Small => this.size_3p5(),
+                            Size::Medium => this.size_4(),
+                            Size::Large => this.size(rems(1.125)),
+                            _ => this.size_4(),
+                        })
                         .flex_shrink_0()
                         .rounded_full()
                         .border_1()
                         .border_color(border_color)
-                        .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
-                        .map(|this| match checked {
+                        .when(cx.theme().shadow && !disabled, |this| this.shadow_xs())
+                        .map(|this| match self.checked {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(bg),
                         })
-                        .child(
-                            svg()
-                                .absolute()
-                                .top_px()
-                                .left_px()
-                                .size_3()
-                                .text_color(bg)
-                                .when(checked, |this| {
-                                    this.text_color(cx.theme().primary_foreground)
-                                })
-                                .map(|this| match checked {
-                                    true => this.path(IconName::Check.path()),
-                                    false => this,
-                                }),
-                        ),
+                        .child(checkbox_check_icon(
+                            self.id, self.size, checked, disabled, window, cx,
+                        )),
                 )
                 .when(!self.children.is_empty() || self.label.is_some(), |this| {
                     this.child(

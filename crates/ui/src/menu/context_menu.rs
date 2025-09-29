@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
     anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, App, Context,
-    Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, Focusable, GlobalElementId,
+    Corner, DismissEvent, Element, ElementId, Entity, Focusable, GlobalElementId,
     InspectorElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Position, Stateful, Style, Window,
 };
@@ -143,7 +143,9 @@ impl Element for ContextMenu {
                                 .anchor(anchor)
                                 .when_some(menu_view, |this, menu| {
                                     // Focus the menu, so that can be handle the action.
-                                    menu.focus_handle(cx).focus(window);
+                                    if !menu.focus_handle(cx).contains_focused(window, cx) {
+                                        menu.focus_handle(cx).focus(window);
+                                    }
 
                                     this.child(div().occlude().child(menu.clone()))
                                 }),
@@ -222,7 +224,7 @@ impl Element for ContextMenu {
 
                 // When right mouse click, to build content menu, and show it at the mouse position.
                 window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-                    if phase == DispatchPhase::Bubble
+                    if phase.bubble()
                         && event.button == MouseButton::Right
                         && bounds.contains(&event.position)
                     {

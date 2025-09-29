@@ -45,18 +45,17 @@ impl DatePickerStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let now = chrono::Local::now().naive_local().date();
         let date_picker = cx.new(|cx| {
-            let mut picker = DatePickerState::new(window, cx);
+            let mut picker = DatePickerState::new(window, cx).disabled_matcher(vec![0, 6]);
             picker.set_date(now, window, cx);
-            picker.set_disabled(vec![0, 6], window, cx);
             picker
         });
         let date_picker_large = cx.new(|cx| {
-            let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
-            picker.set_disabled(
-                calendar::Matcher::range(Some(now), now.checked_add_days(Days::new(7))),
-                window,
-                cx,
-            );
+            let mut picker = DatePickerState::new(window, cx)
+                .date_format("%Y-%m-%d")
+                .disabled_matcher(calendar::Matcher::range(
+                    Some(now),
+                    now.checked_add_days(Days::new(7)),
+                ));
             picker.set_date(
                 now.checked_sub_days(Days::new(1)).unwrap_or_default(),
                 window,
@@ -65,22 +64,15 @@ impl DatePickerStory {
             picker
         });
         let date_picker_small = cx.new(|cx| {
-            let mut picker = DatePickerState::new(window, cx);
-            picker.set_disabled(
+            let mut picker = DatePickerState::new(window, cx).disabled_matcher(
                 calendar::Matcher::interval(Some(now), now.checked_add_days(Days::new(5))),
-                window,
-                cx,
             );
             picker.set_date(now, window, cx);
             picker
         });
         let data_picker_custom = cx.new(|cx| {
-            let mut picker = DatePickerState::new(window, cx);
-            picker.set_disabled(
-                calendar::Matcher::custom(|date| date.day0() < 5),
-                window,
-                cx,
-            );
+            let mut picker = DatePickerState::new(window, cx)
+                .disabled_matcher(calendar::Matcher::custom(|date| date.day0() < 5));
             picker.set_date(now, window, cx);
             picker
         });

@@ -70,7 +70,14 @@ impl Arc {
     fn path<T>(&self, arc: &ArcData<T>, bounds: &Bounds<Pixels>) -> Option<Path<Pixels>> {
         let start_angle = arc.start_angle - HALF_PI;
         let end_angle = arc.end_angle - HALF_PI;
-        let pad_angle = arc.pad_angle;
+        let da = end_angle - start_angle;
+        let pad_angle = if da >= PI {
+            // Leave some pad angle for full circle.
+            // If not, the path start and end will be the same point.
+            0.0001
+        } else {
+            arc.pad_angle
+        };
         let r0 = self.inner_radius.max(0.);
         let r1 = self.outer_radius.max(0.);
 
@@ -79,7 +86,6 @@ impl Arc {
         let center_y = bounds.origin.y.0 + bounds.size.height.0 / 2.;
 
         // Angle difference.
-        let da = end_angle - start_angle;
         if r1 < EPSILON || da.abs() < EPSILON {
             return None;
         }

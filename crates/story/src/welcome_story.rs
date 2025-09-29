@@ -49,12 +49,12 @@ impl Focusable for WelcomeStory {
 impl Render for WelcomeStory {
     fn render(
         &mut self,
-        _: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        v_flex().p_4().gap_5().child(TextView::markdown(
-            "intro",
-            include_str!("../../../README.md"),
-        ))
+        v_flex().p_4().gap_5().child(
+            TextView::markdown("intro", include_str!("../../../README.md"), window, cx)
+                .selectable(),
+        )
     }
 }

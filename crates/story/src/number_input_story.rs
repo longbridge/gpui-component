@@ -8,7 +8,7 @@ use crate::section;
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex, ActiveTheme, IconName, Sizable,
+    v_flex, ActiveTheme, Disableable, IconName, Sizable,
 };
 
 pub fn init(_: &mut App) {}
@@ -22,6 +22,7 @@ pub struct NumberInputStory {
     number_input3_value: f64,
     number_input4: Entity<InputState>,
     number_input4_value: f64,
+    disabled_input: Entity<InputState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -81,6 +82,12 @@ impl NumberInputStory {
                 })
         });
 
+        let disabled_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .default_value("100")
+                .placeholder("Disabled input")
+        });
+
         let _subscriptions = vec![
             cx.subscribe_in(&number_input1, window, Self::on_input_event),
             cx.subscribe_in(&number_input1, window, Self::on_number_input_event),
@@ -90,6 +97,8 @@ impl NumberInputStory {
             cx.subscribe_in(&number_input3, window, Self::on_number_input_event),
             cx.subscribe_in(&number_input4, window, Self::on_input_event),
             cx.subscribe_in(&number_input4, window, Self::on_number_input_event),
+            cx.subscribe_in(&disabled_input, window, Self::on_input_event),
+            cx.subscribe_in(&disabled_input, window, Self::on_number_input_event),
         ];
 
         Self {
@@ -101,28 +110,30 @@ impl NumberInputStory {
             number_input3_value: 0.0,
             number_input4,
             number_input4_value: 0.0,
+            disabled_input,
             _subscriptions,
         }
     }
 
     fn on_input_event(
         &mut self,
-        this: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &InputEvent,
         _: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => {
-                if this == &self.number_input1 {
+            InputEvent::Change => {
+                let text = state.read(cx).value();
+                if state == &self.number_input1 {
                     if let Ok(value) = text.parse::<i64>() {
                         self.number_input1_value = value;
                     }
-                } else if this == &self.number_input2 {
+                } else if state == &self.number_input2 {
                     if let Ok(value) = text.parse::<u64>() {
                         self.number_input2_value = value;
                     }
-                } else if this == &self.number_input3 {
+                } else if state == &self.number_input3 {
                     if let Ok(value) = text.parse::<f64>() {
                         self.number_input3_value = value;
                     }
@@ -214,6 +225,11 @@ impl Render for NumberInputStory {
                 section("Normal Size")
                     .max_w_md()
                     .child(NumberInput::new(&self.number_input1)),
+            )
+            .child(
+                section("Disabled")
+                    .max_w_md()
+                    .child(NumberInput::new(&self.disabled_input).disabled(true)),
             )
             .child(
                 section("Small Size with suffix").max_w_md().child(

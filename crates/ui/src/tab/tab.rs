@@ -3,9 +3,9 @@ use std::sync::Arc;
 use crate::{h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
-    Styled, Window,
+    div, px, relative, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window,
 };
 
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
@@ -56,7 +56,10 @@ impl TabVariant {
                 TabVariant::Underline => px(30.),
                 _ => px(24.),
             },
-            Size::Large => px(36.),
+            Size::Large => match self {
+                TabVariant::Underline => px(44.),
+                _ => px(36.),
+            },
             _ => match self {
                 TabVariant::Underline => px(36.),
                 _ => px(32.),
@@ -67,12 +70,12 @@ impl TabVariant {
     fn inner_height(&self, size: Size) -> Pixels {
         match size {
             Size::XSmall => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(20.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(18.),
                 TabVariant::Segmented => px(16.),
                 TabVariant::Underline => px(20.),
             },
             Size::Small => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(24.),
+                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(22.),
                 TabVariant::Segmented => px(20.),
                 TabVariant::Underline => px(22.),
             },
@@ -100,7 +103,7 @@ impl TabVariant {
         };
 
         if matches!(self, TabVariant::Underline) {
-            padding_x = padding_x / 2.;
+            padding_x = px(0.);
         }
 
         Edges {
@@ -153,7 +156,6 @@ impl TabVariant {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
-                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -533,10 +535,6 @@ impl ParentElement for Tab {
 }
 
 impl Selectable for Tab {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -624,7 +622,7 @@ impl RenderOnce for Tab {
             .child(
                 h_flex()
                     .h(inner_height)
-                    .line_height(inner_height)
+                    .line_height(relative(1.))
                     .items_center()
                     .justify_center()
                     .overflow_hidden()

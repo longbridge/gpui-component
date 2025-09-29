@@ -83,6 +83,7 @@ impl RenderOnce for Accordion {
 
         v_flex()
             .id(self.id)
+            .size_full()
             .when(self.bordered, |this| this.gap_1())
             .children(
                 self.children
@@ -246,9 +247,7 @@ impl RenderOnce for AccordionItem {
                             })
                         })
                         .when(!self.bordered, |this| {
-                            this.border_b_1()
-                                .border_color(cx.theme().border)
-                                .rounded_t(cx.theme().radius)
+                            this.border_b_1().border_color(cx.theme().border)
                         })
                         .child(
                             h_flex()

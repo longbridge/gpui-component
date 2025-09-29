@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
@@ -12,7 +12,7 @@ use gpui_component::{
     input::{InputState, TextInput},
     modal::ModalButtonProps,
     text::TextView,
-    v_flex, ActiveTheme, ContextModal as _,
+    v_flex, ActiveTheme, ContextModal as _, Icon, IconName,
 };
 
 use crate::{section, TestAction};
@@ -26,7 +26,6 @@ pub struct ModalStory {
     dropdown: Entity<DropdownState<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
-    model_padding: bool,
     model_keyboard: bool,
     overlay_closable: bool,
 }
@@ -78,7 +77,6 @@ impl ModalStory {
             dropdown,
             modal_overlay: true,
             model_show_close: true,
-            model_padding: true,
             model_keyboard: true,
             overlay_closable: true,
         }
@@ -87,7 +85,6 @@ impl ModalStory {
     fn show_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let overlay = self.modal_overlay;
         let modal_show_close = self.model_show_close;
-        let modal_padding = self.model_padding;
         let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
@@ -102,7 +99,6 @@ impl ModalStory {
                 .keyboard(keyboard)
                 .show_close(modal_show_close)
                 .overlay_closable(overlay_closable)
-                .when(!modal_padding, |this| this.p(px(0.)))
                 .child(
                     v_flex()
                         .gap_3()
@@ -148,7 +144,6 @@ impl ModalStory {
                                             .keyboard(keyboard)
                                             .show_close(modal_show_close)
                                             .overlay_closable(overlay_closable)
-                                            .when(!modal_padding, |this| this.p(px(0.)))
                                     });
                                 },
                             ),
@@ -226,15 +221,6 @@ impl Render for ModalStory {
                                     })),
                             )
                             .child(
-                                Checkbox::new("modal-padding")
-                                    .label("Model Padding")
-                                    .checked(self.model_padding)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.model_padding = !view.model_padding;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
                                 Checkbox::new("modal-keyboard")
                                     .label("Keyboard")
                                     .checked(self.model_keyboard)
@@ -307,31 +293,34 @@ impl Render for ModalStory {
                                 .outline()
                                 .label("Custom Buttons")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
+                                    window.open_modal(cx, move |modal, _, cx| {
                                         modal
                                             .rounded_lg()
-                                            .p_3()
                                             .confirm()
                                             .overlay(modal_overlay)
                                             .overlay_closable(overlay_closable)
-                                            .child("Are you sure to delete this item?")
+                                            .child(
+                                                h_flex().gap_3()
+                                                    .child(Icon::new(IconName::TriangleAlert).size_6().text_color(cx.theme().warning))
+                                                    .child("Update successful, we need to restart the application.")
+                                            )
                                             .button_props(
                                                 ModalButtonProps::default()
-                                                    .cancel_text("Abort")
+                                                    .cancel_text("Later")
                                                     .cancel_variant(ButtonVariant::Secondary)
-                                                    .ok_text("Sure")
+                                                    .ok_text("Restart Now")
                                                     .ok_variant(ButtonVariant::Danger),
                                             )
                                             .on_ok(|_, window, cx| {
                                                 window.push_notification(
-                                                    "You have pressed sure.",
+                                                    "You have pressed restart.",
                                                     cx,
                                                 );
                                                 true
                                             })
                                             .on_cancel(|_, window, cx| {
                                                 window.push_notification(
-                                                    "You have pressed abort.",
+                                                    "You have pressed later.",
                                                     cx,
                                                 );
                                                 true
@@ -367,7 +356,7 @@ impl Render for ModalStory {
                                 .outline()
                                 .label("Scrollable Modal")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
+                                    window.open_modal(cx, move |modal, window, cx| {
                                         modal
                                             .h(px(450.))
                                             .overlay(modal_overlay)
@@ -376,13 +365,30 @@ impl Render for ModalStory {
                                             .child(TextView::markdown(
                                                 "markdown1",
                                                 include_str!("../../../README.md"),
+                                                window,
+                                                cx
                                             ))
                                     });
                                 })),
                         ),
                     )
                     .child(
-                        section("Custom Modal style").child(
+                        section("Custom Paddings").child(
+                            Button::new("custom-modal-paddings")
+                                .outline()
+                                .label("Custom Paddings")
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_modal(cx, move |modal, _, _| {
+                                        modal
+                                            .p_3()
+                                            .title("Custom Modal Title")
+                                            .child("This is a custom modal content, we can use paddings to control the layout and spacing within the modal.")
+                                    });
+                                })),
+                        ),
+                    )
+                    .child(
+                        section("Custom Style").child(
                             Button::new("custom-modal-style")
                                 .outline()
                                 .label("Custom Modal Style")
@@ -390,16 +396,10 @@ impl Render for ModalStory {
                                     window.open_modal(cx, move |modal, _, cx| {
                                         modal
                                             .rounded_lg()
-                                            .p_0()
-                                            .title(div().pt_4().px_4().child("Custom Modal Title"))
-                                            .child(
-                                                div()
-                                                    .bg(cx.theme().info)
-                                                    .text_color(cx.theme().info_foreground)
-                                                    .p_4()
-                                                    .rounded_b_lg()
-                                                    .child("This is a custom modal content."),
-                                            )
+                                            .bg(cx.theme().cyan)
+                                            .text_color(cx.theme().info_foreground)
+                                            .title("Custom Modal Title")
+                                            .child("This is a custom modal content.")
                                     });
                                 })),
                         ),

@@ -5,7 +5,7 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, point, px, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges, Element, ElementId,
+    div, point, px, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges, Element,
     FocusHandle, Hsla, ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
@@ -56,6 +56,10 @@ macro_rules! font_weight {
 }
 
 /// Extends [`gpui::Styled`] with specific styling methods.
+#[cfg_attr(
+    any(feature = "inspector", debug_assertions),
+    gpui_macros::derive_inspector_reflection
+)]
 pub trait StyledExt: Styled + Sized {
     /// Refine the style of this element, applying the given style refinement.
     fn refine_style(mut self, style: &StyleRefinement) -> Self {
@@ -186,12 +190,21 @@ pub trait StyledExt: Styled + Sized {
 
     /// Set as Popover style
     #[inline]
-    fn popover_style(self, cx: &mut App) -> Self {
+    fn popover_style(self, cx: &App) -> Self {
         self.bg(cx.theme().popover)
+            .text_color(cx.theme().popover_foreground)
             .border_1()
             .border_color(cx.theme().border)
             .shadow_lg()
             .rounded(cx.theme().radius)
+    }
+
+    /// Set corner radii for the element.
+    fn corner_radii(self, radius: Corners<Pixels>) -> Self {
+        self.rounded_tl(radius.top_left)
+            .rounded_tr(radius.top_right)
+            .rounded_bl(radius.bottom_left)
+            .rounded_br(radius.bottom_right)
     }
 }
 
@@ -321,11 +334,11 @@ impl Size {
 
     pub fn input_py(&self) -> Pixels {
         match self {
-            Size::Large => px(16.),
-            Size::Medium => px(8.),
-            Size::Small => px(4.),
+            Size::Large => px(10.),
+            Size::Medium => px(5.),
+            Size::Small => px(2.),
             Size::XSmall => px(0.),
-            _ => px(4.),
+            _ => px(2.),
         }
     }
 }
@@ -338,14 +351,16 @@ impl From<Pixels> for Size {
 
 /// A trait for defining element that can be selected.
 pub trait Selectable: Sized {
-    /// Returns the element id of the element.
-    fn element_id(&self) -> &ElementId;
-
     /// Set the selected state of the element.
     fn selected(self, selected: bool) -> Self;
 
     /// Returns true if the element is selected.
     fn is_selected(&self) -> bool;
+
+    /// Set is the element mouse right clicked, default do nothing.
+    fn secondary_selected(self, _: bool) -> Self {
+        self
+    }
 }
 
 /// A trait for defining element that can be disabled.

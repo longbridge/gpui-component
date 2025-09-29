@@ -1,12 +1,12 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use crate::{
     actions::Confirm, text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName,
     Selectable, Sizable, Size, StyledExt as _,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, rems, svg, AnyElement, App, Div, ElementId,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
+    div, prelude::FluentBuilder as _, px, relative, rems, svg, Animation, AnimationExt, AnyElement,
+    App, Div, ElementId, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 
@@ -113,10 +113,6 @@ impl Disableable for Checkbox {
 }
 
 impl Selectable for Checkbox {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(self, selected: bool) -> Self {
         self.checked(selected)
     }
@@ -139,6 +135,63 @@ impl Sizable for Checkbox {
     }
 }
 
+pub(crate) fn checkbox_check_icon(
+    id: ElementId,
+    size: Size,
+    checked: bool,
+    disabled: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> impl IntoElement {
+    let toggle_state = window.use_keyed_state(id, cx, |_, _| checked);
+    let color = if disabled {
+        cx.theme().primary_foreground.opacity(0.5)
+    } else {
+        cx.theme().primary_foreground
+    };
+
+    svg()
+        .absolute()
+        .top_px()
+        .left_px()
+        .map(|this| match size {
+            Size::XSmall => this.size_2(),
+            Size::Small => this.size_2p5(),
+            Size::Medium => this.size_3(),
+            Size::Large => this.size_3p5(),
+            _ => this.size_3(),
+        })
+        .text_color(color)
+        .map(|this| match checked {
+            true => this.path(IconName::Check.path()),
+            _ => this,
+        })
+        .map(|this| {
+            if !disabled && checked != *toggle_state.read(cx) {
+                let duration = Duration::from_secs_f64(0.25);
+                cx.spawn({
+                    let toggle_state = toggle_state.clone();
+                    async move |cx| {
+                        cx.background_executor().timer(duration).await;
+                        _ = toggle_state.update(cx, |this, _| *this = checked);
+                    }
+                })
+                .detach();
+
+                this.with_animation(
+                    ElementId::NamedInteger("toggle".into(), checked as u64),
+                    Animation::new(Duration::from_secs_f64(0.25)),
+                    move |this, delta| {
+                        this.opacity(if checked { 1.0 * delta } else { 1.0 - delta })
+                    },
+                )
+                .into_any_element()
+            } else {
+                this.into_any_element()
+            }
+        })
+}
+
 impl RenderOnce for Checkbox {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
@@ -154,19 +207,16 @@ impl RenderOnce for Checkbox {
         } else {
             cx.theme().input
         };
-        let (color, icon_color) = if self.disabled {
-            (
-                border_color.opacity(0.5),
-                cx.theme().primary_foreground.opacity(0.5),
-            )
+        let color = if self.disabled {
+            border_color.opacity(0.5)
         } else {
-            (border_color, cx.theme().primary_foreground)
+            border_color
         };
         let radius = cx.theme().radius.min(px(4.));
 
         div().child(
             self.base
-                .id(self.id)
+                .id(self.id.clone())
                 .key_context(KEY_CONTENT)
                 .track_focus(
                     &focus_handle
@@ -219,24 +269,14 @@ impl RenderOnce for Checkbox {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(color),
                         })
-                        .child(
-                            svg()
-                                .absolute()
-                                .top_px()
-                                .left_px()
-                                .map(|this| match self.size {
-                                    Size::XSmall => this.size_2(),
-                                    Size::Small => this.size_2p5(),
-                                    Size::Medium => this.size_3(),
-                                    Size::Large => this.size_3p5(),
-                                    _ => this.size_3(),
-                                })
-                                .text_color(icon_color)
-                                .map(|this| match checked {
-                                    true => this.path(IconName::Check.path()),
-                                    _ => this,
-                                }),
-                        ),
+                        .child(checkbox_check_icon(
+                            self.id,
+                            self.size,
+                            checked,
+                            self.disabled,
+                            window,
+                            cx,
+                        )),
                 )
                 .when(self.label.is_some() || !self.children.is_empty(), |this| {
                     this.child(

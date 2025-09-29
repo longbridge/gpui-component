@@ -1,94 +1,68 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::path::PathBuf;
 
-use anyhow::Context;
 use gpui::{
     div, px, Action, App, InteractiveElement as _, ParentElement as _, Render, SharedString,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     popup_menu::PopupMenuExt,
-    IconName, Sizable, Theme, ThemeConfig, ThemeSet,
+    scroll::ScrollbarShow,
+    ActiveTheme, IconName, Sizable, Theme, ThemeRegistry,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::AppState;
 
 const STATE_FILE: &str = "target/state.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct State {
     theme: SharedString,
+    scrollbar_show: Option<ScrollbarShow>,
 }
 
 pub fn init(cx: &mut App) {
     // Load last theme state
     let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
+    tracing::info!("Load themes...");
     if let Ok(state) = serde_json::from_str::<State>(&json) {
-        tracing::info!("apply theme: {:?}", state.theme);
-        AppState::global_mut(cx).theme_name = Some(state.theme.clone());
-        if let Some(theme) = THEMES.get(&state.theme) {
-            Theme::global_mut(cx).apply_config(theme);
+        if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
+            if let Some(theme) = ThemeRegistry::global(cx)
+                .themes()
+                .get(&state.theme)
+                .cloned()
+            {
+                Theme::global_mut(cx).apply_config(&theme);
+            }
+        }) {
+            tracing::error!("Failed to watch themes directory: {}", err);
         }
+
+        if let Some(scrollbar_show) = state.scrollbar_show {
+            Theme::global_mut(cx).scrollbar_show = scrollbar_show;
+        }
+        cx.refresh_windows();
     }
+
+    cx.observe_global::<Theme>(|cx| {
+        let state = State {
+            theme: cx.theme().theme_name().clone(),
+            scrollbar_show: Some(cx.theme().scrollbar_show),
+        };
+
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        std::fs::write(STATE_FILE, json).unwrap();
+    })
+    .detach();
 }
-
-static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
-    fn parse_themes(source: &str) -> ThemeSet {
-        serde_json::from_str(source)
-            .context(format!("source: '{}'", source))
-            .unwrap()
-    }
-
-    let mut themes = HashMap::new();
-    for source in [
-        include_str!("../../../themes/adventure.json"),
-        include_str!("../../../themes/alduin.json"),
-        include_str!("../../../themes/ayu.json"),
-        include_str!("../../../themes/catppuccin.json"),
-        include_str!("../../../themes/everforest.json"),
-        include_str!("../../../themes/fahrenheit.json"),
-        include_str!("../../../themes/gruvbox.json"),
-        include_str!("../../../themes/harper.json"),
-        include_str!("../../../themes/hybrid.json"),
-        include_str!("../../../themes/jellybeans.json"),
-        include_str!("../../../themes/kibble.json"),
-        include_str!("../../../themes/macos-classic.json"),
-        include_str!("../../../themes/mandarin-square.json"),
-        include_str!("../../../themes/matrix.json"),
-        include_str!("../../../themes/mellifluous.json"),
-        include_str!("../../../themes/molokai.json"),
-        include_str!("../../../themes/solarized.json"),
-        include_str!("../../../themes/spaceduck.json"),
-        include_str!("../../../themes/tokyonight.json"),
-        include_str!("../../../themes/twilight.json"),
-    ] {
-        let theme_set = parse_themes(source);
-        for theme in theme_set.themes {
-            themes.insert(theme.name.clone(), theme);
-        }
-    }
-
-    themes
-});
 
 #[derive(Action, Clone, PartialEq)]
 #[action(namespace = themes, no_json)]
 struct SwitchTheme(SharedString);
 
-pub struct ThemeSwitcher {
-    current_theme_name: SharedString,
-}
+pub struct ThemeSwitcher {}
 
 impl ThemeSwitcher {
-    pub fn new(cx: &mut App) -> Self {
-        let theme_name = AppState::global(cx)
-            .theme_name
-            .clone()
-            .unwrap_or("default-light".into());
-
-        Self {
-            current_theme_name: theme_name,
-        }
+    pub fn new(_: &mut App) -> Self {
+        Self {}
     }
 }
 
@@ -98,28 +72,17 @@ impl Render for ThemeSwitcher {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
+        let theme_name = cx.theme().theme_name().clone();
+
         div()
             .id("theme-switcher")
-            .on_action(cx.listener(|this, switch: &SwitchTheme, _, cx| {
-                this.current_theme_name = switch.0.clone();
-                let theme_name = this.current_theme_name.clone();
-
-                if let Some(theme_config) = THEMES.get(&theme_name) {
-                    Theme::global_mut(cx).apply_config(theme_config);
-                } else if theme_name == "default-light" {
-                    Theme::global_mut(cx).set_default_light();
-                } else if theme_name == "default-dark" {
-                    Theme::global_mut(cx).set_default_dark();
+            .on_action(cx.listener(|_, switch: &SwitchTheme, _, cx| {
+                let theme_name = switch.0.clone();
+                if let Some(theme_config) =
+                    ThemeRegistry::global(cx).themes().get(&theme_name).cloned()
+                {
+                    Theme::global_mut(cx).apply_config(&theme_config);
                 }
-
-                // Save AppState
-                let state = State {
-                    theme: theme_name.clone(),
-                };
-                AppState::global_mut(cx).theme_name = Some(theme_name.clone());
-                let json = serde_json::to_string_pretty(&state).unwrap();
-                std::fs::write(STATE_FILE, json).unwrap();
-
                 cx.notify();
             }))
             .child(
@@ -128,27 +91,18 @@ impl Render for ThemeSwitcher {
                     .ghost()
                     .small()
                     .popup_menu({
-                        let current_theme_id = self.current_theme_name.clone();
-                        move |menu, _, _| {
-                            let mut menu = menu
-                                .scrollable()
-                                .max_h(px(600.))
-                                .menu_with_check(
-                                    "Default Light",
-                                    current_theme_id == "default-light",
-                                    Box::new(SwitchTheme("default-light".into())),
-                                )
-                                .menu_with_check(
-                                    "Default Dark",
-                                    current_theme_id == "default-dark",
-                                    Box::new(SwitchTheme("default-dark".into())),
-                                );
+                        let current_theme_id = theme_name.clone();
+                        move |menu, _, cx| {
+                            let mut menu = menu.scrollable().max_h(px(600.));
 
-                            let mut names = THEMES.keys().collect::<Vec<&SharedString>>();
-                            names.sort();
+                            let names = ThemeRegistry::global(cx)
+                                .sorted_themes()
+                                .iter()
+                                .map(|theme| theme.name.clone())
+                                .collect::<Vec<SharedString>>();
 
                             for theme_name in names {
-                                let is_selected = *theme_name == current_theme_id;
+                                let is_selected = theme_name == current_theme_id;
                                 menu = menu.menu_with_check(
                                     theme_name.clone(),
                                     is_selected,

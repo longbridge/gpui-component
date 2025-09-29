@@ -27,12 +27,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
       - name: Install system dependencies
         if: ${{ matrix.run_on != 'windows-latest' }}
         run: script/bootstrap
       - name: Machete
         if: ${{ matrix.run_on == 'macos-latest' }}
-        uses: bnjbvr/cargo-machete@main
+        uses: bnjbvr/cargo-machete@v0.9.1
       - name: Setup | Cache Cargo
         uses: actions/cache@v4
         with:
@@ -76,3 +78,4 @@ jobs:
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
           cargo test --all
+          cargo test -p gpui-component --doc

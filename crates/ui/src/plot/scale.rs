@@ -13,5 +13,12 @@ pub trait Scale<T> {
     fn tick(&self, value: &T) -> Option<f32>;
 
     /// Get the least index of the scale.
-    fn least_index(&self, tick: f32) -> usize;
+    fn least_index(&self, _tick: f32) -> usize {
+        0
+    }
+
+    /// Get the least index of the scale with the domain.
+    fn least_index_with_domain(&self, _tick: f32, _domain: &[T]) -> (usize, f32) {
+        (0, 0.)
+    }
 }

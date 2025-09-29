@@ -417,6 +417,10 @@ impl TabPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        if self.collapsed {
+            return div();
+        }
+
         let zoomed = self.zoomed;
         let view = cx.entity().clone();
         let zoomable_toolbar_visible = state.zoomable.map_or(false, |v| v.toolbar_visible());
@@ -424,7 +428,6 @@ impl TabPanel {
         h_flex()
             .gap_1()
             .occlude()
-            .items_center()
             .when_some(self.toolbar_buttons(window, cx), |this, buttons| {
                 this.children(
                     buttons
@@ -607,11 +610,11 @@ impl TabPanel {
 
             return h_flex()
                 .justify_between()
-                .items_center()
                 .line_height(rems(1.0))
                 .h(px(30.))
                 .py_2()
-                .px_3()
+                .pl_3()
+                .pr_2()
                 .when(left_dock_button.is_some(), |this| this.pl_2())
                 .when(right_dock_button.is_some(), |this| this.pr_2())
                 .when_some(title_style, |this, theme| {
@@ -667,8 +670,8 @@ impl TabPanel {
         let tabs_count = self.panels.len();
 
         TabBar::new("tab-bar")
-            .mt(-px(1.))
-            .track_scroll(self.tab_bar_scroll_handle.clone())
+            .tab_item_top_offset(-px(1.))
+            .track_scroll(&self.tab_bar_scroll_handle)
             .when(
                 left_dock_button.is_some() || bottom_dock_button.is_some(),
                 |this| {
@@ -1168,7 +1171,7 @@ impl Render for TabPanel {
         self.bind_actions(cx)
             .id("tab-panel")
             .track_focus(&focus_handle)
-            .tab_group()
+            // .tab_group()
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().background)

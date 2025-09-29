@@ -37,6 +37,7 @@ struct FieldProps {
     layout: Axis,
     /// Field gap
     gap: Option<Pixels>,
+    column: u16,
 }
 
 impl Default for FieldProps {
@@ -47,6 +48,7 @@ impl Default for FieldProps {
             layout: Axis::Vertical,
             size: Size::default(),
             gap: None,
+            column: 1,
         }
     }
 }
@@ -102,6 +104,14 @@ impl Form {
     /// Add multiple children to the form.
     pub fn children(mut self, fields: impl IntoIterator<Item = FormField>) -> Self {
         self.fields.extend(fields);
+        self
+    }
+
+    /// Set the column count for the form.
+    ///
+    /// Default is 1.
+    pub fn column(mut self, column: u16) -> Self {
+        self.props.column = column;
         self
     }
 }
@@ -174,6 +184,9 @@ pub struct FormField {
     /// Alignment of the form field.
     align_items: Option<AlignItems>,
     props: FieldProps,
+    col_span: u16,
+    col_start: Option<i16>,
+    col_end: Option<i16>,
 }
 
 impl FormField {
@@ -190,6 +203,9 @@ impl FormField {
             focus_handle: None,
             align_items: None,
             props: FieldProps::default(),
+            col_span: 1,
+            col_start: None,
+            col_end: None,
         }
     }
 
@@ -254,8 +270,8 @@ impl FormField {
     /// Set the focus handle for the form field.
     ///
     /// If not set, the form field will not be focusable.
-    pub fn track_focus(mut self, focus_handle: FocusHandle) -> Self {
-        self.focus_handle = Some(focus_handle);
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.focus_handle = Some(focus_handle.clone());
         self
     }
 
@@ -288,6 +304,26 @@ impl FormField {
     /// Align the form field items to the center.
     pub fn items_center(mut self) -> Self {
         self.align_items = Some(AlignItems::Center);
+        self
+    }
+
+    /// Sets the column span for the form field.
+    ///
+    /// Default is 1.
+    pub fn col_span(mut self, col_span: u16) -> Self {
+        self.col_span = col_span;
+        self
+    }
+
+    /// Sets the column start of this form field.
+    pub fn col_start(mut self, col_start: i16) -> Self {
+        self.col_start = Some(col_start);
+        self
+    }
+
+    /// Sets the column end of this form field.
+    pub fn col_end(mut self, col_end: i16) -> Self {
+        self.col_end = Some(col_end);
         self
     }
 }
@@ -339,6 +375,9 @@ impl RenderOnce for FormField {
         v_flex()
             .flex_1()
             .gap(gap / 2.)
+            .col_span(self.col_span)
+            .when_some(self.col_start, |this, start| this.col_start(start))
+            .when_some(self.col_end, |this, end| this.col_end(end))
             .child(
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
@@ -423,11 +462,17 @@ impl RenderOnce for Form {
             _ => px(8.),
         };
 
-        v_flex().w_full().gap(gap).children(
-            self.fields
-                .into_iter()
-                .enumerate()
-                .map(|(ix, field)| field.props(ix, props)),
-        )
+        v_flex()
+            .w_full()
+            .gap_x(gap * 3.)
+            .gap_y(gap)
+            .grid()
+            .grid_cols(props.column)
+            .children(
+                self.fields
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, field)| field.props(ix, props)),
+            )
     }
 }

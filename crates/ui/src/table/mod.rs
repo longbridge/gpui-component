@@ -7,12 +7,13 @@ use crate::{
     popup_menu::PopupMenu,
     scroll::{self, ScrollableMask, Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
+    VirtualListScrollHandle,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString,
+    Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
@@ -103,7 +104,7 @@ pub struct Table<D: TableDelegate> {
 
     pub vertical_scroll_handle: UniformListScrollHandle,
     pub vertical_scroll_state: ScrollbarState,
-    pub horizontal_scroll_handle: ScrollHandle,
+    pub horizontal_scroll_handle: VirtualListScrollHandle,
     pub horizontal_scroll_state: ScrollbarState,
 
     scrollbar_visible: Edges<bool>,
@@ -137,7 +138,7 @@ where
             focus_handle: cx.focus_handle(),
             delegate,
             col_groups: Vec::new(),
-            horizontal_scroll_handle: ScrollHandle::new(),
+            horizontal_scroll_handle: VirtualListScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             vertical_scroll_state: ScrollbarState::default(),
             horizontal_scroll_state: ScrollbarState::default(),
@@ -269,6 +270,17 @@ where
         cx.notify();
     }
 
+    fn fixed_left_cols_count(&self) -> usize {
+        if !self.col_fixed {
+            return 0;
+        }
+
+        self.col_groups
+            .iter()
+            .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
+            .count()
+    }
+
     /// Scroll to the row at the given index.
     pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
         self.vertical_scroll_handle
@@ -277,11 +289,13 @@ where
     }
 
     // Scroll to the column at the given index.
-    // TODO: Fix scroll to selected col, this was not working after fixed col.
-    // pub fn scroll_to_col(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-    //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
-    //     cx.notify();
-    // }
+    pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
+        let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
+
+        self.horizontal_scroll_handle
+            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        cx.notify();
+    }
 
     /// Returns the selected row index.
     pub fn selected_row(&self) -> Option<usize> {
@@ -310,11 +324,8 @@ where
     pub fn set_selected_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         self.selection_state = SelectionState::Column;
         self.selected_col = Some(col_ix);
-        if let Some(_col_ix) = self.selected_col {
-            // TODO: Fix scroll to selected col, this was not working after fixed col.
-            // if self.col_groups[col_ix].fixed.is_none() {
-            //     self.horizontal_scroll_handle.scroll_to_item(col_ix);
-            // }
+        if let Some(col_ix) = self.selected_col {
+            self.scroll_to_col(col_ix, cx);
         }
         cx.emit(TableEvent::SelectColumn(col_ix));
         cx.notify();
@@ -367,8 +378,16 @@ where
         self.set_selected_col(col_ix, cx)
     }
 
+    fn has_selection(&self) -> bool {
+        self.selected_row.is_some() || self.selected_col.is_some()
+    }
+
     fn action_cancel(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
-        self.clear_selection(cx);
+        if self.has_selection() {
+            self.clear_selection(cx);
+            return;
+        }
+        cx.propagate();
     }
 
     fn action_select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
@@ -568,7 +587,7 @@ where
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt to subtract with overflow
         if visible_end >= rows_count.saturating_sub(threshold) {
-            if !self.delegate.can_load_more(cx) {
+            if !self.delegate.is_eof(cx) {
                 return;
             }
 
@@ -856,6 +875,7 @@ where
         let name = col_group.column.name.clone();
 
         h_flex()
+            .h_full()
             .child(
                 self.render_cell(col_ix, window, cx)
                     .id(("col-header", col_ix))
@@ -1001,7 +1021,7 @@ where
                             .children(
                                 self.col_groups
                                     .iter()
-                                    .filter(|col| col.column.fixed == None)
+                                    .skip(left_columns_count)
                                     .enumerate()
                                     .map(|(col_ix, _)| {
                                         self.render_th(left_columns_count + col_ix, window, cx)
@@ -1020,6 +1040,7 @@ where
         left_columns_count: usize,
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         columns_count: usize,
+        extra_rows_count: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -1029,17 +1050,31 @@ where
         let view = cx.entity().clone();
 
         if row_ix < rows_count {
-            self.delegate
-                .render_tr(row_ix, window, cx)
-                .h_flex()
+            let is_last_row = row_ix == rows_count - 1;
+            let table_is_filled = extra_rows_count == 0;
+            let need_render_border = if is_last_row {
+                if is_selected {
+                    true
+                } else if table_is_filled {
+                    false
+                } else {
+                    !self.stripe
+                }
+            } else {
+                true
+            };
+
+            let mut tr = self.delegate.render_tr(row_ix, window, cx);
+            let style = tr.style().clone();
+
+            tr.h_flex()
                 .w_full()
                 .h(self.size.table_row_height())
-                .border_b_1()
-                .when(row_ix == rows_count, |this| {
-                    this.border_color(gpui::transparent_white())
+                .when(need_render_border, |this| {
+                    this.border_b_1().border_color(cx.theme().table_row_border)
                 })
-                .border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .refine_style(&style)
                 .hover(|this| {
                     if is_selected || self.right_clicked_row == Some(row_ix) {
                         this
@@ -1093,7 +1128,7 @@ where
                                 Axis::Horizontal,
                                 col_sizes,
                                 {
-                                    move |table, visible_range: Range<usize>, _, window, cx| {
+                                    move |table, visible_range: Range<usize>, window, cx| {
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Horizontal,
@@ -1137,7 +1172,7 @@ where
                                     .top(if row_ix == 0 { px(0.) } else { px(-1.) })
                                     .left(px(0.))
                                     .right(px(0.))
-                                    .bottom_0()
+                                    .bottom(px(-1.))
                                     .absolute()
                                     .bg(cx.theme().table_active)
                                     .border_1()
@@ -1153,7 +1188,7 @@ where
                             .top(if row_ix == 0 { px(0.) } else { px(-1.) })
                             .left(px(0.))
                             .right(px(0.))
-                            .bottom_0()
+                            .bottom(px(-1.))
                             .absolute()
                             .border_1()
                             .border_color(cx.theme().selection),
@@ -1192,10 +1227,6 @@ where
 
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
     fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
-        if !self.stripe {
-            return 0;
-        }
-
         let mut extra_rows_needed = 0;
 
         let row_height = self.size.table_row_height();
@@ -1299,7 +1330,12 @@ where
             .count();
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
-        let extra_rows_needed = self.calculate_extra_rows_needed(rows_count);
+        let extra_rows_count = self.calculate_extra_rows_needed(rows_count);
+        let render_rows_count = if self.stripe {
+            rows_count + extra_rows_count
+        } else {
+            rows_count
+        };
 
         let inner_table = v_flex()
             .key_context("Table")
@@ -1337,7 +1373,7 @@ where
                         h_flex().id("table-body").flex_grow().size_full().child(
                             uniform_list(
                                 "table-uniform-list",
-                                rows_count + extra_rows_needed,
+                                render_rows_count,
                                 cx.processor(
                                     move |table, visible_range: Range<usize>, window, cx| {
                                         // We must calculate the col sizes here, because the col sizes
@@ -1387,6 +1423,7 @@ where
                                                 left_columns_count,
                                                 col_sizes.clone(),
                                                 columns_count,
+                                                extra_rows_count,
                                                 window,
                                                 cx,
                                             ));

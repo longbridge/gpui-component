@@ -1,15 +1,17 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, DefiniteLength, Entity, InteractiveElement, IntoElement,
-    MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled, Window,
+    div, px, relative, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity,
+    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Pixels, Rems,
+    RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::button::{Button, ButtonVariants as _};
 use crate::indicator::Indicator;
 use crate::input::clear_button;
+use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
-use crate::ActiveTheme;
 use crate::{h_flex, StyledExt};
+use crate::{v_flex, ActiveTheme};
 use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
 
@@ -117,6 +119,12 @@ impl TextInput {
         self
     }
 
+    /// Set the tab index for the input, default is 0.
+    pub fn tab_index(mut self, index: isize) -> Self {
+        self.tab_index = index;
+        self
+    }
+
     fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
         Button::new("toggle-mask")
             .icon(IconName::Eye)
@@ -141,10 +149,74 @@ impl TextInput {
             })
     }
 
-    /// Set the tab index for the input, default is 0.
-    pub fn tab_index(mut self, index: isize) -> Self {
-        self.tab_index = index;
-        self
+    /// This method must after the refine_style.
+    fn render_editor(
+        paddings: EdgesRefinement<DefiniteLength>,
+        input_state: &Entity<InputState>,
+        state: &InputState,
+        window: &Window,
+        _cx: &App,
+    ) -> impl IntoElement {
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+
+        let paddings = Edges {
+            left: paddings
+                .left
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+            right: paddings
+                .right
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+            top: paddings
+                .top
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+            bottom: paddings
+                .bottom
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(px(0.)),
+        };
+
+        const MIN_SCROLL_PADDING: Pixels = px(2.0);
+
+        v_flex()
+            .size_full()
+            .children(state.search_panel.clone())
+            .child(div().flex_1().child(input_state.clone()).map(|this| {
+                if let Some(last_layout) = state.last_layout.as_ref() {
+                    let left = if last_layout.line_number_width.is_zero() {
+                        px(0.)
+                    } else {
+                        // Align left edge to the Line number.
+                        paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
+                    };
+
+                    let scroll_size = gpui::Size {
+                        width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
+                        height: state.scroll_size.height,
+                    };
+
+                    let scrollbar = if !state.soft_wrap {
+                        Scrollbar::both(&state.scroll_state, &state.scroll_handle)
+                    } else {
+                        Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
+                    };
+
+                    this.relative().child(
+                        div()
+                            .absolute()
+                            .top(-paddings.top + MIN_SCROLL_PADDING)
+                            .left(left)
+                            .right(-paddings.right + MIN_SCROLL_PADDING)
+                            .bottom(-paddings.bottom + MIN_SCROLL_PADDING)
+                            .child(scrollbar.scroll_size(scroll_size)),
+                    )
+                } else {
+                    this
+                }
+            }))
     }
 }
 
@@ -161,7 +233,6 @@ impl RenderOnce for TextInput {
         let font_size = window.text_style().font_size.to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
-            state.mode.set_height(self.height);
             state.text_wrapper.set_font(font, font_size, cx);
             state.disabled = self.disabled;
         });
@@ -177,15 +248,17 @@ impl RenderOnce for TextInput {
         let bg = if state.disabled {
             cx.theme().muted
         } else {
-            cx.theme().background
+            cx.theme()
+                .highlight_theme
+                .style
+                .background
+                .unwrap_or(cx.theme().background)
         };
 
         let prefix = self.prefix;
         let suffix = self.suffix;
-        let show_clear_button = self.cleanable
-            && !state.loading
-            && !state.text.is_empty()
-            && state.mode.is_single_line();
+        let show_clear_button =
+            self.cleanable && !state.loading && state.text.len() > 0 && state.mode.is_single_line();
         let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
 
         div()
@@ -215,6 +288,9 @@ impl RenderOnce for TextInput {
                             .on_action(window.listener_for(&self.state, InputState::indent_block))
                             .on_action(window.listener_for(&self.state, InputState::outdent_block))
                     })
+                    .on_action(
+                        window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
+                    )
             })
             .on_action(window.listener_for(&self.state, InputState::left))
             .on_action(window.listener_for(&self.state, InputState::right))
@@ -227,6 +303,9 @@ impl RenderOnce for TextInput {
                     .on_action(window.listener_for(&self.state, InputState::select_down))
                     .on_action(window.listener_for(&self.state, InputState::page_up))
                     .on_action(window.listener_for(&self.state, InputState::page_down))
+                    .on_action(
+                        window.listener_for(&self.state, InputState::on_action_go_to_definition),
+                    )
             })
             .on_action(window.listener_for(&self.state, InputState::select_all))
             .on_action(window.listener_for(&self.state, InputState::select_to_start_of_line))
@@ -243,23 +322,34 @@ impl RenderOnce for TextInput {
             .on_action(window.listener_for(&self.state, InputState::select_to_end))
             .on_action(window.listener_for(&self.state, InputState::show_character_palette))
             .on_action(window.listener_for(&self.state, InputState::copy))
+            .on_action(window.listener_for(&self.state, InputState::on_action_search))
             .on_key_down(window.listener_for(&self.state, InputState::on_key_down))
             .on_mouse_down(
                 MouseButton::Left,
+                window.listener_for(&self.state, InputState::on_mouse_down),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
                 window.listener_for(&self.state, InputState::on_mouse_down),
             )
             .on_mouse_up(
                 MouseButton::Left,
                 window.listener_for(&self.state, InputState::on_mouse_up),
             )
+            .on_mouse_up(
+                MouseButton::Right,
+                window.listener_for(&self.state, InputState::on_mouse_up),
+            )
             .on_mouse_move(window.listener_for(&self.state, InputState::on_mouse_move))
             .on_scroll_wheel(window.listener_for(&self.state, InputState::on_scroll_wheel))
             .size_full()
             .line_height(LINE_HEIGHT)
+            .input_px(self.size)
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
             .text_size(font_size)
+            .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
@@ -276,11 +366,23 @@ impl RenderOnce for TextInput {
                             })
                     })
             })
-            .input_px(self.size)
             .items_center()
             .gap(gap_x)
+            .refine_style(&self.style)
             .children(prefix)
-            .child(self.state.clone())
+            .when(state.mode.is_multi_line(), |mut this| {
+                let paddings = this.style().padding.clone();
+                this.child(Self::render_editor(
+                    paddings,
+                    &self.state,
+                    &state,
+                    window,
+                    cx,
+                ))
+            })
+            .when(!state.mode.is_multi_line(), |this| {
+                this.child(self.state.clone())
+            })
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px() / 2.).child(
                     h_flex()
@@ -306,25 +408,6 @@ impl RenderOnce for TextInput {
                         })
                         .children(suffix),
                 )
-            })
-            .refine_style(&self.style)
-            .when(state.mode.is_multi_line(), |this| {
-                if state.last_layout.is_some() {
-                    this.relative().child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right(px(1.))
-                            .bottom_0()
-                            .child(
-                                Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
-                                    .scroll_size(state.scroll_size),
-                            ),
-                    )
-                } else {
-                    this
-                }
             })
     }
 }

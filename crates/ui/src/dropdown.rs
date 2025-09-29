@@ -1,9 +1,9 @@
 use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext,
-    Bounds, ClickEvent, Context, DismissEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels, Render,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
-    Task, WeakEntity, Window,
+    Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Empty, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement,
+    Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Subscription, Task, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -11,8 +11,9 @@ use crate::{
     actions::{Cancel, Confirm, SelectNext, SelectPrev},
     h_flex,
     input::clear_button,
-    list::{List, ListDelegate, ListItem},
-    v_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+    list::{List, ListDelegate},
+    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size,
+    StyleSized, StyledExt,
 };
 
 #[derive(Clone)]
@@ -41,7 +42,7 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 /// A trait for items that can be displayed in a dropdown.
-pub trait DropdownItem {
+pub trait DropdownItem: Clone {
     type Value: Clone;
     fn title(&self) -> SharedString;
     /// Customize the display title used to selected item in Dropdown Input.
@@ -51,6 +52,10 @@ pub trait DropdownItem {
         None
     }
     fn value(&self) -> &Self::Value;
+    /// Check if the item matches the query for search, default is to match the title.
+    fn matches(&self, query: &str) -> bool {
+        self.title().to_lowercase().contains(&query.to_lowercase())
+    }
 }
 
 impl DropdownItem for String {
@@ -80,23 +85,29 @@ impl DropdownItem for SharedString {
 pub trait DropdownDelegate: Sized {
     type Item: DropdownItem;
 
-    fn len(&self) -> usize;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
+    /// Returns the number of sections in the dropdown.
+    fn sections_count(&self, _: &App) -> usize {
+        1
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item>;
+    /// Returns the section header element for the given section index.
+    fn section(&self, _section: usize) -> Option<AnyElement> {
+        return None;
+    }
 
-    fn position<V>(&self, value: &V) -> Option<usize>
+    /// Returns the number of items in the given section.
+    fn items_count(&self, section: usize) -> usize;
+
+    /// Returns the item at the given index path (Only section, row will be use).
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item>;
+
+    /// Returns the index of the item with the given value, or None if not found.
+    fn position<V>(&self, _value: &V) -> Option<IndexPath>
     where
         Self::Item: DropdownItem<Value = V>,
-        V: PartialEq,
-    {
-        (0..self.len()).find(|&i| self.get(i).map_or(false, |item| item.value() == value))
-    }
+        V: PartialEq;
 
-    fn can_search(&self) -> bool {
+    fn searchable(&self) -> bool {
         false
     }
 
@@ -108,44 +119,72 @@ pub trait DropdownDelegate: Sized {
 impl<T: DropdownItem> DropdownDelegate for Vec<T> {
     type Item = T;
 
-    fn len(&self) -> usize {
+    fn items_count(&self, _: usize) -> usize {
         self.len()
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.as_slice().get(ix)
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
+        self.as_slice().get(ix.row)
     }
 
-    fn position<V>(&self, value: &V) -> Option<usize>
+    fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
-        self.iter().position(|v| v.value() == value)
+        self.iter()
+            .position(|v| v.value() == value)
+            .map(|ix| IndexPath::default().row(ix))
     }
 }
 
 struct DropdownListDelegate<D: DropdownDelegate + 'static> {
     delegate: D,
     dropdown: WeakEntity<DropdownState<D>>,
-    selected_index: Option<usize>,
+    selected_index: Option<IndexPath>,
 }
 
 impl<D> ListDelegate for DropdownListDelegate<D>
 where
     D: DropdownDelegate + 'static,
 {
-    type Item = ListItem;
+    type Item = DropdownListItem;
 
-    fn items_count(&self, _: &App) -> usize {
-        self.delegate.len()
+    fn sections_count(&self, cx: &App) -> usize {
+        self.delegate.sections_count(cx)
+    }
+
+    fn items_count(&self, section: usize, _: &App) -> usize {
+        self.delegate.items_count(section)
+    }
+
+    fn render_section_header(
+        &self,
+        section: usize,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) -> Option<impl IntoElement> {
+        let dropdown = self.dropdown.upgrade()?.read(cx);
+        let Some(item) = self.delegate.section(section) else {
+            return None;
+        };
+
+        return Some(
+            div()
+                .py_0p5()
+                .px_2()
+                .list_size(dropdown.size)
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(item),
+        );
     }
 
     fn render_item(
         &self,
-        ix: usize,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<List<Self>>,
+        ix: IndexPath,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = self
             .selected_index
@@ -155,12 +194,10 @@ where
             .upgrade()
             .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
 
-        if let Some(item) = self.delegate.get(ix) {
-            let list_item = ListItem::new(("list-item", ix))
-                .check_icon(IconName::Check)
+        if let Some(item) = self.delegate.item(ix) {
+            let list_item = DropdownListItem::new(ix.row)
                 .selected(selected)
-                .input_text_size(size)
-                .list_size(size)
+                .with_size(size)
                 .child(div().whitespace_nowrap().child(item.title().to_string()));
             Some(list_item)
         } else {
@@ -181,7 +218,7 @@ where
     fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
         let selected_value = self
             .selected_index
-            .and_then(|ix| self.delegate.get(ix))
+            .and_then(|ix| self.delegate.item(ix))
             .map(|item| item.value().clone());
         let dropdown = self.dropdown.clone();
 
@@ -208,7 +245,7 @@ where
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) {
@@ -267,12 +304,20 @@ pub struct Dropdown<D: DropdownDelegate + 'static> {
     appearance: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct SearchableVec<T> {
     items: Vec<T>,
     matched_items: Vec<T>,
 }
 
-impl<T: DropdownItem + Clone> SearchableVec<T> {
+impl<T: Clone> SearchableVec<T> {
+    pub fn push(&mut self, item: T) {
+        self.items.push(item.clone());
+        self.matched_items.push(item);
+    }
+}
+
+impl<T: Clone> SearchableVec<T> {
     pub fn new(items: impl Into<Vec<T>>) -> Self {
         let items = items.into();
         Self {
@@ -282,7 +327,7 @@ impl<T: DropdownItem + Clone> SearchableVec<T> {
     }
 }
 
-impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
+impl<T: DropdownItem> From<Vec<T>> for SearchableVec<T> {
     fn from(items: Vec<T>) -> Self {
         Self {
             items: items.clone(),
@@ -291,32 +336,32 @@ impl<T: DropdownItem + Clone> From<Vec<T>> for SearchableVec<T> {
     }
 }
 
-impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
-    type Item = T;
+impl<I: DropdownItem> DropdownDelegate for SearchableVec<I> {
+    type Item = I;
 
-    fn len(&self) -> usize {
+    fn items_count(&self, _: usize) -> usize {
         self.matched_items.len()
     }
 
-    fn get(&self, ix: usize) -> Option<&Self::Item> {
-        self.matched_items.get(ix)
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
+        self.matched_items.get(ix.row)
     }
 
-    fn position<V>(&self, value: &V) -> Option<usize>
+    fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
         Self::Item: DropdownItem<Value = V>,
         V: PartialEq,
     {
         for (ix, item) in self.matched_items.iter().enumerate() {
             if item.value() == value {
-                return Some(ix);
+                return Some(IndexPath::default().row(ix));
             }
         }
 
         None
     }
 
-    fn can_search(&self) -> bool {
+    fn searchable(&self) -> bool {
         true
     }
 
@@ -332,13 +377,127 @@ impl<T: DropdownItem + Clone> DropdownDelegate for SearchableVec<T> {
     }
 }
 
+impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
+    type Item = I;
+
+    fn sections_count(&self, _: &App) -> usize {
+        self.matched_items.len()
+    }
+
+    fn items_count(&self, section: usize) -> usize {
+        self.matched_items
+            .get(section)
+            .map_or(0, |group| group.items.len())
+    }
+
+    fn section(&self, section: usize) -> Option<AnyElement> {
+        Some(
+            self.matched_items
+                .get(section)?
+                .title
+                .clone()
+                .into_any_element(),
+        )
+    }
+
+    fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
+        let section = self.matched_items.get(ix.section)?;
+
+        section.items.get(ix.row)
+    }
+
+    fn position<V>(&self, value: &V) -> Option<IndexPath>
+    where
+        Self::Item: DropdownItem<Value = V>,
+        V: PartialEq,
+    {
+        for (ix, group) in self.matched_items.iter().enumerate() {
+            for (row_ix, item) in group.items.iter().enumerate() {
+                if item.value() == value {
+                    return Some(IndexPath::default().section(ix).row(row_ix));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn searchable(&self) -> bool {
+        true
+    }
+
+    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
+        self.matched_items = self
+            .items
+            .iter()
+            .filter(|item| item.matches(&query))
+            .cloned()
+            .map(|mut item| {
+                item.items.retain(|item| item.matches(&query));
+                item
+            })
+            .collect();
+
+        Task::ready(())
+    }
+}
+
+/// A group of dropdown items with a title.
+#[derive(Debug, Clone)]
+pub struct DropdownItemGroup<I: DropdownItem> {
+    pub title: SharedString,
+    pub items: Vec<I>,
+}
+
+// impl<I> DropdownItem for DropdownItemGroup<I>
+// where
+//     I: DropdownItem,
+// {
+//     type Value = SharedString;
+
+//     fn title(&self) -> SharedString {
+//         self.title.clone()
+//     }
+
+//     fn value(&self) -> &Self::Value {
+//         &self.title
+//     }
+
+//     fn matches(&self, query: &str) -> bool {
+//         self.title.to_lowercase().contains(&query.to_lowercase())
+//             || self.items.iter().any(|item| item.matches(query))
+//     }
+// }
+
+impl<I> DropdownItemGroup<I>
+where
+    I: DropdownItem,
+{
+    pub fn new(title: impl Into<SharedString>) -> Self {
+        Self {
+            title: title.into(),
+            items: vec![],
+        }
+    }
+
+    pub fn items(mut self, items: impl IntoIterator<Item = I>) -> Self {
+        self.items = items.into_iter().collect();
+        self
+    }
+
+    fn matches(&self, query: &str) -> bool {
+        self.title.to_lowercase().contains(&query.to_lowercase())
+            || self.items.iter().any(|item| item.matches(query))
+    }
+}
+
 impl<D> DropdownState<D>
 where
     D: DropdownDelegate + 'static,
 {
     pub fn new(
         delegate: D,
-        selected_index: Option<usize>,
+        selected_index: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -349,11 +508,12 @@ where
             selected_index,
         };
 
-        let searchable = delegate.delegate.can_search();
+        let searchable = delegate.delegate.searchable();
 
         let list = cx.new(|cx| {
             let mut list = List::new(delegate, window, cx)
                 .max_h(rems(20.))
+                .paddings(Edges::all(px(4.)))
                 .reset_on_cancel(false);
             if !searchable {
                 list = list.no_query();
@@ -391,12 +551,12 @@ where
 
     pub fn set_selected_index(
         &mut self,
-        selected_index: Option<usize>,
+        selected_index: Option<IndexPath>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.list.update(cx, |list, cx| {
-            list.set_selected_index(selected_index, window, cx);
+            list._set_selected_index(selected_index, window, cx);
         });
         self.update_selected_value(window, cx);
     }
@@ -414,14 +574,14 @@ where
         self.set_selected_index(selected_index, window, cx);
     }
 
-    pub fn selected_index(&self, cx: &App) -> Option<usize> {
+    pub fn selected_index(&self, cx: &App) -> Option<IndexPath> {
         self.list.read(cx).selected_index()
     }
 
     fn update_selected_value(&mut self, _: &Window, cx: &App) {
         self.selected_value = self
             .selected_index(cx)
-            .and_then(|ix| self.list.read(cx).delegate().delegate.get(ix))
+            .and_then(|ix| self.list.read(cx).delegate().delegate.item(ix))
             .map(|item| item.value().clone());
     }
 
@@ -613,7 +773,7 @@ where
             .read(cx)
             .delegate()
             .delegate
-            .get(*selected_index)
+            .item(*selected_index)
             .map(|item| {
                 if let Some(el) = item.display_title() {
                     el
@@ -809,7 +969,7 @@ where
                             div()
                                 .occlude()
                                 .map(|this| match self.menu_width {
-                                    Length::Auto => this.w(bounds.size.width),
+                                    Length::Auto => this.w(bounds.size.width + px(2.)),
                                     Length::Definite(w) => this.w(w),
                                 })
                                 .child(
@@ -834,5 +994,102 @@ where
                     .with_priority(1),
                 )
             })
+    }
+}
+
+#[derive(IntoElement)]
+struct DropdownListItem {
+    id: ElementId,
+    size: Size,
+    style: StyleRefinement,
+    selected: bool,
+    disabled: bool,
+    children: Vec<AnyElement>,
+}
+
+impl DropdownListItem {
+    pub fn new(ix: usize) -> Self {
+        Self {
+            id: ("dropdown-item", ix).into(),
+            size: Size::default(),
+            style: StyleRefinement::default(),
+            selected: false,
+            disabled: false,
+            children: Vec::new(),
+        }
+    }
+}
+
+impl ParentElement for DropdownListItem {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Disableable for DropdownListItem {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Selectable for DropdownListItem {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
+}
+
+impl Sizable for DropdownListItem {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
+impl Styled for DropdownListItem {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for DropdownListItem {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        h_flex()
+            .id(self.id)
+            .relative()
+            .gap_x_1()
+            .py_1()
+            .px_2()
+            .rounded(cx.theme().radius)
+            .text_base()
+            .text_color(cx.theme().foreground)
+            .relative()
+            .items_center()
+            .justify_between()
+            .input_text_size(self.size)
+            .list_size(self.size)
+            .refine_style(&self.style)
+            .when(!self.disabled, |this| {
+                this.when(!self.selected, |this| {
+                    this.hover(|this| this.bg(cx.theme().accent.alpha(0.7)))
+                })
+            })
+            .when(self.selected, |this| this.bg(cx.theme().accent))
+            .when(self.disabled, |this| {
+                this.text_color(cx.theme().muted_foreground)
+            })
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .gap_x_1()
+                    .child(div().w_full().children(self.children)),
+            )
     }
 }

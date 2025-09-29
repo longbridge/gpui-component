@@ -1,13 +1,13 @@
 use gpui::{
-    hsla, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
-    SharedString, Styled, Subscription, Window,
+    hsla, px, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement,
+    Render, SharedString, Styled, Subscription, Window,
 };
 use gpui_component::{
     checkbox::Checkbox,
     clipboard::Clipboard,
     h_flex,
     slider::{Slider, SliderEvent, SliderState},
-    v_flex, Colorize as _, ContextModal, StyledExt,
+    v_flex, ActiveTheme, Colorize as _, ContextModal, StyledExt,
 };
 
 use crate::section;
@@ -18,8 +18,10 @@ pub struct SliderStory {
     slider1_value: f32,
     slider2: Entity<SliderState>,
     slider2_value: f32,
+    slider3: Entity<SliderState>,
     slider_hsl: [Entity<SliderState>; 4],
     slider_hsl_value: Hsla,
+    slider4: Entity<SliderState>,
     disabled: bool,
     _subscritions: Vec<Subscription>,
 }
@@ -48,11 +50,17 @@ impl SliderStory {
             SliderState::new()
                 .min(-255.)
                 .max(255.)
-                .default_value(15.)
+                .default_value(75.)
                 .step(15.)
         });
 
-        let slider2 = cx.new(|_| SliderState::new().min(0.).max(5.).step(1.0));
+        let slider2 = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(5.)
+                .step(1.0)
+                .default_value(2.)
+        });
         let slider_hsl = [
             cx.new(|_| {
                 SliderState::new()
@@ -84,16 +92,32 @@ impl SliderStory {
             }),
         ];
 
+        let slider3 = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(100.)
+                .default_value(12.0..45.0)
+                .step(1.)
+        });
+
+        let slider4 = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(360.)
+                .default_value(100.0..300.0)
+                .step(1.)
+        });
+
         let mut _subscritions = vec![
             cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
-                    this.slider1_value = *value;
+                    this.slider1_value = value.start();
                     cx.notify();
                 }
             }),
             cx.subscribe(&slider2, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
-                    this.slider2_value = *value;
+                    this.slider2_value = value.start();
                     cx.notify();
                 }
             }),
@@ -106,10 +130,10 @@ impl SliderStory {
                     cx.subscribe(slider, |this, _, event: &SliderEvent, cx| match event {
                         SliderEvent::Change(_) => {
                             this.slider_hsl_value = hsla(
-                                this.slider_hsl[0].read(cx).value(),
-                                this.slider_hsl[1].read(cx).value(),
-                                this.slider_hsl[2].read(cx).value(),
-                                this.slider_hsl[3].read(cx).value(),
+                                this.slider_hsl[0].read(cx).value().start(),
+                                this.slider_hsl[1].read(cx).value().start(),
+                                this.slider_hsl[2].read(cx).value().start(),
+                                this.slider_hsl[3].read(cx).value().start(),
                             );
                             cx.notify();
                         }
@@ -128,6 +152,8 @@ impl SliderStory {
             slider2_value: 0.,
             slider1,
             slider2,
+            slider3,
+            slider4,
             slider_hsl,
             slider_hsl_value: gpui::red(),
             disabled: false,
@@ -147,10 +173,9 @@ impl Render for SliderStory {
         let rgb = SharedString::from(self.slider_hsl_value.to_hex());
 
         v_flex()
-            .items_center()
             .gap_y_3()
             .child(
-                h_flex().justify_between().child(
+                h_flex().child(
                     Checkbox::new("disabled")
                         .checked(self.disabled)
                         .label("Disabled")
@@ -164,23 +189,40 @@ impl Render for SliderStory {
                 section("Horizontal Slider")
                     .max_w_md()
                     .v_flex()
-                    .child(
-                        Slider::new(&self.slider1)
-                            .horizontal()
-                            .disabled(self.disabled),
-                    )
+                    .child(Slider::new(&self.slider1).disabled(self.disabled))
                     .child(format!("Value: {}", self.slider1_value)),
             )
             .child(
-                section("Slider (0 - 5)")
+                section("Slider (0 - 5) and with color")
                     .max_w_md()
                     .v_flex()
                     .child(
                         Slider::new(&self.slider2)
-                            .horizontal()
-                            .disabled(self.disabled),
+                            .disabled(self.disabled)
+                            .bg(cx.theme().success)
+                            .text_color(cx.theme().success_foreground),
                     )
                     .child(format!("Value: {}", self.slider2_value)),
+            )
+            .child(
+                section("Range Mode")
+                    .max_w_md()
+                    .v_flex()
+                    .child(Slider::new(&self.slider3).disabled(self.disabled))
+                    .child(format!("Value: {}", self.slider3.read(cx).value())),
+            )
+            .child(
+                section("Vertical with Range")
+                    .max_w_md()
+                    .v_flex()
+                    .child(
+                        Slider::new(&self.slider4)
+                            .vertical()
+                            .h(px(200.))
+                            .rounded(px(2.))
+                            .disabled(self.disabled),
+                    )
+                    .child(format!("Value: {}", self.slider4.read(cx).value())),
             )
             .child(
                 section("Color Picker")
@@ -210,7 +252,6 @@ impl Render for SliderStory {
                             .child(
                                 Slider::new(&self.slider_hsl[0])
                                     .vertical()
-                                    .reverse()
                                     .disabled(self.disabled),
                             )
                             .child(
@@ -229,7 +270,6 @@ impl Render for SliderStory {
                             .child(
                                 Slider::new(&self.slider_hsl[1])
                                     .vertical()
-                                    .reverse()
                                     .disabled(self.disabled),
                             )
                             .child(
@@ -248,7 +288,6 @@ impl Render for SliderStory {
                             .child(
                                 Slider::new(&self.slider_hsl[2])
                                     .vertical()
-                                    .reverse()
                                     .disabled(self.disabled),
                             )
                             .child(
@@ -267,7 +306,6 @@ impl Render for SliderStory {
                             .child(
                                 Slider::new(&self.slider_hsl[3])
                                     .vertical()
-                                    .reverse()
                                     .disabled(self.disabled),
                             )
                             .child(

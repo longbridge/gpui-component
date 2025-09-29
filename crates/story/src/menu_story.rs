@@ -17,24 +17,25 @@ struct Info(usize);
 
 actions!(menu_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
+const CONTEXT: &str = "menu_story";
 pub fn init(cx: &mut App) {
     cx.bind_keys([
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-c", Copy, None),
+        KeyBinding::new("ctrl-c", Copy, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-v", Paste, None),
+        KeyBinding::new("cmd-v", Paste, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-v", Paste, None),
+        KeyBinding::new("ctrl-v", Paste, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-x", Cut, None),
+        KeyBinding::new("cmd-x", Cut, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-x", Cut, None),
+        KeyBinding::new("ctrl-x", Cut, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-shift-f", SearchAll, None),
+        KeyBinding::new("cmd-shift-f", SearchAll, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-shift-f", SearchAll, None),
+        KeyBinding::new("ctrl-shift-f", SearchAll, Some(CONTEXT)),
     ])
 }
 
@@ -116,6 +117,7 @@ impl Render for MenuStory {
         let checked = self.checked;
 
         v_flex()
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
@@ -217,24 +219,43 @@ impl Render for MenuStory {
                     }),
             )
             .child(
-                section("Menu with scrollbar").child(
-                    Button::new("popup-menu-11112")
-                        .outline()
-                        .label("Scrollable Menu")
-                        .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
-                            let mut this = this
-                                .scrollable()
-                                .max_h(px(300.))
-                                .label(format!("Total {} items", 100));
-                            for i in 0..100 {
-                                this = this.menu(
-                                    SharedString::from(format!("Item {}", i)),
-                                    Box::new(Info(i)),
-                                )
-                            }
-                            this.min_w(px(100.))
-                        }),
-                ),
+                section("Menu with scrollbar")
+                    .child(
+                        Button::new("popup-menu-scrollable-1")
+                            .outline()
+                            .label("Scrollable Menu (100 items)")
+                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                                let mut this = this
+                                    .scrollable()
+                                    .max_h(px(300.))
+                                    .label(format!("Total {} items", 100));
+                                for i in 0..100 {
+                                    this = this.menu(
+                                        SharedString::from(format!("Item {}", i)),
+                                        Box::new(Info(i)),
+                                    )
+                                }
+                                this.min_w(px(100.))
+                            }),
+                    )
+                    .child(
+                        Button::new("popup-menu-scrollable-2")
+                            .outline()
+                            .label("Scrollable Menu (5 items)")
+                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                                let mut this = this
+                                    .scrollable()
+                                    .max_h(px(300.))
+                                    .label(format!("Total {} items", 100));
+                                for i in 0..5 {
+                                    this = this.menu(
+                                        SharedString::from(format!("Item {}", i)),
+                                        Box::new(Info(i)),
+                                    )
+                                }
+                                this.min_w(px(100.))
+                            }),
+                    ),
             )
     }
 }

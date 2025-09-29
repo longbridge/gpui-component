@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use gpui::{Hsla, SharedString};
-use palette::FromColor as _;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +32,8 @@ pub struct ThemeSet {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ThemeConfig {
+    /// Whether this theme is the default theme.
+    pub is_default: bool,
     /// The name of the theme.
     pub name: SharedString,
     /// The mode of the theme, default is light.
@@ -56,9 +57,6 @@ pub struct ThemeConfigColors {
     /// Accordion background color.
     #[serde(rename = "accordion.background")]
     pub accordion: Option<SharedString>,
-    /// Accordion active background color.
-    #[serde(rename = "accordion.active.background")]
-    pub accordion_active: Option<SharedString>,
     /// Accordion hover background color.
     #[serde(rename = "accordion.hover.background")]
     pub accordion_hover: Option<SharedString>,
@@ -68,12 +66,15 @@ pub struct ThemeConfigColors {
     /// Default border color
     #[serde(rename = "border")]
     pub border: Option<SharedString>,
-    /// Background color for Card.
-    #[serde(rename = "card.background")]
-    pub card: Option<SharedString>,
-    /// Text color for Card.
-    #[serde(rename = "card.foreground")]
-    pub card_foreground: Option<SharedString>,
+    /// Background color for GroupBox.
+    #[serde(rename = "group_box.background")]
+    pub group_box: Option<SharedString>,
+    /// Text color for GroupBox.
+    #[serde(rename = "group_box.foreground")]
+    pub group_box_foreground: Option<SharedString>,
+    /// Title text color for GroupBox.
+    #[serde(rename = "group_box.title.foreground")]
+    pub group_box_title_foreground: Option<SharedString>,
     /// Input caret color (Blinking cursor).
     #[serde(rename = "caret")]
     pub caret: Option<SharedString>,
@@ -374,28 +375,13 @@ pub struct ThemeConfigColors {
 /// Try to parse HEX color, `#RRGGBB` or `#RRGGBBAA`
 fn try_parse_color(color: &str) -> Result<Hsla> {
     let rgba = gpui::Rgba::try_from(color)?;
-    let rgba = palette::rgb::Srgba::from_components((rgba.r, rgba.g, rgba.b, rgba.a));
-    let hsla = palette::Hsla::from_color(rgba);
-
-    let hsla = gpui::hsla(
-        hsla.hue.into_positive_degrees() / 360.,
-        hsla.saturation,
-        hsla.lightness,
-        hsla.alpha,
-    );
-
-    Ok(hsla)
+    Ok(rgba.into())
 }
 
-impl Theme {
-    /// Apply the given theme configuration to the current theme.
-    pub fn apply_config(&mut self, config: &ThemeConfig) {
+impl ThemeColor {
+    /// Create a new `ThemeColor` from a `ThemeConfig`.
+    pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &ThemeColor) {
         let colors = config.colors.clone();
-        let default_theme = if config.mode.is_dark() {
-            ThemeColor::dark()
-        } else {
-            ThemeColor::light()
-        };
 
         macro_rules! apply_color {
             ($config_field:ident) => {
@@ -421,44 +407,114 @@ impl Theme {
             };
         }
 
-        self.mode = config.mode;
+        apply_color!(background);
 
         // Base colors for fallback
         apply_color!(red);
-        apply_color!(red_light, fallback = self.red.opacity(0.8));
+        apply_color!(
+            red_light,
+            fallback = self.background.blend(self.red.opacity(0.8))
+        );
         apply_color!(green);
-        apply_color!(green_light, fallback = self.green.opacity(0.8));
+        apply_color!(
+            green_light,
+            fallback = self.background.blend(self.green.opacity(0.8))
+        );
         apply_color!(blue);
-        apply_color!(blue_light, fallback = self.blue.opacity(0.8));
+        apply_color!(
+            blue_light,
+            fallback = self.background.blend(self.blue.opacity(0.8))
+        );
         apply_color!(magenta);
-        apply_color!(magenta_light, fallback = self.magenta.opacity(0.8));
+        apply_color!(
+            magenta_light,
+            fallback = self.background.blend(self.magenta.opacity(0.8))
+        );
         apply_color!(yellow);
-        apply_color!(yellow_light, fallback = self.yellow.opacity(0.8));
+        apply_color!(
+            yellow_light,
+            fallback = self.background.blend(self.yellow.opacity(0.8))
+        );
         apply_color!(cyan);
-        apply_color!(cyan_light, fallback = self.cyan.opacity(0.8));
+        apply_color!(
+            cyan_light,
+            fallback = self.background.blend(self.cyan.opacity(0.8))
+        );
 
-        apply_color!(background);
         apply_color!(border);
         apply_color!(foreground);
         apply_color!(muted);
-        apply_color!(muted_foreground, fallback = self.foreground.opacity(0.7));
+        apply_color!(
+            muted_foreground,
+            fallback = self.muted.blend(self.foreground.opacity(0.7))
+        );
+
+        // Button colors
+        let active_darken = if config.mode.is_dark() { 0.2 } else { 0.1 };
+        let hover_opacity = 0.9;
         apply_color!(primary);
-        apply_color!(primary_active, fallback = self.primary.darken(0.1));
         apply_color!(primary_foreground, fallback = self.foreground);
-        apply_color!(primary_hover, fallback = self.primary.opacity(0.9));
+        apply_color!(
+            primary_hover,
+            fallback = self.background.blend(self.primary.opacity(hover_opacity))
+        );
+        apply_color!(
+            primary_active,
+            fallback = self.primary.darken(active_darken)
+        );
         apply_color!(secondary);
-        apply_color!(secondary_active, fallback = self.secondary.darken(0.1));
         apply_color!(secondary_foreground, fallback = self.foreground);
-        apply_color!(secondary_hover, fallback = self.secondary.opacity(0.9));
+        apply_color!(
+            secondary_hover,
+            fallback = self.background.blend(self.secondary.opacity(hover_opacity))
+        );
+        apply_color!(
+            secondary_active,
+            fallback = self.secondary.darken(active_darken)
+        );
+        apply_color!(success, fallback = self.green);
+        apply_color!(success_foreground, fallback = self.primary_foreground);
+        apply_color!(
+            success_hover,
+            fallback = self.background.blend(self.success.opacity(hover_opacity))
+        );
+        apply_color!(
+            success_active,
+            fallback = self.success.darken(active_darken)
+        );
+        apply_color!(info, fallback = self.cyan);
+        apply_color!(info_foreground, fallback = self.primary_foreground);
+        apply_color!(
+            info_hover,
+            fallback = self.background.blend(self.info.opacity(hover_opacity))
+        );
+        apply_color!(info_active, fallback = self.info.darken(active_darken));
+        apply_color!(warning, fallback = self.yellow);
+        apply_color!(warning_foreground, fallback = self.primary_foreground);
+        apply_color!(
+            warning_hover,
+            fallback = self.background.blend(self.warning.opacity(0.9))
+        );
+        apply_color!(
+            warning_active,
+            fallback = self.background.blend(self.warning.darken(active_darken))
+        );
 
         // Other colors
         apply_color!(accent, fallback = self.secondary);
         apply_color!(accent_foreground, fallback = self.secondary_foreground);
         apply_color!(accordion, fallback = self.background);
-        apply_color!(accordion_active, fallback = self.accordion);
-        apply_color!(accordion_hover, fallback = self.accordion);
-        apply_color!(card, fallback = self.background);
-        apply_color!(card_foreground, fallback = self.foreground);
+        apply_color!(accordion_hover, fallback = self.accent.opacity(0.8));
+        apply_color!(
+            group_box,
+            fallback = self
+                .background
+                .blend(
+                    self.secondary
+                        .opacity(if config.mode.is_dark() { 0.3 } else { 0.4 })
+                )
+        );
+        apply_color!(group_box_foreground, fallback = self.secondary_foreground);
         apply_color!(caret, fallback = self.primary);
         apply_color!(chart_1, fallback = self.blue.lighten(0.4));
         apply_color!(chart_2, fallback = self.blue.lighten(0.2));
@@ -466,27 +522,35 @@ impl Theme {
         apply_color!(chart_4, fallback = self.blue.darken(0.2));
         apply_color!(chart_5, fallback = self.blue.darken(0.4));
         apply_color!(danger, fallback = self.red);
-        apply_color!(danger_active, fallback = self.danger.darken(0.1));
+        apply_color!(danger_active, fallback = self.danger.darken(active_darken));
         apply_color!(danger_foreground, fallback = self.primary_foreground);
-        apply_color!(danger_hover, fallback = self.danger.opacity(0.9));
-        apply_color!(description_list_label, fallback = self.border.opacity(0.2));
+        apply_color!(
+            danger_hover,
+            fallback = self.background.blend(self.danger.opacity(0.9))
+        );
+        apply_color!(
+            description_list_label,
+            fallback = self.background.blend(self.border.opacity(0.2))
+        );
         apply_color!(
             description_list_label_foreground,
             fallback = self.secondary_foreground
         );
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
         apply_color!(drop_target, fallback = self.primary.opacity(0.2));
-        apply_color!(info, fallback = self.cyan);
-        apply_color!(info_active, fallback = self.info.darken(0.1));
-        apply_color!(info_foreground, fallback = self.primary_foreground);
-        apply_color!(info_hover, fallback = self.info.opacity(0.9));
         apply_color!(input, fallback = self.border);
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);
         apply_color!(link_hover, fallback = self.link);
         apply_color!(list, fallback = self.background);
-        apply_color!(list_active, fallback = self.primary.opacity(0.1));
-        apply_color!(list_active_border, fallback = self.primary.opacity(0.6));
+        apply_color!(
+            list_active,
+            fallback = self.background.blend(self.primary.opacity(0.1))
+        );
+        apply_color!(
+            list_active_border,
+            fallback = self.background.blend(self.primary.opacity(0.6))
+        );
         apply_color!(list_even, fallback = self.list);
         apply_color!(list_head, fallback = self.list);
         apply_color!(list_hover, fallback = self.secondary_hover);
@@ -495,9 +559,9 @@ impl Theme {
         apply_color!(progress_bar, fallback = self.primary);
         apply_color!(ring, fallback = self.blue);
         apply_color!(scrollbar, fallback = self.background);
-        apply_color!(scrollbar_thumb, fallback = self.secondary);
-        apply_color!(scrollbar_thumb_hover, fallback = self.secondary_hover);
-        apply_color!(selection, fallback = self.primary.opacity(0.5));
+        apply_color!(scrollbar_thumb, fallback = self.accent);
+        apply_color!(scrollbar_thumb_hover, fallback = self.scrollbar_thumb);
+        apply_color!(selection, fallback = self.primary);
         apply_color!(sidebar, fallback = self.background);
         apply_color!(sidebar_accent, fallback = self.accent);
         apply_color!(sidebar_accent_foreground, fallback = self.accent_foreground);
@@ -511,16 +575,12 @@ impl Theme {
         apply_color!(skeleton, fallback = self.secondary);
         apply_color!(slider_bar, fallback = self.primary);
         apply_color!(slider_thumb, fallback = self.primary_foreground);
-        apply_color!(success, fallback = self.green);
-        apply_color!(success_foreground, fallback = self.primary_foreground);
-        apply_color!(success_hover, fallback = self.success.opacity(0.9));
-        apply_color!(success_active, fallback = self.success.darken(0.1));
         apply_color!(switch, fallback = self.secondary);
         apply_color!(tab, fallback = self.background);
         apply_color!(tab_active, fallback = self.background);
         apply_color!(tab_active_foreground, fallback = self.foreground);
         apply_color!(tab_bar, fallback = self.background);
-        apply_color!(tab_bar_segmented, fallback = self.background);
+        apply_color!(tab_bar_segmented, fallback = self.secondary);
         apply_color!(tab_foreground, fallback = self.secondary_foreground);
         apply_color!(table, fallback = self.list);
         apply_color!(table_active, fallback = self.list_active);
@@ -533,38 +593,43 @@ impl Theme {
         apply_color!(title_bar, fallback = self.background);
         apply_color!(title_bar_border, fallback = self.border);
         apply_color!(tiles, fallback = self.background);
-        apply_color!(warning, fallback = self.yellow);
-        apply_color!(warning_active, fallback = self.warning.darken(0.1));
-        apply_color!(warning_hover, fallback = self.warning.opacity(0.9));
-        apply_color!(warning_foreground, fallback = self.primary_foreground);
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);
 
         // TODO: Apply default fallback colors to highlight.
 
         // Ensure opacity for list_active, table_active
-        self.colors.list_active = self.colors.list_active.alpha(0.2);
-        self.colors.table_active = self.colors.table_active.alpha(0.2);
+        self.list_active = self.list_active.alpha(0.2);
+        self.table_active = self.table_active.alpha(0.2);
+        self.selection = self.selection.alpha(0.3);
+    }
+}
 
+impl Theme {
+    /// Apply the given theme configuration to the current theme.
+    pub fn apply_config(&mut self, config: &Rc<ThemeConfig>) {
         if config.mode.is_dark() {
-            self.dark_theme = self.colors;
+            self.dark_theme = config.clone();
         } else {
-            self.light_theme = self.colors;
+            self.light_theme = config.clone();
         }
-
         if let Some(style) = &config.highlight {
             let highlight_theme = Arc::new(HighlightTheme {
                 name: config.name.to_string(),
-                appearance: self.mode,
+                appearance: config.mode,
                 style: style.clone(),
             });
             self.highlight_theme = highlight_theme.clone();
-            if config.mode.is_dark() {
-                self.dark_highlight_theme = highlight_theme;
-            } else {
-                self.light_highlight_theme = highlight_theme;
-            }
         }
+
+        let default_theme = if config.mode.is_dark() {
+            ThemeColor::dark()
+        } else {
+            ThemeColor::light()
+        };
+
+        self.colors.apply_config(&config, &default_theme);
+        self.mode = config.mode;
     }
 }
 

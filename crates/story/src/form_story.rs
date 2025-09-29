@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     switch::Switch,
-    v_flex, ActiveTheme, AxisExt, Selectable, Sizable, Size,
+    v_flex, ActiveTheme, AxisExt, IndexPath, Selectable, Sizable, Size,
 };
 
 pub struct FormStory {
@@ -27,6 +27,7 @@ pub struct FormStory {
     date: Entity<DatePickerState>,
     layout: Axis,
     size: Size,
+    column: u16,
 }
 
 impl super::Story for FormStory {
@@ -61,7 +62,7 @@ impl FormStory {
                     "Ms.".to_string(),
                     "Dr.".to_string(),
                 ],
-                Some(0),
+                Some(IndexPath::default()),
                 window,
                 cx,
             )
@@ -91,6 +92,7 @@ impl FormStory {
             subscribe_email: false,
             layout: Axis::Vertical,
             size: Size::default(),
+            column: 1,
         }
     }
 }
@@ -103,6 +105,9 @@ impl Focusable for FormStory {
 
 impl Render for FormStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_multi_column = self.column > 1;
+        let is_horizontal = self.layout.is_horizontal();
+
         v_flex()
             .id("form-story")
             .size_full()
@@ -115,17 +120,34 @@ impl Render for FormStory {
                     .flex_wrap()
                     .justify_between()
                     .child(
-                        Switch::new("layout")
-                            .checked(self.layout.is_horizontal())
-                            .label("Horizontal")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                if *checked {
-                                    this.layout = Axis::Horizontal;
-                                } else {
-                                    this.layout = Axis::Vertical;
-                                }
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .gap_x_3()
+                            .child(
+                                Switch::new("layout")
+                                    .checked(self.layout.is_horizontal())
+                                    .label("Horizontal")
+                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                        if *checked {
+                                            this.layout = Axis::Horizontal;
+                                        } else {
+                                            this.layout = Axis::Vertical;
+                                        }
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Switch::new("column")
+                                    .checked(self.column > 1)
+                                    .label("Multi Column")
+                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                        if *checked {
+                                            this.column = 2;
+                                        } else {
+                                            this.column = 1;
+                                        }
+                                        cx.notify();
+                                    })),
+                            ),
                     )
                     .child(
                         ButtonGroup::new("size")
@@ -163,6 +185,8 @@ impl Render for FormStory {
                 v_form()
                     .layout(self.layout)
                     .with_size(self.size)
+                    .column(self.column)
+                    .label_width(px(if is_multi_column { 100. } else { 140. }))
                     .child(
                         form_field().label_fn(|_, _| "Name").child(
                             h_flex()
@@ -200,46 +224,60 @@ impl Render for FormStory {
                     .child(
                         form_field()
                             .no_label_indent()
+                            .when(is_multi_column, |this| this.col_span(2))
                             .child("This is a full width form field."),
                     )
                     .child(
                         form_field()
                             .label("Please select your birthday")
-                            .child(DatePicker::new(&self.date))
-                            .description("Select your birthday, we will send you a gift."),
+                            .description("Select your birthday, we will send you a gift.")
+                            .child(DatePicker::new(&self.date)),
                     )
                     .child(
-                        form_field().child(
-                            Switch::new("subscribe-newsletter")
-                                .label("Subscribe our newsletter")
-                                .checked(self.subscribe_email)
-                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                    this.subscribe_email = *checked;
-                                    cx.notify();
-                                })),
-                        ),
+                        form_field()
+                            .when(is_horizontal && is_multi_column, |this| {
+                                this.no_label_indent()
+                            })
+                            .when(is_multi_column, |this| this.col_start(1))
+                            .child(
+                                Switch::new("subscribe-newsletter")
+                                    .label("Subscribe our newsletter")
+                                    .checked(self.subscribe_email)
+                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                        this.subscribe_email = *checked;
+                                        cx.notify();
+                                    })),
+                            ),
                     )
                     .child(
-                        form_field().child(
-                            ColorPicker::new(&self.color_state)
-                                .small()
-                                .label("Theme color"),
-                        ),
+                        form_field()
+                            .when(is_horizontal && is_multi_column, |this| {
+                                this.no_label_indent()
+                            })
+                            .child(
+                                ColorPicker::new(&self.color_state)
+                                    .small()
+                                    .label("Theme color"),
+                            ),
                     )
                     .child(
-                        form_field().child(
-                            Checkbox::new("use-vertical-layout")
-                                .label("Vertical layout")
-                                .checked(self.layout.is_vertical())
-                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                    this.layout = if *checked {
-                                        Axis::Vertical
-                                    } else {
-                                        Axis::Horizontal
-                                    };
-                                    cx.notify();
-                                })),
-                        ),
+                        form_field()
+                            .when(is_horizontal && is_multi_column, |this| {
+                                this.no_label_indent()
+                            })
+                            .child(
+                                Checkbox::new("use-vertical-layout")
+                                    .label("Vertical layout")
+                                    .checked(self.layout.is_vertical())
+                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                        this.layout = if *checked {
+                                            Axis::Vertical
+                                        } else {
+                                            Axis::Horizontal
+                                        };
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
     }

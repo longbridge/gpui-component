@@ -14,6 +14,7 @@ mod description_list_story;
 mod drawer_story;
 mod dropdown_story;
 mod form_story;
+mod group_box_story;
 mod icon_story;
 mod image_story;
 mod indicator_story;
@@ -43,6 +44,7 @@ mod themes;
 mod title_bar;
 mod toggle_story;
 mod tooltip_story;
+mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
 
@@ -50,9 +52,9 @@ pub use assets::Assets;
 use gpui::{
     actions, div, prelude::FluentBuilder as _, px, rems, size, Action, AnyElement, AnyView, App,
     AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowKind,
-    WindowOptions,
+    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Pixels, Render,
+    RenderOnce, SharedString, Size, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    WindowBounds, WindowKind, WindowOptions,
 };
 
 pub use accordion_story::AccordionStory;
@@ -70,6 +72,7 @@ pub use description_list_story::DescriptionListStory;
 pub use drawer_story::DrawerStory;
 pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
+pub use group_box_story::GroupBoxStory;
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
 pub use indicator_story::IndicatorStory;
@@ -100,6 +103,7 @@ pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+pub use virtual_list_story::VirtualListStory;
 pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
@@ -107,6 +111,7 @@ use gpui_component::{
     button::Button,
     context_menu::ContextMenuExt,
     dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
+    group_box::GroupBox,
     h_flex,
     notification::Notification,
     popup_menu::PopupMenu,
@@ -138,13 +143,11 @@ actions!(story, [TestAction, Tab, TabPrev]);
 
 pub struct AppState {
     pub invisible_panels: Entity<Vec<SharedString>>,
-    pub theme_name: Option<SharedString>,
 }
 impl AppState {
     fn init(cx: &mut App) {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
-            theme_name: None,
         };
         cx.set_global::<AppState>(state);
     }
@@ -163,7 +166,19 @@ where
     E: Into<AnyView>,
     F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
 {
-    let mut window_size = size(px(1600.0), px(1200.0));
+    create_new_window_with_size(title, None, crate_view_fn, cx);
+}
+
+pub fn create_new_window_with_size<F, E>(
+    title: &str,
+    window_size: Option<Size<Pixels>>,
+    crate_view_fn: F,
+    cx: &mut App,
+) where
+    E: Into<AnyView>,
+    F: FnOnce(&mut Window, &mut App) -> E + Send + 'static,
+{
+    let mut window_size = window_size.unwrap_or(size(px(1600.0), px(1200.0)));
     if let Some(display) = cx.primary_display() {
         let display_size = display.bounds().size;
         window_size.width = window_size.width.min(display_size.width * 0.85);
@@ -177,8 +192,8 @@ where
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(gpui::Size {
-                width: px(640.),
-                height: px(480.),
+                width: px(480.),
+                height: px(320.),
             }),
             kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]
@@ -245,7 +260,7 @@ impl Render for StoryRoot {
             )
             .children(drawer_layer)
             .children(modal_layer)
-            .child(div().absolute().top_8().children(notification_layer))
+            .children(notification_layer)
     }
 }
 
@@ -399,13 +414,10 @@ impl Styled for StorySection {
 }
 
 impl RenderOnce for StorySection {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        v_flex()
-            .id(self.title.clone())
-            .gap_2()
-            .mb_5()
-            .w_full()
-            .child(
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        GroupBox::new()
+            .outline()
+            .title(
                 h_flex()
                     .justify_between()
                     .w_full()
@@ -413,17 +425,14 @@ impl RenderOnce for StorySection {
                     .child(self.title)
                     .children(self.sub_title),
             )
-            .child(
-                v_flex()
-                    .p_4()
-                    .overflow_x_hidden()
-                    .border_1()
-                    .border_color(cx.theme().border)
+            .content_style(
+                StyleRefinement::default()
                     .rounded_lg()
+                    .overflow_x_hidden()
                     .items_center()
-                    .justify_center()
-                    .child(self.base.children(self.children)),
+                    .justify_center(),
             )
+            .child(self.base.children(self.children))
     }
 }
 
@@ -657,6 +666,7 @@ impl StoryState {
             "AccordionStory" => story!(AccordionStory),
             "SidebarStory" => story!(SidebarStory),
             "FormStory" => story!(FormStory),
+            "NotificationStory" => story!(NotificationStory),
             _ => {
                 unreachable!("Invalid story klass: {}", self.story_klass)
             }

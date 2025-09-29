@@ -22,7 +22,7 @@ impl Gallery {
     pub fn new(init_story: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
-            InputEvent::Change(_) => {
+            InputEvent::Change => {
                 this.active_group_index = Some(0);
                 this.active_index = Some(0);
                 cx.notify()
@@ -52,9 +52,10 @@ impl Gallery {
                     StoryContainer::panel::<DrawerStory>(window, cx),
                     StoryContainer::panel::<DropdownStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
+                    StoryContainer::panel::<GroupBoxStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
-                    StoryContainer::panel::<IndicatorStory>(window, cx),
                     StoryContainer::panel::<ImageStory>(window, cx),
+                    StoryContainer::panel::<IndicatorStory>(window, cx),
                     StoryContainer::panel::<InputStory>(window, cx),
                     StoryContainer::panel::<KbdStory>(window, cx),
                     StoryContainer::panel::<LabelStory>(window, cx),
@@ -78,6 +79,7 @@ impl Gallery {
                     StoryContainer::panel::<TagStory>(window, cx),
                     StoryContainer::panel::<TextareaStory>(window, cx),
                     StoryContainer::panel::<TooltipStory>(window, cx),
+                    StoryContainer::panel::<VirtualListStory>(window, cx),
                 ],
             ),
         ];
@@ -210,7 +212,7 @@ impl Render for Gallery {
                                     )
                                     .child(
                                         div()
-                                            .bg(cx.theme().secondary)
+                                            .bg(cx.theme().sidebar_accent)
                                             .px_1()
                                             .rounded_full()
                                             .flex_1()

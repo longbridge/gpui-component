@@ -1,21 +1,21 @@
 use gpui::*;
 use gpui_component::{button::*, checkbox::*, divider::*, dropdown::*, input::*, *};
+use itertools::Itertools as _;
+use serde::{Deserialize, Serialize};
 
 use crate::section;
 
 pub fn init(_: &mut App) {}
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Country {
     name: SharedString,
     code: SharedString,
 }
 
 impl Country {
-    pub fn new(name: impl Into<SharedString>, code: impl Into<SharedString>) -> Self {
-        Self {
-            name: name.into(),
-            code: code.into(),
-        }
+    pub fn letter_prefix(&self) -> char {
+        self.name.chars().next().unwrap_or(' ')
     }
 }
 
@@ -37,7 +37,7 @@ impl DropdownItem for Country {
 
 pub struct DropdownStory {
     disabled: bool,
-    country_dropdown: Entity<DropdownState<Vec<Country>>>,
+    country_dropdown: Entity<DropdownState<SearchableVec<DropdownItemGroup<Country>>>>,
     fruit_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
     simple_dropdown1: Entity<DropdownState<Vec<SharedString>>>,
     simple_dropdown2: Entity<DropdownState<SearchableVec<SharedString>>>,
@@ -69,21 +69,24 @@ impl Focusable for DropdownStory {
 
 impl DropdownStory {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        let countries = vec![
-            Country::new("United States", "US"),
-            Country::new("Canada", "CA"),
-            Country::new("Mexico", "MX"),
-            Country::new("Brazil", "BR"),
-            Country::new("Argentina", "AR"),
-            Country::new("Chile", "CL"),
-            Country::new("China", "CN"),
-            Country::new("Peru", "PE"),
-            Country::new("Colombia", "CO"),
-            Country::new("Venezuela", "VE"),
-            Country::new("Ecuador", "EC"),
-        ];
+        let countries =
+            serde_json::from_str::<Vec<Country>>(include_str!("./fixtures/countries.json"))
+                .unwrap();
+        let mut grouped_countries: SearchableVec<DropdownItemGroup<Country>> =
+            SearchableVec::new(vec![]);
+        for (prefix, items) in countries.iter().chunk_by(|c| c.letter_prefix()).into_iter() {
+            let items = items.cloned().collect::<Vec<Country>>();
+            grouped_countries.push(DropdownItemGroup::new(prefix.to_string()).items(items));
+        }
 
-        let country_dropdown = cx.new(|cx| DropdownState::new(countries, Some(6), window, cx));
+        let country_dropdown = cx.new(|cx| {
+            DropdownState::new(
+                grouped_countries,
+                Some(IndexPath::default().row(8).section(2)),
+                window,
+                cx,
+            )
+        });
         let appearance_dropdown = cx.new(|cx| {
             DropdownState::new(
                 vec![
@@ -93,7 +96,7 @@ impl DropdownStory {
                     "JP".into(),
                     "KR".into(),
                 ],
-                Some(0),
+                Some(IndexPath::default()),
                 window,
                 cx,
             )
@@ -132,7 +135,7 @@ impl DropdownStory {
                             "Cocoa".into(),
                             "WinUI".into(),
                         ],
-                        Some(0),
+                        Some(IndexPath::default()),
                         window,
                         cx,
                     )
@@ -170,8 +173,8 @@ impl DropdownStory {
 
     fn on_dropdown_event(
         &mut self,
-        _: &Entity<DropdownState<Vec<Country>>>,
-        event: &DropdownEvent<Vec<Country>>,
+        _: &Entity<DropdownState<SearchableVec<DropdownItemGroup<Country>>>>,
+        event: &DropdownEvent<SearchableVec<DropdownItemGroup<Country>>>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {

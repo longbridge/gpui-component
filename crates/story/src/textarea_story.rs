@@ -16,6 +16,7 @@ pub fn init(_: &mut App) {}
 pub struct TextareaStory {
     textarea: Entity<InputState>,
     textarea_auto_grow: Entity<InputState>,
+    textarea_no_wrap: Entity<InputState>,
 }
 
 impl super::Story for TextareaStory {
@@ -46,28 +47,30 @@ impl TextareaStory {
             InputState::new(window, cx)
                 .multi_line()
                 .rows(10)
-                .placeholder("Enter text here...").default_value(
-                unindent::unindent(
-                    r#"Hello 世界，this is GPUI component.
+                .placeholder("Enter text here...")
+                .searchable(true)
+                .default_value(
+                    unindent::unindent(
+                        r#"Hello 世界，this is GPUI component.
 
-                The GPUI Component is a collection of UI components for GPUI framework, including.
+                    The GPUI Component is a collection of UI components for GPUI framework, including.
 
-                Button, Input, Checkbox, Radio, Dropdown, Tab, and more...
+                    Button, Input, Checkbox, Radio, Dropdown, Tab, and more...
 
-                Here is an application that is built by using GPUI Component.
+                    Here is an application that is built by using GPUI Component.
 
-                > This application is still under development, not published yet.
+                    > This application is still under development, not published yet.
 
-                ![image](https://github.com/user-attachments/assets/559a648d-19df-4b5a-b563-b78cc79c8894)
+                    ![image](https://github.com/user-attachments/assets/559a648d-19df-4b5a-b563-b78cc79c8894)
 
-                ![image](https://github.com/user-attachments/assets/5e06ad5d-7ea0-43db-8d13-86a240da4c8d)
+                    ![image](https://github.com/user-attachments/assets/5e06ad5d-7ea0-43db-8d13-86a240da4c8d)
 
-                ## Demo
+                    ## Demo
 
-                If you want to see the demo, here is a some demo applications.
-                "#,
+                    If you want to see the demo, here is a some demo applications.
+                    "#,
+                    )
                 )
-            )
         });
 
         let textarea_auto_grow = cx.new(|cx| {
@@ -77,9 +80,18 @@ impl TextareaStory {
                 .default_value("Hello 世界，this is GPUI component.")
         });
 
+        let textarea_no_wrap = cx.new(|cx| {
+            InputState::new(window, cx)
+                .multi_line()
+                .rows(6)
+                .soft_wrap(false)
+                .default_value("This is a very long line of text to test if the horizontal scrolling function is working properly, and it should not wrap automatically but display a horizontal scrollbar.\nThe second line is also very long text, used to test the horizontal scrolling effect under multiple lines, and you can input more content to test.\nThe third line: Here you can input other long text content that requires horizontal scrolling.\n")
+        });
+
         Self {
             textarea,
             textarea_auto_grow,
+            textarea_no_wrap,
         }
     }
 
@@ -114,12 +126,10 @@ impl Focusable for TextareaStory {
 
 impl Render for TextareaStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let loc = self.textarea.read(cx).line_column();
+        let loc = self.textarea.read(cx).cursor_position();
 
         v_flex()
             .id("textarea-story")
-            .size_full()
-            .justify_start()
             .gap_3()
             .child(
                 section("Textarea").child(
@@ -152,16 +162,15 @@ impl Render for TextareaStory {
                                                 ),
                                         ),
                                 )
-                                .child(format!("{}:{}", loc.line, loc.column)),
+                                .child(format!("{}:{}", loc.line, loc.character)),
                         ),
                 ),
             )
+            .child(section("Textarea Auto Grow").child(TextInput::new(&self.textarea_auto_grow)))
             .child(
-                section("Textarea Auto Grow").child(
-                    v_flex()
-                        .w_full()
-                        .child(TextInput::new(&self.textarea_auto_grow)),
-                ),
+                section("No Wrap")
+                    .max_w_md()
+                    .child(TextInput::new(&self.textarea_no_wrap).h(px(200.))),
             )
     }
 }

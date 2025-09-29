@@ -1,13 +1,12 @@
-use gpui::{App, FontWeight, HighlightStyle, Hsla};
+use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::{collections::HashMap, ops::Deref, sync::LazyLock};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use super::LanguageConfig;
 use crate::{
     highlighter::{languages, Language},
-    ActiveTheme, Colorize, ThemeMode,
+    ActiveTheme, ThemeMode, DEFAULT_THEME_COLORS,
 };
 
 pub(super) fn init(cx: &mut App) {
@@ -59,14 +58,35 @@ pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "variant",
 ];
 
-const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("./themes/dark.json");
-    serde_json::from_str(json).unwrap()
-});
-const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("./themes/light.json");
-    serde_json::from_str(json).unwrap()
-});
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageConfig {
+    pub name: SharedString,
+    pub language: tree_sitter::Language,
+    pub injection_languages: Vec<SharedString>,
+    pub highlights: SharedString,
+    pub injections: SharedString,
+    pub locals: SharedString,
+}
+
+impl LanguageConfig {
+    pub fn new(
+        name: impl Into<SharedString>,
+        language: tree_sitter::Language,
+        injection_languages: Vec<SharedString>,
+        highlights: &str,
+        injections: &str,
+        locals: &str,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            language,
+            injection_languages,
+            highlights: SharedString::from(highlights.to_string()),
+            injections: SharedString::from(injections.to_string()),
+            locals: SharedString::from(locals.to_string()),
+        }
+    }
+}
 
 /// Theme for Tree-sitter Highlight
 ///
@@ -314,7 +334,7 @@ impl StatusColors {
     pub fn error_background(&self, cx: &App) -> Hsla {
         let bg = cx.theme().background;
         self.error_background
-            .unwrap_or(self.error(cx).lightness(bg.l).saturation(bg.s))
+            .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
     }
 
     #[inline]
@@ -331,7 +351,7 @@ impl StatusColors {
     pub fn warning_background(&self, cx: &App) -> Hsla {
         let bg = cx.theme().background;
         self.warning_background
-            .unwrap_or(self.warning(cx).lightness(bg.l).saturation(bg.s))
+            .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
     }
 
     #[inline]
@@ -348,7 +368,7 @@ impl StatusColors {
     pub fn info_background(&self, cx: &App) -> Hsla {
         let bg = cx.theme().background;
         self.info_background
-            .unwrap_or(self.info(cx).lightness(bg.l).saturation(bg.s))
+            .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
     }
 
     #[inline]
@@ -365,7 +385,7 @@ impl StatusColors {
     pub fn success_background(&self, cx: &App) -> Hsla {
         let bg = cx.theme().background;
         self.success_background
-            .unwrap_or(self.success(cx).lightness(bg.l).saturation(bg.s))
+            .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
     }
 
     #[inline]
@@ -382,7 +402,7 @@ impl StatusColors {
     pub fn hint_background(&self, cx: &App) -> Hsla {
         let bg = cx.theme().background;
         self.hint_background
-            .unwrap_or(self.hint(cx).lightness(bg.l).saturation(bg.s))
+            .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
     }
 
     #[inline]
@@ -431,12 +451,12 @@ impl Deref for HighlightTheme {
 }
 
 impl HighlightTheme {
-    pub fn default_dark() -> Self {
-        DEFAULT_DARK.clone()
+    pub fn default_dark() -> Arc<Self> {
+        DEFAULT_THEME_COLORS[&ThemeMode::Dark].1.clone()
     }
 
-    pub fn default_light() -> Self {
-        DEFAULT_LIGHT.clone()
+    pub fn default_light() -> Arc<Self> {
+        DEFAULT_THEME_COLORS[&ThemeMode::Light].1.clone()
     }
 }
 
@@ -494,22 +514,7 @@ impl LanguageRegistry {
 
 #[cfg(test)]
 mod tests {
-    use gpui::rgb;
-
     use crate::highlighter::LanguageConfig;
-
-    #[test]
-    fn test_syntax_colors() {
-        use super::{HighlightTheme, SyntaxColors};
-
-        let theme: HighlightTheme =
-            serde_json::from_str(include_str!("./themes/light.json")).unwrap();
-        let syntax: &SyntaxColors = &theme.style.syntax;
-
-        assert_eq!(syntax.style("keyword"), Some(rgb(0x0433ff).into()));
-        assert_eq!(syntax.style("keyword.repeat"), Some(rgb(0x0433ff).into()));
-        assert_eq!(syntax.style("foo"), None);
-    }
 
     #[test]
     fn test_registry() {
@@ -518,7 +523,7 @@ mod tests {
 
         registry.register(
             "foo",
-            &LanguageConfig::new("foo", tree_sitter_bash::LANGUAGE.into(), vec![], "", "", ""),
+            &LanguageConfig::new("foo", tree_sitter_json::LANGUAGE.into(), vec![], "", "", ""),
         );
 
         assert!(registry.language("foo").is_some());

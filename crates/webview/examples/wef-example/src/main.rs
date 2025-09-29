@@ -71,7 +71,7 @@ impl Main {
                     move |state, event: &InputEvent, _, cx| {
                         if let InputEvent::PressEnter { .. } = event {
                             let url = state.read(cx).value();
-                            webview.read(cx).browser().load_url(url);
+                            webview.read(cx).browser().load_url(&url);
                         }
                     }
                 })

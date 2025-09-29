@@ -7,7 +7,7 @@ version = "0.1.0"
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
-gpui-component = { workspace = true, features = ["webview"] }
+gpui-component = { workspace = true, features = ["webview", "tree-sitter-languages"] }
 
 chrono = "0.4"
 fake = { version = "2.10.0", features = ["dummy"] }
@@ -15,6 +15,7 @@ rand = "0.8"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
 reqwest_client.workspace = true
+smol.workspace = true
 rust-embed = "8.5.0"
 serde = "1"
 serde_json = "1"
@@ -22,6 +23,9 @@ unindent = "0.2.3"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tree-sitter-navi = "0.2.2"
+itertools = "0.14.0"
+lsp-types.workspace = true
+autocorrect = "2.14.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

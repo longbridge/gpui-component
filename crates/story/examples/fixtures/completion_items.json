@@ -1,0 +1,216 @@
+[
+  {
+    "label": "as",
+    "detail": "as TYPE",
+    "documentation": "Perform a safe type cast.\n\n## Example:\n```rust\nlet x: u32 = 42;\nlet y: u64 = x as u64;\n```"
+  },
+  {
+    "label": "break",
+    "documentation": "Exit a loop immediately.\n\n**Usage:**\nThe `break` statement is used to terminate a loop early when a specific condition is met."
+  },
+  {
+    "label": "const",
+    "detail": "const NAME: Type = ..;",
+    "documentation": "Define a constant value.\n\n**Note:** Constants are immutable and must have their type explicitly declared."
+  },
+  {
+    "label": "continue",
+    "documentation": "Skip the rest of the current loop iteration."
+  },
+  {
+    "label": "crate",
+    "documentation": "Refer to the current crate root.\n\n**Details:**\nThe `crate` keyword is used to access items in the root of the current crate."
+  },
+  {
+    "label": "else",
+    "documentation": "Provide an alternative branch for an if statement."
+  },
+  {
+    "label": "enum",
+    "documentation": "Define a type that can be one of several variants.\n\n**Example:**\n```rust\nenum Direction {\n    Up,\n    Down,\n    Left,\n    Right,\n}\n```"
+  },
+  {
+    "label": "extern",
+    "documentation": "Link to or define external functions or variables."
+  },
+  {
+    "label": "false",
+    "documentation": "Boolean false value."
+  },
+  {
+    "label": "fn",
+    "documentation": "Define a function.\n\n**Example:**\n```rust\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n```"
+  },
+  {
+    "label": "for",
+    "documentation": "Loop over an iterator."
+  },
+  {
+    "label": "if",
+    "documentation": "Conditionally execute code."
+  },
+  {
+    "label": "impl",
+    "documentation": "Implement methods or traits for a type."
+  },
+  {
+    "label": "in",
+    "documentation": "Used in for loops to specify the iterator."
+  },
+  {
+    "label": "let",
+    "documentation": "Bind a value to a variable."
+  },
+  {
+    "label": "loop",
+    "documentation": "Create an infinite loop.\n\n**Example:**\n```rust\nloop {\n    println!(\"This will run forever!\");\n}\n```"
+  },
+  {
+    "label": "match",
+    "documentation": "Pattern matching control flow construct."
+  },
+  {
+    "label": "mod",
+    "documentation": "Define a module."
+  },
+  {
+    "label": "move",
+    "documentation": "Force a closure to take ownership of captured variables."
+  },
+  {
+    "label": "mut",
+    "documentation": "Make a variable mutable."
+  },
+  {
+    "label": "pub",
+    "documentation": "Make an item public."
+  },
+  {
+    "label": "ref",
+    "documentation": "Create a reference in a pattern."
+  },
+  {
+    "label": "return",
+    "documentation": "Return a value from a function."
+  },
+  {
+    "label": "self",
+    "documentation": "Refer to the current instance of a type."
+  },
+  {
+    "label": "Self",
+    "documentation": "Refer to the current type."
+  },
+  {
+    "label": "static",
+    "documentation": "Define a static variable with a fixed address."
+  },
+  {
+    "label": "struct",
+    "documentation": "Define a structure.\n\n**Example:**\n```rust\nstruct Point {\n    x: i32,\n    y: i32,\n}\n```"
+  },
+  {
+    "label": "super",
+    "documentation": "Refer to the parent module."
+  },
+  {
+    "label": "trait",
+    "documentation": "Define shared behavior via methods."
+  },
+  {
+    "label": "true",
+    "documentation": "Boolean true value."
+  },
+  {
+    "label": "type",
+    "documentation": "Define a type alias."
+  },
+  {
+    "label": "unsafe",
+    "documentation": "Access potentially unsafe operations."
+  },
+  {
+    "label": "use",
+    "documentation": "Import items from a module."
+  },
+  {
+    "label": "where",
+    "documentation": "Add constraints to generic parameters."
+  },
+  {
+    "label": "while",
+    "documentation": "Loop while a condition is true."
+  },
+  {
+    "label": "async",
+    "documentation": "Define asynchronous code."
+  },
+  {
+    "label": "await",
+    "documentation": "Wait for an asynchronous operation to complete."
+  },
+  {
+    "label": "dyn",
+    "documentation": "Define a dynamically dispatched trait object."
+  },
+  {
+    "label": "union",
+    "documentation": "Define a union type."
+  },
+  {
+    "label": "default",
+    "documentation": "Provide a default implementation for a trait."
+  },
+  {
+    "label": "macro_rules",
+    "documentation": "Define a macro."
+  },
+  {
+    "label": "alloc",
+    "documentation": "Memory allocation module."
+  },
+  {
+    "label": "core",
+    "documentation": "Minimal runtime library for Rust."
+  },
+  {
+    "label": "std",
+    "documentation": "Standard library for Rust."
+  },
+  {
+    "label": "vec!",
+    "documentation": "Create a growable array.\n\n**Example:**\n```rust\nlet mut v = Vec::new();\nv.push(1);\nv.push(2);\n```"
+  },
+  {
+    "label": "format!",
+    "documentation": "Format a string."
+  },
+  {
+    "label": "println!",
+    "documentation": "Print to the standard output.\n\n**Example:**\n```rust\nprintln!(\"Hello, world!\");\n```"
+  },
+  {
+    "label": "eprintln!",
+    "documentation": "Print to the standard error."
+  },
+  {
+    "label": "dbg!",
+    "documentation": "Debug print a value."
+  },
+  {
+    "label": "todo!",
+    "documentation": "Mark unfinished code."
+  },
+  {
+    "label": "unimplemented!",
+    "documentation": "Mark unimplemented code."
+  },
+  {
+    "label": "unreachable!",
+    "documentation": "Mark code that should never be executed."
+  },
+  {
+    "label": "unimplemented!(\"your format message: {}\", ...)",
+    "documentation": "Mark unimplemented code with a custom message."
+  }
+]

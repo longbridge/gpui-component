@@ -7,6 +7,7 @@ use tokio::time;
 const VERSION: &str = "1.0.0";
 
 /// HelloWorld struct provides greeting functionality with configuration options
+/// This is CJK 中文🎊 for test line, column.
 ///
 /// # Features
 /// - Async greetings with customizable names
@@ -41,6 +42,9 @@ impl HelloWorld {
     }
 
     // Greets multiple people asynchronously with configurable delay
+    //
+    // Use `Command-click` on `Duration` will jump to its definition.
+    // Use `Control-click` on `String`, `HashMap` or `Result` will open its documentation page.
     pub async fn greet<T: AsRef<str>>(&self, names: &[T]) -> Result<()> {
         for name in names {
             time::sleep(Duration::from_millis(100)).await;

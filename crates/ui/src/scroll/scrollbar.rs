@@ -10,7 +10,7 @@ use gpui::{
     fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
     CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
     IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
-    Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window,
+    Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -69,7 +69,7 @@ impl ScrollHandleOffsetable for ScrollHandle {
     }
 
     fn content_size(&self) -> Size<Pixels> {
-        self.max_offset()
+        self.max_offset() + self.bounds().size
     }
 }
 
@@ -87,7 +87,8 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
     }
 
     fn content_size(&self) -> Size<Pixels> {
-        self.0.borrow().base_handle.max_offset()
+        let base_handle = &self.0.borrow().base_handle;
+        base_handle.max_offset() + base_handle.bounds().size
     }
 }
 
@@ -104,6 +105,7 @@ pub struct ScrollbarStateInner {
     last_scroll_time: Option<Instant>,
     // Last update offset
     last_update: Instant,
+    idle_timer_scheduled: bool,
 }
 
 impl Default for ScrollbarState {
@@ -116,6 +118,7 @@ impl Default for ScrollbarState {
             last_scroll_offset: point(px(0.), px(0.)),
             last_scroll_time: None,
             last_update: Instant::now(),
+            idle_timer_scheduled: false,
         })))
     }
 }
@@ -187,6 +190,12 @@ impl ScrollbarStateInner {
     fn with_last_update(&self, t: Instant) -> Self {
         let mut state = *self;
         state.last_update = t;
+        state
+    }
+
+    fn with_idle_timer_scheduled(&self, scheduled: bool) -> Self {
+        let mut state = *self;
+        state.idle_timer_scheduled = scheduled;
         state
     }
 
@@ -338,7 +347,7 @@ impl Scrollbar {
     /// If you have very high CPU usage, consider reducing this value to improve performance.
     ///
     /// Available values: 30..120
-    pub fn max_fps(mut self, max_fps: usize) -> Self {
+    pub(crate) fn max_fps(mut self, max_fps: usize) -> Self {
         self.max_fps = max_fps.clamp(30, 120);
         self
     }
@@ -373,6 +382,22 @@ impl Scrollbar {
             THUMB_ACTIVE_WIDTH,
             THUMB_ACTIVE_INSET,
             THUMB_ACTIVE_RADIUS,
+        )
+    }
+
+    fn style_for_normal(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
+        let (width, inset, radius) = match cx.theme().scrollbar_show {
+            ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
+            _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
+        };
+
+        (
+            cx.theme().scrollbar_thumb,
+            cx.theme().scrollbar,
+            gpui::transparent_black(),
+            width,
+            inset,
+            radius,
         )
     }
 
@@ -488,9 +513,8 @@ impl Element for Scrollbar {
             };
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
-
             let margin_end = if has_both && !is_vertical {
-                THUMB_ACTIVE_WIDTH
+                WIDTH
             } else {
                 px(0.)
             };
@@ -532,19 +556,21 @@ impl Element for Scrollbar {
 
             let state = self.state.clone();
             let is_always_to_show = cx.theme().scrollbar_show.is_always();
-            let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
+            let is_offset_changed = state.get().last_scroll_offset != self.scroll_handle.offset();
 
             let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius) =
                 if state.get().dragged_axis == Some(axis) {
                     Self::style_for_active(cx)
-                } else if is_hover_to_show && (is_hovered_on_bar || is_hovered_on_thumb) {
+                } else if is_hovered_on_bar || is_hovered_on_thumb {
                     if is_hovered_on_thumb {
                         Self::style_for_hovered_thumb(cx)
                     } else {
                         Self::style_for_hovered_bar(cx)
                     }
+                } else if is_offset_changed {
+                    Self::style_for_normal(cx)
                 } else if is_always_to_show {
                     if is_hovered_on_thumb {
                         Self::style_for_hovered_thumb(cx)
@@ -556,25 +582,34 @@ impl Element for Scrollbar {
                     // Delay 2s to fade out the scrollbar thumb (in 1s)
                     if let Some(last_time) = state.get().last_scroll_time {
                         let elapsed = Instant::now().duration_since(last_time).as_secs_f32();
-                        if elapsed < FADE_OUT_DURATION {
-                            if is_hovered_on_bar {
-                                state.set(state.get().with_last_scroll_time(Some(Instant::now())));
-                                idle_state = if is_hovered_on_thumb {
-                                    Self::style_for_hovered_thumb(cx)
-                                } else {
-                                    Self::style_for_hovered_bar(cx)
-                                };
+                        if is_hovered_on_bar {
+                            state.set(state.get().with_last_scroll_time(Some(Instant::now())));
+                            idle_state = if is_hovered_on_thumb {
+                                Self::style_for_hovered_thumb(cx)
                             } else {
-                                if elapsed < FADE_OUT_DELAY {
-                                    idle_state.0 = cx.theme().scrollbar_thumb;
-                                } else {
-                                    // opacity = 1 - (x - 2)^10
-                                    let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
-                                    idle_state.0 = cx.theme().scrollbar_thumb.opacity(opacity);
-                                };
+                                Self::style_for_hovered_bar(cx)
+                            };
+                        } else if elapsed < FADE_OUT_DELAY {
+                            idle_state.0 = cx.theme().scrollbar_thumb;
 
-                                window.request_animation_frame();
+                            if !state.get().idle_timer_scheduled {
+                                let state = state.clone();
+                                state.set(state.get().with_idle_timer_scheduled(true));
+                                let current_view = window.current_view();
+                                let next_delay = Duration::from_secs_f32(FADE_OUT_DELAY - elapsed);
+                                window
+                                    .spawn(cx, async move |cx| {
+                                        Timer::after(next_delay).await;
+                                        state.set(state.get().with_idle_timer_scheduled(false));
+                                        cx.update(|_, cx| cx.notify(current_view)).ok();
+                                    })
+                                    .detach();
                             }
+                        } else if elapsed < FADE_OUT_DURATION {
+                            let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
+                            idle_state.0 = cx.theme().scrollbar_thumb.opacity(opacity);
+
+                            window.request_animation_frame();
                         }
                     }
 
@@ -659,6 +694,7 @@ impl Element for Scrollbar {
                     .get()
                     .with_last_scroll(self.scroll_handle.offset(), Some(Instant::now())),
             );
+            cx.notify(view_id);
         }
 
         window.with_content_mask(

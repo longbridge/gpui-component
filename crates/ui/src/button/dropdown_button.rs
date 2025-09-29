@@ -93,10 +93,6 @@ impl ButtonVariants for DropdownButton {
 }
 
 impl Selectable for DropdownButton {
-    fn element_id(&self) -> &ElementId {
-        &self.id
-    }
-
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self

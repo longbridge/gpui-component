@@ -4,17 +4,23 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     ops::{Deref, DerefMut},
+    rc::Rc,
     sync::Arc,
 };
 
 mod color;
+mod registry;
 mod schema;
 mod theme_color;
+
 pub use color::*;
+pub use registry::*;
 pub use schema::*;
 pub use theme_color::*;
 
 pub fn init(cx: &mut App) {
+    registry::init(cx);
+
     Theme::sync_system_appearance(None, cx);
     Theme::sync_scrollbar_appearance(cx);
 }
@@ -33,11 +39,9 @@ impl ActiveTheme for App {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
-    pub light_theme: ThemeColor,
-    pub dark_theme: ThemeColor,
     pub highlight_theme: Arc<HighlightTheme>,
-    pub light_highlight_theme: Arc<HighlightTheme>,
-    pub dark_highlight_theme: Arc<HighlightTheme>,
+    pub light_theme: Rc<ThemeConfig>,
+    pub dark_theme: Rc<ThemeConfig>,
 
     pub mode: ThemeMode,
     pub font_family: SharedString,
@@ -58,7 +62,7 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::from(ThemeColor::light())
+        Self::from(ThemeColor::default())
     }
 }
 
@@ -97,21 +101,30 @@ impl Theme {
         self.mode.is_dark()
     }
 
-    /// Sets the theme to default light.
-    pub fn set_default_light(&mut self) {
-        self.light_theme = ThemeColor::light();
-        self.colors = ThemeColor::light();
-        self.light_highlight_theme = Arc::new(HighlightTheme::default_light());
-        self.highlight_theme = self.light_highlight_theme.clone();
+    /// Returns the current theme name.
+    pub fn theme_name(&self) -> &SharedString {
+        if self.is_dark() {
+            &self.dark_theme.name
+        } else {
+            &self.light_theme.name
+        }
     }
 
-    /// Sets the theme to default dark.
-    pub fn set_default_dark(&mut self) {
-        self.dark_theme = ThemeColor::dark();
-        self.colors = ThemeColor::dark();
-        self.dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
-        self.highlight_theme = self.dark_highlight_theme.clone();
-    }
+    // /// Sets the theme to default light.
+    // pub fn set_default_light(&mut self) {
+    //     self.light_theme = ThemeColor::light();
+    //     self.colors = ThemeColor::light();
+    //     self.light_highlight_theme = Arc::new(HighlightTheme::default_light());
+    //     self.highlight_theme = self.light_highlight_theme.clone();
+    // }
+
+    // /// Sets the theme to default dark.
+    // pub fn set_default_dark(&mut self) {
+    //     self.dark_theme = ThemeColor::dark();
+    //     self.colors = ThemeColor::dark();
+    //     self.dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
+    //     self.highlight_theme = self.dark_highlight_theme.clone();
+    // }
 
     /// Sync the theme with the system appearance
     pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
@@ -127,33 +140,29 @@ impl Theme {
 
     /// Sync the Scrollbar showing behavior with the system
     pub fn sync_scrollbar_appearance(cx: &mut App) {
-        if cx.should_auto_hide_scrollbars() {
-            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Scrolling;
+        Theme::global_mut(cx).scrollbar_show = if cx.should_auto_hide_scrollbars() {
+            ScrollbarShow::Scrolling
         } else {
-            cx.global_mut::<Theme>().scrollbar_show = ScrollbarShow::Hover;
-        }
+            ScrollbarShow::Hover
+        };
     }
 
     pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
         let mode = mode.into();
         if !cx.has_global::<Theme>() {
-            let colors = match mode {
-                ThemeMode::Light => ThemeColor::light(),
-                ThemeMode::Dark => ThemeColor::dark(),
-            };
-            let mut theme = Theme::from(colors);
-            theme.light_theme = ThemeColor::light();
-            theme.dark_theme = ThemeColor::dark();
+            let mut theme = Theme::default();
+            theme.light_theme = ThemeRegistry::global(cx).default_light_theme().clone();
+            theme.dark_theme = ThemeRegistry::global(cx).default_dark_theme().clone();
             cx.set_global(theme);
         }
 
         let theme = cx.global_mut::<Theme>();
         theme.mode = mode;
-        theme.colors = if mode.is_dark() {
-            theme.dark_theme
+        if mode.is_dark() {
+            theme.apply_config(&theme.dark_theme.clone());
         } else {
-            theme.light_theme
-        };
+            theme.apply_config(&theme.light_theme.clone());
+        }
 
         if let Some(window) = window {
             window.refresh();
@@ -163,12 +172,8 @@ impl Theme {
 
 impl From<ThemeColor> for Theme {
     fn from(colors: ThemeColor) -> Self {
-        let mode = ThemeMode::default();
-        let light_highlight_theme = Arc::new(HighlightTheme::default_light());
-        let dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
-
         Theme {
-            mode,
+            mode: ThemeMode::default(),
             transparent: Hsla::transparent_black(),
             font_size: px(16.),
             font_family: if cfg!(target_os = "macos") {
@@ -185,11 +190,9 @@ impl From<ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             colors,
-            light_theme: ThemeColor::light(),
-            dark_theme: ThemeColor::dark(),
-            highlight_theme: light_highlight_theme.clone(),
-            light_highlight_theme: light_highlight_theme,
-            dark_highlight_theme: dark_highlight_theme,
+            light_theme: Rc::new(ThemeConfig::default()),
+            dark_theme: Rc::new(ThemeConfig::default()),
+            highlight_theme: HighlightTheme::default_light(),
         }
     }
 }

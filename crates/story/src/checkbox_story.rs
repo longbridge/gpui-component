@@ -56,7 +56,7 @@ impl Focusable for CheckboxStory {
 }
 
 impl Render for CheckboxStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().gap_6().child(
             v_flex()
                 .items_start()
@@ -162,6 +162,8 @@ impl Render for CheckboxStory {
                                     "The [long long label](https://github.com) \
                             text used **Markdown**, \
                             it should wrap when the text is too long.",
+                                    window,
+                                    cx,
                                 ),
                             ))
                             .on_click(cx.listener(|this, checked: &bool, _, _| {

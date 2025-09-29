@@ -6,8 +6,8 @@ use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt}
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     div, Action, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement, ParentElement,
-    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window,
+    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window,
 };
 use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
@@ -21,6 +21,7 @@ pub struct SelectTab(usize);
 #[derive(IntoElement)]
 pub struct TabBar {
     base: Stateful<Div>,
+    style: StyleRefinement,
     scroll_handle: Option<ScrollHandle>,
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
@@ -31,6 +32,8 @@ pub struct TabBar {
     size: Size,
     menu: bool,
     on_click: Option<Arc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
+    /// Special for internal TabPanel to remove the top border.
+    tab_item_top_offset: Pixels,
 }
 
 impl TabBar {
@@ -38,6 +41,7 @@ impl TabBar {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             base: div().id(id).px(px(-1.)),
+            style: StyleRefinement::default(),
             children: SmallVec::new(),
             scroll_handle: None,
             prefix: None,
@@ -48,6 +52,7 @@ impl TabBar {
             selected_index: None,
             on_click: None,
             menu: false,
+            tab_item_top_offset: px(0.),
         }
     }
 
@@ -88,8 +93,8 @@ impl TabBar {
     }
 
     /// Track the scroll of the TabBar
-    pub fn track_scroll(mut self, scroll_handle: ScrollHandle) -> Self {
-        self.scroll_handle = Some(scroll_handle);
+    pub fn track_scroll(mut self, scroll_handle: &ScrollHandle) -> Self {
+        self.scroll_handle = Some(scroll_handle.clone());
         self
     }
 
@@ -137,11 +142,16 @@ impl TabBar {
         self.on_click = Some(Arc::new(on_click));
         self
     }
+
+    pub(crate) fn tab_item_top_offset(mut self, offset: impl Into<Pixels>) -> Self {
+        self.tab_item_top_offset = offset.into();
+        self
+    }
 }
 
 impl Styled for TabBar {
     fn style(&mut self) -> &mut StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -174,8 +184,8 @@ impl RenderOnce for TabBar {
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
-                    Size::XSmall => px(3.),
-                    Size::Small => px(3.),
+                    Size::XSmall => px(2.),
+                    Size::Small => px(2.),
                     Size::Large => px(6.),
                     _ => px(5.),
                 };
@@ -190,18 +200,13 @@ impl RenderOnce for TabBar {
             TabVariant::Underline => {
                 // This gap is same as the tab inner_paddings
                 let gap = match self.size {
-                    Size::XSmall => px(8.),
-                    Size::Small => px(10.),
-                    Size::Large => px(16.),
-                    _ => px(12.),
+                    Size::XSmall => px(10.),
+                    Size::Small => px(12.),
+                    Size::Large => px(20.),
+                    _ => px(16.),
                 };
 
-                let padding = Edges {
-                    left: gap,
-                    right: gap,
-                    ..Default::default()
-                };
-                (cx.theme().transparent, padding, gap)
+                (cx.theme().transparent, Edges::all(px(0.)), gap)
             }
         };
 
@@ -243,6 +248,7 @@ impl RenderOnce for TabBar {
                 |this| this.rounded(cx.theme().radius),
             )
             .paddings(paddings)
+            .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()
@@ -257,6 +263,7 @@ impl RenderOnce for TabBar {
                         item_labels.push((child.label.clone(), child.disabled));
                         child
                             .id(ix)
+                            .mt(self.tab_item_top_offset)
                             .with_variant(self.variant)
                             .with_size(self.size)
                             .when_some(self.selected_index, |this, selected_ix| {

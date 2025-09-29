@@ -29,7 +29,7 @@ impl Divider {
     /// Creates a horizontal divider.
     pub fn horizontal() -> Self {
         Self {
-            base: div().w_full(),
+            base: div(),
             axis: Axis::Horizontal,
             label: None,
             color: None,
