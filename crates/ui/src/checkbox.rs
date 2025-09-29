@@ -208,11 +208,13 @@ impl RenderOnce for Checkbox {
         div().child(
             self.base
                 .id(self.id.clone())
-                .track_focus(
-                    &focus_handle
-                        .tab_stop(self.tab_stop)
-                        .tab_index(self.tab_index),
-                )
+                .when(!self.disabled, |this| {
+                    this.track_focus(
+                        &focus_handle
+                            .tab_stop(self.tab_stop)
+                            .tab_index(self.tab_index),
+                    )
+                })
                 .h_flex()
                 .gap_2()
                 .items_start()

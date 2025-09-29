@@ -410,17 +410,19 @@ impl RenderOnce for Button {
 
         let focus_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx);
+            .read(cx)
+            .clone();
         let is_focused = focus_handle.is_focused(window);
 
         self.base
             .id(self.id.clone())
-            .track_focus(
-                &focus_handle
-                    .clone()
-                    .tab_index(self.tab_index)
-                    .tab_stop(self.tab_stop),
-            )
+            .when(!self.disabled, |this| {
+                this.track_focus(
+                    &focus_handle
+                        .tab_index(self.tab_index)
+                        .tab_stop(self.tab_stop),
+                )
+            })
             .flex_shrink_0()
             .cursor_default()
             .flex()
