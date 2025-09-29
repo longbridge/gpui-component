@@ -2061,7 +2061,8 @@ impl InputState {
         if !self.is_context_menu_open(cx) {
             return;
         }
-
+        dbg!("----------- on blur");
+        self.unselect(window, cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
