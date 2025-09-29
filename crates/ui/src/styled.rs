@@ -588,14 +588,16 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
         inner_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
         inner_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
 
+        let inset = RING_BORDER_WIDTH + margins;
+
         self.child(
             div()
                 .flex_none()
                 .absolute()
-                .top(-RING_BORDER_WIDTH + -margins + -border_widths.top)
-                .left(-RING_BORDER_WIDTH + -margins + -border_widths.left)
-                .right(-RING_BORDER_WIDTH + -margins - -border_widths.right)
-                .bottom(-RING_BORDER_WIDTH + -margins - -border_widths.bottom)
+                .top(-(inset + border_widths.top))
+                .left(-(inset + border_widths.left))
+                .right(-(inset + border_widths.right))
+                .bottom(-(inset + border_widths.bottom))
                 .border(RING_BORDER_WIDTH)
                 .border_color(cx.theme().ring.alpha(0.2))
                 .refine_style(&inner_style),

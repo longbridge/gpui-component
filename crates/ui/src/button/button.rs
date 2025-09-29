@@ -415,6 +415,12 @@ impl RenderOnce for Button {
 
         self.base
             .id(self.id.clone())
+            .track_focus(
+                &focus_handle
+                    .clone()
+                    .tab_index(self.tab_index)
+                    .tab_stop(self.tab_stop),
+            )
             .flex_shrink_0()
             .cursor_default()
             .flex()
