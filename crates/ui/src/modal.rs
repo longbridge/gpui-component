@@ -380,7 +380,6 @@ impl RenderOnce for Modal {
             .child(
                 div()
                     .id("modal")
-                    .tab_group()
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
@@ -416,7 +415,8 @@ impl RenderOnce for Modal {
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
-                            .track_focus(&self.focus_handle.tab_stop(true))
+                            .track_focus(&self.focus_handle)
+                            .tab_group()
                             .when(self.keyboard, |this| {
                                 this.on_action({
                                     let on_cancel = on_cancel.clone();

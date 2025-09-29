@@ -158,7 +158,7 @@ impl RenderOnce for Drawer {
                             .id("drawer")
                             .tab_group()
                             .key_context(CONTEXT)
-                            .track_focus(&self.focus_handle.tab_stop(true))
+                            .track_focus(&self.focus_handle)
                             .on_action({
                                 let on_close = self.on_close.clone();
                                 move |_: &Cancel, window, cx| {
