@@ -1171,7 +1171,7 @@ impl Render for TabPanel {
         self.bind_actions(cx)
             .id("tab-panel")
             .track_focus(&focus_handle)
-            // .tab_group()
+            .tab_group()
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().background)

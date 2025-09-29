@@ -159,7 +159,7 @@ impl RenderOnce for Radio {
                     this.on_action({
                         let on_click = self.on_click.clone();
                         move |_: &Confirm, window, cx| {
-                            Self::handle_click(&on_click, checked, window, cx);
+                            Self::handle_click(&on_click, !checked, window, cx);
                             window.refresh();
                         }
                     })

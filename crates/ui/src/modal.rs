@@ -380,6 +380,7 @@ impl RenderOnce for Modal {
             .child(
                 div()
                     .id("modal")
+                    .tab_group()
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
