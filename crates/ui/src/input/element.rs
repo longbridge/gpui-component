@@ -527,14 +527,27 @@ impl TextElement {
     }
 
     fn layout_lines(
-        text: &Rope,
+        state: &InputState,
+        display_text: &Rope,
         text_wrapper: &TextWrapper,
         visible_range: &Range<usize>,
         font_size: Pixels,
         runs: &[TextRun],
         window: &mut Window,
     ) -> Vec<LineLayout> {
-        let visible_text = text
+        let is_multi_line = state.mode.is_multi_line();
+        if !is_multi_line {
+            let shaped_line = window.text_system().shape_line(
+                display_text.to_string().into(),
+                font_size,
+                &runs,
+                None,
+            );
+
+            return vec![LineLayout::new().lines(smallvec::smallvec![shaped_line])];
+        }
+
+        let visible_text = display_text
             .slice_lines(visible_range.start..visible_range.end)
             .to_string();
 
@@ -545,6 +558,7 @@ impl TextElement {
                 .lines
                 .get(visible_range.start + ix)
                 .expect("line should exists in text_wrapper");
+
             // if line_item.len() != line.len() {
             //     dbg!(&line, &line_item.wrapped_lines);
             // }
@@ -853,7 +867,8 @@ impl Element for TextElement {
         };
 
         let lines = Self::layout_lines(
-            &text,
+            &state,
+            &display_text,
             &state.text_wrapper,
             &visible_range,
             font_size,
