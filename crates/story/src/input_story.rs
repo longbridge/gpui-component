@@ -1,6 +1,6 @@
 use gpui::{
-    div, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Styled, Subscription, Window,
+    div, App, AppContext as _, Context, Entity, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window,
 };
 
 use crate::section;
@@ -9,7 +9,6 @@ use gpui_component::{button::*, input::*, *};
 pub fn init(_: &mut App) {}
 
 pub struct InputStory {
-    focus_handle: FocusHandle,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     input_esc: Entity<InputState>,
@@ -95,7 +94,6 @@ impl InputStory {
         ];
 
         Self {
-            focus_handle: cx.focus_handle(),
             input1,
             input2,
             input_esc,
@@ -135,12 +133,6 @@ impl InputStory {
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),
         };
-    }
-}
-
-impl Focusable for InputStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
-        self.focus_handle.clone()
     }
 }
 
