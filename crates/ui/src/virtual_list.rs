@@ -104,6 +104,7 @@ impl VirtualListScrollHandle {
             item_index: ix,
             strategy,
             offset,
+            scroll_strict: false,
         });
     }
 
