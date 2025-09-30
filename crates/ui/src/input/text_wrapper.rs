@@ -9,13 +9,11 @@ use crate::input::RopeExt;
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
 pub(super) struct LineItem {
-    /// The original line text.
+    /// The original line text, without end `\n`.
     line: Rope,
     /// The soft wrapped lines relative byte range (0..line.len) of this line (Include first line).
     ///
-    /// FIXME: Here in somecase, the `line_wrapper.wrap_line` has returned different
-    /// like the `window.text_system().shape_text`. So, this value may not equal
-    /// the actual rendered lines.
+    /// Not contains the line end `\n`.
     pub(super) wrapped_lines: Vec<Range<usize>>,
 }
 
@@ -235,6 +233,91 @@ impl TextWrapper {
     /// If the `text` is the same as the current text, do nothing.
     fn update_all(&mut self, text: &Rope, cx: &mut App) {
         self.update(text, &(0..text.len()), &text, cx);
+    }
+
+    /// Return display point (with soft wrap) from the given byte offset in the text.
+    ///
+    /// Panics if the `offset` is out of bounds.
+    pub(crate) fn offset_to_display_point(&self, offset: usize) -> DisplayPoint {
+        let row = self.text.offset_to_point(offset).row;
+        let start = self.text.line_start_offset(row);
+        let line = &self.lines[row];
+
+        let mut wrapped_row = self
+            .lines
+            .iter()
+            .take(row)
+            .map(|l| l.lines_len())
+            .sum::<usize>();
+
+        let local_offset = offset.saturating_sub(start);
+        for (ix, range) in line.wrapped_lines.iter().enumerate() {
+            if range.contains(&local_offset) {
+                return DisplayPoint::new(
+                    wrapped_row + ix,
+                    ix,
+                    local_offset.saturating_sub(range.start),
+                );
+            }
+        }
+
+        // If not found, return the end of the line.
+        let last_line = line.wrapped_lines.last().unwrap_or(&(0..0));
+        let local_row = line.wrapped_lines.len().saturating_sub(1);
+        DisplayPoint::new(wrapped_row + local_row, local_row, last_line.end)
+    }
+
+    /// Return byte offset in the text from the given display point (with soft wrap).
+    ///
+    /// Panics if the `point.row` is out of bounds.
+    pub(crate) fn display_point_to_offset(&self, point: DisplayPoint) -> usize {
+        let mut wrapped_row = 0;
+        for (row, line) in self.lines.iter().enumerate() {
+            if wrapped_row + line.lines_len() > point.row {
+                let line_start = self.text.line_start_offset(row);
+                let local_row = point.row.saturating_sub(wrapped_row);
+                if let Some(range) = line.wrapped_lines.get(local_row) {
+                    return line_start + (range.start + point.column).min(range.end);
+                } else {
+                    // If not found, return the end of the line.
+                    return line_start + line.len();
+                }
+            }
+
+            wrapped_row += line.lines_len();
+        }
+
+        return self.text.len();
+    }
+
+    pub(crate) fn display_point_to_point(&self, point: DisplayPoint) -> tree_sitter::Point {
+        let offset = self.display_point_to_offset(point);
+        self.text.offset_to_point(offset)
+    }
+
+    pub(crate) fn point_to_display_point(&self, point: tree_sitter::Point) -> DisplayPoint {
+        let offset = self.text.point_to_offset(point);
+        self.offset_to_display_point(offset)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisplayPoint {
+    /// The 0-based soft wrapped row index in the text.
+    pub row: usize,
+    /// The 0-based row index in local line (include first line).
+    pub local_row: usize,
+    /// The 0-based column index in the display line (with soft wrap).
+    pub column: usize,
+}
+
+impl DisplayPoint {
+    pub fn new(row: usize, local_row: usize, column: usize) -> Self {
+        Self {
+            row,
+            local_row,
+            column,
+        }
     }
 }
 
@@ -595,5 +678,106 @@ mod tests {
         line_layout.set_wrapped_lines(wrapped_lines);
         assert_eq!(line_layout.len(), 150);
         assert_eq!(line_layout.wrapped_lines.len(), 2);
+    }
+
+    #[test]
+    fn test_offset_to_display_point() {
+        let font = gpui::Font {
+            family: "Arial".into(),
+            weight: FontWeight::default(),
+            style: FontStyle::Normal,
+            features: FontFeatures::default(),
+            fallbacks: None,
+        };
+
+        let mut wrapper = TextWrapper::new(font, px(14.), None);
+        wrapper.text = Rope::from(
+            "Hello, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。",
+        );
+        wrapper.lines = vec![
+            // range: 0..15
+            LineItem {
+                line: Rope::from("Hello, 世界!\r"),
+                wrapped_lines: vec![0..15],
+            },
+            // range: 16..36
+            LineItem {
+                line: Rope::from("This is second line."),
+                wrapped_lines: vec![0..10, 10..20],
+            },
+            // range: 37..56
+            LineItem {
+                line: Rope::from("This is third line."),
+                wrapped_lines: vec![0..9, 9..15, 15..20],
+            },
+            // range: 57..79
+            LineItem {
+                line: Rope::from("这里是第 4 行。"),
+                wrapped_lines: vec![0..22],
+            },
+        ];
+
+        assert_eq!(
+            wrapper.offset_to_display_point(12),
+            DisplayPoint::new(0, 0, 12)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(15),
+            DisplayPoint::new(0, 0, 15)
+        );
+
+        assert_eq!(
+            wrapper.offset_to_display_point(16),
+            DisplayPoint::new(1, 0, 0)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(21),
+            DisplayPoint::new(1, 0, 5)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(27),
+            DisplayPoint::new(2, 1, 1)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(37),
+            DisplayPoint::new(3, 0, 0)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(54),
+            DisplayPoint::new(5, 2, 2)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(59),
+            DisplayPoint::new(6, 0, 2)
+        );
+
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(6, 0, 2)),
+            59
+        );
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(5, 2, 2)),
+            54
+        );
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(3, 0, 0)),
+            37
+        );
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(2, 1, 1)),
+            27
+        );
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(1, 0, 5)),
+            21
+        );
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(1, 0, 0)),
+            16
+        );
+        assert_eq!(
+            wrapper.display_point_to_offset(DisplayPoint::new(0, 0, 15)),
+            15
+        );
     }
 }

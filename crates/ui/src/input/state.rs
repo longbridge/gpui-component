@@ -249,6 +249,21 @@ pub(super) struct LastLayout {
     pub(super) cursor_bounds: Option<Bounds<Pixels>>,
 }
 
+impl LastLayout {
+    /// Get the line layout for the given row (0-based).
+    ///
+    /// 0 is the viewport first visible line.
+    ///
+    /// Returns None if the row is out of range.
+    pub(crate) fn line(&self, row: usize) -> Option<&LineLayout> {
+        if row < self.visible_range.start || row >= self.visible_range.end {
+            return None;
+        }
+
+        self.lines.get(row.saturating_sub(self.visible_range.start))
+    }
+}
+
 /// InputState to keep editing state of the [`super::TextInput`].
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
@@ -641,32 +656,37 @@ impl InputState {
 
         let offset = self.cursor();
         let was_preferred_column = self.preferred_column;
+        let mut display_point = self.text_wrapper.offset_to_display_point(offset);
+        dbg!(display_point);
+        display_point.row = display_point.row.saturating_add_signed(move_lines);
+        display_point.column = 0;
 
-        let row = self.text.offset_to_point(offset).row;
-        let new_row = row.saturating_add_signed(move_lines);
-        let line_start_offset = self
-            .text
-            .point_to_offset(tree_sitter::Point::new(new_row, 0));
-
+        let line_start_offset = self.text_wrapper.display_point_to_offset(display_point);
+        let new_display_point = self.text_wrapper.offset_to_display_point(line_start_offset);
+        let new_row = self.text_wrapper.display_point_to_point(display_point).row;
         let mut new_offset = line_start_offset;
 
+        let Some(line_item) = self.text_wrapper.line(new_row) else {
+            return;
+        };
+        let Some(sub_line) = line_item.wrapped_lines.get(new_display_point.local_row) else {
+            return;
+        };
+
         if let Some((preferred_x, column)) = was_preferred_column {
-            let new_column = column.min(self.text.slice_line(new_row).len());
+            let new_column = column.min(sub_line.len());
             new_offset = line_start_offset + new_column;
 
             // If in visible range, prefer to use position to get column.
-            if new_row >= last_layout.visible_range.start {
-                let visible_row = new_row.saturating_sub(last_layout.visible_range.start);
-                if let Some(line) = last_layout.lines.get(visible_row) {
-                    if let Some(x) = line.closest_index_for_position(
-                        Point {
-                            x: preferred_x,
-                            y: px(0.),
-                        },
-                        last_layout.line_height,
-                    ) {
-                        new_offset = line_start_offset + x;
-                    }
+            if let Some(line) = last_layout.line(new_row) {
+                if let Some(x) = line.closest_index_for_position(
+                    Point {
+                        x: preferred_x,
+                        y: new_display_point.local_row * last_layout.line_height,
+                    },
+                    last_layout.line_height,
+                ) {
+                    new_offset = line_start_offset + x;
                 }
             }
         }
