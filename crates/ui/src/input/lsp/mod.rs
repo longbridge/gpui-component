@@ -115,6 +115,7 @@ impl InputState {
             self.handle_hover_definition(offset, window, cx);
         } else {
             self.hover_definition.clear();
+            self.hover_popover = None;
             self.handle_hover_popover(offset, window, cx);
         }
         cx.notify();
