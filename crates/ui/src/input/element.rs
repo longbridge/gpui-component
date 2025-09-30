@@ -537,6 +537,7 @@ impl TextElement {
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_multi_line = state.mode.is_multi_line();
+
         if !is_multi_line {
             let shaped_line = window.text_system().shape_line(
                 display_text.to_string().into(),
@@ -546,6 +547,23 @@ impl TextElement {
             );
 
             return vec![LineLayout::new().lines(smallvec::smallvec![shaped_line])];
+        }
+
+        // Empty to use placeholder, the placeholder is not in the text_wrapper map.
+        if state.text.len() == 0 {
+            return display_text
+                .to_string()
+                .split("\n")
+                .map(|line| {
+                    let shaped_line = window.text_system().shape_line(
+                        line.to_string().into(),
+                        font_size,
+                        &runs,
+                        None,
+                    );
+                    LineLayout::new().lines(smallvec::smallvec![shaped_line])
+                })
+                .collect();
         }
 
         let visible_text = display_text
