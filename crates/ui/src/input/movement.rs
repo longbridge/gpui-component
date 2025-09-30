@@ -63,26 +63,17 @@ impl InputState {
         let was_preferred_column = self.preferred_column;
 
         let mut display_point = self.text_wrapper.offset_to_display_point(offset);
-        dbg!(&offset, &display_point);
         display_point.row = display_point.row.saturating_add_signed(move_lines);
         display_point.column = 0;
+        dbg!(&offset, &display_point);
         let mut new_offset = self.text_wrapper.display_point_to_offset(display_point);
 
         if let Some((preferred_x, column)) = was_preferred_column {
-            dbg!(&new_offset, &display_point);
             // Get display point again to update local_row.
             let mut next_display_point = self.text_wrapper.offset_to_display_point(new_offset);
             next_display_point.column = 0;
             let next_point = self.text_wrapper.display_point_to_point(next_display_point);
             let line_start_offset = self.text.line_start_offset(next_point.row);
-
-            dbg!(
-                &line_start_offset,
-                &new_offset,
-                next_point.row,
-                next_display_point.row,
-                next_display_point.local_row
-            );
 
             // make a fallback value if not in visible range.
             let max_line_len = self.text.slice_line(next_point.row).len();

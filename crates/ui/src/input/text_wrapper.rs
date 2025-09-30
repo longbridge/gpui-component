@@ -253,6 +253,8 @@ impl TextWrapper {
         let local_offset = offset.saturating_sub(start);
         for (ix, range) in line.wrapped_lines.iter().enumerate() {
             if range.contains(&local_offset) {
+                dbg!(&line.wrapped_lines);
+                dbg!(ix, range, local_offset);
                 return DisplayPoint::new(
                     wrapped_row + ix,
                     ix,
@@ -263,6 +265,7 @@ impl TextWrapper {
 
         // Otherwice return the eof of the line.
         let last_range = line.wrapped_lines.last().unwrap_or(&(0..0));
+        dbg!("other", last_range);
         let ix = line.lines_len().saturating_sub(1);
         return DisplayPoint::new(wrapped_row + ix, ix, last_range.len());
     }
