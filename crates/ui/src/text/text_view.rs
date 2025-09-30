@@ -518,17 +518,22 @@ impl Element for TextView {
             });
 
             cx.spawn({
-                let state = self.state.clone();
+                let state = self.state.downgrade();
                 async move |cx| {
                     while let Ok(parsed_result) = rx_result.recv().await {
-                        _ = state.update(cx, |state, cx| {
-                            state.parsed_result = Some(parsed_result);
-                            if let Some(parent_entity) = state.parent_entity {
-                                let app = &mut **cx;
-                                app.notify(parent_entity);
-                            }
-                            state.clear_selection();
-                        });
+                        if let Some(state) = state.upgrade() {
+                            _ = state.update(cx, |state, cx| {
+                                state.parsed_result = Some(parsed_result);
+                                if let Some(parent_entity) = state.parent_entity {
+                                    let app = &mut **cx;
+                                    app.notify(parent_entity);
+                                }
+                                state.clear_selection();
+                            });
+                        } else {
+                            // state released, stopping processing
+                            break;
+                        }
                     }
                 }
             })
