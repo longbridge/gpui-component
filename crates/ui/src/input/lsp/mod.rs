@@ -112,11 +112,11 @@ impl InputState {
         cx: &mut Context<InputState>,
     ) {
         if event.modifiers.secondary() {
-            self.hover_popover = None;
             self.handle_hover_definition(offset, window, cx);
         } else {
             self.hover_definition.clear();
             self.handle_hover_popover(offset, window, cx);
         }
+        cx.notify();
     }
 }
