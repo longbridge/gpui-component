@@ -44,7 +44,7 @@ impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
             div().map(|this| match &mut state.parsed_result {
-                Ok(content) => this.child(content.root_node.render(
+                Some(Ok(content)) => this.child(content.root_node.render(
                     None,
                     true,
                     true,
@@ -52,12 +52,13 @@ impl RenderOnce for TextViewElement {
                     window,
                     cx,
                 )),
-                Err(err) => this.child(
+                Some(Err(err)) => this.child(
                     v_flex()
                         .gap_1()
                         .child("Failed to parse content")
                         .child(err.to_string()),
                 ),
+                None => this,
             })
         })
     }
@@ -82,9 +83,9 @@ impl RenderOnce for TextViewElement {
 #[derive(Clone)]
 pub struct TextView {
     id: ElementId,
+    init_state: Option<InitState>,
     state: Entity<TextViewState>,
     selectable: bool,
-    tx: smol::channel::Sender<Update>,
 }
 
 #[derive(PartialEq)]
@@ -121,6 +122,8 @@ struct UpdateFuture {
 impl UpdateFuture {
     fn new(
         type_: TextViewType,
+        style: TextViewStyle,
+        text: SharedString,
         highlight_theme: Arc<HighlightTheme>,
         rx: smol::channel::Receiver<Update>,
         tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
@@ -129,8 +132,8 @@ impl UpdateFuture {
         Self {
             type_,
             highlight_theme,
-            current_style: TextViewStyle::default(),
-            current_text: SharedString::default(),
+            current_style: style,
+            current_text: text,
             timer: Timer::never(),
             rx,
             tx_result,
@@ -184,11 +187,23 @@ impl Future for UpdateFuture {
     }
 }
 
+#[derive(Clone)]
+enum InitState {
+    Initializing {
+        type_: TextViewType,
+        text: SharedString,
+        style: Box<TextViewStyle>,
+        highlight_theme: Arc<HighlightTheme>,
+    },
+    Initialized {
+        tx: smol::channel::Sender<Update>,
+    },
+}
+
 pub(crate) struct TextViewState {
     parent_entity: Option<EntityId>,
-    tx: smol::channel::Sender<Update>,
-    parsed_result: Result<ParsedContent, SharedString>,
-
+    tx: Option<smol::channel::Sender<Update>>,
+    parsed_result: Option<Result<ParsedContent, SharedString>>,
     focus_handle: Option<FocusHandle>,
 
     /// The bounds of the text view
@@ -201,47 +216,13 @@ pub(crate) struct TextViewState {
 }
 
 impl TextViewState {
-    fn new(
-        type_: TextViewType,
-        content: &str,
-        window: &mut Window,
-        cx: &mut Context<TextViewState>,
-    ) -> Self {
+    fn new(cx: &mut Context<TextViewState>) -> Self {
         let focus_handle = cx.focus_handle();
-        let (tx, rx) = smol::channel::unbounded::<Update>();
-        let (tx_result, rx_result) =
-            smol::channel::unbounded::<Result<ParsedContent, SharedString>>();
-        let highlight_theme = cx.theme().highlight_theme.clone();
-        let parsed_result = parse_content(type_, content, Default::default(), &highlight_theme);
-
-        cx.spawn_in(window, async move |this, cx| {
-            while let Ok(parsed_result) = rx_result.recv().await {
-                _ = this.update(cx, |state, cx| {
-                    state.parsed_result = parsed_result;
-                    if let Some(parent_entity) = state.parent_entity {
-                        let app = &mut **cx;
-                        app.notify(parent_entity);
-                    }
-                    state.clear_selection();
-                });
-            }
-        })
-        .detach();
-
-        cx.background_spawn(UpdateFuture::new(
-            type_,
-            highlight_theme,
-            rx,
-            tx_result,
-            Duration::from_millis(200),
-        ))
-        .detach();
-
         Self {
             parent_entity: None,
-            tx,
+            tx: None,
+            parsed_result: None,
             focus_handle: Some(focus_handle),
-            parsed_result,
             bounds: Bounds::default(),
             selection_positions: (None, None),
             is_selecting: false,
@@ -303,14 +284,21 @@ impl TextViewState {
     }
 
     fn selection_text(&self) -> Option<String> {
-        Some(self.parsed_result.as_ref().ok()?.root_node.selected_text())
+        Some(
+            self.parsed_result
+                .as_ref()?
+                .as_ref()
+                .ok()?
+                .root_node
+                .selected_text(),
+        )
     }
 }
 
 #[derive(IntoElement, Clone)]
 pub enum Text {
     String(SharedString),
-    TextView(TextView),
+    TextView(Box<TextView>),
 }
 
 impl From<SharedString> for Text {
@@ -333,7 +321,7 @@ impl From<String> for Text {
 
 impl From<TextView> for Text {
     fn from(e: TextView) -> Self {
-        Self::TextView(e)
+        Self::TextView(Box::new(e))
     }
 }
 
@@ -344,7 +332,7 @@ impl Text {
     pub fn style(self, style: TextViewStyle) -> Self {
         match self {
             Self::String(s) => Self::String(s),
-            Self::TextView(e) => Self::TextView(e.style(style)),
+            Self::TextView(e) => Self::TextView(Box::new(e.style(style))),
         }
     }
 }
@@ -359,6 +347,26 @@ impl RenderOnce for Text {
 }
 
 impl TextView {
+    fn create_init_state(
+        type_: TextViewType,
+        text: &SharedString,
+        highlight_theme: &Arc<HighlightTheme>,
+        state: &Entity<TextViewState>,
+        cx: &mut App,
+    ) -> InitState {
+        let state = state.read(cx);
+        if let Some(tx) = &state.tx {
+            InitState::Initialized { tx: tx.clone() }
+        } else {
+            InitState::Initializing {
+                type_,
+                text: text.clone(),
+                style: Default::default(),
+                highlight_theme: highlight_theme.clone(),
+            }
+        }
+    }
+
     /// Create a new markdown text view.
     pub fn markdown(
         id: impl Into<ElementId>,
@@ -368,26 +376,26 @@ impl TextView {
     ) -> Self {
         let id: ElementId = id.into();
         let markdown = markdown.into();
-        let mut is_new_state = false;
-        let state = window.use_keyed_state(
-            SharedString::from(format!("{}/state", id)),
-            cx,
-            |window, cx| {
-                is_new_state = true;
-                TextViewState::new(TextViewType::Markdown, &markdown, window, cx)
-            },
-        );
-        let tx = state.read(cx).tx.clone();
-        if !is_new_state {
-            state.update(cx, move |state, _| {
-                _ = state.tx.try_send(Update::Text(markdown));
+        let highlight_theme = cx.theme().highlight_theme.clone();
+        let state =
+            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
+                TextViewState::new(cx)
             });
+        let init_state = Self::create_init_state(
+            TextViewType::Markdown,
+            &markdown,
+            &highlight_theme,
+            &state,
+            cx,
+        );
+        if let Some(tx) = &state.read(cx).tx {
+            let _ = tx.try_send(Update::Text(markdown));
         }
         Self {
             id,
+            init_state: Some(init_state),
             state,
             selectable: false,
-            tx,
         }
     }
 
@@ -400,38 +408,48 @@ impl TextView {
     ) -> Self {
         let id: ElementId = id.into();
         let html = html.into();
-        let mut is_new_state = false;
-        let state = window.use_keyed_state(
-            SharedString::from(format!("{}/state", id)),
-            cx,
-            |window, cx| {
-                is_new_state = true;
-                TextViewState::new(TextViewType::Html, &html, window, cx)
-            },
-        );
-        let tx = state.read(cx).tx.clone();
-        if !is_new_state {
-            state.update(cx, move |state, _| {
-                _ = state.tx.try_send(Update::Text(html));
+        let highlight_theme = cx.theme().highlight_theme.clone();
+        let state =
+            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
+                TextViewState::new(cx)
             });
+        let init_state =
+            Self::create_init_state(TextViewType::Html, &html, &highlight_theme, &state, cx);
+        if let Some(tx) = &state.read(cx).tx {
+            let _ = tx.try_send(Update::Text(html));
         }
         Self {
             id,
+            init_state: Some(init_state),
             state,
             selectable: false,
-            tx,
         }
     }
 
     /// Set the source text of the text view.
-    pub fn text(self, raw: impl Into<SharedString>) -> Self {
-        _ = self.tx.try_send(Update::Text(raw.into()));
+    pub fn text(mut self, raw: impl Into<SharedString>) -> Self {
+        if let Some(init_state) = &mut self.init_state {
+            match init_state {
+                InitState::Initializing { text, .. } => *text = raw.into(),
+                InitState::Initialized { tx } => {
+                    let _ = tx.try_send(Update::Text(raw.into()));
+                }
+            }
+        }
+
         self
     }
 
     /// Set [`TextViewStyle`].
-    pub fn style(self, style: TextViewStyle) -> Self {
-        _ = self.tx.try_send(Update::Style(Box::new(style)));
+    pub fn style(mut self, style: TextViewStyle) -> Self {
+        if let Some(init_state) = &mut self.init_state {
+            match init_state {
+                InitState::Initializing { style: s, .. } => *s = Box::new(style),
+                InitState::Initialized { tx } => {
+                    let _ = tx.try_send(Update::Style(Box::new(style)));
+                }
+            }
+        }
         self
     }
 
@@ -477,6 +495,59 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
+        if let Some(InitState::Initializing {
+            type_,
+            text,
+            style,
+            highlight_theme,
+        }) = self.init_state.take()
+        {
+            let style = *style;
+            let highlight_theme = highlight_theme.clone();
+            let (tx, rx) = smol::channel::unbounded::<Update>();
+            let (tx_result, rx_result) =
+                smol::channel::unbounded::<Result<ParsedContent, SharedString>>();
+            let parsed_result = parse_content(type_, &text, style.clone(), &highlight_theme);
+
+            self.state.update(cx, {
+                let tx = tx.clone();
+                |state, _| {
+                    state.parsed_result = Some(parsed_result);
+                    state.tx = Some(tx);
+                }
+            });
+
+            cx.spawn({
+                let state = self.state.clone();
+                async move |cx| {
+                    while let Ok(parsed_result) = rx_result.recv().await {
+                        _ = state.update(cx, |state, cx| {
+                            state.parsed_result = Some(parsed_result);
+                            if let Some(parent_entity) = state.parent_entity {
+                                let app = &mut **cx;
+                                app.notify(parent_entity);
+                            }
+                            state.clear_selection();
+                        });
+                    }
+                }
+            })
+            .detach();
+
+            cx.background_spawn(UpdateFuture::new(
+                type_,
+                style,
+                text,
+                highlight_theme,
+                rx,
+                tx_result,
+                Duration::from_millis(200),
+            ))
+            .detach();
+
+            self.init_state = Some(InitState::Initialized { tx });
+        }
+
         let focus_handle = self
             .state
             .read(cx)
