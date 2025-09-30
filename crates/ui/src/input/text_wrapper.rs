@@ -261,10 +261,10 @@ impl TextWrapper {
             }
         }
 
-        // If not found, return the end of the line.
-        let last_line = line.wrapped_lines.last().unwrap_or(&(0..0));
-        let local_row = line.wrapped_lines.len().saturating_sub(1);
-        DisplayPoint::new(wrapped_row + local_row, local_row, last_line.end)
+        // Otherwice return the eof of the line.
+        let last_range = line.wrapped_lines.last().unwrap_or(&(0..0));
+        let ix = line.lines_len().saturating_sub(1);
+        return DisplayPoint::new(wrapped_row + ix, ix, last_range.len());
     }
 
     /// Return byte offset in the text from the given display point (with soft wrap).
@@ -306,8 +306,10 @@ pub struct DisplayPoint {
     /// The 0-based soft wrapped row index in the text.
     pub row: usize,
     /// The 0-based row index in local line (include first line).
+    ///
+    /// This value only valid when return from [`TextWrapper::offset_to_display_point`], otherwise it will be ignored.
     pub local_row: usize,
-    /// The 0-based column index in the display line (with soft wrap).
+    /// The 0-based column byte index in the display line (with soft wrap).
     pub column: usize,
 }
 

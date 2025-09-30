@@ -61,33 +61,39 @@ impl InputState {
 
         let offset = self.cursor();
         let was_preferred_column = self.preferred_column;
+
         let mut display_point = self.text_wrapper.offset_to_display_point(offset);
-        dbg!(display_point);
+        dbg!(&offset, &display_point);
         display_point.row = display_point.row.saturating_add_signed(move_lines);
         display_point.column = 0;
-
-        let line_start_offset = self.text_wrapper.display_point_to_offset(display_point);
-        let new_display_point = self.text_wrapper.offset_to_display_point(line_start_offset);
-        let new_row = self.text_wrapper.display_point_to_point(display_point).row;
-        let mut new_offset = line_start_offset;
-
-        let Some(line_item) = self.text_wrapper.line(new_row) else {
-            return;
-        };
-        let Some(sub_line) = line_item.wrapped_lines.get(new_display_point.local_row) else {
-            return;
-        };
+        let mut new_offset = self.text_wrapper.display_point_to_offset(display_point);
 
         if let Some((preferred_x, column)) = was_preferred_column {
-            let new_column = column.min(sub_line.len());
-            new_offset = line_start_offset + new_column;
+            dbg!(&new_offset, &display_point);
+            // Get display point again to update local_row.
+            let mut next_display_point = self.text_wrapper.offset_to_display_point(new_offset);
+            next_display_point.column = 0;
+            let next_point = self.text_wrapper.display_point_to_point(next_display_point);
+            let line_start_offset = self.text.line_start_offset(next_point.row);
+
+            dbg!(
+                &line_start_offset,
+                &new_offset,
+                next_point.row,
+                next_display_point.row,
+                next_display_point.local_row
+            );
+
+            // make a fallback value if not in visible range.
+            let max_line_len = self.text.slice_line(next_point.row).len();
+            new_offset = (line_start_offset + column).min(max_line_len);
 
             // If in visible range, prefer to use position to get column.
-            if let Some(line) = last_layout.line(new_row) {
+            if let Some(line) = last_layout.line(next_point.row) {
                 if let Some(x) = line.closest_index_for_position(
                     Point {
                         x: preferred_x,
-                        y: new_display_point.local_row * last_layout.line_height,
+                        y: next_display_point.local_row * last_layout.line_height,
                     },
                     last_layout.line_height,
                 ) {
@@ -95,6 +101,7 @@ impl InputState {
                 }
             }
         }
+
         self.pause_blink_cursor(cx);
         self.move_to(new_offset, cx);
         // Set back the preferred_column
