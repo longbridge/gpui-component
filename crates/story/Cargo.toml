@@ -16,7 +16,7 @@ raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
 reqwest_client.workspace = true
 smol.workspace = true
-rust-embed = "8.5.0"
+rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
 serde = "1"
 serde_json = "1"
 unindent = "0.2.3"
