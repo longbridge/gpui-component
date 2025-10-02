@@ -362,7 +362,7 @@ impl CodeBlock {
             .mb(style.paragraph_gap)
             .p_3()
             .rounded(cx.theme().radius)
-            .bg(cx.theme().accent)
+            .bg(cx.theme().secondary.opacity(0.85))
             .font_family("Menlo, Monaco, Consolas, monospace")
             .text_size(rems(0.875))
             .relative()

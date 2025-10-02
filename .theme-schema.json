@@ -118,14 +118,6 @@
           "description": "Default border color",
           "type": ["string", "null"]
         },
-        "card.background": {
-          "description": "Background color for Card.",
-          "type": ["string", "null"]
-        },
-        "card.foreground": {
-          "description": "Text color for Card.",
-          "type": ["string", "null"]
-        },
         "caret": {
           "description": "Input caret color (Blinking cursor).",
           "type": ["string", "null"]
@@ -184,6 +176,18 @@
         },
         "foreground": {
           "description": "Default text color.",
+          "type": ["string", "null"]
+        },
+        "group_box.background": {
+          "description": "Background color for GroupBox.",
+          "type": ["string", "null"]
+        },
+        "group_box.foreground": {
+          "description": "Foreground color for GroupBox.",
+          "type": ["string", "null"]
+        },
+        "group_box.title.foreground": {
+          "description": "Title text color for GroupBox.",
           "type": ["string", "null"]
         },
         "info.background": {
