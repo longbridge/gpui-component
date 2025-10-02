@@ -215,11 +215,19 @@ impl Sizable for Tag {
         self
     }
 }
+
 impl ParentElement for Tag {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
     }
 }
+
+impl Styled for Tag {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for Tag {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let bg = if self.outline {
