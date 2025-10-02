@@ -161,8 +161,6 @@
         "accent.foreground": "#ebdbb2",
         "background": "#1d2021",
         "border": "#3e3936",
-        "card.background": "#282828",
-        "card.foreground": "#ebdbb2",
         "danger.active.background": "#fb4934",
         "foreground": "#ebdbb2",
         "input.border": "#504945",
