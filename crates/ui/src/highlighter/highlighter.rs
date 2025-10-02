@@ -1,4 +1,5 @@
 use crate::highlighter::{HighlightTheme, LanguageRegistry};
+use crate::input::RopeExt;
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{HighlightStyle, SharedString};
@@ -9,6 +10,7 @@ use std::{
     ops::Range,
     usize,
 };
+use sum_tree::Bias;
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -433,14 +435,16 @@ impl SyntaxHighlighter {
         injection_language: &str,
         node: Node,
     ) -> Vec<(Range<usize>, String)> {
-        let start_offset = node.start_byte();
-        let end_offset = node.end_byte();
+        // Ensure byte offsets are on char boundaries for UTF-8 safety
+        let start_offset = self.text.clip_offset(node.start_byte(), Bias::Left);
+        let end_offset = self.text.clip_offset(node.end_byte(), Bias::Right);
+
         let mut cache = vec![];
         let Some(query) = &self.injection_queries.get(injection_language) else {
             return cache;
         };
 
-        let content = self.text.slice(node.byte_range());
+        let content = self.text.slice(start_offset..end_offset);
         if content.len() == 0 {
             return cache;
         };
