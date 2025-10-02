@@ -3,7 +3,8 @@ use crate::{
     input::InputState,
     modal::Modal,
     notification::{Notification, NotificationList},
-    window_border, ActiveTheme, Placement,
+    window_border::WindowBorder,
+    ActiveTheme, Placement,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
@@ -391,7 +392,7 @@ impl Render for Root {
         let base_font_size = cx.theme().font_size;
         window.set_rem_size(base_font_size);
 
-        window_border().child(
+        WindowBorder::new().child(
             div()
                 .id("root")
                 .key_context(CONTENT)
