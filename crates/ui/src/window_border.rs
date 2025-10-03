@@ -9,11 +9,11 @@ use gpui::{
 use crate::ActiveTheme;
 
 #[cfg(not(target_os = "linux"))]
-const SHADOW_SIZE: Pixels = Pixels(0.0);
+const SHADOW_SIZE: Pixels = px(0.0);
 #[cfg(target_os = "linux")]
-const SHADOW_SIZE: Pixels = Pixels(12.0);
-const BORDER_SIZE: Pixels = Pixels(1.0);
-pub(crate) const BORDER_RADIUS: Pixels = Pixels(0.0);
+const SHADOW_SIZE: Pixels = px(12.0);
+const BORDER_SIZE: Pixels = px(1.0);
+pub(crate) const BORDER_RADIUS: Pixels = px(0.0);
 
 /// Create a new window border.
 pub fn window_border() -> WindowBorder {

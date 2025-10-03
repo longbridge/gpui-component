@@ -11,6 +11,8 @@ use std::{fmt::Debug, ops::Add};
 
 use gpui::{point, px, App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point, Window};
 
+use crate::PixelsExt;
+
 pub use axis::{Axis, AxisText, AXIS_GAP};
 pub use grid::Grid;
 pub use label::Label;
@@ -42,8 +44,8 @@ where
         .iter()
         .map(|p| {
             point(
-                px(p.x.into() + bounds.origin.x.0),
-                px(p.y.into() + bounds.origin.y.0),
+                px(p.x.into() + bounds.origin.x.as_f32()),
+                px(p.y.into() + bounds.origin.y.as_f32()),
             )
         })
         .collect::<Vec<_>>();

@@ -5,7 +5,10 @@ use gpui::{
     Point, Window,
 };
 
-use crate::plot::{origin_point, StrokeStyle};
+use crate::{
+    plot::{origin_point, StrokeStyle},
+    PixelsExt,
+};
 
 #[allow(clippy::type_complexity)]
 pub struct Line<T> {
@@ -138,7 +141,7 @@ impl<T> Line<T> {
                 let pos = origin_point(px(x), px(y), origin);
 
                 if self.dot {
-                    let dot_radius = self.dot_size.0 / 2.;
+                    let dot_radius = self.dot_size.as_f32() / 2.;
                     let dot_pos = origin_point(px(x - dot_radius), px(y - dot_radius), origin);
                     paint_dots.push(self.paint_dot(dot_pos));
                 }

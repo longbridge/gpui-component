@@ -224,7 +224,7 @@ pub enum Size {
 impl Size {
     fn as_f32(&self) -> f32 {
         match self {
-            Size::Size(val) => val.0,
+            Size::Size(val) => val.as_f32(),
             Size::XSmall => 0.,
             Size::Small => 1.,
             Size::Medium => 2.,
@@ -301,7 +301,7 @@ impl Size {
     /// e.g. `Size::XSmall.max(Size::Small)` will return `Size::XSmall`.
     pub fn max(&self, other: Self) -> Self {
         match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.0.min(b.0))),
+            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().min(b.as_f32()))),
             (Size::Size(a), _) => Size::Size(*a),
             (_, Size::Size(b)) => Size::Size(b),
             (a, b) if a.as_f32() < b.as_f32() => *a,
@@ -314,7 +314,7 @@ impl Size {
     /// e.g. `Size::XSmall.min(Size::Small)` will return `Size::Small`.
     pub fn min(&self, other: Self) -> Self {
         match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.0.max(b.0))),
+            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().max(b.as_f32()))),
             (Size::Size(a), _) => Size::Size(*a),
             (_, Size::Size(b)) => Size::Size(b),
             (a, b) if a.as_f32() > b.as_f32() => *a,
@@ -692,6 +692,21 @@ impl Side {
 pub trait Collapsible {
     fn collapsed(self, collapsed: bool) -> Self;
     fn is_collapsed(&self) -> bool;
+}
+
+/// A trait for converting `Pixels` to `f32` and `f64`.
+pub trait PixelsExt {
+    fn as_f32(&self) -> f32;
+    fn as_f64(self) -> f64;
+}
+impl PixelsExt for Pixels {
+    fn as_f32(&self) -> f32 {
+        f32::from(self)
+    }
+
+    fn as_f64(self) -> f64 {
+        f64::from(self)
+    }
 }
 
 #[cfg(test)]

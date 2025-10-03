@@ -15,7 +15,7 @@ use crate::{
         text_wrapper::{LineLayout, TextWrapper},
         RopeExt as _,
     },
-    ActiveTheme as _, Colorize, Root,
+    ActiveTheme as _, Colorize, PixelsExt, Root,
 };
 
 use super::{mode::InputMode, InputState, LastLayout};
@@ -692,21 +692,25 @@ fn print_points_as_svg_path(
     for corners in line_corners {
         println!(
             "tl: ({}, {}), tr: ({}, {}), bl: ({}, {}), br: ({}, {})",
-            corners.top_left.x.0 as i32,
-            corners.top_left.y.0 as i32,
-            corners.top_right.x.0 as i32,
-            corners.top_right.y.0 as i32,
-            corners.bottom_left.x.0 as i32,
-            corners.bottom_left.y.0 as i32,
-            corners.bottom_right.x.0 as i32,
-            corners.bottom_right.y.0 as i32,
+            corners.top_left.x.as_f32() as i32,
+            corners.top_left.y.as_f32() as i32,
+            corners.top_right.x.as_f32() as i32,
+            corners.top_right.y.as_f32() as i32,
+            corners.bottom_left.x.as_f32() as i32,
+            corners.bottom_left.y.as_f32() as i32,
+            corners.bottom_right.x.as_f32() as i32,
+            corners.bottom_right.y.as_f32() as i32,
         );
     }
 
     if points.len() > 0 {
-        println!("M{},{}", points[0].x.0 as i32, points[0].y.0 as i32);
+        println!(
+            "M{},{}",
+            points[0].x.as_f32() as i32,
+            points[0].y.as_f32() as i32
+        );
         for p in points.iter().skip(1) {
-            println!("L{},{}", p.x.0 as i32, p.y.0 as i32);
+            println!("L{},{}", p.x.as_f32() as i32, p.y.as_f32() as i32);
         }
     }
 }

@@ -4,6 +4,8 @@ use std::{f32::consts::PI, fmt::Debug};
 
 use gpui::{point, px, Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window};
 
+use crate::PixelsExt;
+
 const EPSILON: f32 = 1e-12;
 const HALF_PI: f32 = PI / 2.;
 
@@ -82,8 +84,8 @@ impl Arc {
         let r1 = self.outer_radius.max(0.);
 
         // Calculate the center point.
-        let center_x = bounds.origin.x.0 + bounds.size.width.0 / 2.;
-        let center_y = bounds.origin.y.0 + bounds.size.height.0 / 2.;
+        let center_x = bounds.origin.x.as_f32() + bounds.size.width.as_f32() / 2.;
+        let center_y = bounds.origin.y.as_f32() + bounds.size.height.as_f32() / 2.;
 
         // Angle difference.
         if r1 < EPSILON || da.abs() < EPSILON {
