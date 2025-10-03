@@ -403,8 +403,8 @@ impl LineLayout {
                 let mut ix = line.closest_index_for_x(x);
                 if !is_last && ix == line.text.len() {
                     // For soft wrap line, we can't put the cursor at the end of the line.
-                    let len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
-                    ix = ix.saturating_sub(len);
+                    let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
+                    ix = ix.saturating_sub(c_len);
                 }
 
                 return acc_len + ix;
@@ -433,8 +433,8 @@ impl LineLayout {
                 let mut ix = line.closest_index_for_x(pos.x);
                 if !is_last && ix == line.text.len() {
                     // For soft wrap line, we can't put the cursor at the end of the line.
-                    let len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
-                    ix = ix.saturating_sub(len);
+                    let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
+                    ix = ix.saturating_sub(c_len);
                 }
                 return Some(offset + ix);
             }
