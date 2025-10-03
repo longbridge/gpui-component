@@ -1512,6 +1512,8 @@ impl InputState {
 
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
+        self.selected_range = (0..0).into();
+        self.scroll_to(0, cx);
     }
 
     pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
