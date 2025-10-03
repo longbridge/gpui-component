@@ -1110,7 +1110,7 @@ impl Element for TextElement {
             }
         }
 
-        let active_line_color = cx.theme().highlight_theme.style.active_line;
+        let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
 
         // Paint active line
         let mut offset_y = px(0.);
@@ -1193,7 +1193,7 @@ impl Element for TextElement {
                 cx.theme()
                     .highlight_theme
                     .style
-                    .background
+                    .editor_background
                     .unwrap_or(cx.theme().background),
             ));
 

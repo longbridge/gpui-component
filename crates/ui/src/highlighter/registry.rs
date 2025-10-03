@@ -412,15 +412,15 @@ impl StatusColors {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightThemeStyle {
     #[serde(rename = "editor.background")]
-    pub background: Option<Hsla>,
+    pub editor_background: Option<Hsla>,
     #[serde(rename = "editor.foreground")]
-    pub foreground: Option<Hsla>,
+    pub editor_foreground: Option<Hsla>,
     #[serde(rename = "editor.active_line.background")]
-    pub active_line: Option<Hsla>,
+    pub editor_active_line: Option<Hsla>,
     #[serde(rename = "editor.line_number")]
-    pub line_number: Option<Hsla>,
+    pub editor_line_number: Option<Hsla>,
     #[serde(rename = "editor.active_line_number")]
-    pub active_line_number: Option<Hsla>,
+    pub editor_active_line_number: Option<Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]

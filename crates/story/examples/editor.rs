@@ -866,7 +866,7 @@ impl Render for Example {
                     h_flex()
                         .justify_between()
                         .text_sm()
-                        .bg(cx.theme().secondary)
+                        .bg(cx.theme().background)
                         .py_1p5()
                         .px_4()
                         .border_t_1()
