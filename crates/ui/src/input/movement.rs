@@ -74,10 +74,6 @@ impl InputState {
             let next_point = self.text_wrapper.display_point_to_point(next_display_point);
             let line_start_offset = self.text.line_start_offset(next_point.row);
 
-            // make a fallback value if not in visible range.
-            let max_line_len = self.text.slice_line(next_point.row).len();
-            new_offset = (line_start_offset + column).min(max_line_len);
-
             // If in visible range, prefer to use position to get column.
             if let Some(line) = last_layout.line(next_point.row) {
                 if let Some(x) = line.closest_index_for_position(
@@ -89,6 +85,10 @@ impl InputState {
                 ) {
                     new_offset = line_start_offset + x;
                 }
+            } else {
+                // Not in visible range, use column directly.
+                let max_line_len = self.text.slice_line(next_point.row).len();
+                new_offset = line_start_offset + column.min(max_line_len);
             }
         }
 
