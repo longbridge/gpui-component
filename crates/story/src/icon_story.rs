@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants},
     dock::PanelControl,
-    h_flex, neutral_500, v_flex, ActiveTheme as _, Icon, IconName,
+    h_flex, neutral_500, v_flex, ActiveTheme as _, Icon, IconName, Sizable,
 };
 
 use crate::section;
@@ -109,6 +109,16 @@ impl Render for IconStory {
                                 )
                                 .with_variant(ButtonVariant::Ghost),
                         ),
+                ),
+            )
+            .child(
+                section("Button with size").child(
+                    Button::new("button-with-size")
+                        .outline()
+                        .size_5()
+                        .small()
+                        .px_0()
+                        .label("10"),
                 ),
             )
     }

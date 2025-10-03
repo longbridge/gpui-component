@@ -423,7 +423,6 @@ impl RenderOnce for Button {
                         .tab_stop(self.tab_stop),
                 )
             })
-            .flex_shrink_0()
             .cursor_default()
             .flex()
             .flex_shrink_0()
