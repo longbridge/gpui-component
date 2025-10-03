@@ -301,6 +301,10 @@ impl TextWrapper {
     }
 }
 
+/// The actully display point in the text.
+///
+/// This is usually used to describe the
+/// position in the text with `soft-wrap` mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DisplayPoint {
     /// The 0-based soft wrapped row index in the text.
@@ -323,6 +327,7 @@ impl DisplayPoint {
     }
 }
 
+/// The layout info of a line with soft wrapped lines.
 pub(crate) struct LineLayout {
     /// Total bytes length of this line.
     len: usize,
@@ -389,11 +394,19 @@ impl LineLayout {
         None
     }
 
+    /// Get the closest index for the given x in this line layout.
     pub(super) fn closest_index_for_x(&self, x: Pixels) -> usize {
         let mut acc_len = 0;
-        for line in self.wrapped_lines.iter() {
+        for (i, line) in self.wrapped_lines.iter().enumerate() {
+            let is_last = i + 1 == self.wrapped_lines.len();
             if x <= line.width {
-                let ix = line.closest_index_for_x(x);
+                let mut ix = line.closest_index_for_x(x);
+                if !is_last && ix == line.text.len() {
+                    // For soft wrap line, we can't put the cursor at the end of the line.
+                    let len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
+                    ix = ix.saturating_sub(len);
+                }
+
                 return acc_len + ix;
             }
             acc_len += line.text.len();
@@ -420,9 +433,9 @@ impl LineLayout {
                 let mut ix = line.closest_index_for_x(pos.x);
                 if !is_last && ix == line.text.len() {
                     // For soft wrap line, we can't put the cursor at the end of the line.
-                    ix = ix.saturating_sub(1);
+                    let len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
+                    ix = ix.saturating_sub(len);
                 }
-
                 return Some(offset + ix);
             }
 
