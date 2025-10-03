@@ -261,7 +261,7 @@ impl TextWrapper {
             }
         }
 
-        // Otherwice return the eof of the line.
+        // Otherwise return the eof of the line.
         let last_range = line.wrapped_lines.last().unwrap_or(&(0..0));
         let ix = line.lines_len().saturating_sub(1);
         return DisplayPoint::new(wrapped_row + ix, ix, last_range.len());
