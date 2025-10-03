@@ -65,7 +65,6 @@ impl InputState {
         let mut display_point = self.text_wrapper.offset_to_display_point(offset);
         display_point.row = display_point.row.saturating_add_signed(move_lines);
         display_point.column = 0;
-        dbg!(&offset, &display_point);
         let mut new_offset = self.text_wrapper.display_point_to_offset(display_point);
 
         if let Some((preferred_x, column)) = was_preferred_column {

@@ -253,8 +253,6 @@ impl TextWrapper {
         let local_offset = offset.saturating_sub(start);
         for (ix, range) in line.wrapped_lines.iter().enumerate() {
             if range.contains(&local_offset) {
-                dbg!(&line.wrapped_lines);
-                dbg!(ix, range, local_offset);
                 return DisplayPoint::new(
                     wrapped_row + ix,
                     ix,
@@ -265,7 +263,6 @@ impl TextWrapper {
 
         // Otherwice return the eof of the line.
         let last_range = line.wrapped_lines.last().unwrap_or(&(0..0));
-        dbg!("other", last_range);
         let ix = line.lines_len().saturating_sub(1);
         return DisplayPoint::new(wrapped_row + ix, ix, last_range.len());
     }
@@ -376,13 +373,16 @@ impl LineLayout {
         let mut acc_len = 0;
         let mut offset_y = px(0.);
 
-        for line in self.wrapped_lines.iter() {
-            let range = acc_len..=(acc_len + line.len());
+        for (i, line) in self.wrapped_lines.iter().enumerate() {
+            let is_last = i + 1 == self.wrapped_lines.len();
+            let line_len = if is_last { line.len + 1 } else { line.len };
+
+            let range = acc_len..(acc_len + line_len);
             if range.contains(&offset) {
                 let x = line.x_for_index(offset.saturating_sub(acc_len));
                 return Some(point(x, offset_y));
             }
-            acc_len += line.text.len();
+            acc_len += line_len;
             offset_y += line_height;
         }
 
@@ -413,10 +413,16 @@ impl LineLayout {
     ) -> Option<usize> {
         let mut offset = 0;
         let mut line_top = px(0.);
-        for line in self.wrapped_lines.iter() {
+        for (i, line) in self.wrapped_lines.iter().enumerate() {
+            let is_last = i + 1 == self.wrapped_lines.len();
             let line_bottom = line_top + line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                let ix = line.closest_index_for_x(pos.x);
+                let mut ix = line.closest_index_for_x(pos.x);
+                if !is_last && ix == line.text.len() {
+                    // For soft wrap line, we can't put the cursor at the end of the line.
+                    ix = ix.saturating_sub(1);
+                }
+
                 return Some(offset + ix);
             }
 
@@ -555,7 +561,6 @@ mod tests {
             text.to_string(),
             "AAA, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
-        dbg!(&wrapper.lines);
         assert_eq!(wrapper.lines.len(), 4);
         assert_wrapper_lines(
             &text,
