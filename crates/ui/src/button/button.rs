@@ -533,7 +533,6 @@ impl RenderOnce for Button {
             .child({
                 h_flex()
                     .id("label")
-                    .overflow_hidden()
                     .items_center()
                     .justify_center()
                     .button_text_size(self.size)
