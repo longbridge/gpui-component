@@ -406,6 +406,7 @@ impl RenderOnce for TextInput {
                                 move |_, window, cx| {
                                     state.update(cx, |state, cx| {
                                         state.clean(window, cx);
+                                        state.focus(window, cx);
                                     })
                                 }
                             }))
