@@ -7,8 +7,8 @@ use crate::{
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
     Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window,
+    Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -182,7 +182,7 @@ impl ButtonVariant {
 #[derive(IntoElement)]
 pub struct Button {
     id: ElementId,
-    base: Div,
+    base: Stateful<Div>,
     style: StyleRefinement,
     icon: Option<Icon>,
     label: Option<SharedString>,
@@ -217,9 +217,13 @@ impl From<Button> for AnyElement {
 
 impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
+
         Self {
-            id: id.into(),
-            base: div().flex_shrink_0(),
+            id: id.clone(),
+            // ID must be set after div is created;
+            // `popup_menu` uses this id to create the popup menu.
+            base: div().flex_shrink_0().id(id),
             style: StyleRefinement::default(),
             icon: None,
             label: None,
@@ -415,7 +419,6 @@ impl RenderOnce for Button {
         let is_focused = focus_handle.is_focused(window);
 
         self.base
-            .id(self.id.clone())
             .when(!self.disabled, |this| {
                 this.track_focus(
                     &focus_handle
