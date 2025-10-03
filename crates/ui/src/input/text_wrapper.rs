@@ -301,7 +301,7 @@ impl TextWrapper {
     }
 }
 
-/// The actully display point in the text.
+/// The actually display point in the text.
 ///
 /// This is usually used to describe the
 /// position in the text with `soft-wrap` mode.
