@@ -635,8 +635,6 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self._pending_update = true;
-        self.lsp.reset();
         self.history.ignore = true;
         let was_disabled = self.disabled;
         self.replace_text(value, window, cx);
@@ -647,6 +645,9 @@ impl InputState {
             self.selected_range = (self.text.len()..self.text.len()).into();
         } else {
             self.selected_range.clear();
+
+            self._pending_update = true;
+            self.lsp.reset();
         }
         // Move scroll to top
         self.scroll_handle.set_offset(point(px(0.), px(0.)));

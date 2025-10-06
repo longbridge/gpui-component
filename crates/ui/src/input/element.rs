@@ -1442,4 +1442,44 @@ mod tests {
         assert_runs(runs_for_range(&runs, 3, &(2..10)), &[4, 1, 3]);
         assert_runs(runs_for_range(&runs, 9, &(0..8)), &[1, 7]);
     }
+
+    #[test]
+    fn test_split_runs_by_bg_segments() {
+        let run = TextRun {
+            len: 0,
+            font: gpui::font(".SystemUIFont"),
+            color: gpui::blue(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+
+        let runs = vec![
+            TextRun {
+                len: 5,
+                ..run.clone()
+            },
+            TextRun {
+                len: 7,
+                ..run.clone()
+            },
+            TextRun {
+                len: 24,
+                ..run.clone()
+            },
+        ];
+
+        let bg_segments = vec![(8..12, gpui::red()), (12..18, gpui::blue())];
+        let result = split_runs_by_bg_segments(5, &runs, &bg_segments);
+        assert_eq!(
+            result.iter().map(|run| run.len).collect::<Vec<_>>(),
+            vec![3, 2, 2, 5, 1, 23]
+        );
+        assert_eq!(result[0].color, gpui::blue());
+        assert_eq!(result[1].color, gpui::black());
+        assert_eq!(result[2].color, gpui::black());
+        assert_eq!(result[3].color, gpui::black());
+        assert_eq!(result[4].color, gpui::black());
+        assert_eq!(result[5].color, gpui::blue());
+    }
 }
