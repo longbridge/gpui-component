@@ -31,7 +31,8 @@ pub struct Lsp {
     pub definition_provider: Option<Rc<dyn DefinitionProvider>>,
     /// The document color provider.
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
-    color_informations: Vec<lsp_types::ColorInformation>,
+
+    pub(crate) color_informations: Vec<lsp_types::ColorInformation>,
     _hover_task: Task<Result<()>>,
     _document_color_task: Task<Result<()>>,
 }

@@ -168,6 +168,15 @@ impl Theme {
             window.refresh();
         }
     }
+
+    /// Get the editor background color, if not set, use the theme background color.
+    #[inline]
+    pub(crate) fn editor_background(&self) -> Hsla {
+        self.highlight_theme
+            .style
+            .editor_background
+            .unwrap_or(self.background)
+    }
 }
 
 impl From<ThemeColor> for Theme {

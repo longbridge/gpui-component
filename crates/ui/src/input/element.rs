@@ -2,9 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, IntoElement, LayoutId, MouseButton,
-    MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, TextRun, TextStyle,
-    UnderlineStyle, Window,
+    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, Rgba, ShapedLine, SharedString, Size, Style,
+    TextRun, TextStyle, UnderlineStyle, Window,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -241,7 +241,7 @@ impl TextElement {
     pub(crate) fn layout_match_range(
         range: Range<usize>,
         last_layout: &LastLayout,
-        bounds: &mut Bounds<Pixels>,
+        bounds: &Bounds<Pixels>,
     ) -> Option<Path<Pixels>> {
         if range.is_empty() {
             return None;
@@ -374,7 +374,7 @@ impl TextElement {
     fn layout_search_matches(
         &self,
         last_layout: &LastLayout,
-        bounds: &mut Bounds<Pixels>,
+        bounds: &Bounds<Pixels>,
         cx: &mut App,
     ) -> Vec<(Path<Pixels>, bool)> {
         let search_panel = self.state.read(cx).search_panel.clone();
@@ -401,7 +401,7 @@ impl TextElement {
     fn layout_hover_highlight(
         &self,
         last_layout: &LastLayout,
-        bounds: &mut Bounds<Pixels>,
+        bounds: &Bounds<Pixels>,
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let hover_popover = self.state.read(cx).hover_popover.clone();
@@ -411,6 +411,62 @@ impl TextElement {
         };
 
         Self::layout_match_range(symbol_range, last_layout, bounds)
+    }
+
+    fn layout_document_colors(
+        &self,
+        last_layout: &LastLayout,
+        bounds: &Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Vec<DocumentColorPath> {
+        let state = self.state.read(cx);
+        let lsp = &state.lsp;
+
+        let mut paths = vec![];
+        for info in lsp.color_informations.iter() {
+            let start = state.text.position_to_offset(&info.range.start);
+            let end = state.text.position_to_offset(&info.range.end);
+
+            if let Some(path) = Self::layout_match_range(start..end, last_layout, bounds) {
+                let color: Hsla = Rgba {
+                    r: info.color.red,
+                    g: info.color.green,
+                    b: info.color.blue,
+                    a: info.color.alpha,
+                }
+                .into();
+                let text_color = if cx.theme().editor_background().blend(color).l >= 0.5 {
+                    gpui::black()
+                } else {
+                    gpui::white()
+                };
+
+                let part_text = state.text.slice(start..end).to_string();
+                let text_run = TextRun {
+                    len: part_text.len(),
+                    font: window.text_style().font(),
+                    color: text_color,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                let shape_line = window.text_system().shape_line(
+                    part_text.into(),
+                    last_layout.line_height,
+                    &[text_run],
+                    None,
+                );
+
+                paths.push(DocumentColorPath {
+                    path,
+                    color,
+                    text: shape_line,
+                });
+            }
+        }
+
+        paths
     }
 
     fn layout_selections(
@@ -671,8 +727,15 @@ pub(super) struct PrepaintState {
     selection_path: Option<Path<Pixels>>,
     hover_highlight_path: Option<Path<Pixels>>,
     search_match_paths: Vec<(Path<Pixels>, bool)>,
+    document_color_paths: Vec<DocumentColorPath>,
     hover_definition_hitbox: Option<Hitbox>,
     bounds: Bounds<Pixels>,
+}
+
+struct DocumentColorPath {
+    path: Path<Pixels>,
+    color: Hsla,
+    text: ShapedLine,
 }
 
 impl IntoElement for TextElement {
@@ -1032,6 +1095,7 @@ impl Element for TextElement {
         };
 
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
+        let document_color_paths = self.layout_document_colors(&last_layout, &bounds, window, cx);
 
         PrepaintState {
             bounds,
@@ -1045,6 +1109,7 @@ impl Element for TextElement {
             search_match_paths,
             hover_highlight_path,
             hover_definition_hitbox,
+            document_color_paths,
         }
     }
 
@@ -1156,6 +1221,19 @@ impl Element for TextElement {
             if let Some(path) = prepaint.hover_highlight_path.take() {
                 window.paint_path(path, secondary_selection);
             }
+        }
+
+        // Paint document colors
+        for document_color in prepaint.document_color_paths.iter() {
+            window.paint_path(document_color.path.clone(), document_color.color);
+
+            let p = point(
+                origin.x + prepaint.last_layout.line_number_width,
+                origin.y + invisible_top_padding,
+            );
+
+            // Paint the text on the color
+            _ = document_color.text.paint(p, line_height, window, cx);
         }
 
         // Paint text

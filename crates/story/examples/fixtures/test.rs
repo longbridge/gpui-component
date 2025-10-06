@@ -30,6 +30,8 @@ pub enum HelloError {
     Timeout,
 }
 
+const TEXT_COLOR: &str = "#00AA33";
+
 type Result<T> = std::result::Result<T, HelloError>;
 
 impl HelloWorld {
