@@ -32,7 +32,7 @@ pub struct Lsp {
     /// The document color provider.
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
 
-    pub(crate) document_colors: Vec<(lsp_types::Range, Hsla)>,
+    document_colors: Vec<(lsp_types::Range, Hsla)>,
     _hover_task: Task<Result<()>>,
     _document_color_task: Task<Result<()>>,
 }
