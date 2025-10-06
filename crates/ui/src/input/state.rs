@@ -2145,6 +2145,7 @@ impl EntityInputHandler for InputState {
             .update(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        self.lsp.update(&self.text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
         self.update_preferred_column();
@@ -2163,7 +2164,7 @@ impl EntityInputHandler for InputState {
         range_utf16: Option<Range<usize>>,
         new_text: &str,
         new_selected_range_utf16: Option<Range<usize>>,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.disabled {
@@ -2198,6 +2199,7 @@ impl EntityInputHandler for InputState {
             .update(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        self.lsp.update(&self.text, window, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
             self.selected_range = (range.start..range.start).into();

@@ -14,8 +14,8 @@ use gpui_component::{
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
-        self, CodeActionProvider, CompletionProvider, DefinitionProvider, HoverProvider,
-        InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
+        self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
+        HoverProvider, InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
     },
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
@@ -619,6 +619,39 @@ impl CodeActionProvider for TextConvertor {
     }
 }
 
+impl DocumentColorProvider for ExampleLspStore {
+    fn document_colors(
+        &self,
+        text: &Rope,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<gpui::Result<Vec<lsp_types::ColorInformation>>> {
+        let nodes = color_lsp::parse(&text.to_string());
+        let colors = nodes
+            .into_iter()
+            .map(|node| {
+                let start = lsp_types::Position::new(node.position.line, node.position.character);
+                let end = lsp_types::Position::new(
+                    node.position.line,
+                    node.position.character + node.matched.chars().count() as u32,
+                );
+
+                lsp_types::ColorInformation {
+                    range: lsp_types::Range { start, end },
+                    color: lsp_types::Color {
+                        red: node.color.r,
+                        green: node.color.g,
+                        blue: node.color.b,
+                        alpha: node.color.a,
+                    },
+                }
+            })
+            .collect::<Vec<_>>();
+
+        Task::ready(Ok(colors))
+    }
+}
+
 impl Example {
     pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = if let Some(name) = default {
@@ -650,6 +683,7 @@ impl Example {
             editor.lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
             editor.lsp.hover_provider = Some(lsp_store.clone());
             editor.lsp.definition_provider = Some(lsp_store.clone());
+            editor.lsp.document_color_provider = Some(lsp_store.clone());
 
             editor
         });

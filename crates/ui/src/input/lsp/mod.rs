@@ -1,5 +1,6 @@
 use anyhow::Result;
 use gpui::{App, Context, MouseMoveEvent, Task, Window};
+use ropey::Rope;
 use std::rc::Rc;
 
 use crate::input::{popovers::ContextMenu, InputState, RopeExt};
@@ -7,11 +8,13 @@ use crate::input::{popovers::ContextMenu, InputState, RopeExt};
 mod code_actions;
 mod completions;
 mod definitions;
+mod document_colors;
 mod hover;
 
 pub use code_actions::*;
 pub use completions::*;
 pub use definitions::*;
+pub use document_colors::*;
 pub use hover::*;
 
 /// LSP ServerCapabilities
@@ -26,7 +29,11 @@ pub struct Lsp {
     pub hover_provider: Option<Rc<dyn HoverProvider>>,
     /// The definition provider.
     pub definition_provider: Option<Rc<dyn DefinitionProvider>>,
+    /// The document color provider.
+    pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
+    color_informations: Vec<lsp_types::ColorInformation>,
     _hover_task: Task<Result<()>>,
+    _document_color_task: Task<Result<()>>,
 }
 
 impl Default for Lsp {
@@ -36,8 +43,23 @@ impl Default for Lsp {
             code_action_providers: vec![],
             hover_provider: None,
             definition_provider: None,
+            document_color_provider: None,
+            color_informations: vec![],
             _hover_task: Task::ready(Ok(())),
+            _document_color_task: Task::ready(Ok(())),
         }
+    }
+}
+
+impl Lsp {
+    /// Update the LSP when the text changes.
+    pub(crate) fn update(
+        &mut self,
+        text: &Rope,
+        window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) {
+        self.update_document_colors(text, window, cx);
     }
 }
 
