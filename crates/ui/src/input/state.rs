@@ -635,6 +635,8 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self._pending_update = true;
+        self.lsp.reset();
         self.history.ignore = true;
         let was_disabled = self.disabled;
         self.replace_text(value, window, cx);
@@ -2160,7 +2162,6 @@ impl EntityInputHandler for InputState {
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
         }
-        self._pending_update = false;
         cx.emit(InputEvent::Change);
         cx.notify();
     }
@@ -2177,6 +2178,8 @@ impl EntityInputHandler for InputState {
         if self.disabled {
             return;
         }
+
+        self.lsp.reset();
 
         let range = range_utf16
             .as_ref()
@@ -2221,7 +2224,6 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
-        self._pending_update = false;
         cx.emit(InputEvent::Change);
         cx.notify();
     }

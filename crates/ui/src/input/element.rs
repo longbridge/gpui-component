@@ -411,15 +411,12 @@ impl TextElement {
 
     fn layout_document_colors(
         &self,
+        document_colors: &[(Range<usize>, Hsla)],
         last_layout: &LastLayout,
         bounds: &Bounds<Pixels>,
-        cx: &App,
     ) -> Vec<(Path<Pixels>, Hsla)> {
-        let state = self.state.read(cx);
-        let lsp = &state.lsp;
-
         let mut paths = vec![];
-        for (range, color) in lsp.document_colors.iter() {
+        for (range, color) in document_colors.iter() {
             if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
                 paths.push((path, color.clone()));
             }
@@ -928,15 +925,7 @@ impl Element for TextElement {
 
         let document_colors = state
             .lsp
-            .document_colors
-            .iter()
-            .filter(|(range, _)| {
-                range.start < last_layout.visible_range_offset.end
-                    && range.end > last_layout.visible_range_offset.start
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-
+            .document_colors_for_range(&text, &last_layout.visible_range);
         let lines = Self::layout_lines(
             &state,
             &display_text,
@@ -1024,7 +1013,8 @@ impl Element for TextElement {
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
         let selection_path = self.layout_selections(&last_layout, &mut bounds, cx);
         let hover_highlight_path = self.layout_hover_highlight(&last_layout, &mut bounds, cx);
-        let document_color_paths = self.layout_document_colors(&last_layout, &bounds, cx);
+        let document_color_paths =
+            self.layout_document_colors(&document_colors, &last_layout, &bounds);
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
@@ -1371,10 +1361,10 @@ fn split_runs_by_bg_segments(
                     color: text_color,
                     ..run.clone()
                 });
-            }
 
-            cursor = bg_range.end;
-            run_start = cursor;
+                cursor = bg_range.end;
+                run_start = cursor;
+            }
         }
 
         if run_end > cursor {

@@ -22,6 +22,30 @@ pub trait DocumentColorProvider {
 }
 
 impl Lsp {
+    /// Get document colors that intersect with the visible range (0-based row).
+    ///
+    /// Returns byte ranges and colors.
+    pub(crate) fn document_colors_for_range(
+        &self,
+        text: &Rope,
+        visible_range: &Range<usize>,
+    ) -> Vec<(Range<usize>, Hsla)> {
+        self.document_colors
+            .iter()
+            .filter_map(|(range, color)| {
+                if (range.start.line as usize) > visible_range.end
+                    || (range.end.line as usize) < visible_range.start
+                {
+                    return None;
+                }
+
+                let start = text.position_to_offset(&range.start);
+                let end = text.position_to_offset(&range.end);
+
+                Some((start..end, *color))
+            })
+            .collect()
+    }
     pub(crate) fn update_document_colors(
         &mut self,
         text: &Rope,
@@ -37,11 +61,9 @@ impl Lsp {
             let colors = task.await?;
 
             editor.update(cx, |editor, cx| {
-                let mut document_colors: Vec<(Range<usize>, Hsla)> = colors
+                let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
                     .iter()
                     .map(|info| {
-                        let start = editor.text.position_to_offset(&info.range.start);
-                        let end = editor.text.position_to_offset(&info.range.end);
                         let color = gpui::Rgba {
                             r: info.color.red,
                             g: info.color.green,
@@ -50,7 +72,7 @@ impl Lsp {
                         }
                         .into();
 
-                        (start..end, color)
+                        (info.range, color)
                     })
                     .collect();
                 document_colors.sort_by_key(|(range, _)| range.start);

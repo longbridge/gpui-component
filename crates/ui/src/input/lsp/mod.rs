@@ -1,7 +1,7 @@
 use anyhow::Result;
 use gpui::{App, Context, Hsla, MouseMoveEvent, Task, Window};
 use ropey::Rope;
-use std::{ops::Range, rc::Rc};
+use std::rc::Rc;
 
 use crate::input::{popovers::ContextMenu, InputState, RopeExt};
 
@@ -32,7 +32,7 @@ pub struct Lsp {
     /// The document color provider.
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
 
-    pub(crate) document_colors: Vec<(Range<usize>, Hsla)>,
+    pub(crate) document_colors: Vec<(lsp_types::Range, Hsla)>,
     _hover_task: Task<Result<()>>,
     _document_color_task: Task<Result<()>>,
 }
@@ -61,6 +61,13 @@ impl Lsp {
         cx: &mut Context<InputState>,
     ) {
         self.update_document_colors(text, window, cx);
+    }
+
+    /// Reset all LSP states.
+    pub(crate) fn reset(&mut self) {
+        self.document_colors.clear();
+        self._hover_task = Task::ready(Ok(()));
+        self._document_color_task = Task::ready(Ok(()));
     }
 }
 
