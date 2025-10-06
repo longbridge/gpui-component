@@ -323,6 +323,10 @@ pub struct InputState {
 
     pub lsp: Lsp,
 
+    /// A flag to indicate if we have a pending update to the text.
+    ///
+    /// If true, will call some update (for example LSP, Syntax Highlight) before render.
+    _pending_update: bool,
     /// A flag to indicate if we should ignore the next completion event.
     pub(super) silent_replace_text: bool,
 
@@ -415,6 +419,7 @@ impl InputState {
             silent_replace_text: false,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
+            _pending_update: false,
         }
     }
 
@@ -799,6 +804,7 @@ impl InputState {
             diagnostics.reset(&self.text)
         }
         self.text_wrapper.set_default_text(&self.text);
+        self._pending_update = true;
         self
     }
 
@@ -2154,6 +2160,7 @@ impl EntityInputHandler for InputState {
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
         }
+        self._pending_update = false;
         cx.emit(InputEvent::Change);
         cx.notify();
     }
@@ -2214,6 +2221,7 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
+        self._pending_update = false;
         cx.emit(InputEvent::Change);
         cx.notify();
     }
@@ -2302,9 +2310,13 @@ impl Focusable for InputState {
 }
 
 impl Render for InputState {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.mode
-            .update_highlighter(&(0..0), &self.text, "", false, cx);
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self._pending_update {
+            self.mode
+                .update_highlighter(&(0..0), &self.text, "", false, cx);
+            self.lsp.update(&self.text, window, cx);
+            self._pending_update = false;
+        }
 
         div()
             .id("input-state")

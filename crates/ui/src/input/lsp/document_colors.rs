@@ -1,9 +1,11 @@
+use std::ops::Range;
+
 use anyhow::Result;
-use gpui::{App, Context, Task, Window};
+use gpui::{App, Context, Hsla, Task, Window};
 use lsp_types::ColorInformation;
 use ropey::Rope;
 
-use crate::input::{InputState, Lsp};
+use crate::input::{InputState, Lsp, RopeExt};
 
 pub trait DocumentColorProvider {
     /// Fetches document colors for the specified range.
@@ -35,11 +37,28 @@ impl Lsp {
             let colors = task.await?;
 
             editor.update(cx, |editor, cx| {
-                if colors == editor.lsp.color_informations {
+                let mut document_colors: Vec<(Range<usize>, Hsla)> = colors
+                    .iter()
+                    .map(|info| {
+                        let start = editor.text.position_to_offset(&info.range.start);
+                        let end = editor.text.position_to_offset(&info.range.end);
+                        let color = gpui::Rgba {
+                            r: info.color.red,
+                            g: info.color.green,
+                            b: info.color.blue,
+                            a: info.color.alpha,
+                        }
+                        .into();
+
+                        (start..end, color)
+                    })
+                    .collect();
+                document_colors.sort_by_key(|(range, _)| range.start);
+
+                if document_colors == editor.lsp.document_colors {
                     return;
                 }
-
-                editor.lsp.color_informations = colors;
+                editor.lsp.document_colors = document_colors;
                 cx.notify();
             })?;
 

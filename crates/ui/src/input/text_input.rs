@@ -249,11 +249,7 @@ impl RenderOnce for TextInput {
             cx.theme().muted
         } else {
             if state.mode.is_code_editor() {
-                cx.theme()
-                    .highlight_theme
-                    .style
-                    .editor_background
-                    .unwrap_or(cx.theme().background)
+                cx.theme().editor_background()
             } else {
                 cx.theme().background
             }
