@@ -418,7 +418,7 @@ impl TextElement {
         let mut paths = vec![];
         for (range, color) in document_colors.iter() {
             if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
-                paths.push((path, color.clone()));
+                paths.push((path, *color));
             }
         }
 
@@ -1193,7 +1193,7 @@ impl Element for TextElement {
 
         // Paint document colors
         for (path, color) in prepaint.document_color_paths.iter() {
-            window.paint_path(path.clone(), color.clone());
+            window.paint_path(path.clone(), *color);
         }
 
         // Paint text
