@@ -111,6 +111,9 @@ impl RenderOnce for MenuItem {
             .items_center()
             .justify_between()
             .refine_style(&self.style)
+            .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
+                this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
+            })
             .when(!self.disabled, |this| {
                 this.when(self.hovered, |this| {
                     this.bg(cx.theme().accent)
@@ -119,9 +122,6 @@ impl RenderOnce for MenuItem {
                 .hover(|this| {
                     this.bg(cx.theme().accent)
                         .text_color(cx.theme().accent_foreground)
-                })
-                .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
-                    this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
                 })
                 .when_some(self.on_click, |this, on_click| {
                     this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
