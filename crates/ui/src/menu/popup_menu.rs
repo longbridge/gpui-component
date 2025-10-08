@@ -566,9 +566,7 @@ impl PopupMenu {
                         menu.with_menu_items(submenu.items.clone(), window, cx)
                     })
                 }
-                OwnedMenuItem::SystemMenu(_) => {
-                    debug_assert!(false, "SystemMenu is not supported in PopupMenu");
-                }
+                OwnedMenuItem::SystemMenu(_) => {}
             }
         }
 
@@ -601,9 +599,7 @@ impl PopupMenu {
                         menu,
                     })
                 }
-                OwnedMenuItem::SystemMenu(_) => {
-                    debug_assert!(false, "SystemMenu is not supported in PopupMenu");
-                }
+                OwnedMenuItem::SystemMenu(_) => {}
             }
         }
     }
