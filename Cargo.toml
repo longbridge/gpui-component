@@ -1,37 +1,35 @@
 [workspace]
-members = [
-    "crates/macros",
-    "crates/hello_world",
-    "crates/story",
-    "crates/ui",
-]
+members = ["crates/hello_world", "crates/macros", "crates/story", "crates/ui"]
 
 default-members = ["crates/story"]
 resolver = "2"
 
 [workspace.dependencies]
 gpui = { git = "https://github.com/zed-industries/zed.git" }
-gpui_macros = { git = "https://github.com/zed-industries/zed.git" }
-reqwest_client = { git = "https://github.com/zed-industries/zed.git" }
-sum_tree = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { path = "crates/ui" }
 gpui-component-macros = { path = "crates/macros" }
+gpui-macros = { git = "https://github.com/zed-industries/zed.git" }
+reqwest_client = { git = "https://github.com/zed-industries/zed.git" }
+ropey = { version = "=2.0.0-beta.1", features = [
+    "metric_lines_lf",
+    "metric_utf16",
+] }
 story = { path = "crates/story" }
-ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16", "metric_lines_lf"] }
+zed-sum-tree = { git = "https://github.com/zed-industries/zed.git" }
 
 anyhow = "1"
 log = "0.4"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_repr = "0.1"
-serde_json = "1"
-schemars = "1"
-smallvec = "1"
-rust-i18n = "3"
+lsp-types = "0.97.0"
+notify = "7.0.0"
 raw-window-handle = "0.6.2"
+rust-i18n = "3"
+schemars = "1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1"
+serde_repr = "0.1"
+smallvec = "1"
 smol = "1"
 tracing = "0.1.41"
-notify = "7.0.0"
-lsp-types = "0.97.0"
 
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
@@ -43,6 +41,7 @@ arc_with_non_send_sync = "allow"
 borrowed_box = "allow"
 dbg_macro = "deny"
 let_underscore_future = "allow"
+manual_is_multiple_of = "allow"
 map_entry = "allow"
 module_inception = "allow"
 non_canonical_partial_ord_impl = "allow"
@@ -51,7 +50,6 @@ single_range_in_vec_init = "allow"
 style = { level = "allow", priority = -1 }
 todo = "deny"
 type_complexity = "allow"
-manual_is_multiple_of = "allow"
 
 [profile.dev]
 codegen-units = 16

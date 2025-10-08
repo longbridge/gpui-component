@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use ropey::{LineType, Rope, RopeSlice};
-use sum_tree::Bias;
 use tree_sitter::Point;
+use zed_sum_tree::Bias;
 
 use crate::input::Position;
 
@@ -208,7 +208,7 @@ pub trait RopeExt {
     ///
     /// ```
     /// use gpui_component::input::{Rope, RopeExt};
-    /// use sum_tree::Bias;
+    /// use zed_sum_tree::Bias;
     ///
     /// let rope = Rope::from("Hello 中文🎉 test\nRope");
     /// assert_eq!(rope.clip_offset(5, Bias::Left), 5);
@@ -393,8 +393,8 @@ impl RopeExt for Rope {
 #[cfg(test)]
 mod tests {
     use ropey::Rope;
-    use sum_tree::Bias;
     use tree_sitter::Point;
+    use zed_sum_tree::Bias;
 
     use crate::input::{Position, RopeExt};
 
@@ -601,13 +601,13 @@ mod tests {
         // Test for not on a char boundary
         let mut rope = Rope::from("中文");
         rope.replace(0..1, "New");
-        assert_eq!(rope.to_string(), "New文");
+        assert_eq!(rope.to_string(), "New 文");
         let mut rope = Rope::from("中文");
         rope.replace(0..2, "New");
-        assert_eq!(rope.to_string(), "New文");
+        assert_eq!(rope.to_string(), "New 文");
         let mut rope = Rope::from("中文");
         rope.replace(0..3, "New");
-        assert_eq!(rope.to_string(), "New文");
+        assert_eq!(rope.to_string(), "New 文");
         let mut rope = Rope::from("中文");
         rope.replace(1..4, "New");
         assert_eq!(rope.to_string(), "New");

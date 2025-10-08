@@ -51,7 +51,7 @@ tree-sitter-languages = [
 anyhow.workspace = true
 gpui = { workspace = true }
 gpui-component-macros.workspace = true
-gpui_macros.workspace = true
+gpui-macros.workspace = true
 notify.workspace = true
 ropey.workspace = true
 rust-i18n.workspace = true
@@ -61,8 +61,8 @@ serde_json.workspace = true
 serde_repr.workspace = true
 smallvec.workspace = true
 smol.workspace = true
-sum_tree.workspace = true
 tracing.workspace = true
+zed-sum-tree.workspace = true
 
 enum-iterator = "2.1.0"
 itertools = "0.13.0"

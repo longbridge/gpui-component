@@ -6,7 +6,7 @@ use std::{
 
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use ropey::Rope;
-use sum_tree::{Bias, SeekTarget, SumTree};
+use zed_sum_tree::{Bias, SeekTarget, SumTree};
 
 use crate::{
     input::{Position, RopeExt as _},
@@ -199,7 +199,7 @@ pub struct DiagnosticSummary {
     end: usize,
 }
 
-impl sum_tree::Item for DiagnosticEntry {
+impl zed_sum_tree::Item for DiagnosticEntry {
     type Summary = DiagnosticSummary;
     fn summary(&self, _cx: &()) -> Self::Summary {
         DiagnosticSummary {
@@ -210,7 +210,7 @@ impl sum_tree::Item for DiagnosticEntry {
     }
 }
 
-impl sum_tree::Summary for DiagnosticSummary {
+impl zed_sum_tree::Summary for DiagnosticSummary {
     type Context<'a> = &'a ();
     fn zero(_: Self::Context<'_>) -> Self {
         DiagnosticSummary {
@@ -347,7 +347,7 @@ mod tests {
 
         use super::{Diagnostic, DiagnosticSet, DiagnosticSeverity};
 
-        let text = Rope::from("Hello, 你好warld!\nThis is a test.\nGoodbye, world!");
+        let text = Rope::from("Hello, 你好 warld!\nThis is a test.\nGoodbye, world!");
         let mut diagnostics = DiagnosticSet::new(&text);
 
         diagnostics.push(
