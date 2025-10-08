@@ -1,7 +1,7 @@
 use gpui::{
     actions, prelude::FluentBuilder as _, px, AnyElement, App, Context, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
-    SharedString, Styled, Window,
+    SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
@@ -31,6 +31,7 @@ pub struct NumberInput {
     suffix: Option<AnyElement>,
     appearance: bool,
     disabled: bool,
+    style: StyleRefinement,
 }
 
 impl NumberInput {
@@ -44,6 +45,7 @@ impl NumberInput {
             suffix: None,
             appearance: true,
             disabled: false,
+            style: StyleRefinement::default(),
         }
     }
 
@@ -133,6 +135,13 @@ impl Sizable for NumberInput {
         self
     }
 }
+
+impl Styled for NumberInput {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focused = self.state.focus_handle(cx).is_focused(window);
@@ -150,6 +159,7 @@ impl RenderOnce for NumberInput {
                     .border_color(cx.theme().input)
                     .border_1()
                     .rounded(cx.theme().radius)
+                    .refine_style(&self.style)
             })
             .when(self.disabled, |this| this.bg(cx.theme().muted))
             .when(focused, |this| this.focused_border(cx))
