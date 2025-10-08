@@ -157,8 +157,8 @@ impl Render for MenuBarStory {
                     ]),
                     MenuBarMenu::new("Window").disabled(true),
                     MenuBarMenu::new("View").items(vec![
-                        MenuItem::separator().owned(),
                         MenuItem::action("Info 1", Info(1)).owned(),
+                        MenuItem::separator().owned(),
                         MenuItem::action("Info 2", Info(2)).owned(),
                         MenuItem::action("Info 3", Info(3)).owned(),
                     ]),

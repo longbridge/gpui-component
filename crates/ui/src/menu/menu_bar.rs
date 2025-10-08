@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder, px, App, ElementId, InteractiveElement as _,
-    IntoElement, OwnedMenuItem, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    anchored, deferred, div, prelude::FluentBuilder, px, App, DismissEvent, ElementId, Entity,
+    InteractiveElement as _, IntoElement, OwnedMenuItem, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window,
 };
 
 use crate::{
@@ -168,9 +168,27 @@ impl Disableable for MenuBarMenu {
     }
 }
 
+struct MenuBarMenuState {
+    menu: Entity<PopupMenu>,
+    _subscription: Option<Subscription>,
+}
+
+impl MenuBarMenuState {
+    fn new(menu: Entity<PopupMenu>) -> Self {
+        Self {
+            menu,
+            _subscription: None,
+        }
+    }
+}
+
 impl RenderOnce for MenuBarMenu {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let popup_menu = window.use_keyed_state(self.id.clone(), cx, |_, cx| PopupMenu::new(cx));
+        let state = window.use_keyed_state(self.id.clone(), cx, |window, cx| {
+            MenuBarMenuState::new(PopupMenu::build(window, cx, |menu, _, _| menu))
+        });
+
+        let popup_menu = state.read(cx).menu.clone();
 
         div()
             .id(self.id)
@@ -201,25 +219,38 @@ impl RenderOnce for MenuBarMenu {
                 })
             })
             .when(self.selected && !self.disabled, |this| {
+                let dismiss_handle = self.on_mouse_down_out.clone();
+                let _subscription =
+                    window.subscribe(&popup_menu, cx, move |_, _: &DismissEvent, window, cx| {
+                        if self.selected {
+                            if let Some(handler) = &dismiss_handle {
+                                handler(window, cx);
+                            }
+                        }
+                    });
+
+                state.update(cx, |state, _| {
+                    state._subscription = Some(_subscription);
+                });
+                popup_menu.update(cx, |menu, cx| {
+                    menu.set_menu_items(self.items.clone(), window, cx);
+                });
+
                 this.child(deferred(
                     anchored()
                         .anchor(gpui::Corner::TopLeft)
                         .snap_to_window_with_margin(px(8.))
-                        .child(
-                            div()
-                                .mt_1()
-                                .child(PopupMenu::build(window, cx, |menu, window, cx| {
-                                    menu.with_menu_items(self.items.clone(), window, cx)
-                                }))
-                                .when_some(self.on_mouse_down_out, |this, handler| {
-                                    this.on_mouse_down_out({
-                                        let handler = handler.clone();
-                                        move |_, window, cx| {
-                                            handler(window, cx);
-                                        }
-                                    })
-                                }),
-                        ),
+                        .child(div().mt_1().child(popup_menu).when_some(
+                            self.on_mouse_down_out,
+                            |this, handler| {
+                                this.on_mouse_down_out({
+                                    let handler = handler.clone();
+                                    move |_, window, cx| {
+                                        handler(window, cx);
+                                    }
+                                })
+                            },
+                        )),
                 ))
             })
     }

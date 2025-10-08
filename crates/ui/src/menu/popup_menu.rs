@@ -438,7 +438,6 @@ impl PopupMenu {
 
     fn wrap_handler(&self, action: Box<dyn Action>) -> Rc<dyn Fn(&mut Window, &mut App)> {
         Rc::new(move |window, cx| {
-            dbg!(format!("PopupMenu action: {:?}", action.type_id()));
             window.dispatch_action(action.boxed_clone(), cx);
         })
     }
@@ -574,6 +573,39 @@ impl PopupMenu {
         }
 
         self
+    }
+
+    pub(super) fn set_menu_items(
+        &mut self,
+        items: impl IntoIterator<Item = OwnedMenuItem>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.menu_items.clear();
+        for item in items {
+            match item {
+                OwnedMenuItem::Action { name, action, .. } => {
+                    self.add_menu_item(name, None, action.boxed_clone(), false);
+                }
+                OwnedMenuItem::Separator => {
+                    self.menu_items.push(PopupMenuItem::Separator);
+                }
+                OwnedMenuItem::Submenu(submenu) => {
+                    let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                        menu.with_menu_items(submenu.items.clone(), window, cx)
+                    });
+                    self.menu_items.push(PopupMenuItem::Submenu {
+                        icon: None,
+                        label: submenu.name,
+                        disabled: false,
+                        menu,
+                    })
+                }
+                OwnedMenuItem::SystemMenu(_) => {
+                    debug_assert!(false, "SystemMenu is not supported in PopupMenu");
+                }
+            }
+        }
     }
 
     pub(crate) fn active_submenu(&self) -> Option<Entity<PopupMenu>> {
