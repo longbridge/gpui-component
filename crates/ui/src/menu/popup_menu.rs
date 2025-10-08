@@ -1,6 +1,6 @@
 use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
 use crate::input::{SelectLeft, SelectRight};
-use crate::menu::menu_item::MenuItem;
+use crate::menu::menu_item::MenuItemElement;
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::{
     button::Button, h_flex, popover::Popover, v_flex, ActiveTheme, Icon, IconName, Selectable,
@@ -13,7 +13,7 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
-use gpui::{Half, MouseDownEvent, Subscription};
+use gpui::{Half, MouseDownEvent, OwnedMenuItem, Subscription};
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
@@ -438,6 +438,7 @@ impl PopupMenu {
 
     fn wrap_handler(&self, action: Box<dyn Action>) -> Rc<dyn Fn(&mut Window, &mut App)> {
         Rc::new(move |window, cx| {
+            dbg!(format!("PopupMenu action: {:?}", action.type_id()));
             window.dispatch_action(action.boxed_clone(), cx);
         })
     }
@@ -541,6 +542,37 @@ impl PopupMenu {
             is_link: false,
             handler: self.wrap_handler(action),
         });
+        self
+    }
+
+    pub(super) fn with_menu_items<I>(
+        mut self,
+        items: impl IntoIterator<Item = I>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self
+    where
+        I: Into<OwnedMenuItem>,
+    {
+        for item in items {
+            match item.into() {
+                OwnedMenuItem::Action { name, action, .. } => {
+                    self = self.menu(name, action.boxed_clone())
+                }
+                OwnedMenuItem::Separator => {
+                    self = self.separator();
+                }
+                OwnedMenuItem::Submenu(submenu) => {
+                    self = self.submenu(submenu.name, window, cx, move |menu, window, cx| {
+                        menu.with_menu_items(submenu.items.clone(), window, cx)
+                    })
+                }
+                OwnedMenuItem::SystemMenu(_) => {
+                    debug_assert!(false, "SystemMenu is not supported in PopupMenu");
+                }
+            }
+        }
+
         self
     }
 
@@ -826,7 +858,7 @@ impl PopupMenu {
             _ => (px(26.), state.radius),
         };
 
-        let this = MenuItem::new(ix, &group_name)
+        let this = MenuItemElement::new(ix, &group_name)
             .relative()
             .text_sm()
             .py_0()

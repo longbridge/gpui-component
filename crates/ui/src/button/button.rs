@@ -319,6 +319,7 @@ impl Button {
         self
     }
 
+    /// Add click handler.
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,

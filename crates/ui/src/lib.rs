@@ -5,7 +5,6 @@ mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
 mod kbd;
-mod menu;
 mod root;
 mod styled;
 mod time;
@@ -40,6 +39,7 @@ pub mod input;
 pub mod label;
 pub mod link;
 pub mod list;
+pub mod menu;
 pub mod modal;
 pub mod notification;
 pub mod plot;

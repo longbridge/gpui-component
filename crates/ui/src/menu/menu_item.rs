@@ -7,7 +7,7 @@ use gpui::{
 use smallvec::SmallVec;
 
 #[derive(IntoElement)]
-pub struct MenuItem {
+pub(crate) struct MenuItemElement {
     id: ElementId,
     group_name: SharedString,
     style: StyleRefinement,
@@ -18,7 +18,7 @@ pub struct MenuItem {
     children: SmallVec<[AnyElement; 2]>,
 }
 
-impl MenuItem {
+impl MenuItemElement {
     pub fn new(id: impl Into<ElementId>, group_name: impl Into<SharedString>) -> Self {
         let id: ElementId = id.into();
         Self {
@@ -60,26 +60,26 @@ impl MenuItem {
     }
 }
 
-impl Disableable for MenuItem {
+impl Disableable for MenuItemElement {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 }
 
-impl Styled for MenuItem {
+impl Styled for MenuItemElement {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         &mut self.style
     }
 }
 
-impl ParentElement for MenuItem {
+impl ParentElement for MenuItemElement {
     fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
         self.children.extend(elements);
     }
 }
 
-impl RenderOnce for MenuItem {
+impl RenderOnce for MenuItemElement {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)
