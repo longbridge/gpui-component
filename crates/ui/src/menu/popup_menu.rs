@@ -874,6 +874,7 @@ impl PopupMenu {
                 .disabled(*disabled)
                 .child(
                     h_flex()
+                        .flex_1()
                         .min_h(item_height)
                         .items_center()
                         .gap_x_1()
