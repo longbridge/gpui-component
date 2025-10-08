@@ -5,16 +5,13 @@ default-members = ["crates/story"]
 resolver = "2"
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { path = "crates/ui" }
 gpui-component-macros = { path = "crates/macros" }
+story = { path = "crates/story" }
+
+gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui-macros = { git = "https://github.com/zed-industries/zed.git" }
 reqwest_client = { git = "https://github.com/zed-industries/zed.git" }
-ropey = { version = "=2.0.0-beta.1", features = [
-    "metric_lines_lf",
-    "metric_utf16",
-] }
-story = { path = "crates/story" }
 zed-sum-tree = { git = "https://github.com/zed-industries/zed.git" }
 
 anyhow = "1"
@@ -22,6 +19,10 @@ log = "0.4"
 lsp-types = "0.97.0"
 notify = "7.0.0"
 raw-window-handle = "0.6.2"
+ropey = { version = "=2.0.0-beta.1", features = [
+    "metric_lines_lf",
+    "metric_utf16",
+] }
 rust-i18n = "3"
 schemars = "1"
 serde = { version = "1.0.219", features = ["derive"] }
