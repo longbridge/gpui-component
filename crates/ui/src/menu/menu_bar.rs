@@ -52,7 +52,7 @@ impl RenderOnce for MenuBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| MenuBarState::default());
         let selected_ix = state.read(cx).selected_ix;
-        let has_actived_menu = selected_ix.is_some();
+        let has_activated_menu = selected_ix.is_some();
 
         h_flex()
             .id(self.id)
@@ -69,7 +69,7 @@ impl RenderOnce for MenuBar {
                             });
                         }
                     })
-                    .when(has_actived_menu, |m| {
+                    .when(has_activated_menu, |m| {
                         m.on_hover({
                             let state = state.clone();
                             move |hovered, _, cx| {
