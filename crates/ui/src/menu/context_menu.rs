@@ -4,7 +4,7 @@ use gpui::{
     anchored, deferred, div, prelude::FluentBuilder, px, relative, AnyElement, App, Context,
     Corner, DismissEvent, Element, ElementId, Entity, Focusable, GlobalElementId,
     InspectorElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Position, Stateful, Style, Window,
+    ParentElement, Pixels, Point, Position, Stateful, Style, Subscription, Window,
 };
 
 use crate::menu::popup_menu::PopupMenu;
@@ -76,6 +76,7 @@ struct ContextMenuSharedState {
     menu_view: Option<Entity<PopupMenu>>,
     open: bool,
     position: Point<Pixels>,
+    _subscription: Option<Subscription>,
 }
 
 pub struct ContextMenuState {
@@ -91,6 +92,7 @@ impl Default for ContextMenuState {
                 menu_view: None,
                 open: false,
                 position: Default::default(),
+                _subscription: None,
             })),
         }
     }
@@ -243,17 +245,16 @@ impl Element for ContextMenu {
                         })
                         .into_element();
 
-                        window
-                            .subscribe(&menu, cx, {
-                                let shared_state = shared_state.clone();
-                                move |_, _: &DismissEvent, window, _| {
-                                    shared_state.borrow_mut().open = false;
-                                    window.refresh();
-                                }
-                            })
-                            .detach();
+                        let _subscription = window.subscribe(&menu, cx, {
+                            let shared_state = shared_state.clone();
+                            move |_, _: &DismissEvent, window, _| {
+                                shared_state.borrow_mut().open = false;
+                                window.refresh();
+                            }
+                        });
 
                         shared_state.borrow_mut().menu_view = Some(menu.clone());
+                        shared_state.borrow_mut()._subscription = Some(_subscription);
                         window.refresh();
                     }
                 });
