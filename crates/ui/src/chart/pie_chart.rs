@@ -9,7 +9,7 @@ use crate::{
         shape::{Arc, Pie},
         Plot,
     },
-    ActiveTheme,
+    ActiveTheme, PixelsExt,
 };
 
 #[derive(IntoPlot)]
@@ -73,7 +73,7 @@ impl<T> Plot for PieChart<T> {
         };
 
         let outer_radius = if self.outer_radius.is_zero() {
-            bounds.size.height.0 * 0.4
+            bounds.size.height.as_f32() * 0.4
         } else {
             self.outer_radius
         };

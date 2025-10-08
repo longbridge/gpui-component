@@ -147,8 +147,6 @@
         "accent.foreground": "#f8f8f2",
         "background": "#1b1d1e",
         "border": "#3b3b3b",
-        "card.background": "#272822",
-        "card.foreground": "#f8f8f2",
         "foreground": "#f8f8f2",
         "input.border": "#3b3b3b",
         "list.active.background": "#f9267211",

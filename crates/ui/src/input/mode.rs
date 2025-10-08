@@ -2,13 +2,13 @@ use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
 use gpui::{App, SharedString};
-use rope::Rope;
-use tree_sitter::{InputEdit, Point};
-
-use crate::highlighter::DiagnosticSet;
-use crate::highlighter::SyntaxHighlighter;
+use ropey::Rope;
+use tree_sitter::InputEdit;
 
 use super::text_wrapper::TextWrapper;
+use crate::highlighter::DiagnosticSet;
+use crate::highlighter::SyntaxHighlighter;
+use crate::input::RopeExt as _;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TabSize {
@@ -106,6 +106,10 @@ impl InputMode {
     }
 
     pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
+        if self.is_single_line() {
+            return;
+        }
+
         let wrapped_lines = text_wrapper.len();
         self.set_rows(wrapped_lines);
     }
@@ -180,7 +184,7 @@ impl InputMode {
 
                 let mut highlighter = highlighter.borrow_mut();
                 if highlighter.is_none() {
-                    let new_highlighter = SyntaxHighlighter::new(language, cx);
+                    let new_highlighter = SyntaxHighlighter::new(language);
                     highlighter.replace(new_highlighter);
                 }
 
@@ -207,15 +211,9 @@ impl InputMode {
                     start_byte: selected_range.start,
                     old_end_byte: selected_range.end,
                     new_end_byte: new_end,
-                    start_position: Point::new(start_pos.row as usize, start_pos.column as usize),
-                    old_end_position: Point::new(
-                        old_end_pos.row as usize,
-                        old_end_pos.column as usize,
-                    ),
-                    new_end_position: Point::new(
-                        new_end_pos.row as usize,
-                        new_end_pos.column as usize,
-                    ),
+                    start_position: start_pos,
+                    old_end_position: old_end_pos,
+                    new_end_position: new_end_pos,
                 };
 
                 highlighter.update(Some(edit), text);

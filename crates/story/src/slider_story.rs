@@ -35,7 +35,7 @@ impl super::Story for SliderStory {
         "Displays a slider control for selecting a value within a range."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -225,101 +225,96 @@ impl Render for SliderStory {
                     .child(format!("Value: {}", self.slider4.read(cx).value())),
             )
             .child(
-                section(
-                    h_flex()
-                        .gap_2()
-                        .justify_between()
-                        .child("Color Picker")
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .items_center()
-                                .child(
-                                    h_flex()
-                                        .text_color(self.slider_hsl_value)
-                                        .child(rgb.clone()),
-                                )
-                                .child(Clipboard::new("copy-hsl").value(rgb).on_copied(
-                                    |_, window, cx| {
-                                        window.push_notification("Color copied to clipboard.", cx)
-                                    },
-                                )),
-                        ),
-                )
-                .max_w_md()
-                .justify_around()
-                .child(
-                    v_flex()
-                        .h_32()
-                        .gap_3()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            Slider::new(&self.slider_hsl[0])
-                                .vertical()
-                                .disabled(self.disabled),
-                        )
-                        .child(
-                            v_flex()
-                                .items_center()
-                                .child("Hue")
-                                .child(format!("{:.0}", self.slider_hsl_value.h * 360.)),
-                        ),
-                )
-                .child(
-                    v_flex()
-                        .h_32()
-                        .gap_3()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            Slider::new(&self.slider_hsl[1])
-                                .vertical()
-                                .disabled(self.disabled),
-                        )
-                        .child(
-                            v_flex()
-                                .items_center()
-                                .child("Saturation")
-                                .child(format!("{:.0}", self.slider_hsl_value.s * 100.)),
-                        ),
-                )
-                .child(
-                    v_flex()
-                        .h_32()
-                        .gap_3()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            Slider::new(&self.slider_hsl[2])
-                                .vertical()
-                                .disabled(self.disabled),
-                        )
-                        .child(
-                            v_flex()
-                                .items_center()
-                                .child("Lightness")
-                                .child(format!("{:.0}", self.slider_hsl_value.l * 100.)),
-                        ),
-                )
-                .child(
-                    v_flex()
-                        .h_32()
-                        .gap_3()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            Slider::new(&self.slider_hsl[3])
-                                .vertical()
-                                .disabled(self.disabled),
-                        )
-                        .child(
-                            v_flex()
-                                .items_center()
-                                .child("Alpha")
-                                .child(format!("{:.0}", self.slider_hsl_value.a * 100.)),
-                        ),
-                ),
+                section("Color Picker")
+                    .sub_title(
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .child(
+                                h_flex()
+                                    .text_color(self.slider_hsl_value)
+                                    .child(rgb.clone()),
+                            )
+                            .child(Clipboard::new("copy-hsl").value(rgb).on_copied(
+                                |_, window, cx| {
+                                    window.push_notification("Color copied to clipboard.", cx)
+                                },
+                            )),
+                    )
+                    .max_w_md()
+                    .justify_around()
+                    .child(
+                        v_flex()
+                            .h_32()
+                            .gap_3()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                Slider::new(&self.slider_hsl[0])
+                                    .vertical()
+                                    .disabled(self.disabled),
+                            )
+                            .child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Hue")
+                                    .child(format!("{:.0}", self.slider_hsl_value.h * 360.)),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .h_32()
+                            .gap_3()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                Slider::new(&self.slider_hsl[1])
+                                    .vertical()
+                                    .disabled(self.disabled),
+                            )
+                            .child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Saturation")
+                                    .child(format!("{:.0}", self.slider_hsl_value.s * 100.)),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .h_32()
+                            .gap_3()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                Slider::new(&self.slider_hsl[2])
+                                    .vertical()
+                                    .disabled(self.disabled),
+                            )
+                            .child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Lightness")
+                                    .child(format!("{:.0}", self.slider_hsl_value.l * 100.)),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .h_32()
+                            .gap_3()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                Slider::new(&self.slider_hsl[3])
+                                    .vertical()
+                                    .disabled(self.disabled),
+                            )
+                            .child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Alpha")
+                                    .child(format!("{:.0}", self.slider_hsl_value.a * 100.)),
+                            ),
+                    ),
             )
     }
 }

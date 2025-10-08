@@ -6,8 +6,6 @@ on:
       - "*"
     tags:
       - "*"
-env:
-  CEF_VERSION: "136.1.6+g1ac1b14+chromium-136.0.7103.114"
 
 jobs:
   test:
@@ -27,12 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
       - name: Install system dependencies
         if: ${{ matrix.run_on != 'windows-latest' }}
         run: script/bootstrap
       - name: Machete
         if: ${{ matrix.run_on == 'macos-latest' }}
-        uses: bnjbvr/cargo-machete@main
+        uses: bnjbvr/cargo-machete@v0.9.1
       - name: Setup | Cache Cargo
         uses: actions/cache@v4
         with:
@@ -43,16 +43,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: test-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache CEF
-        id: cache-cef
-        uses: actions/cache@v4
-        with:
-          path: $HOME/.cef
-          key: cef-${{ env.CEF_VERSION }}-${{ matrix.target }}
-      - name: Init CEF
-        if: ${{ !steps.cache-cef.outputs.cache-hit }}
-        run: |
-          cargo run -p cargo-wef -- wef init
       - name: Typo check
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
@@ -65,14 +55,13 @@ jobs:
       - name: Test Linux
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |
-          cargo run -p cargo-wef wef add-framework target/debug
           cargo test --all
       - name: Test Windows
         if: ${{ matrix.run_on == 'windows-latest' }}
         run: |
-          cargo run -p cargo-wef wef add-framework target/debug
           cargo test --all
       - name: Test MacOS
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
           cargo test --all
+          cargo test -p gpui-component --doc

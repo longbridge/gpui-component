@@ -26,7 +26,7 @@ pub use delegate::*;
 
 actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     let context = Some("Table");
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, context),

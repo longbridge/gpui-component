@@ -1,14 +1,16 @@
-use crate::{highlighter::LanguageRegistry, input::RopeExt as _, ActiveTheme};
+use crate::highlighter::{HighlightTheme, LanguageRegistry};
+use crate::input::RopeExt;
 
 use anyhow::{anyhow, Context, Result};
-use gpui::{App, HighlightStyle, SharedString};
+use gpui::{HighlightStyle, SharedString};
 
-use rope::Rope;
+use ropey::{ChunkCursor, Rope};
 use std::{
     collections::{BTreeSet, HashMap},
     ops::Range,
     usize,
 };
+use sum_tree::Bias;
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -40,12 +42,21 @@ pub struct SyntaxHighlighter {
 }
 
 struct TextProvider<'a>(&'a Rope);
-struct ByteChunks<'a>(rope::Chunks<'a>);
+struct ByteChunks<'a> {
+    cursor: ChunkCursor<'a>,
+    end: usize,
+}
 impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
     type I = ByteChunks<'a>;
 
     fn text(&mut self, node: tree_sitter::Node) -> Self::I {
-        ByteChunks(self.0.chunks_in_range(node.byte_range()))
+        let range = node.byte_range();
+        let cursor = self.0.chunk_cursor_at(range.start);
+
+        ByteChunks {
+            cursor,
+            end: range.end,
+        }
     }
 }
 
@@ -53,7 +64,14 @@ impl<'a> Iterator for ByteChunks<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(str::as_bytes)
+        let cursor = &mut self.cursor;
+        let end = self.end;
+
+        if cursor.next() && cursor.byte_offset() < end {
+            Some(cursor.chunk().as_bytes())
+        } else {
+            None
+        }
     }
 }
 
@@ -98,8 +116,8 @@ impl sum_tree::Item for HighlightItem {
 }
 
 impl sum_tree::Summary for HighlightSummary {
-    type Context = ();
-    fn zero(_: &Self::Context) -> Self {
+    type Context<'a> = &'a ();
+    fn zero(_: Self::Context<'_>) -> Self {
         HighlightSummary {
             count: 0,
             start: usize::MIN,
@@ -109,7 +127,7 @@ impl sum_tree::Summary for HighlightSummary {
         }
     }
 
-    fn add_summary(&mut self, other: &Self, _: &Self::Context) {
+    fn add_summary(&mut self, other: &Self, _: Self::Context<'_>) {
         self.min_start = self.min_start.min(other.min_start);
         self.max_end = self.max_end.max(other.max_end);
         self.start = other.start;
@@ -139,15 +157,15 @@ impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
 
 impl SyntaxHighlighter {
     /// Create a new SyntaxHighlighter for HTML.
-    pub fn new(lang: &str, cx: &App) -> Self {
-        match Self::build_combined_injections_query(&lang, cx) {
+    pub fn new(lang: &str) -> Self {
+        match Self::build_combined_injections_query(&lang) {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(
                     "SyntaxHighlighter init failed, fallback to use `text`, {}",
                     err
                 );
-                Self::build_combined_injections_query("text", cx).unwrap()
+                Self::build_combined_injections_query("text").unwrap()
             }
         }
     }
@@ -155,9 +173,8 @@ impl SyntaxHighlighter {
     /// Build the combined injections query for the given language.
     ///
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
-    fn build_combined_injections_query(lang: &str, cx: &App) -> Result<Self> {
-        let registry = LanguageRegistry::global(cx);
-        let Some(config) = registry.language(&lang) else {
+    fn build_combined_injections_query(lang: &str) -> Result<Self> {
+        let Some(config) = LanguageRegistry::singleton().language(&lang) else {
             return Err(anyhow!(
                 "language {:?} is not registered in `LanguageRegistry`",
                 lang
@@ -250,7 +267,7 @@ impl SyntaxHighlighter {
 
         let mut injection_queries = HashMap::new();
         for inj_language in config.injection_languages.iter() {
-            if let Some(inj_config) = registry.language(&inj_language) {
+            if let Some(inj_config) = LanguageRegistry::singleton().language(&inj_language) {
                 match Query::new(&inj_config.language, &inj_config.highlights) {
                     Ok(q) => {
                         injection_queries.insert(inj_config.name.clone(), q);
@@ -315,11 +332,14 @@ impl SyntaxHighlighter {
             .unwrap_or(self.parser.parse("", None).unwrap());
         old_tree.edit(&edit);
 
-        let mut chunks = text.chunks();
         let new_tree = self.parser.parse_with_options(
             &mut move |offset, _| {
-                chunks.seek(offset);
-                chunks.next().unwrap_or("").as_bytes()
+                if offset >= text.len() {
+                    ""
+                } else {
+                    let (chunk, chunk_byte_ix) = text.chunk(offset);
+                    &chunk[offset - chunk_byte_ix..]
+                }
             },
             Some(&old_tree),
             None,
@@ -334,7 +354,7 @@ impl SyntaxHighlighter {
     }
 
     /// Match the visible ranges of nodes in the Tree for highlighting.
-    fn match_styles(&self, range: Range<usize>, cx: &App) -> Vec<HighlightItem> {
+    fn match_styles(&self, range: Range<usize>) -> Vec<HighlightItem> {
         let mut highlights = vec![];
         let Some(tree) = &self.tree else {
             return highlights;
@@ -357,7 +377,7 @@ impl SyntaxHighlighter {
             if let (Some(language_name), Some(content_node), _) =
                 self.injection_for_match(None, query, query_match)
             {
-                let styles = self.handle_injection(&language_name, content_node, cx);
+                let styles = self.handle_injection(&language_name, content_node);
                 for (node_range, highlight_name) in styles {
                     highlights.push(HighlightItem::new(node_range.clone(), highlight_name));
                 }
@@ -414,23 +434,24 @@ impl SyntaxHighlighter {
         &self,
         injection_language: &str,
         node: Node,
-        cx: &App,
     ) -> Vec<(Range<usize>, String)> {
-        let start_offset = node.start_byte();
-        let end_offset = node.end_byte();
+        // Ensure byte offsets are on char boundaries for UTF-8 safety
+        let start_offset = self.text.clip_offset(node.start_byte(), Bias::Left);
+        let end_offset = self.text.clip_offset(node.end_byte(), Bias::Right);
+
         let mut cache = vec![];
         let Some(query) = &self.injection_queries.get(injection_language) else {
             return cache;
         };
 
-        let content = self.text.slice(node.byte_range());
+        let content = self.text.slice(start_offset..end_offset);
         if content.len() == 0 {
             return cache;
         };
         // FIXME: Avoid to_string.
         let content = content.to_string();
 
-        let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
+        let Some(config) = LanguageRegistry::singleton().language(injection_language) else {
             return cache;
         };
         let mut parser = Parser::new();
@@ -550,14 +571,12 @@ impl SyntaxHighlighter {
     pub(crate) fn styles(
         &self,
         range: &Range<usize>,
-        cx: &App,
+        theme: &HighlightTheme,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        let theme = &cx.theme().highlight_theme;
-
         let mut styles = vec![];
         let start_offset = range.start;
 
-        let highlights = self.match_styles(range.clone(), cx);
+        let highlights = self.match_styles(range.clone());
 
         // let mut iter_count = 0;
         for item in highlights {
@@ -573,7 +592,6 @@ impl SyntaxHighlighter {
 
             styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
         }
-        // dbg!(iter_count);
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {

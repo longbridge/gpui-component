@@ -365,11 +365,17 @@ actions!(story, [ShowPanelInfo]);
 #[derive(IntoElement)]
 struct StorySection {
     base: Div,
-    title: AnyElement,
+    title: SharedString,
+    sub_title: Vec<AnyElement>,
     children: Vec<AnyElement>,
 }
 
 impl StorySection {
+    pub fn sub_title(mut self, sub_title: impl IntoElement) -> Self {
+        self.sub_title.push(sub_title.into_any_element());
+        self
+    }
+
     #[allow(unused)]
     fn max_w_md(mut self) -> Self {
         self.base = self.base.max_w(rems(48.));
@@ -416,7 +422,8 @@ impl RenderOnce for StorySection {
                     .justify_between()
                     .w_full()
                     .gap_4()
-                    .child(self.title),
+                    .child(self.title)
+                    .children(self.sub_title),
             )
             .content_style(
                 StyleRefinement::default()
@@ -431,9 +438,10 @@ impl RenderOnce for StorySection {
 
 impl ContextMenuExt for StorySection {}
 
-pub(crate) fn section(title: impl IntoElement) -> StorySection {
+pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
-        title: title.into_any_element(),
+        title: title.into(),
+        sub_title: vec![],
         base: h_flex()
             .flex_wrap()
             .justify_center()
@@ -463,7 +471,7 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: Focusable + Render + Sized {
+pub trait Story: Render + Sized {
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
@@ -481,7 +489,7 @@ pub trait Story: Focusable + Render + Sized {
     fn title_bg() -> Option<Hsla> {
         None
     }
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable>;
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
 
     fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
         let _ = active;
@@ -526,13 +534,12 @@ impl StoryContainer {
         let description = S::description();
         let story = S::new_view(window, cx);
         let story_klass = S::klass();
-        let focus_handle = story.focus_handle(cx);
 
         let view = cx.new(|cx| {
             let mut story = Self::new(window, cx)
                 .story(story.into(), story_klass)
                 .on_active(S::on_active_any);
-            story.focus_handle = focus_handle;
+            story.focus_handle = cx.focus_handle();
             story.closable = S::closable();
             story.zoomable = S::zoomable();
             story.name = name.into();

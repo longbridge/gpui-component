@@ -4,15 +4,8 @@ use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
 use crate::section;
-use crate::{Tab, TabPrev};
 
-const CONTEXT: &str = "DropdownStory";
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-    ])
-}
+pub fn init(_: &mut App) {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Country {
@@ -63,7 +56,7 @@ impl super::Story for DropdownStory {
         "Displays a list of options for the user to pick from—triggered by a button."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -190,43 +183,15 @@ impl DropdownStory {
         }
     }
 
-    fn on_key_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-        cx.notify();
-    }
-
-    fn on_key_shift_tab(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
-        cx.notify();
-    }
-
     fn toggle_disabled(&mut self, disabled: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.disabled = disabled;
         cx.notify();
     }
 }
 
-impl FocusableCycle for DropdownStory {
-    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
-    where
-        Self: Sized,
-    {
-        vec![
-            self.country_dropdown.focus_handle(cx),
-            self.fruit_dropdown.focus_handle(cx),
-            self.simple_dropdown1.focus_handle(cx),
-            self.simple_dropdown2.focus_handle(cx),
-            self.simple_dropdown3.focus_handle(cx),
-        ]
-    }
-}
-
 impl Render for DropdownStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .key_context(CONTEXT)
-            .on_action(cx.listener(Self::on_key_tab))
-            .on_action(cx.listener(Self::on_key_shift_tab))
             .size_full()
             .gap_4()
             .child(

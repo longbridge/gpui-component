@@ -107,7 +107,7 @@ impl RenderOnce for GroupBox {
 
         v_flex()
             .id(self.id.unwrap_or("group-box".into()))
-            .size_full()
+            .w_full()
             .when(has_paddings, |this| this.gap_3())
             .when(!has_paddings, |this| this.gap_4())
             .refine_style(&self.style)

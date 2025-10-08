@@ -1,8 +1,8 @@
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use crate::{
-    text::Text, v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable, Size,
-    StyledExt as _,
+    text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName, Selectable, Sizable,
+    Size, StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, Animation, AnimationExt, AnyElement,
@@ -21,7 +21,9 @@ pub struct Checkbox {
     checked: bool,
     disabled: bool,
     size: Size,
-    on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+    tab_stop: bool,
+    tab_index: isize,
+    on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
 impl Checkbox {
@@ -36,6 +38,8 @@ impl Checkbox {
             disabled: false,
             size: Size::default(),
             on_click: None,
+            tab_stop: true,
+            tab_index: 0,
         }
     }
 
@@ -50,8 +54,32 @@ impl Checkbox {
     }
 
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
         self
+    }
+
+    /// Set the tab stop for the checkbox, default is true.
+    pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
+        self
+    }
+
+    /// Set the tab index for the checkbox, default is 0.
+    pub fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
+        self
+    }
+
+    fn handle_click(
+        on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+        checked: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let new_checked = !checked;
+        if let Some(f) = on_click {
+            (f)(&new_checked, window, cx);
+        }
     }
 }
 
@@ -158,6 +186,13 @@ pub(crate) fn checkbox_check_icon(
 impl RenderOnce for Checkbox {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
+
+        let focus_handle = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .read(cx)
+            .clone();
+        let is_focused = focus_handle.is_focused(window);
+
         let border_color = if checked {
             cx.theme().primary
         } else {
@@ -173,6 +208,13 @@ impl RenderOnce for Checkbox {
         div().child(
             self.base
                 .id(self.id.clone())
+                .when(!self.disabled, |this| {
+                    this.track_focus(
+                        &focus_handle
+                            .tab_stop(self.tab_stop)
+                            .tab_index(self.tab_index),
+                    )
+                })
                 .h_flex()
                 .gap_2()
                 .items_start()
@@ -188,9 +230,11 @@ impl RenderOnce for Checkbox {
                 .when(self.disabled, |this| {
                     this.text_color(cx.theme().muted_foreground)
                 })
+                .rounded(cx.theme().radius * 0.5)
+                .focus_ring(is_focused, px(2.), window, cx)
                 .refine_style(&self.style)
                 .child(
-                    v_flex()
+                    div()
                         .relative()
                         .map(|this| match self.size {
                             Size::XSmall => this.size_3(),
@@ -204,7 +248,7 @@ impl RenderOnce for Checkbox {
                         .border_color(color)
                         .rounded(radius)
                         .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
-                        .map(|this| match self.checked {
+                        .map(|this| match checked {
                             false => this.bg(cx.theme().background),
                             _ => this.bg(color),
                         })
@@ -242,16 +286,20 @@ impl RenderOnce for Checkbox {
                             .children(self.children),
                     )
                 })
-                .when_some(
-                    self.on_click.filter(|_| !self.disabled),
-                    |this, on_click| {
-                        this.on_click(move |_, window, cx| {
+                .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                    // Avoid focus on mouse down.
+                    window.prevent_default();
+                })
+                .when(!self.disabled, |this| {
+                    this.on_click({
+                        let on_click = self.on_click.clone();
+                        move |_, window, cx| {
+                            window.prevent_default();
                             cx.stop_propagation();
-                            let checked = !self.checked;
-                            on_click(&checked, window, cx);
-                        })
-                    },
-                ),
+                            Self::handle_click(&on_click, checked, window, cx);
+                        }
+                    })
+                }),
         )
     }
 }

@@ -9,11 +9,11 @@ use gpui::{
 use crate::ActiveTheme;
 
 #[cfg(not(target_os = "linux"))]
-const SHADOW_SIZE: Pixels = Pixels(0.0);
+const SHADOW_SIZE: Pixels = px(0.0);
 #[cfg(target_os = "linux")]
-const SHADOW_SIZE: Pixels = Pixels(12.0);
-const BORDER_SIZE: Pixels = Pixels(1.0);
-pub(crate) const BORDER_RADIUS: Pixels = Pixels(0.0);
+const SHADOW_SIZE: Pixels = px(12.0);
+const BORDER_SIZE: Pixels = px(1.0);
+pub(crate) const BORDER_RADIUS: Pixels = px(0.0);
 
 /// Create a new window border.
 pub fn window_border() -> WindowBorder {
@@ -140,7 +140,6 @@ impl RenderOnce for WindowBorder {
                     .map(|div| match decorations {
                         Decorations::Server => div,
                         Decorations::Client { tiling } => div
-                            // .border_color(cx.theme().window_border)
                             .when(!(tiling.top || tiling.right), |div| {
                                 div.rounded_tr(BORDER_RADIUS)
                             })

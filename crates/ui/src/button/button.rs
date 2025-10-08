@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
 use crate::{
-    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable, Icon,
-    Selectable, Sizable, Size, StyleSized, StyledExt,
+    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
+    FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, Action, AnyElement, App, ClickEvent, Corners, Div,
-    Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton,
-    ParentElement, Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
+    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, ParentElement,
+    Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -181,6 +181,7 @@ impl ButtonVariant {
 /// A Button element.
 #[derive(IntoElement)]
 pub struct Button {
+    id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
     icon: Option<Icon>,
@@ -199,10 +200,13 @@ pub struct Button {
         SharedString,
         Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
     )>,
-    on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     pub(crate) stop_propagation: bool,
     loading: bool,
     loading_icon: Option<Icon>,
+
+    tab_index: isize,
+    tab_stop: bool,
 }
 
 impl From<Button> for AnyElement {
@@ -213,8 +217,13 @@ impl From<Button> for AnyElement {
 
 impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
+
         Self {
-            base: div().id(id.into()).flex_shrink_0(),
+            id: id.clone(),
+            // ID must be set after div is created;
+            // `popup_menu` uses this id to create the popup menu.
+            base: div().flex_shrink_0().id(id),
             style: StyleRefinement::default(),
             icon: None,
             label: None,
@@ -233,6 +242,8 @@ impl Button {
             outline: false,
             children: Vec::new(),
             loading_icon: None,
+            tab_index: 0,
+            tab_stop: true,
         }
     }
 
@@ -310,7 +321,7 @@ impl Button {
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
         self
     }
 
@@ -321,6 +332,22 @@ impl Button {
 
     pub fn loading_icon(mut self, icon: impl Into<Icon>) -> Self {
         self.loading_icon = Some(icon.into());
+        self
+    }
+
+    /// Set the tab index of the button, it will be used to focus the button by tab key.
+    ///
+    /// Default is 0.
+    pub fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
+        self
+    }
+
+    /// Set the tab stop of the button, if true, the button will be focusable by tab key.
+    ///
+    /// Default is true.
+    pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
         self
     }
 }
@@ -376,22 +403,36 @@ impl InteractiveElement for Button {
 }
 
 impl RenderOnce for Button {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let style: ButtonVariant = self.variant;
+        let clickable = !(self.disabled || self.loading) && self.on_click.is_some();
         let normal_style = style.normal(self.outline, cx);
         let icon_size = match self.size {
             Size::Size(v) => Size::Size(v * 0.75),
             _ => self.size,
         };
 
+        let focus_handle = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .read(cx)
+            .clone();
+        let is_focused = focus_handle.is_focused(window);
+
         self.base
-            .flex_shrink_0()
+            .when(!self.disabled, |this| {
+                this.track_focus(
+                    &focus_handle
+                        .tab_index(self.tab_index)
+                        .tab_stop(self.tab_stop),
+                )
+            })
             .cursor_default()
             .flex()
+            .flex_shrink_0()
             .items_center()
             .justify_center()
+            .cursor_default()
             .when(self.variant.is_link(), |this| this.cursor_pointer())
-            .overflow_hidden()
             .when(cx.theme().shadow && normal_style.shadow, |this| {
                 this.shadow_xs()
             })
@@ -470,21 +511,28 @@ impl RenderOnce for Button {
                     .shadow_none()
             })
             .refine_style(&self.style)
-            .when_some(
-                self.on_click.filter(|_| !self.disabled && !self.loading),
-                |this, on_click| {
-                    let stop_propagation = self.stop_propagation;
-                    this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                        window.prevent_default();
-                        if stop_propagation {
-                            cx.stop_propagation();
-                        }
-                    })
-                    .on_click(move |event, window, cx| {
-                        (on_click)(event, window, cx);
-                    })
-                },
-            )
+            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                // Avoid focus on mouse down.
+                window.prevent_default();
+            })
+            .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
+                let stop_propagation = self.stop_propagation;
+                this.on_click(move |_, _, cx| {
+                    if stop_propagation {
+                        cx.stop_propagation();
+                    }
+                })
+                .on_click(move |event, window, cx| {
+                    (on_click)(event, window, cx);
+                })
+            })
+            .when(self.disabled, |this| {
+                let disabled_style = style.disabled(self.outline, cx);
+                this.bg(disabled_style.bg)
+                    .text_color(disabled_style.fg)
+                    .border_color(disabled_style.border)
+                    .shadow_none()
+            })
             .child({
                 h_flex()
                     .id("label")
@@ -530,6 +578,7 @@ impl RenderOnce for Button {
                         .build(window, cx)
                 })
             })
+            .focus_ring(is_focused, px(0.), window, cx)
     }
 }
 

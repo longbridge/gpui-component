@@ -154,8 +154,6 @@
         "accent.foreground": "#fdf6e3",
         "background": "#002B36",
         "border": "#083e4c",
-        "card.background": "#002b36",
-        "card.foreground": "#fdf6e3",
         "foreground": "#fdf6e3",
         "input.border": "#083e4c",
         "list.active.background": "#0d667d22",
@@ -188,7 +186,7 @@
       },
       "highlight": {
         "editor.foreground": "#DDDDDD",
-        "editor.background": "#000000",
+        "editor.background": "#002B36",
         "editor.active_line.background": "#073642",
         "editor.line_number": "#8F8F8F",
         "editor.active_line_number": "#DDDDDD",

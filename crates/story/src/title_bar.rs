@@ -11,8 +11,8 @@ use gpui_component::{
     locale,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
-    set_locale, ActiveTheme as _, ContextModal as _, IconName, Sizable as _, Theme, ThemeMode,
-    TitleBar,
+    set_locale, ActiveTheme as _, ContextModal as _, IconName, PixelsExt, Sizable as _, Theme,
+    ThemeMode, TitleBar,
 };
 
 use crate::{themes::ThemeSwitcher, SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
@@ -219,8 +219,8 @@ impl FontSizeSelector {
 impl Render for FontSizeSelector {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
-        let font_size = cx.theme().font_size.0 as i32;
-        let radius = cx.theme().radius.0 as i32;
+        let font_size = cx.theme().font_size.as_f32() as i32;
+        let radius = cx.theme().radius.as_f32() as i32;
         let scroll_show = cx.theme().scrollbar_show;
 
         div()

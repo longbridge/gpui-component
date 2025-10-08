@@ -33,6 +33,7 @@
         "tab.active.background": "#010101",
         "tab.active.foreground": "#a8a49d",
         "tab.foreground": "#787878",
+        "title_bar.background": "#101010",
         "base.red": "#ff5874",
         "base.red.light": "#ff587499",
         "base.green": "#489e48",

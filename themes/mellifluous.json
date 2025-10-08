@@ -159,8 +159,6 @@
         "accent.foreground": "#abb2bf",
         "background": "#1A1A1A",
         "border": "#444444",
-        "card.background": "#282c34",
-        "card.foreground": "#abb2bf",
         "foreground": "#abb2bf",
         "input.border": "#444444",
         "link.active.foreground": "#5A6599",
@@ -202,7 +200,7 @@
       "highlight": {
         "editor.foreground": "#abb2bf",
         "editor.background": "#1A1A1A",
-        "editor.active_line.background": "#292929",
+        "editor.active_line.background": "#29292977",
         "editor.line_number": "#828997",
         "editor.active_line_number": "#abb2bf",
         "conflict": "#e06c75",

@@ -26,7 +26,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{scroll::ScrollHandleOffsetable, AxisExt};
+use crate::{scroll::ScrollHandleOffsetable, AxisExt, PixelsExt};
 
 struct VirtualListScrollHandleState {
     axis: Axis,
@@ -104,6 +104,7 @@ impl VirtualListScrollHandle {
             item_index: ix,
             strategy,
             offset,
+            scroll_strict: false,
         });
     }
 
@@ -382,7 +383,11 @@ impl Element for VirtualList {
 
                             state.content_size = if self.axis.is_horizontal() {
                                 Size {
-                                    width: px(state.sizes.iter().map(|size| size.0).sum::<f32>()),
+                                    width: px(state
+                                        .sizes
+                                        .iter()
+                                        .map(|size| size.as_f32())
+                                        .sum::<f32>()),
                                     height: state
                                         .items_sizes
                                         .get(0)
@@ -394,7 +399,11 @@ impl Element for VirtualList {
                                         .items_sizes
                                         .get(0)
                                         .map_or(px(0.), |size| size.width),
-                                    height: px(state.sizes.iter().map(|size| size.0).sum::<f32>()),
+                                    height: px(state
+                                        .sizes
+                                        .iter()
+                                        .map(|size| size.as_f32())
+                                        .sum::<f32>()),
                                 }
                             };
                         }
@@ -563,7 +572,7 @@ impl Element for VirtualList {
                         - layout.size_layout.content_size.along(self.axis);
 
                     // Do not trigger scrolling if the content is smaller than the container.
-                    if min_scroll_offset.0 >= 0. {
+                    if min_scroll_offset.as_f32() >= 0. {
                         scroll_offset.x = px(0.);
                         scroll_offset.y = px(0.);
                     }

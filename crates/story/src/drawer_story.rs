@@ -84,6 +84,7 @@ impl ListDelegate for ListItemDeletegate {
                 )
                 .suffix(|_, _| {
                     Button::new("like")
+                        .tab_stop(false)
                         .icon(IconName::Heart)
                         .with_variant(ButtonVariant::Ghost)
                         .size(px(18.))
@@ -173,7 +174,7 @@ impl Story for DrawerStory {
         "Drawer for open a popup in the edge of the window"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

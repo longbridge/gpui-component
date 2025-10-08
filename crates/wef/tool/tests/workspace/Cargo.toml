@@ -1,3 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["example", "bin", "package_bin"]

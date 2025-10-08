@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme, AxisExt, Sizable, Size,
-    StyledExt,
+    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme, AxisExt,
+    FocusableExt as _, Sizable, Size, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, relative, rems, AnyElement, App, Axis, Div, ElementId,
+    div, prelude::FluentBuilder, px, relative, rems, AnyElement, App, Axis, Div, ElementId,
     InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
@@ -22,8 +22,10 @@ pub struct Radio {
     children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
+    tab_stop: bool,
+    tab_index: isize,
     size: Size,
-    on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
 impl Radio {
@@ -36,6 +38,8 @@ impl Radio {
             children: Vec::new(),
             checked: false,
             disabled: false,
+            tab_index: 0,
+            tab_stop: true,
             size: Size::default(),
             on_click: None,
         }
@@ -56,9 +60,33 @@ impl Radio {
         self
     }
 
-    pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
-        self.on_click = Some(Box::new(handler));
+    /// Set the tab index for the Radio element, default is `0`.
+    pub fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
         self
+    }
+
+    /// Set the tab stop for the Radio element, default is `true`.
+    pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
+        self
+    }
+
+    pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+
+    fn handle_click(
+        on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+        checked: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let new_checked = !checked;
+        if let Some(f) = on_click {
+            (f)(&new_checked, window, cx);
+        }
     }
 }
 
@@ -90,6 +118,11 @@ impl ParentElement for Radio {
 impl RenderOnce for Radio {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
+        let focus_handle = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+            .read(cx)
+            .clone();
+        let is_focused = focus_handle.is_focused(window);
         let disabled = self.disabled;
 
         let (border_color, bg) = if checked {
@@ -106,12 +139,21 @@ impl RenderOnce for Radio {
         // wrap a flex to patch for let Radio display inline
         div().child(
             self.base
-                .h_flex()
                 .id(self.id.clone())
+                .when(!self.disabled, |this| {
+                    this.track_focus(
+                        &focus_handle
+                            .tab_stop(self.tab_stop)
+                            .tab_index(self.tab_index),
+                    )
+                })
+                .h_flex()
                 .gap_x_2()
                 .text_color(cx.theme().foreground)
                 .items_start()
                 .line_height(relative(1.))
+                .rounded(cx.theme().radius * 0.5)
+                .focus_ring(is_focused, px(2.), window, cx)
                 .map(|this| match self.size {
                     Size::XSmall => this.text_xs(),
                     Size::Small => this.text_sm(),
@@ -143,33 +185,41 @@ impl RenderOnce for Radio {
                             self.id, self.size, checked, disabled, window, cx,
                         )),
                 )
-                .child(
-                    v_flex()
-                        .w_full()
-                        .line_height(relative(1.2))
-                        .gap_1()
-                        .when_some(self.label, |this, label| {
-                            this.child(
-                                div()
-                                    .size_full()
-                                    .overflow_hidden()
-                                    .line_height(relative(1.))
-                                    .when(self.disabled, |this| {
-                                        this.text_color(cx.theme().muted_foreground)
-                                    })
-                                    .child(label),
-                            )
-                        })
-                        .children(self.children),
-                )
-                .when_some(
-                    self.on_click.filter(|_| !self.disabled),
-                    |this, on_click| {
-                        this.on_click(move |_event, window, cx| {
-                            on_click(&!self.checked, window, cx);
-                        })
-                    },
-                ),
+                .when(!self.children.is_empty() || self.label.is_some(), |this| {
+                    this.child(
+                        v_flex()
+                            .w_full()
+                            .line_height(relative(1.2))
+                            .gap_1()
+                            .when_some(self.label, |this, label| {
+                                this.child(
+                                    div()
+                                        .size_full()
+                                        .overflow_hidden()
+                                        .line_height(relative(1.))
+                                        .when(self.disabled, |this| {
+                                            this.text_color(cx.theme().muted_foreground)
+                                        })
+                                        .child(label),
+                                )
+                            })
+                            .children(self.children),
+                    )
+                })
+                .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                    // Avoid focus on mouse down.
+                    window.prevent_default();
+                })
+                .when(!self.disabled, |this| {
+                    this.on_click({
+                        let on_click = self.on_click.clone();
+                        move |_, window, cx| {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            Self::handle_click(&on_click, checked, window, cx);
+                        }
+                    })
+                }),
         )
     }
 }

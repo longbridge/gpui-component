@@ -4,11 +4,6 @@ members = [
     "crates/hello_world",
     "crates/story",
     "crates/ui",
-    "crates/wef",
-    "crates/wef/tool",
-    "crates/wef/examples/wef-winit",
-    "crates/webview",
-    "crates/webview/examples/wef-example",
 ]
 
 default-members = ["crates/story"]
@@ -17,13 +12,12 @@ resolver = "2"
 [workspace.dependencies]
 gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui_macros = { git = "https://github.com/zed-industries/zed.git" }
-rope = { git = "https://github.com/zed-industries/zed.git" }
 reqwest_client = { git = "https://github.com/zed-industries/zed.git" }
 sum_tree = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { path = "crates/ui" }
 gpui-component-macros = { path = "crates/macros" }
 story = { path = "crates/story" }
-wef = { path = "crates/wef" }
+ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16", "metric_lines_lf"] }
 
 anyhow = "1"
 log = "0.4"
@@ -37,6 +31,7 @@ raw-window-handle = "0.6.2"
 smol = "1"
 tracing = "0.1.41"
 notify = "7.0.0"
+lsp-types = "0.97.0"
 
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
@@ -56,6 +51,7 @@ single_range_in_vec_init = "allow"
 style = { level = "allow", priority = -1 }
 todo = "deny"
 type_complexity = "allow"
+manual_is_multiple_of = "allow"
 
 [profile.dev]
 codegen-units = 16

@@ -39,12 +39,12 @@ pub(crate) const WIDTH: Pixels = px(2. * 2. + 8.);
 const MIN_THUMB_SIZE: f32 = 48.;
 
 const THUMB_WIDTH: Pixels = px(6.);
-const THUMB_RADIUS: Pixels = Pixels(6. / 2.);
-const THUMB_INSET: Pixels = Pixels(2.);
+const THUMB_RADIUS: Pixels = px(6. / 2.);
+const THUMB_INSET: Pixels = px(2.);
 
 const THUMB_ACTIVE_WIDTH: Pixels = px(8.);
-const THUMB_ACTIVE_RADIUS: Pixels = Pixels(8. / 2.);
-const THUMB_ACTIVE_INSET: Pixels = Pixels(2.);
+const THUMB_ACTIVE_RADIUS: Pixels = px(8. / 2.);
+const THUMB_ACTIVE_INSET: Pixels = px(2.);
 
 const FADE_OUT_DURATION: f32 = 3.0;
 const FADE_OUT_DELAY: f32 = 2.0;

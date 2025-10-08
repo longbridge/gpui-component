@@ -557,7 +557,7 @@ impl ThemeColor {
         apply_color!(popover, fallback = self.background);
         apply_color!(popover_foreground, fallback = self.foreground);
         apply_color!(progress_bar, fallback = self.primary);
-        apply_color!(ring, fallback = self.primary);
+        apply_color!(ring, fallback = self.blue);
         apply_color!(scrollbar, fallback = self.background);
         apply_color!(scrollbar_thumb, fallback = self.accent);
         apply_color!(scrollbar_thumb_hover, fallback = self.scrollbar_thumb);

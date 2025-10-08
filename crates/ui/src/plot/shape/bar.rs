@@ -13,7 +13,7 @@ pub struct Bar<T> {
     y0: f32,
     y1: Box<dyn Fn(&T) -> Option<f32>>,
     fill: Box<dyn Fn(&T) -> Hsla>,
-    label: Option<Box<dyn Fn(&T, Point<Pixels>) -> Text>>,
+    label: Option<Box<dyn Fn(&T, Point<Pixels>) -> Vec<Text>>>,
 }
 
 impl<T> Default for Bar<T> {
@@ -87,7 +87,7 @@ impl<T> Bar<T> {
     /// Set the label of the Bar.
     pub fn label<F>(mut self, label: F) -> Self
     where
-        F: Fn(&T, Point<Pixels>) -> Text + 'static,
+        F: Fn(&T, Point<Pixels>) -> Vec<Text> + 'static,
     {
         self.label = Some(Box::new(label));
         self
@@ -121,7 +121,7 @@ impl<T> Bar<T> {
                 graph.push(fill(Bounds::from_corners(p1, p2), color));
 
                 if let Some(label) = &self.label {
-                    labels.push(label(
+                    labels.extend(label(
                         v,
                         point(
                             px(x_tick + self.band_width / 2.),

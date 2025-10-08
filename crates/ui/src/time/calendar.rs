@@ -474,6 +474,11 @@ impl CalendarState {
         .into()
     }
 
+    fn year_name(&self, offset_month: usize) -> SharedString {
+        let (year, _) = self.offset_year_month(offset_month);
+        year.to_string().into()
+    }
+
     fn set_view_mode(&mut self, mode: ViewMode, _: &mut Window, cx: &mut Context<Self>) {
         self.view_mode = mode;
         cx.notify();
@@ -534,7 +539,7 @@ impl Calendar {
         let (_, month) = state.offset_year_month(offset_month);
         let day = d.day();
         let is_current_month = d.month() == month;
-        let is_active = state.date.is_active(d) && is_current_month;
+        let is_active = state.date.is_active(d);
         let is_in_range = state.date.is_in_range(d);
 
         let date = *d;
@@ -544,8 +549,10 @@ impl Calendar {
             .as_ref()
             .map_or(false, |disabled| disabled.matched(&date));
 
+        let date_id: SharedString = format!("{}_{}", date.format("%Y-%m-%d"), offset_month).into();
+
         self.item_button(
-            d.ordinal() as usize,
+            date_id,
             day.to_string(),
             is_active,
             is_in_range,
@@ -612,6 +619,7 @@ impl Calendar {
             .child(
                 Button::new("prev")
                     .icon(IconName::ArrowLeft)
+                    .tab_stop(false)
                     .ghost()
                     .disabled(disabled)
                     .with_size(icon_size)
@@ -635,6 +643,7 @@ impl Calendar {
                                 .ghost()
                                 .label(state.month_name(0))
                                 .compact()
+                                .tab_stop(false)
                                 .with_size(self.size)
                                 .selected(view_mode.is_month())
                                 .on_click(window.listener_for(
@@ -654,6 +663,7 @@ impl Calendar {
                                 .ghost()
                                 .label(current_year.to_string())
                                 .compact()
+                                .tab_stop(false)
                                 .with_size(self.size)
                                 .selected(view_mode.is_year())
                                 .on_click(window.listener_for(
@@ -681,7 +691,7 @@ impl Calendar {
                                 _ => this.gap_3(),
                             })
                             .child(state.month_name(n))
-                            .child(current_year.to_string())
+                            .child(state.year_name(n))
                     }),
                 ))
             })
@@ -689,6 +699,7 @@ impl Calendar {
                 Button::new("next")
                     .icon(IconName::ArrowRight)
                     .ghost()
+                    .tab_stop(false)
                     .disabled(disabled)
                     .with_size(icon_size)
                     .when(view_mode.is_day(), |this| {

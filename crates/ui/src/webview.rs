@@ -11,6 +11,8 @@ use gpui::{
     MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window,
 };
 
+use crate::PixelsExt;
+
 pub struct WebView {
     focus_handle: FocusHandle,
     webview: Rc<wry::WebView>,
@@ -176,8 +178,8 @@ impl Element for WebViewElement {
         self.view
             .set_bounds(Rect {
                 size: dpi::Size::Logical(LogicalSize {
-                    width: (bounds.size.width.0).into(),
-                    height: (bounds.size.height.0).into(),
+                    width: (bounds.size.width.as_f32()).into(),
+                    height: (bounds.size.height.as_f32()).into(),
                 }),
                 position: dpi::Position::Logical(dpi::LogicalPosition::new(
                     bounds.origin.x.into(),

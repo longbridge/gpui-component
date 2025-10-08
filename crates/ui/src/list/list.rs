@@ -24,7 +24,7 @@ use gpui::{
 use rust_i18n::t;
 use smol::Timer;
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     let context: Option<&str> = Some("List");
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, context),
@@ -60,6 +60,7 @@ pub struct List<D: ListDelegate> {
     pub(crate) size: Size,
     rows_cache: RowsCache,
     selected_index: Option<IndexPath>,
+    item_to_measure_index: IndexPath,
     deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
@@ -86,6 +87,7 @@ where
             query_input: Some(query_input),
             last_query: None,
             selected_index: None,
+            item_to_measure_index: IndexPath::default(),
             deferred_scroll_to_index: None,
             mouse_right_clicked_index: None,
             scroll_handle: VirtualListScrollHandle::new(),
@@ -187,6 +189,17 @@ where
         self.selected_index
     }
 
+    /// Set a specific list item for measurement.
+    pub fn set_item_to_measure_index(
+        &mut self,
+        ix: IndexPath,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.item_to_measure_index = ix;
+        cx.notify();
+    }
+
     fn render_scrollbar(&self, _: &mut Window, _: &mut Context<Self>) -> Option<impl IntoElement> {
         if !self.scrollbar_visible {
             return None;
@@ -238,13 +251,14 @@ where
 
     fn on_query_input_event(
         &mut self,
-        _: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &InputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => {
+            InputEvent::Change => {
+                let text = state.read(cx).value();
                 let text = text.trim().to_string();
                 if Some(&text) == self.last_query.as_ref() {
                     return;
@@ -365,7 +379,7 @@ where
         cx.notify();
     }
 
-    fn on_action_select_prev(
+    pub(crate) fn on_action_select_prev(
         &mut self,
         _: &SelectPrev,
         window: &mut Window,
@@ -381,7 +395,7 @@ where
         self.select_item(prev_ix, window, cx);
     }
 
-    fn on_action_select_next(
+    pub(crate) fn on_action_select_next(
         &mut self,
         _: &SelectNext,
         window: &mut Window,
@@ -449,10 +463,13 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let measured_size = self.rows_cache.measured_size();
+
         v_flex()
             .flex_grow()
             .relative()
             .h_full()
+            .min_w(measured_size.item_size.width)
             .when_some(self.max_height, |this, h| this.max_h(h))
             .overflow_hidden()
             .when(items_count == 0, |this| {
@@ -522,7 +539,7 @@ where
         // Measure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
         measured_size.item_size = self
-            .render_list_item(IndexPath::default(), window, cx)
+            .render_list_item(self.item_to_measure_index, window, cx)
             .into_any_element()
             .layout_as_root(available_space, window, cx);
 

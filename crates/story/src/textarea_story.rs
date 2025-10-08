@@ -1,24 +1,17 @@
 use gpui::{
-    px, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window,
+    px, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled, Window,
 };
 
-use crate::{section, Tab, TabPrev};
+use crate::section;
 use gpui_component::{
     button::Button,
     h_flex,
     input::{InputState, TextInput},
-    v_flex, FocusableCycle, Sizable,
+    v_flex, Sizable,
 };
 
-const CONTEXT: &str = "TextareaStory";
-
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-    ])
-}
+pub fn init(_: &mut App) {}
 
 pub struct TextareaStory {
     textarea: Entity<InputState>,
@@ -39,7 +32,7 @@ impl super::Story for TextareaStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -54,28 +47,30 @@ impl TextareaStory {
             InputState::new(window, cx)
                 .multi_line()
                 .rows(10)
-                .placeholder("Enter text here...").default_value(
-                unindent::unindent(
-                    r#"Hello 世界，this is GPUI component.
+                .placeholder("Enter text here...")
+                .searchable(true)
+                .default_value(
+                    unindent::unindent(
+                        r#"Hello 世界，this is GPUI component.
 
-                The GPUI Component is a collection of UI components for GPUI framework, including.
+                    The GPUI Component is a collection of UI components for GPUI framework, including.
 
-                Button, Input, Checkbox, Radio, Dropdown, Tab, and more...
+                    Button, Input, Checkbox, Radio, Dropdown, Tab, and more...
 
-                Here is an application that is built by using GPUI Component.
+                    Here is an application that is built by using GPUI Component.
 
-                > This application is still under development, not published yet.
+                    > This application is still under development, not published yet.
 
-                ![image](https://github.com/user-attachments/assets/559a648d-19df-4b5a-b563-b78cc79c8894)
+                    ![image](https://github.com/user-attachments/assets/559a648d-19df-4b5a-b563-b78cc79c8894)
 
-                ![image](https://github.com/user-attachments/assets/5e06ad5d-7ea0-43db-8d13-86a240da4c8d)
+                    ![image](https://github.com/user-attachments/assets/5e06ad5d-7ea0-43db-8d13-86a240da4c8d)
 
-                ## Demo
+                    ## Demo
 
-                If you want to see the demo, here is a some demo applications.
-                "#,
+                    If you want to see the demo, here is a some demo applications.
+                    "#,
+                    )
                 )
-            )
         });
 
         let textarea_auto_grow = cx.new(|cx| {
@@ -98,14 +93,6 @@ impl TextareaStory {
             textarea_auto_grow,
             textarea_no_wrap,
         }
-    }
-
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-    }
-
-    fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
     }
 
     fn on_insert_text_to_textarea(
@@ -131,11 +118,6 @@ impl TextareaStory {
     }
 }
 
-impl FocusableCycle for TextareaStory {
-    fn cycle_focus_handles(&self, _: &mut Window, _: &mut App) -> Vec<FocusHandle> {
-        [].to_vec()
-    }
-}
 impl Focusable for TextareaStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.textarea.focus_handle(cx)
@@ -147,10 +129,7 @@ impl Render for TextareaStory {
         let loc = self.textarea.read(cx).cursor_position();
 
         v_flex()
-            .key_context(CONTEXT)
             .id("textarea-story")
-            .on_action(cx.listener(Self::tab))
-            .on_action(cx.listener(Self::tab_prev))
             .gap_3()
             .child(
                 section("Textarea").child(

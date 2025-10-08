@@ -85,7 +85,7 @@ Here is a link to [Google](https://www.google.com), and another to [Rust](https:
 
 ### SVG
 
-![Rust](https://www.rust-lang.org/logos/rust-logo-blk.svg)
+![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg)
 
 ## Table
 

@@ -8,16 +8,13 @@
       "name": "macOS Classic Light",
       "mode": "light",
       "colors": {
-        "accent.background": "#EAEAEA",
+        "accent.background": "#E0E0E0",
         "accent.foreground": "#000000",
-        "background": "#FFFFFF",
+        "background": "#FCFCFC",
         "foreground": "#000000",
         "border": "#D2D2D2",
         "ring": "#0064E1",
-        "danger.background": "#d21f07",
-        "danger.active.background": "#C5060B",
         "danger.foreground": "#FFFFFF",
-        "danger.hover.background": "#D9564E",
         "input.border": "#E0E0E0",
         "list.active.background": "#C7DEFF",
         "list.active.border": "#0064E1",
@@ -28,18 +25,16 @@
         "muted.background": "#F7F7F7",
         "muted.foreground": "#505050",
         "panel.background": "#F9F9F9",
-        "popover.background": "#FFFFFF",
+        "popover.background": "#F7F7F7",
         "popover.foreground": "#000000",
-        "primary.active.background": "#1958a4",
         "primary.background": "#0064E1",
         "primary.foreground": "#FFFFFF",
-        "primary.hover.background": "#2585fa",
-        "scrollbar.background": "#FFFFFF33",
+        "scrollbar.background": "#FFFFFF00",
         "scrollbar.thumb.background": "#C8C8C8AA",
-        "secondary.active.background": "#E0E0E0",
-        "secondary.background": "#E9E9E9",
+        "secondary.active.background": "#D0D0D0",
+        "secondary.background": "#E4E4E4",
         "secondary.foreground": "#000000",
-        "secondary.hover.background": "#D0D0D0",
+        "secondary.hover.background": "#e9e9e9",
         "tab.active.background": "#FFFFFF",
         "tab.active.foreground": "#000000",
         "tab.background": "#E9E9E9",
@@ -155,55 +150,45 @@
       "name": "macOS Classic Dark",
       "mode": "dark",
       "colors": {
-        "accent.background": "#353436",
+        "accent.background": "#363636",
         "accent.foreground": "#CACCCA",
-        "background": "#131313",
-        "border": "#404040",
-        "ring": "#A76D3B",
-        "card.background": "#1E1D1E",
-        "card.foreground": "#CACCCA",
-        "danger.background": "#802207",
-        "danger.foreground": "#E8E4CF",
-        "foreground": "#CACCCA",
-        "input.border": "#3A3A3A",
+        "background": "#1E1E1E",
+        "border": "#454545",
+        "ring": "#0059D1",
+        "foreground": "#DEDEDE",
+        "input.border": "#494949",
         "list.active.background": "#353436",
-        "list.active.border": "#A76D3B",
-        "list.even.background": "#1E1D1E",
+        "list.active.border": "#0059D1",
         "muted.background": "#1E1D1E",
-        "muted.foreground": "#9E9E9E",
+        "muted.foreground": "#9D9D9D",
         "panel.background": "#1E1D1E",
         "popover.background": "#1E1D1E",
         "popover.foreground": "#CACCCA",
-        "primary.background": "#A76D3B",
-        "primary.foreground": "#E8E4CF",
-        "scrollbar.background": "#13131333",
+        "primary.background": "#0059D1",
+        "primary.foreground": "#F2F9FF",
+        "scrollbar.background": "#13131300",
         "scrollbar.thumb.background": "#4C4D4DAA",
-        "secondary.active.background": "#1E1D1E99",
-        "secondary.background": "#1E1D1E",
-        "secondary.foreground": "#CACCCA",
-        "secondary.hover.background": "#212122",
-        "tab.active.background": "#131313",
-        "tab.active.foreground": "#CACCCA",
+        "secondary.active.background": "#2F2F2F99",
+        "secondary.background": "#303030",
+        "secondary.foreground": "#DEDEDE",
+        "secondary.hover.background": "#343434",
+        "tab.active.background": "#1E1E1E",
         "tab.background": "#232323",
         "tab.foreground": "#8F8F8F",
-        "tab_bar.background": "#232323",
-        "base.blue": "#073180",
-        "base.blue.light": "#3f72e2",
-        "base.cyan": "#07807c",
-        "base.cyan.light": "#5BDFD8",
-        "base.green": "#078015",
-        "base.green.light": "#76BA53",
-        "base.magenta": "#AE30C2",
-        "base.magenta.light": "#D86DE9",
-        "base.red": "#802207",
-        "base.red.light": "#DD6F61",
-        "base.yellow": "#807007",
-        "base.yellow.light": "#7B6508"
+        "title_bar.background": "#272727",
+        "selection.background": "#3F638B",
+        "link": "#307BF6",
+        "base.blue": "#0059D1",
+        "base.cyan": "#3CD3FE",
+        "base.green": "#62BA46",
+        "base.magenta": "#F74F9E",
+        "base.red": "#FF4245",
+        "base.yellow": "#FCB827"
       },
       "highlight": {
         "editor.foreground": "#CACCCA",
         "editor.background": "#131313",
-        "editor.active_line.background": "#353436",
+        "editor.active_line.background": "#35343666",
         "editor.line_number": "#8F8F8F",
         "editor.active_line_number": "#DDDDDD",
         "conflict": "#D2602D",
@@ -216,8 +201,8 @@
         "hint": "#b283f8",
         "hint.background": "#250c4b",
         "hint.border": "#3f0891",
-        "info.background": "#0C194D",
-        "info.border": "#082190",
+        "info.background": "#0059D1",
+        "info.border": "#0059D1",
         "modified": "#B0A878",
         "modified.background": "#3A310E",
         "predictive": "#5D5945",
@@ -226,7 +211,7 @@
         "warning.border": "#7B6508",
         "syntax": {
           "attribute": {
-            "color": "#be9a52"
+            "color": "#e7cb8f"
           },
           "boolean": {
             "color": "#E1D797"
@@ -247,30 +232,30 @@
             "color": "#CACCCA"
           },
           "function": {
-            "color": "#E1D797"
+            "color": "#fdd888"
           },
           "keyword": {
-            "color": "#E19773"
+            "color": "#c28b12"
           },
           "link_text": {
-            "color": "#A86D3B",
+            "color": "#307BF6",
             "font_style": "normal"
           },
           "link_uri": {
-            "color": "#6F6D66",
+            "color": "#7faef9",
             "font_style": "italic"
           },
           "number": {
-            "color": "#E19773"
+            "color": "#E1D797"
           },
           "string": {
-            "color": "#76BA53"
+            "color": "#62BA46"
           },
           "string.escape": {
-            "color": "#76BA53"
+            "color": "#62BA46"
           },
           "string.regex": {
-            "color": "#76BA53"
+            "color": "#62BA46"
           },
           "string.special": {
             "color": "#E1D797"
@@ -285,11 +270,11 @@
             "color": "#E1D797"
           },
           "title": {
-            "color": "#A76D3B",
+            "color": "#fdd888",
             "font_weight": 600
           },
           "type": {
-            "color": "#A86D3B"
+            "color": "#c75828"
           },
           "property": {
             "color": "#CACCCA"

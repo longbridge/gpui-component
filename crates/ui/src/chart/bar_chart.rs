@@ -11,7 +11,7 @@ use crate::{
         shape::Bar,
         Axis, AxisText, Grid, Plot, AXIS_GAP,
     },
-    ActiveTheme,
+    ActiveTheme, PixelsExt,
 };
 
 #[derive(IntoPlot)]
@@ -90,8 +90,8 @@ where
             return;
         };
 
-        let width = bounds.size.width.0;
-        let height = bounds.size.height.0 - AXIS_GAP;
+        let width = bounds.size.width.as_f32();
+        let height = bounds.size.height.as_f32() - AXIS_GAP;
 
         // X scale
         let x = ScaleBand::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width])
@@ -154,8 +154,7 @@ where
 
         if let Some(label) = self.label.as_ref() {
             let label = label.clone();
-            bar =
-                bar.label(move |d, p| Text::new(label(d), p, label_color).align(TextAlign::Center));
+            bar = bar.label(move |d, p| vec![Text::new(label(d), p, label_color)]);
         }
 
         bar.paint(&bounds, window, cx);

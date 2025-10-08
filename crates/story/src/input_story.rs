@@ -1,19 +1,12 @@
 use gpui::{
-    div, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Subscription, Window,
+    div, App, AppContext as _, Context, Entity, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window,
 };
 
-use crate::{section, Tab, TabPrev};
+use crate::section;
 use gpui_component::{button::*, input::*, *};
 
-const CONTEXT: &str = "InputStory";
-
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-    ])
-}
+pub fn init(_: &mut App) {}
 
 pub struct InputStory {
     input1: Entity<InputState>,
@@ -43,7 +36,7 @@ impl super::Story for InputStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -124,23 +117,18 @@ impl InputStory {
         }
     }
 
-    fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(true, window, cx);
-    }
-
-    fn tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        self.cycle_focus(false, window, cx);
-    }
-
     fn on_input_event(
         &mut self,
-        _: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &InputEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
         match event {
-            InputEvent::Change(text) => println!("Change: {}", text),
+            InputEvent::Change => {
+                let text = state.read(_cx).value();
+                println!("Change: {}", text)
+            }
             InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),
@@ -148,39 +136,10 @@ impl InputStory {
     }
 }
 
-impl FocusableCycle for InputStory {
-    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<FocusHandle> {
-        [
-            self.input1.focus_handle(cx),
-            self.input2.focus_handle(cx),
-            self.disabled_input.focus_handle(cx),
-            self.mask_input.focus_handle(cx),
-            self.prefix_input1.focus_handle(cx),
-            self.both_input1.focus_handle(cx),
-            self.suffix_input1.focus_handle(cx),
-            self.currency_input.focus_handle(cx),
-            self.phone_input.focus_handle(cx),
-            self.mask_input2.focus_handle(cx),
-            self.large_input.focus_handle(cx),
-            self.small_input.focus_handle(cx),
-            self.input_esc.focus_handle(cx),
-        ]
-        .to_vec()
-    }
-}
-impl Focusable for InputStory {
-    fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.input1.focus_handle(cx)
-    }
-}
-
 impl Render for InputStory {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .key_context(CONTEXT)
             .id("input-story")
-            .on_action(cx.listener(Self::tab))
-            .on_action(cx.listener(Self::tab_prev))
             .size_full()
             .justify_start()
             .gap_3()
