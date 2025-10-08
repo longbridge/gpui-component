@@ -1,8 +1,8 @@
 use crate::{h_flex, ActiveTheme, Disableable, Selectable, StyledExt};
 use gpui::{
     prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
-    IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    IntoElement, MouseButton, ParentElement, RenderOnce, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -14,7 +14,7 @@ pub struct MenuItem {
     selected: bool,
     hovered: bool,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
-    on_mouse_enter: Option<Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>>,
+    on_hover: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
 }
 
@@ -28,7 +28,7 @@ impl MenuItem {
             selected: false,
             hovered: false,
             on_click: None,
-            on_mouse_enter: None,
+            on_hover: None,
             children: SmallVec::new(),
         }
     }
@@ -59,11 +59,8 @@ impl MenuItem {
 
     /// Set a handler for when the mouse enters the MenuItem.
     #[allow(unused)]
-    pub fn on_mouse_enter(
-        mut self,
-        handler: impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.on_mouse_enter = Some(Box::new(handler));
+    pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_hover = Some(Box::new(handler));
         self
     }
 }
@@ -111,8 +108,8 @@ impl RenderOnce for MenuItem {
             .items_center()
             .justify_between()
             .refine_style(&self.style)
-            .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
-                this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
+            .when_some(self.on_hover, |this, on_hover| {
+                this.on_hover(move |hovered, window, cx| (on_hover)(hovered, window, cx))
             })
             .when(!self.disabled, |this| {
                 this.when(self.hovered, |this| {

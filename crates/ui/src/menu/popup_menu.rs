@@ -831,12 +831,15 @@ impl PopupMenu {
             .rounded(radius)
             .items_center()
             .hovered(selected)
-            .on_mouse_enter(cx.listener(move |this, _, _, cx| {
-                if this.selected_index == Some(ix) {
-                    return;
+            .on_hover(cx.listener(move |this, hovered, _, cx| {
+                if *hovered {
+                    this.selected_index = Some(ix);
+                } else {
+                    if this.selected_index == Some(ix) {
+                        this.selected_index = None;
+                    }
                 }
 
-                this.selected_index = Some(ix);
                 cx.notify();
             }));
 
