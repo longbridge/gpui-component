@@ -86,16 +86,16 @@ pub(crate) enum PopupMenuItem {
 
 impl PopupMenuItem {
     fn is_clickable(&self) -> bool {
-        !matches!(self, PopupMenuItem::Separator)
+        !matches!(self, Self::Separator)
             && matches!(
                 self,
-                PopupMenuItem::Item {
+                Self::Item {
                     disabled: false,
                     ..
-                } | PopupMenuItem::ElementItem {
+                } | Self::ElementItem {
                     disabled: false,
                     ..
-                } | PopupMenuItem::Submenu {
+                } | Self::Submenu {
                     disabled: false,
                     ..
                 }
@@ -103,7 +103,7 @@ impl PopupMenuItem {
     }
 
     fn is_separator(&self) -> bool {
-        matches!(self, PopupMenuItem::Separator)
+        matches!(self, Self::Separator)
     }
 }
 
@@ -155,7 +155,7 @@ impl PopupMenu {
     pub fn build(
         window: &mut Window,
         cx: &mut App,
-        f: impl FnOnce(Self, &mut Window, &mut Context<PopupMenu>) -> Self,
+        f: impl FnOnce(Self, &mut Window, &mut Context<Self>) -> Self,
     ) -> Entity<Self> {
         cx.new(|cx| {
             let mut menu = Self::new(cx);
@@ -468,7 +468,7 @@ impl PopupMenu {
         label: impl Into<SharedString>,
         window: &mut Window,
         cx: &mut Context<Self>,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        f: impl Fn(Self, &mut Window, &mut Context<Self>) -> Self + 'static,
     ) -> Self {
         self.submenu_with_icon(None, label, window, cx, f)
     }
@@ -480,7 +480,7 @@ impl PopupMenu {
         disabled: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        f: impl Fn(Self, &mut Window, &mut Context<Self>) -> Self + 'static,
     ) -> Self {
         self.submenu_with_icon_with_disabled(None, label, disabled, window, cx, f)
     }
@@ -492,7 +492,7 @@ impl PopupMenu {
         label: impl Into<SharedString>,
         window: &mut Window,
         cx: &mut Context<Self>,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        f: impl Fn(Self, &mut Window, &mut Context<Self>) -> Self + 'static,
     ) -> Self {
         self.submenu_with_icon_with_disabled(icon, label, false, window, cx, f)
     }
@@ -505,9 +505,9 @@ impl PopupMenu {
         disabled: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        f: impl Fn(Self, &mut Window, &mut Context<Self>) -> Self + 'static,
     ) -> Self {
-        let submenu = PopupMenu::build(window, cx, f);
+        let submenu = Self::build(window, cx, f);
         let parent_menu = cx.entity().downgrade();
         submenu.update(cx, |view, _| {
             view.parent_menu = Some(parent_menu);
@@ -544,7 +544,7 @@ impl PopupMenu {
         self
     }
 
-    pub(crate) fn active_submenu(&self) -> Option<Entity<PopupMenu>> {
+    pub(crate) fn active_submenu(&self) -> Option<Entity<Self>> {
         if let Some(ix) = self.selected_index {
             if let Some(item) = self.menu_items.get(ix) {
                 return match item {

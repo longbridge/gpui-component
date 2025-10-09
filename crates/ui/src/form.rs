@@ -144,9 +144,9 @@ impl From<AnyView> for FieldBuilder {
 impl RenderOnce for FieldBuilder {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         match self {
-            FieldBuilder::String(value) => value.into_any_element(),
-            FieldBuilder::Element(builder) => builder(window, cx),
-            FieldBuilder::View(view) => view.into_any(),
+            Self::String(value) => value.into_any_element(),
+            Self::Element(builder) => builder(window, cx),
+            Self::View(view) => view.into_any(),
         }
     }
 }

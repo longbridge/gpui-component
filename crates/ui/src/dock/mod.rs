@@ -99,7 +99,7 @@ pub enum DockItem {
 impl std::fmt::Debug for DockItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DockItem::Split {
+            Self::Split {
                 axis, items, sizes, ..
             } => f
                 .debug_struct("Split")
@@ -107,15 +107,15 @@ impl std::fmt::Debug for DockItem {
                 .field("items", &items.len())
                 .field("sizes", sizes)
                 .finish(),
-            DockItem::Tabs {
+            Self::Tabs {
                 items, active_ix, ..
             } => f
                 .debug_struct("Tabs")
                 .field("items", &items.len())
                 .field("active_ix", active_ix)
                 .finish(),
-            DockItem::Panel { .. } => f.debug_struct("Panel").finish(),
-            DockItem::Tiles { .. } => f.debug_struct("Tiles").finish(),
+            Self::Panel { .. } => f.debug_struct("Panel").finish(),
+            Self::Tiles { .. } => f.debug_struct("Tiles").finish(),
         }
     }
 }
@@ -124,7 +124,7 @@ impl DockItem {
     /// Create DockItem with split layout, each item of panel have equal size.
     pub fn split(
         axis: Axis,
-        items: Vec<DockItem>,
+        items: Vec<Self>,
         dock_area: &WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut App,
@@ -139,7 +139,7 @@ impl DockItem {
     /// Set `None` in `sizes` to make the index of panel have auto size.
     pub fn split_with_sizes(
         axis: Axis,
-        items: Vec<DockItem>,
+        items: Vec<Self>,
         sizes: Vec<Option<Pixels>>,
         dock_area: &WeakEntity<DockArea>,
         window: &mut Window,
@@ -190,7 +190,7 @@ impl DockItem {
     ///
     /// This items and metas should have the same length.
     pub fn tiles(
-        items: Vec<DockItem>,
+        items: Vec<Self>,
         metas: Vec<impl Into<TileMeta> + Copy>,
         dock_area: &WeakEntity<DockArea>,
         window: &mut Window,
@@ -202,13 +202,13 @@ impl DockItem {
             let mut tiles = Tiles::new(window, cx);
             for (ix, item) in items.clone().into_iter().enumerate() {
                 match item {
-                    DockItem::Tabs { view, .. } => {
+                    Self::Tabs { view, .. } => {
                         let meta: TileMeta = metas[ix].into();
                         let tile_item =
                             TileItem::new(Arc::new(view), meta.bounds).z_index(meta.z_index);
                         tiles.add_item(tile_item, dock_area, window, cx);
                     }
-                    DockItem::Panel { view } => {
+                    Self::Panel { view } => {
                         let meta: TileMeta = metas[ix].into();
                         let tile_item =
                             TileItem::new(view.clone(), meta.bounds).z_index(meta.z_index);
@@ -336,7 +336,7 @@ impl DockItem {
             Self::Split { view, items, .. } => {
                 // Iter items to add panel to the first tabs
                 for item in items.into_iter() {
-                    if let DockItem::Tabs { view, .. } = item {
+                    if let Self::Tabs { view, .. } = item {
                         view.update(cx, |tab_panel, cx| {
                             tab_panel.add_panel(panel.clone(), window, cx);
                         });
@@ -373,12 +373,12 @@ impl DockItem {
     /// Remove a panel from the dock item.
     pub fn remove_panel(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) {
         match self {
-            DockItem::Tabs { view, .. } => {
+            Self::Tabs { view, .. } => {
                 view.update(cx, |tab_panel, cx| {
                     tab_panel.remove_panel(panel, window, cx);
                 });
             }
-            DockItem::Split { items, view, .. } => {
+            Self::Split { items, view, .. } => {
                 // For each child item, set collapsed state
                 for item in items {
                     item.remove_panel(panel.clone(), window, cx);
@@ -387,50 +387,50 @@ impl DockItem {
                     split.remove_panel(panel, window, cx);
                 });
             }
-            DockItem::Tiles { view, .. } => {
+            Self::Tiles { view, .. } => {
                 view.update(cx, |tiles, cx| {
                     tiles.remove(panel, window, cx);
                 });
             }
-            DockItem::Panel { .. } => {}
+            Self::Panel { .. } => {}
         }
     }
 
     pub fn set_collapsed(&self, collapsed: bool, window: &mut Window, cx: &mut App) {
         match self {
-            DockItem::Tabs { view, .. } => {
+            Self::Tabs { view, .. } => {
                 view.update(cx, |tab_panel, cx| {
                     tab_panel.set_collapsed(collapsed, window, cx);
                 });
             }
-            DockItem::Split { items, .. } => {
+            Self::Split { items, .. } => {
                 // For each child item, set collapsed state
                 for item in items {
                     item.set_collapsed(collapsed, window, cx);
                 }
             }
-            DockItem::Tiles { .. } => {}
-            DockItem::Panel { view } => view.set_active(!collapsed, window, cx),
+            Self::Tiles { .. } => {}
+            Self::Panel { view } => view.set_active(!collapsed, window, cx),
         }
     }
 
     /// Recursively traverses to find the left-most and top-most TabPanel.
     pub(crate) fn left_top_tab_panel(&self, cx: &App) -> Option<Entity<TabPanel>> {
         match self {
-            DockItem::Tabs { view, .. } => Some(view.clone()),
-            DockItem::Split { view, .. } => view.read(cx).left_top_tab_panel(true, cx),
-            DockItem::Tiles { .. } => None,
-            DockItem::Panel { .. } => None,
+            Self::Tabs { view, .. } => Some(view.clone()),
+            Self::Split { view, .. } => view.read(cx).left_top_tab_panel(true, cx),
+            Self::Tiles { .. } => None,
+            Self::Panel { .. } => None,
         }
     }
 
     /// Recursively traverses to find the right-most and top-most TabPanel.
     pub(crate) fn right_top_tab_panel(&self, cx: &App) -> Option<Entity<TabPanel>> {
         match self {
-            DockItem::Tabs { view, .. } => Some(view.clone()),
-            DockItem::Split { view, .. } => view.read(cx).right_top_tab_panel(true, cx),
-            DockItem::Tiles { .. } => None,
-            DockItem::Panel { .. } => None,
+            Self::Tabs { view, .. } => Some(view.clone()),
+            Self::Split { view, .. } => view.read(cx).right_top_tab_panel(true, cx),
+            Self::Tiles { .. } => None,
+            Self::Panel { .. } => None,
         }
     }
 }
@@ -917,7 +917,7 @@ impl DockArea {
         &mut self,
         view: &Entity<P>,
         window: &mut Window,
-        cx: &mut Context<DockArea>,
+        cx: &mut Context<Self>,
     ) {
         let subscription =
             cx.subscribe_in(

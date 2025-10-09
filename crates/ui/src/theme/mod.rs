@@ -85,14 +85,14 @@ impl Global for Theme {}
 impl Theme {
     /// Returns the global theme reference
     #[inline(always)]
-    pub fn global(cx: &App) -> &Theme {
-        cx.global::<Theme>()
+    pub fn global(cx: &App) -> &Self {
+        cx.global::<Self>()
     }
 
     /// Returns the global theme mutable reference
     #[inline(always)]
-    pub fn global_mut(cx: &mut App) -> &mut Theme {
-        cx.global_mut::<Theme>()
+    pub fn global_mut(cx: &mut App) -> &mut Self {
+        cx.global_mut::<Self>()
     }
 
     /// Returns true if the theme is dark.
@@ -140,7 +140,7 @@ impl Theme {
 
     /// Sync the Scrollbar showing behavior with the system
     pub fn sync_scrollbar_appearance(cx: &mut App) {
-        Theme::global_mut(cx).scrollbar_show = if cx.should_auto_hide_scrollbars() {
+        Self::global_mut(cx).scrollbar_show = if cx.should_auto_hide_scrollbars() {
             ScrollbarShow::Scrolling
         } else {
             ScrollbarShow::Hover
@@ -149,14 +149,14 @@ impl Theme {
 
     pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
         let mode = mode.into();
-        if !cx.has_global::<Theme>() {
-            let mut theme = Theme::default();
+        if !cx.has_global::<Self>() {
+            let mut theme = Self::default();
             theme.light_theme = ThemeRegistry::global(cx).default_light_theme().clone();
             theme.dark_theme = ThemeRegistry::global(cx).default_dark_theme().clone();
             cx.set_global(theme);
         }
 
-        let theme = cx.global_mut::<Theme>();
+        let theme = cx.global_mut::<Self>();
         theme.mode = mode;
         if mode.is_dark() {
             theme.apply_config(&theme.dark_theme.clone());
@@ -181,7 +181,7 @@ impl Theme {
 
 impl From<ThemeColor> for Theme {
     fn from(colors: ThemeColor) -> Self {
-        Theme {
+        Self {
             mode: ThemeMode::default(),
             transparent: Hsla::transparent_black(),
             font_size: px(16.),
@@ -225,8 +225,8 @@ impl ThemeMode {
     /// Return lower_case theme name: `light`, `dark`.
     pub fn name(&self) -> &'static str {
         match self {
-            ThemeMode::Light => "light",
-            ThemeMode::Dark => "dark",
+            Self::Light => "light",
+            Self::Dark => "dark",
         }
     }
 }

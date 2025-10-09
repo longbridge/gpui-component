@@ -102,7 +102,7 @@ impl StackPanel {
     fn assert_panel_is_valid(&self, panel: &Arc<dyn PanelView>) {
         assert!(
             panel.view().downcast::<TabPanel>().is_ok()
-                || panel.view().downcast::<StackPanel>().is_ok(),
+                || panel.view().downcast::<Self>().is_ok(),
             "Panel must be a `TabPanel` or `StackPanel`"
         );
     }
@@ -290,7 +290,7 @@ impl StackPanel {
     pub(super) fn replace_panel(
         &mut self,
         old_panel: Arc<dyn PanelView>,
-        new_panel: Entity<StackPanel>,
+        new_panel: Entity<Self>,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -344,7 +344,7 @@ impl StackPanel {
         if let Some(view) = first_panel {
             if let Ok(tab_panel) = view.view().downcast::<TabPanel>() {
                 Some(tab_panel)
-            } else if let Ok(stack_panel) = view.view().downcast::<StackPanel>() {
+            } else if let Ok(stack_panel) = view.view().downcast::<Self>() {
                 stack_panel.read(cx).left_top_tab_panel(false, cx)
             } else {
                 None
@@ -377,7 +377,7 @@ impl StackPanel {
         if let Some(view) = panel {
             if let Ok(tab_panel) = view.view().downcast::<TabPanel>() {
                 Some(tab_panel)
-            } else if let Ok(stack_panel) = view.view().downcast::<StackPanel>() {
+            } else if let Ok(stack_panel) = view.view().downcast::<Self>() {
                 stack_panel.read(cx).right_top_tab_panel(false, cx)
             } else {
                 None

@@ -20,7 +20,7 @@ pub enum MaskToken {
 impl MaskToken {
     /// Check if the token is any character.
     pub fn is_any(&self) -> bool {
-        matches!(self, MaskToken::Any)
+        matches!(self, Self::Any)
     }
 
     /// Check if the token is a match for the given character.
@@ -28,45 +28,45 @@ impl MaskToken {
     /// The separator is always a match any input character.
     fn is_match(&self, ch: char) -> bool {
         match self {
-            MaskToken::Digit => ch.is_ascii_digit(),
-            MaskToken::Letter => ch.is_ascii_alphabetic(),
-            MaskToken::LetterOrDigit => ch.is_ascii_alphanumeric(),
-            MaskToken::Any => true,
-            MaskToken::Sep(c) => *c == ch,
+            Self::Digit => ch.is_ascii_digit(),
+            Self::Letter => ch.is_ascii_alphabetic(),
+            Self::LetterOrDigit => ch.is_ascii_alphanumeric(),
+            Self::Any => true,
+            Self::Sep(c) => *c == ch,
         }
     }
 
     /// Is the token a separator (Can be ignored)
     fn is_sep(&self) -> bool {
-        matches!(self, MaskToken::Sep(_))
+        matches!(self, Self::Sep(_))
     }
 
     /// Check if the token is a number.
     pub fn is_number(&self) -> bool {
-        matches!(self, MaskToken::Digit)
+        matches!(self, Self::Digit)
     }
 
     pub fn placeholder(&self) -> char {
         match self {
-            MaskToken::Sep(c) => *c,
+            Self::Sep(c) => *c,
             _ => '_',
         }
     }
 
     fn mask_char(&self, ch: char) -> char {
         match self {
-            MaskToken::Digit | MaskToken::LetterOrDigit | MaskToken::Letter => ch,
-            MaskToken::Sep(c) => *c,
-            MaskToken::Any => ch,
+            Self::Digit | Self::LetterOrDigit | Self::Letter => ch,
+            Self::Sep(c) => *c,
+            Self::Any => ch,
         }
     }
 
     fn unmask_char(&self, ch: char) -> Option<char> {
         match self {
-            MaskToken::Digit => Some(ch),
-            MaskToken::Letter => Some(ch),
-            MaskToken::LetterOrDigit => Some(ch),
-            MaskToken::Any => Some(ch),
+            Self::Digit => Some(ch),
+            Self::Letter => Some(ch),
+            Self::LetterOrDigit => Some(ch),
+            Self::Any => Some(ch),
             _ => None,
         }
     }

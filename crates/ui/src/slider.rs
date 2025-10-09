@@ -36,33 +36,33 @@ pub enum SliderValue {
 impl std::fmt::Display for SliderValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SliderValue::Single(value) => write!(f, "{}", value),
-            SliderValue::Range(start, end) => write!(f, "{}..{}", start, end),
+            Self::Single(value) => write!(f, "{}", value),
+            Self::Range(start, end) => write!(f, "{}..{}", start, end),
         }
     }
 }
 
 impl From<f32> for SliderValue {
     fn from(value: f32) -> Self {
-        SliderValue::Single(value)
+        Self::Single(value)
     }
 }
 
 impl From<(f32, f32)> for SliderValue {
     fn from(value: (f32, f32)) -> Self {
-        SliderValue::Range(value.0, value.1)
+        Self::Range(value.0, value.1)
     }
 }
 
 impl From<Range<f32>> for SliderValue {
     fn from(value: Range<f32>) -> Self {
-        SliderValue::Range(value.start, value.end)
+        Self::Range(value.start, value.end)
     }
 }
 
 impl Default for SliderValue {
     fn default() -> Self {
-        SliderValue::Single(0.)
+        Self::Single(0.)
     }
 }
 
@@ -70,50 +70,50 @@ impl SliderValue {
     /// Clamp the value to the given range.
     pub fn clamp(self, min: f32, max: f32) -> Self {
         match self {
-            SliderValue::Single(value) => SliderValue::Single(value.clamp(min, max)),
-            SliderValue::Range(start, end) => {
-                SliderValue::Range(start.clamp(min, max), end.clamp(min, max))
+            Self::Single(value) => Self::Single(value.clamp(min, max)),
+            Self::Range(start, end) => {
+                Self::Range(start.clamp(min, max), end.clamp(min, max))
             }
         }
     }
 
     #[inline]
     pub fn is_single(&self) -> bool {
-        matches!(self, SliderValue::Single(_))
+        matches!(self, Self::Single(_))
     }
 
     #[inline]
     pub fn is_range(&self) -> bool {
-        matches!(self, SliderValue::Range(_, _))
+        matches!(self, Self::Range(_, _))
     }
 
     pub fn start(&self) -> f32 {
         match self {
-            SliderValue::Single(value) => *value,
-            SliderValue::Range(start, _) => *start,
+            Self::Single(value) => *value,
+            Self::Range(start, _) => *start,
         }
     }
 
     pub fn end(&self) -> f32 {
         match self {
-            SliderValue::Single(value) => *value,
-            SliderValue::Range(_, end) => *end,
+            Self::Single(value) => *value,
+            Self::Range(_, end) => *end,
         }
     }
 
     fn set_start(&mut self, value: f32) {
-        if let SliderValue::Range(_, end) = self {
-            *self = SliderValue::Range(value.min(*end), *end);
+        if let Self::Range(_, end) = self {
+            *self = Self::Range(value.min(*end), *end);
         } else {
-            *self = SliderValue::Single(value);
+            *self = Self::Single(value);
         }
     }
 
     fn set_end(&mut self, value: f32) {
-        if let SliderValue::Range(start, _) = self {
-            *self = SliderValue::Range(*start, value.max(*start));
+        if let Self::Range(start, _) = self {
+            *self = Self::Range(*start, value.max(*start));
         } else {
-            *self = SliderValue::Single(value);
+            *self = Self::Single(value);
         }
     }
 }

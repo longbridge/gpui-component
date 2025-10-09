@@ -54,7 +54,7 @@ impl From<Language> for SharedString {
 
 impl Language {
     pub fn all() -> impl Iterator<Item = Self> {
-        enum_iterator::all::<Language>()
+        enum_iterator::all::<Self>()
     }
 
     pub fn name(&self) -> &'static str {

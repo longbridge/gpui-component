@@ -65,36 +65,36 @@ pub enum InputMode {
 impl InputMode {
     #[inline]
     pub(super) fn is_single_line(&self) -> bool {
-        matches!(self, InputMode::SingleLine)
+        matches!(self, Self::SingleLine)
     }
 
     #[inline]
     pub(super) fn is_code_editor(&self) -> bool {
-        matches!(self, InputMode::CodeEditor { .. })
+        matches!(self, Self::CodeEditor { .. })
     }
 
     #[inline]
     pub(super) fn is_auto_grow(&self) -> bool {
-        matches!(self, InputMode::AutoGrow { .. })
+        matches!(self, Self::AutoGrow { .. })
     }
 
     #[inline]
     pub(super) fn is_multi_line(&self) -> bool {
         matches!(
             self,
-            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. }
+            Self::MultiLine { .. } | Self::AutoGrow { .. } | Self::CodeEditor { .. }
         )
     }
 
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
-            InputMode::MultiLine { rows, .. } => {
+            Self::MultiLine { rows, .. } => {
                 *rows = new_rows;
             }
-            InputMode::CodeEditor { rows, .. } => {
+            Self::CodeEditor { rows, .. } => {
                 *rows = new_rows;
             }
-            InputMode::AutoGrow {
+            Self::AutoGrow {
                 rows,
                 min_rows,
                 max_rows,
@@ -117,9 +117,9 @@ impl InputMode {
     /// At least 1 row be return.
     pub(super) fn rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { rows, .. } => *rows,
-            InputMode::CodeEditor { rows, .. } => *rows,
-            InputMode::AutoGrow { rows, .. } => *rows,
+            Self::MultiLine { rows, .. } => *rows,
+            Self::CodeEditor { rows, .. } => *rows,
+            Self::AutoGrow { rows, .. } => *rows,
             _ => 1,
         }
         .max(1)
@@ -129,8 +129,8 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn min_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => 1,
-            InputMode::AutoGrow { min_rows, .. } => *min_rows,
+            Self::MultiLine { .. } | Self::CodeEditor { .. } => 1,
+            Self::AutoGrow { min_rows, .. } => *min_rows,
             _ => 1,
         }
         .max(1)
@@ -139,8 +139,8 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn max_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => usize::MAX,
-            InputMode::AutoGrow { max_rows, .. } => *max_rows,
+            Self::MultiLine { .. } | Self::CodeEditor { .. } => usize::MAX,
+            Self::AutoGrow { max_rows, .. } => *max_rows,
             _ => 1,
         }
     }
@@ -150,7 +150,7 @@ impl InputMode {
     #[inline]
     pub(super) fn line_number(&self) -> bool {
         match self {
-            InputMode::CodeEditor { line_number, .. } => *line_number,
+            Self::CodeEditor { line_number, .. } => *line_number,
             _ => false,
         }
     }
@@ -158,8 +158,8 @@ impl InputMode {
     #[inline]
     pub(super) fn tab_size(&self) -> Option<&TabSize> {
         match self {
-            InputMode::MultiLine { tab, .. } => Some(tab),
-            InputMode::CodeEditor { tab, .. } => Some(tab),
+            Self::MultiLine { tab, .. } => Some(tab),
+            Self::CodeEditor { tab, .. } => Some(tab),
             _ => None,
         }
     }
@@ -173,7 +173,7 @@ impl InputMode {
         cx: &mut App,
     ) {
         match &self {
-            InputMode::CodeEditor {
+            Self::CodeEditor {
                 language,
                 highlighter,
                 ..
@@ -225,14 +225,14 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn diagnostics(&self) -> Option<&DiagnosticSet> {
         match self {
-            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            Self::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
     }
 
     pub(super) fn diagnostics_mut(&mut self) -> Option<&mut DiagnosticSet> {
         match self {
-            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            Self::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
     }

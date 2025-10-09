@@ -191,7 +191,7 @@ pub enum Matcher {
 
 impl From<Vec<u32>> for Matcher {
     fn from(days: Vec<u32>) -> Self {
-        Matcher::DayOfWeek(days)
+        Self::DayOfWeek(days)
     }
 }
 
@@ -200,33 +200,33 @@ where
     F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
-        Matcher::Custom(Box::new(f))
+        Self::Custom(Box::new(f))
     }
 }
 
 impl Matcher {
     pub fn interval(before: Option<NaiveDate>, after: Option<NaiveDate>) -> Self {
-        Matcher::Interval(IntervalMatcher { before, after })
+        Self::Interval(IntervalMatcher { before, after })
     }
 
     pub fn range(from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
-        Matcher::Range(RangeMatcher { from, to })
+        Self::Range(RangeMatcher { from, to })
     }
 
     fn matched(&self, date: &NaiveDate) -> bool {
         match self {
-            Matcher::DayOfWeek(days) => days.contains(&date.weekday().num_days_from_sunday()),
-            Matcher::Interval(interval) => {
+            Self::DayOfWeek(days) => days.contains(&date.weekday().num_days_from_sunday()),
+            Self::Interval(interval) => {
                 let before_check = interval.before.map_or(false, |before| date < &before);
                 let after_check = interval.after.map_or(false, |after| date > &after);
                 before_check || after_check
             }
-            Matcher::Range(range) => {
+            Self::Range(range) => {
                 let from_check = range.from.map_or(false, |from| date < &from);
                 let to_check = range.to.map_or(false, |to| date > &to);
                 !from_check && !to_check
             }
-            Matcher::Custom(f) => f(date),
+            Self::Custom(f) => f(date),
         }
     }
 
@@ -242,7 +242,7 @@ impl Matcher {
     where
         F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
     {
-        Matcher::Custom(Box::new(f))
+        Self::Custom(Box::new(f))
     }
 }
 

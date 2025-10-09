@@ -85,7 +85,7 @@ impl WebViewStory {
         });
 
         cx.new(|cx| {
-            let this = WebViewStory {
+            let this = Self {
                 focus_handle,
                 webview,
                 address_input: address_input.clone(),

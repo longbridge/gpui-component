@@ -88,7 +88,7 @@ impl Colorize for Hsla {
     fn lighten(&self, factor: f32) -> Self {
         let l = self.l * (1.0 + factor.clamp(0.0, 1.0));
 
-        Hsla { l, ..*self }
+        Self { l, ..*self }
     }
 
     fn darken(&self, factor: f32) -> Self {
@@ -98,7 +98,7 @@ impl Colorize for Hsla {
     }
 
     fn apply(&self, new_color: Self) -> Self {
-        Hsla {
+        Self {
             h: new_color.h,
             s: new_color.s,
             l: self.l,
@@ -118,7 +118,7 @@ impl Colorize for Hsla {
             (a + diff * t).rem_euclid(360.0)
         }
 
-        Hsla {
+        Self {
             h: lerp_hue(self.h * 360., other.h * 360., factor) / 360.,
             s: self.s * factor + other.s * inv,
             l: self.l * factor + other.l * inv,
@@ -164,7 +164,7 @@ impl Colorize for Hsla {
         };
 
         let v = gpui::Rgba { r, g, b, a };
-        let color: Hsla = v.into();
+        let color: Self = v.into();
         Ok(color)
     }
 
@@ -246,25 +246,25 @@ impl Display for ColorName {
 impl From<&str> for ColorName {
     fn from(value: &str) -> Self {
         match value.to_lowercase().as_str() {
-            "gray" => ColorName::Gray,
-            "red" => ColorName::Red,
-            "orange" => ColorName::Orange,
-            "amber" => ColorName::Amber,
-            "yellow" => ColorName::Yellow,
-            "lime" => ColorName::Lime,
-            "green" => ColorName::Green,
-            "emerald" => ColorName::Emerald,
-            "teal" => ColorName::Teal,
-            "cyan" => ColorName::Cyan,
-            "sky" => ColorName::Sky,
-            "blue" => ColorName::Blue,
-            "indigo" => ColorName::Indigo,
-            "violet" => ColorName::Violet,
-            "purple" => ColorName::Purple,
-            "fuchsia" => ColorName::Fuchsia,
-            "pink" => ColorName::Pink,
-            "rose" => ColorName::Rose,
-            _ => ColorName::Gray,
+            "gray" => Self::Gray,
+            "red" => Self::Red,
+            "orange" => Self::Orange,
+            "amber" => Self::Amber,
+            "yellow" => Self::Yellow,
+            "lime" => Self::Lime,
+            "green" => Self::Green,
+            "emerald" => Self::Emerald,
+            "teal" => Self::Teal,
+            "cyan" => Self::Cyan,
+            "sky" => Self::Sky,
+            "blue" => Self::Blue,
+            "indigo" => Self::Indigo,
+            "violet" => Self::Violet,
+            "purple" => Self::Purple,
+            "fuchsia" => Self::Fuchsia,
+            "pink" => Self::Pink,
+            "rose" => Self::Rose,
+            _ => Self::Gray,
         }
     }
 }
@@ -279,24 +279,24 @@ impl ColorName {
     /// Returns all available color names.
     pub fn all() -> [Self; 18] {
         [
-            ColorName::Gray,
-            ColorName::Red,
-            ColorName::Orange,
-            ColorName::Amber,
-            ColorName::Yellow,
-            ColorName::Lime,
-            ColorName::Green,
-            ColorName::Emerald,
-            ColorName::Teal,
-            ColorName::Cyan,
-            ColorName::Sky,
-            ColorName::Blue,
-            ColorName::Indigo,
-            ColorName::Violet,
-            ColorName::Purple,
-            ColorName::Fuchsia,
-            ColorName::Pink,
-            ColorName::Rose,
+            Self::Gray,
+            Self::Red,
+            Self::Orange,
+            Self::Amber,
+            Self::Yellow,
+            Self::Lime,
+            Self::Green,
+            Self::Emerald,
+            Self::Teal,
+            Self::Cyan,
+            Self::Sky,
+            Self::Blue,
+            Self::Indigo,
+            Self::Violet,
+            Self::Purple,
+            Self::Fuchsia,
+            Self::Pink,
+            Self::Rose,
         ]
     }
 
@@ -306,24 +306,24 @@ impl ColorName {
     /// falls back to 500 if out of range.
     pub fn scale(&self, scale: usize) -> Hsla {
         let colors = match self {
-            ColorName::Gray => &DEFAULT_COLORS.gray,
-            ColorName::Red => &DEFAULT_COLORS.red,
-            ColorName::Orange => &DEFAULT_COLORS.orange,
-            ColorName::Amber => &DEFAULT_COLORS.amber,
-            ColorName::Yellow => &DEFAULT_COLORS.yellow,
-            ColorName::Lime => &DEFAULT_COLORS.lime,
-            ColorName::Green => &DEFAULT_COLORS.green,
-            ColorName::Emerald => &DEFAULT_COLORS.emerald,
-            ColorName::Teal => &DEFAULT_COLORS.teal,
-            ColorName::Cyan => &DEFAULT_COLORS.cyan,
-            ColorName::Sky => &DEFAULT_COLORS.sky,
-            ColorName::Blue => &DEFAULT_COLORS.blue,
-            ColorName::Indigo => &DEFAULT_COLORS.indigo,
-            ColorName::Violet => &DEFAULT_COLORS.violet,
-            ColorName::Purple => &DEFAULT_COLORS.purple,
-            ColorName::Fuchsia => &DEFAULT_COLORS.fuchsia,
-            ColorName::Pink => &DEFAULT_COLORS.pink,
-            ColorName::Rose => &DEFAULT_COLORS.rose,
+            Self::Gray => &DEFAULT_COLORS.gray,
+            Self::Red => &DEFAULT_COLORS.red,
+            Self::Orange => &DEFAULT_COLORS.orange,
+            Self::Amber => &DEFAULT_COLORS.amber,
+            Self::Yellow => &DEFAULT_COLORS.yellow,
+            Self::Lime => &DEFAULT_COLORS.lime,
+            Self::Green => &DEFAULT_COLORS.green,
+            Self::Emerald => &DEFAULT_COLORS.emerald,
+            Self::Teal => &DEFAULT_COLORS.teal,
+            Self::Cyan => &DEFAULT_COLORS.cyan,
+            Self::Sky => &DEFAULT_COLORS.sky,
+            Self::Blue => &DEFAULT_COLORS.blue,
+            Self::Indigo => &DEFAULT_COLORS.indigo,
+            Self::Violet => &DEFAULT_COLORS.violet,
+            Self::Purple => &DEFAULT_COLORS.purple,
+            Self::Fuchsia => &DEFAULT_COLORS.fuchsia,
+            Self::Pink => &DEFAULT_COLORS.pink,
+            Self::Rose => &DEFAULT_COLORS.rose,
         };
 
         if let Some(color) = colors.get(&scale) {

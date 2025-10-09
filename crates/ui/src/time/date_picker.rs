@@ -50,14 +50,14 @@ pub struct DateRangePreset {
 impl DateRangePreset {
     /// Creates a new DateRangePreset with single date.
     pub fn single(label: impl Into<SharedString>, single: NaiveDate) -> Self {
-        DateRangePreset {
+        Self {
             label: label.into(),
             value: DateRangePresetValue::Single(single),
         }
     }
     /// Creates a new DateRangePreset with a range of dates.
     pub fn range(label: impl Into<SharedString>, start: NaiveDate, end: NaiveDate) -> Self {
-        DateRangePreset {
+        Self {
             label: label.into(),
             value: DateRangePresetValue::Range(start, end),
         }

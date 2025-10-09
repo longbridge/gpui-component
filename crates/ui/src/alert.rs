@@ -25,31 +25,31 @@ pub enum AlertVariant {
 impl AlertVariant {
     fn fg(&self, cx: &App) -> Hsla {
         match self {
-            AlertVariant::Secondary => cx.theme().secondary_foreground,
-            AlertVariant::Info => cx.theme().info,
-            AlertVariant::Success => cx.theme().success,
-            AlertVariant::Warning => cx.theme().warning,
-            AlertVariant::Error => cx.theme().danger,
+            Self::Secondary => cx.theme().secondary_foreground,
+            Self::Info => cx.theme().info,
+            Self::Success => cx.theme().success,
+            Self::Warning => cx.theme().warning,
+            Self::Error => cx.theme().danger,
         }
     }
 
     fn color(&self, cx: &App) -> Hsla {
         match self {
-            AlertVariant::Secondary => cx.theme().secondary,
-            AlertVariant::Info => cx.theme().info,
-            AlertVariant::Success => cx.theme().success,
-            AlertVariant::Warning => cx.theme().warning,
-            AlertVariant::Error => cx.theme().danger,
+            Self::Secondary => cx.theme().secondary,
+            Self::Info => cx.theme().info,
+            Self::Success => cx.theme().success,
+            Self::Warning => cx.theme().warning,
+            Self::Error => cx.theme().danger,
         }
     }
 
     fn border_color(&self, cx: &App) -> Hsla {
         match self {
-            AlertVariant::Secondary => cx.theme().border,
-            AlertVariant::Info => cx.theme().info,
-            AlertVariant::Success => cx.theme().success,
-            AlertVariant::Warning => cx.theme().warning,
-            AlertVariant::Error => cx.theme().danger,
+            Self::Secondary => cx.theme().border,
+            Self::Info => cx.theme().info,
+            Self::Success => cx.theme().success,
+            Self::Warning => cx.theme().warning,
+            Self::Error => cx.theme().danger,
         }
     }
 }

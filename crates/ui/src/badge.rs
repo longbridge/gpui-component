@@ -17,12 +17,12 @@ enum BadgeVariant {
 impl BadgeVariant {
     #[inline]
     fn is_icon(&self) -> bool {
-        matches!(self, BadgeVariant::Icon(_))
+        matches!(self, Self::Icon(_))
     }
 
     #[inline]
     fn is_number(&self) -> bool {
-        matches!(self, BadgeVariant::Number)
+        matches!(self, Self::Number)
     }
 }
 

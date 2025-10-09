@@ -42,7 +42,7 @@ pub struct VirtualListScrollHandle {
 
 impl From<ScrollHandle> for VirtualListScrollHandle {
     fn from(handle: ScrollHandle) -> Self {
-        let mut this = VirtualListScrollHandle::new();
+        let mut this = Self::new();
         this.base_handle = handle;
         this
     }
@@ -78,7 +78,7 @@ impl Deref for VirtualListScrollHandle {
 
 impl VirtualListScrollHandle {
     pub fn new() -> Self {
-        VirtualListScrollHandle {
+        Self {
             state: Rc::new(RefCell::new(VirtualListScrollHandleState {
                 axis: Axis::Vertical,
                 items_count: 0,

@@ -26,7 +26,7 @@ impl InputState {
         &mut self,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<Self>,
     ) {
         if self.selecting {
             return;
