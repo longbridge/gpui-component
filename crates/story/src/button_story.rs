@@ -1,13 +1,13 @@
 use gpui::{
-    prelude::FluentBuilder, px, Action, App, AppContext as _, ClickEvent, Context, Entity,
-    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
+    Action, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled as _, Window, prelude::FluentBuilder, px,
 };
 
 use gpui_component::{
+    ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
-    Theme,
+    h_flex, v_flex,
 };
 use serde::Deserialize;
 
@@ -43,8 +43,12 @@ impl ButtonStory {
         })
     }
 
-    fn on_click(ev: &ClickEvent, _window: &mut Window, _cx: &mut App) {
-        println!("Button clicked! {:?}", ev);
+    fn on_click(ev: &ClickEvent, _: &mut Window, _: &mut App) {
+        println!("Button clicked {:?}", ev);
+    }
+
+    fn on_hover(hovered: &bool, _: &mut Window, _: &mut App) {
+        println!("Button hovered {:?}", hovered);
     }
 }
 
@@ -159,7 +163,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-2")
@@ -168,7 +173,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-4")
@@ -178,7 +184,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-4-warning")
@@ -188,7 +195,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-4-success")
@@ -198,7 +206,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-info")
@@ -208,7 +217,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-ghost")
@@ -218,7 +228,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-link")
@@ -228,7 +239,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-text")
@@ -238,7 +250,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     ),
             )
             .child(

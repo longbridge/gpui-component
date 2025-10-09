@@ -201,6 +201,7 @@ pub struct Button {
         Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
     )>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+    on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     pub(crate) stop_propagation: bool,
     loading: bool,
     loading_icon: Option<Icon>,
@@ -236,6 +237,7 @@ impl Button {
             size: Size::Medium,
             tooltip: None,
             on_click: None,
+            on_hover: None,
             stop_propagation: true,
             loading: false,
             compact: false,
@@ -322,6 +324,12 @@ impl Button {
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_click = Some(Rc::new(handler));
+        self
+    }
+
+    /// Add hover handler, the bool parameter indicates whether the mouse is hovering.
+    pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_hover = Some(Rc::new(handler));
         self
     }
 
@@ -524,6 +532,11 @@ impl RenderOnce for Button {
                 })
                 .on_click(move |event, window, cx| {
                     (on_click)(event, window, cx);
+                })
+            })
+            .when_some(self.on_hover.filter(|_| clickable), |this, on_hover| {
+                this.on_hover(move |hovered, window, cx| {
+                    (on_hover)(hovered, window, cx);
                 })
             })
             .when(self.disabled, |this| {

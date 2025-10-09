@@ -601,6 +601,7 @@ mod tests {
         // Test for not on a char boundary
         let mut rope = Rope::from("中文");
         rope.replace(0..1, "New");
+        // autocorrect-disable
         assert_eq!(rope.to_string(), "New文");
         let mut rope = Rope::from("中文");
         rope.replace(0..2, "New");
@@ -608,6 +609,7 @@ mod tests {
         let mut rope = Rope::from("中文");
         rope.replace(0..3, "New");
         assert_eq!(rope.to_string(), "New文");
+        // autocorrect-enable
         let mut rope = Rope::from("中文");
         rope.replace(1..4, "New");
         assert_eq!(rope.to_string(), "New");
