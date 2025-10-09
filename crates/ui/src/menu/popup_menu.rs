@@ -792,9 +792,9 @@ impl PopupMenu {
         let bounds = self.bounds;
         let max_width = self.max_width();
         let (anchor, left) = if max_width + bounds.origin.x > window.bounds().size.width {
-            (Corner::TopRight, -px(14.))
+            (Corner::TopRight, -px(16.))
         } else {
-            (Corner::TopLeft, bounds.size.width)
+            (Corner::TopLeft, bounds.size.width - px(8.))
         };
 
         let is_bottom_pos = bounds.origin.y + bounds.size.height > window.bounds().size.height;
@@ -818,26 +818,28 @@ impl PopupMenu {
         const EDGE_PADDING: Pixels = px(4.);
         const INNER_PADDING: Pixels = px(8.);
 
+        let is_submenu = matches!(item, PopupMenuItem::Submenu { .. });
+        let group_name = format!("popup-menu-item-{}", ix);
+
         let (item_height, radius) = match self.size {
             Size::Small => (px(20.), state.radius.half()),
             _ => (px(26.), state.radius),
         };
 
-        let this = MenuItem::new(ix)
+        let this = MenuItem::new(ix, &group_name)
             .relative()
             .text_sm()
             .py_0()
             .px(INNER_PADDING)
             .rounded(radius)
             .items_center()
-            .hovered(selected)
+            .selected(selected)
             .on_hover(cx.listener(move |this, hovered, _, cx| {
                 if *hovered {
                     this.selected_index = Some(ix);
-                } else {
-                    if this.selected_index == Some(ix) {
-                        this.selected_index = None;
-                    }
+                } else if !is_submenu && this.selected_index == Some(ix) {
+                    // TODO: Better handle the submenu unselection when hover out
+                    this.selected_index = None;
                 }
 
                 cx.notify();
@@ -951,23 +953,25 @@ impl PopupMenu {
                                 .child(IconName::ChevronRight),
                         ),
                 )
-                .when(selected, |this| {
+                .child({
                     let (anchor, left) = self.child_menu_anchor(window);
                     let is_bottom_pos = matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
 
-                    this.child(
-                        anchored()
-                            .anchor(anchor)
-                            .child(
-                                div()
-                                    .occlude()
-                                    .when(is_bottom_pos, |this| this.bottom_0())
-                                    .when(!is_bottom_pos, |this| this.top_neg_1())
-                                    .left(left)
-                                    .child(menu.clone()),
-                            )
-                            .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
-                    )
+                    anchored()
+                        .anchor(anchor)
+                        .child(
+                            div()
+                                .id("submenu")
+                                .group(&group_name)
+                                .when(!selected, |this| this.invisible())
+                                .group_hover(&group_name, |this| this.visible())
+                                .occlude()
+                                .when(is_bottom_pos, |this| this.bottom_0())
+                                .when(!is_bottom_pos, |this| this.top_neg_1())
+                                .left(left)
+                                .child(menu.clone()),
+                        )
+                        .snap_to_window_with_margin(Edges::all(EDGE_PADDING))
                 }),
         }
     }

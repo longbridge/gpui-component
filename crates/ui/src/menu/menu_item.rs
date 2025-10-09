@@ -1,32 +1,32 @@
-use crate::{h_flex, ActiveTheme, Disableable, Selectable, StyledExt};
+use crate::{h_flex, ActiveTheme, Disableable, StyledExt};
 use gpui::{
     prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
-    IntoElement, MouseButton, ParentElement, RenderOnce, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window,
+    IntoElement, MouseButton, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
 #[derive(IntoElement)]
 pub struct MenuItem {
     id: ElementId,
+    group_name: SharedString,
     style: StyleRefinement,
     disabled: bool,
     selected: bool,
-    hovered: bool,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     on_hover: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
 }
 
 impl MenuItem {
-    pub fn new(id: impl Into<ElementId>) -> Self {
+    pub fn new(id: impl Into<ElementId>, group_name: impl Into<SharedString>) -> Self {
         let id: ElementId = id.into();
         Self {
             id: id.clone(),
+            group_name: group_name.into(),
             style: StyleRefinement::default(),
             disabled: false,
             selected: false,
-            hovered: false,
             on_click: None,
             on_hover: None,
             children: SmallVec::new(),
@@ -41,11 +41,6 @@ impl MenuItem {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
-        self
-    }
-
-    pub fn hovered(mut self, hovered: bool) -> Self {
-        self.hovered = hovered;
         self
     }
 
@@ -72,17 +67,6 @@ impl Disableable for MenuItem {
     }
 }
 
-impl Selectable for MenuItem {
-    fn selected(mut self, selected: bool) -> Self {
-        self.selected = selected;
-        self
-    }
-
-    fn is_selected(&self) -> bool {
-        self.selected
-    }
-}
-
 impl Styled for MenuItem {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         &mut self.style
@@ -99,6 +83,7 @@ impl RenderOnce for MenuItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)
+            .group(&self.group_name)
             .gap_x_1()
             .py_1()
             .px_2()
@@ -112,11 +97,11 @@ impl RenderOnce for MenuItem {
                 this.on_hover(move |hovered, window, cx| (on_hover)(hovered, window, cx))
             })
             .when(!self.disabled, |this| {
-                this.when(self.hovered, |this| {
+                this.group_hover(self.group_name, |this| {
                     this.bg(cx.theme().accent)
                         .text_color(cx.theme().accent_foreground)
                 })
-                .hover(|this| {
+                .when(self.selected, |this| {
                     this.bg(cx.theme().accent)
                         .text_color(cx.theme().accent_foreground)
                 })
