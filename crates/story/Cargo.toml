@@ -1,6 +1,6 @@
 [package]
-edition = "2021"
 name = "story"
+edition = "2024"
 publish = false
 version = "0.1.0"
 
@@ -8,13 +8,13 @@ version = "0.1.0"
 anyhow.workspace = true
 gpui.workspace = true
 gpui-component = { workspace = true, features = ["webview", "tree-sitter-languages"] }
+reqwest_client = { path = "../reqwest_client" }
 
 chrono = "0.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 rand = "0.8"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
-reqwest_client.workspace = true
 smol.workspace = true
 rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
 serde = "1"
