@@ -5878,9 +5878,7 @@ dependencies = [
  "regex",
  "rustls",
  "rustls-platform-verifier",
- "serde",
  "tokio",
- "workspace-hack",
  "zed-http-client",
  "zed-reqwest",
 ]

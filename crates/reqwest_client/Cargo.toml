@@ -19,7 +19,6 @@ doctest = true
 reqwest.workspace = true
 http-client.workspace = true
 anyhow.workspace = true
-serde.workspace = true
 log.workspace = true
 
 rustls = { version = "0.23.26" }
@@ -28,7 +27,6 @@ bytes = "1.0"
 futures = "0.3"
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 regex = "1.5"
-workspace-hack = "0.1.0"
 
 [dev-dependencies]
 gpui.workspace = true
