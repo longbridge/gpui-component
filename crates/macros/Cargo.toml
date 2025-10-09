@@ -2,7 +2,7 @@
 edition = "2021"
 name = "gpui-component-macros"
 description = "Macros for GPUI Component."
-version = "0.2.0-test0"
+version = "0.2.0-test1"
 publish = true
 license-file = "LICENSE-APACHE"
 
