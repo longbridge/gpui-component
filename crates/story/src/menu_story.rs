@@ -1,11 +1,11 @@
 use gpui::{
-    actions, div, px, Action, App, AppContext, Context, Corner, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
-    Styled as _, Window,
+    Action, App, AppContext, Context, Corner, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ParentElement as _, Render, SharedString, Styled as _, Window,
+    actions, div, px,
 };
 use gpui_component::{
-    button::Button, context_menu::ContextMenuExt, h_flex, popup_menu::PopupMenuExt as _, v_flex,
-    ActiveTheme as _, IconName,
+    ActiveTheme as _, IconName, button::Button, context_menu::ContextMenuExt, h_flex,
+    popup_menu::PopupMenuExt as _, v_flex,
 };
 use serde::Deserialize;
 
@@ -178,13 +178,18 @@ impl Render for MenuStory {
                                     .separator()
                                     .submenu("Links", window, cx, |menu, _, _| {
                                         menu.link_with_icon(
-                                            "GitHub Repository",
+                                            "GPUI Component",
                                             IconName::GitHub,
                                             "https://github.com/longbridge/gpui-component",
                                         )
                                         .separator()
                                         .link("GPUI", "https://gpui.rs")
                                         .link("Zed", "https://zed.dev")
+                                    })
+                                    .separator()
+                                    .submenu("Other Links", window, cx, |menu, _, _| {
+                                        menu.link("Crates", "https://crates.io")
+                                            .link("Rust Docs", "https://docs.rs")
                                     })
                             }),
                     )
