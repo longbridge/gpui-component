@@ -43,6 +43,7 @@ GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-a
 
 ```toml
 gpui-component = { version = "0.2.0", features = ["webview"] }
+wry = { version = "0.53.3, package = "lb-wry" }
 ```
 
 More usage examples can be found in the [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
