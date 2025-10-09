@@ -1,12 +1,13 @@
 [package]
+name = "gpui-component"
 description = "UI components for building fantastic desktop application by using GPUI."
 edition = "2021"
 homepage = "https://github.com/longbridge/gpui-component"
-keywords = ["GPUI", "application", "desktop", "ui"]
-license-file = "LICENSE-APACHE"
-name = "gpui-component"
+keywords = ["gpui", "uikit", "desktop-application", "shadcn", "desktop", "ui"]
 publish = true
 version = "0.2.0-test0"
+readme = "README.md"
+license-file = "LICENSE-APACHE"
 
 [lib]
 doctest = false
