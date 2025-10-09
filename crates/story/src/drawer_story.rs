@@ -2,13 +2,14 @@ use std::{sync::Arc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Task, Timer,
-    WeakEntity, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    ParentElement, Render, SharedString, Styled, Task, Timer, WeakEntity, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use raw_window_handle::HasWindowHandle;
 
 use gpui_component::{
+    ActiveTheme as _, ContextModal as _, Icon, IconName, IndexPath, Placement,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
@@ -17,11 +18,11 @@ use gpui_component::{
     list::{List, ListDelegate, ListItem},
     v_flex,
     webview::WebView,
-    wry, ActiveTheme as _, ContextModal as _, Icon, IconName, IndexPath, Placement,
+    wry,
 };
 
 use crate::TestAction;
-use crate::{section, Story};
+use crate::{Story, section};
 
 pub struct ListItemDeletegate {
     story: WeakEntity<DrawerStory>,

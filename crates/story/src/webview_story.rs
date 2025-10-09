@@ -1,13 +1,13 @@
 use gpui::{
-    div, App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement as _, Render, Styled as _, Window,
+    App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement as _, Render, Styled as _, Window, div,
 };
 use gpui_component::{
-    h_flex,
+    ActiveTheme, h_flex,
     input::{InputEvent, InputState, TextInput},
     v_flex,
     webview::WebView,
-    wry, ActiveTheme,
+    wry,
 };
 
 pub fn init(_: &mut App) {

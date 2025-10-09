@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use ropey::{LineType, Rope, RopeSlice};
+use sum_tree::Bias;
 use tree_sitter::Point;
-use zed_sum_tree::Bias;
 
 use crate::input::Position;
 
@@ -208,7 +208,7 @@ pub trait RopeExt {
     ///
     /// ```
     /// use gpui_component::input::{Rope, RopeExt};
-    /// use zed_sum_tree::Bias;
+    /// use sum_tree::Bias;
     ///
     /// let rope = Rope::from("Hello 中文🎉 test\nRope");
     /// assert_eq!(rope.clip_offset(5, Bias::Left), 5);
@@ -393,8 +393,8 @@ impl RopeExt for Rope {
 #[cfg(test)]
 mod tests {
     use ropey::Rope;
+    use sum_tree::Bias;
     use tree_sitter::Point;
-    use zed_sum_tree::Bias;
 
     use crate::input::{Position, RopeExt};
 

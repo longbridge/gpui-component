@@ -6,7 +6,7 @@ use std::{
 
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
 use ropey::Rope;
-use zed_sum_tree::{Bias, SeekTarget, SumTree};
+use sum_tree::{Bias, SeekTarget, SumTree};
 
 use crate::{
     input::{Position, RopeExt as _},
@@ -199,7 +199,7 @@ pub struct DiagnosticSummary {
     end: usize,
 }
 
-impl zed_sum_tree::Item for DiagnosticEntry {
+impl sum_tree::Item for DiagnosticEntry {
     type Summary = DiagnosticSummary;
     fn summary(&self, _cx: &()) -> Self::Summary {
         DiagnosticSummary {
@@ -210,7 +210,7 @@ impl zed_sum_tree::Item for DiagnosticEntry {
     }
 }
 
-impl zed_sum_tree::Summary for DiagnosticSummary {
+impl sum_tree::Summary for DiagnosticSummary {
     type Context<'a> = &'a ();
     fn zero(_: Self::Context<'_>) -> Self {
         DiagnosticSummary {

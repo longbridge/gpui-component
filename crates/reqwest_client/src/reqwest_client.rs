@@ -5,9 +5,9 @@ use std::{any::type_name, borrow::Cow, mem, pin::Pin, task::Poll, time::Duration
 use anyhow::anyhow;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{AsyncRead, FutureExt as _, TryStreamExt as _};
-use zed_http_client::{RedirectPolicy, Url, http};
+use http_client::{RedirectPolicy, Url, http};
 use regex::Regex;
-use zed_reqwest::{
+use reqwest::{
     header::{HeaderMap, HeaderValue},
     redirect,
 };
@@ -19,15 +19,15 @@ static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static REDACT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"key=[^&]+").unwrap());
 
 pub struct ReqwestClient {
-    client: zed_reqwest::Client,
+    client: reqwest::Client,
     proxy: Option<Url>,
     user_agent: Option<HeaderValue>,
     handle: tokio::runtime::Handle,
 }
 
 impl ReqwestClient {
-    fn builder() -> zed_reqwest::ClientBuilder {
-        zed_reqwest::Client::builder()
+    fn builder() -> reqwest::ClientBuilder {
+        reqwest::Client::builder()
             .use_rustls_tls()
             .connect_timeout(Duration::from_secs(10))
     }
@@ -55,7 +55,7 @@ impl ReqwestClient {
         let client_has_proxy;
 
         if let Some(proxy) = proxy.as_ref().and_then(|proxy_url| {
-            zed_reqwest::Proxy::all(proxy_url.clone())
+            reqwest::Proxy::all(proxy_url.clone())
                 .inspect_err(|e| {
                     log::error!(
                         "Failed to parse proxy URL '{}': {}",
@@ -66,7 +66,7 @@ impl ReqwestClient {
                 .ok()
         }) {
             // Respect NO_PROXY env var
-            client = client.proxy(proxy.no_proxy(zed_reqwest::NoProxy::from_env()));
+            client = client.proxy(proxy.no_proxy(reqwest::NoProxy::from_env()));
             client_has_proxy = true;
         } else {
             client_has_proxy = false;
@@ -82,8 +82,8 @@ impl ReqwestClient {
     }
 }
 
-impl From<zed_reqwest::Client> for ReqwestClient {
-    fn from(client: zed_reqwest::Client) -> Self {
+impl From<reqwest::Client> for ReqwestClient {
+    fn from(client: reqwest::Client) -> Self {
         let handle = tokio::runtime::Handle::try_current().unwrap_or_else(|_| {
             log::debug!("no tokio runtime found, creating one for Reqwest...");
             let runtime = RUNTIME.get_or_init(|| {
@@ -202,7 +202,7 @@ pub fn poll_read_buf(
     Poll::Ready(Ok(n))
 }
 
-fn redact_error(mut error: zed_reqwest::Error) -> zed_reqwest::Error {
+fn redact_error(mut error: reqwest::Error) -> reqwest::Error {
     if let Some(url) = error.url_mut()
         && let Some(query) = url.query()
         && let Cow::Owned(redacted) = REDACT_REGEX.replace_all(query, "key=REDACTED")
@@ -212,7 +212,7 @@ fn redact_error(mut error: zed_reqwest::Error) -> zed_reqwest::Error {
     error
 }
 
-impl zed_http_client::HttpClient for ReqwestClient {
+impl http_client::HttpClient for ReqwestClient {
     fn proxy(&self) -> Option<&Url> {
         self.proxy.as_ref()
     }
@@ -227,10 +227,10 @@ impl zed_http_client::HttpClient for ReqwestClient {
 
     fn send(
         &self,
-        req: http::Request<zed_http_client::AsyncBody>,
+        req: http::Request<http_client::AsyncBody>,
     ) -> futures::future::BoxFuture<
         'static,
-        anyhow::Result<zed_http_client::Response<zed_http_client::AsyncBody>>,
+        anyhow::Result<http_client::Response<http_client::AsyncBody>>,
     > {
         let (parts, body) = req.into_parts();
 
@@ -244,10 +244,10 @@ impl zed_http_client::HttpClient for ReqwestClient {
             });
         }
         let request = request.body(match body.0 {
-            zed_http_client::Inner::Empty => zed_reqwest::Body::default(),
-            zed_http_client::Inner::Bytes(cursor) => cursor.into_inner().into(),
-            zed_http_client::Inner::AsyncReader(stream) => {
-                zed_reqwest::Body::wrap_stream(StreamReader::new(stream))
+            http_client::Inner::Empty => reqwest::Body::default(),
+            http_client::Inner::Bytes(cursor) => cursor.into_inner().into(),
+            http_client::Inner::AsyncReader(stream) => {
+                reqwest::Body::wrap_stream(StreamReader::new(stream))
             }
         });
 
@@ -268,7 +268,7 @@ impl zed_http_client::HttpClient for ReqwestClient {
                 .bytes_stream()
                 .map_err(futures::io::Error::other)
                 .into_async_read();
-            let body = zed_http_client::AsyncBody::from_reader(bytes);
+            let body = http_client::AsyncBody::from_reader(bytes);
 
             builder.body(body).map_err(|e| anyhow!(e))
         }
@@ -278,8 +278,8 @@ impl zed_http_client::HttpClient for ReqwestClient {
     fn send_multipart_form<'a>(
         &'a self,
         url: &str,
-        form: zed_reqwest::multipart::Form,
-    ) -> futures::future::BoxFuture<'a, anyhow::Result<zed_http_client::Response<zed_http_client::AsyncBody>>>
+        form: reqwest::multipart::Form,
+    ) -> futures::future::BoxFuture<'a, anyhow::Result<http_client::Response<http_client::AsyncBody>>>
     {
         let response = self.client.post(url).multipart(form).send();
         self.handle
@@ -298,7 +298,7 @@ impl zed_http_client::HttpClient for ReqwestClient {
 
 #[cfg(test)]
 mod tests {
-    use zed_http_client::{HttpClient, Url};
+    use http_client::{HttpClient, Url};
 
     use crate::ReqwestClient;
 
