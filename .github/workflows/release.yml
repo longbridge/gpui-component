@@ -12,4 +12,4 @@ jobs:
         name: Release Crate
         with:
           command: publish
-          args: --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          args: --workspace --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
