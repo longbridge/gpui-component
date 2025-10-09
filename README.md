@@ -31,8 +31,8 @@ We built multi-theme support in the application. This feature is not included in
 GPUI and GPUI Component are still in development, so you need to add dependencies by git.
 
 ```toml
-gpui = { git = "https://github.com/zed-industries/zed.git" }
-gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
+gpui = "0.2.0"
+gpui-component = "0.2.0"
 ```
 
 ### WebView
@@ -42,7 +42,7 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
 GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-apps/wry). This is an optional feature, which you can enable with a feature flag.
 
 ```toml
-gpui-component = { git = "https://github.com/longbridge/gpui-component.git", features = ["webview"] }
+gpui-component = { version = "0.2.0", features = ["webview"] }
 ```
 
 More usage examples can be found in the [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
