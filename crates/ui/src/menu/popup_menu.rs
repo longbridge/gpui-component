@@ -815,8 +815,8 @@ impl PopupMenu {
     ) -> impl IntoElement {
         let has_icon = self.has_icon;
         let selected = self.selected_index == Some(ix);
-        const EDGE_PADDING: Pixels = px(8.);
-        const INNER_PADDING: Pixels = px(4.);
+        const EDGE_PADDING: Pixels = px(4.);
+        const INNER_PADDING: Pixels = px(8.);
 
         let (item_height, radius) = match self.size {
             Size::Small => (px(20.), state.radius.half()),
