@@ -953,25 +953,23 @@ impl PopupMenu {
                                 .child(IconName::ChevronRight),
                         ),
                 )
-                .child({
-                    let (anchor, left) = self.child_menu_anchor(window);
-                    let is_bottom_pos = matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
-
-                    anchored()
-                        .anchor(anchor)
-                        .child(
-                            div()
-                                .id("submenu")
-                                .group(&group_name)
-                                .when(!selected, |this| this.invisible())
-                                .group_hover(&group_name, |this| this.visible())
-                                .occlude()
-                                .when(is_bottom_pos, |this| this.bottom_0())
-                                .when(!is_bottom_pos, |this| this.top_neg_1())
-                                .left(left)
-                                .child(menu.clone()),
-                        )
-                        .snap_to_window_with_margin(Edges::all(EDGE_PADDING))
+                .when(selected, |this| {
+                    this.child({
+                        let (anchor, left) = self.child_menu_anchor(window);
+                        let is_bottom_pos =
+                            matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
+                        anchored()
+                            .anchor(anchor)
+                            .child(
+                                div()
+                                    .occlude()
+                                    .when(is_bottom_pos, |this| this.bottom_0())
+                                    .when(!is_bottom_pos, |this| this.top_neg_1())
+                                    .left(left)
+                                    .child(menu.clone()),
+                            )
+                            .snap_to_window_with_margin(Edges::all(EDGE_PADDING))
+                    })
                 }),
         }
     }
