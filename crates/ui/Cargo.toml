@@ -5,7 +5,7 @@ edition = "2021"
 homepage = "https://github.com/longbridge/gpui-component"
 keywords = ["gpui", "uikit", "shadcn", "desktop", "ui"]
 publish = true
-version = "0.2.0-test1"
+version = "0.2.0-test2"
 readme = "../../README.md"
 license-file = "LICENSE-APACHE"
 
