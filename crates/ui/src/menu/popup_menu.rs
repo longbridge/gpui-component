@@ -962,6 +962,7 @@ impl PopupMenu {
                             .anchor(anchor)
                             .child(
                                 div()
+                                    .id("submenu")
                                     .occlude()
                                     .when(is_bottom_pos, |this| this.bottom_0())
                                     .when(!is_bottom_pos, |this| this.top_neg_1())
