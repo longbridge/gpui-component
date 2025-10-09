@@ -1,27 +1,24 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, AppContext, ClickEvent, Context, Corner,
-    Entity, FocusHandle, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
-    Render, SharedString, Styled as _, Subscription, Window,
+    AnyElement, App, AppContext, Context, Corner, Entity, FocusHandle, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, Render, SharedString, Styled as _, Subscription,
+    Window, div, px,
 };
 use gpui_component::{
+    ActiveTheme as _, ContextModal as _, IconName, PixelsExt, Sizable as _, Theme, TitleBar,
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    locale,
+    menu::AppMenuBar,
     popup_menu::PopupMenuExt as _,
     scroll::ScrollbarShow,
-    set_locale, ActiveTheme as _, ContextModal as _, IconName, PixelsExt, Sizable as _, Theme,
-    ThemeMode, TitleBar,
 };
 
-use crate::{themes::ThemeSwitcher, SelectFont, SelectLocale, SelectRadius, SelectScrollbarShow};
+use crate::{SelectFont, SelectRadius, SelectScrollbarShow, app_menus};
 
 pub struct AppTitleBar {
-    title: SharedString,
-    locale_selector: Entity<LocaleSelector>,
+    app_menu_bar: Entity<AppMenuBar>,
     font_size_selector: Entity<FontSizeSelector>,
-    theme_switcher: Entity<ThemeSwitcher>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
 }
@@ -32,15 +29,14 @@ impl AppTitleBar {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let locale_selector = cx.new(|cx| LocaleSelector::new(window, cx));
+        app_menus::init(title, cx);
+
         let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
-        let theme_switcher = cx.new(|cx| ThemeSwitcher::new(cx));
+        let app_menu_bar = AppMenuBar::new(window, cx);
 
         Self {
-            title: title.into(),
-            locale_selector,
+            app_menu_bar,
             font_size_selector,
-            theme_switcher,
             child: Rc::new(|_, _| div().into_any_element()),
             _subscriptions: vec![],
         }
@@ -54,15 +50,6 @@ impl AppTitleBar {
         self.child = Rc::new(move |window, cx| f(window, cx).into_any_element());
         self
     }
-
-    fn change_color_mode(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let mode = match cx.theme().mode.is_dark() {
-            true => ThemeMode::Light,
-            false => ThemeMode::Dark,
-        };
-
-        Theme::change(mode, None, cx);
-    }
 }
 
 impl Render for AppTitleBar {
@@ -71,7 +58,7 @@ impl Render for AppTitleBar {
 
         TitleBar::new()
             // left side
-            .child(div().flex().items_center().child(self.title.clone()))
+            .child(div().flex().items_center().child(self.app_menu_bar.clone()))
             .child(
                 div()
                     .flex()
@@ -81,21 +68,6 @@ impl Render for AppTitleBar {
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child((self.child.clone())(window, cx))
-                    .child(self.theme_switcher.clone())
-                    .child(
-                        Button::new("theme-mode")
-                            .map(|this| {
-                                if cx.theme().mode.is_dark() {
-                                    this.icon(IconName::Sun)
-                                } else {
-                                    this.icon(IconName::Moon)
-                                }
-                            })
-                            .small()
-                            .ghost()
-                            .on_click(cx.listener(Self::change_color_mode)),
-                    )
-                    .child(self.locale_selector.clone())
                     .child(self.font_size_selector.clone())
                     .child(
                         Button::new("github")
@@ -117,59 +89,6 @@ impl Render for AppTitleBar {
                             ),
                         ),
                     ),
-            )
-    }
-}
-
-struct LocaleSelector {
-    focus_handle: FocusHandle,
-}
-
-impl LocaleSelector {
-    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self {
-            focus_handle: cx.focus_handle(),
-        }
-    }
-
-    fn on_select_locale(
-        &mut self,
-        locale: &SelectLocale,
-        window: &mut Window,
-        _: &mut Context<Self>,
-    ) {
-        set_locale(&locale.0);
-        window.refresh();
-    }
-}
-
-impl Render for LocaleSelector {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let focus_handle = self.focus_handle.clone();
-        let locale = locale().to_string();
-
-        div()
-            .id("locale-selector")
-            .track_focus(&focus_handle)
-            .on_action(cx.listener(Self::on_select_locale))
-            .child(
-                Button::new("btn")
-                    .small()
-                    .ghost()
-                    .icon(IconName::Globe)
-                    .popup_menu(move |this, _, _| {
-                        this.menu_with_check(
-                            "English",
-                            locale == "en",
-                            Box::new(SelectLocale("en".into())),
-                        )
-                        .menu_with_check(
-                            "简体中文",
-                            locale == "zh-CN",
-                            Box::new(SelectLocale("zh-CN".into())),
-                        )
-                    })
-                    .anchor(Corner::TopRight),
             )
     }
 }

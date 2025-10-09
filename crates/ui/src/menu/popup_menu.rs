@@ -570,38 +570,11 @@ impl PopupMenu {
             }
         }
 
-        self
-    }
-
-    pub(super) fn set_menu_items(
-        &mut self,
-        items: impl IntoIterator<Item = OwnedMenuItem>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.menu_items.clear();
-        for item in items {
-            match item {
-                OwnedMenuItem::Action { name, action, .. } => {
-                    self.add_menu_item(name, None, action.boxed_clone(), false);
-                }
-                OwnedMenuItem::Separator => {
-                    self.menu_items.push(PopupMenuItem::Separator);
-                }
-                OwnedMenuItem::Submenu(submenu) => {
-                    let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
-                        menu.with_menu_items(submenu.items.clone(), window, cx)
-                    });
-                    self.menu_items.push(PopupMenuItem::Submenu {
-                        icon: None,
-                        label: submenu.name,
-                        disabled: false,
-                        menu,
-                    })
-                }
-                OwnedMenuItem::SystemMenu(_) => {}
-            }
+        if self.menu_items.len() > 20 {
+            self.scrollable = true;
         }
+
+        self
     }
 
     pub(crate) fn active_submenu(&self) -> Option<Entity<PopupMenu>> {

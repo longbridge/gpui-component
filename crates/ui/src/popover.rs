@@ -282,10 +282,8 @@ impl<M: ManagedView> Element for Popover<M> {
                                     .tab_group()
                                     .when(!no_style, |this| this.popover_style(cx))
                                     .map(|this| match anchor {
-                                        Corner::TopLeft | Corner::TopRight => this.top_1p5(),
-                                        Corner::BottomLeft | Corner::BottomRight => {
-                                            this.bottom_1p5()
-                                        }
+                                        Corner::TopLeft | Corner::TopRight => this.top_1(),
+                                        Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
                                     })
                                     .child(content_view.clone())
                                     .when(!no_style, |this| {
