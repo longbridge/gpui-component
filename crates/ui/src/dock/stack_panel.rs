@@ -101,8 +101,7 @@ impl StackPanel {
 
     fn assert_panel_is_valid(&self, panel: &Arc<dyn PanelView>) {
         assert!(
-            panel.view().downcast::<TabPanel>().is_ok()
-                || panel.view().downcast::<Self>().is_ok(),
+            panel.view().downcast::<TabPanel>().is_ok() || panel.view().downcast::<Self>().is_ok(),
             "Panel must be a `TabPanel` or `StackPanel`"
         );
     }

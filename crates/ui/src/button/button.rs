@@ -616,9 +616,7 @@ impl ButtonVariant {
             Self::Warning => cx.theme().warning,
             Self::Success => cx.theme().success,
             Self::Info => cx.theme().info,
-            Self::Ghost | Self::Link | Self::Text => {
-                cx.theme().transparent
-            }
+            Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
             Self::Custom(colors) => colors.color,
         }
     }
@@ -717,9 +715,7 @@ impl ButtonVariant {
                     bg
                 }
             }
-            Self::Ghost | Self::Link | Self::Text => {
-                cx.theme().transparent
-            }
+            Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
             Self::Custom(colors) => colors.border,
         }
     }
@@ -935,9 +931,7 @@ impl ButtonVariant {
 
     fn disabled(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
-            Self::Link | Self::Ghost | Self::Text => {
-                cx.theme().transparent
-            }
+            Self::Link | Self::Ghost | Self::Text => cx.theme().transparent,
             Self::Primary => cx.theme().primary.opacity(0.15),
             Self::Danger => cx.theme().danger.opacity(0.15),
             Self::Warning => cx.theme().warning.opacity(0.15),

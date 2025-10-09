@@ -71,9 +71,7 @@ impl SliderValue {
     pub fn clamp(self, min: f32, max: f32) -> Self {
         match self {
             Self::Single(value) => Self::Single(value.clamp(min, max)),
-            Self::Range(start, end) => {
-                Self::Range(start.clamp(min, max), end.clamp(min, max))
-            }
+            Self::Range(start, end) => Self::Range(start.clamp(min, max), end.clamp(min, max)),
         }
     }
 
