@@ -1869,10 +1869,12 @@ impl InputState {
             return;
         }
 
+        // NOTE: Do not cancel select, when blur.
+        // Because maybe user want to copy the selected text by ContextMenu (will take focus handle).
+
         self.hover_popover = None;
         self.diagnostic_popover = None;
         self.context_menu = None;
-        self.unselect(window, cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
