@@ -122,8 +122,7 @@ impl AppMenu {
         _: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
-        let name = menu.name.clone().into();
-
+        let name = menu.name.clone();
         cx.new(|_| Self {
             ix,
             menu_bar,
