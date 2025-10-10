@@ -1,6 +1,6 @@
 use gpui::{
-    div, relative, Action, AsKeystroke, IntoElement, KeyContext, Keystroke, ParentElement as _,
-    RenderOnce, StyleRefinement, Styled, Window,
+    div, relative, Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke,
+    ParentElement as _, RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -52,6 +52,20 @@ impl Kbd {
             None => window.highest_precedence_binding_for_action(action),
         }?;
 
+        if let Some(key) = binding.keystrokes().first() {
+            Some(Self::new(key.as_keystroke().clone()))
+        } else {
+            None
+        }
+    }
+
+    /// Return the first keybinding for the given action and focus handle.
+    pub fn binding_for_action_in(
+        action: &dyn Action,
+        focus_handle: &FocusHandle,
+        window: &Window,
+    ) -> Option<Self> {
+        let binding = window.highest_precedence_binding_for_action_in(action, focus_handle)?;
         if let Some(key) = binding.keystrokes().first() {
             Some(Self::new(key.as_keystroke().clone()))
         } else {

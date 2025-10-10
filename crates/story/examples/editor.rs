@@ -9,6 +9,7 @@ use std::{
 use anyhow::Ok;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
+    ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
@@ -17,7 +18,7 @@ use gpui_component::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
     },
-    v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
+    v_flex,
 };
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,

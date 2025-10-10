@@ -3,15 +3,16 @@ use gpui::{
     Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement, Render, Styled, Window,
 };
+use gpui_component::{AxisExt, h_flex, popup_menu::PopupMenuExt as _};
 use gpui_component::{
+    Sizable as _, Size,
     button::Button,
     checkbox::Checkbox,
     description_list::{DescriptionItem, DescriptionList},
     dock::PanelControl,
     text::TextView,
-    v_flex, Sizable as _, Size,
+    v_flex,
 };
-use gpui_component::{h_flex, popup_menu::PopupMenuExt as _, AxisExt};
 use serde::Deserialize;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]

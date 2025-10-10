@@ -1,24 +1,21 @@
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder, px, App, AppContext as _, Context,
-    DismissEvent, Entity, InteractiveElement as _, IntoElement, KeyBinding, OwnedMenu,
+    anchored, deferred, div, prelude::FluentBuilder, px, App, AppContext as _, ClickEvent, Context,
+    DismissEvent, Entity, Focusable, InteractiveElement as _, IntoElement, KeyBinding, OwnedMenu,
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window,
 };
 
 use crate::{
-    actions::{Cancel, Confirm, SelectLeft, SelectNext, SelectPrev, SelectRight},
+    actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     h_flex,
     popup_menu::PopupMenu,
     Selectable, Sizable,
 };
 
-const CONTEXT: &str = "menu_bar";
+const CONTEXT: &str = "AppMenuBar";
 pub fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
         KeyBinding::new("escape", Cancel, Some(CONTEXT)),
-        KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
-        KeyBinding::new("down", SelectNext, Some(CONTEXT)),
         KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
         KeyBinding::new("right", SelectRight, Some(CONTEXT)),
     ]);
@@ -26,20 +23,21 @@ pub fn init(cx: &mut App) {
 
 /// The application menu bar, for Windows and Linux.
 pub struct AppMenuBar {
-    menus: Vec<Entity<MenuBarMenu>>,
+    menus: Vec<Entity<AppMenu>>,
     selected_ix: Option<usize>,
 }
 
 impl AppMenuBar {
-    /// Create a new menu bar with the given ID.
+    /// Create a new app menu bar.
     pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
+            let menu_bar = cx.entity();
             let menus = cx
                 .get_menus()
                 .unwrap_or_default()
                 .iter()
                 .enumerate()
-                .map(|(ix, menu)| MenuBarMenu::new(ix, menu, cx.entity(), window, cx))
+                .map(|(ix, menu)| AppMenu::new(ix, menu, menu_bar.clone(), window, cx))
                 .collect();
 
             Self {
@@ -49,16 +47,39 @@ impl AppMenuBar {
         })
     }
 
-    fn on_action_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(selected_ix) = self.selected_ix {
-            if selected_ix > 0 {
-                self.selected_ix = Some(selected_ix - 1);
-                cx.notify();
-            } else {
-                self.selected_ix = Some(self.menus.len().saturating_sub(1));
-                cx.notify();
-            }
-        }
+    fn move_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(selected_ix) = self.selected_ix else {
+            return;
+        };
+
+        let new_ix = if selected_ix == 0 {
+            self.menus.len().saturating_sub(1)
+        } else {
+            selected_ix.saturating_sub(1)
+        };
+        self.set_selected_ix(Some(new_ix), window, cx);
+    }
+
+    fn move_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(selected_ix) = self.selected_ix else {
+            return;
+        };
+
+        let new_ix = if selected_ix + 1 >= self.menus.len() {
+            0
+        } else {
+            selected_ix + 1
+        };
+        self.set_selected_ix(Some(new_ix), window, cx);
+    }
+
+    fn cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_selected_ix(None, window, cx);
+    }
+
+    fn set_selected_ix(&mut self, ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>) {
+        self.selected_ix = ix;
+        cx.notify();
     }
 
     #[inline]
@@ -71,9 +92,11 @@ impl Render for AppMenuBar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .id("app-menu-bar")
-            .size_full()
             .key_context(CONTEXT)
-            .on_action(cx.listener(Self::on_action_left))
+            .on_action(cx.listener(Self::move_left))
+            .on_action(cx.listener(Self::move_right))
+            .on_action(cx.listener(Self::cancel))
+            .size_full()
             .gap_x_1()
             .overflow_x_scroll()
             .children(self.menus.clone())
@@ -81,65 +104,102 @@ impl Render for AppMenuBar {
 }
 
 /// A menu in the menu bar.
-pub(super) struct MenuBarMenu {
+pub(super) struct AppMenu {
     menu_bar: Entity<AppMenuBar>,
     ix: usize,
     name: SharedString,
-    popup_menu: Entity<PopupMenu>,
+    menu: OwnedMenu,
+    popup_menu: Option<Entity<PopupMenu>>,
 
-    _subscription: Subscription,
+    _subscription: Option<Subscription>,
 }
 
-impl MenuBarMenu {
+impl AppMenu {
     pub(super) fn new(
         ix: usize,
         menu: &OwnedMenu,
         menu_bar: Entity<AppMenuBar>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
         let name = menu.name.clone().into();
-        let items = menu.items.clone();
 
+        cx.new(|_| Self {
+            ix,
+            menu_bar,
+            name,
+            menu: menu.clone(),
+            popup_menu: None,
+            _subscription: None,
+        })
+    }
+
+    fn build_popup_menu(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<PopupMenu> {
+        if let Some(popup_menu) = &self.popup_menu {
+            popup_menu.read(cx).focus_handle(cx).focus(window);
+            return popup_menu.clone();
+        }
+
+        let items = self.menu.items.clone();
         let popup_menu = PopupMenu::build(window, cx, |menu, window, cx| {
             menu.with_menu_items(items, window, cx)
         });
-
-        cx.new(|cx| {
-            let _subscription = cx.subscribe_in(&popup_menu, window, Self::handle_dismiss);
-
-            Self {
-                ix,
-                menu_bar,
-                name,
-                popup_menu,
-                _subscription,
-            }
-        })
+        popup_menu.read(cx).focus_handle(cx).focus(window);
+        self._subscription = Some(cx.subscribe_in(&popup_menu, window, Self::handle_dismiss));
+        self.popup_menu = Some(popup_menu.clone());
+        popup_menu
     }
 
     fn handle_dismiss(
         &mut self,
         _: &Entity<PopupMenu>,
         _: &DismissEvent,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.menu_bar.update(cx, |state, cx| {
+            state.cancel(&Cancel, window, cx);
+        });
+    }
+
+    fn handle_trigger_click(
+        &mut self,
+        _: &ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let is_selected = self.menu_bar.read(cx).selected_ix == Some(self.ix);
+
         _ = self.menu_bar.update(cx, |state, cx| {
-            if state.selected_ix == Some(self.ix) {
-                state.selected_ix = None;
-                cx.notify();
-            }
+            let new_ix = if is_selected { None } else { Some(self.ix) };
+            state.set_selected_ix(new_ix, window, cx);
+        });
+    }
+
+    fn handle_hover(&mut self, hovered: &bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !*hovered {
+            return;
+        }
+
+        let has_activated_menu = self.menu_bar.read(cx).has_activated_menu();
+        if !has_activated_menu {
+            return;
+        }
+
+        _ = self.menu_bar.update(cx, |state, cx| {
+            state.set_selected_ix(Some(self.ix), window, cx);
         });
     }
 }
 
-impl Render for MenuBarMenu {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let menu_ix = self.ix;
+impl Render for AppMenu {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let menu_bar = self.menu_bar.read(cx);
         let is_selected = menu_bar.selected_ix == Some(self.ix);
-        let has_activated_menu = menu_bar.has_activated_menu();
 
         div()
             .id(self.ix)
@@ -152,36 +212,9 @@ impl Render for MenuBarMenu {
                     .ghost()
                     .label(self.name.clone())
                     .selected(is_selected)
-                    .on_click({
-                        let menu_bar = self.menu_bar.clone();
-                        move |_, _, cx| {
-                            if is_selected {
-                                _ = menu_bar.update(cx, |state, cx| {
-                                    state.selected_ix = None;
-                                    cx.notify();
-                                });
-                            } else {
-                                _ = menu_bar.update(cx, |state, cx| {
-                                    state.selected_ix = Some(menu_ix);
-                                    cx.notify();
-                                });
-                            }
-                        }
-                    }),
+                    .on_click(cx.listener(Self::handle_trigger_click)),
             )
-            .when(has_activated_menu, |this| {
-                this.on_hover({
-                    let menu_bar = self.menu_bar.clone();
-                    move |hovered, _, cx| {
-                        if *hovered {
-                            _ = menu_bar.update(cx, |state, cx| {
-                                state.selected_ix = Some(menu_ix);
-                                cx.notify();
-                            });
-                        }
-                    }
-                })
-            })
+            .on_hover(cx.listener(Self::handle_hover))
             .when(is_selected, |this| {
                 this.child(deferred(
                     anchored()
@@ -192,18 +225,7 @@ impl Render for MenuBarMenu {
                                 .size_full()
                                 .occlude()
                                 .top_1()
-                                .child(self.popup_menu.clone())
-                                .on_mouse_down_out({
-                                    let menu_bar = self.menu_bar.clone();
-                                    move |_, _, cx| {
-                                        _ = menu_bar.update(cx, |state, cx| {
-                                            if state.selected_ix == Some(menu_ix) {
-                                                state.selected_ix = None;
-                                                cx.notify();
-                                            }
-                                        });
-                                    }
-                                }),
+                                .child(self.build_popup_menu(window, cx)),
                         ),
                 ))
             })
