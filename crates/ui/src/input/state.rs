@@ -1870,7 +1870,7 @@ impl InputState {
         }
 
         // NOTE: Do not cancel select, when blur.
-        // Because maybe user want to copy the selected text by ContextMenu (will take focus handle).
+        // Because maybe user want to copy the selected text by AppMenuBar (will take focus handle).
 
         self.hover_popover = None;
         self.diagnostic_popover = None;
