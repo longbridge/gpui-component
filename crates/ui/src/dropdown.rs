@@ -74,7 +74,7 @@ impl DropdownItem for SharedString {
     type Value = Self;
 
     fn title(&self) -> SharedString {
-        SharedString::from(self.to_string())
+        Self::from(self.to_string())
     }
 
     fn value(&self) -> &Self::Value {

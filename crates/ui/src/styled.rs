@@ -224,11 +224,11 @@ pub enum Size {
 impl Size {
     fn as_f32(&self) -> f32 {
         match self {
-            Size::Size(val) => val.as_f32(),
-            Size::XSmall => 0.,
-            Size::Small => 1.,
-            Size::Medium => 2.,
-            Size::Large => 3.,
+            Self::Size(val) => val.as_f32(),
+            Self::XSmall => 0.,
+            Self::Small => 1.,
+            Self::Medium => 2.,
+            Self::Large => 3.,
         }
     }
 
@@ -236,9 +236,9 @@ impl Size {
     #[inline]
     pub fn table_row_height(&self) -> Pixels {
         match self {
-            Size::XSmall => px(26.),
-            Size::Small => px(30.),
-            Size::Large => px(40.),
+            Self::XSmall => px(26.),
+            Self::Small => px(30.),
+            Self::Large => px(40.),
             _ => px(32.),
         }
     }
@@ -247,19 +247,19 @@ impl Size {
     #[inline]
     pub fn table_cell_padding(&self) -> Edges<Pixels> {
         match self {
-            Size::XSmall => Edges {
+            Self::XSmall => Edges {
                 top: px(2.),
                 bottom: px(2.),
                 left: px(4.),
                 right: px(4.),
             },
-            Size::Small => Edges {
+            Self::Small => Edges {
                 top: px(3.),
                 bottom: px(3.),
                 left: px(6.),
                 right: px(6.),
             },
-            Size::Large => Edges {
+            Self::Large => Edges {
                 top: px(8.),
                 bottom: px(8.),
                 left: px(12.),
@@ -277,22 +277,22 @@ impl Size {
     /// Returns a smaller size.
     pub fn smaller(&self) -> Self {
         match self {
-            Size::XSmall => Size::XSmall,
-            Size::Small => Size::XSmall,
-            Size::Medium => Size::Small,
-            Size::Large => Size::Medium,
-            Size::Size(val) => Size::Size(*val * 0.2),
+            Self::XSmall => Self::XSmall,
+            Self::Small => Self::XSmall,
+            Self::Medium => Self::Small,
+            Self::Large => Self::Medium,
+            Self::Size(val) => Self::Size(*val * 0.2),
         }
     }
 
     /// Returns a larger size.
     pub fn larger(&self) -> Self {
         match self {
-            Size::XSmall => Size::Small,
-            Size::Small => Size::Medium,
-            Size::Medium => Size::Large,
-            Size::Large => Size::Large,
-            Size::Size(val) => Size::Size(*val * 1.2),
+            Self::XSmall => Self::Small,
+            Self::Small => Self::Medium,
+            Self::Medium => Self::Large,
+            Self::Large => Self::Large,
+            Self::Size(val) => Self::Size(*val * 1.2),
         }
     }
 
@@ -301,9 +301,9 @@ impl Size {
     /// e.g. `Size::XSmall.max(Size::Small)` will return `Size::XSmall`.
     pub fn max(&self, other: Self) -> Self {
         match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().min(b.as_f32()))),
-            (Size::Size(a), _) => Size::Size(*a),
-            (_, Size::Size(b)) => Size::Size(b),
+            (Self::Size(a), Self::Size(b)) => Self::Size(px(a.as_f32().min(b.as_f32()))),
+            (Self::Size(a), _) => Self::Size(*a),
+            (_, Self::Size(b)) => Self::Size(b),
             (a, b) if a.as_f32() < b.as_f32() => *a,
             _ => other,
         }
@@ -314,9 +314,9 @@ impl Size {
     /// e.g. `Size::XSmall.min(Size::Small)` will return `Size::Small`.
     pub fn min(&self, other: Self) -> Self {
         match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().max(b.as_f32()))),
-            (Size::Size(a), _) => Size::Size(*a),
-            (_, Size::Size(b)) => Size::Size(b),
+            (Self::Size(a), Self::Size(b)) => Self::Size(px(a.as_f32().max(b.as_f32()))),
+            (Self::Size(a), _) => Self::Size(*a),
+            (_, Self::Size(b)) => Self::Size(b),
             (a, b) if a.as_f32() > b.as_f32() => *a,
             _ => other,
         }
@@ -334,10 +334,10 @@ impl Size {
 
     pub fn input_py(&self) -> Pixels {
         match self {
-            Size::Large => px(10.),
-            Size::Medium => px(5.),
-            Size::Small => px(2.),
-            Size::XSmall => px(0.),
+            Self::Large => px(10.),
+            Self::Medium => px(5.),
+            Self::Small => px(2.),
+            Self::XSmall => px(0.),
             _ => px(2.),
         }
     }
@@ -345,7 +345,7 @@ impl Size {
 
 impl From<Pixels> for Size {
     fn from(size: Pixels) -> Self {
-        Size::Size(size)
+        Self::Size(size)
     }
 }
 
@@ -613,12 +613,12 @@ pub trait AxisExt {
 impl AxisExt for Axis {
     #[inline]
     fn is_horizontal(self) -> bool {
-        self == Axis::Horizontal
+        self == Self::Horizontal
     }
 
     #[inline]
     fn is_vertical(self) -> bool {
-        self == Axis::Vertical
+        self == Self::Vertical
     }
 }
 
@@ -633,10 +633,10 @@ pub enum Placement {
 impl Display for Placement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Placement::Top => write!(f, "Top"),
-            Placement::Bottom => write!(f, "Bottom"),
-            Placement::Left => write!(f, "Left"),
-            Placement::Right => write!(f, "Right"),
+            Self::Top => write!(f, "Top"),
+            Self::Bottom => write!(f, "Bottom"),
+            Self::Left => write!(f, "Left"),
+            Self::Right => write!(f, "Right"),
         }
     }
 }
@@ -645,7 +645,7 @@ impl Placement {
     #[inline]
     pub fn is_horizontal(&self) -> bool {
         match self {
-            Placement::Left | Placement::Right => true,
+            Self::Left | Self::Right => true,
             _ => false,
         }
     }
@@ -653,7 +653,7 @@ impl Placement {
     #[inline]
     pub fn is_vertical(&self) -> bool {
         match self {
-            Placement::Top | Placement::Bottom => true,
+            Self::Top | Self::Bottom => true,
             _ => false,
         }
     }
@@ -661,8 +661,8 @@ impl Placement {
     #[inline]
     pub fn axis(&self) -> Axis {
         match self {
-            Placement::Top | Placement::Bottom => Axis::Vertical,
-            Placement::Left | Placement::Right => Axis::Horizontal,
+            Self::Top | Self::Bottom => Axis::Vertical,
+            Self::Left | Self::Right => Axis::Horizontal,
         }
     }
 }

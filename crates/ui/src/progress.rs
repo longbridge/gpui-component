@@ -13,7 +13,7 @@ pub struct Progress {
 
 impl Progress {
     pub fn new() -> Self {
-        Progress {
+        Self {
             value: Default::default(),
             height: 8.,
         }

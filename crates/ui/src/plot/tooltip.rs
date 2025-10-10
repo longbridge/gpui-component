@@ -17,13 +17,13 @@ impl CrossLineAxis {
     /// Returns true if the cross line axis is vertical or both.
     #[inline]
     pub fn show_vertical(&self) -> bool {
-        matches!(self, CrossLineAxis::Vertical | CrossLineAxis::Both)
+        matches!(self, Self::Vertical | Self::Both)
     }
 
     /// Returns true if the cross line axis is horizontal or both.
     #[inline]
     pub fn show_horizontal(&self) -> bool {
-        matches!(self, CrossLineAxis::Horizontal | CrossLineAxis::Both)
+        matches!(self, Self::Horizontal | Self::Both)
     }
 }
 

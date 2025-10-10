@@ -149,7 +149,7 @@ impl AppState {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
         };
-        cx.set_global::<AppState>(state);
+        cx.set_global::<Self>(state);
     }
 
     pub fn global(cx: &App) -> &Self {

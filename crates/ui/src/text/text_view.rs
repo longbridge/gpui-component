@@ -216,7 +216,7 @@ pub(crate) struct TextViewState {
 }
 
 impl TextViewState {
-    fn new(cx: &mut Context<TextViewState>) -> Self {
+    fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         Self {
             parent_entity: None,

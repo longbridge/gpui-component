@@ -57,7 +57,7 @@ impl CompanyListItem {
         ix: IndexPath,
         selected: bool,
     ) -> Self {
-        CompanyListItem {
+        Self {
             company,
             ix,
             base: ListItem::new(id),

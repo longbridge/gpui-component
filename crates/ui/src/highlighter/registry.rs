@@ -160,9 +160,9 @@ pub enum FontStyle {
 impl From<FontStyle> for gpui::FontStyle {
     fn from(style: FontStyle) -> Self {
         match style {
-            FontStyle::Normal => gpui::FontStyle::Normal,
-            FontStyle::Italic => gpui::FontStyle::Italic,
-            FontStyle::Underline => gpui::FontStyle::Normal,
+            FontStyle::Normal => Self::Normal,
+            FontStyle::Italic => Self::Italic,
+            FontStyle::Underline => Self::Normal,
         }
     }
 }
@@ -184,15 +184,15 @@ pub enum FontWeightContent {
 impl From<FontWeightContent> for FontWeight {
     fn from(value: FontWeightContent) -> Self {
         match value {
-            FontWeightContent::Thin => FontWeight::THIN,
-            FontWeightContent::ExtraLight => FontWeight::EXTRA_LIGHT,
-            FontWeightContent::Light => FontWeight::LIGHT,
-            FontWeightContent::Normal => FontWeight::NORMAL,
-            FontWeightContent::Medium => FontWeight::MEDIUM,
-            FontWeightContent::Semibold => FontWeight::SEMIBOLD,
-            FontWeightContent::Bold => FontWeight::BOLD,
-            FontWeightContent::ExtraBold => FontWeight::EXTRA_BOLD,
-            FontWeightContent::Black => FontWeight::BLACK,
+            FontWeightContent::Thin => Self::THIN,
+            FontWeightContent::ExtraLight => Self::EXTRA_LIGHT,
+            FontWeightContent::Light => Self::LIGHT,
+            FontWeightContent::Normal => Self::NORMAL,
+            FontWeightContent::Medium => Self::MEDIUM,
+            FontWeightContent::Semibold => Self::SEMIBOLD,
+            FontWeightContent::Bold => Self::BOLD,
+            FontWeightContent::ExtraBold => Self::EXTRA_BOLD,
+            FontWeightContent::Black => Self::BLACK,
         }
     }
 }
@@ -206,7 +206,7 @@ pub struct ThemeStyle {
 
 impl From<ThemeStyle> for HighlightStyle {
     fn from(style: ThemeStyle) -> Self {
-        HighlightStyle {
+        Self {
             color: style.color,
             font_weight: style.font_weight.map(Into::into),
             font_style: style.font_style.map(Into::into),
@@ -465,7 +465,7 @@ pub struct LanguageRegistry {
 
 impl LanguageRegistry {
     /// Returns the singleton instance of the `LanguageRegistry` with default languages and themes.
-    pub fn singleton() -> &'static LazyLock<LanguageRegistry> {
+    pub fn singleton() -> &'static LazyLock<Self> {
         static INSTANCE: LazyLock<LanguageRegistry> = LazyLock::new(|| LanguageRegistry {
             languages: Mutex::new(
                 languages::Language::all()

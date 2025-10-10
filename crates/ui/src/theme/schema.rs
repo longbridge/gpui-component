@@ -380,7 +380,7 @@ fn try_parse_color(color: &str) -> Result<Hsla> {
 
 impl ThemeColor {
     /// Create a new `ThemeColor` from a `ThemeConfig`.
-    pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &ThemeColor) {
+    pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &Self) {
         let colors = config.colors.clone();
 
         macro_rules! apply_color {

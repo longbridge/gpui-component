@@ -32,7 +32,7 @@ struct TabStyle {
 
 impl Default for TabStyle {
     fn default() -> Self {
-        TabStyle {
+        Self {
             borders: Edges::all(px(0.)),
             border_color: gpui::transparent_white(),
             bg: gpui::transparent_white(),
@@ -49,19 +49,19 @@ impl TabVariant {
     fn height(&self, size: Size) -> Pixels {
         match size {
             Size::XSmall => match self {
-                TabVariant::Underline => px(26.),
+                Self::Underline => px(26.),
                 _ => px(20.),
             },
             Size::Small => match self {
-                TabVariant::Underline => px(30.),
+                Self::Underline => px(30.),
                 _ => px(24.),
             },
             Size::Large => match self {
-                TabVariant::Underline => px(44.),
+                Self::Underline => px(44.),
                 _ => px(36.),
             },
             _ => match self {
-                TabVariant::Underline => px(36.),
+                Self::Underline => px(36.),
                 _ => px(32.),
             },
         }
@@ -70,25 +70,25 @@ impl TabVariant {
     fn inner_height(&self, size: Size) -> Pixels {
         match size {
             Size::XSmall => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(18.),
-                TabVariant::Segmented => px(16.),
-                TabVariant::Underline => px(20.),
+                Self::Tab | Self::Outline | Self::Pill => px(18.),
+                Self::Segmented => px(16.),
+                Self::Underline => px(20.),
             },
             Size::Small => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(22.),
-                TabVariant::Segmented => px(20.),
-                TabVariant::Underline => px(22.),
+                Self::Tab | Self::Outline | Self::Pill => px(22.),
+                Self::Segmented => px(20.),
+                Self::Underline => px(22.),
             },
             Size::Large => match self {
-                TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(36.),
-                TabVariant::Segmented => px(28.),
-                TabVariant::Underline => px(32.),
+                Self::Tab | Self::Outline | Self::Pill => px(36.),
+                Self::Segmented => px(28.),
+                Self::Underline => px(32.),
             },
             _ => match self {
-                TabVariant::Tab => px(30.),
-                TabVariant::Outline | TabVariant::Pill => px(26.),
-                TabVariant::Segmented => px(24.),
-                TabVariant::Underline => px(26.),
+                Self::Tab => px(30.),
+                Self::Outline | Self::Pill => px(26.),
+                Self::Segmented => px(24.),
+                Self::Underline => px(26.),
             },
         }
     }
@@ -102,7 +102,7 @@ impl TabVariant {
             _ => px(12.),
         };
 
-        if matches!(self, TabVariant::Underline) {
+        if matches!(self, Self::Underline) {
             padding_x = px(0.);
         }
 
@@ -116,7 +116,7 @@ impl TabVariant {
     fn inner_margins(&self, size: Size) -> Edges<Pixels> {
         match size {
             Size::XSmall => match self {
-                TabVariant::Underline => Edges {
+                Self::Underline => Edges {
                     top: px(1.),
                     bottom: px(2.),
                     ..Default::default()
@@ -124,7 +124,7 @@ impl TabVariant {
                 _ => Edges::all(px(0.)),
             },
             Size::Small => match self {
-                TabVariant::Underline => Edges {
+                Self::Underline => Edges {
                     top: px(2.),
                     bottom: px(3.),
                     ..Default::default()
@@ -132,7 +132,7 @@ impl TabVariant {
                 _ => Edges::all(px(0.)),
             },
             Size::Large => match self {
-                TabVariant::Underline => Edges {
+                Self::Underline => Edges {
                     top: px(5.),
                     bottom: px(6.),
                     ..Default::default()
@@ -140,7 +140,7 @@ impl TabVariant {
                 _ => Edges::all(px(0.)),
             },
             _ => match self {
-                TabVariant::Underline => Edges {
+                Self::Underline => Edges {
                     top: px(3.),
                     bottom: px(4.),
                     ..Default::default()
@@ -152,7 +152,7 @@ impl TabVariant {
 
     fn normal(&self, cx: &App) -> TabStyle {
         match self {
-            TabVariant::Tab => TabStyle {
+            Self::Tab => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
@@ -164,7 +164,7 @@ impl TabVariant {
                 border_color: cx.theme().transparent,
                 ..Default::default()
             },
-            TabVariant::Outline => TabStyle {
+            Self::Outline => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
@@ -172,19 +172,19 @@ impl TabVariant {
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            Self::Pill => TabStyle {
                 fg: cx.theme().foreground,
                 bg: cx.theme().transparent,
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Segmented => TabStyle {
+            Self::Segmented => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 inner_radius: cx.theme().radius,
                 ..Default::default()
             },
-            TabVariant::Underline => TabStyle {
+            Self::Underline => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 radius: px(0.),
@@ -202,7 +202,7 @@ impl TabVariant {
 
     fn hovered(&self, selected: bool, cx: &App) -> TabStyle {
         match self {
-            TabVariant::Tab => TabStyle {
+            Self::Tab => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
@@ -214,7 +214,7 @@ impl TabVariant {
                 border_color: cx.theme().transparent,
                 ..Default::default()
             },
-            TabVariant::Outline => TabStyle {
+            Self::Outline => TabStyle {
                 fg: cx.theme().secondary_foreground,
                 bg: cx.theme().secondary_hover,
                 borders: Edges::all(px(1.)),
@@ -222,13 +222,13 @@ impl TabVariant {
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            Self::Pill => TabStyle {
                 fg: cx.theme().secondary_foreground,
                 bg: cx.theme().secondary,
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Segmented => TabStyle {
+            Self::Segmented => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 inner_bg: if selected {
@@ -239,7 +239,7 @@ impl TabVariant {
                 inner_radius: cx.theme().radius,
                 ..Default::default()
             },
-            TabVariant::Underline => TabStyle {
+            Self::Underline => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 radius: px(0.),
@@ -257,7 +257,7 @@ impl TabVariant {
 
     fn selected(&self, cx: &App) -> TabStyle {
         match self {
-            TabVariant::Tab => TabStyle {
+            Self::Tab => TabStyle {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().tab_active,
                 borders: Edges {
@@ -269,7 +269,7 @@ impl TabVariant {
                 border_color: cx.theme().border,
                 ..Default::default()
             },
-            TabVariant::Outline => TabStyle {
+            Self::Outline => TabStyle {
                 fg: cx.theme().primary,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
@@ -277,13 +277,13 @@ impl TabVariant {
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            Self::Pill => TabStyle {
                 fg: cx.theme().primary_foreground,
                 bg: cx.theme().primary,
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Segmented => TabStyle {
+            Self::Segmented => TabStyle {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().transparent,
                 inner_radius: cx.theme().radius,
@@ -291,7 +291,7 @@ impl TabVariant {
                 shadow: true,
                 ..Default::default()
             },
-            TabVariant::Underline => TabStyle {
+            Self::Underline => TabStyle {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
@@ -306,7 +306,7 @@ impl TabVariant {
 
     fn disabled(&self, selected: bool, cx: &App) -> TabStyle {
         match self {
-            TabVariant::Tab => TabStyle {
+            Self::Tab => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().transparent,
                 border_color: if selected {
@@ -322,7 +322,7 @@ impl TabVariant {
                 },
                 ..Default::default()
             },
-            TabVariant::Outline => TabStyle {
+            Self::Outline => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
@@ -334,7 +334,7 @@ impl TabVariant {
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Pill => TabStyle {
+            Self::Pill => TabStyle {
                 fg: if selected {
                     cx.theme().primary_foreground.opacity(0.5)
                 } else {
@@ -348,7 +348,7 @@ impl TabVariant {
                 radius: px(99.),
                 ..Default::default()
             },
-            TabVariant::Segmented => TabStyle {
+            Self::Segmented => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().tab_bar,
                 inner_bg: if selected {
@@ -359,7 +359,7 @@ impl TabVariant {
                 inner_radius: cx.theme().radius,
                 ..Default::default()
             },
-            TabVariant::Underline => TabStyle {
+            Self::Underline => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().transparent,
                 radius: cx.theme().radius,

@@ -29,17 +29,17 @@ pub(crate) enum ContextMenu {
 impl ContextMenu {
     pub(crate) fn is_open(&self, cx: &App) -> bool {
         match self {
-            ContextMenu::Completion(menu) => menu.read(cx).is_open(),
-            ContextMenu::CodeAction(menu) => menu.read(cx).is_open(),
-            ContextMenu::MouseContext(menu) => menu.read(cx).is_open(),
+            Self::Completion(menu) => menu.read(cx).is_open(),
+            Self::CodeAction(menu) => menu.read(cx).is_open(),
+            Self::MouseContext(menu) => menu.read(cx).is_open(),
         }
     }
 
     pub(crate) fn render(&self) -> impl IntoElement {
         match self {
-            ContextMenu::Completion(menu) => menu.clone().into_any_element(),
-            ContextMenu::CodeAction(menu) => menu.clone().into_any_element(),
-            ContextMenu::MouseContext(menu) => menu.clone().into_any_element(),
+            Self::Completion(menu) => menu.clone().into_any_element(),
+            Self::CodeAction(menu) => menu.clone().into_any_element(),
+            Self::MouseContext(menu) => menu.clone().into_any_element(),
         }
     }
 }

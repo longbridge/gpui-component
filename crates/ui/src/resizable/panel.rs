@@ -68,7 +68,7 @@ impl ResizablePanelGroup {
     }
 
     /// Add a ResizablePanelGroup as a child to the group.
-    pub fn group(self, group: ResizablePanelGroup) -> Self {
+    pub fn group(self, group: Self) -> Self {
         self.child(resizable_panel().child(group.into_any_element()))
     }
 

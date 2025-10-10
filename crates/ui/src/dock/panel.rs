@@ -41,12 +41,12 @@ pub enum PanelControl {
 impl PanelControl {
     #[inline]
     pub fn toolbar_visible(&self) -> bool {
-        matches!(self, PanelControl::Both | PanelControl::Toolbar)
+        matches!(self, Self::Both | Self::Toolbar)
     }
 
     #[inline]
     pub fn menu_visible(&self) -> bool {
-        matches!(self, PanelControl::Both | PanelControl::Menu)
+        matches!(self, Self::Both | Self::Menu)
     }
 }
 
@@ -270,8 +270,8 @@ pub struct PanelRegistry {
 impl PanelRegistry {
     /// Initialize the panel registry.
     pub(crate) fn init(cx: &mut App) {
-        if let None = cx.try_global::<PanelRegistry>() {
-            cx.set_global(PanelRegistry::new());
+        if let None = cx.try_global::<Self>() {
+            cx.set_global(Self::new());
         }
     }
 
@@ -282,11 +282,11 @@ impl PanelRegistry {
     }
 
     pub fn global(cx: &App) -> &Self {
-        cx.global::<PanelRegistry>()
+        cx.global::<Self>()
     }
 
     pub fn global_mut(cx: &mut App) -> &mut Self {
-        cx.global_mut::<PanelRegistry>()
+        cx.global_mut::<Self>()
     }
 
     /// Build a panel by name.

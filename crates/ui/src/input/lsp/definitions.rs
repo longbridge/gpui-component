@@ -132,7 +132,7 @@ impl InputState {
         event: &MouseDownEvent,
         offset: usize,
         _: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<Self>,
     ) -> bool {
         if !event.modifiers.secondary() {
             return false;

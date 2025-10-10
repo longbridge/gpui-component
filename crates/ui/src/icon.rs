@@ -186,7 +186,7 @@ impl IconName {
 
 impl From<IconName> for Icon {
     fn from(val: IconName) -> Self {
-        Icon::build(val)
+        Self::build(val)
     }
 }
 
@@ -241,7 +241,7 @@ pub trait IconNamed {
 }
 
 impl Icon {
-    pub fn new(icon: impl Into<Icon>) -> Self {
+    pub fn new(icon: impl Into<Self>) -> Self {
         icon.into()
     }
 
@@ -258,7 +258,7 @@ impl Icon {
     }
 
     /// Create a new view for the icon
-    pub fn view(self, cx: &mut App) -> Entity<Icon> {
+    pub fn view(self, cx: &mut App) -> Entity<Self> {
         cx.new(|_| self)
     }
 

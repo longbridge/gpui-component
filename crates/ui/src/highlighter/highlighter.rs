@@ -118,7 +118,7 @@ impl sum_tree::Item for HighlightItem {
 impl sum_tree::Summary for HighlightSummary {
     type Context<'a> = &'a ();
     fn zero(_: Self::Context<'_>) -> Self {
-        HighlightSummary {
+        Self {
             count: 0,
             start: usize::MIN,
             end: usize::MAX,

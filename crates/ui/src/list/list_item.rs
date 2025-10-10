@@ -16,7 +16,7 @@ enum ListItemMode {
 impl ListItemMode {
     #[inline]
     fn is_separator(&self) -> bool {
-        matches!(self, ListItemMode::Separator)
+        matches!(self, Self::Separator)
     }
 }
 

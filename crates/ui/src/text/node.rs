@@ -76,7 +76,7 @@ pub struct Span {
 
 impl From<Span> for ElementId {
     fn from(value: Span) -> Self {
-        ElementId::Name(format!("md-{}:{}", value.start, value.end).into())
+        Self::Name(format!("md-{}:{}", value.start, value.end).into())
     }
 }
 
@@ -228,10 +228,10 @@ pub(crate) enum ColumnumnAlign {
 impl From<mdast::AlignKind> for ColumnumnAlign {
     fn from(value: mdast::AlignKind) -> Self {
         match value {
-            mdast::AlignKind::None => ColumnumnAlign::Left,
-            mdast::AlignKind::Left => ColumnumnAlign::Left,
-            mdast::AlignKind::Center => ColumnumnAlign::Center,
-            mdast::AlignKind::Right => ColumnumnAlign::Right,
+            mdast::AlignKind::None => Self::Left,
+            mdast::AlignKind::Left => Self::Left,
+            mdast::AlignKind::Center => Self::Center,
+            mdast::AlignKind::Right => Self::Right,
         }
     }
 }
@@ -248,10 +248,10 @@ pub(crate) struct TableCell {
 }
 
 impl Paragraph {
-    pub(crate) fn take(&mut self) -> Paragraph {
+    pub(crate) fn take(&mut self) -> Self {
         std::mem::replace(
             self,
-            Paragraph {
+            Self {
                 span: None,
                 children: vec![],
                 link_refs: Default::default(),
@@ -440,7 +440,7 @@ impl Node {
     }
 
     /// Combine all children, omitting the empt parent nodes.
-    pub(super) fn compact(self) -> Node {
+    pub(super) fn compact(self) -> Self {
         match self {
             Self::Root { mut children } if children.len() == 1 => children.remove(0).compact(),
             _ => self,
@@ -450,7 +450,7 @@ impl Node {
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         match self {
-            Node::Root { children } => {
+            Self::Root { children } => {
                 let mut block_text = String::new();
                 for c in children.iter() {
                     block_text.push_str(&c.selected_text());
@@ -460,7 +460,7 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::Paragraph(paragraph) => {
+            Self::Paragraph(paragraph) => {
                 let mut block_text = String::new();
                 block_text.push_str(&paragraph.selected_text());
                 if !block_text.is_empty() {
@@ -468,7 +468,7 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::Heading { children, .. } => {
+            Self::Heading { children, .. } => {
                 let mut block_text = String::new();
                 block_text.push_str(&children.selected_text());
                 if !block_text.is_empty() {
@@ -476,17 +476,17 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::List { children, .. } => {
+            Self::List { children, .. } => {
                 for c in children.iter() {
                     text.push_str(&c.selected_text());
                 }
             }
-            Node::ListItem { children, .. } => {
+            Self::ListItem { children, .. } => {
                 for c in children.iter() {
                     text.push_str(&c.selected_text());
                 }
             }
-            Node::Blockquote { children } => {
+            Self::Blockquote { children } => {
                 let mut block_text = String::new();
                 for c in children.iter() {
                     block_text.push_str(&c.selected_text());
@@ -497,7 +497,7 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::Table(table) => {
+            Self::Table(table) => {
                 let mut block_text = String::new();
                 for row in table.children.iter() {
                     let mut row_texts = vec![];
@@ -515,14 +515,14 @@ impl Node {
                     text.push('\n');
                 }
             }
-            Node::CodeBlock(code_block) => {
+            Self::CodeBlock(code_block) => {
                 let block_text = code_block.selected_text();
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
-            Node::Definition { .. } | Node::Break { .. } | Node::Divider | Node::Unknown => {}
+            Self::Definition { .. } | Self::Break { .. } | Self::Divider | Self::Unknown => {}
         }
 
         text
@@ -660,7 +660,7 @@ pub(crate) struct ListState {
 
 impl Node {
     fn render_list_item(
-        item: &Node,
+        item: &Self,
         ix: usize,
         state: ListState,
         node_cx: &NodeContext,
@@ -668,7 +668,7 @@ impl Node {
         cx: &mut App,
     ) -> impl IntoElement {
         match item {
-            Node::ListItem {
+            Self::ListItem {
                 children,
                 spread,
                 checked,
@@ -680,9 +680,9 @@ impl Node {
 
                     for (child_ix, child) in children.iter().enumerate() {
                         match child {
-                            Node::Paragraph(_) => {
+                            Self::Paragraph(_) => {
                                 let last_not_list = child_ix > 0
-                                    && !matches!(children[child_ix - 1], Node::List { .. });
+                                    && !matches!(children[child_ix - 1], Self::List { .. });
 
                                 let text = child.render(
                                     Some(ListState {
@@ -747,7 +747,7 @@ impl Node {
                                         .child(div().overflow_hidden().child(text)),
                                 );
                             }
-                            Node::List { .. } => {
+                            Self::List { .. } => {
                                 items.push(div().ml(rems(1.)).child(child.render(
                                     Some(ListState {
                                         depth: state.depth + 1,
@@ -772,7 +772,7 @@ impl Node {
     }
 
     fn render_table(
-        item: &Node,
+        item: &Self,
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
@@ -780,7 +780,7 @@ impl Node {
         const DEFAULT_LENGTH: usize = 5;
         const MAX_LENGTH: usize = 150;
         let col_lens = match item {
-            Node::Table(table) => {
+            Self::Table(table) => {
                 let mut col_lens = vec![];
                 for row in table.children.iter() {
                     for (ix, cell) in row.children.iter().enumerate() {
@@ -800,7 +800,7 @@ impl Node {
         };
 
         match item {
-            Node::Table(table) => div()
+            Self::Table(table) => div()
                 .id("table")
                 .mb(rems(1.))
                 .w_full()
@@ -878,7 +878,7 @@ impl Node {
         };
 
         match self {
-            Node::Root { children } => div()
+            Self::Root { children } => div()
                 .id("div")
                 .children({
                     let children_len = children.len();
@@ -888,12 +888,12 @@ impl Node {
                     })
                 })
                 .into_any_element(),
-            Node::Paragraph(paragraph) => div()
+            Self::Paragraph(paragraph) => div()
                 .id("p")
                 .mb(mb)
                 .child(paragraph.render(node_cx, window, cx))
                 .into_any_element(),
-            Node::Heading { level, children } => {
+            Self::Heading { level, children } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
                     2 => (rems(1.5), FontWeight::SEMIBOLD),
@@ -918,7 +918,7 @@ impl Node {
                     .child(children.render(node_cx, window, cx))
                     .into_any_element()
             }
-            Node::Blockquote { children } => div()
+            Self::Blockquote { children } => div()
                 .id("blockquote")
                 .w_full()
                 .mb(mb)
@@ -934,7 +934,7 @@ impl Node {
                     })
                 })
                 .into_any_element(),
-            Node::List { children, ordered } => v_flex()
+            Self::List { children, ordered } => v_flex()
                 .id(if *ordered { "ol" } else { "ul" })
                 .mb(mb)
                 .children({
@@ -964,16 +964,16 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => code_block.render(node_cx, window, cx),
-            Node::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
-            Node::Divider => div()
+            Self::CodeBlock(code_block) => code_block.render(node_cx, window, cx),
+            Self::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
+            Self::Divider => div()
                 .id("divider")
                 .bg(cx.theme().border)
                 .h(px(2.))
                 .mb(mb)
                 .into_any_element(),
-            Node::Break { .. } => div().id("break").into_any_element(),
-            Node::Unknown | Node::Definition { .. } => div().into_any_element(),
+            Self::Break { .. } => div().id("break").into_any_element(),
+            Self::Unknown | Self::Definition { .. } => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("unknown implementation: {:?}", self);
@@ -1036,17 +1036,17 @@ impl Node {
     #[allow(dead_code)]
     pub(crate) fn to_markdown(&self) -> String {
         match self {
-            Node::Root { children } => children
+            Self::Root { children } => children
                 .iter()
                 .map(|child| child.to_markdown())
                 .collect::<Vec<_>>()
                 .join("\n\n"),
-            Node::Paragraph(paragraph) => paragraph.to_markdown(),
-            Node::Heading { level, children } => {
+            Self::Paragraph(paragraph) => paragraph.to_markdown(),
+            Self::Heading { level, children } => {
                 let hashes = "#".repeat(*level as usize);
                 format!("{} {}", hashes, children.to_markdown())
             }
-            Node::Blockquote { children } => {
+            Self::Blockquote { children } => {
                 let content = children
                     .iter()
                     .map(|child| child.to_markdown())
@@ -1059,7 +1059,7 @@ impl Node {
                     .collect::<Vec<_>>()
                     .join("\n")
             }
-            Node::List { children, ordered } => children
+            Self::List { children, ordered } => children
                 .iter()
                 .enumerate()
                 .map(|(i, child)| {
@@ -1072,7 +1072,7 @@ impl Node {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            Node::ListItem {
+            Self::ListItem {
                 children, checked, ..
             } => {
                 let checkbox = if let Some(checked) = checked {
@@ -1094,14 +1094,14 @@ impl Node {
                         .join("\n")
                 )
             }
-            Node::CodeBlock(code_block) => {
+            Self::CodeBlock(code_block) => {
                 format!(
                     "```{}\n{}\n```",
                     code_block.lang.clone().unwrap_or_default(),
                     code_block.code()
                 )
             }
-            Node::Table(table) => {
+            Self::Table(table) => {
                 let header = table
                     .children
                     .first()
@@ -1141,15 +1141,15 @@ impl Node {
                     .join("\n");
                 format!("{}\n{}\n{}", header, alignments, rows)
             }
-            Node::Break { html } => {
+            Self::Break { html } => {
                 if *html {
                     "<br>".to_string()
                 } else {
                     "\n".to_string()
                 }
             }
-            Node::Divider => "---".to_string(),
-            Node::Definition {
+            Self::Divider => "---".to_string(),
+            Self::Definition {
                 identifier,
                 url,
                 title,
@@ -1160,7 +1160,7 @@ impl Node {
                     format!("[{}]: {}", identifier, url)
                 }
             }
-            Node::Unknown => "".to_string(),
+            Self::Unknown => "".to_string(),
         }
         .trim()
         .to_string()

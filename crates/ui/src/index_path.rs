@@ -17,7 +17,7 @@ pub struct IndexPath {
 
 impl From<IndexPath> for ElementId {
     fn from(path: IndexPath) -> Self {
-        ElementId::Name(format!("index-path({},{},{})", path.section, path.row, path.column).into())
+        Self::Name(format!("index-path({},{},{})", path.section, path.row, path.column).into())
     }
 }
 
@@ -37,7 +37,7 @@ impl IndexPath {
     /// The `section` is set to 0 by default.
     /// The `column` is set to 0 by default.
     pub fn new(row: usize) -> Self {
-        IndexPath {
+        Self {
             section: 0,
             row,
             ..Default::default()
@@ -63,7 +63,7 @@ impl IndexPath {
     }
 
     /// Check if the self is equal to the given index path (Same section and row).
-    pub fn eq_row(&self, index: IndexPath) -> bool {
+    pub fn eq_row(&self, index: Self) -> bool {
         self.section == index.section && self.row == index.row
     }
 }

@@ -213,7 +213,7 @@ impl sum_tree::Item for DiagnosticEntry {
 impl sum_tree::Summary for DiagnosticSummary {
     type Context<'a> = &'a ();
     fn zero(_: Self::Context<'_>) -> Self {
-        DiagnosticSummary {
+        Self {
             count: 0,
             start: usize::MIN,
             end: usize::MIN,

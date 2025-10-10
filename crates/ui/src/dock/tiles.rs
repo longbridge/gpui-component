@@ -986,7 +986,7 @@ impl Tiles {
     }
 
     /// Handle the mouse up event to finalize drag or resize operations
-    fn on_mouse_up(&mut self, _: &mut Window, cx: &mut Context<'_, Tiles>) {
+    fn on_mouse_up(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) {
         // Check if a drag or resize was active
         if self.dragging_index.is_some()
             || self.resizing_index.is_some()

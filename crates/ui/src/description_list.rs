@@ -35,40 +35,40 @@ pub enum DescriptionText {
 
 impl From<&str> for DescriptionText {
     fn from(text: &str) -> Self {
-        DescriptionText::String(SharedString::from(text.to_string()))
+        Self::String(SharedString::from(text.to_string()))
     }
 }
 
 impl From<Text> for DescriptionText {
     fn from(text: Text) -> Self {
-        DescriptionText::Text(text)
+        Self::Text(text)
     }
 }
 
 impl From<AnyElement> for DescriptionText {
     fn from(element: AnyElement) -> Self {
-        DescriptionText::AnyElement(element)
+        Self::AnyElement(element)
     }
 }
 
 impl From<SharedString> for DescriptionText {
     fn from(text: SharedString) -> Self {
-        DescriptionText::String(text)
+        Self::String(text)
     }
 }
 
 impl From<String> for DescriptionText {
     fn from(text: String) -> Self {
-        DescriptionText::String(SharedString::from(text))
+        Self::String(SharedString::from(text))
     }
 }
 
 impl RenderOnce for DescriptionText {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         match self {
-            DescriptionText::String(text) => div().child(text).into_any_element(),
-            DescriptionText::Text(text) => text.into_any_element(),
-            DescriptionText::AnyElement(element) => element,
+            Self::String(text) => div().child(text).into_any_element(),
+            Self::Text(text) => text.into_any_element(),
+            Self::AnyElement(element) => element,
         }
     }
 }
@@ -78,7 +78,7 @@ impl DescriptionItem {
     ///
     /// The value is an empty element.
     pub fn new(label: impl Into<DescriptionText>) -> Self {
-        DescriptionItem::Item {
+        Self::Item {
             label: label.into(),
             value: "".into(),
             span: 1,
@@ -88,7 +88,7 @@ impl DescriptionItem {
     /// Set the element value of the item.
     pub fn value(mut self, value: impl Into<DescriptionText>) -> Self {
         let new_value = value.into();
-        if let DescriptionItem::Item { value, .. } = &mut self {
+        if let Self::Item { value, .. } = &mut self {
             *value = new_value;
         }
         self
@@ -99,7 +99,7 @@ impl DescriptionItem {
     /// This method only works for [`DescriptionItem::Item`].
     pub fn span(mut self, span: usize) -> Self {
         let val = span;
-        if let DescriptionItem::Item { span, .. } = &mut self {
+        if let Self::Item { span, .. } = &mut self {
             *span = val;
         }
         self
@@ -107,14 +107,14 @@ impl DescriptionItem {
 
     fn _label(&self) -> Option<&DescriptionText> {
         match self {
-            DescriptionItem::Item { label, .. } => Some(label),
+            Self::Item { label, .. } => Some(label),
             _ => None,
         }
     }
 
     fn _span(&self) -> Option<usize> {
         match self {
-            DescriptionItem::Item { span, .. } => Some(*span),
+            Self::Item { span, .. } => Some(*span),
             _ => None,
         }
     }

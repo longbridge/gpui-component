@@ -175,7 +175,7 @@ impl PanelState {
         }
     }
 
-    pub fn add_child(&mut self, panel: PanelState) {
+    pub fn add_child(&mut self, panel: Self) {
         self.children.push(panel);
     }
 

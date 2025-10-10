@@ -22,41 +22,41 @@ impl RowEntry {
     #[inline]
     #[allow(unused)]
     pub(crate) fn is_section_header(&self) -> bool {
-        matches!(self, RowEntry::SectionHeader(_))
+        matches!(self, Self::SectionHeader(_))
     }
 
     pub(crate) fn eq_index_path(&self, path: &IndexPath) -> bool {
         match self {
-            RowEntry::Entry(index_path) => index_path == path,
-            RowEntry::SectionHeader(_) | RowEntry::SectionFooter(_) => false,
+            Self::Entry(index_path) => index_path == path,
+            Self::SectionHeader(_) | Self::SectionFooter(_) => false,
         }
     }
 
     #[allow(unused)]
     pub(crate) fn index(&self) -> IndexPath {
         match self {
-            RowEntry::Entry(index_path) => *index_path,
-            RowEntry::SectionHeader(ix) => IndexPath::default().section(*ix),
-            RowEntry::SectionFooter(ix) => IndexPath::default().section(*ix),
+            Self::Entry(index_path) => *index_path,
+            Self::SectionHeader(ix) => IndexPath::default().section(*ix),
+            Self::SectionFooter(ix) => IndexPath::default().section(*ix),
         }
     }
 
     #[inline]
     #[allow(unused)]
     pub(crate) fn is_section_footer(&self) -> bool {
-        matches!(self, RowEntry::SectionFooter(_))
+        matches!(self, Self::SectionFooter(_))
     }
 
     #[inline]
     pub(crate) fn is_entry(&self) -> bool {
-        matches!(self, RowEntry::Entry(_))
+        matches!(self, Self::Entry(_))
     }
 
     #[inline]
     #[allow(unused)]
     pub(crate) fn section_ix(&self) -> Option<usize> {
         match self {
-            RowEntry::SectionHeader(ix) | RowEntry::SectionFooter(ix) => Some(*ix),
+            Self::SectionHeader(ix) | Self::SectionFooter(ix) => Some(*ix),
             _ => None,
         }
     }
