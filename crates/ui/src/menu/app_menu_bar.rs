@@ -138,18 +138,27 @@ impl AppMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<PopupMenu> {
-        if let Some(popup_menu) = &self.popup_menu {
-            popup_menu.read(cx).focus_handle(cx).focus(window);
-            return popup_menu.clone();
+        let popup_menu = match self.popup_menu.as_ref() {
+            None => {
+                let items = self.menu.items.clone();
+                let popup_menu = PopupMenu::build(window, cx, |menu, window, cx| {
+                    menu.with_menu_items(items, window, cx)
+                });
+                popup_menu.read(cx).focus_handle(cx).focus(window);
+                self._subscription =
+                    Some(cx.subscribe_in(&popup_menu, window, Self::handle_dismiss));
+                self.popup_menu = Some(popup_menu.clone());
+
+                popup_menu
+            }
+            Some(menu) => menu.clone(),
+        };
+
+        let focus_handle = popup_menu.read(cx).focus_handle(cx);
+        if !focus_handle.contains_focused(window, cx) {
+            focus_handle.focus(window);
         }
 
-        let items = self.menu.items.clone();
-        let popup_menu = PopupMenu::build(window, cx, |menu, window, cx| {
-            menu.with_menu_items(items, window, cx)
-        });
-        popup_menu.read(cx).focus_handle(cx).focus(window);
-        self._subscription = Some(cx.subscribe_in(&popup_menu, window, Self::handle_dismiss));
-        self.popup_menu = Some(popup_menu.clone());
         popup_menu
     }
 
