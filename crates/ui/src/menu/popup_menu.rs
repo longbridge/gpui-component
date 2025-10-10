@@ -68,13 +68,15 @@ pub(crate) enum PopupMenuItem {
         disabled: bool,
         is_link: bool,
         action: Option<Box<dyn Action>>,
-        handler: Rc<dyn Fn(&mut Window, &mut App)>,
+        // For link item
+        handler: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
     },
     ElementItem {
         icon: Option<Icon>,
         disabled: bool,
+        action: Box<dyn Action>,
         render: Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
-        handler: Rc<dyn Fn(&mut Window, &mut App)>,
+        handler: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
     },
     Submenu {
         icon: Option<Icon>,
@@ -265,7 +267,7 @@ impl PopupMenu {
             disabled,
             action: None,
             is_link: true,
-            handler: Rc::new(move |_, cx| cx.open_url(&href)),
+            handler: Some(Rc::new(move |_, cx| cx.open_url(&href))),
         });
         self
     }
@@ -295,7 +297,7 @@ impl PopupMenu {
             disabled,
             action: None,
             is_link: true,
-            handler: Rc::new(move |_, cx| cx.open_url(&href)),
+            handler: Some(Rc::new(move |_, cx| cx.open_url(&href))),
         });
         self
     }
@@ -400,9 +402,10 @@ impl PopupMenu {
     {
         self.menu_items.push(PopupMenuItem::ElementItem {
             render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
-            handler: self.wrap_handler(action),
+            action,
             icon: Some(icon.into()),
             disabled,
+            handler: None,
         });
         self.has_icon = true;
         self
@@ -437,7 +440,8 @@ impl PopupMenu {
         if checked {
             self.menu_items.push(PopupMenuItem::ElementItem {
                 render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
-                handler: self.wrap_handler(action),
+                action,
+                handler: None,
                 icon: Some(IconName::Check.into()),
                 disabled,
             });
@@ -445,18 +449,13 @@ impl PopupMenu {
         } else {
             self.menu_items.push(PopupMenuItem::ElementItem {
                 render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
-                handler: self.wrap_handler(action),
+                action,
+                handler: None,
                 icon: None,
                 disabled,
             });
         }
         self
-    }
-
-    fn wrap_handler(&self, action: Box<dyn Action>) -> Rc<dyn Fn(&mut Window, &mut App)> {
-        Rc::new(move |window, cx| {
-            window.dispatch_action(action.boxed_clone(), cx);
-        })
     }
 
     /// Use small size, the menu item will have smaller height.
@@ -556,7 +555,7 @@ impl PopupMenu {
             disabled,
             action: Some(action.boxed_clone()),
             is_link: false,
-            handler: self.wrap_handler(action),
+            handler: None,
         });
         self
     }
@@ -641,18 +640,44 @@ impl PopupMenu {
             Some(index) => {
                 let item = self.menu_items.get(index);
                 match item {
-                    Some(PopupMenuItem::Item { handler, .. }) => {
-                        handler(window, cx);
+                    Some(PopupMenuItem::Item {
+                        handler, action, ..
+                    }) => {
+                        if let Some(handler) = handler {
+                            handler(window, cx);
+                        } else if let Some(action) = action.as_ref() {
+                            self.dispatch_confirm_action(action, window, cx);
+                        }
+
                         self.dismiss(&Cancel, window, cx)
                     }
-                    Some(PopupMenuItem::ElementItem { handler, .. }) => {
-                        handler(window, cx);
+                    Some(PopupMenuItem::ElementItem {
+                        handler, action, ..
+                    }) => {
+                        if let Some(handler) = handler {
+                            handler(window, cx);
+                        } else {
+                            self.dispatch_confirm_action(action, window, cx);
+                        }
                         self.dismiss(&Cancel, window, cx)
                     }
                     _ => {}
                 }
             }
             _ => {}
+        }
+    }
+
+    fn dispatch_confirm_action(
+        &self,
+        action: &Box<dyn Action>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(action_context) = self.action_context.as_ref() {
+            action_context.dispatch_action(action.as_ref(), window, cx);
+        } else {
+            window.dispatch_action(action.boxed_clone(), cx);
         }
     }
 
