@@ -358,6 +358,16 @@ impl Button {
         self.tab_stop = tab_stop;
         self
     }
+
+    #[inline]
+    fn clickable(&self) -> bool {
+        !(self.disabled || self.loading) && self.on_click.is_some()
+    }
+
+    #[inline]
+    fn hoverable(&self) -> bool {
+        !(self.disabled || self.loading) && self.on_hover.is_some()
+    }
 }
 
 impl Disableable for Button {
@@ -413,7 +423,8 @@ impl InteractiveElement for Button {
 impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let style: ButtonVariant = self.variant;
-        let clickable = !(self.disabled || self.loading) && self.on_click.is_some();
+        let clickable = self.clickable();
+        let hoverable = self.hoverable();
         let normal_style = style.normal(self.outline, cx);
         let icon_size = match self.size {
             Size::Size(v) => Size::Size(v * 0.75),
@@ -534,7 +545,7 @@ impl RenderOnce for Button {
                     (on_click)(event, window, cx);
                 })
             })
-            .when_some(self.on_hover.filter(|_| clickable), |this, on_hover| {
+            .when_some(self.on_hover.filter(|_| hoverable), |this, on_hover| {
                 this.on_hover(move |hovered, window, cx| {
                     (on_hover)(hovered, window, cx);
                 })
