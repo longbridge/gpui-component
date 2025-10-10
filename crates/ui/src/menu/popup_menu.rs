@@ -659,10 +659,12 @@ impl PopupMenu {
         cx: &mut Context<Self>,
     ) {
         if let Some(action_context) = self.action_context.as_ref() {
-            action_context.dispatch_action(action.as_ref(), window, cx);
-        } else {
-            window.dispatch_action(action.boxed_clone(), cx);
+            if !action_context.contains_focused(window, cx) {
+                action_context.focus(window);
+            }
         }
+
+        window.dispatch_action(action.boxed_clone(), cx);
     }
 
     fn set_selected_index(&mut self, ix: usize, cx: &mut Context<Self>) {
