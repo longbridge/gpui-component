@@ -161,6 +161,8 @@ impl AppMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self._subscription.take();
+        self.popup_menu.take();
         self.menu_bar.update(cx, |state, cx| {
             state.cancel(&Cancel, window, cx);
         });

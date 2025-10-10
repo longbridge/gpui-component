@@ -846,8 +846,13 @@ impl PopupMenu {
     ) -> Option<impl IntoElement> {
         let action = action?;
 
-        match self.action_context.as_ref() {
-            Some(handle) => Kbd::binding_for_action_in(action.as_ref(), handle, window),
+        match self
+            .action_context
+            .as_ref()
+            .and_then(|handle| Kbd::binding_for_action_in(action.as_ref(), handle, window))
+        {
+            Some(kbd) => Some(kbd),
+            // Fallback to App level key binding
             None => Kbd::binding_for_action(action.as_ref(), None, window),
         }
         .map(|this| {

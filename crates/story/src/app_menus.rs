@@ -38,6 +38,18 @@ pub fn init(title: impl Into<SharedString>, cx: &mut App) {
                 MenuItem::action("Copy", gpui_component::input::Copy),
                 MenuItem::action("Paste", gpui_component::input::Paste),
                 MenuItem::separator(),
+                MenuItem::action("Delete", gpui_component::input::Delete),
+                MenuItem::action(
+                    "Delete Previous Word",
+                    gpui_component::input::DeleteToPreviousWordStart,
+                ),
+                MenuItem::action(
+                    "Delete Next Word",
+                    gpui_component::input::DeleteToNextWordEnd,
+                ),
+                MenuItem::separator(),
+                MenuItem::action("Find", gpui_component::input::Search),
+                MenuItem::separator(),
                 MenuItem::action("Select All", gpui_component::input::SelectAll),
             ],
         },
