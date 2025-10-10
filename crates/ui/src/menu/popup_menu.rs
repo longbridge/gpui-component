@@ -130,6 +130,8 @@ pub struct PopupMenu {
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
     scroll_state: ScrollbarState,
+    // This will update on render
+    submenu_anchor: (Corner, Pixels),
 
     _subscriptions: Vec<Subscription>,
 }
@@ -152,6 +154,7 @@ impl PopupMenu {
             scroll_state: ScrollbarState::default(),
             external_link_icon: true,
             size: Size::default(),
+            submenu_anchor: (Corner::TopLeft, Pixels::ZERO),
             _subscriptions: vec![],
         }
     }
@@ -715,16 +718,15 @@ impl PopupMenu {
     }
 
     fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
-        let (anchor, _) = self.child_menu_anchor(window);
-        let handled = if matches!(anchor, Corner::TopLeft | Corner::BottomLeft) {
-            let handled = self._unselect_submenu(window, cx);
-            if self.parent_side(cx).is_left() {
-                self._focus_parent_menu(window, cx);
-            }
-            handled
+        let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
+            self._unselect_submenu(window, cx)
         } else {
             self._select_submenu(window, cx)
         };
+
+        if self.parent_side(cx).is_left() {
+            self._focus_parent_menu(window, cx);
+        }
 
         if handled {
             return;
@@ -737,16 +739,15 @@ impl PopupMenu {
     }
 
     fn select_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
-        let (anchor, _) = self.child_menu_anchor(window);
-        let handled = if matches!(anchor, Corner::TopLeft | Corner::BottomLeft) {
+        let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
             self._select_submenu(window, cx)
         } else {
-            let handled = self._unselect_submenu(window, cx);
-            if self.parent_side(cx).is_right() {
-                self._focus_parent_menu(window, cx);
-            }
-            handled
+            self._unselect_submenu(window, cx)
         };
+
+        if self.parent_side(cx).is_right() {
+            self._focus_parent_menu(window, cx);
+        }
 
         if handled {
             return;
@@ -808,11 +809,9 @@ impl PopupMenu {
             return Side::Left;
         };
 
-        let parent_x = parent.read(cx).bounds.origin.x;
-        if parent_x < self.bounds.origin.x {
-            Side::Left
-        } else {
-            Side::Right
+        match parent.read(cx).submenu_anchor.0 {
+            Corner::TopLeft | Corner::BottomLeft => Side::Left,
+            Corner::TopRight | Corner::BottomRight => Side::Right,
         }
     }
 
@@ -898,7 +897,7 @@ impl PopupMenu {
     }
 
     /// Calculate the anchor corner and left offset for child submenu
-    fn child_menu_anchor(&self, window: &Window) -> (Corner, Pixels) {
+    fn update_submenu_menu_anchor(&mut self, window: &Window) {
         let bounds = self.bounds;
         let max_width = self.max_width();
         let (anchor, left) = if max_width + bounds.origin.x > window.bounds().size.width {
@@ -908,11 +907,11 @@ impl PopupMenu {
         };
 
         let is_bottom_pos = bounds.origin.y + bounds.size.height > window.bounds().size.height;
-        if is_bottom_pos {
+        self.submenu_anchor = if is_bottom_pos {
             (anchor.other_side_corner_along(gpui::Axis::Vertical), left)
         } else {
             (anchor, left)
-        }
+        };
     }
 
     fn render_item(
@@ -1065,7 +1064,7 @@ impl PopupMenu {
                 )
                 .when(selected, |this| {
                     this.child({
-                        let (anchor, left) = self.child_menu_anchor(window);
+                        let (anchor, left) = self.submenu_anchor;
                         let is_bottom_pos =
                             matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
                         anchored()
@@ -1101,6 +1100,8 @@ struct ItemState {
 
 impl Render for PopupMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.update_submenu_menu_anchor(window);
+
         let view = cx.entity().clone();
         let items_count = self.menu_items.len();
 
