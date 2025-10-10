@@ -331,6 +331,7 @@ impl Render for CodeActionMenu {
 
         deferred(
             editor_popover("code-action-menu", cx)
+                .absolute()
                 .left(pos.x)
                 .top(pos.y)
                 .max_w(max_width)
