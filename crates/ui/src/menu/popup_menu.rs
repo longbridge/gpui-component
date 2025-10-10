@@ -85,6 +85,7 @@ pub(crate) enum PopupMenuItem {
 }
 
 impl PopupMenuItem {
+    #[inline]
     fn is_clickable(&self) -> bool {
         !matches!(self, PopupMenuItem::Separator)
             && matches!(
@@ -102,8 +103,14 @@ impl PopupMenuItem {
             )
     }
 
+    #[inline]
     fn is_separator(&self) -> bool {
         matches!(self, PopupMenuItem::Separator)
+    }
+
+    #[inline]
+    fn is_submenu(&self) -> bool {
+        matches!(self, PopupMenuItem::Submenu { .. })
     }
 }
 
@@ -162,6 +169,16 @@ impl PopupMenu {
             menu.action_context = window.focused(cx);
             f(menu, window, cx)
         })
+    }
+
+    /// Set the focus handle of Entity to handle actions.
+    ///
+    /// When the menu is dismissed or before an action is triggered, the focus will be returned to this handle.
+    ///
+    /// Then the action will be dispatched to this handle.
+    pub fn action_context(mut self, handle: FocusHandle) -> Self {
+        self.action_context = Some(handle);
+        self
     }
 
     /// Set min width of the popup menu, default is 120px
@@ -577,6 +594,17 @@ impl PopupMenu {
         self
     }
 
+    /// Check if the selected item is a submenu
+    fn is_selected_submenu(&self) -> bool {
+        if let Some(ix) = self.selected_index {
+            if let Some(item) = self.menu_items.get(ix) {
+                return item.is_submenu();
+            }
+        }
+
+        false
+    }
+
     pub(crate) fn active_submenu(&self) -> Option<Entity<PopupMenu>> {
         if let Some(ix) = self.selected_index {
             if let Some(item) = self.menu_items.get(ix) {
@@ -676,6 +704,12 @@ impl PopupMenu {
     }
 
     fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
+        // For parent AppMenuBar to handle.
+        if !self.is_selected_submenu() {
+            cx.propagate();
+            return;
+        }
+
         let (anchor, _) = self.child_menu_anchor(window);
         if matches!(anchor, Corner::TopLeft | Corner::BottomLeft) {
             self._unselect_submenu(window, cx);
@@ -689,6 +723,12 @@ impl PopupMenu {
     }
 
     fn select_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
+        // For parent AppMenuBar to handle.
+        if !self.is_selected_submenu() {
+            cx.propagate();
+            return;
+        }
+
         let (anchor, _) = self.child_menu_anchor(window);
         if matches!(anchor, Corner::TopLeft | Corner::BottomLeft) {
             self._select_submenu(window, cx);
@@ -774,12 +814,18 @@ impl PopupMenu {
     }
 
     fn render_key_binding(
+        &self,
         action: Option<Box<dyn Action>>,
         window: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
         let action = action?;
-        Kbd::binding_for_action(action.as_ref(), None, window).map(|this| {
+
+        match self.action_context.as_ref() {
+            Some(handle) => Kbd::binding_for_action_in(action.as_ref(), handle, window),
+            None => Kbd::binding_for_action(action.as_ref(), None, window),
+        }
+        .map(|this| {
             this.p_0()
                 .flex_nowrap()
                 .border_0()
@@ -926,7 +972,7 @@ impl PopupMenu {
             } => {
                 let show_link_icon = *is_link && self.external_link_icon;
                 let action = action.as_ref().map(|action| action.boxed_clone());
-                let key = Self::render_key_binding(action, window, cx);
+                let key = self.render_key_binding(action, window, cx);
 
                 this.when(!disabled, |this| {
                     this.on_click(
