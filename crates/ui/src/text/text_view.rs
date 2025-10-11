@@ -9,7 +9,7 @@ use gpui::{
     div, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId, Entity,
     EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement, IntoElement,
     KeyBinding, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, RenderOnce, SharedString, Size, Styled, Timer, Window,
+    Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer, Window,
 };
 use smol::stream::StreamExt;
 
@@ -22,7 +22,7 @@ use crate::{
         TextViewStyle,
     },
 };
-use crate::{v_flex, ActiveTheme};
+use crate::{v_flex, ActiveTheme, StyledExt};
 
 const CONTEXT: &'static str = "TextView";
 
@@ -43,23 +43,25 @@ struct TextViewElement {
 impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
-            div().map(|this| match &mut state.parsed_result {
-                Some(Ok(content)) => this.child(content.root_node.render(
-                    None,
-                    true,
-                    true,
-                    &content.node_cx,
-                    window,
-                    cx,
-                )),
-                Some(Err(err)) => this.child(
-                    v_flex()
-                        .gap_1()
-                        .child("Failed to parse content")
-                        .child(err.to_string()),
-                ),
-                None => this,
-            })
+            div()
+                .size_full()
+                .map(|this| match &mut state.parsed_result {
+                    Some(Ok(content)) => this.child(content.root_node.render(
+                        None,
+                        true,
+                        true,
+                        &content.node_cx,
+                        window,
+                        cx,
+                    )),
+                    Some(Err(err)) => this.child(
+                        v_flex()
+                            .gap_1()
+                            .child("Failed to parse content")
+                            .child(err.to_string()),
+                    ),
+                    None => this,
+                })
         })
     }
 }
@@ -85,6 +87,7 @@ pub struct TextView {
     id: ElementId,
     init_state: Option<InitState>,
     state: Entity<TextViewState>,
+    style: StyleRefinement,
     selectable: bool,
 }
 
@@ -346,6 +349,12 @@ impl RenderOnce for Text {
     }
 }
 
+impl Styled for TextView {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl TextView {
     fn create_init_state(
         type_: TextViewType,
@@ -394,6 +403,7 @@ impl TextView {
         Self {
             id,
             init_state: Some(init_state),
+            style: StyleRefinement::default(),
             state,
             selectable: false,
         }
@@ -421,6 +431,7 @@ impl TextView {
         Self {
             id,
             init_state: Some(init_state),
+            style: StyleRefinement::default(),
             state,
             selectable: false,
         }
@@ -563,12 +574,14 @@ impl Element for TextView {
         let mut el = div()
             .key_context(CONTEXT)
             .track_focus(focus_handle)
+            .size_full()
             .on_action({
                 let state = self.state.clone();
                 move |_: &input::Copy, _, cx| {
                     Self::on_action_copy(&state, cx);
                 }
             })
+            .refine_style(&self.style)
             .child(TextViewElement {
                 state: self.state.clone(),
             })

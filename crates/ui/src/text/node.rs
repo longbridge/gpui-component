@@ -111,7 +111,7 @@ impl PartialEq for ImageNode {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct InlineNode {
     /// The text content.
     pub(crate) text: SharedString,
@@ -154,7 +154,7 @@ impl InlineNode {
 ///
 /// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
@@ -205,7 +205,7 @@ impl Paragraph {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Table {
     pub children: Vec<TableRow>,
     pub column_aligns: Vec<ColumnumnAlign>,
@@ -236,12 +236,12 @@ impl From<mdast::AlignKind> for ColumnumnAlign {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct TableRow {
     pub children: Vec<TableCell>,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct TableCell {
     pub children: Paragraph,
     pub width: Option<DefiniteLength>,
@@ -391,7 +391,7 @@ impl NodeContext {
 }
 
 /// The AST Node of the rich text.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Node {
     Root {
         children: Vec<Node>,
@@ -878,16 +878,35 @@ impl Node {
         };
 
         match self {
-            Node::Root { children } => div()
-                .id("div")
-                .children({
-                    let children_len = children.len();
-                    children.into_iter().enumerate().map(move |(index, c)| {
-                        let is_last_child = is_root && index == children_len - 1;
-                        c.render(None, false, is_last_child, node_cx, window, cx)
-                    })
-                })
-                .into_any_element(),
+            Node::Root { children } => {
+                if !is_root {
+                    return div()
+                        .id("root")
+                        .size_full()
+                        .overflow_y_scroll()
+                        .children(
+                            children.into_iter().map(move |node| {
+                                node.render(None, false, false, node_cx, window, cx)
+                            }),
+                        )
+                        .into_any_element();
+                }
+
+                let children_len = children.len();
+                let children = children.clone();
+                let node_cx = node_cx.clone();
+                gpui::list(
+                    gpui::ListState::new(children_len, gpui::ListAlignment::Top, px(100.)),
+                    move |ix, window, cx| {
+                        let node = &children[ix];
+                        let is_last = is_root && ix + 1 == children_len;
+                        node.render(None, false, is_last, &node_cx, window, cx)
+                    },
+                )
+                .size_full()
+                .debug_red()
+                .into_any_element()
+            }
             Node::Paragraph(paragraph) => div()
                 .id("p")
                 .mb(mb)
