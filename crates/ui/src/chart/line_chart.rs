@@ -64,6 +64,11 @@ where
         self
     }
 
+    pub fn step_after(mut self) -> Self {
+        self.stroke_style = StrokeStyle::StepAfter;
+        self
+    }
+
     pub fn dot(mut self) -> Self {
         self.dot = true;
         self

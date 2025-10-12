@@ -182,6 +182,13 @@ impl<T> Line<T> {
                     builder.line_to(*p);
                 }
             }
+            StrokeStyle::StepAfter => {
+                builder.move_to(dots[0]);
+                for d in dots.windows(2) {
+                    builder.line_to(Point::new(d[1].x, d[0].y));
+                    builder.line_to(Point::new(d[1].x, d[1].y));
+                }
+            }
         }
 
         (builder.build().ok(), paint_dots)

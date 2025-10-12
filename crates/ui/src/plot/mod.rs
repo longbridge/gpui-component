@@ -26,6 +26,7 @@ pub enum StrokeStyle {
     #[default]
     Natural,
     Linear,
+    StepAfter,
 }
 
 pub fn origin_point<T>(x: T, y: T, origin: Point<T>) -> Point<T>

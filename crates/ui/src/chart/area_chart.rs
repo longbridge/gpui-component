@@ -74,6 +74,11 @@ where
         self
     }
 
+    pub fn step_after(mut self) -> Self {
+        self.stroke_style = StrokeStyle::StepAfter;
+        self
+    }
+
     pub fn tick_margin(mut self, tick_margin: usize) -> Self {
         self.tick_margin = tick_margin;
         self
