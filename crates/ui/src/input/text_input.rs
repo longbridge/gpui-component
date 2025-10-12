@@ -10,7 +10,7 @@ use crate::indicator::Indicator;
 use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
-use crate::{h_flex, StyledExt};
+use crate::{h_flex, Selectable, StyledExt};
 use crate::{v_flex, ActiveTheme};
 use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
@@ -32,12 +32,24 @@ pub struct TextInput {
     bordered: bool,
     focus_bordered: bool,
     tab_index: isize,
+    selected: bool,
 }
 
 impl Sizable for TextInput {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
+    }
+}
+
+impl Selectable for TextInput {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
     }
 }
 
@@ -58,6 +70,7 @@ impl TextInput {
             bordered: true,
             focus_bordered: true,
             tab_index: 0,
+            selected: false,
         }
     }
 
