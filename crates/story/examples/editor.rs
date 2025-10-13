@@ -24,7 +24,7 @@ use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
 };
-use story::Assets;
+use story::{Assets, Open};
 
 fn init() {
     LanguageRegistry::singleton().register(
@@ -865,6 +865,47 @@ impl Example {
             lsp_store.update_diagnostics(diagnostics.clone());
         });
     }
+
+    fn on_action_open(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
+        let path = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: true,
+            multiple: false,
+            prompt: Some("Select a source file".into()),
+        });
+
+        let view = cx.entity();
+        let editor = self.editor.clone();
+        cx.spawn_in(window, async move |_, window| {
+            let path = path.await.ok()?.ok()??.iter().next()?.clone();
+
+            let language = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or_default();
+            let language = Language::from_str(&language);
+            let lang = Lang::BuiltIn(language.clone());
+            let content = std::fs::read_to_string(&path).ok()?;
+
+            dbg!(language);
+
+            window
+                .update(|window, cx| {
+                    _ = editor.update(cx, |this, cx| {
+                        this.set_highlighter(language.name(), cx);
+                        this.set_value(content, window, cx);
+                    });
+                    view.update(cx, |this, cx| {
+                        this.language = lang;
+                        cx.notify();
+                    })
+                })
+                .ok();
+
+            Some(())
+        })
+        .detach();
+    }
 }
 
 impl Render for Example {
@@ -883,78 +924,88 @@ impl Render for Example {
             });
         }
 
-        v_flex().size_full().child(
-            v_flex()
-                .id("source")
-                .w_full()
-                .flex_1()
-                .child(
-                    TextInput::new(&self.editor)
-                        .bordered(false)
-                        .p_0()
-                        .h_full()
-                        .font_family("Monaco")
-                        .text_size(px(12.))
-                        .focus_bordered(false),
-                )
-                .child(
-                    h_flex()
-                        .justify_between()
-                        .text_sm()
-                        .bg(cx.theme().background)
-                        .py_1p5()
-                        .px_4()
-                        .border_t_1()
-                        .border_color(cx.theme().border)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(
-                            h_flex()
-                                .gap_3()
-                                .child(
-                                    Dropdown::new(&self.language_state)
-                                        .menu_width(px(160.))
-                                        .xsmall(),
-                                )
-                                .child(
-                                    Button::new("line-number")
-                                        .ghost()
-                                        .when(self.line_number, |this| this.icon(IconName::Check))
-                                        .label("Line Number")
-                                        .xsmall()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.line_number = !this.line_number;
-                                            this.editor.update(cx, |state, cx| {
-                                                state.set_line_number(this.line_number, window, cx);
-                                            });
-                                            cx.notify();
-                                        })),
-                                )
-                                .child({
-                                    Button::new("soft-wrap")
-                                        .ghost()
-                                        .xsmall()
-                                        .label("Soft Wrap")
-                                        .selected(self.soft_wrap)
-                                        .on_click(cx.listener(Self::toggle_soft_wrap))
-                                }),
-                        )
-                        .child({
-                            let position = self.editor.read(cx).cursor_position();
-                            let cursor = self.editor.read(cx).cursor();
+        v_flex()
+            .id("app")
+            .size_full()
+            .on_action(cx.listener(Self::on_action_open))
+            .child(
+                v_flex()
+                    .id("source")
+                    .w_full()
+                    .flex_1()
+                    .child(
+                        TextInput::new(&self.editor)
+                            .bordered(false)
+                            .p_0()
+                            .h_full()
+                            .font_family("Monaco")
+                            .text_size(px(12.))
+                            .focus_bordered(false),
+                    )
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .text_sm()
+                            .bg(cx.theme().background)
+                            .py_1p5()
+                            .px_4()
+                            .border_t_1()
+                            .border_color(cx.theme().border)
+                            .text_color(cx.theme().muted_foreground)
+                            .child(
+                                h_flex()
+                                    .gap_3()
+                                    .child(
+                                        Dropdown::new(&self.language_state)
+                                            .menu_width(px(160.))
+                                            .xsmall(),
+                                    )
+                                    .child(
+                                        Button::new("line-number")
+                                            .ghost()
+                                            .when(self.line_number, |this| {
+                                                this.icon(IconName::Check)
+                                            })
+                                            .label("Line Number")
+                                            .xsmall()
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.line_number = !this.line_number;
+                                                this.editor.update(cx, |state, cx| {
+                                                    state.set_line_number(
+                                                        this.line_number,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                });
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child({
+                                        Button::new("soft-wrap")
+                                            .ghost()
+                                            .xsmall()
+                                            .label("Soft Wrap")
+                                            .selected(self.soft_wrap)
+                                            .on_click(cx.listener(Self::toggle_soft_wrap))
+                                    }),
+                            )
+                            .child({
+                                let position = self.editor.read(cx).cursor_position();
+                                let cursor = self.editor.read(cx).cursor();
 
-                            Button::new("line-column")
-                                .ghost()
-                                .xsmall()
-                                .label(format!(
-                                    "{}:{} ({} byte)",
-                                    position.line + 1,
-                                    position.character + 1,
-                                    cursor
-                                ))
-                                .on_click(cx.listener(Self::go_to_line))
-                        }),
-                ),
-        )
+                                Button::new("line-column")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(format!(
+                                        "{}:{} ({} byte)",
+                                        position.line + 1,
+                                        position.character + 1,
+                                        cursor
+                                    ))
+                                    .on_click(cx.listener(Self::go_to_line))
+                            }),
+                    ),
+            )
     }
 }
 
