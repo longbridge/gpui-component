@@ -1100,7 +1100,6 @@ impl Node {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        let is_root = false;
         let mb = if options.in_list || options.is_last {
             rems(0.)
         } else {
@@ -1160,7 +1159,7 @@ impl Node {
                         .children({
                             let children_len = children.len();
                             children.into_iter().enumerate().map(move |(index, c)| {
-                                let is_last = is_root && index == children_len - 1;
+                                let is_last = index == children_len - 1;
                                 c.render_block(options.is_last(is_last), node_cx, window, cx)
                             })
                         }),
