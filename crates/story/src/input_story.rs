@@ -1,6 +1,6 @@
 use gpui::{
-    div, App, AppContext as _, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window,
+    App, AppContext as _, Context, Entity, InteractiveElement, IntoElement, ParentElement as _,
+    Render, Styled, Subscription, Window, div,
 };
 
 use crate::section;
@@ -121,13 +121,20 @@ impl InputStory {
         &mut self,
         state: &Entity<InputState>,
         event: &InputEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             InputEvent::Change => {
-                let text = state.read(_cx).value();
-                println!("Change: {}", text)
+                let text = state.read(cx).value();
+                if state == &self.input2 {
+                    println!("Set disabled value: {}", text);
+                    self.disabled_input.update(cx, |this, cx| {
+                        this.set_value(text, window, cx);
+                    })
+                } else {
+                    println!("Change: {}", text)
+                }
             }
             InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
             InputEvent::Focus => println!("Focus"),
