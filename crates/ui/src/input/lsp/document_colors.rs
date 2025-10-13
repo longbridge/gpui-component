@@ -46,6 +46,7 @@ impl Lsp {
             })
             .collect()
     }
+
     pub(crate) fn update_document_colors(
         &mut self,
         text: &Rope,

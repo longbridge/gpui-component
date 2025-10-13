@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use gpui::{App, Context, Task, Window};
 use ropey::Rope;
@@ -47,6 +49,9 @@ impl InputState {
         let mut symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
         let editor = cx.entity();
         self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(150))
+                .await;
             let result = task.await?;
 
             _ = editor.update(cx, |editor, cx| match result {
