@@ -904,7 +904,6 @@ impl Node {
                     },
                 )
                 .size_full()
-                .debug_red()
                 .into_any_element()
             }
             Node::Paragraph(paragraph) => div()
