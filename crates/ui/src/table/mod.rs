@@ -5,7 +5,7 @@ use crate::{
     context_menu::ContextMenuExt,
     h_flex,
     popup_menu::PopupMenu,
-    scroll::{self, ScrollableMask, Scrollbar, ScrollbarState},
+    scroll::{ScrollableMask, Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
     VirtualListScrollHandle,
 };
@@ -688,7 +688,7 @@ where
                 .top(self.size.table_row_height())
                 .right_0()
                 .bottom_0()
-                .w(scroll::WIDTH)
+                .w(Scrollbar::width())
                 .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
                     cx.notify();
                 }))
@@ -709,7 +709,7 @@ where
             .left(self.fixed_head_cols_bounds.size.width)
             .right_0()
             .bottom_0()
-            .h(scroll::WIDTH)
+            .h(Scrollbar::width())
             .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
                 cx.notify();
             }))

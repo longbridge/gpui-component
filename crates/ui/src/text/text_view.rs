@@ -596,8 +596,8 @@ impl Element for TextView {
             .child(
                 div()
                     .absolute()
+                    .w(Scrollbar::width())
                     .top_0()
-                    .left_0()
                     .right_0()
                     .bottom_0()
                     .child(Scrollbar::vertical(scrollbar_state, list_state)),

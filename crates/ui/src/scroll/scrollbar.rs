@@ -36,7 +36,7 @@ impl ScrollbarShow {
 }
 
 /// The width of the scrollbar (THUMB_ACTIVE_INSET * 2 + THUMB_ACTIVE_WIDTH)
-pub(crate) const WIDTH: Pixels = px(2. * 2. + 8.);
+const WIDTH: Pixels = px(2. * 2. + 8.);
 const MIN_THUMB_SIZE: f32 = 48.;
 
 const THUMB_WIDTH: Pixels = px(6.);
@@ -312,6 +312,11 @@ impl Scrollbar {
             max_fps: 120,
             scroll_size: None,
         }
+    }
+
+    // Get the width of the scrollbar.
+    pub const fn width() -> Pixels {
+        WIDTH
     }
 
     /// Create with vertical and horizontal scrollbar.
