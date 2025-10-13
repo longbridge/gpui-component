@@ -24,6 +24,10 @@ impl Render for Example {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "true");
+    }
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
