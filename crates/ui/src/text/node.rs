@@ -1087,7 +1087,6 @@ impl Node {
             _ => return div().into_any_element(),
         };
 
-        let children_len = children.len();
         let children = children.clone();
         let node_cx = node_cx.clone();
 
@@ -1096,7 +1095,7 @@ impl Node {
         }
 
         gpui::list(list_state, move |ix, window, cx| {
-            let is_last = ix + 1 == children_len;
+            let is_last = ix + 1 == children.len();
             children[ix]
                 .render_block(options.is_last(is_last), &node_cx, window, cx)
                 .into_any_element()
