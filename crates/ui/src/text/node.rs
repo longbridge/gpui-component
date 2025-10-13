@@ -7,7 +7,7 @@ use std::{
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
     Div, Element, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    IntoElement, Length, ObjectFit, ParentElement, SharedString, SharedUri,
+    IntoElement, Length, ListState, ObjectFit, ParentElement, SharedString, SharedUri,
     StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
@@ -530,14 +530,6 @@ impl Node {
 
         text
     }
-
-    /// Return number of direct children, for non-root node, always return 1.
-    pub(super) fn len(&self) -> usize {
-        match self {
-            Node::Root { children } => children.len(),
-            _ => 1,
-        }
-    }
 }
 
 impl Paragraph {
@@ -663,7 +655,7 @@ impl Paragraph {
 }
 
 #[derive(Default, Clone, Copy)]
-pub(crate) struct NodeRenderOptions {
+struct NodeRenderOptions {
     in_list: bool,
     todo: bool,
     ordered: bool,
@@ -672,7 +664,7 @@ pub(crate) struct NodeRenderOptions {
 }
 
 impl NodeRenderOptions {
-    pub(super) fn is_last(mut self, is_last: bool) -> Self {
+    fn is_last(mut self, is_last: bool) -> Self {
         self.is_last = is_last;
         self
     }
@@ -886,14 +878,13 @@ impl Node {
                                 let last_not_list = child_ix > 0
                                     && !matches!(children[child_ix - 1], Node::List { .. });
 
-                                let text = child.render(
+                                let text = child.render_block(
                                     NodeRenderOptions {
                                         depth: options.depth + 1,
                                         todo: checked.is_some(),
                                         is_last: true,
                                         ..options
                                     },
-                                    None,
                                     node_cx,
                                     window,
                                     cx,
@@ -950,14 +941,13 @@ impl Node {
                                 );
                             }
                             Node::List { .. } => {
-                                items.push(div().ml(rems(1.)).child(child.render(
+                                items.push(div().ml(rems(1.)).child(child.render_block(
                                     NodeRenderOptions {
                                         depth: options.depth + 1,
                                         todo: checked.is_some(),
                                         is_last: true,
                                         ..options
                                     },
-                                    None,
                                     node_cx,
                                     window,
                                     cx,
@@ -1074,15 +1064,43 @@ impl Node {
         }
     }
 
-    pub(crate) fn render(
+    pub fn render_root(&self, list_state: ListState, node_cx: &NodeContext) -> impl IntoElement {
+        let children = match self {
+            Node::Root { children } => children,
+            _ => return div().into_any_element(),
+        };
+
+        let options = NodeRenderOptions {
+            is_last: true,
+            ..Default::default()
+        };
+
+        let children_len = children.len();
+        let children = children.clone();
+        let node_cx = node_cx.clone();
+
+        if list_state.item_count() != children.len() {
+            list_state.reset(children.len());
+        }
+
+        gpui::list(list_state, move |ix, window, cx| {
+            let is_last = ix + 1 == children_len;
+            children[ix]
+                .render_block(options.is_last(is_last), &node_cx, window, cx)
+                .into_any_element()
+        })
+        .size_full()
+        .into_any()
+    }
+
+    fn render_block(
         &self,
         options: NodeRenderOptions,
-        list_state: Option<gpui::ListState>,
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        let is_root = list_state.is_some();
+        let is_root = false;
         let mb = if options.in_list || options.is_last {
             rems(0.)
         } else {
@@ -1090,30 +1108,14 @@ impl Node {
         };
 
         match self {
-            Node::Root { children } => {
-                if !is_root {
-                    return div()
-                        .id("div")
-                        .children(
-                            children
-                                .into_iter()
-                                .map(move |node| node.render(options, None, node_cx, window, cx)),
-                        )
-                        .into_any_element();
-                }
-
-                let children_len = children.len();
-                let children = children.clone();
-                let node_cx = node_cx.clone();
-                let state = list_state.expect("root_list_state is required for root node");
-
-                gpui::list(state, move |ix, window, cx| {
-                    let is_last = is_root && ix + 1 == children_len;
-                    children[ix].render(options.is_last(is_last), None, &node_cx, window, cx)
-                })
-                .size_full()
-                .into_any()
-            }
+            Node::Root { children } => div()
+                .id("div")
+                .children(
+                    children
+                        .into_iter()
+                        .map(move |node| node.render_block(options, node_cx, window, cx)),
+                )
+                .into_any_element(),
             Node::Paragraph(paragraph) => div()
                 .id("p")
                 .pb(mb)
@@ -1159,7 +1161,7 @@ impl Node {
                             let children_len = children.len();
                             children.into_iter().enumerate().map(move |(index, c)| {
                                 let is_last = is_root && index == children_len - 1;
-                                c.render(options.is_last(is_last), None, node_cx, window, cx)
+                                c.render_block(options.is_last(is_last), node_cx, window, cx)
                             })
                         }),
                 )

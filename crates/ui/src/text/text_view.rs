@@ -16,7 +16,6 @@ use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
 use crate::scroll::{Scrollbar, ScrollbarState};
-use crate::text::node::NodeRenderOptions;
 use crate::{
     global_state::GlobalState,
     input::{self},
@@ -45,18 +44,16 @@ struct TextViewElement {
 }
 
 impl RenderOnce for TextViewElement {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.state.update(cx, |state, cx| {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.state.update(cx, |state, _| {
             v_flex()
                 .size_full()
                 .map(|this| match &mut state.parsed_result {
-                    Some(Ok(content)) => this.child(content.root_node.render(
-                        NodeRenderOptions::default().is_last(true),
-                        Some(self.list_state.clone()),
-                        &content.node_cx,
-                        window,
-                        cx,
-                    )),
+                    Some(Ok(content)) => this.child(
+                        content
+                            .root_node
+                            .render_root(self.list_state.clone(), &content.node_cx),
+                    ),
                     Some(Err(err)) => this.child(
                         v_flex()
                             .gap_1()
@@ -570,20 +567,8 @@ impl Element for TextView {
             self.init_state = Some(InitState::Initialized { tx });
         }
 
-        let blocks_count = self
-            .state
-            .read(cx)
-            .parsed_result
-            .as_ref()
-            .and_then(|res| res.as_ref().ok())
-            .map(|content| content.root_node.len())
-            .unwrap_or(0);
-
         let scrollbar_state = &self.state.read(cx).scrollbar_state;
         let list_state = &self.state.read(cx).list_state;
-        if list_state.item_count() != blocks_count {
-            list_state.reset(blocks_count);
-        }
 
         let focus_handle = self
             .state
