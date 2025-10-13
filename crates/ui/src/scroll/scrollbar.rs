@@ -9,8 +9,9 @@ use crate::{ActiveTheme, AxisExt};
 use gpui::{
     fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
     CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
-    IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
-    Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
+    IntoElement, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad,
+    Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer,
+    UniformListScrollHandle, Window,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ impl ScrollbarShow {
 }
 
 /// The width of the scrollbar (THUMB_ACTIVE_INSET * 2 + THUMB_ACTIVE_WIDTH)
-pub(crate) const WIDTH: Pixels = px(2. * 2. + 8.);
+const WIDTH: Pixels = px(2. * 2. + 8.);
 const MIN_THUMB_SIZE: f32 = 48.;
 
 const THUMB_WIDTH: Pixels = px(6.);
@@ -52,11 +53,10 @@ const FADE_OUT_DELAY: f32 = 2.0;
 pub trait ScrollHandleOffsetable {
     fn offset(&self) -> Point<Pixels>;
     fn set_offset(&self, offset: Point<Pixels>);
-    fn is_uniform_list(&self) -> bool {
-        false
-    }
     /// The full size of the content, including padding.
     fn content_size(&self) -> Size<Pixels>;
+    fn start_drag(&self) {}
+    fn end_drag(&self) {}
 }
 
 impl ScrollHandleOffsetable for ScrollHandle {
@@ -82,13 +82,31 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
         self.0.borrow_mut().base_handle.set_offset(offset)
     }
 
-    fn is_uniform_list(&self) -> bool {
-        true
-    }
-
     fn content_size(&self) -> Size<Pixels> {
         let base_handle = &self.0.borrow().base_handle;
         base_handle.max_offset() + base_handle.bounds().size
+    }
+}
+
+impl ScrollHandleOffsetable for ListState {
+    fn offset(&self) -> Point<Pixels> {
+        self.scroll_px_offset_for_scrollbar()
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        self.set_offset_from_scrollbar(offset);
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.viewport_bounds().size + self.max_offset_for_scrollbar()
+    }
+
+    fn start_drag(&self) {
+        self.scrollbar_drag_started();
+    }
+
+    fn end_drag(&self) {
+        self.scrollbar_drag_ended();
     }
 }
 
@@ -294,6 +312,11 @@ impl Scrollbar {
             max_fps: 120,
             scroll_size: None,
         }
+    }
+
+    // Get the width of the scrollbar.
+    pub(crate) const fn width() -> Pixels {
+        WIDTH
     }
 
     /// Create with vertical and horizontal scrollbar.
@@ -778,6 +801,7 @@ impl Element for Scrollbar {
                                         // click on the thumb bar, set the drag position
                                         let pos = event.position - thumb_bounds.origin;
 
+                                        scroll_handle.start_drag();
                                         state.set(state.get().with_drag_pos(axis, pos));
 
                                         cx.notify(view_id);
@@ -854,6 +878,9 @@ impl Element for Scrollbar {
 
                             // Move thumb position on dragging
                             if state.get().dragged_axis == Some(axis) && event.dragging() {
+                                // Stop the event propagation to avoid selecting text or other side effects.
+                                cx.stop_propagation();
+
                                 // drag_pos is the position of the mouse down event
                                 // We need to keep the thumb bar still at the origin down position
                                 let drag_pos = state.get().drag_pos;
@@ -900,10 +927,12 @@ impl Element for Scrollbar {
                     });
 
                     window.on_mouse_event({
+                        let scroll_handle = self.scroll_handle.clone();
                         let state = self.state.clone();
 
                         move |_event: &MouseUpEvent, phase, _, cx| {
                             if phase.bubble() {
+                                scroll_handle.end_drag();
                                 state.set(state.get().with_unset_drag_pos());
                                 cx.notify(view_id);
                             }

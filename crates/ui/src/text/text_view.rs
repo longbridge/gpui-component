@@ -6,14 +6,16 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId, Entity,
-    EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement, IntoElement,
-    KeyBinding, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, RenderOnce, SharedString, Size, Styled, Timer, Window,
+    div, px, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId,
+    Entity, EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement,
+    IntoElement, KeyBinding, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer,
+    Window,
 };
 use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
+use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::{
     global_state::GlobalState,
     input::{self},
@@ -22,7 +24,7 @@ use crate::{
         TextViewStyle,
     },
 };
-use crate::{v_flex, ActiveTheme};
+use crate::{v_flex, ActiveTheme, StyledExt};
 
 const CONTEXT: &'static str = "TextView";
 
@@ -37,29 +39,30 @@ pub(crate) fn init(cx: &mut App) {
 
 #[derive(IntoElement, Clone)]
 struct TextViewElement {
+    list_state: Option<ListState>,
     state: Entity<TextViewState>,
 }
 
 impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
-            div().map(|this| match &mut state.parsed_result {
-                Some(Ok(content)) => this.child(content.root_node.render(
-                    None,
-                    true,
-                    true,
-                    &content.node_cx,
-                    window,
-                    cx,
-                )),
-                Some(Err(err)) => this.child(
-                    v_flex()
-                        .gap_1()
-                        .child("Failed to parse content")
-                        .child(err.to_string()),
-                ),
-                None => this,
-            })
+            v_flex()
+                .size_full()
+                .map(|this| match &mut state.parsed_result {
+                    Some(Ok(content)) => this.child(content.root_node.render_root(
+                        self.list_state.clone(),
+                        &content.node_cx,
+                        window,
+                        cx,
+                    )),
+                    Some(Err(err)) => this.child(
+                        v_flex()
+                            .gap_1()
+                            .child("Failed to parse content")
+                            .child(err.to_string()),
+                    ),
+                    None => this,
+                })
         })
     }
 }
@@ -85,7 +88,9 @@ pub struct TextView {
     id: ElementId,
     init_state: Option<InitState>,
     state: Entity<TextViewState>,
+    style: StyleRefinement,
     selectable: bool,
+    scrollable: bool,
 }
 
 #[derive(PartialEq)]
@@ -205,7 +210,6 @@ pub(crate) struct TextViewState {
     tx: Option<smol::channel::Sender<Update>>,
     parsed_result: Option<Result<ParsedContent, SharedString>>,
     focus_handle: Option<FocusHandle>,
-
     /// The bounds of the text view
     bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
@@ -213,6 +217,8 @@ pub(crate) struct TextViewState {
     /// Is current in selection.
     is_selecting: bool,
     is_selectable: bool,
+    scrollbar_state: ScrollbarState,
+    list_state: ListState,
 }
 
 impl TextViewState {
@@ -227,6 +233,8 @@ impl TextViewState {
             selection_positions: (None, None),
             is_selecting: false,
             is_selectable: false,
+            scrollbar_state: ScrollbarState::default(),
+            list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)),
         }
     }
 }
@@ -346,6 +354,12 @@ impl RenderOnce for Text {
     }
 }
 
+impl Styled for TextView {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl TextView {
     fn create_init_state(
         type_: TextViewType,
@@ -394,8 +408,10 @@ impl TextView {
         Self {
             id,
             init_state: Some(init_state),
+            style: StyleRefinement::default(),
             state,
             selectable: false,
+            scrollable: false,
         }
     }
 
@@ -421,8 +437,10 @@ impl TextView {
         Self {
             id,
             init_state: Some(init_state),
+            style: StyleRefinement::default(),
             state,
             selectable: false,
+            scrollable: false,
         }
     }
 
@@ -456,6 +474,23 @@ impl TextView {
     /// Set the text view to be selectable, default is false.
     pub fn selectable(mut self) -> Self {
         self.selectable = true;
+        self
+    }
+
+    /// Set the text view to be scrollable, default is false.
+    ///
+    /// ## If true for `scrollable`
+    ///
+    /// The `scrollable` mode used for large content,
+    /// will show scrollbar, but requires the parent to have a fixed height,
+    /// and use [`gpui::list`] to render the content in a virtualized way.
+    ///
+    /// ## If false to fit content
+    ///
+    /// The TextView will expand to fit all content, no scrollbar.
+    /// This mode is suitable for small content, such as a few lines of text, a label, etc.
+    pub fn scrollable(mut self) -> Self {
+        self.scrollable = true;
         self
     }
 
@@ -553,6 +588,9 @@ impl Element for TextView {
             self.init_state = Some(InitState::Initialized { tx });
         }
 
+        let scrollbar_state = &self.state.read(cx).scrollbar_state;
+        let list_state = &self.state.read(cx).list_state;
+
         let focus_handle = self
             .state
             .read(cx)
@@ -563,6 +601,8 @@ impl Element for TextView {
         let mut el = div()
             .key_context(CONTEXT)
             .track_focus(focus_handle)
+            .size_full()
+            .relative()
             .on_action({
                 let state = self.state.clone();
                 move |_: &input::Copy, _, cx| {
@@ -570,7 +610,24 @@ impl Element for TextView {
                 }
             })
             .child(TextViewElement {
+                list_state: if self.scrollable {
+                    Some(list_state.clone())
+                } else {
+                    None
+                },
                 state: self.state.clone(),
+            })
+            .refine_style(&self.style)
+            .when(self.scrollable, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .w(Scrollbar::width())
+                        .top_0()
+                        .right_0()
+                        .bottom_0()
+                        .child(Scrollbar::vertical(scrollbar_state, list_state)),
+                )
             })
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
@@ -636,7 +693,11 @@ impl Element for TextView {
                 // move to update end position.
                 window.on_mouse_event({
                     let state = self.state.clone();
-                    move |event: &MouseMoveEvent, _, _, cx| {
+                    move |event: &MouseMoveEvent, phase, _, cx| {
+                        if !phase.bubble() {
+                            return;
+                        }
+
                         state.update(cx, |state, _| {
                             state.update_selection(event.position);
                         });
@@ -647,7 +708,11 @@ impl Element for TextView {
                 // up to end selection
                 window.on_mouse_event({
                     let state = self.state.clone();
-                    move |_: &MouseUpEvent, _, _, cx| {
+                    move |_: &MouseUpEvent, phase, _, cx| {
+                        if !phase.bubble() {
+                            return;
+                        }
+
                         state.update(cx, |state, _| {
                             state.end_selection();
                         });

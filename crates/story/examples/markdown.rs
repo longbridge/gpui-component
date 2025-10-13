@@ -98,20 +98,16 @@ impl Render for Example {
                     )
                     .child(
                         resizable_panel().child(
-                            div()
-                                .id("preview")
-                                .size_full()
-                                .p_5()
-                                .overflow_y_scroll()
-                                .child(
-                                    TextView::markdown(
-                                        "preview",
-                                        self.input_state.read(cx).value().clone(),
-                                        window,
-                                        cx,
-                                    )
-                                    .selectable(),
-                                ),
+                            TextView::markdown(
+                                "preview",
+                                self.input_state.read(cx).value().clone(),
+                                window,
+                                cx,
+                            )
+                            .flex_none()
+                            .p_5()
+                            .scrollable()
+                            .selectable(),
                         ),
                     ),
             )
