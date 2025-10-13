@@ -47,8 +47,7 @@ struct TextViewElement {
 impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
-            div()
-                .relative()
+            v_flex()
                 .size_full()
                 .map(|this| match &mut state.parsed_result {
                     Some(Ok(content)) => this.child(content.root_node.render(
@@ -219,6 +218,8 @@ pub(crate) struct TextViewState {
     /// Is current in selection.
     is_selecting: bool,
     is_selectable: bool,
+    scrollbar_state: ScrollbarState,
+    list_state: ListState,
 }
 
 impl TextViewState {
@@ -233,6 +234,8 @@ impl TextViewState {
             selection_positions: (None, None),
             is_selecting: false,
             is_selectable: false,
+            scrollbar_state: ScrollbarState::default(),
+            list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)),
         }
     }
 }
@@ -567,19 +570,20 @@ impl Element for TextView {
             self.init_state = Some(InitState::Initialized { tx });
         }
 
-        let (scrollbar_state, list_state) = window
-            .use_keyed_state(
-                SharedString::from(format!("{}-scrollbar", self.state.entity_id().to_string())),
-                cx,
-                |_, _| {
-                    (
-                        ScrollbarState::default(),
-                        ListState::new(0, gpui::ListAlignment::Top, px(500.)),
-                    )
-                },
-            )
+        let blocks_count = self
+            .state
             .read(cx)
-            .clone();
+            .parsed_result
+            .as_ref()
+            .and_then(|res| res.as_ref().ok())
+            .map(|content| content.root_node.len())
+            .unwrap_or(0);
+
+        let scrollbar_state = &self.state.read(cx).scrollbar_state;
+        let list_state = &self.state.read(cx).list_state;
+        if list_state.item_count() != blocks_count {
+            list_state.reset(blocks_count);
+        }
 
         let focus_handle = self
             .state
@@ -611,7 +615,7 @@ impl Element for TextView {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .child(Scrollbar::vertical(&scrollbar_state, &list_state)),
+                    .child(Scrollbar::vertical(scrollbar_state, list_state)),
             )
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
@@ -677,7 +681,11 @@ impl Element for TextView {
                 // move to update end position.
                 window.on_mouse_event({
                     let state = self.state.clone();
-                    move |event: &MouseMoveEvent, _, _, cx| {
+                    move |event: &MouseMoveEvent, phase, _, cx| {
+                        if !phase.bubble() {
+                            return;
+                        }
+
                         state.update(cx, |state, _| {
                             state.update_selection(event.position);
                         });
@@ -688,7 +696,11 @@ impl Element for TextView {
                 // up to end selection
                 window.on_mouse_event({
                     let state = self.state.clone();
-                    move |_: &MouseUpEvent, _, _, cx| {
+                    move |_: &MouseUpEvent, phase, _, cx| {
+                        if !phase.bubble() {
+                            return;
+                        }
+
                         state.update(cx, |state, _| {
                             state.end_selection();
                         });

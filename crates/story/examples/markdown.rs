@@ -104,6 +104,7 @@ impl Render for Example {
                                 window,
                                 cx,
                             )
+                            .flex_none()
                             .p_5()
                             .selectable(),
                         ),

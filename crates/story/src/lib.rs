@@ -459,6 +459,7 @@ pub struct StoryContainer {
     story_klass: Option<SharedString>,
     closable: bool,
     zoomable: Option<PanelControl>,
+    paddings: Pixels,
     on_active: Option<fn(AnyView, bool, &mut Window, &mut App)>,
 }
 
@@ -484,6 +485,9 @@ pub trait Story: Render + Sized {
     }
     fn title_bg() -> Option<Hsla> {
         None
+    }
+    fn paddings() -> Pixels {
+        px(16.)
     }
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
 
@@ -521,6 +525,7 @@ impl StoryContainer {
             story_klass: None,
             closable: true,
             zoomable: Some(PanelControl::default()),
+            paddings: px(16.),
             on_active: None,
         }
     }
@@ -541,6 +546,7 @@ impl StoryContainer {
             story.name = name.into();
             story.description = description.into();
             story.title_bg = S::title_bg();
+            story.paddings = S::paddings();
             story
         });
 
@@ -768,7 +774,7 @@ impl Render for StoryContainer {
                         .id("story-children")
                         .w_full()
                         .flex_1()
-                        .p_4()
+                        .p(self.paddings)
                         .child(story),
                 )
             })

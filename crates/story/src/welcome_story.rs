@@ -1,4 +1,6 @@
-use gpui::{App, AppContext, Context, Entity, FocusHandle, Focusable, Render, Window};
+use gpui::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Render, Styled as _, Window, px,
+};
 
 use gpui_component::{dock::PanelControl, text::TextView};
 
@@ -36,6 +38,10 @@ impl Story for WelcomeStory {
     fn zoomable() -> Option<PanelControl> {
         None
     }
+
+    fn paddings() -> gpui::Pixels {
+        px(0.)
+    }
 }
 
 impl Focusable for WelcomeStory {
@@ -50,6 +56,8 @@ impl Render for WelcomeStory {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        TextView::markdown("intro", include_str!("../../../README.md"), window, cx).selectable()
+        TextView::markdown("intro", include_str!("../../../README.md"), window, cx)
+            .p_4()
+            .selectable()
     }
 }
