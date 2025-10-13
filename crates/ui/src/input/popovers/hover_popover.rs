@@ -185,7 +185,7 @@ impl Element for Popover {
             .end
             .min(window.bounds().size.width - SNAP_TO_EDGE * 2)
             .max(px(200.));
-        let max_height = (window.bounds().size.height - SNAP_TO_EDGE * 2).min(px(300.));
+        let max_height = (window.bounds().size.height - SNAP_TO_EDGE * 2).min(px(320.));
 
         let is_open = *open_state.read(cx);
 

@@ -474,21 +474,27 @@ pub trait Story: Render + Sized {
     }
 
     fn title() -> &'static str;
+
     fn description() -> &'static str {
         ""
     }
+
     fn closable() -> bool {
         true
     }
+
     fn zoomable() -> Option<PanelControl> {
         Some(PanelControl::default())
     }
+
     fn title_bg() -> Option<Hsla> {
         None
     }
+
     fn paddings() -> Pixels {
         px(16.)
     }
+
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
 
     fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
@@ -496,6 +502,7 @@ pub trait Story: Render + Sized {
         let _ = window;
         let _ = cx;
     }
+
     fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
     where
         Self: 'static,
