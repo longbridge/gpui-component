@@ -140,8 +140,9 @@ pub struct SelectRadius(usize);
 actions!(
     story,
     [
-        Quit,
+        About,
         Open,
+        Quit,
         CloseWindow,
         ToggleSearch,
         TestAction,
@@ -307,7 +308,14 @@ pub fn init(cx: &mut App) {
 
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-o", Open, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-o", Open, None),
+        #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-q", Quit, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("alt-f4", Quit, None),
     ]);
 
     cx.on_action(|_: &Quit, cx: &mut App| {

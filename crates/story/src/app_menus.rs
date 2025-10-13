@@ -1,12 +1,10 @@
-use gpui::{App, Menu, MenuItem, SharedString, actions};
+use gpui::{App, Menu, MenuItem, SharedString};
 use gpui_component::{ThemeMode, ThemeRegistry};
 
 use crate::{
-    CloseWindow, Open, Quit, SelectLocale, ToggleSearch,
+    About, CloseWindow, Open, Quit, SelectLocale, ToggleSearch,
     themes::{SwitchTheme, SwitchThemeMode},
 };
-
-actions!(story, [About]);
 
 pub fn init(title: impl Into<SharedString>, cx: &mut App) {
     cx.set_menus(vec![
@@ -14,6 +12,8 @@ pub fn init(title: impl Into<SharedString>, cx: &mut App) {
             name: title.into(),
             items: vec![
                 MenuItem::action("About", About),
+                MenuItem::Separator,
+                MenuItem::action("Open...", Open),
                 MenuItem::Separator,
                 MenuItem::Submenu(Menu {
                     name: "Appearance".into(),
