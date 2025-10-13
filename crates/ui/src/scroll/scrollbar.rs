@@ -315,7 +315,7 @@ impl Scrollbar {
     }
 
     // Get the width of the scrollbar.
-    pub const fn width() -> Pixels {
+    pub(crate) const fn width() -> Pixels {
         WIDTH
     }
 
