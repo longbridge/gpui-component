@@ -354,11 +354,17 @@ impl CodeBlock {
         text
     }
 
-    fn render(&self, node_cx: &NodeContext, _: &mut Window, cx: &mut App) -> AnyElement {
+    fn render(
+        &self,
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
         let style = &node_cx.style;
 
         div()
-            .pb(style.paragraph_gap)
+            .when(!options.is_last, |this| this.pb(style.paragraph_gap))
             .child(
                 div()
                     .id("codeblock")
@@ -1204,7 +1210,7 @@ impl Node {
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => code_block.render(node_cx, window, cx),
+            Node::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
             Node::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
             Node::Divider => div()
                 .pb(mb)

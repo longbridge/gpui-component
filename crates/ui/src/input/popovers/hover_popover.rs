@@ -3,7 +3,8 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
     deferred, div, point, prelude::FluentBuilder as _, px, AnyElement, App, AppContext as _,
     AvailableSpace, Bounds, Element, ElementId, Entity, InteractiveElement, IntoElement,
-    MouseDownEvent, ParentElement as _, Pixels, Render, StyleRefinement, Styled, Window,
+    MouseDownEvent, ParentElement as _, Pixels, Render, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window,
 };
 
 use crate::{
@@ -184,11 +185,13 @@ impl Element for Popover {
             .end
             .min(window.bounds().size.width - SNAP_TO_EDGE * 2)
             .max(px(200.));
+        let max_height = (window.bounds().size.height - SNAP_TO_EDGE * 2).min(px(300.));
 
         let is_open = *open_state.read(cx);
 
         let mut popover = deferred(
             div()
+                .id("hover-popover-content")
                 .when(!is_open, |s| s.invisible())
                 .flex_none()
                 .occlude()
@@ -197,6 +200,8 @@ impl Element for Popover {
                 .popover_style(cx)
                 .shadow_md()
                 .max_w(max_width)
+                .max_h(max_height)
+                .overflow_y_scroll()
                 .refine_style(&self.style)
                 .child((self.content_builder)(window, cx)),
         )
