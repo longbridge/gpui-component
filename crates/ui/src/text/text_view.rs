@@ -6,14 +6,16 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId, Entity,
-    EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement, IntoElement,
-    KeyBinding, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer, Window,
+    div, px, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId,
+    Entity, EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement,
+    IntoElement, KeyBinding, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer, Window,
 };
 use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
+use crate::scroll::{Scrollbar, ScrollbarState};
+use crate::text::node::NodeRenderOptions;
 use crate::{
     global_state::GlobalState,
     input::{self},
@@ -43,13 +45,22 @@ struct TextViewElement {
 impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
+            let scrollbar_state = window
+                .use_keyed_state(
+                    SharedString::from(format!("{}-scrollbar", self.state.entity_id().to_string())),
+                    cx,
+                    |_, _| ScrollbarState::default(),
+                )
+                .read(cx)
+                .clone();
+
             div()
+                .relative()
                 .size_full()
                 .map(|this| match &mut state.parsed_result {
                     Some(Ok(content)) => this.child(content.root_node.render(
-                        None,
-                        true,
-                        true,
+                        NodeRenderOptions::default().is_last(true),
+                        Some(state.list_state.clone()),
                         &content.node_cx,
                         window,
                         cx,
@@ -62,6 +73,15 @@ impl RenderOnce for TextViewElement {
                     ),
                     None => this,
                 })
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .child(Scrollbar::vertical(&scrollbar_state, &state.list_state)),
+                )
         })
     }
 }
@@ -209,6 +229,7 @@ pub(crate) struct TextViewState {
     parsed_result: Option<Result<ParsedContent, SharedString>>,
     focus_handle: Option<FocusHandle>,
 
+    list_state: gpui::ListState,
     /// The bounds of the text view
     bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
@@ -226,6 +247,7 @@ impl TextViewState {
             tx: None,
             parsed_result: None,
             focus_handle: Some(focus_handle),
+            list_state: gpui::ListState::new(0, gpui::ListAlignment::Top, px(500.)),
             bounds: Bounds::default(),
             selection_positions: (None, None),
             is_selecting: false,

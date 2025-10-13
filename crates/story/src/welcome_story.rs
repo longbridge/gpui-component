@@ -1,8 +1,6 @@
-use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, Styled, Window,
-};
+use gpui::{App, AppContext, Context, Entity, FocusHandle, Focusable, Render, Window};
 
-use gpui_component::{dock::PanelControl, text::TextView, v_flex};
+use gpui_component::{dock::PanelControl, text::TextView};
 
 use crate::Story;
 

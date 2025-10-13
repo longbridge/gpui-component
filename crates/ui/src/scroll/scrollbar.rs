@@ -92,6 +92,20 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
     }
 }
 
+impl ScrollHandleOffsetable for gpui::ListState {
+    fn offset(&self) -> Point<Pixels> {
+        self.scroll_px_offset_for_scrollbar()
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        self.set_offset_from_scrollbar(offset);
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.viewport_bounds().size
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
 
