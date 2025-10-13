@@ -39,21 +39,22 @@ pub(crate) fn init(cx: &mut App) {
 
 #[derive(IntoElement, Clone)]
 struct TextViewElement {
-    list_state: ListState,
+    list_state: Option<ListState>,
     state: Entity<TextViewState>,
 }
 
 impl RenderOnce for TextViewElement {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.state.update(cx, |state, _| {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.state.update(cx, |state, cx| {
             v_flex()
                 .size_full()
                 .map(|this| match &mut state.parsed_result {
-                    Some(Ok(content)) => this.child(
-                        content
-                            .root_node
-                            .render_root(self.list_state.clone(), &content.node_cx),
-                    ),
+                    Some(Ok(content)) => this.child(content.root_node.render_root(
+                        self.list_state.clone(),
+                        &content.node_cx,
+                        window,
+                        cx,
+                    )),
                     Some(Err(err)) => this.child(
                         v_flex()
                             .gap_1()
@@ -89,6 +90,7 @@ pub struct TextView {
     state: Entity<TextViewState>,
     style: StyleRefinement,
     selectable: bool,
+    scrollable: bool,
 }
 
 #[derive(PartialEq)]
@@ -409,6 +411,7 @@ impl TextView {
             style: StyleRefinement::default(),
             state,
             selectable: false,
+            scrollable: false,
         }
     }
 
@@ -437,6 +440,7 @@ impl TextView {
             style: StyleRefinement::default(),
             state,
             selectable: false,
+            scrollable: false,
         }
     }
 
@@ -470,6 +474,23 @@ impl TextView {
     /// Set the text view to be selectable, default is false.
     pub fn selectable(mut self) -> Self {
         self.selectable = true;
+        self
+    }
+
+    /// Set the text view to be scrollable, default is false.
+    ///
+    /// ## If true for `scrollable`
+    ///
+    /// The `scrollable` mode used for large content,
+    /// will show scrollbar, but requires the parent to have a fixed height,
+    /// and use [`gpui::list`] to render the content in a virtualized way.
+    ///
+    /// ## If false to fit content
+    ///
+    /// The TextView will expand to fit all content, no scrollbar.
+    /// This mode is suitable for small content, such as a few lines of text, a label, etc.
+    pub fn scrollable(mut self) -> Self {
+        self.scrollable = true;
         self
     }
 
@@ -589,19 +610,25 @@ impl Element for TextView {
                 }
             })
             .child(TextViewElement {
-                list_state: list_state.clone(),
+                list_state: if self.scrollable {
+                    Some(list_state.clone())
+                } else {
+                    None
+                },
                 state: self.state.clone(),
             })
             .refine_style(&self.style)
-            .child(
-                div()
-                    .absolute()
-                    .w(Scrollbar::width())
-                    .top_0()
-                    .right_0()
-                    .bottom_0()
-                    .child(Scrollbar::vertical(scrollbar_state, list_state)),
-            )
+            .when(self.scrollable, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .w(Scrollbar::width())
+                        .top_0()
+                        .right_0()
+                        .bottom_0()
+                        .child(Scrollbar::vertical(scrollbar_state, list_state)),
+                )
+            })
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, el)

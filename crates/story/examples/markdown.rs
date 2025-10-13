@@ -106,6 +106,7 @@ impl Render for Example {
                             )
                             .flex_none()
                             .p_5()
+                            .scrollable()
                             .selectable(),
                         ),
                     ),

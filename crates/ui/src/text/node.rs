@@ -1064,15 +1064,27 @@ impl Node {
         }
     }
 
-    pub fn render_root(&self, list_state: ListState, node_cx: &NodeContext) -> impl IntoElement {
-        let children = match self {
-            Node::Root { children } => children,
-            _ => return div().into_any_element(),
-        };
-
+    pub(super) fn render_root(
+        &self,
+        list_state: Option<ListState>,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
         let options = NodeRenderOptions {
             is_last: true,
             ..Default::default()
+        };
+
+        let Some(list_state) = list_state else {
+            return self
+                .render_block(options, node_cx, window, cx)
+                .into_any_element();
+        };
+
+        let children = match self {
+            Node::Root { children } => children,
+            _ => return div().into_any_element(),
         };
 
         let children_len = children.len();
