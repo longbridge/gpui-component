@@ -102,7 +102,9 @@ impl ScrollHandleOffsetable for gpui::ListState {
     }
 
     fn content_size(&self) -> Size<Pixels> {
-        self.viewport_bounds().size
+        dbg!(self.max_offset_for_scrollbar());
+        dbg!(self.item_count());
+        self.max_offset_for_scrollbar()
     }
 }
 

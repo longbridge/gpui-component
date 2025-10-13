@@ -1073,7 +1073,6 @@ impl Node {
                     return div()
                         .id("root")
                         .size_full()
-                        .overflow_y_scroll()
                         .children(
                             children
                                 .into_iter()
@@ -1089,9 +1088,8 @@ impl Node {
                 state.reset(children_len);
 
                 gpui::list(state, move |ix, window, cx| {
-                    let node = &children[ix];
                     let is_last = is_root && ix + 1 == children_len;
-                    node.render(options.is_last(is_last), None, &node_cx, window, cx)
+                    children[ix].render(options.is_last(is_last), None, &node_cx, window, cx)
                 })
                 .size_full()
                 .into_any_element()

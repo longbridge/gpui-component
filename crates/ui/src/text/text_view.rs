@@ -8,8 +8,9 @@ use gpui::prelude::FluentBuilder;
 use gpui::{
     div, px, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId,
     Entity, EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement,
-    IntoElement, KeyBinding, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer, Window,
+    IntoElement, KeyBinding, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer,
+    Window,
 };
 use smol::stream::StreamExt;
 
@@ -39,28 +40,20 @@ pub(crate) fn init(cx: &mut App) {
 
 #[derive(IntoElement, Clone)]
 struct TextViewElement {
+    list_state: ListState,
     state: Entity<TextViewState>,
 }
 
 impl RenderOnce for TextViewElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
-            let scrollbar_state = window
-                .use_keyed_state(
-                    SharedString::from(format!("{}-scrollbar", self.state.entity_id().to_string())),
-                    cx,
-                    |_, _| ScrollbarState::default(),
-                )
-                .read(cx)
-                .clone();
-
             div()
                 .relative()
                 .size_full()
                 .map(|this| match &mut state.parsed_result {
                     Some(Ok(content)) => this.child(content.root_node.render(
                         NodeRenderOptions::default().is_last(true),
-                        Some(state.list_state.clone()),
+                        Some(self.list_state.clone()),
                         &content.node_cx,
                         window,
                         cx,
@@ -73,15 +66,6 @@ impl RenderOnce for TextViewElement {
                     ),
                     None => this,
                 })
-                .child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .right_0()
-                        .bottom_0()
-                        .child(Scrollbar::vertical(&scrollbar_state, &state.list_state)),
-                )
         })
     }
 }
@@ -228,8 +212,6 @@ pub(crate) struct TextViewState {
     tx: Option<smol::channel::Sender<Update>>,
     parsed_result: Option<Result<ParsedContent, SharedString>>,
     focus_handle: Option<FocusHandle>,
-
-    list_state: gpui::ListState,
     /// The bounds of the text view
     bounds: Bounds<Pixels>,
     /// The local (in TextView) position of the selection.
@@ -247,7 +229,6 @@ impl TextViewState {
             tx: None,
             parsed_result: None,
             focus_handle: Some(focus_handle),
-            list_state: gpui::ListState::new(0, gpui::ListAlignment::Top, px(500.)),
             bounds: Bounds::default(),
             selection_positions: (None, None),
             is_selecting: false,
@@ -586,6 +567,20 @@ impl Element for TextView {
             self.init_state = Some(InitState::Initialized { tx });
         }
 
+        let (scrollbar_state, list_state) = window
+            .use_keyed_state(
+                SharedString::from(format!("{}-scrollbar", self.state.entity_id().to_string())),
+                cx,
+                |_, _| {
+                    (
+                        ScrollbarState::default(),
+                        ListState::new(0, gpui::ListAlignment::Top, px(500.)),
+                    )
+                },
+            )
+            .read(cx)
+            .clone();
+
         let focus_handle = self
             .state
             .read(cx)
@@ -597,16 +592,27 @@ impl Element for TextView {
             .key_context(CONTEXT)
             .track_focus(focus_handle)
             .size_full()
+            .relative()
             .on_action({
                 let state = self.state.clone();
                 move |_: &input::Copy, _, cx| {
                     Self::on_action_copy(&state, cx);
                 }
             })
-            .refine_style(&self.style)
             .child(TextViewElement {
+                list_state: list_state.clone(),
                 state: self.state.clone(),
             })
+            .refine_style(&self.style)
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .right_0()
+                    .bottom_0()
+                    .child(Scrollbar::vertical(&scrollbar_state, &list_state)),
+            )
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, el)
