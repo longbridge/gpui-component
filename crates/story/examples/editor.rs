@@ -887,8 +887,6 @@ impl Example {
             let lang = Lang::BuiltIn(language.clone());
             let content = std::fs::read_to_string(&path).ok()?;
 
-            dbg!(language);
-
             window
                 .update(|window, cx| {
                     _ = editor.update(cx, |this, cx| {
