@@ -24,7 +24,7 @@ where
     x: Option<Rc<dyn Fn(&T) -> X>>,
     y: Vec<Rc<dyn Fn(&T) -> Y>>,
     stroke: Vec<Hsla>,
-    stroke_style: StrokeStyle,
+    stroke_style: Vec<StrokeStyle>,
     fill: Vec<Background>,
     tick_margin: usize,
 }
@@ -40,7 +40,7 @@ where
     {
         Self {
             data: data.into_iter().collect(),
-            stroke_style: Default::default(),
+            stroke_style: vec![],
             stroke: vec![],
             fill: vec![],
             tick_margin: 1,
@@ -69,13 +69,18 @@ where
         self
     }
 
+    pub fn natural(mut self) -> Self {
+        self.stroke_style.push(StrokeStyle::Natural);
+        self
+    }
+
     pub fn linear(mut self) -> Self {
-        self.stroke_style = StrokeStyle::Linear;
+        self.stroke_style.push(StrokeStyle::Linear);
         self
     }
 
     pub fn step_after(mut self) -> Self {
-        self.stroke_style = StrokeStyle::StepAfter;
+        self.stroke_style.push(StrokeStyle::StepAfter);
         self
     }
 
@@ -163,6 +168,10 @@ where
                 .unwrap_or(&cx.theme().chart_2.opacity(0.4).into());
 
             let stroke = *self.stroke.get(i).unwrap_or(&cx.theme().chart_2);
+            let stroke_style = *self
+                .stroke_style
+                .get(i)
+                .unwrap_or(self.stroke_style.first().unwrap_or(&Default::default()));
 
             Area::new()
                 .data(&self.data)
@@ -170,7 +179,7 @@ where
                 .y0(height)
                 .y1(move |d| y.tick(&y_fn(d)))
                 .stroke(stroke)
-                .stroke_style(self.stroke_style)
+                .stroke_style(stroke_style)
                 .fill(fill)
                 .paint(&bounds, window);
         }
