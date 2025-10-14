@@ -773,7 +773,6 @@ impl Render for StoryContainer {
             .size_full()
             .overflow_y_scroll()
             .track_focus(&self.focus_handle)
-            .debug_focused(&self.focus_handle, window, cx)
             .on_action(cx.listener(Self::on_action_panel_info))
             .on_action(cx.listener(Self::on_action_toggle_search))
             .when_some(self.story.clone(), |this, story| {
