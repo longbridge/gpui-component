@@ -74,7 +74,7 @@ impl BrushStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            canvas_size: (600.0, 400.0),
+            canvas_size: (800.0, 600.0),
             brush_size,
             brush_opacity,
             brush_color: gpui::black(),
@@ -148,7 +148,7 @@ impl BrushStory {
                     } else {
                         dy_px
                     };
-                    dx_abs >= px(1.0) || dy_abs >= px(1.0) // At least 1 pixel apart in any direction
+                    dx_abs >= px(1.0) || dy_abs >= px(1.0)
                 } else {
                     true
                 };
@@ -166,7 +166,6 @@ impl BrushStory {
             self.is_drawing = false;
             if let Some(stroke) = self.current_stroke.take() {
                 if stroke.points.len() > 1 {
-                    // Create new Rc with updated strokes
                     let mut new_strokes = (*self.strokes).clone();
                     new_strokes.push(stroke);
                     self.strokes = Rc::new(new_strokes);
@@ -358,88 +357,100 @@ impl Render for BrushStory {
         v_flex()
             .gap_6()
             .child(
-                section("Brush Controls")
-                    .max_w_2xl()
-                    .child(
-                        h_flex()
-                            .gap_4()
-                            .items_center()
-                            .child("Size:")
-                            .child(
-                                Slider::new(&self.brush_size)
-                                    .w(px(200.))
-                                    .bg(theme.primary)
-                                    .text_color(theme.primary_foreground),
-                            )
-                            .child(format!("{:.0}px", brush_size)),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_4()
-                            .items_center()
-                            .child("Opacity:")
-                            .child(
-                                Slider::new(&self.brush_opacity)
-                                    .w(px(200.))
-                                    .bg(theme.primary)
-                                    .text_color(theme.primary_foreground),
-                            )
-                            .child(format!("{:.0}%", brush_opacity * 100.0)),
-                    ),
-            )
-            .child(
-                section("Color Palette").max_w_2xl().child(
+                section("Controls").max_w_2xl().child(
                     h_flex()
-                        .gap_3()
-                        .flex_wrap()
-                        .child(self.color_button(gpui::black(), "Black", cx))
-                        .child(self.color_button(gpui::white(), "White", cx))
-                        .child(self.color_button(gpui::red(), "Red", cx))
-                        .child(self.color_button(gpui::green(), "Green", cx))
-                        .child(self.color_button(gpui::blue(), "Blue", cx))
-                        .child(self.color_button(gpui::yellow(), "Yellow", cx))
-                        .child(self.color_button(gpui::hsla(0.58, 1.0, 0.5, 1.0), "Purple", cx))
-                        .child(self.color_button(gpui::hsla(0.083, 1.0, 0.5, 1.0), "Orange", cx)),
+                        .gap_8()
+                        .w_full()
+                        .items_start()
+                        .child(
+                            v_flex()
+                                .gap_4()
+                                .flex_1()
+                                .w(gpui::relative(0.5))
+                                .child(
+                                    h_flex()
+                                        .gap_4()
+                                        .items_center()
+                                        .child("Size:")
+                                        .child(
+                                            Slider::new(&self.brush_size)
+                                                .w(px(200.))
+                                                .bg(theme.primary)
+                                                .text_color(theme.primary_foreground),
+                                        )
+                                        .child(format!("{:.0}px", brush_size)),
+                                )
+                                .child(
+                                    h_flex()
+                                        .gap_4()
+                                        .items_center()
+                                        .child("Opacity:")
+                                        .child(
+                                            Slider::new(&self.brush_opacity)
+                                                .w(px(200.))
+                                                .bg(theme.primary)
+                                                .text_color(theme.primary_foreground),
+                                        )
+                                        .child(format!("{:.0}%", brush_opacity * 100.0)),
+                                )
+                                .child(
+                                    h_flex()
+                                        .gap_3()
+                                        .items_center()
+                                        .child(
+                                            Button::new("clear-canvas")
+                                                .icon(IconName::Close)
+                                                .label("Clear Canvas")
+                                                .small()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.clear_canvas(cx);
+                                                })),
+                                        )
+                                        .child(
+                                            Checkbox::new("show-grid")
+                                                .label("Show Grid")
+                                                .checked(self.show_grid)
+                                                .on_click(cx.listener(|this, checked, _, cx| {
+                                                    this.show_grid = *checked;
+                                                    cx.notify();
+                                                })),
+                                        ),
+                                ),
+                        )
+                        .child(
+                            v_flex()
+                                .gap_2()
+                                .flex_1()
+                                .w(gpui::relative(0.5))
+                                .child(h_flex().gap_2().items_center().child("Color:"))
+                                .child(
+                                    h_flex()
+                                        .gap_3()
+                                        .flex_wrap()
+                                        .child(self.color_button(gpui::black(), "Black", cx))
+                                        .child(self.color_button(gpui::white(), "White", cx))
+                                        .child(self.color_button(gpui::red(), "Red", cx))
+                                        .child(self.color_button(gpui::green(), "Green", cx))
+                                        .child(self.color_button(gpui::blue(), "Blue", cx))
+                                        .child(self.color_button(gpui::yellow(), "Yellow", cx))
+                                        .child(self.color_button(
+                                            gpui::hsla(0.58, 1.0, 0.5, 1.0),
+                                            "Purple",
+                                            cx,
+                                        ))
+                                        .child(self.color_button(
+                                            gpui::hsla(0.083, 1.0, 0.5, 1.0),
+                                            "Orange",
+                                            cx,
+                                        )),
+                                ),
+                        ),
                 ),
             )
             .child(
                 section("Drawing Canvas")
                     .max_w_2xl()
-                    .child(
-                        h_flex()
-                            .gap_3()
-                            .mb_2()
-                            .child(
-                                Button::new("clear-canvas")
-                                    .icon(IconName::Close)
-                                    .label("Clear Canvas")
-                                    .small()
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.clear_canvas(cx);
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("show-grid")
-                                    .label("Show Grid")
-                                    .checked(self.show_grid)
-                                    .on_click(cx.listener(|this, checked, _, cx| {
-                                        this.show_grid = *checked;
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
                     .child(self.render_canvas(cx)),
-            )
-            .child(
-                section("Instructions").max_w_2xl().child(
-                    v_flex()
-                        .items_start()
-                        .gap_2()
-                        .child("• Click and drag on the canvas to draw")
-                        .child("• Adjust brush size and opacity using the sliders")
-                        .child("• Select different colors from the palette")
-                        .child("• Use 'Clear Canvas' to reset the drawing"),
-                ),
             )
     }
 }
