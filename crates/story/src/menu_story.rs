@@ -40,7 +40,6 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct MenuStory {
-    focus_handle: FocusHandle,
     checked: bool,
     message: String,
 }
@@ -65,11 +64,8 @@ impl MenuStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        cx.focus_self(window);
-
         Self {
             checked: true,
-            focus_handle: cx.focus_handle(),
             message: "".to_string(),
         }
     }
@@ -106,19 +102,12 @@ impl MenuStory {
     }
 }
 
-impl Focusable for MenuStory {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
 impl Render for MenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let checked = self.checked;
 
         v_flex()
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
             .on_action(cx.listener(Self::on_paste))

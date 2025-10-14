@@ -661,10 +661,8 @@ impl PopupMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(action_context) = self.action_context.as_ref() {
-            if !action_context.contains_focused(window, cx) {
-                action_context.focus(window);
-            }
+        if let Some(context) = self.action_context.as_ref() {
+            context.focus(window);
         }
 
         window.dispatch_action(action.boxed_clone(), cx);
