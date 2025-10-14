@@ -23,9 +23,9 @@ where
     data: Vec<T>,
     x: Option<Rc<dyn Fn(&T) -> X>>,
     y: Vec<Rc<dyn Fn(&T) -> Y>>,
-    stroke: Vec<Hsla>,
-    stroke_style: StrokeStyle,
-    fill: Vec<Background>,
+    strokes: Vec<Hsla>,
+    stroke_styles: Vec<StrokeStyle>,
+    fills: Vec<Background>,
     tick_margin: usize,
 }
 
@@ -40,9 +40,9 @@ where
     {
         Self {
             data: data.into_iter().collect(),
-            stroke_style: Default::default(),
-            stroke: vec![],
-            fill: vec![],
+            stroke_styles: vec![],
+            strokes: vec![],
+            fills: vec![],
             tick_margin: 1,
             x: None,
             y: vec![],
@@ -60,22 +60,27 @@ where
     }
 
     pub fn stroke(mut self, stroke: impl Into<Hsla>) -> Self {
-        self.stroke.push(stroke.into());
+        self.strokes.push(stroke.into());
         self
     }
 
     pub fn fill(mut self, fill: impl Into<Background>) -> Self {
-        self.fill.push(fill.into());
+        self.fills.push(fill.into());
+        self
+    }
+
+    pub fn natural(mut self) -> Self {
+        self.stroke_styles.push(StrokeStyle::Natural);
         self
     }
 
     pub fn linear(mut self) -> Self {
-        self.stroke_style = StrokeStyle::Linear;
+        self.stroke_styles.push(StrokeStyle::Linear);
         self
     }
 
     pub fn step_after(mut self) -> Self {
-        self.stroke_style = StrokeStyle::StepAfter;
+        self.stroke_styles.push(StrokeStyle::StepAfter);
         self
     }
 
@@ -158,11 +163,16 @@ where
             let y_fn = y_fn.clone();
 
             let fill = *self
-                .fill
+                .fills
                 .get(i)
                 .unwrap_or(&cx.theme().chart_2.opacity(0.4).into());
 
-            let stroke = *self.stroke.get(i).unwrap_or(&cx.theme().chart_2);
+            let stroke = *self.strokes.get(i).unwrap_or(&cx.theme().chart_2);
+
+            let stroke_style = *self
+                .stroke_styles
+                .get(i)
+                .unwrap_or(self.stroke_styles.first().unwrap_or(&Default::default()));
 
             Area::new()
                 .data(&self.data)
@@ -170,7 +180,7 @@ where
                 .y0(height)
                 .y1(move |d| y.tick(&y_fn(d)))
                 .stroke(stroke)
-                .stroke_style(self.stroke_style)
+                .stroke_style(stroke_style)
                 .fill(fill)
                 .paint(&bounds, window);
         }
