@@ -22,7 +22,6 @@ pub struct BrushStory {
     brush_size: Entity<SliderState>,
     brush_opacity: Entity<SliderState>,
     brush_color: Hsla,
-    // Use Rc to avoid deep cloning on every render
     strokes: Rc<Vec<Stroke>>,
     current_stroke: Option<Stroke>,
     is_drawing: bool,
@@ -82,7 +81,7 @@ impl BrushStory {
             strokes: Rc::new(vec![]),
             current_stroke: None,
             is_drawing: false,
-            show_grid: false, // Disabled by default for better performance
+            show_grid: false,
             canvas_bounds: None,
         }
     }
@@ -100,7 +99,6 @@ impl BrushStory {
             let mut color = self.brush_color;
             color.a = brush_opacity;
 
-            // Convert global coordinates to local canvas coordinates
             let local_pos = if let Some(bounds) = self.canvas_bounds {
                 Point::new(
                     event.position.x - bounds.origin.x,
@@ -127,7 +125,6 @@ impl BrushStory {
     ) {
         if self.is_drawing {
             if let Some(ref mut stroke) = self.current_stroke {
-                // Convert global coordinates to local canvas coordinates
                 let local_pos = if let Some(bounds) = self.canvas_bounds {
                     Point::new(
                         event.position.x - bounds.origin.x,
@@ -137,12 +134,10 @@ impl BrushStory {
                     event.position
                 };
 
-                // Optimization: Only add point if it's far enough from the last point
-                // This reduces the number of points and improves performance
                 let should_add = if let Some(last) = stroke.points.last() {
                     let dx_px = local_pos.x - last.x;
                     let dy_px = local_pos.y - last.y;
-                    // Check Manhattan distance (simpler, no multiplication needed)
+
                     let dx_abs = if dx_px < px(0.0) {
                         px(0.0) - dx_px
                     } else {
@@ -200,8 +195,6 @@ impl Focusable for BrushStory {
     }
 }
 
-// Use gpui::canvas for rendering
-
 impl BrushStory {
     fn color_button(&self, color: Hsla, _label: &str, cx: &Context<Self>) -> impl IntoElement {
         let is_selected = self.brush_color.to_hex() == color.to_hex();
@@ -229,14 +222,12 @@ impl BrushStory {
     fn render_canvas(&mut self, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
-        // Clone Rc (cheap - just increments ref count) and other data
         let strokes_for_prepaint = self.strokes.clone();
         let current_stroke_for_prepaint = self.current_stroke.clone();
         let show_grid_for_prepaint = self.show_grid;
         let canvas_size_for_prepaint = self.canvas_size;
         let theme_for_prepaint = theme.clone();
 
-        // Clone the state entity to capture bounds
         let state_entity = cx.entity().clone();
 
         let base_div = gpui::div()
@@ -252,7 +243,6 @@ impl BrushStory {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
-            // Use an invisible canvas to capture bounds
             .child(
                 gpui::canvas(
                     move |bounds, _, cx| {
@@ -269,8 +259,6 @@ impl BrushStory {
         base_div.child(
             gpui::canvas(
                 move |bounds, _window, _cx| {
-                    // Prepare data for painting - all data is owned
-                    // Note: we return bounds here to capture it in paint closure
                     (
                         strokes_for_prepaint,
                         current_stroke_for_prepaint,
@@ -286,12 +274,10 @@ impl BrushStory {
                       _cx| {
                     let origin = prepaint_bounds.origin;
 
-                    // Draw grid if enabled (optimized with larger grid size)
                     if show_grid {
                         let grid_color = theme.border.opacity(0.2);
-                        let grid_size = 40.0; // Larger grid = fewer lines = better performance
+                        let grid_size = 40.0;
 
-                        // Vertical lines
                         let mut x = 0.0;
                         while x <= canvas_size.0 {
                             let mut builder = PathBuilder::stroke(px(1.0));
@@ -306,7 +292,6 @@ impl BrushStory {
                             x += grid_size;
                         }
 
-                        // Horizontal lines
                         let mut y = 0.0;
                         while y <= canvas_size.1 {
                             let mut builder = PathBuilder::stroke(px(1.0));
@@ -322,7 +307,6 @@ impl BrushStory {
                         }
                     }
 
-                    // Draw completed strokes
                     for stroke in strokes.iter() {
                         if let Some(path) = BrushStory::build_stroke_path(stroke, &prepaint_bounds)
                         {
@@ -330,7 +314,6 @@ impl BrushStory {
                         }
                     }
 
-                    // Draw current stroke being drawn
                     if let Some(ref stroke) = current_stroke {
                         if let Some(path) = BrushStory::build_stroke_path(stroke, &prepaint_bounds)
                         {
@@ -351,14 +334,12 @@ impl BrushStory {
 
         let mut builder = PathBuilder::stroke(px(stroke.size));
 
-        // First point - convert local coordinates to absolute by adding canvas origin
         let first_point = Point::new(
             bounds.origin.x + stroke.points[0].x,
             bounds.origin.y + stroke.points[0].y,
         );
         builder.move_to(first_point);
 
-        // Rest of the points - also convert to absolute coordinates
         for point in stroke.points.iter().skip(1) {
             let abs_point = Point::new(bounds.origin.x + point.x, bounds.origin.y + point.y);
             builder.line_to(abs_point);
