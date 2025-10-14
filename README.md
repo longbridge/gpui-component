@@ -31,7 +31,7 @@ We built multi-theme support in the application. This feature is not included in
 GPUI and GPUI Component are still in development, so you need to add dependencies by git.
 
 ```toml
-gpui = "0.2.0"
+gpui = "0.2.1"
 gpui-component = "0.2.0"
 ```
 
