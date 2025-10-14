@@ -767,7 +767,7 @@ impl Focusable for StoryContainer {
     }
 }
 impl Render for StoryContainer {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("story-container")
             .size_full()
