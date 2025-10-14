@@ -41,6 +41,7 @@ impl Gallery {
                     StoryContainer::panel::<AlertStory>(window, cx),
                     StoryContainer::panel::<AvatarStory>(window, cx),
                     StoryContainer::panel::<BadgeStory>(window, cx),
+                    StoryContainer::panel::<BrushStory>(window, cx),
                     StoryContainer::panel::<ButtonStory>(window, cx),
                     StoryContainer::panel::<CalendarStory>(window, cx),
                     StoryContainer::panel::<ChartStory>(window, cx),
