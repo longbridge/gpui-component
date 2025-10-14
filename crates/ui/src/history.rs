@@ -27,6 +27,7 @@ pub struct History<I: HistoryItem> {
     pub(crate) ignore: bool,
     max_undo: usize,
     group_interval: Option<Duration>,
+    grouping: bool,
     unique: bool,
 }
 
@@ -43,6 +44,7 @@ where
             version: 0,
             max_undo: 1000,
             group_interval: None,
+            grouping: false,
             unique: false,
         }
     }
@@ -66,10 +68,20 @@ where
         self
     }
 
+    /// Start grouping changes, this will prevent the version from being incremented until `end_grouping` is called.
+    pub fn start_grouping(&mut self) {
+        self.grouping = true;
+    }
+
+    /// End grouping changes, this will allow the version to be incremented again.
+    pub fn end_grouping(&mut self) {
+        self.grouping = false;
+    }
+
     /// Increment the version number if the last change was made more than `GROUP_INTERVAL` milliseconds ago.
     fn inc_version(&mut self) -> usize {
         let t = Instant::now();
-        if Some(self.last_changed_at.elapsed()) > self.group_interval {
+        if !self.grouping && Some(self.last_changed_at.elapsed()) > self.group_interval {
             self.version += 1;
         }
 
