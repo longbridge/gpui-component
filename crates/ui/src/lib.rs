@@ -9,6 +9,7 @@ mod root;
 mod styled;
 mod time;
 mod title_bar;
+mod tree;
 mod virtual_list;
 mod window_border;
 
