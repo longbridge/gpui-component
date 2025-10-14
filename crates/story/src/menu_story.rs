@@ -1,7 +1,6 @@
 use gpui::{
-    Action, App, AppContext, Context, Corner, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, SharedString, Styled as _, Window,
-    actions, div, px,
+    Action, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
     ActiveTheme as _, IconName, button::Button, context_menu::ContextMenuExt, h_flex,
@@ -63,7 +62,7 @@ impl MenuStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
             checked: true,
             message: "".to_string(),
