@@ -109,7 +109,7 @@ pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, Root, StyledExt, TitleBar,
+    ActiveTheme, ContextModal, IconName, Root, TitleBar,
     button::Button,
     context_menu::ContextMenuExt,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
