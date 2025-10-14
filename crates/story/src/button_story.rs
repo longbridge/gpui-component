@@ -1,6 +1,7 @@
 use gpui::{
-    Action, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Styled as _, Window, prelude::FluentBuilder, px,
+    Action, App, AppContext as _, ClickEvent, Context, Corner, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
+    prelude::FluentBuilder, px,
 };
 
 use gpui_component::{
@@ -691,7 +692,7 @@ impl Render for ButtonStory {
                         DropdownButton::new("dropdown-button2")
                             .button(Button::new("btn").label("Click Me"))
                             .selected(selected)
-                            .popup_menu(move |this, _, _| {
+                            .popup_menu_with_anchor(Corner::BottomRight, move |this, _, _| {
                                 this.menu_with_check(
                                     "Disabled",
                                     disabled,
