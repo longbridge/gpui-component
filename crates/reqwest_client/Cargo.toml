@@ -16,7 +16,7 @@ path = "src/reqwest_client.rs"
 doctest = true
 
 [dependencies]
-reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
+reqwest.workspace = true
 http-client.workspace = true
 anyhow.workspace = true
 log.workspace = true
