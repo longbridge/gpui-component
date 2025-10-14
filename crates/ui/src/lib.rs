@@ -74,11 +74,13 @@ pub use index_path::IndexPath;
 pub use input::{Rope, RopeExt, RopeLines};
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
+pub use list::*;
 pub use menu::{context_menu, popup_menu};
 pub use root::{ContextModal, Root};
 pub use styled::*;
 pub use time::*;
 pub use title_bar::*;
+pub use tree::*;
 pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList, VirtualListScrollHandle};
 pub use window_border::{window_border, window_paddings, WindowBorder};
 

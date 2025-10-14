@@ -1,22 +1,90 @@
-use gpui::{ElementId, SharedString};
+use std::{cell::RefCell, rc::Rc};
 
-use crate::{Disableable, Icon};
+use gpui::{
+    div, prelude::FluentBuilder as _, uniform_list, App, Context, ElementId, Entity,
+    InteractiveElement as _, IntoElement, ListSizingBehavior, MouseButton, ParentElement,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window,
+};
+
+use crate::{v_flex, ListItem, StyledExt};
+
+/// Create a new tree with the given root items.
+///
+/// # Arguments
+///
+/// * `state` - The shared state managing the tree items.
+/// * `render_item` - A closure to render each tree item.
+///
+/// ```ignore
+/// Tree::new(&tree_state, |ix, entry, selected, window, cx| {
+///     div().child(item.label.clone())
+/// })
+/// ```
+pub fn tree<R>(state: &Entity<TreeState>, render_item: R) -> Tree
+where
+    R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
+{
+    Tree::new(state, render_item)
+}
 
 /// A tree item with a label, children, and an expanded state.
 #[derive(Clone)]
 pub struct TreeItem {
     pub label: SharedString,
-    pub icon: Option<Icon>,
     pub children: Vec<TreeItem>,
-    pub expanded: bool,
-    pub disabled: bool,
+    pub expanded: Rc<RefCell<bool>>,
+    pub disabled: Rc<RefCell<bool>>,
+}
+
+impl TreeItem {
+    /// Return true if the item is disabled.
+    pub fn is_disabled(&self) -> bool {
+        *self.disabled.borrow()
+    }
+
+    /// Return true if the item is expanded.
+    #[inline]
+    pub fn is_expanded(&self) -> bool {
+        *self.item.expanded.borrow()
+    }
 }
 
 /// A flat representation of a tree item with its depth.
 #[derive(Clone)]
-struct TreeEntry {
+pub struct TreeEntry {
     item: TreeItem,
     depth: usize,
+}
+
+impl TreeEntry {
+    /// Get the source tree item.
+    #[inline]
+    pub fn item(&self) -> &TreeItem {
+        &self.item
+    }
+
+    /// The depth of this item in the tree.
+    #[inline]
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+
+    #[inline]
+    fn is_root(&self) -> bool {
+        self.depth == 0
+    }
+
+    /// Whether this item is a folder (has children).
+    #[inline]
+    pub fn is_folder(&self) -> bool {
+        !self.item.children.is_empty()
+    }
+
+    /// Return true if the item is expanded.
+    #[inline]
+    pub fn is_expanded(&self) -> bool {
+        *self.item.expanded.borrow()
+    }
 }
 
 impl TreeItem {
@@ -24,10 +92,9 @@ impl TreeItem {
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             label: label.into(),
-            icon: None,
             children: Vec::new(),
-            expanded: false,
-            disabled: false,
+            expanded: Rc::new(RefCell::new(false)),
+            disabled: Rc::new(RefCell::new(false)),
         }
     }
 
@@ -38,74 +105,268 @@ impl TreeItem {
     }
 
     /// Add multiple child items to this tree item.
-    pub fn children(mut self, children: Vec<TreeItem>) -> Self {
-        self.children.extend(children);
-        self
-    }
-
-    /// Set icon for this tree item.
-    pub fn icon(mut self, icon: Icon) -> Self {
-        self.icon = Some(icon);
+    pub fn children(mut self, children: impl Into<Vec<TreeItem>>) -> Self {
+        self.children.extend(children.into());
         self
     }
 
     /// Set expanded state for this tree item.
     pub fn expanded(mut self, expanded: bool) -> Self {
-        self.expanded = expanded;
+        self.expanded = Rc::new(RefCell::new(expanded));
         self
     }
 
     /// Set disabled state for this tree item.
     pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
+        self.disabled = Rc::new(RefCell::new(disabled));
         self
     }
 }
 
-pub struct Tree {
-    id: ElementId,
-    pub items: Vec<TreeItem>,
+/// State for managing tree items.
+pub struct TreeState {
     entries: Vec<TreeEntry>,
+    selected_ix: Option<usize>,
 }
 
-impl Tree {
-    /// Create a new tree with the given root items.
-    pub fn new(id: impl Into<ElementId>, items: Vec<TreeItem>) -> Self {
-        let mut tree = Self {
-            id: id.into(),
-            items,
+impl TreeState {
+    /// Create a new empty tree state.
+    pub fn new() -> Self {
+        Self {
+            selected_ix: None,
             entries: Vec::new(),
-        };
-        tree.rebuild_entries();
-        tree
-    }
-
-    /// Rebuild the flat entries list from the hierarchical items.
-    fn rebuild_entries(&mut self) {
-        self.entries.clear();
-        for item in self.items.clone().into_iter() {
-            self.add_entry(item, 0);
         }
     }
 
-    /// Recursively add entries to the flat list.
+    pub fn items(mut self, items: impl Into<Vec<TreeItem>>) -> Self {
+        let items = items.into();
+        self.entries.clear();
+        for item in items.into_iter() {
+            self.add_entry(item, 0);
+        }
+        self
+    }
+
+    pub fn set_items(&mut self, items: impl Into<Vec<TreeItem>>, cx: &mut Context<Self>) {
+        let items = items.into();
+        self.entries.clear();
+        for item in items.into_iter() {
+            self.add_entry(item, 0);
+        }
+        self.selected_ix = None;
+        cx.notify();
+    }
+
     fn add_entry(&mut self, item: TreeItem, depth: usize) {
         self.entries.push(TreeEntry {
             item: item.clone(),
             depth,
         });
-        if item.expanded {
+        if item.is_expanded() {
             for child in &item.children {
                 self.add_entry(child.clone(), depth + 1);
             }
         }
     }
 
-    /// Toggle the expanded state of a tree item at the given index.
-    pub fn toggle_expanded(&mut self, index: usize) {
-        if let Some(entry) = self.entries.get_mut(index) {
-            entry.item.expanded = !entry.item.expanded;
-            self.rebuild_entries();
+    fn toggle_expand(&mut self, ix: usize) {
+        let Some(entry) = self.entries.get_mut(ix) else {
+            return;
+        };
+        if !entry.is_folder() {
+            return;
         }
+
+        *entry.item.expanded.borrow_mut() = !entry.is_expanded();
+        self.rebuild_entries();
+    }
+
+    fn rebuild_entries(&mut self) {
+        let root_items: Vec<TreeItem> = self
+            .entries
+            .iter()
+            .filter(|e| e.is_root())
+            .map(|e| e.item.clone())
+            .collect();
+        self.entries.clear();
+        for item in root_items.into_iter() {
+            self.add_entry(item, 0);
+        }
+    }
+}
+
+/// A tree view element that displays hierarchical data.
+#[derive(IntoElement)]
+pub struct Tree {
+    id: ElementId,
+    state: Entity<TreeState>,
+    style: StyleRefinement,
+    render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
+}
+
+impl Tree {
+    pub fn new<R>(state: &Entity<TreeState>, render_item: R) -> Self
+    where
+        R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
+    {
+        Self {
+            id: ElementId::Name(format!("tree-{}", state.entity_id()).into()),
+            state: state.clone(),
+            style: StyleRefinement::default(),
+            render_item: Rc::new(move |ix, item, selected, window, app| {
+                render_item(ix, item, selected, window, app)
+            }),
+        }
+    }
+
+    fn on_entry_click(state: &Entity<TreeState>, ix: usize, _: &mut Window, cx: &mut App) {
+        state.update(cx, |state, cx| {
+            state.selected_ix = Some(ix);
+            state.toggle_expand(ix);
+            cx.notify();
+        })
+    }
+}
+
+impl Styled for Tree {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for Tree {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let tree_state = self.state.read(cx);
+        let render_item = self.render_item.clone();
+
+        v_flex()
+            .id(self.id)
+            .size_full()
+            .child(
+                uniform_list("items", tree_state.entries.len(), {
+                    let selected_ix = tree_state.selected_ix;
+                    let entries = tree_state.entries.clone();
+                    let state = self.state.clone();
+                    move |visible_range, window, cx| {
+                        let mut items = Vec::with_capacity(visible_range.len());
+                        for ix in visible_range {
+                            let entry = &entries[ix];
+                            let selected = Some(ix) == selected_ix;
+                            let item = (render_item)(ix, entry, selected, window, cx);
+
+                            let el = div()
+                                .id(ix)
+                                .child(item.disabled(entry.item.disabled).selected(selected))
+                                .when(!entry.item.disabled, |this| {
+                                    this.on_mouse_down(MouseButton::Left, {
+                                        let state = state.clone();
+                                        move |_, window, cx| {
+                                            Self::on_entry_click(&state, ix, window, cx);
+                                        }
+                                    })
+                                });
+
+                            items.push(el)
+                        }
+
+                        items
+                    }
+                })
+                .flex_grow()
+                .size_full()
+                .with_sizing_behavior(ListSizingBehavior::Auto)
+                .into_any_element(),
+            )
+            .refine_style(&self.style)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+
+    use crate::TreeState;
+
+    fn assert_entries(entries: &Vec<super::TreeEntry>, expected: &str) {
+        let actual: Vec<String> = entries
+            .iter()
+            .map(|e| {
+                let mut s = String::new();
+                s.push_str(&"    ".repeat(e.depth));
+                s.push_str(e.item().label.as_str());
+                s
+            })
+            .collect();
+        let actual = actual.join("\n");
+        assert_eq!(actual.trim(), expected.trim());
+    }
+
+    #[test]
+    fn test_tree_entry() {
+        use super::TreeItem;
+
+        let items = vec![
+            TreeItem::new("src")
+                .expanded(true)
+                .child(
+                    TreeItem::new("ui")
+                        .expanded(true)
+                        .child(TreeItem::new("button.rs"))
+                        .child(TreeItem::new("icon.rs"))
+                        .child(TreeItem::new("mod.rs")),
+                )
+                .child(TreeItem::new("lib.rs")),
+            TreeItem::new("Cargo.toml"),
+            TreeItem::new("Cargo.lock").disabled(true),
+            TreeItem::new("README.md"),
+        ];
+
+        let mut state = TreeState::new().items(items);
+        assert_entries(
+            &state.entries,
+            indoc! {
+                r#"
+                src
+                    ui
+                        button.rs
+                        icon.rs
+                        mod.rs
+                    lib.rs
+                Cargo.toml
+                Cargo.lock
+                README.md
+                "#
+            },
+        );
+
+        let entry = state.entries.get(0).unwrap();
+        assert_eq!(entry.depth(), 0);
+        assert_eq!(entry.is_root(), true);
+        assert_eq!(entry.is_folder(), true);
+        assert_eq!(entry.is_expanded(), true);
+
+        let entry = state.entries.get(1).unwrap();
+        assert_eq!(entry.depth(), 1);
+        assert_eq!(entry.is_root(), false);
+        assert_eq!(entry.is_folder(), true);
+        assert_eq!(entry.is_expanded(), true);
+        assert_eq!(entry.item().label.as_str(), "ui");
+
+        state.toggle_expand(1);
+        let entry = state.entries.get(1).unwrap();
+        assert_eq!(entry.is_expanded(), false);
+        assert_entries(
+            &state.entries,
+            indoc! {
+                r#"
+                src
+                    ui
+                    lib.rs
+                Cargo.toml
+                Cargo.lock
+                README.md
+                "#
+            },
+        );
     }
 }
