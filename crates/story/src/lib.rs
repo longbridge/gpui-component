@@ -109,7 +109,7 @@ pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, Root, TitleBar,
+    ActiveTheme, ContextModal, IconName, Root, StyledExt, TitleBar,
     button::Button,
     context_menu::ContextMenuExt,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
@@ -767,12 +767,13 @@ impl Focusable for StoryContainer {
     }
 }
 impl Render for StoryContainer {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("story-container")
             .size_full()
             .overflow_y_scroll()
             .track_focus(&self.focus_handle)
+            .debug_focused(&self.focus_handle, window, cx)
             .on_action(cx.listener(Self::on_action_panel_info))
             .on_action(cx.listener(Self::on_action_toggle_search))
             .when_some(self.story.clone(), |this, story| {
