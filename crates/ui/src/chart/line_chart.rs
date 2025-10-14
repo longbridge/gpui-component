@@ -59,6 +59,11 @@ where
         self
     }
 
+    pub fn natural(mut self) -> Self {
+        self.stroke_style = StrokeStyle::Natural;
+        self
+    }
+
     pub fn linear(mut self) -> Self {
         self.stroke_style = StrokeStyle::Linear;
         self
