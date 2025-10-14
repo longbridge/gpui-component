@@ -1579,7 +1579,6 @@ impl InputState {
         }
 
         let old_text = text.slice(range.clone()).to_string();
-
         let new_range = range.start..range.start + new_text.len();
 
         self.history
@@ -2150,6 +2149,7 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&old_text, &range, &new_text);
+        self.history.end_grouping();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -2205,7 +2205,6 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.push_history(&old_text, &range, new_text);
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -2228,7 +2227,8 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change);
+        self.history.start_grouping();
+        self.push_history(&old_text, &range, new_text);
         cx.notify();
     }
 
