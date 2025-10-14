@@ -25,6 +25,7 @@ pub struct DropdownButton {
     variant: Option<ButtonVariant>,
     size: Option<Size>,
     rounded: ButtonRounded,
+    anchor: Corner,
 }
 
 impl DropdownButton {
@@ -40,6 +41,7 @@ impl DropdownButton {
             variant: None,
             size: None,
             rounded: ButtonRounded::default(),
+            anchor: Corner::TopRight,
         }
     }
 
@@ -53,6 +55,16 @@ impl DropdownButton {
         popup_menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         self.popup_menu = Some(Box::new(popup_menu));
+        self
+    }
+
+    pub fn popup_menu_with_anchor(
+        mut self,
+        anchor: impl Into<Corner>,
+        popup_menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.popup_menu = Some(Box::new(popup_menu));
+        self.anchor = anchor.into();
         self
     }
 
@@ -158,7 +170,7 @@ impl RenderOnce for DropdownButton {
                             .when_some(self.outline, |this, _| this.outline())
                             .when_some(self.size, |this, size| this.with_size(size))
                             .when_some(self.variant, |this, variant| this.with_variant(variant))
-                            .popup_menu_with_anchor(Corner::TopRight, move |this, window, cx| {
+                            .popup_menu_with_anchor(self.anchor, move |this, window, cx| {
                                 popup_menu(this, window, cx)
                             }),
                     )
