@@ -141,7 +141,10 @@ impl AppMenu {
             None => {
                 let items = self.menu.items.clone();
                 let popup_menu = PopupMenu::build(window, cx, |menu, window, cx| {
-                    menu.with_menu_items(items, window, cx)
+                    menu.when_some(window.focused(cx), |this, handle| {
+                        this.action_context(handle)
+                    })
+                    .with_menu_items(items, window, cx)
                 });
                 popup_menu.read(cx).focus_handle(cx).focus(window);
                 self._subscription =

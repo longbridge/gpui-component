@@ -164,11 +164,7 @@ impl PopupMenu {
         cx: &mut App,
         f: impl FnOnce(Self, &mut Window, &mut Context<PopupMenu>) -> Self,
     ) -> Entity<Self> {
-        cx.new(|cx| {
-            let mut menu = Self::new(cx);
-            menu.action_context = window.focused(cx);
-            f(menu, window, cx)
-        })
+        cx.new(|cx| f(Self::new(cx), window, cx))
     }
 
     /// Set the focus handle of Entity to handle actions.
@@ -661,10 +657,8 @@ impl PopupMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(action_context) = self.action_context.as_ref() {
-            if !action_context.contains_focused(window, cx) {
-                action_context.focus(window);
-            }
+        if let Some(context) = self.action_context.as_ref() {
+            context.focus(window);
         }
 
         window.dispatch_action(action.boxed_clone(), cx);
