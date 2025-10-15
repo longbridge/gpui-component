@@ -1,5 +1,5 @@
 [workspace]
-members = ["examples/hello_world", "examples/window_title", "crates/macros", "crates/story", "crates/ui", "examples/window_title", "examples/app_assets", "examples/app_assets"]
+members = ["examples/hello_world", "examples/window_title", "crates/macros", "crates/story", "crates/ui", "examples/window_title", "examples/app_assets", "examples/app_assets", "examples/input"]
 
 default-members = ["crates/story"]
 resolver = "2"
