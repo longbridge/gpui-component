@@ -62,7 +62,7 @@ impl InputStory {
         let mask_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .masked(true)
-                .default_value("this-is-password")
+                .default_value("this-is-password-中文🚀🎉")
         });
 
         let prefix_input1 =
