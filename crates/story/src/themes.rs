@@ -50,10 +50,6 @@ pub fn init(cx: &mut App) {
         };
 
         if let Ok(json) = serde_json::to_string_pretty(&state) {
-            // Create parent directory if it doesn't exist
-            if let Some(parent) = std::path::Path::new(STATE_FILE).parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
             // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
             let _ = std::fs::write(STATE_FILE, json);
         }
