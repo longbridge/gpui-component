@@ -1,15 +1,29 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, uniform_list, App, Context, ElementId, Entity,
-    InteractiveElement as _, IntoElement, ListSizingBehavior, MouseButton, ParentElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, UniformListScrollHandle, Window,
+    div, prelude::FluentBuilder as _, uniform_list, App, Context, ElementId, Entity, FocusHandle,
+    InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior, MouseButton,
+    ParentElement, Render, RenderOnce, SharedString, StyleRefinement, Styled,
+    UniformListScrollHandle, Window,
 };
 
 use crate::{
+    actions::{Cancel, Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
     scroll::{Scrollbar, ScrollbarState},
     ListItem, StyledExt,
 };
+
+const CONTEXT: &str = "Tree";
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
+        KeyBinding::new("right", SelectRight, Some(CONTEXT)),
+    ]);
+}
 
 /// Create a [`Tree`].
 ///
@@ -163,6 +177,7 @@ impl TreeItem {
 
 /// State for managing tree items.
 pub struct TreeState {
+    focus_handle: FocusHandle,
     entries: Vec<TreeEntry>,
     scrollbar_state: ScrollbarState,
     scroll_handle: UniformListScrollHandle,
@@ -171,9 +186,10 @@ pub struct TreeState {
 
 impl TreeState {
     /// Create a new empty tree state.
-    pub fn new() -> Self {
+    pub fn new(cx: &mut App) -> Self {
         Self {
             selected_ix: None,
+            focus_handle: cx.focus_handle(),
             scrollbar_state: ScrollbarState::default(),
             scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
@@ -235,6 +251,74 @@ impl TreeState {
             self.add_entry(item, 0);
         }
     }
+
+    fn on_action_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(selected_ix) = self.selected_ix {
+            if let Some(entry) = self.entries.get(selected_ix) {
+                if entry.is_folder() {
+                    self.toggle_expand(selected_ix);
+                    cx.notify();
+                }
+            }
+        }
+    }
+
+    fn on_action_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(selected_ix) = self.selected_ix {
+            if let Some(entry) = self.entries.get(selected_ix) {
+                if entry.is_folder() && entry.is_expanded() {
+                    self.toggle_expand(selected_ix);
+                    cx.notify();
+                }
+            }
+        }
+    }
+
+    fn on_action_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(selected_ix) = self.selected_ix {
+            if let Some(entry) = self.entries.get(selected_ix) {
+                if entry.is_folder() && !entry.is_expanded() {
+                    self.toggle_expand(selected_ix);
+                    cx.notify();
+                }
+            }
+        }
+    }
+
+    fn on_action_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
+        let mut selected_ix = self.selected_ix.unwrap_or(0);
+
+        if selected_ix > 0 {
+            selected_ix = selected_ix - 1;
+        } else {
+            selected_ix = self.entries.len().saturating_sub(1);
+        }
+
+        self.selected_ix = Some(selected_ix);
+        self.scroll_handle
+            .scroll_to_item(selected_ix, gpui::ScrollStrategy::Top);
+        cx.notify();
+    }
+
+    fn on_action_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
+        let mut selected_ix = self.selected_ix.unwrap_or(0);
+        if selected_ix + 1 < self.entries.len() {
+            selected_ix = selected_ix + 1;
+        } else {
+            selected_ix = 0;
+        }
+
+        self.selected_ix = Some(selected_ix);
+        self.scroll_handle
+            .scroll_to_item(selected_ix, gpui::ScrollStrategy::Bottom);
+        cx.notify();
+    }
+}
+
+impl Render for TreeState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
 }
 
 /// A tree view element that displays hierarchical data.
@@ -277,12 +361,19 @@ impl Styled for Tree {
 }
 
 impl RenderOnce for Tree {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tree_state = self.state.read(cx);
         let render_item = self.render_item.clone();
 
         div()
             .id(self.id)
+            .key_context(CONTEXT)
+            .track_focus(&tree_state.focus_handle)
+            .on_action(window.listener_for(&self.state, TreeState::on_action_confirm))
+            .on_action(window.listener_for(&self.state, TreeState::on_action_left))
+            .on_action(window.listener_for(&self.state, TreeState::on_action_right))
+            .on_action(window.listener_for(&self.state, TreeState::on_action_up))
+            .on_action(window.listener_for(&self.state, TreeState::on_action_down))
             .size_full()
             .child(
                 uniform_list("items", tree_state.entries.len(), {
@@ -342,6 +433,7 @@ mod tests {
     use indoc::indoc;
 
     use crate::TreeState;
+    use gpui::AppContext as _;
 
     fn assert_entries(entries: &Vec<super::TreeEntry>, expected: &str) {
         let actual: Vec<String> = entries
@@ -357,31 +449,32 @@ mod tests {
         assert_eq!(actual.trim(), expected.trim());
     }
 
-    #[test]
-    fn test_tree_entry() {
+    #[gpui::test]
+    fn test_tree_entry(cx: &mut gpui::TestAppContext) {
         use super::TreeItem;
 
         let items = vec![
-            TreeItem::new("src")
+            TreeItem::new("src", "src")
                 .expanded(true)
                 .child(
-                    TreeItem::new("ui")
+                    TreeItem::new("src/ui", "ui")
                         .expanded(true)
-                        .child(TreeItem::new("button.rs"))
-                        .child(TreeItem::new("icon.rs"))
-                        .child(TreeItem::new("mod.rs")),
+                        .child(TreeItem::new("src/ui/button.rs", "button.rs"))
+                        .child(TreeItem::new("src/ui/icon.rs", "icon.rs"))
+                        .child(TreeItem::new("src/ui/mod.rs", "mod.rs")),
                 )
-                .child(TreeItem::new("lib.rs")),
-            TreeItem::new("Cargo.toml"),
-            TreeItem::new("Cargo.lock").disabled(true),
-            TreeItem::new("README.md"),
+                .child(TreeItem::new("src/lib.rs", "lib.rs")),
+            TreeItem::new("Cargo.toml", "Cargo.toml"),
+            TreeItem::new("Cargo.lock", "Cargo.lock").disabled(true),
+            TreeItem::new("README.md", "README.md"),
         ];
 
-        let mut state = TreeState::new().items(items);
-        assert_entries(
-            &state.entries,
-            indoc! {
-                r#"
+        let state = cx.new(|cx| TreeState::new(cx).items(items));
+        state.update(cx, |state, _| {
+            assert_entries(
+                &state.entries,
+                indoc! {
+                    r#"
                 src
                     ui
                         button.rs
@@ -392,29 +485,29 @@ mod tests {
                 Cargo.lock
                 README.md
                 "#
-            },
-        );
+                },
+            );
 
-        let entry = state.entries.get(0).unwrap();
-        assert_eq!(entry.depth(), 0);
-        assert_eq!(entry.is_root(), true);
-        assert_eq!(entry.is_folder(), true);
-        assert_eq!(entry.is_expanded(), true);
+            let entry = state.entries.get(0).unwrap();
+            assert_eq!(entry.depth(), 0);
+            assert_eq!(entry.is_root(), true);
+            assert_eq!(entry.is_folder(), true);
+            assert_eq!(entry.is_expanded(), true);
 
-        let entry = state.entries.get(1).unwrap();
-        assert_eq!(entry.depth(), 1);
-        assert_eq!(entry.is_root(), false);
-        assert_eq!(entry.is_folder(), true);
-        assert_eq!(entry.is_expanded(), true);
-        assert_eq!(entry.item().label.as_str(), "ui");
+            let entry = state.entries.get(1).unwrap();
+            assert_eq!(entry.depth(), 1);
+            assert_eq!(entry.is_root(), false);
+            assert_eq!(entry.is_folder(), true);
+            assert_eq!(entry.is_expanded(), true);
+            assert_eq!(entry.item().label.as_str(), "ui");
 
-        state.toggle_expand(1);
-        let entry = state.entries.get(1).unwrap();
-        assert_eq!(entry.is_expanded(), false);
-        assert_entries(
-            &state.entries,
-            indoc! {
-                r#"
+            state.toggle_expand(1);
+            let entry = state.entries.get(1).unwrap();
+            assert_eq!(entry.is_expanded(), false);
+            assert_entries(
+                &state.entries,
+                indoc! {
+                    r#"
                 src
                     ui
                     lib.rs
@@ -422,7 +515,8 @@ mod tests {
                 Cargo.lock
                 README.md
                 "#
-            },
-        );
+                },
+            );
+        })
     }
 }

@@ -1,7 +1,7 @@
 use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
-    actions::{Cancel, SelectNext, SelectPrev},
+    actions::{Cancel, SelectDown, SelectUp},
     context_menu::ContextMenuExt,
     h_flex,
     popup_menu::PopupMenu,
@@ -24,16 +24,16 @@ mod loading;
 pub use column::*;
 pub use delegate::*;
 
-actions!(table, [SelectPrevColumn, SelectNextColumn]);
+actions!(table, [SelectUpColumn, SelectDownColumn]);
 
 pub(crate) fn init(cx: &mut App) {
     let context = Some("Table");
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, context),
-        KeyBinding::new("up", SelectPrev, context),
-        KeyBinding::new("down", SelectNext, context),
-        KeyBinding::new("left", SelectPrevColumn, context),
-        KeyBinding::new("right", SelectNextColumn, context),
+        KeyBinding::new("up", SelectUp, context),
+        KeyBinding::new("down", SelectDown, context),
+        KeyBinding::new("left", SelectUpColumn, context),
+        KeyBinding::new("right", SelectDownColumn, context),
     ]);
 }
 
@@ -390,7 +390,7 @@ where
         cx.propagate();
     }
 
-    fn action_select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
+    fn action_select_prev(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
         let rows_count = self.delegate.rows_count(cx);
         if rows_count < 1 {
             return;
@@ -408,7 +408,7 @@ where
         self.set_selected_row(selected_row, cx);
     }
 
-    fn action_select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
+    fn action_select_next(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
         let rows_count = self.delegate.rows_count(cx);
         if rows_count < 1 {
             return;
@@ -431,7 +431,7 @@ where
 
     fn action_select_prev_col(
         &mut self,
-        _: &SelectPrevColumn,
+        _: &SelectUpColumn,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -449,7 +449,7 @@ where
 
     fn action_select_next_col(
         &mut self,
-        _: &SelectNextColumn,
+        _: &SelectDownColumn,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
