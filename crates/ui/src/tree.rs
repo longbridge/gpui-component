@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::{
-    actions::{Cancel, Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
+    actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
     scroll::{Scrollbar, ScrollbarState},
     ListItem, StyledExt,
 };
@@ -16,8 +16,6 @@ use crate::{
 const CONTEXT: &str = "Tree";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
         KeyBinding::new("up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
@@ -213,6 +211,11 @@ impl TreeState {
         }
         self.selected_ix = None;
         cx.notify();
+    }
+
+    /// Get the currently selected entry, if any.
+    pub fn selected_entry(&self) -> Option<&TreeEntry> {
+        self.selected_ix.and_then(|ix| self.entries.get(ix))
     }
 
     fn add_entry(&mut self, item: TreeItem, depth: usize) {

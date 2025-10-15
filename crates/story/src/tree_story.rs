@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use autocorrect::ignorer::Ignorer;
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, InteractiveElement, ParentElement, Render, Styled,
-    Window, px,
+    App, AppContext, Context, Entity, InteractiveElement, KeyBinding, ParentElement, Render,
+    Styled, Window, actions, px,
 };
 
 use gpui_component::{
@@ -13,10 +13,19 @@ use gpui_component::{
 
 use crate::{Story, section};
 
+actions!(story, [Rename, SelectItem]);
+
+const CONTEXT: &str = "TreeStory";
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("enter", Rename, Some(CONTEXT)),
+        KeyBinding::new("space", SelectItem, Some(CONTEXT)),
+    ]);
+}
+
 pub struct TreeStory {
     tree_state: Entity<TreeState>,
     selected_item: Option<TreeItem>,
-    focus_handle: gpui::FocusHandle,
 }
 
 fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
@@ -76,7 +85,26 @@ impl TreeStory {
         Self {
             tree_state,
             selected_item: None,
-            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    fn on_action_select_item(
+        &mut self,
+        _: &SelectItem,
+        _: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some(entry) = self.tree_state.read(cx).selected_entry() {
+            self.selected_item = Some(entry.item().clone());
+            cx.notify();
+        }
+    }
+
+    fn on_action_rename(&mut self, _: &Rename, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if let Some(entry) = self.tree_state.read(cx).selected_entry() {
+            let item = entry.item();
+            println!("Renaming item: {} ({})", item.label, item.id);
+            // Here you could implement actual renaming logic
         }
     }
 }
@@ -95,12 +123,6 @@ impl Story for TreeStory {
     }
 }
 
-impl Focusable for TreeStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
 impl Render for TreeStory {
     fn render(
         &mut self,
@@ -108,51 +130,60 @@ impl Render for TreeStory {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let view = cx.entity();
-        v_flex().track_focus(&self.focus_handle).gap_5().child(
-            section("File tree")
-                .v_flex()
-                .max_w_md()
-                .child(
-                    tree(
-                        &self.tree_state,
-                        move |ix, entry, _selected, _window, cx| {
-                            view.update(cx, |_, cx| {
-                                let item = entry.item();
-                                let icon = if !entry.is_folder() {
-                                    IconName::File
-                                } else if entry.is_expanded() {
-                                    IconName::FolderOpen
-                                } else {
-                                    IconName::Folder
-                                };
+        v_flex()
+            .id("tree-story")
+            .key_context(CONTEXT)
+            .on_action(cx.listener(Self::on_action_rename))
+            .on_action(cx.listener(Self::on_action_select_item))
+            .gap_5()
+            .child(
+                section("File tree")
+                    .sub_title("Press `space` to select, `enter` to rename.")
+                    .v_flex()
+                    .max_w_md()
+                    .child(
+                        tree(
+                            &self.tree_state,
+                            move |ix, entry, _selected, _window, cx| {
+                                view.update(cx, |_, cx| {
+                                    let item = entry.item();
+                                    let icon = if !entry.is_folder() {
+                                        IconName::File
+                                    } else if entry.is_expanded() {
+                                        IconName::FolderOpen
+                                    } else {
+                                        IconName::Folder
+                                    };
 
-                                ListItem::new(ix)
-                                    .w_full()
-                                    .rounded(cx.theme().radius)
-                                    .px_3()
-                                    .pl(px(16.) * entry.depth() + px(12.))
-                                    .child(h_flex().gap_2().child(icon).child(item.label.clone()))
-                                    .on_click(cx.listener({
-                                        let item = item.clone();
-                                        move |this, _, _window, cx| {
-                                            this.selected_item = Some(item.clone());
-                                            cx.notify();
-                                        }
-                                    }))
-                            })
-                        },
+                                    ListItem::new(ix)
+                                        .w_full()
+                                        .rounded(cx.theme().radius)
+                                        .px_3()
+                                        .pl(px(16.) * entry.depth() + px(12.))
+                                        .child(
+                                            h_flex().gap_2().child(icon).child(item.label.clone()),
+                                        )
+                                        .on_click(cx.listener({
+                                            let item = item.clone();
+                                            move |this, _, _window, cx| {
+                                                this.selected_item = Some(item.clone());
+                                                cx.notify();
+                                            }
+                                        }))
+                                })
+                            },
+                        )
+                        .p_1()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded(cx.theme().radius)
+                        .h(px(540.)),
                     )
-                    .p_1()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius)
-                    .h(px(540.)),
-                )
-                .children(
-                    self.selected_item
-                        .as_ref()
-                        .map(|item| Label::new("Selected:").secondary(item.id.clone())),
-                ),
-        )
+                    .children(
+                        self.selected_item
+                            .as_ref()
+                            .map(|item| Label::new("Selected:").secondary(item.id.clone())),
+                    ),
+            )
     }
 }
