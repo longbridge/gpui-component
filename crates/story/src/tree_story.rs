@@ -179,10 +179,22 @@ impl Render for TreeStory {
                         .rounded(cx.theme().radius)
                         .h(px(540.)),
                     )
-                    .children(
-                        self.selected_item
-                            .as_ref()
-                            .map(|item| Label::new("Selected:").secondary(item.id.clone())),
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_between()
+                            .gap_3()
+                            .children(
+                                self.tree_state
+                                    .read(cx)
+                                    .selected_index()
+                                    .map(|ix| format!("Selected Index: {}", ix)),
+                            )
+                            .children(
+                                self.selected_item
+                                    .as_ref()
+                                    .map(|item| Label::new("Selected:").secondary(item.id.clone())),
+                            ),
                     ),
             )
     }

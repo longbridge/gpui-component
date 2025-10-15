@@ -213,6 +213,21 @@ impl TreeState {
         cx.notify();
     }
 
+    /// Get the currently selected index, if any.
+    pub fn selected_index(&self) -> Option<usize> {
+        self.selected_ix
+    }
+
+    /// Set the selected index, or `None` to clear selection.
+    pub fn set_selected_index(&mut self, ix: Option<usize>, cx: &mut Context<Self>) {
+        self.selected_ix = ix;
+        cx.notify();
+    }
+
+    pub fn scroll_to_item(&mut self, ix: usize, strategy: gpui::ScrollStrategy) {
+        self.scroll_handle.scroll_to_item(ix, strategy);
+    }
+
     /// Get the currently selected entry, if any.
     pub fn selected_entry(&self) -> Option<&TreeEntry> {
         self.selected_ix.and_then(|ix| self.entries.get(ix))
@@ -379,7 +394,7 @@ impl RenderOnce for Tree {
             .on_action(window.listener_for(&self.state, TreeState::on_action_down))
             .size_full()
             .child(
-                uniform_list("items", tree_state.entries.len(), {
+                uniform_list("entries", tree_state.entries.len(), {
                     let selected_ix = tree_state.selected_ix;
                     let entries = tree_state.entries.clone();
                     let state = self.state.clone();
