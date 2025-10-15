@@ -10,7 +10,7 @@ use gpui::{
 use ropey::Rope;
 
 use crate::{
-    actions::SelectPrev,
+    actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
     input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt as _, Search, TextInput},
@@ -25,7 +25,7 @@ actions!(input, [Tab]);
 pub(super) fn init(cx: &mut App) {
     cx.bind_keys(vec![KeyBinding::new(
         "shift-enter",
-        SelectPrev,
+        SelectUp,
         Some(KEY_CONTEXT),
     )]);
 }
@@ -290,7 +290,7 @@ impl SearchPanel {
         cx.notify();
     }
 
-    fn on_action_prev(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_prev(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
         self.prev(window, cx);
     }
 

@@ -45,6 +45,7 @@ mod themes;
 mod title_bar;
 mod toggle_story;
 mod tooltip_story;
+mod tree_story;
 mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
@@ -103,7 +104,7 @@ pub use textarea_story::TextareaStory;
 pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
-use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+pub use tree_story::TreeStory;
 pub use virtual_list_story::VirtualListStory;
 pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
@@ -120,6 +121,7 @@ use gpui_component::{
     scroll::ScrollbarShow,
     v_flex,
 };
+use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -300,6 +302,7 @@ pub fn init(cx: &mut App) {
     webview_story::init(cx);
     tooltip_story::init(cx);
     otp_input_story::init(cx);
+    tree_story::init(cx);
 
     let http_client = std::sync::Arc::new(
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),

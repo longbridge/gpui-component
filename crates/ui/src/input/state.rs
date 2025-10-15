@@ -27,6 +27,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
+use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::{
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
@@ -66,10 +67,6 @@ actions!(
         MoveEnd,
         MovePageUp,
         MovePageDown,
-        SelectUp,
-        SelectDown,
-        SelectLeft,
-        SelectRight,
         SelectAll,
         SelectToStartOfLine,
         SelectToEndOfLine,

@@ -8,7 +8,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    actions::{Cancel, Confirm, SelectNext, SelectPrev},
+    actions::{Cancel, Confirm, SelectDown, SelectUp},
     h_flex,
     input::clear_button,
     list::{List, ListDelegate},
@@ -29,8 +29,8 @@ pub enum ListEvent {
 const CONTEXT: &str = "Dropdown";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
-        KeyBinding::new("down", SelectNext, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
         KeyBinding::new(
             "secondary-enter",
@@ -603,7 +603,7 @@ where
         cx.notify();
     }
 
-    fn up(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+    fn up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             self.open = true;
         }
@@ -612,7 +612,7 @@ where
         cx.propagate();
     }
 
-    fn down(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
+    fn down(&mut self, _: &SelectDown, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             self.open = true;
         }
