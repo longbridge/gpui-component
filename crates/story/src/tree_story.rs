@@ -105,7 +105,7 @@ impl Render for TreeStory {
                                     .w_full()
                                     .rounded(cx.theme().radius)
                                     .px_3()
-                                    .pl(px(10.) * entry.depth() + px(12.))
+                                    .pl(px(16.) * entry.depth() + px(12.))
                                     .child(h_flex().gap_2().child(icon).child(item.label.clone()))
                                     .on_click(cx.listener({
                                         let item = item.clone();
@@ -121,7 +121,7 @@ impl Render for TreeStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
-                    .h(px(640.)),
+                    .h(px(540.)),
                 )
                 .children(
                     self.selected_item

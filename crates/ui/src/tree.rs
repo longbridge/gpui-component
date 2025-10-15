@@ -3,10 +3,13 @@ use std::{cell::RefCell, rc::Rc};
 use gpui::{
     div, prelude::FluentBuilder as _, uniform_list, App, Context, ElementId, Entity,
     InteractiveElement as _, IntoElement, ListSizingBehavior, MouseButton, ParentElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    RenderOnce, SharedString, StyleRefinement, Styled, UniformListScrollHandle, Window,
 };
 
-use crate::{v_flex, ListItem, StyledExt};
+use crate::{
+    scroll::{Scrollbar, ScrollbarState},
+    ListItem, StyledExt,
+};
 
 /// Create a new tree with the given root items.
 ///
@@ -27,26 +30,17 @@ where
     Tree::new(state, render_item)
 }
 
+struct TreeItemState {
+    expanded: bool,
+    disabled: bool,
+}
+
 /// A tree item with a label, children, and an expanded state.
 #[derive(Clone)]
 pub struct TreeItem {
     pub label: SharedString,
     pub children: Vec<TreeItem>,
-    pub expanded: Rc<RefCell<bool>>,
-    pub disabled: Rc<RefCell<bool>>,
-}
-
-impl TreeItem {
-    /// Return true if the item is disabled.
-    pub fn is_disabled(&self) -> bool {
-        *self.disabled.borrow()
-    }
-
-    /// Return true if the item is expanded.
-    #[inline]
-    pub fn is_expanded(&self) -> bool {
-        *self.item.expanded.borrow()
-    }
+    state: Rc<RefCell<TreeItemState>>,
 }
 
 /// A flat representation of a tree item with its depth.
@@ -83,7 +77,12 @@ impl TreeEntry {
     /// Return true if the item is expanded.
     #[inline]
     pub fn is_expanded(&self) -> bool {
-        *self.item.expanded.borrow()
+        self.item.is_expanded()
+    }
+
+    #[inline]
+    pub fn is_disabled(&self) -> bool {
+        self.item.is_disabled()
     }
 }
 
@@ -93,8 +92,10 @@ impl TreeItem {
         Self {
             label: label.into(),
             children: Vec::new(),
-            expanded: Rc::new(RefCell::new(false)),
-            disabled: Rc::new(RefCell::new(false)),
+            state: Rc::new(RefCell::new(TreeItemState {
+                expanded: false,
+                disabled: false,
+            })),
         }
     }
 
@@ -111,21 +112,34 @@ impl TreeItem {
     }
 
     /// Set expanded state for this tree item.
-    pub fn expanded(mut self, expanded: bool) -> Self {
-        self.expanded = Rc::new(RefCell::new(expanded));
+    pub fn expanded(self, expanded: bool) -> Self {
+        self.state.borrow_mut().expanded = expanded;
         self
     }
 
     /// Set disabled state for this tree item.
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = Rc::new(RefCell::new(disabled));
+    pub fn disabled(self, disabled: bool) -> Self {
+        self.state.borrow_mut().disabled = disabled;
         self
+    }
+
+    /// Return true if the item is disabled.
+    pub fn is_disabled(&self) -> bool {
+        self.state.borrow().disabled
+    }
+
+    /// Return true if the item is expanded.
+    #[inline]
+    pub fn is_expanded(&self) -> bool {
+        self.state.borrow().expanded
     }
 }
 
 /// State for managing tree items.
 pub struct TreeState {
     entries: Vec<TreeEntry>,
+    scrollbar_state: ScrollbarState,
+    scroll_handle: UniformListScrollHandle,
     selected_ix: Option<usize>,
 }
 
@@ -134,6 +148,8 @@ impl TreeState {
     pub fn new() -> Self {
         Self {
             selected_ix: None,
+            scrollbar_state: ScrollbarState::default(),
+            scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
         }
     }
@@ -177,7 +193,7 @@ impl TreeState {
             return;
         }
 
-        *entry.item.expanded.borrow_mut() = !entry.is_expanded();
+        entry.item.state.borrow_mut().expanded = !entry.is_expanded();
         self.rebuild_entries();
     }
 
@@ -239,7 +255,7 @@ impl RenderOnce for Tree {
         let tree_state = self.state.read(cx);
         let render_item = self.render_item.clone();
 
-        v_flex()
+        div()
             .id(self.id)
             .size_full()
             .child(
@@ -256,8 +272,8 @@ impl RenderOnce for Tree {
 
                             let el = div()
                                 .id(ix)
-                                .child(item.disabled(entry.item.disabled).selected(selected))
-                                .when(!entry.item.disabled, |this| {
+                                .child(item.disabled(entry.item().is_disabled()).selected(selected))
+                                .when(!entry.item().is_disabled(), |this| {
                                     this.on_mouse_down(MouseButton::Left, {
                                         let state = state.clone();
                                         move |_, window, cx| {
@@ -274,10 +290,24 @@ impl RenderOnce for Tree {
                 })
                 .flex_grow()
                 .size_full()
+                .track_scroll(tree_state.scroll_handle.clone())
                 .with_sizing_behavior(ListSizingBehavior::Auto)
                 .into_any_element(),
             )
             .refine_style(&self.style)
+            .relative()
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .right_0()
+                    .bottom_0()
+                    .w(Scrollbar::width())
+                    .child(Scrollbar::vertical(
+                        &tree_state.scrollbar_state,
+                        &tree_state.scroll_handle,
+                    )),
+            )
     }
 }
 
