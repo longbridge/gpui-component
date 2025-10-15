@@ -24,7 +24,7 @@ mod loading;
 pub use column::*;
 pub use delegate::*;
 
-actions!(table, [SelectUpColumn, SelectDownColumn]);
+actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
 pub(crate) fn init(cx: &mut App) {
     let context = Some("Table");
@@ -32,8 +32,8 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("escape", Cancel, context),
         KeyBinding::new("up", SelectUp, context),
         KeyBinding::new("down", SelectDown, context),
-        KeyBinding::new("left", SelectUpColumn, context),
-        KeyBinding::new("right", SelectDownColumn, context),
+        KeyBinding::new("left", SelectPrevColumn, context),
+        KeyBinding::new("right", SelectNextColumn, context),
     ]);
 }
 
@@ -431,7 +431,7 @@ where
 
     fn action_select_prev_col(
         &mut self,
-        _: &SelectUpColumn,
+        _: &SelectPrevColumn,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -449,7 +449,7 @@ where
 
     fn action_select_next_col(
         &mut self,
-        _: &SelectDownColumn,
+        _: &SelectNextColumn,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
