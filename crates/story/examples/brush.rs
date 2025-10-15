@@ -1,24 +1,19 @@
 use std::rc::Rc;
 
-use gpui::{
-    App, AppContext, Bounds, Context, Entity, Focusable, Hsla, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, PathBuilder, Pixels,
-    Point, Render, Styled, Window, prelude::FluentBuilder, px,
-};
+use gpui::{StyleRefinement, prelude::FluentBuilder, *};
 use gpui_component::{
     ActiveTheme, Colorize as _, IconName, Sizable,
     button::Button,
     checkbox::Checkbox,
+    group_box::GroupBox,
     h_flex,
     slider::{Slider, SliderState},
     v_flex,
 };
-
-use crate::section;
+use story::Assets;
 
 pub struct BrushStory {
     focus_handle: gpui::FocusHandle,
-    canvas_size: (f32, f32),
     brush_size: Entity<SliderState>,
     brush_opacity: Entity<SliderState>,
     brush_color: Hsla,
@@ -31,30 +26,12 @@ pub struct BrushStory {
 
 #[derive(Clone, Debug)]
 struct Stroke {
-    points: Vec<Point<gpui::Pixels>>,
+    points: Vec<Point<Pixels>>,
     color: Hsla,
     size: f32,
 }
 
-impl super::Story for BrushStory {
-    fn title() -> &'static str {
-        "Brush"
-    }
-
-    fn description() -> &'static str {
-        "Interactive drawing canvas with brush controls."
-    }
-
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
-        Self::view(window, cx)
-    }
-}
-
 impl BrushStory {
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
-    }
-
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let brush_size = cx.new(|_| {
             SliderState::new()
@@ -74,10 +51,9 @@ impl BrushStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            canvas_size: (800.0, 600.0),
             brush_size,
             brush_opacity,
-            brush_color: gpui::black(),
+            brush_color: black(),
             strokes: Rc::new(vec![]),
             current_stroke: None,
             is_drawing: false,
@@ -96,8 +72,7 @@ impl BrushStory {
             self.is_drawing = true;
             let brush_size = self.brush_size.read(cx).value().start();
             let brush_opacity = self.brush_opacity.read(cx).value().start();
-            let mut color = self.brush_color;
-            color.a = brush_opacity;
+            let color = self.brush_color.opacity(brush_opacity);
 
             let local_pos = if let Some(bounds) = self.canvas_bounds {
                 Point::new(
@@ -189,7 +164,7 @@ impl BrushStory {
 }
 
 impl Focusable for BrushStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -199,7 +174,7 @@ impl BrushStory {
         let is_selected = self.brush_color.to_hex() == color.to_hex();
         let theme = cx.theme();
 
-        gpui::div()
+        div()
             .w(px(40.))
             .h(px(40.))
             .rounded(theme.radius)
@@ -224,26 +199,21 @@ impl BrushStory {
         let strokes_for_prepaint = self.strokes.clone();
         let current_stroke_for_prepaint = self.current_stroke.clone();
         let show_grid_for_prepaint = self.show_grid;
-        let canvas_size_for_prepaint = self.canvas_size;
         let theme_for_prepaint = theme.clone();
 
         let state_entity = cx.entity().clone();
 
-        let base_div = gpui::div()
+        let base_div = div()
             .id("canvas")
-            .w(px(self.canvas_size.0))
-            .h(px(self.canvas_size.1))
+            .size_full()
             .bg(theme.background)
-            .border_1()
-            .border_color(theme.border)
-            .rounded(theme.radius)
-            .cursor_pointer()
+            .cursor_crosshair()
             .relative()
             .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
             .child(
-                gpui::canvas(
+                canvas(
                     move |bounds, _, cx| {
                         state_entity.update(cx, |state, _| {
                             state.canvas_bounds = Some(bounds);
@@ -256,35 +226,32 @@ impl BrushStory {
             );
 
         base_div.child(
-            gpui::canvas(
+            canvas(
                 move |bounds, _window, _cx| {
                     (
                         strokes_for_prepaint,
                         current_stroke_for_prepaint,
                         show_grid_for_prepaint,
-                        canvas_size_for_prepaint,
                         theme_for_prepaint,
                         bounds,
                     )
                 },
                 move |_bounds,
-                      (strokes, current_stroke, show_grid, canvas_size, theme, prepaint_bounds),
+                      (strokes, current_stroke, show_grid, theme, prepaint_bounds),
                       window,
                       _cx| {
                     let origin = prepaint_bounds.origin;
+                    let size = prepaint_bounds.size;
 
                     if show_grid {
                         let grid_color = theme.border.opacity(0.2);
                         let grid_size = 40.0;
 
                         let mut x = 0.0;
-                        while x <= canvas_size.0 {
+                        while px(x) <= size.width {
                             let mut builder = PathBuilder::stroke(px(1.0));
                             builder.move_to(Point::new(origin.x + px(x), origin.y));
-                            builder.line_to(Point::new(
-                                origin.x + px(x),
-                                origin.y + px(canvas_size.1),
-                            ));
+                            builder.line_to(Point::new(origin.x + px(x), origin.y + size.height));
                             if let Ok(path) = builder.build() {
                                 window.paint_path(path, grid_color);
                             }
@@ -292,13 +259,10 @@ impl BrushStory {
                         }
 
                         let mut y = 0.0;
-                        while y <= canvas_size.1 {
+                        while px(y) <= size.height {
                             let mut builder = PathBuilder::stroke(px(1.0));
                             builder.move_to(Point::new(origin.x, origin.y + px(y)));
-                            builder.line_to(Point::new(
-                                origin.x + px(canvas_size.0),
-                                origin.y + px(y),
-                            ));
+                            builder.line_to(Point::new(origin.x + size.width, origin.y + px(y)));
                             if let Ok(path) = builder.build() {
                                 window.paint_path(path, grid_color);
                             }
@@ -321,12 +285,12 @@ impl BrushStory {
                     }
                 },
             )
-            .w(px(self.canvas_size.0))
-            .h(px(self.canvas_size.1)),
+            .absolute()
+            .size_full(),
         )
     }
 
-    fn build_stroke_path(stroke: &Stroke, bounds: &Bounds<Pixels>) -> Option<gpui::Path<Pixels>> {
+    fn build_stroke_path(stroke: &Stroke, bounds: &Bounds<Pixels>) -> Option<Path<Pixels>> {
         if stroke.points.len() < 2 {
             return None;
         }
@@ -355,9 +319,10 @@ impl Render for BrushStory {
         let brush_opacity = self.brush_opacity.read(cx).value().start();
 
         v_flex()
+            .size_full()
             .gap_6()
             .child(
-                section("Controls").max_w_2xl().child(
+                section("Controls").child(
                     h_flex()
                         .gap_8()
                         .w_full()
@@ -366,7 +331,7 @@ impl Render for BrushStory {
                             v_flex()
                                 .gap_4()
                                 .flex_1()
-                                .w(gpui::relative(0.5))
+                                .w(relative(0.5))
                                 .child(
                                     h_flex()
                                         .gap_4()
@@ -421,25 +386,25 @@ impl Render for BrushStory {
                             v_flex()
                                 .gap_2()
                                 .flex_1()
-                                .w(gpui::relative(0.5))
+                                .w(relative(0.5))
                                 .child(h_flex().gap_2().items_center().child("Color:"))
                                 .child(
                                     h_flex()
                                         .gap_3()
                                         .flex_wrap()
-                                        .child(self.color_button(gpui::black(), "Black", cx))
-                                        .child(self.color_button(gpui::white(), "White", cx))
-                                        .child(self.color_button(gpui::red(), "Red", cx))
-                                        .child(self.color_button(gpui::green(), "Green", cx))
-                                        .child(self.color_button(gpui::blue(), "Blue", cx))
-                                        .child(self.color_button(gpui::yellow(), "Yellow", cx))
+                                        .child(self.color_button(black(), "Black", cx))
+                                        .child(self.color_button(white(), "White", cx))
+                                        .child(self.color_button(red(), "Red", cx))
+                                        .child(self.color_button(green(), "Green", cx))
+                                        .child(self.color_button(blue(), "Blue", cx))
+                                        .child(self.color_button(yellow(), "Yellow", cx))
                                         .child(self.color_button(
-                                            gpui::hsla(0.58, 1.0, 0.5, 1.0),
+                                            hsla(0.58, 1.0, 0.5, 1.0),
                                             "Purple",
                                             cx,
                                         ))
                                         .child(self.color_button(
-                                            gpui::hsla(0.083, 1.0, 0.5, 1.0),
+                                            hsla(0.083, 1.0, 0.5, 1.0),
                                             "Orange",
                                             cx,
                                         )),
@@ -449,8 +414,53 @@ impl Render for BrushStory {
             )
             .child(
                 section("Drawing Canvas")
-                    .max_w_2xl()
-                    .child(self.render_canvas(cx)),
+                    .child(self.render_canvas(cx))
+                    .flex_1(),
             )
     }
+}
+
+fn section(title: impl Into<SharedString>) -> GroupBox {
+    GroupBox::new()
+        .outline()
+        .title(
+            h_flex()
+                .justify_between()
+                .w_full()
+                .gap_4()
+                .child(title.into()),
+        )
+        .content_style(StyleRefinement::default().flex_1().size_full())
+}
+
+pub struct Example {
+    root: Entity<BrushStory>,
+}
+
+impl Example {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let root = cx.new(|cx| BrushStory::new(window, cx));
+        Self { root }
+    }
+
+    fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new(window, cx))
+    }
+}
+
+impl Render for Example {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().p_4().size_full().child(self.root.clone())
+    }
+}
+
+fn main() {
+    let app = Application::new().with_assets(Assets);
+
+    app.run(move |cx| {
+        story::init(cx);
+        cx.activate(true);
+
+        story::create_new_window("Brush Example", Example::view, cx);
+    });
 }
