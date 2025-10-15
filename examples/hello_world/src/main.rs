@@ -29,6 +29,7 @@ fn main() {
     let app = Application::new();
 
     app.run(move |cx| {
+        // We must initialize gpui_component before using it.
         gpui_component::init(cx);
 
         cx.activate(true);
@@ -57,19 +58,11 @@ fn main() {
                 ..Default::default()
             };
 
-            let window = cx
-                .open_window(options, |window, cx| {
-                    let view = cx.new(|_| HelloWorld);
-                    cx.new(|cx| Root::new(view.into(), window, cx))
-                })
-                .expect("failed to open window");
-
-            window
-                .update(cx, |_, window, _| {
-                    window.activate_window();
-                    window.set_window_title("Example");
-                })
-                .expect("failed to update window");
+            cx.open_window(options, |window, cx| {
+                let view = cx.new(|_| HelloWorld);
+                // The first level on the window must be Root.
+                cx.new(|cx| Root::new(view.into(), window, cx))
+            })?;
 
             Ok::<_, anyhow::Error>(())
         })
