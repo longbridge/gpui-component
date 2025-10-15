@@ -76,12 +76,20 @@ impl TextElement {
         let line_number_width = last_layout.line_number_width;
 
         let mut selected_range = state.selected_range;
+
         if let Some(ime_marked_range) = &state.ime_marked_range {
             selected_range = (ime_marked_range.end..ime_marked_range.end).into();
         }
         let is_selected_all = selected_range.len() == state.text.len();
 
-        let cursor = state.cursor();
+        let mut cursor = state.cursor();
+        if state.masked {
+            // Because masked use `*`, 1 char with 1 byte.
+            selected_range.start = state.text.offset_to_char_index(selected_range.start);
+            selected_range.end = state.text.offset_to_char_index(selected_range.end);
+            cursor = state.text.offset_to_char_index(cursor);
+        }
+
         let mut current_row = None;
         let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
@@ -440,6 +448,12 @@ impl TextElement {
         }
         if selected_range.is_empty() {
             return None;
+        }
+
+        if state.masked {
+            // Because masked use `*`, 1 char with 1 byte.
+            selected_range.start = state.text.offset_to_char_index(selected_range.start);
+            selected_range.end = state.text.offset_to_char_index(selected_range.end);
         }
 
         let (start_ix, end_ix) = if selected_range.start < selected_range.end {

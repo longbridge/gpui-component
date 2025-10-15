@@ -1671,7 +1671,8 @@ impl InputState {
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                return line_layout.closest_index_for_x(pos.x);
+                index = line_layout.closest_index_for_x(pos.x);
+                break;
             }
 
             if let Some(v) = line_layout.closest_index_for_position(pos, line_height) {
@@ -1685,8 +1686,15 @@ impl InputState {
             index += line_layout.len() + 1;
         }
 
-        if index > self.text.len() {
+        let index = if index > self.text.len() {
             self.text.len()
+        } else {
+            index
+        };
+
+        if self.masked {
+            // When is masked, the index is char index, need convert to byte index.
+            self.text.char_index_to_offset(index)
         } else {
             index
         }
