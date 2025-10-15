@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+
+use autocorrect::ignorer::Ignorer;
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, ParentElement, Render, Styled,
     Window, px,
@@ -16,37 +19,59 @@ pub struct TreeStory {
     focus_handle: gpui::FocusHandle,
 }
 
+fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
+    let mut items = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let relative_path = path.strip_prefix(root).unwrap_or(&path);
+            if ignorer.is_ignored(&relative_path.to_string_lossy())
+                || relative_path.ends_with(".git")
+            {
+                continue;
+            }
+            let file_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Unknown")
+                .to_string();
+            let id = path.to_string_lossy().to_string();
+            if path.is_dir() {
+                let children = build_file_items(ignorer, &root, &path);
+                items.push(TreeItem::new(id, file_name).children(children));
+            } else {
+                items.push(TreeItem::new(id, file_name));
+            }
+        }
+    }
+    items.sort_by(|a, b| {
+        b.is_folder()
+            .cmp(&a.is_folder())
+            .then(a.label.cmp(&b.label))
+    });
+    items
+}
+
 impl TreeStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
 
+    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
+        cx.spawn(async move |cx| {
+            let ignorer = Ignorer::new(&path.to_string_lossy());
+            let items = build_file_items(&ignorer, &path, &path);
+            _ = state.update(cx, |state, cx| {
+                state.set_items(items, cx);
+            });
+        })
+        .detach();
+    }
+
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let tree_state = cx.new(|_| {
-            TreeState::new().items(vec![
-                TreeItem::new("src")
-                    .expanded(true)
-                    .child(TreeItem::new("main.rs"))
-                    .child(TreeItem::new("lib.rs"))
-                    .child(
-                        TreeItem::new("components")
-                            .child(TreeItem::new("utils").child(TreeItem::new("mod.rs")))
-                            .child(TreeItem::new("label.rs"))
-                            .child(TreeItem::new("button.rs"))
-                            .child(TreeItem::new("input.rs"))
-                            .child(TreeItem::new("theme.rs"))
-                            .child(TreeItem::new("colors.rs"))
-                            .child(TreeItem::new("dropdown.rs"))
-                            .child(TreeItem::new("menu.rs"))
-                            .child(TreeItem::new("popover.rs"))
-                            .child(TreeItem::new("tree.rs"))
-                            .child(TreeItem::new("mod.rs")),
-                    ),
-                TreeItem::new("Cargo.toml"),
-                TreeItem::new("Cargo.lock").disabled(true),
-                TreeItem::new("README.md"),
-            ])
-        });
+        let tree_state = cx.new(|_| TreeState::new().items(vec![]));
+
+        Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
         Self {
             tree_state,
@@ -126,7 +151,7 @@ impl Render for TreeStory {
                 .children(
                     self.selected_item
                         .as_ref()
-                        .map(|item| Label::new("Selected Item").secondary(item.label.clone())),
+                        .map(|item| Label::new("Selected:").secondary(item.id.clone())),
                 ),
         )
     }

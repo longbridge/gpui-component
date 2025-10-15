@@ -11,7 +11,7 @@ use crate::{
     ListItem, StyledExt,
 };
 
-/// Create a new tree with the given root items.
+/// Create a [`Tree`].
 ///
 /// # Arguments
 ///
@@ -19,8 +19,17 @@ use crate::{
 /// * `render_item` - A closure to render each tree item.
 ///
 /// ```ignore
-/// Tree::new(&tree_state, |ix, entry, selected, window, cx| {
-///     div().child(item.label.clone())
+/// let state = cx.new(|_| {
+///     TreeState::new().items(vec![
+///         TreeItem::new("src")
+///             .child(TreeItem::new("lib.rs"),
+///         TreeItem::new("Cargo.toml"),
+///         TreeItem::new("README.md"),
+///     ])
+/// });
+///
+/// tree(&state, |ix, entry, selected, window, cx| {
+///     div().px(px(16.) * entry.depth()).child(item.label.clone())
 /// })
 /// ```
 pub fn tree<R>(state: &Entity<TreeState>, render_item: R) -> Tree
@@ -38,6 +47,7 @@ struct TreeItemState {
 /// A tree item with a label, children, and an expanded state.
 #[derive(Clone)]
 pub struct TreeItem {
+    pub id: SharedString,
     pub label: SharedString,
     pub children: Vec<TreeItem>,
     state: Rc<RefCell<TreeItemState>>,
@@ -71,7 +81,7 @@ impl TreeEntry {
     /// Whether this item is a folder (has children).
     #[inline]
     pub fn is_folder(&self) -> bool {
-        !self.item.children.is_empty()
+        self.item.is_folder()
     }
 
     /// Return true if the item is expanded.
@@ -88,8 +98,18 @@ impl TreeEntry {
 
 impl TreeItem {
     /// Create a new tree item with the given label.
-    pub fn new(label: impl Into<SharedString>) -> Self {
+    ///
+    /// - The `id` for you to uniquely identify this item, then later you can use it for selection or other purposes.
+    /// - The `label` is the text to display for this item.
+    ///
+    /// For example, the `id` is the full file path, and the `label` is the file name.
+    ///
+    /// ```ignore
+    /// TreeItem::new("src/ui/button.rs", "button.rs")
+    /// ```
+    pub fn new(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Self {
         Self {
+            id: id.into(),
             label: label.into(),
             children: Vec::new(),
             state: Rc::new(RefCell::new(TreeItemState {
@@ -121,6 +141,12 @@ impl TreeItem {
     pub fn disabled(self, disabled: bool) -> Self {
         self.state.borrow_mut().disabled = disabled;
         self
+    }
+
+    /// Whether this item is a folder (has children).
+    #[inline]
+    pub fn is_folder(&self) -> bool {
+        self.children.len() > 0
     }
 
     /// Return true if the item is disabled.
