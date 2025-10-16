@@ -18,11 +18,11 @@ use std::{
 };
 
 use gpui::{
-    div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
-    Context, DeferredScrollToItem, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox,
-    InteractiveElement, IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render,
-    ScrollHandle, ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement,
-    Styled, Window,
+    div, point, prelude::FluentBuilder as _, px, size, Along, AnyElement, App, AvailableSpace,
+    Axis, Bounds, ContentMask, Context, DeferredScrollToItem, Div, Element, ElementId, Entity,
+    GlobalElementId, Half, Hitbox, InteractiveElement, IntoElement, IsZero as _,
+    ListSizingBehavior, Pixels, Point, Render, ScrollHandle, ScrollStrategy, Size, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -181,7 +181,10 @@ where
         base: div()
             .id(id)
             .size_full()
-            .overflow_scroll()
+            .map(|this| match axis {
+                Axis::Horizontal => this.overflow_x_scroll().overflow_y_hidden(),
+                Axis::Vertical => this.overflow_y_scroll().overflow_x_hidden(),
+            })
             .track_scroll(&scroll_handle),
         scroll_handle,
         items_count: item_sizes.len(),
