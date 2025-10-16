@@ -4,10 +4,11 @@ members = [
     "crates/macros",
     "crates/story",
     "crates/ui",
-    "examples/app_assets",
+    "examples/app_assets", "examples/editor",
     "examples/hello_world",
     "examples/input",
     "examples/window_title",
+    "examples/editor",
 ]
 resolver = "2"
 
