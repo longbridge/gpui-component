@@ -2,9 +2,9 @@
 edition = "2021"
 name = "gpui-component-macros"
 description = "Macros for GPUI Component."
-version = "0.2.0"
+version = "0.3.0-test1"
 publish = true
-license-file = "../../LICENSE-APACHE"
+license = "Apache-2.0"
 
 [lib]
 proc-macro = true

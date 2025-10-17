@@ -3,11 +3,11 @@ description = "UI components for building fantastic desktop application by using
 edition = "2021"
 homepage = "https://github.com/longbridge/gpui-component"
 keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
-license-file = "../../LICENSE-APACHE"
+license = "Apache-2.0"
 name = "gpui-component"
 publish = true
 readme = "../../README.md"
-version = "0.2.0"
+version = "0.3.0-test1"
 
 [lib]
 doctest = false
