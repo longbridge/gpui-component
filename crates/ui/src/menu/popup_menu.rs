@@ -1,5 +1,5 @@
-use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
-use crate::input::{SelectLeft, SelectRight};
+use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
+use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::{
@@ -22,8 +22,8 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
         KeyBinding::new("escape", Cancel, Some(CONTEXT)),
-        KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
-        KeyBinding::new("down", SelectNext, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
         KeyBinding::new("right", SelectRight, Some(CONTEXT)),
     ]);
@@ -164,11 +164,7 @@ impl PopupMenu {
         cx: &mut App,
         f: impl FnOnce(Self, &mut Window, &mut Context<PopupMenu>) -> Self,
     ) -> Entity<Self> {
-        cx.new(|cx| {
-            let mut menu = Self::new(cx);
-            menu.action_context = window.focused(cx);
-            f(menu, window, cx)
-        })
+        cx.new(|cx| f(Self::new(cx), window, cx))
     }
 
     /// Set the focus handle of Entity to handle actions.
@@ -661,10 +657,8 @@ impl PopupMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(action_context) = self.action_context.as_ref() {
-            if !action_context.contains_focused(window, cx) {
-                action_context.focus(window);
-            }
+        if let Some(context) = self.action_context.as_ref() {
+            context.focus(window);
         }
 
         window.dispatch_action(action.boxed_clone(), cx);
@@ -678,7 +672,7 @@ impl PopupMenu {
         }
     }
 
-    fn select_up(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
+    fn select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
         let ix = self.selected_index.unwrap_or(0);
 
@@ -697,7 +691,7 @@ impl PopupMenu {
         self.set_selected_index(last_clickable_ix.unwrap_or(0), cx);
     }
 
-    fn select_down(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
+    fn select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
         let Some(ix) = self.selected_index else {
             self.set_selected_index(0, cx);

@@ -27,6 +27,7 @@ use super::{
     number_input,
     text_wrapper::TextWrapper,
 };
+use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::{
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
@@ -66,10 +67,6 @@ actions!(
         MoveEnd,
         MovePageUp,
         MovePageDown,
-        SelectUp,
-        SelectDown,
-        SelectLeft,
-        SelectRight,
         SelectAll,
         SelectToStartOfLine,
         SelectToEndOfLine,
@@ -1579,7 +1576,6 @@ impl InputState {
         }
 
         let old_text = text.slice(range.clone()).to_string();
-
         let new_range = range.start..range.start + new_text.len();
 
         self.history
@@ -1672,7 +1668,8 @@ impl InputState {
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                return line_layout.closest_index_for_x(pos.x);
+                index = line_layout.closest_index_for_x(pos.x);
+                break;
             }
 
             if let Some(v) = line_layout.closest_index_for_position(pos, line_height) {
@@ -1686,8 +1683,15 @@ impl InputState {
             index += line_layout.len() + 1;
         }
 
-        if index > self.text.len() {
+        let index = if index > self.text.len() {
             self.text.len()
+        } else {
+            index
+        };
+
+        if self.masked {
+            // When is masked, the index is char index, need convert to byte index.
+            self.text.char_index_to_offset(index)
         } else {
             index
         }
@@ -2150,6 +2154,7 @@ impl EntityInputHandler for InputState {
         }
 
         self.push_history(&old_text, &range, &new_text);
+        self.history.end_grouping();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -2205,7 +2210,6 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.push_history(&old_text, &range, new_text);
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -2228,7 +2232,8 @@ impl EntityInputHandler for InputState {
                 .into();
         }
         self.mode.update_auto_grow(&self.text_wrapper);
-        cx.emit(InputEvent::Change);
+        self.history.start_grouping();
+        self.push_history(&old_text, &range, new_text);
         cx.notify();
     }
 

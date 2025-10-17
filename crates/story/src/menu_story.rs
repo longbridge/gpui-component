@@ -1,7 +1,6 @@
 use gpui::{
-    Action, App, AppContext, Context, Corner, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, SharedString, Styled as _, Window,
-    actions, div, px,
+    Action, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
     ActiveTheme as _, IconName, button::Button, context_menu::ContextMenuExt, h_flex,
@@ -40,7 +39,6 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct MenuStory {
-    focus_handle: FocusHandle,
     checked: bool,
     message: String,
 }
@@ -64,12 +62,9 @@ impl MenuStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        cx.focus_self(window);
-
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
             checked: true,
-            focus_handle: cx.focus_handle(),
             message: "".to_string(),
         }
     }
@@ -106,19 +101,12 @@ impl MenuStory {
     }
 }
 
-impl Focusable for MenuStory {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
 impl Render for MenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let checked = self.checked;
 
         v_flex()
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
             .on_action(cx.listener(Self::on_paste))

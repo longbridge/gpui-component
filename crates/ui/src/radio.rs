@@ -215,7 +215,6 @@ impl RenderOnce for Radio {
                         let on_click = self.on_click.clone();
                         move |_, window, cx| {
                             window.prevent_default();
-                            cx.stop_propagation();
                             Self::handle_click(&on_click, checked, window, cx);
                         }
                     })

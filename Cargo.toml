@@ -1,19 +1,26 @@
 [workspace]
-members = ["crates/hello_world", "crates/macros", "crates/story", "crates/ui"]
-
 default-members = ["crates/story"]
+members = [
+    "crates/macros",
+    "crates/story",
+    "crates/ui",
+    "examples/app_assets",
+    "examples/hello_world",
+    "examples/input",
+    "examples/window_title",
+]
 resolver = "2"
 
 [workspace.dependencies]
 gpui-component = { path = "crates/ui" }
-gpui-component-macros = { path = "crates/macros", version = "0.2.0" }
+gpui-component-macros = { path = "crates/macros", version = "0.3.0-preview1" }
 story = { path = "crates/story" }
 
 gpui = "0.2.0"
 gpui-macros = "0.2.0"
-sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 http-client = { version = "0.2.0", package = "zed-http-client" }
 reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
+sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 
 anyhow = "1"
 log = "0.4"

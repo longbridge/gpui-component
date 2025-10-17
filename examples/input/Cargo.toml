@@ -1,0 +1,13 @@
+[package]
+name = "input"
+version = "0.3.0-preview1"
+publish = false
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component = { workspace = true }
+
+[lints]
+workspace = true

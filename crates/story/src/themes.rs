@@ -49,8 +49,10 @@ pub fn init(cx: &mut App) {
             scrollbar_show: Some(cx.theme().scrollbar_show),
         };
 
-        let json = serde_json::to_string_pretty(&state).unwrap();
-        std::fs::write(STATE_FILE, json).unwrap();
+        if let Ok(json) = serde_json::to_string_pretty(&state) {
+            // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
+            let _ = std::fs::write(STATE_FILE, json);
+        }
     })
     .detach();
 

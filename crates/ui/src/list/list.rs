@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::time::Duration;
 
-use crate::actions::{Cancel, Confirm, SelectNext, SelectPrev};
+use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
 use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::list::ListDelegate;
@@ -30,8 +30,8 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("escape", Cancel, context),
         KeyBinding::new("enter", Confirm { secondary: false }, context),
         KeyBinding::new("secondary-enter", Confirm { secondary: true }, context),
-        KeyBinding::new("up", SelectPrev, context),
-        KeyBinding::new("down", SelectNext, context),
+        KeyBinding::new("up", SelectUp, context),
+        KeyBinding::new("down", SelectDown, context),
     ]);
 }
 
@@ -381,7 +381,7 @@ where
 
     pub(crate) fn on_action_select_prev(
         &mut self,
-        _: &SelectPrev,
+        _: &SelectUp,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -397,7 +397,7 @@ where
 
     pub(crate) fn on_action_select_next(
         &mut self,
-        _: &SelectNext,
+        _: &SelectDown,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {

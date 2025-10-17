@@ -124,16 +124,14 @@ impl ListDelegate for ListItemDeletegate {
         });
     }
 
-    fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
-        _ = self.story.update(cx, |this, cx| {
+    fn confirm(&mut self, _secondary: bool, _: &mut Window, cx: &mut Context<List<Self>>) {
+        _ = self.story.update(cx, |this, _| {
             self.confirmed_index = self.selected_index;
             if let Some(ix) = self.confirmed_index {
                 if let Some(item) = self.matches.get(ix) {
                     this.selected_value = Some(SharedString::from(item.to_string()));
                 }
             }
-
-            window.close_drawer(cx);
         });
     }
 

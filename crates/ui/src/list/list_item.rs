@@ -1,8 +1,8 @@
 use crate::{h_flex, ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId,
-    InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, ParentElement, RenderOnce,
-    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    InteractiveElement, IntoElement, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -171,18 +171,13 @@ impl RenderOnce for ListItem {
             .justify_between()
             .refine_style(&self.style)
             .when(is_selectable, |this| {
-                this.when_some(self.on_click, |this, on_click| {
-                    this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        cx.stop_propagation();
+                this.when_some(self.on_click, |this, on_click| this.on_click(on_click))
+                    .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
+                        this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
                     })
-                    .on_click(on_click)
-                })
-                .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
-                    this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
-                })
-                .when(!is_active, |this| {
-                    this.hover(|this| this.bg(cx.theme().list_hover))
-                })
+                    .when(!is_active, |this| {
+                        this.hover(|this| this.bg(cx.theme().list_hover))
+                    })
             })
             .when(!is_selectable, |this| {
                 this.text_color(cx.theme().muted_foreground)
