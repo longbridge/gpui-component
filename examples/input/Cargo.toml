@@ -1,6 +1,7 @@
 [package]
 name = "input"
-version = "0.3.0-test1"
+version = "0.3.0-preview1"
+publish = false
 edition = "2024"
 
 [dependencies]
