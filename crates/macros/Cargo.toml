@@ -4,7 +4,7 @@ name = "gpui-component-macros"
 description = "Macros for GPUI Component."
 version = "0.2.0"
 publish = true
-license-file = "LICENSE-APACHE"
+license-file = "../../LICENSE-APACHE"
 
 [lib]
 proc-macro = true
