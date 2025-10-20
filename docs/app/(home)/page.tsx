@@ -7,6 +7,8 @@ import {
   Layout,
   BarChart3,
   Terminal,
+  Blocks,
+  SquareCode,
 } from "lucide-react";
 import { DynamicCodeBlock } from "fumadocs-ui/components/dynamic-codeblock";
 
@@ -20,7 +22,8 @@ export default function HomePage() {
             GPUI Component
           </h1>
           <p className="text-xl text-fd-muted-foreground max-w-[42rem] leading-normal sm:text-2xl sm:leading-8">
-            UI components for building fantastic desktop applications using{" "}
+            Rust GUI components for building fantastic cross-platform desktop
+            application by using{" "}
             <a
               href="https://gpui.rs"
               target="_blank"
@@ -55,8 +58,8 @@ export default function HomePage() {
       <section className="container py-24 md:py-32">
         <div className="grid gap-12 lg:grid-cols-3">
           <div className="flex flex-col gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-fd-primary/10">
-              <Code2 className="h-6 w-6 text-fd-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-500 dark:bg-green-700">
+              <Blocks className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-xl font-bold">40+ Components</h3>
             <p className="text-fd-muted-foreground">
@@ -66,8 +69,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-fd-primary/10">
-              <Zap className="h-6 w-6 text-fd-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500 dark:bg-blue-700">
+              <Zap className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-xl font-bold">High Performance</h3>
             <p className="text-fd-muted-foreground">
@@ -77,8 +80,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-fd-primary/10">
-              <Palette className="h-6 w-6 text-fd-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-500 dark:bg-red-700">
+              <Palette className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-xl font-bold">Themeable</h3>
             <p className="text-fd-muted-foreground">
@@ -88,8 +91,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-fd-primary/10">
-              <Layout className="h-6 w-6 text-fd-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-yellow-500 dark:bg-yellow-700">
+              <Layout className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-xl font-bold">Flexible Layouts</h3>
             <p className="text-fd-muted-foreground">
@@ -99,8 +102,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-fd-primary/10">
-              <BarChart3 className="h-6 w-6 text-fd-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-500 dark:bg-purple-700">
+              <BarChart3 className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-xl font-bold">Data Visualization</h3>
             <p className="text-fd-muted-foreground">
@@ -110,8 +113,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-fd-primary/10">
-              <Terminal className="h-6 w-6 text-fd-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-500 dark:bg-cyan-700">
+              <SquareCode className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-xl font-bold">Code Editor</h3>
             <p className="text-fd-muted-foreground">
