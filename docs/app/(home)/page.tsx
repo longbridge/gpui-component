@@ -8,6 +8,7 @@ import {
   BarChart3,
   Terminal,
 } from "lucide-react";
+import { DynamicCodeBlock } from "fumadocs-ui/components/dynamic-codeblock";
 
 export default function HomePage() {
   return (
@@ -129,7 +130,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Code Example Section */}
       <section className="container py-24 md:py-32">
         <div className="flex flex-col gap-8">
           <div className="flex flex-col gap-4 text-center">
@@ -140,30 +140,50 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="rounded-lg border bg-fd-card p-6 shadow-sm">
-            <pre className="overflow-x-auto" lang="rust">
-              <code className="text-sm">
-                {`use gpui::*;
+          <DynamicCodeBlock
+            lang="rust"
+            code={`use gpui::*;
 use gpui_component::{button::*, *};
 
-pub struct MyApp;
-
-impl Render for MyApp {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+pub struct HelloWorld;
+impl Render for HelloWorld {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .v_flex()
             .gap_2()
+            .size_full()
+            .items_center()
+            .justify_center()
+            .child("Hello, World!")
             .child(
-                Button::new("btn")
+                Button::new("ok")
                     .primary()
-                    .label("Get Started")
-                    .on_click(|_, _, _| println!("Clicked!"))
+                    .label("Let's Go!")
+                    .on_click(|_, _, _| println!("Clicked!")),
             )
     }
+}
+
+fn main() {
+    let app = Application::new();
+
+    app.run(move |cx| {
+        // This must be called before using any GPUI Component features.
+        gpui_component::init(cx);
+
+        cx.spawn(async move |cx| {
+            cx.open_window(WindowOptions::default(), |window, cx| {
+                let view = cx.new(|_| HelloWorld);
+                // This first level on the window, should be a Root.
+                cx.new(|cx| Root::new(view.into(), window, cx))
+            })?;
+
+            Ok::<_, anyhow::Error>(())
+        })
+        .detach();
+    });
 }`}
-              </code>
-            </pre>
-          </div>
+          ></DynamicCodeBlock>
         </div>
       </section>
 
