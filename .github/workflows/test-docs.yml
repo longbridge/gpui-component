@@ -12,9 +12,8 @@ jobs:
         uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
       - name: Install
-        run: |
-          cd docs
-          bun install
+        working-directory: docs
+        run: bun install
       - name: Build
         working-directory: docs
         run: |
