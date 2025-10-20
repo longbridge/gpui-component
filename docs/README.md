@@ -2,26 +2,16 @@
 
 This is the official documentation website for [GPUI Component](https://github.com/longbridge/gpui-component) - a comprehensive UI component library for building fantastic desktop applications using GPUI.
 
-Built with [Next.js](https://nextjs.org/) and [Fumadocs](https://fumadocs.dev/).
-
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18.17 or later
-- Bun, npm, pnpm, or yarn
+- Bun
 
 ### Installation
 
 ```bash
-# Install dependencies
 bun install
-# or
-npm install
-# or
-pnpm install
-# or
-yarn install
 ```
 
 ### Development
@@ -30,12 +20,6 @@ Run the development server:
 
 ```bash
 bun dev
-# or
-npm run dev
-# or
-pnpm dev
-# or
-yarn dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -46,16 +30,12 @@ Build the documentation for production:
 
 ```bash
 bun run build
-# or
-npm run build
 ```
 
 ### Preview Production Build
 
 ```bash
 bun run start
-# or
-npm run start
 ```
 
 ## Project Structure
@@ -120,6 +100,7 @@ Each component documentation should follow this structure:
 ### Layout
 
 Edit `lib/layout.shared.tsx` to customize:
+
 - Navigation title and logo
 - Navigation links
 - Footer content
@@ -127,6 +108,7 @@ Edit `lib/layout.shared.tsx` to customize:
 ### Styling
 
 The documentation uses Tailwind CSS. You can customize the theme in:
+
 - `tailwind.config.js`
 - `app/layout.tsx`
 

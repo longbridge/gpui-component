@@ -1,5 +1,13 @@
-import Link from 'next/link';
-import { ArrowRight, Code2, Zap, Palette, Layout, BarChart3, Terminal } from 'lucide-react';
+import Link from "next/link";
+import {
+  ArrowRight,
+  Code2,
+  Zap,
+  Palette,
+  Layout,
+  BarChart3,
+  Terminal,
+} from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -11,7 +19,7 @@ export default function HomePage() {
             GPUI Component
           </h1>
           <p className="text-xl text-fd-muted-foreground max-w-[42rem] leading-normal sm:text-2xl sm:leading-8">
-            UI components for building fantastic desktop applications using{' '}
+            UI components for building fantastic desktop applications using{" "}
             <a
               href="https://gpui.rs"
               target="_blank"
@@ -51,7 +59,8 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold">40+ Components</h3>
             <p className="text-fd-muted-foreground">
-              Comprehensive library of cross-platform desktop UI components for building feature-rich applications.
+              Comprehensive library of cross-platform desktop UI components for
+              building feature-rich applications.
             </p>
           </div>
 
@@ -61,7 +70,8 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold">High Performance</h3>
             <p className="text-fd-muted-foreground">
-              Virtualized Table and List components for smooth rendering of large datasets with minimal memory footprint.
+              Virtualized Table and List components for smooth rendering of
+              large datasets with minimal memory footprint.
             </p>
           </div>
 
@@ -71,7 +81,8 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold">Themeable</h3>
             <p className="text-fd-muted-foreground">
-              Built-in Theme system with customizable colors, supporting multiple themes and dark mode out of the box.
+              Built-in Theme system with customizable colors, supporting
+              multiple themes and dark mode out of the box.
             </p>
           </div>
 
@@ -81,7 +92,8 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold">Flexible Layouts</h3>
             <p className="text-fd-muted-foreground">
-              Dock layout for panel arrangements, resizable panels, and freeform layouts for any application structure.
+              Dock layout for panel arrangements, resizable panels, and freeform
+              layouts for any application structure.
             </p>
           </div>
 
@@ -91,7 +103,8 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold">Data Visualization</h3>
             <p className="text-fd-muted-foreground">
-              Built-in chart components for visualizing data with Line, Bar, Area, and Pie charts.
+              Built-in chart components for visualizing data with Line, Bar,
+              Area, and Pie charts.
             </p>
           </div>
 
@@ -101,7 +114,16 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold">Code Editor</h3>
             <p className="text-fd-muted-foreground">
-              High-performance code editor with LSP support, syntax highlighting powered by Tree Sitter.
+              High-performance code editor with LSP support, syntax
+              highlighting, powered by{" "}
+              <a href="https://tree-sitter.github.io/" target="_blank">
+                Tree Sitter
+              </a>{" "}
+              and{" "}
+              <a href="https://github.com/cessen/ropey" target="_blank">
+                Rope
+              </a>
+              .
             </p>
           </div>
         </div>
@@ -113,14 +135,15 @@ export default function HomePage() {
           <div className="flex flex-col gap-4 text-center">
             <h2 className="text-3xl font-bold">Simple and Intuitive API</h2>
             <p className="text-fd-muted-foreground text-lg max-w-[42rem] mx-auto">
-              Get started with just a few lines of code. Stateless components make it easy to build complex UIs.
+              Get started with just a few lines of code. Stateless components
+              make it easy to build complex UIs.
             </p>
           </div>
 
           <div className="rounded-lg border bg-fd-card p-6 shadow-sm">
-            <pre className="overflow-x-auto">
+            <pre className="overflow-x-auto" lang="rust">
               <code className="text-sm">
-{`use gpui::*;
+                {`use gpui::*;
 use gpui_component::{button::*, *};
 
 pub struct MyApp;
@@ -150,7 +173,8 @@ impl Render for MyApp {
           <div className="flex flex-col gap-4">
             <h2 className="text-3xl font-bold">Ready to get started?</h2>
             <p className="text-fd-muted-foreground text-lg max-w-[42rem] mx-auto">
-              Explore our comprehensive documentation and start building amazing desktop applications today.
+              Explore our comprehensive documentation and start building amazing
+              desktop applications today.
             </p>
           </div>
 
