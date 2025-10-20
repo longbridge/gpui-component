@@ -16,6 +16,37 @@ use gpui_component::Placement;
 
 ## Usage
 
+### Setup application root view for display of drawers
+
+You need to set up your application's root view to render the drawer layer. This is typically done in your main application struct's render method.
+
+The `Root::render_notification_layer` function handles rendering any active modals on top of your app content.
+
+```rust
+use gpui_component::TitleBar;
+
+struct MyApp {
+    view: AnyView,
+}
+
+impl Render for MyApp {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let drawer_layer = Root::render_drawer_layer(window, cx);
+
+        div()
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(TitleBar::new())
+                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+            )
+            // Render the drawer layer on top of the app content
+            .children(drawer_layer)
+    }
+}
+```
+
 ### Basic Drawer
 
 ```rust
@@ -212,44 +243,44 @@ window.close_drawer(cx);
 
 ### Window Extensions
 
-| Method | Description |
-|--------|-------------|
-| `open_drawer(cx, fn)` | Open drawer with default placement (Right) |
-| `open_drawer_at(placement, cx, fn)` | Open drawer at specific placement |
-| `close_drawer(cx)` | Close current drawer |
+| Method                              | Description                                |
+| ----------------------------------- | ------------------------------------------ |
+| `open_drawer(cx, fn)`               | Open drawer with default placement (Right) |
+| `open_drawer_at(placement, cx, fn)` | Open drawer at specific placement          |
+| `close_drawer(cx)`                  | Close current drawer                       |
 
 ### Drawer Builder
 
-| Method | Description |
-|--------|-------------|
-| `title(str)` | Set drawer title |
-| `child(el)` | Add content to drawer body |
-| `footer(el)` | Set footer content |
-| `size(px)` | Set drawer size (width or height) |
-| `margin_top(px)` | Set top margin (for title bars) |
-| `resizable(bool)` | Allow resizing (default: true) |
-| `overlay(bool)` | Show overlay background (default: true) |
-| `overlay_closable(bool)` | Click overlay to close (default: true) |
-| `on_close(fn)` | Close event callback |
+| Method                   | Description                             |
+| ------------------------ | --------------------------------------- |
+| `title(str)`             | Set drawer title                        |
+| `child(el)`              | Add content to drawer body              |
+| `footer(el)`             | Set footer content                      |
+| `size(px)`               | Set drawer size (width or height)       |
+| `margin_top(px)`         | Set top margin (for title bars)         |
+| `resizable(bool)`        | Allow resizing (default: true)          |
+| `overlay(bool)`          | Show overlay background (default: true) |
+| `overlay_closable(bool)` | Click overlay to close (default: true)  |
+| `on_close(fn)`           | Close event callback                    |
 
 ### Placement Options
 
-| Value | Description |
-|-------|-------------|
-| `Placement::Left` | Slides in from left edge |
-| `Placement::Right` | Slides in from right edge (default) |
-| `Placement::Top` | Slides in from top edge |
-| `Placement::Bottom` | Slides in from bottom edge |
+| Value               | Description                         |
+| ------------------- | ----------------------------------- |
+| `Placement::Left`   | Slides in from left edge            |
+| `Placement::Right`  | Slides in from right edge (default) |
+| `Placement::Top`    | Slides in from top edge             |
+| `Placement::Bottom` | Slides in from bottom edge          |
 
 ### Styling Methods
 
-| Method | Description |
-|--------|-------------|
-| `bg(color)` | Set background color |
-| `text_color(color)` | Set text color |
-| `border_color(color)` | Set border color |
-| `px_*()/py_*()` | Custom padding |
-| `gap_*()` | Spacing between children |
+| Method                | Description              |
+| --------------------- | ------------------------ |
+| `bg(color)`           | Set background color     |
+| `text_color(color)`   | Set text color           |
+| `border_color(color)` | Set border color         |
+| `px_*()/py_*()`       | Custom padding           |
+| `gap_*()`             | Spacing between children |
 
 ## Examples
 

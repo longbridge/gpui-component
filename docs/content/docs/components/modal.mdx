@@ -16,6 +16,37 @@ use gpui_component::ContextModal;
 
 ## Usage
 
+### Setup application root view for display of modals
+
+You need to set up your application's root view to render the modal layer. This is typically done in your main application struct's render method.
+
+The `Root::render_modal_layer` function handles rendering any active modals on top of your app content.
+
+```rust
+use gpui_component::TitleBar;
+
+struct MyApp {
+    view: AnyView,
+}
+
+impl Render for MyApp {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let modal_layer = Root::render_modal_layer(window, cx);
+
+        div()
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(TitleBar::new())
+                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+            )
+            // Render the modal layer on top of the app content
+            .children(modal_layer)
+    }
+}
+```
+
 ### Basic Modal
 
 ```rust
@@ -222,42 +253,42 @@ Button::new("submit")
 
 ### Modal Builder
 
-| Method | Description |
-|--------|-------------|
-| `title(str)` | Set modal title |
-| `child(el)` | Add content to modal body |
-| `footer(fn)` | Set footer with custom buttons |
-| `overlay(bool)` | Show/hide overlay (default: true) |
-| `overlay_closable(bool)` | Allow closing by clicking overlay |
-| `keyboard(bool)` | Allow closing with ESC key |
-| `show_close(bool)` | Show close button in header |
-| `confirm()` | Use confirm modal style |
-| `alert()` | Use alert modal style (single OK button) |
-| `button_props(props)` | Customize confirm/alert buttons |
-| `on_ok(fn)` | OK button callback (confirm/alert) |
-| `on_cancel(fn)` | Cancel button callback (confirm) |
-| `on_close(fn)` | Close callback (alert) |
-| `min_h(px)` | Set minimum height |
-| `h(px)` | Set fixed height |
-| `rounded_lg()` | Apply large border radius |
-| `p_*()` | Custom padding |
-| `bg()` | Custom background |
+| Method                   | Description                              |
+| ------------------------ | ---------------------------------------- |
+| `title(str)`             | Set modal title                          |
+| `child(el)`              | Add content to modal body                |
+| `footer(fn)`             | Set footer with custom buttons           |
+| `overlay(bool)`          | Show/hide overlay (default: true)        |
+| `overlay_closable(bool)` | Allow closing by clicking overlay        |
+| `keyboard(bool)`         | Allow closing with ESC key               |
+| `show_close(bool)`       | Show close button in header              |
+| `confirm()`              | Use confirm modal style                  |
+| `alert()`                | Use alert modal style (single OK button) |
+| `button_props(props)`    | Customize confirm/alert buttons          |
+| `on_ok(fn)`              | OK button callback (confirm/alert)       |
+| `on_cancel(fn)`          | Cancel button callback (confirm)         |
+| `on_close(fn)`           | Close callback (alert)                   |
+| `min_h(px)`              | Set minimum height                       |
+| `h(px)`                  | Set fixed height                         |
+| `rounded_lg()`           | Apply large border radius                |
+| `p_*()`                  | Custom padding                           |
+| `bg()`                   | Custom background                        |
 
 ### ModalButtonProps
 
-| Method | Description |
-|--------|-------------|
-| `ok_text(str)` | Text for OK button |
-| `ok_variant(variant)` | Style for OK button |
-| `cancel_text(str)` | Text for Cancel button |
+| Method                    | Description             |
+| ------------------------- | ----------------------- |
+| `ok_text(str)`            | Text for OK button      |
+| `ok_variant(variant)`     | Style for OK button     |
+| `cancel_text(str)`        | Text for Cancel button  |
 | `cancel_variant(variant)` | Style for Cancel button |
 
 ### Window Extensions
 
-| Method | Description |
-|--------|-------------|
+| Method               | Description         |
+| -------------------- | ------------------- |
 | `open_modal(cx, fn)` | Open a modal dialog |
-| `close_modal(cx)` | Close current modal |
+| `close_modal(cx)`    | Close current modal |
 
 ## Examples
 

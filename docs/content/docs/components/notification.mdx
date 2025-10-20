@@ -16,6 +16,38 @@ use gpui_component::ContextModal;
 
 ## Usage
 
+### Setup application root view for display of notifications
+
+You need to set up your application's root view to render the notification layer. This is typically done in your main application struct's render method.
+
+The `Root::render_notification_layer` function handles rendering any active modals on top of your app content.
+
+```rust
+use gpui_component::TitleBar;
+
+struct MyApp {
+    view: AnyView,
+}
+
+impl Render for MyApp {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let notification_layer = Root::render_notification_layer(window, cx);
+
+
+        div()
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(TitleBar::new())
+                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+            )
+            // Render the notification layer on top of the app content
+            .children(notification_layer)
+    }
+}
+```
+
 ### Basic Notification
 
 ```rust
@@ -175,40 +207,40 @@ window.remove_notification::<PersistentNotification>(cx);
 
 ### Notification Methods
 
-| Method | Description |
-|--------|-------------|
-| `new()` | Create a new notification with default settings |
-| `info(message)` | Create an info notification with blue styling |
-| `success(message)` | Create a success notification with green styling |
-| `warning(message)` | Create a warning notification with yellow/orange styling |
-| `error(message)` | Create an error notification with red styling |
-| `message(text)` | Set the notification message content |
-| `title(text)` | Set the notification title (appears above message) |
-| `with_type(type)` | Set the notification type for styling and icon |
-| `icon(icon)` | Set a custom icon (overrides type default icon) |
-| `autohide(bool)` | Control auto-dismiss behavior (default: true) |
-| `id<T>()` | Set unique type-based ID for notification |
-| `id1<T>(key)` | Set unique type + element ID for notification |
-| `on_click(callback)` | Set click handler for the notification |
-| `action(builder)` | Add an action button to the notification |
-| `content(builder)` | Set custom content instead of title/message |
-| `dismiss(window, cx)` | Manually dismiss the notification |
+| Method                | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `new()`               | Create a new notification with default settings          |
+| `info(message)`       | Create an info notification with blue styling            |
+| `success(message)`    | Create a success notification with green styling         |
+| `warning(message)`    | Create a warning notification with yellow/orange styling |
+| `error(message)`      | Create an error notification with red styling            |
+| `message(text)`       | Set the notification message content                     |
+| `title(text)`         | Set the notification title (appears above message)       |
+| `with_type(type)`     | Set the notification type for styling and icon           |
+| `icon(icon)`          | Set a custom icon (overrides type default icon)          |
+| `autohide(bool)`      | Control auto-dismiss behavior (default: true)            |
+| `id<T>()`             | Set unique type-based ID for notification                |
+| `id1<T>(key)`         | Set unique type + element ID for notification            |
+| `on_click(callback)`  | Set click handler for the notification                   |
+| `action(builder)`     | Add an action button to the notification                 |
+| `content(builder)`    | Set custom content instead of title/message              |
+| `dismiss(window, cx)` | Manually dismiss the notification                        |
 
 ### NotificationType Variants
 
-| Type | Description | Default Icon | Theme Color |
-|------|-------------|--------------|-------------|
-| `Info` | Informational messages | Info | Blue |
-| `Success` | Success confirmations | CircleCheck | Green |
-| `Warning` | Warning messages | TriangleAlert | Yellow/Orange |
-| `Error` | Error messages | CircleX | Red |
+| Type      | Description            | Default Icon  | Theme Color   |
+| --------- | ---------------------- | ------------- | ------------- |
+| `Info`    | Informational messages | Info          | Blue          |
+| `Success` | Success confirmations  | CircleCheck   | Green         |
+| `Warning` | Warning messages       | TriangleAlert | Yellow/Orange |
+| `Error`   | Error messages         | CircleX       | Red           |
 
 ### Window Extensions
 
-| Method | Description |
-|--------|-------------|
-| `window.push_notification(notification, cx)` | Show a notification |
-| `window.remove_notification::<T>(cx)` | Remove notification by type |
+| Method                                       | Description                 |
+| -------------------------------------------- | --------------------------- |
+| `window.push_notification(notification, cx)` | Show a notification         |
+| `window.remove_notification::<T>(cx)`        | Remove notification by type |
 
 ### Auto-hide Behavior
 
@@ -330,6 +362,7 @@ Notification::new()
 ## Positioning
 
 Notifications appear in a fixed position at the top right of the window:
+
 - **Position**: `absolute().top_4().right_4()`
 - **Stacking**: Newer notifications appear below existing ones
 - **Max visible**: Up to 10 notifications shown at once
@@ -339,16 +372,19 @@ Notifications appear in a fixed position at the top right of the window:
 ## Animation and Timing
 
 ### Show Animation
+
 - **Duration**: 0.25 seconds
 - **Easing**: Cubic bezier (0.4, 0, 0.2, 1)
 - **Effect**: Slides down and fades in
 
 ### Dismiss Animation
+
 - **Duration**: 0.15 seconds
 - **Easing**: Cubic bezier (0.4, 0, 0.2, 1)
 - **Effect**: Slides right and fades out
 
 ### Auto-hide Timing
+
 - **Default delay**: 5 seconds after show
 - **Hover pause**: Timer pauses while hovering over notification area
 - **Manual dismiss**: Immediate when close button clicked
@@ -356,18 +392,21 @@ Notifications appear in a fixed position at the top right of the window:
 ## Accessibility
 
 ### Keyboard Navigation
+
 - Close button can be focused with Tab navigation
 - Enter or Space activates the close button
 - Action buttons are keyboard accessible
 - Focus management handles notification dismissal
 
 ### Screen Reader Support
+
 - Notification content is announced when shown
 - Title and message are properly structured for screen readers
 - Icon provides semantic meaning through appropriate labeling
 - Action buttons have descriptive labels
 
 ### Visual Accessibility
+
 - High contrast between text and background
 - Clear visual hierarchy with title, message, and actions
 - Icon reinforces notification type meaning
@@ -375,6 +414,7 @@ Notifications appear in a fixed position at the top right of the window:
 - Consistent spacing and typography
 
 ### ARIA Properties
+
 - Notifications use appropriate ARIA roles
 - Live regions announce new notifications
 - Action buttons have proper ARIA labels
@@ -383,24 +423,28 @@ Notifications appear in a fixed position at the top right of the window:
 ## Best Practices
 
 ### Content Guidelines
+
 - Keep titles concise and descriptive (1-3 words)
 - Write clear, actionable messages
 - Use appropriate notification types for content
 - Provide specific error messages with next steps
 
 ### UX Guidelines
+
 - Use auto-hide for confirmations and status updates
 - Disable auto-hide for errors requiring user action
 - Include action buttons for actionable notifications
 - Avoid showing too many notifications simultaneously
 
 ### Performance Considerations
+
 - Unique IDs prevent duplicate notifications
 - Auto-dismiss reduces notification buildup
 - Limit notification frequency to avoid overwhelming users
 - Clean up notification subscriptions properly
 
 ### Timing Recommendations
+
 - **Success/Info**: Auto-hide after 5 seconds (default)
 - **Warnings**: Auto-hide after 7-10 seconds or require action
 - **Errors**: Disable auto-hide, require user acknowledgment
