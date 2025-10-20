@@ -5,3 +5,4 @@
 .vscode
 index.scip
 *.log
+node_modules/
