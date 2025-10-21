@@ -3,7 +3,8 @@
         <h1>GPUI Component</h1>
         <div class="banner-description">
             Rust GUI components for building fantastic cross-platform desktop
-            application by using GPUI.
+            application by using
+            <a href="https://gpui.rs" target="_blank">GPUI</a>.
         </div>
         <div class="actions">
             <a href="docs/getting-started" class="btn-primary">Get Started</a>

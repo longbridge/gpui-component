@@ -36,17 +36,27 @@ const config: UserConfig = {
       { text: "Home", link: "/" },
       { text: "Getting Started", link: "/docs/getting-started" },
       { text: "Components", link: "/docs/components" },
+      { text: "Docs", link: "https://docs.rs/gpui-component" },
       {
-        text: "Releases",
-        link: "https://github.com/longbridge/gpui-component/releases",
-      },
-      {
-        text: "Issues",
-        link: "https://github.com/longbridge/gpui-component/issues",
-      },
-      {
-        text: "Discussion",
-        link: "https://github.com/longbridge/gpui-component/discussions",
+        text: "Resources",
+        items: [
+          {
+            text: "Contributors",
+            link: "/contributors",
+          },
+          {
+            text: "Releases",
+            link: "https://github.com/longbridge/gpui-component/releases",
+          },
+          {
+            text: "Issues",
+            link: "https://github.com/longbridge/gpui-component/issues",
+          },
+          {
+            text: "Discussion",
+            link: "https://github.com/longbridge/gpui-component/discussions",
+          },
+        ],
       },
     ],
 
