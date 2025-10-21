@@ -27,10 +27,20 @@ const config: UserConfig = {
   description:
     "Rust GUI components for building fantastic cross-platform desktop application by using GPUI.",
   cleanUrls: true,
+  head: [
+    [
+      "link",
+      {
+        rel: "icon",
+        href: "/logo.svg",
+      },
+    ],
+  ],
   vite: {
     plugins: [llmstxt(), tailwindcss()],
   },
   themeConfig: {
+    logo: "/logo.svg",
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: "Home", link: "/" },
