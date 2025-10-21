@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Entity, Focusable,
-    InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
+    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Entity, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonGroup},
@@ -13,10 +13,11 @@ use gpui_component::{
     h_flex,
     input::{InputState, TextInput},
     switch::Switch,
-    v_flex, ActiveTheme, AxisExt, FocusableCycle, IndexPath, Selectable, Sizable, Size,
+    v_flex, ActiveTheme, AxisExt, IndexPath, Selectable, Sizable, Size,
 };
 
 pub struct FormStory {
+    focus_handle: FocusHandle,
     name_prefix_state: Entity<DropdownState<Vec<String>>>,
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
@@ -42,7 +43,7 @@ impl super::Story for FormStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -81,6 +82,7 @@ impl FormStory {
         let date = cx.new(|cx| DatePickerState::new(window, cx));
 
         Self {
+            focus_handle: cx.focus_handle(),
             name_prefix_state,
             name_input,
             email_input,
@@ -95,22 +97,9 @@ impl FormStory {
     }
 }
 
-impl FocusableCycle for FormStory {
-    fn cycle_focus_handles(&self, _: &mut Window, cx: &mut App) -> Vec<gpui::FocusHandle>
-    where
-        Self: Sized,
-    {
-        vec![
-            self.name_input.focus_handle(cx),
-            self.email_input.focus_handle(cx),
-            self.bio_input.focus_handle(cx),
-        ]
-    }
-}
-
 impl Focusable for FormStory {
-    fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.name_input.focus_handle(cx)
+    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+        self.focus_handle.clone()
     }
 }
 

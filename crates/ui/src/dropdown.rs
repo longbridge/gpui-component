@@ -8,7 +8,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    actions::{Cancel, Confirm, SelectNext, SelectPrev},
+    actions::{Cancel, Confirm, SelectDown, SelectUp},
     h_flex,
     input::clear_button,
     list::{List, ListDelegate},
@@ -27,10 +27,10 @@ pub enum ListEvent {
 }
 
 const CONTEXT: &str = "Dropdown";
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
-        KeyBinding::new("down", SelectNext, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
         KeyBinding::new(
             "secondary-enter",
@@ -609,16 +609,16 @@ where
         cx.notify();
     }
 
-    fn up(&mut self, _: &SelectPrev, window: &mut Window, cx: &mut Context<Self>) {
+    fn up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
-            return;
+            self.open = true;
         }
 
         self.list.focus_handle(cx).focus(window);
         cx.propagate();
     }
 
-    fn down(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
+    fn down(&mut self, _: &SelectDown, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             self.open = true;
         }
@@ -634,9 +634,9 @@ where
         if !self.open {
             self.open = true;
             cx.notify();
-        } else {
-            self.list.focus_handle(cx).focus(window);
         }
+
+        self.list.focus_handle(cx).focus(window);
     }
 
     fn toggle_menu(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -874,7 +874,9 @@ where
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx))
+            .when(!self.disabled, |this| {
+                this.track_focus(&self.focus_handle(cx).tab_stop(true))
+            })
             .on_action(window.listener_for(&self.state, DropdownState::up))
             .on_action(window.listener_for(&self.state, DropdownState::down))
             .on_action(window.listener_for(&self.state, DropdownState::enter))
@@ -888,9 +890,10 @@ where
                     .flex()
                     .items_center()
                     .justify_between()
+                    .border_1()
+                    .border_color(cx.theme().transparent)
                     .when(self.appearance, |this| {
                         this.bg(cx.theme().background)
-                            .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())

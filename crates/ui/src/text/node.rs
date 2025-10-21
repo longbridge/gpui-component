@@ -1,20 +1,24 @@
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::HashMap,
+    ops::Range,
+    sync::{Arc, Mutex},
+};
 
 use gpui::{
     div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    IntoElement, Length, ObjectFit, ParentElement, Rems, SharedString, SharedUri,
+    Div, Element, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
+    IntoElement, Length, ListState, ObjectFit, ParentElement, SharedString, SharedUri,
     StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
-use rope::Rope;
+use ropey::Rope;
 
 use crate::{
     h_flex,
-    highlighter::SyntaxHighlighter,
+    highlighter::{HighlightTheme, SyntaxHighlighter},
     text::inline::{Inline, InlineState},
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Icon, IconName,
+    v_flex, ActiveTheme as _, Icon, IconName, StyledExt,
 };
 
 use super::{utils::list_item_prefix, TextViewStyle};
@@ -98,11 +102,16 @@ impl ImageNode {
 
 impl PartialEq for ImageNode {
     fn eq(&self, other: &Self) -> bool {
-        self.url == other.url && self.title == other.title && self.alt == other.alt
+        self.url == other.url
+            && self.link == other.link
+            && self.title == other.title
+            && self.alt == other.alt
+            && self.width == other.width
+            && self.height == other.height
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct InlineNode {
     /// The text content.
     pub(crate) text: SharedString,
@@ -110,7 +119,13 @@ pub(crate) struct InlineNode {
     /// The text styles, each tuple contains the range of the text and the style.
     pub(crate) marks: Vec<(Range<usize>, TextMark)>,
 
-    state: InlineState,
+    state: Arc<Mutex<InlineState>>,
+}
+
+impl PartialEq for InlineNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text && self.image == other.image && self.marks == other.marks
+    }
 }
 
 impl InlineNode {
@@ -119,7 +134,7 @@ impl InlineNode {
             text: text.into(),
             image: None,
             marks: vec![],
-            state: InlineState::default(),
+            state: Arc::new(Mutex::new(InlineState::default())),
         }
     }
 
@@ -139,7 +154,7 @@ impl InlineNode {
 ///
 /// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
@@ -148,7 +163,15 @@ pub(crate) struct Paragraph {
     /// The key is the identifier, the value is the url.
     pub(super) link_refs: HashMap<SharedString, SharedString>,
 
-    pub(crate) state: InlineState,
+    pub(crate) state: Arc<Mutex<InlineState>>,
+}
+
+impl PartialEq for Paragraph {
+    fn eq(&self, other: &Self) -> bool {
+        self.span == other.span
+            && self.children == other.children
+            && self.link_refs == other.link_refs
+    }
 }
 
 impl Paragraph {
@@ -157,20 +180,24 @@ impl Paragraph {
             span: None,
             children: vec![InlineNode::new(&text)],
             link_refs: HashMap::new(),
-            state: InlineState::default(),
+            state: Arc::new(Mutex::new(InlineState::default())),
         }
     }
 
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
+
         for c in self.children.iter() {
-            if let Some(selection) = c.state.selection.borrow().as_ref() {
-                let part_text = c.state.text.borrow().clone();
+            let state = c.state.lock().unwrap();
+            if let Some(selection) = &state.selection {
+                let part_text = state.text.clone();
                 text.push_str(&part_text[selection.start..selection.end]);
             }
         }
-        if let Some(selection) = self.state.selection.borrow().as_ref() {
-            let all_text = self.state.text.borrow().clone();
+
+        let state = self.state.lock().unwrap();
+        if let Some(selection) = &state.selection {
+            let all_text = state.text.clone();
             text.push_str(&all_text[selection.start..selection.end]);
         }
 
@@ -178,7 +205,7 @@ impl Paragraph {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Table {
     pub children: Vec<TableRow>,
     pub column_aligns: Vec<ColumnumnAlign>,
@@ -191,7 +218,7 @@ impl Table {
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub(super) enum ColumnumnAlign {
+pub(crate) enum ColumnumnAlign {
     #[default]
     Left,
     Center,
@@ -209,22 +236,28 @@ impl From<mdast::AlignKind> for ColumnumnAlign {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct TableRow {
     pub children: Vec<TableCell>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct TableCell {
     pub children: Paragraph,
     pub width: Option<DefiniteLength>,
 }
 
 impl Paragraph {
-    pub(crate) fn reset(&mut self) {
-        self.span = None;
-        self.children.clear();
-        self.state = InlineState::default();
+    pub(crate) fn take(&mut self) -> Paragraph {
+        std::mem::replace(
+            self,
+            Paragraph {
+                span: None,
+                children: vec![],
+                link_refs: Default::default(),
+                state: Arc::new(Mutex::new(InlineState::default())),
+            },
+        )
     }
 
     pub(crate) fn is_image(&self) -> bool {
@@ -265,20 +298,22 @@ impl Paragraph {
             .sum::<usize>()
     }
 
-    /// Try to merge two paragraphs, if they are both text elements.
-    ///
-    /// - Returns `true` if other have merge into self.
-    /// - Returns `false` if not able to merge.
-    pub(crate) fn merge(&mut self, other: &Self) {
-        self.children.extend(other.children.clone());
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.children.extend(other.children);
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
-    state: InlineState,
+    state: Arc<Mutex<InlineState>>,
+}
+
+impl PartialEq for CodeBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.lang == other.lang && self.styles == other.styles
+    }
 }
 
 impl CodeBlock {
@@ -286,17 +321,17 @@ impl CodeBlock {
         code: SharedString,
         lang: Option<SharedString>,
         _: &TextViewStyle,
-        cx: &App,
+        highlight_theme: &HighlightTheme,
     ) -> Self {
         let mut styles = vec![];
         if let Some(lang) = &lang {
-            let mut highlighter = SyntaxHighlighter::new(&lang, cx);
-            highlighter.update(None, &Rope::from(code.as_str()));
-            styles = highlighter.styles(&(0..code.len()), cx);
+            let mut highlighter = SyntaxHighlighter::new(&lang);
+            highlighter.update(None, &Rope::from_str(code.as_str()));
+            styles = highlighter.styles(&(0..code.len()), highlight_theme);
         };
 
-        let state = InlineState::default();
-        state.set_text(code);
+        let state = Arc::new(Mutex::new(InlineState::default()));
+        state.lock().unwrap().set_text(code);
 
         Self {
             lang,
@@ -306,34 +341,47 @@ impl CodeBlock {
     }
 
     fn code(&self) -> SharedString {
-        self.state.text.borrow().clone()
+        self.state.lock().unwrap().text.clone()
     }
 
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
-        if let Some(selection) = self.state.selection.borrow().as_ref() {
-            let part_text = self.state.text.borrow().clone();
+        let state = self.state.lock().unwrap();
+        if let Some(selection) = &state.selection {
+            let part_text = state.text.clone();
             text.push_str(&part_text[selection.start..selection.end]);
         }
         text
     }
 
-    fn render(&self, mb: Rems, _: &mut Window, cx: &mut App) -> AnyElement {
+    fn render(
+        &self,
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        let style = &node_cx.style;
+
         div()
-            .id("codeblock")
-            .mb(mb)
-            .p_3()
-            .rounded(cx.theme().radius)
-            .bg(cx.theme().accent)
-            .font_family("Menlo, Monaco, Consolas, monospace")
-            .text_size(rems(0.875))
-            .relative()
-            .child(Inline::new(
-                "code",
-                self.state.clone(),
-                vec![],
-                self.styles.clone(),
-            ))
+            .when(!options.is_last, |this| this.pb(style.paragraph_gap))
+            .child(
+                div()
+                    .id("codeblock")
+                    .p_3()
+                    .rounded(cx.theme().radius)
+                    .bg(cx.theme().secondary.opacity(0.85))
+                    .font_family("Menlo, Monaco, Consolas, monospace")
+                    .text_size(rems(0.875))
+                    .relative()
+                    .refine_style(&style.code_block)
+                    .child(Inline::new(
+                        "code",
+                        self.state.clone(),
+                        vec![],
+                        self.styles.clone(),
+                    )),
+            )
             .into_any_element()
     }
 }
@@ -401,17 +449,10 @@ impl Node {
     }
 
     /// Combine all children, omitting the empt parent nodes.
-    pub(super) fn compact(&self) -> Node {
+    pub(super) fn compact(self) -> Node {
         match self {
-            Self::Root { children } => {
-                let children = children.iter().map(|c| c.compact()).collect::<Vec<_>>();
-                if children.len() == 1 {
-                    children.first().unwrap().compact()
-                } else {
-                    self.clone()
-                }
-            }
-            _ => self.clone(),
+            Self::Root { mut children } if children.len() == 1 => children.remove(0).compact(),
+            _ => self,
         }
     }
 
@@ -521,7 +562,11 @@ impl Paragraph {
 
             if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
-                    inline_node.state.set_text(text.clone().into());
+                    inline_node
+                        .state
+                        .lock()
+                        .unwrap()
+                        .set_text(text.clone().into());
                     child_nodes.push(
                         Inline::new(
                             ix,
@@ -606,7 +651,7 @@ impl Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
-            self.state.set_text(text.into());
+            self.state.lock().unwrap().set_text(text.into());
             child_nodes
                 .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
         }
@@ -615,336 +660,19 @@ impl Paragraph {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct ListState {
+#[derive(Default, Clone, Copy)]
+struct NodeRenderOptions {
+    in_list: bool,
     todo: bool,
     ordered: bool,
     depth: usize,
+    is_last: bool,
 }
 
-impl Node {
-    fn render_list_item(
-        item: &Node,
-        ix: usize,
-        state: ListState,
-        node_cx: &NodeContext,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        match item {
-            Node::ListItem {
-                children,
-                spread,
-                checked,
-            } => v_flex()
-                .id("li")
-                .when(*spread, |this| this.child(div()))
-                .children({
-                    let mut items: Vec<Div> = Vec::with_capacity(children.len());
-                    for (child_ix, child) in children.iter().enumerate() {
-                        match &child {
-                            Node::Paragraph(_) => {
-                                let last_not_list = child_ix > 0
-                                    && !matches!(children[child_ix - 1], Node::List { .. });
-
-                                let text = child.clone().render(
-                                    Some(ListState {
-                                        depth: state.depth + 1,
-                                        ordered: state.ordered,
-                                        todo: checked.is_some(),
-                                    }),
-                                    false,
-                                    true,
-                                    node_cx,
-                                    window,
-                                    cx,
-                                );
-
-                                // merge content into last item.
-                                if last_not_list {
-                                    if let Some(item_item) = items.last_mut() {
-                                        item_item.extend(vec![div()
-                                            .overflow_hidden()
-                                            .child(text)
-                                            .into_any_element()]);
-                                        continue;
-                                    }
-                                }
-
-                                items.push(
-                                    h_flex()
-                                        .flex_1()
-                                        .relative()
-                                        .items_start()
-                                        .content_start()
-                                        .when(!state.todo && checked.is_none(), |this| {
-                                            this.child(list_item_prefix(
-                                                ix,
-                                                state.ordered,
-                                                state.depth,
-                                            ))
-                                        })
-                                        .when_some(*checked, |this, checked| {
-                                            // Todo list checkbox
-                                            this.child(
-                                                div()
-                                                    .flex()
-                                                    .mt(rems(0.4))
-                                                    .mr_1p5()
-                                                    .size(rems(0.875))
-                                                    .items_center()
-                                                    .justify_center()
-                                                    .rounded(cx.theme().radius.half())
-                                                    .border_1()
-                                                    .border_color(cx.theme().primary)
-                                                    .text_color(cx.theme().primary_foreground)
-                                                    .when(checked, |this| {
-                                                        this.bg(cx.theme().primary).child(
-                                                            Icon::new(IconName::Check)
-                                                                .size_2()
-                                                                .text_xs(),
-                                                        )
-                                                    }),
-                                            )
-                                        })
-                                        .child(div().overflow_hidden().child(text)),
-                                );
-                            }
-                            Node::List { .. } => {
-                                items.push(div().ml(rems(1.)).child(child.clone().render(
-                                    Some(ListState {
-                                        depth: state.depth + 1,
-                                        ordered: state.ordered,
-                                        todo: checked.is_some(),
-                                    }),
-                                    true,
-                                    true,
-                                    node_cx,
-                                    window,
-                                    cx,
-                                )))
-                            }
-                            _ => {}
-                        }
-                    }
-                    items
-                })
-                .into_any_element(),
-            _ => div().into_any_element(),
-        }
-    }
-
-    fn render_table(
-        item: &Node,
-        node_cx: &NodeContext,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        const DEFAULT_LENGTH: usize = 5;
-        const MAX_LENGTH: usize = 150;
-        let col_lens = match item {
-            Node::Table(table) => {
-                let mut col_lens = vec![];
-                for row in table.children.iter() {
-                    for (ix, cell) in row.children.iter().enumerate() {
-                        if col_lens.len() <= ix {
-                            col_lens.push(DEFAULT_LENGTH);
-                        }
-
-                        let len = cell.children.text_len();
-                        if len > col_lens[ix] {
-                            col_lens[ix] = len;
-                        }
-                    }
-                }
-                col_lens
-            }
-            _ => vec![],
-        };
-
-        match item {
-            Node::Table(table) => div()
-                .id("table")
-                .mb(rems(1.))
-                .w_full()
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(cx.theme().radius)
-                .children({
-                    let mut rows = Vec::with_capacity(table.children.len());
-                    for (row_ix, row) in table.children.iter().enumerate() {
-                        rows.push(
-                            div()
-                                .id("row")
-                                .w_full()
-                                .when(row_ix < table.children.len() - 1, |this| this.border_b_1())
-                                .border_color(cx.theme().border)
-                                .flex()
-                                .flex_row()
-                                .children({
-                                    let mut cells = Vec::with_capacity(row.children.len());
-                                    for (ix, cell) in row.children.iter().enumerate() {
-                                        let align = table.column_align(ix);
-                                        let is_last_col = ix == row.children.len() - 1;
-                                        let len = col_lens
-                                            .get(ix)
-                                            .copied()
-                                            .unwrap_or(MAX_LENGTH)
-                                            .min(MAX_LENGTH);
-
-                                        cells.push(
-                                            div()
-                                                .id("cell")
-                                                .flex()
-                                                .when(align == ColumnumnAlign::Center, |this| {
-                                                    this.justify_center()
-                                                })
-                                                .when(align == ColumnumnAlign::Right, |this| {
-                                                    this.justify_end()
-                                                })
-                                                .w(Length::Definite(relative(len as f32)))
-                                                .px_2()
-                                                .py_1()
-                                                .when(!is_last_col, |this| {
-                                                    this.border_r_1()
-                                                        .border_color(cx.theme().border)
-                                                })
-                                                .truncate()
-                                                .child(cell.children.render(node_cx, window, cx)),
-                                        )
-                                    }
-                                    cells
-                                }),
-                        )
-                    }
-                    rows
-                })
-                .into_any_element(),
-            _ => div().into_any_element(),
-        }
-    }
-
-    pub(crate) fn render(
-        &self,
-        list_state: Option<ListState>,
-        is_root: bool,
-        is_last_child: bool,
-        node_cx: &NodeContext,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        let in_list = list_state.is_some();
-        let mb = if in_list || is_last_child {
-            rems(0.)
-        } else {
-            node_cx.style.paragraph_gap
-        };
-
-        match self {
-            Node::Root { children } => div()
-                .id("div")
-                .children({
-                    let children_len = children.len();
-                    children.into_iter().enumerate().map(move |(index, c)| {
-                        let is_last_child = is_root && index == children_len - 1;
-                        c.render(None, false, is_last_child, node_cx, window, cx)
-                    })
-                })
-                .into_any_element(),
-            Node::Paragraph(paragraph) => div()
-                .id("p")
-                .mb(mb)
-                .child(paragraph.render(node_cx, window, cx))
-                .into_any_element(),
-            Node::Heading { level, children } => {
-                let (text_size, font_weight) = match level {
-                    1 => (rems(2.), FontWeight::BOLD),
-                    2 => (rems(1.5), FontWeight::SEMIBOLD),
-                    3 => (rems(1.25), FontWeight::SEMIBOLD),
-                    4 => (rems(1.125), FontWeight::SEMIBOLD),
-                    5 => (rems(1.), FontWeight::SEMIBOLD),
-                    6 => (rems(1.), FontWeight::MEDIUM),
-                    _ => (rems(1.), FontWeight::NORMAL),
-                };
-
-                let mut text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
-                if let Some(f) = node_cx.style.heading_font_size.as_ref() {
-                    text_size = (f)(*level, node_cx.style.heading_base_font_size);
-                }
-
-                h_flex()
-                    .id(("h", *level as usize))
-                    .mb(rems(0.3))
-                    .whitespace_normal()
-                    .text_size(text_size)
-                    .font_weight(font_weight)
-                    .child(children.render(node_cx, window, cx))
-                    .into_any_element()
-            }
-            Node::Blockquote { children } => div()
-                .id("blockquote")
-                .w_full()
-                .mb(mb)
-                .text_color(cx.theme().muted_foreground)
-                .border_l_3()
-                .border_color(cx.theme().secondary_active)
-                .px_4()
-                .children({
-                    let children_len = children.len();
-                    children.into_iter().enumerate().map(move |(index, c)| {
-                        let is_last_child = is_root && index == children_len - 1;
-                        c.render(None, false, is_last_child, node_cx, window, cx)
-                    })
-                })
-                .into_any_element(),
-            Node::List { children, ordered } => v_flex()
-                .id(if *ordered { "ol" } else { "ul" })
-                .mb(mb)
-                .children({
-                    let mut items = Vec::with_capacity(children.len());
-                    let list_state = list_state.unwrap_or_default();
-                    let mut ix = 0;
-                    for item in children.into_iter() {
-                        let is_item = item.is_list_item();
-
-                        items.push(Self::render_list_item(
-                            &item,
-                            ix,
-                            ListState {
-                                ordered: *ordered,
-                                todo: list_state.todo,
-                                depth: list_state.depth,
-                            },
-                            node_cx,
-                            window,
-                            cx,
-                        ));
-
-                        if is_item {
-                            ix += 1;
-                        }
-                    }
-                    items
-                })
-                .into_any_element(),
-            Node::CodeBlock(code_block) => code_block.render(mb, window, cx),
-            Node::Table { .. } => Self::render_table(&self, node_cx, window, cx).into_any_element(),
-            Node::Divider => div()
-                .id("divider")
-                .bg(cx.theme().border)
-                .h(px(2.))
-                .mb(mb)
-                .into_any_element(),
-            Node::Break { .. } => div().id("break").into_any_element(),
-            Node::Unknown | Node::Definition { .. } => div().into_any_element(),
-            _ => {
-                if cfg!(debug_assertions) {
-                    tracing::warn!("unknown implementation: {:?}", self);
-                }
-
-                div().into_any_element()
-            }
-        }
+impl NodeRenderOptions {
+    fn is_last(mut self, is_last: bool) -> Self {
+        self.is_last = is_last;
+        self
     }
 }
 
@@ -1127,5 +855,376 @@ impl Node {
         }
         .trim()
         .to_string()
+    }
+}
+
+impl Node {
+    fn render_list_item(
+        item: &Node,
+        ix: usize,
+        options: NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        match item {
+            Node::ListItem {
+                children,
+                spread,
+                checked,
+            } => v_flex()
+                .id("li")
+                .when(*spread, |this| this.child(div()))
+                .children({
+                    let mut items: Vec<Div> = Vec::with_capacity(children.len());
+
+                    for (child_ix, child) in children.iter().enumerate() {
+                        match child {
+                            Node::Paragraph(_) => {
+                                let last_not_list = child_ix > 0
+                                    && !matches!(children[child_ix - 1], Node::List { .. });
+
+                                let text = child.render_block(
+                                    NodeRenderOptions {
+                                        depth: options.depth + 1,
+                                        todo: checked.is_some(),
+                                        is_last: true,
+                                        ..options
+                                    },
+                                    node_cx,
+                                    window,
+                                    cx,
+                                );
+
+                                // merge content into last item.
+                                if last_not_list {
+                                    if let Some(item_item) = items.last_mut() {
+                                        item_item.extend(vec![div()
+                                            .overflow_hidden()
+                                            .child(text)
+                                            .into_any_element()]);
+                                        continue;
+                                    }
+                                }
+
+                                items.push(
+                                    h_flex()
+                                        .flex_1()
+                                        .relative()
+                                        .items_start()
+                                        .content_start()
+                                        .when(!options.todo && checked.is_none(), |this| {
+                                            this.child(list_item_prefix(
+                                                ix,
+                                                options.ordered,
+                                                options.depth,
+                                            ))
+                                        })
+                                        .when_some(*checked, |this, checked| {
+                                            // Todo list checkbox
+                                            this.child(
+                                                div()
+                                                    .flex()
+                                                    .mt(rems(0.4))
+                                                    .mr_1p5()
+                                                    .size(rems(0.875))
+                                                    .items_center()
+                                                    .justify_center()
+                                                    .rounded(cx.theme().radius.half())
+                                                    .border_1()
+                                                    .border_color(cx.theme().primary)
+                                                    .text_color(cx.theme().primary_foreground)
+                                                    .when(checked, |this| {
+                                                        this.bg(cx.theme().primary).child(
+                                                            Icon::new(IconName::Check)
+                                                                .size_2()
+                                                                .text_xs(),
+                                                        )
+                                                    }),
+                                            )
+                                        })
+                                        .child(div().overflow_hidden().child(text)),
+                                );
+                            }
+                            Node::List { .. } => {
+                                items.push(div().ml(rems(1.)).child(child.render_block(
+                                    NodeRenderOptions {
+                                        depth: options.depth + 1,
+                                        todo: checked.is_some(),
+                                        is_last: true,
+                                        ..options
+                                    },
+                                    node_cx,
+                                    window,
+                                    cx,
+                                )));
+                            }
+                            _ => {}
+                        }
+                    }
+                    items
+                })
+                .into_any_element(),
+            _ => div().into_any_element(),
+        }
+    }
+
+    fn render_table(
+        item: &Node,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        const DEFAULT_LENGTH: usize = 5;
+        const MAX_LENGTH: usize = 150;
+        let col_lens = match item {
+            Node::Table(table) => {
+                let mut col_lens = vec![];
+                for row in table.children.iter() {
+                    for (ix, cell) in row.children.iter().enumerate() {
+                        if col_lens.len() <= ix {
+                            col_lens.push(DEFAULT_LENGTH);
+                        }
+
+                        let len = cell.children.text_len();
+                        if len > col_lens[ix] {
+                            col_lens[ix] = len;
+                        }
+                    }
+                }
+                col_lens
+            }
+            _ => vec![],
+        };
+
+        match item {
+            Node::Table(table) => div()
+                .pb(rems(1.))
+                .w_full()
+                .child(
+                    div()
+                        .id("table")
+                        .w_full()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded(cx.theme().radius)
+                        .children({
+                            let mut rows = Vec::with_capacity(table.children.len());
+                            for (row_ix, row) in table.children.iter().enumerate() {
+                                rows.push(
+                                    div()
+                                        .id("row")
+                                        .w_full()
+                                        .when(row_ix < table.children.len() - 1, |this| {
+                                            this.border_b_1()
+                                        })
+                                        .border_color(cx.theme().border)
+                                        .flex()
+                                        .flex_row()
+                                        .children({
+                                            let mut cells = Vec::with_capacity(row.children.len());
+                                            for (ix, cell) in row.children.iter().enumerate() {
+                                                let align = table.column_align(ix);
+                                                let is_last_col = ix == row.children.len() - 1;
+                                                let len = col_lens
+                                                    .get(ix)
+                                                    .copied()
+                                                    .unwrap_or(MAX_LENGTH)
+                                                    .min(MAX_LENGTH);
+
+                                                cells.push(
+                                                    div()
+                                                        .id("cell")
+                                                        .flex()
+                                                        .when(
+                                                            align == ColumnumnAlign::Center,
+                                                            |this| this.justify_center(),
+                                                        )
+                                                        .when(
+                                                            align == ColumnumnAlign::Right,
+                                                            |this| this.justify_end(),
+                                                        )
+                                                        .w(Length::Definite(relative(len as f32)))
+                                                        .px_2()
+                                                        .py_1()
+                                                        .when(!is_last_col, |this| {
+                                                            this.border_r_1()
+                                                                .border_color(cx.theme().border)
+                                                        })
+                                                        .truncate()
+                                                        .child(
+                                                            cell.children
+                                                                .render(node_cx, window, cx),
+                                                        ),
+                                                )
+                                            }
+                                            cells
+                                        }),
+                                )
+                            }
+                            rows
+                        }),
+                )
+                .into_any_element(),
+            _ => div().into_any_element(),
+        }
+    }
+
+    pub(super) fn render_root(
+        &self,
+        list_state: Option<ListState>,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let options = NodeRenderOptions {
+            is_last: true,
+            ..Default::default()
+        };
+
+        let Some(list_state) = list_state else {
+            return self
+                .render_block(options, node_cx, window, cx)
+                .into_any_element();
+        };
+
+        let children = match self {
+            Node::Root { children } => children,
+            _ => return div().into_any_element(),
+        };
+
+        let children = children.clone();
+        let node_cx = node_cx.clone();
+
+        if list_state.item_count() != children.len() {
+            list_state.reset(children.len());
+        }
+
+        gpui::list(list_state, move |ix, window, cx| {
+            let is_last = ix + 1 == children.len();
+            children[ix]
+                .render_block(options.is_last(is_last), &node_cx, window, cx)
+                .into_any_element()
+        })
+        .size_full()
+        .into_any()
+    }
+
+    fn render_block(
+        &self,
+        options: NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let mb = if options.in_list || options.is_last {
+            rems(0.)
+        } else {
+            node_cx.style.paragraph_gap
+        };
+
+        match self {
+            Node::Root { children } => div()
+                .id("div")
+                .children(
+                    children
+                        .into_iter()
+                        .map(move |node| node.render_block(options, node_cx, window, cx)),
+                )
+                .into_any_element(),
+            Node::Paragraph(paragraph) => div()
+                .id("p")
+                .pb(mb)
+                .child(paragraph.render(node_cx, window, cx))
+                .into_any_element(),
+            Node::Heading { level, children } => {
+                let (text_size, font_weight) = match level {
+                    1 => (rems(2.), FontWeight::BOLD),
+                    2 => (rems(1.5), FontWeight::SEMIBOLD),
+                    3 => (rems(1.25), FontWeight::SEMIBOLD),
+                    4 => (rems(1.125), FontWeight::SEMIBOLD),
+                    5 => (rems(1.), FontWeight::SEMIBOLD),
+                    6 => (rems(1.), FontWeight::MEDIUM),
+                    _ => (rems(1.), FontWeight::NORMAL),
+                };
+
+                let mut text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
+                if let Some(f) = node_cx.style.heading_font_size.as_ref() {
+                    text_size = (f)(*level, node_cx.style.heading_base_font_size);
+                }
+
+                h_flex()
+                    .id(("h", *level as usize))
+                    .pb(rems(0.3))
+                    .whitespace_normal()
+                    .text_size(text_size)
+                    .font_weight(font_weight)
+                    .child(children.render(node_cx, window, cx))
+                    .into_any_element()
+            }
+            Node::Blockquote { children } => div()
+                .w_full()
+                .pb(mb)
+                .child(
+                    div()
+                        .id("blockquote")
+                        .w_full()
+                        .text_color(cx.theme().muted_foreground)
+                        .border_l_3()
+                        .border_color(cx.theme().secondary_active)
+                        .px_4()
+                        .children({
+                            let children_len = children.len();
+                            children.into_iter().enumerate().map(move |(index, c)| {
+                                let is_last = index == children_len - 1;
+                                c.render_block(options.is_last(is_last), node_cx, window, cx)
+                            })
+                        }),
+                )
+                .into_any_element(),
+            Node::List { children, ordered } => v_flex()
+                .id(if *ordered { "ol" } else { "ul" })
+                .pb(mb)
+                .children({
+                    let mut items = Vec::with_capacity(children.len());
+                    let mut ix = 0;
+                    for item in children.into_iter() {
+                        let is_item = item.is_list_item();
+
+                        items.push(Self::render_list_item(
+                            item,
+                            ix,
+                            NodeRenderOptions {
+                                ordered: *ordered,
+                                ..options
+                            },
+                            node_cx,
+                            window,
+                            cx,
+                        ));
+
+                        if is_item {
+                            ix += 1;
+                        }
+                    }
+                    items
+                })
+                .into_any_element(),
+            Node::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
+            Node::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
+            Node::Divider => div()
+                .pb(mb)
+                .child(div().id("divider").bg(cx.theme().border).h(px(2.)))
+                .into_any_element(),
+            Node::Break { .. } => div().id("break").into_any_element(),
+            Node::Unknown | Node::Definition { .. } => div().into_any_element(),
+            _ => {
+                if cfg!(debug_assertions) {
+                    tracing::warn!("unknown implementation: {:?}", self);
+                }
+
+                div().into_any_element()
+            }
+        }
     }
 }

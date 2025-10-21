@@ -5,6 +5,8 @@ use gpui::{
     Window,
 };
 
+use crate::PixelsExt;
+
 mod panel;
 mod resize_handle;
 pub use panel::*;
@@ -130,7 +132,7 @@ impl ResizableState {
     }
 
     pub(crate) fn total_size(&self) -> Pixels {
-        self.sizes.iter().map(|s| s.0).sum::<f32>().into()
+        self.sizes.iter().map(|s| s.as_f32()).sum::<f32>().into()
     }
 
     pub(crate) fn done_resizing(&mut self, cx: &mut Context<Self>) {
@@ -206,7 +208,7 @@ impl ResizableState {
         }
 
         // If total size exceeds container size, adjust the main panel
-        let total_size: Pixels = new_sizes.iter().map(|s| s.0).sum::<f32>().into();
+        let total_size: Pixels = new_sizes.iter().map(|s| s.as_f32()).sum::<f32>().into();
         if total_size > container_size {
             let overflow = total_size - container_size;
             new_sizes[main_ix] = (new_sizes[main_ix] - overflow).max(size_range.start);

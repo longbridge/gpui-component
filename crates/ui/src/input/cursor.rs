@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::ops::{Range, RangeBounds};
 
 /// A selection in the text, represented by start and end byte indices.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -25,6 +25,11 @@ impl Selection {
         self.start = 0;
         self.end = 0;
     }
+
+    /// Checks if the given offset is within the selection range.
+    pub fn contains(&self, offset: usize) -> bool {
+        offset >= self.start && offset < self.end
+    }
 }
 
 impl From<Range<usize>> for Selection {
@@ -37,8 +42,15 @@ impl From<Selection> for Range<usize> {
         value.start..value.end
     }
 }
+impl RangeBounds<usize> for Selection {
+    fn start_bound(&self) -> std::ops::Bound<&usize> {
+        std::ops::Bound::Included(&self.start)
+    }
 
-pub type Position = lsp_types::Position;
+    fn end_bound(&self) -> std::ops::Bound<&usize> {
+        std::ops::Bound::Excluded(&self.end)
+    }
+}
 
 #[cfg(test)]
 mod tests {

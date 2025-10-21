@@ -21,7 +21,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::*;
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     PanelRegistry::init(cx);
 }
 

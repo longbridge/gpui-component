@@ -22,12 +22,11 @@ impl Example {
         let editor = cx.new(|cx| {
             InputState::new(window, cx)
                 .multi_line()
-                .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
                 })
-                .soft_wrap(false)
+                .soft_wrap(true)
                 .placeholder("Enter your code here...")
                 .default_value(text)
         });

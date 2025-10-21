@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-const DEFAULT_THEME: &str = include_str!("../../../../themes/default.json");
+const DEFAULT_THEME: &str = include_str!("./default-theme.json");
 pub(crate) const DEFAULT_THEME_COLORS: LazyLock<
     HashMap<ThemeMode, (Arc<ThemeColor>, Arc<HighlightTheme>)>,
 > = LazyLock::new(|| {
@@ -243,6 +243,11 @@ impl ThemeRegistry {
         }
 
         self.themes.clear();
+        for theme in self.default_themes.values() {
+            self.themes
+                .insert(theme.name.clone(), Rc::new((**theme).clone()));
+        }
+
         for theme in themes.iter() {
             if self.themes.contains_key(&theme.name) {
                 continue;

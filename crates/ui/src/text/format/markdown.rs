@@ -1,88 +1,29 @@
-use gpui::{
-    div, prelude::FluentBuilder as _, App, Entity, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled, Window,
-};
+use gpui::SharedString;
 use markdown::{
     mdast::{self, Node},
     ParseOptions,
 };
 
 use crate::{
+    highlighter::HighlightTheme,
     text::{
         node::{
             self, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Span, Table,
             TableRow, TextMark,
         },
-        TextViewState, TextViewStyle,
+        TextViewStyle,
     },
-    v_flex,
 };
-
-/// Markdown GFM renderer
-///
-/// This is design goal is to be able to most common Markdown (GFM) features
-/// to let us to display rich text in our application.
-///
-/// See also [`super::TextView`]
-#[derive(IntoElement, Clone)]
-pub(crate) struct MarkdownElement {
-    pub(super) text: SharedString,
-    style: TextViewStyle,
-    state: Entity<TextViewState>,
-}
-
-impl MarkdownElement {
-    pub(crate) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
-        Self {
-            state,
-            text: raw.into(),
-            style: TextViewStyle::default(),
-        }
-    }
-
-    /// Set the source of the markdown view.
-    pub(crate) fn text(mut self, raw: impl Into<SharedString>) -> Self {
-        self.text = raw.into();
-        self
-    }
-
-    /// Set TextViewStyle.
-    pub(crate) fn style(mut self, style: impl Into<TextViewStyle>) -> Self {
-        self.style = style.into();
-        self
-    }
-}
-
-impl RenderOnce for MarkdownElement {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.state.update(cx, |state, cx| {
-            state.parse_if_needed(self.text.clone(), false, &self.style, cx);
-        });
-
-        let root = self.state.read(cx).root();
-        let node_cx = self.state.read(cx).node_cx.clone();
-
-        div().map(|this| match root {
-            Ok(node) => this.child(node.render(None, true, true, &node_cx, window, cx)),
-            Err(err) => this.child(
-                v_flex()
-                    .gap_1()
-                    .child("Error parsing Markdown")
-                    .child(err.to_string()),
-            ),
-        })
-    }
-}
 
 /// Parse Markdown into a tree of nodes.
 pub(crate) fn parse(
     raw: &str,
     style: &TextViewStyle,
     cx: &mut NodeContext,
-    app: &App,
+    highlight_theme: &HighlightTheme,
 ) -> Result<node::Node, SharedString> {
     markdown::to_mdast(&raw, &ParseOptions::gfm())
-        .map(|n| ast_to_node(n, style, cx, app))
+        .map(|n| ast_to_node(n, style, cx, highlight_theme))
         .map_err(|e| e.to_string().into())
 }
 
@@ -194,7 +135,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
                 ));
             }
 
-            paragraph.merge(&child_paragraph);
+            paragraph.merge(child_paragraph);
         }
         Node::Image(raw) => {
             paragraph.push_image(ImageNode {
@@ -279,14 +220,14 @@ fn ast_to_node(
     value: mdast::Node,
     style: &TextViewStyle,
     cx: &mut NodeContext,
-    app: &App,
+    highlight_theme: &HighlightTheme,
 ) -> node::Node {
     match value {
         Node::Root(val) => {
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, app))
+                .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
             node::Node::Root { children }
         }
@@ -302,7 +243,7 @@ fn ast_to_node(
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, app))
+                .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
             node::Node::Blockquote { children }
         }
@@ -310,7 +251,7 @@ fn ast_to_node(
             let children = list
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, app))
+                .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
             node::Node::List {
                 ordered: list.ordered,
@@ -321,7 +262,7 @@ fn ast_to_node(
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, app))
+                .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
             node::Node::ListItem {
                 children,
@@ -334,7 +275,7 @@ fn ast_to_node(
             raw.value.into(),
             raw.lang.map(|s| s.into()),
             style,
-            app,
+            highlight_theme,
         )),
         Node::Heading(val) => {
             let mut paragraph = Paragraph::default();
@@ -347,9 +288,12 @@ fn ast_to_node(
                 children: paragraph,
             }
         }
-        Node::Math(val) => {
-            node::Node::CodeBlock(CodeBlock::new(val.value.into(), None, style, app))
-        }
+        Node::Math(val) => node::Node::CodeBlock(CodeBlock::new(
+            val.value.into(),
+            None,
+            style,
+            highlight_theme,
+        )),
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => el,
             Err(err) => {
@@ -364,19 +308,19 @@ fn ast_to_node(
             val.value.into(),
             Some("mdx".into()),
             style,
-            app,
+            highlight_theme,
         )),
         Node::Yaml(val) => node::Node::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("yml".into()),
             style,
-            app,
+            highlight_theme,
         )),
         Node::Toml(val) => node::Node::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
             style,
-            app,
+            highlight_theme,
         )),
         Node::MdxJsxTextElement(val) => {
             let mut paragraph = Paragraph::default();

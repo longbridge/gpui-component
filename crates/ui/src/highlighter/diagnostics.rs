@@ -5,7 +5,7 @@ use std::{
 };
 
 use gpui::{px, App, HighlightStyle, Hsla, SharedString, UnderlineStyle};
-use rope::Rope;
+use ropey::Rope;
 use sum_tree::{Bias, SeekTarget, SumTree};
 
 use crate::{
@@ -58,7 +58,7 @@ pub struct Diagnostic {
 impl From<lsp_types::Diagnostic> for Diagnostic {
     fn from(value: lsp_types::Diagnostic) -> Self {
         Self {
-            range: Position::from(value.range.start)..Position::from(value.range.end),
+            range: value.range.start..value.range.end,
             severity: value
                 .severity
                 .map(Into::into)
@@ -211,8 +211,8 @@ impl sum_tree::Item for DiagnosticEntry {
 }
 
 impl sum_tree::Summary for DiagnosticSummary {
-    type Context = ();
-    fn zero(_: &Self::Context) -> Self {
+    type Context<'a> = &'a ();
+    fn zero(_: Self::Context<'_>) -> Self {
         DiagnosticSummary {
             count: 0,
             start: usize::MIN,
@@ -220,7 +220,7 @@ impl sum_tree::Summary for DiagnosticSummary {
         }
     }
 
-    fn add_summary(&mut self, other: &Self, _: &Self::Context) {
+    fn add_summary(&mut self, other: &Self, _: Self::Context<'_>) {
         self.start = other.start;
         self.end = other.end;
         self.count += other.count;
@@ -240,7 +240,7 @@ impl SeekTarget<'_, DiagnosticSummary, DiagnosticSummary> for usize {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct DiagnosticSet {
     text: Rope,
     diagnostics: SumTree<DiagnosticEntry>,
@@ -259,7 +259,8 @@ impl DiagnosticSet {
         self.clear();
     }
 
-    pub fn push(&mut self, diagnostic: Diagnostic) {
+    pub fn push(&mut self, diagnostic: impl Into<Diagnostic>) {
+        let diagnostic = diagnostic.into();
         let start = self.text.position_to_offset(&diagnostic.range.start);
         let end = self.text.position_to_offset(&diagnostic.range.end);
 
@@ -272,12 +273,13 @@ impl DiagnosticSet {
         );
     }
 
-    pub fn extend<I>(&mut self, diagnostics: I)
+    pub fn extend<D, I>(&mut self, diagnostics: D)
     where
-        I: IntoIterator<Item = Diagnostic>,
+        D: IntoIterator<Item = I>,
+        I: Into<Diagnostic>,
     {
         for diagnostic in diagnostics {
-            self.push(diagnostic);
+            self.push(diagnostic.into());
         }
     }
 
@@ -341,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic() {
-        use rope::Rope;
+        use ropey::Rope;
 
         use super::{Diagnostic, DiagnosticSet, DiagnosticSeverity};
 

@@ -1,0 +1,32 @@
+[package]
+name = "reqwest_client"
+version = "0.3.0-preview1"
+publish = false
+license = "Apache-2.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[features]
+test-support = []
+
+[lib]
+path = "src/reqwest_client.rs"
+doctest = true
+
+[dependencies]
+reqwest.workspace = true
+http-client.workspace = true
+anyhow.workspace = true
+log.workspace = true
+
+rustls = { version = "0.23.26" }
+rustls-platform-verifier = "0.5.0"
+bytes = "1.0"
+futures = "0.3"
+tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+regex = "1.5"
+
+[dev-dependencies]
+gpui.workspace = true

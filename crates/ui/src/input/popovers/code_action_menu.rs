@@ -13,7 +13,7 @@ const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use crate::{
     actions, h_flex,
-    input::{self, InputState},
+    input::{self, popovers::editor_popover, InputState},
     list::{List, ListDelegate, ListEvent},
     ActiveTheme, IndexPath, Selectable,
 };
@@ -254,13 +254,13 @@ impl CodeActionMenu {
 
     fn on_action_up(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.list.update(cx, |this, cx| {
-            this.on_action_select_prev(&actions::SelectPrev, window, cx)
+            this.on_action_select_prev(&actions::SelectUp, window, cx)
         });
     }
 
     fn on_action_down(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.list.update(cx, |this, cx| {
-            this.on_action_select_next(&actions::SelectNext, window, cx)
+            this.on_action_select_next(&actions::SelectDown, window, cx)
         });
     }
 
@@ -330,21 +330,10 @@ impl Render for CodeActionMenu {
         let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
 
         deferred(
-            div()
-                .id("code-action-menu")
+            editor_popover("code-action-menu", cx)
                 .absolute()
                 .left(pos.x)
                 .top(pos.y)
-                .flex_none()
-                .occlude()
-                .p_1()
-                .text_xs()
-                .text_color(cx.theme().popover_foreground)
-                .bg(cx.theme().popover)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(cx.theme().radius)
-                .shadow_md()
                 .max_w(max_width)
                 .min_w(px(120.))
                 .child(self.list.clone())

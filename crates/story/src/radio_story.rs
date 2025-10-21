@@ -27,7 +27,7 @@ impl super::Story for RadioStory {
         "A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -63,24 +63,24 @@ impl Render for RadioStory {
                     .child(
                         Radio::new("radio1")
                             .checked(self.radio_check1)
-                            .on_click(cx.listener(|this, v, _, _| {
-                                this.radio_check1 = *v;
+                            .on_click(cx.listener(|this, checked, _, _| {
+                                this.radio_check1 = *checked;
                             })),
                     )
                     .child(
                         Radio::new("radio2")
-                            .label("Radio")
+                            .label("Radio 2")
                             .checked(self.radio_check2)
-                            .on_click(cx.listener(|this, v, _, _| {
-                                this.radio_check2 = *v;
+                            .on_click(cx.listener(|this, checked, _, _| {
+                                this.radio_check2 = *checked;
                             })),
                     ),
             )
             .child(
                 section("Disabled")
-                    .child(Radio::new("radio3").label("Disabled").disabled(true))
+                    .child(Radio::new("a").label("Disabled").disabled(true))
                     .child(
-                        Radio::new("radio3")
+                        Radio::new("b")
                             .label("Disabled with Checked")
                             .checked(true)
                             .disabled(true),

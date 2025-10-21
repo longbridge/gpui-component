@@ -1,16 +1,15 @@
 mod event;
-mod focusable;
 mod global_state;
 mod icon;
 mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
 mod kbd;
-mod menu;
 mod root;
 mod styled;
 mod time;
 mod title_bar;
+mod tree;
 mod virtual_list;
 mod window_border;
 
@@ -41,6 +40,7 @@ pub mod input;
 pub mod label;
 pub mod link;
 pub mod list;
+pub mod menu;
 pub mod modal;
 pub mod notification;
 pub mod plot;
@@ -70,15 +70,17 @@ pub use wry;
 
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
-pub use focusable::FocusableCycle;
 pub use index_path::IndexPath;
+pub use input::{Rope, RopeExt, RopeLines};
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
+pub use list::*;
 pub use menu::{context_menu, popup_menu};
 pub use root::{ContextModal, Root};
 pub use styled::*;
 pub use time::*;
 pub use title_bar::*;
+pub use tree::*;
 pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList, VirtualListScrollHandle};
 pub use window_border::{window_border, window_paddings, WindowBorder};
 
@@ -90,17 +92,17 @@ use std::ops::Deref;
 
 rust_i18n::i18n!("locales", fallback = "en");
 
-/// Initialize the UI module.
+/// Initialize the components.
 ///
-/// This must be called before using any of the UI components.
-/// You can initialize the UI module at your application's entry point.
+/// You must initialize the components at your application's entry point.
 pub fn init(cx: &mut App) {
     theme::init(cx);
     global_state::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
-    highlighter::init(cx);
+    root::init(cx);
     date_picker::init(cx);
+    color_picker::init(cx);
     dock::init(cx);
     drawer::init(cx);
     dropdown::init(cx);
@@ -111,6 +113,7 @@ pub fn init(cx: &mut App) {
     menu::init(cx);
     table::init(cx);
     text::init(cx);
+    tree::init(cx);
 }
 
 #[inline]

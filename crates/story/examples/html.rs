@@ -2,7 +2,7 @@ use gpui::*;
 use gpui_component::{
     highlighter::Language,
     input::{InputState, TabSize, TextInput},
-    resizable::{h_resizable, resizable_panel, ResizableState},
+    resizable::{ResizableState, h_resizable, resizable_panel},
     text::TextView,
 };
 use story::Assets;
@@ -69,20 +69,15 @@ impl Render for Example {
             )
             .child(
                 resizable_panel().child(
-                    div()
-                        .id("preview")
-                        .size_full()
-                        .p_5()
-                        .overflow_y_scroll()
-                        .child(
-                            TextView::html(
-                                "preview",
-                                self.input_state.read(cx).value().clone(),
-                                window,
-                                cx,
-                            )
-                            .selectable(),
-                        ),
+                    TextView::html(
+                        "preview",
+                        self.input_state.read(cx).value().clone(),
+                        window,
+                        cx,
+                    )
+                    .p_5()
+                    .scrollable()
+                    .selectable(),
                 ),
             )
     }

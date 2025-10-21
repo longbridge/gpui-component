@@ -2,18 +2,16 @@ use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::{
+    collections::HashMap,
+    ops::Deref,
+    sync::{Arc, LazyLock, Mutex},
+};
 
 use crate::{
     highlighter::{languages, Language},
     ActiveTheme, ThemeMode, DEFAULT_THEME_COLORS,
 };
-
-pub(super) fn init(cx: &mut App) {
-    let register = LanguageRegistry::new();
-
-    cx.set_global(register);
-}
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "attribute",
@@ -414,15 +412,15 @@ impl StatusColors {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightThemeStyle {
     #[serde(rename = "editor.background")]
-    pub background: Option<Hsla>,
+    pub editor_background: Option<Hsla>,
     #[serde(rename = "editor.foreground")]
-    pub foreground: Option<Hsla>,
+    pub editor_foreground: Option<Hsla>,
     #[serde(rename = "editor.active_line.background")]
-    pub active_line: Option<Hsla>,
+    pub editor_active_line: Option<Hsla>,
     #[serde(rename = "editor.line_number")]
-    pub line_number: Option<Hsla>,
+    pub editor_line_number: Option<Hsla>,
     #[serde(rename = "editor.active_line_number")]
-    pub active_line_number: Option<Hsla>,
+    pub editor_active_line_number: Option<Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]
@@ -461,54 +459,45 @@ impl HighlightTheme {
 }
 
 /// Registry for code highlighter languages.
-#[derive(Clone)]
 pub struct LanguageRegistry {
-    languages: HashMap<String, LanguageConfig>,
+    languages: Mutex<HashMap<SharedString, LanguageConfig>>,
 }
 
-impl gpui::Global for LanguageRegistry {}
-
 impl LanguageRegistry {
-    pub fn global(cx: &App) -> &LanguageRegistry {
-        cx.global::<LanguageRegistry>()
+    /// Returns the singleton instance of the `LanguageRegistry` with default languages and themes.
+    pub fn singleton() -> &'static LazyLock<LanguageRegistry> {
+        static INSTANCE: LazyLock<LanguageRegistry> = LazyLock::new(|| LanguageRegistry {
+            languages: Mutex::new(
+                languages::Language::all()
+                    .map(|language| (language.name().into(), language.config()))
+                    .collect(),
+            ),
+        });
+        &INSTANCE
     }
 
-    pub fn global_mut(cx: &mut App) -> &mut LanguageRegistry {
-        cx.global_mut::<LanguageRegistry>()
+    /// Registers a new language configuration to the registry.
+    pub fn register(&self, lang: &str, config: &LanguageConfig) {
+        self.languages
+            .lock()
+            .unwrap()
+            .insert(lang.to_string().into(), config.clone());
     }
 
-    /// Create a new language registry with default languages and themes.
-    pub fn new() -> Self {
-        let mut registry = Self {
-            languages: HashMap::new(),
-        };
-
-        for language in languages::Language::all() {
-            registry.register(language.name(), &language.config());
-        }
-
-        registry
-    }
-
-    pub fn register(&mut self, lang: &str, config: &LanguageConfig) {
-        self.languages.insert(lang.to_string(), config.clone());
-    }
-
-    /// Returns a reference to the map of registered languages.
-    pub fn languages(&self) -> &HashMap<String, LanguageConfig> {
-        &self.languages
+    /// Returns a list of all registered language names.
+    pub fn languages(&self) -> Vec<SharedString> {
+        self.languages.lock().unwrap().keys().cloned().collect()
     }
 
     /// Returns the language configuration for the given language name.
-    pub fn language(&self, name: &str) -> Option<&LanguageConfig> {
+    pub fn language(&self, name: &str) -> Option<LanguageConfig> {
         // Try to get by name first, there may have a custom language registered
-        if let Some(language) = self.languages.get(name) {
-            return Some(language);
-        }
-
         // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
-        let language = Language::from_str(name);
-        self.languages.get(language.name())
+        let languages = self.languages.lock().unwrap();
+        languages
+            .get(name)
+            .or_else(|| languages.get(Language::from_str(name).name()))
+            .cloned()
     }
 }
 
@@ -519,7 +508,7 @@ mod tests {
     #[test]
     fn test_registry() {
         use super::LanguageRegistry;
-        let mut registry = LanguageRegistry::new();
+        let registry = LanguageRegistry::singleton();
 
         registry.register(
             "foo",

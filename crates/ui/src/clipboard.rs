@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 use gpui::{
     prelude::FluentBuilder, AnyElement, App, ClipboardItem, Element, ElementId, GlobalElementId,
@@ -75,7 +75,7 @@ impl IntoElement for Clipboard {
 
 #[derive(Default)]
 pub struct ClipboardState {
-    copied: Rc<RefCell<bool>>,
+    copied: Cell<bool>,
 }
 
 impl Element for Clipboard {
@@ -109,7 +109,7 @@ impl Element for Clipboard {
             let clipboard_id = self.id.clone();
             let copied_callback = self.copied_callback.as_ref().map(|c| c.clone());
             let copied = state.copied.clone();
-            let copide_value = *copied.borrow();
+            let copide_value = copied.get();
             let value_fn = self.value_fn.clone();
 
             let mut element = h_flex()
@@ -133,13 +133,13 @@ impl Element for Clipboard {
                                     .map(|f| f(window, cx))
                                     .unwrap_or_else(|| value.clone());
                                 cx.write_to_clipboard(ClipboardItem::new_string(value.to_string()));
-                                *copied.borrow_mut() = true;
+                                copied.set(true);
 
                                 let copied = copied.clone();
                                 cx.spawn(async move |cx| {
                                     cx.background_executor().timer(Duration::from_secs(2)).await;
 
-                                    *copied.borrow_mut() = false;
+                                    copied.set(false);
                                 })
                                 .detach();
 

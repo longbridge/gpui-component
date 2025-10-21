@@ -68,7 +68,7 @@ impl super::Story for ChartStory {
         "Beautiful Charts & Graphs."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 
@@ -247,6 +247,15 @@ impl Render for ChartStory {
                         cx,
                     ))
                     .child(chart_container(
+                        "Line Chart - Step After",
+                        LineChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
+                            .y(|d| d.desktop)
+                            .step_after(),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
                         "Line Chart - Dots",
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
@@ -275,6 +284,15 @@ impl Render for ChartStory {
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .linear(),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Area Chart - Step After",
+                        AreaChart::new(self.monthly_devices.clone())
+                            .x(|d| d.month.clone())
+                            .y(|d| d.desktop)
+                            .step_after(),
                         false,
                         cx,
                     ))

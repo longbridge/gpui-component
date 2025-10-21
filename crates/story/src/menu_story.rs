@@ -1,11 +1,10 @@
 use gpui::{
-    actions, div, px, Action, App, AppContext, Context, Corner, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
-    Styled as _, Window,
+    Action, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    button::Button, context_menu::ContextMenuExt, h_flex, popup_menu::PopupMenuExt as _, v_flex,
-    ActiveTheme as _, IconName,
+    ActiveTheme as _, IconName, button::Button, context_menu::ContextMenuExt, h_flex,
+    popup_menu::PopupMenuExt as _, v_flex,
 };
 use serde::Deserialize;
 
@@ -17,29 +16,29 @@ struct Info(usize);
 
 actions!(menu_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
+const CONTEXT: &str = "menu_story";
 pub fn init(cx: &mut App) {
     cx.bind_keys([
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-c", Copy, None),
+        KeyBinding::new("ctrl-c", Copy, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-v", Paste, None),
+        KeyBinding::new("cmd-v", Paste, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-v", Paste, None),
+        KeyBinding::new("ctrl-v", Paste, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-x", Cut, None),
+        KeyBinding::new("cmd-x", Cut, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-x", Cut, None),
+        KeyBinding::new("ctrl-x", Cut, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-shift-f", SearchAll, None),
+        KeyBinding::new("cmd-shift-f", SearchAll, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-shift-f", SearchAll, None),
+        KeyBinding::new("ctrl-shift-f", SearchAll, Some(CONTEXT)),
     ])
 }
 
 pub struct MenuStory {
-    focus_handle: FocusHandle,
     checked: bool,
     message: String,
 }
@@ -53,7 +52,7 @@ impl super::Story for MenuStory {
         "Popup menu and context menu"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -63,12 +62,9 @@ impl MenuStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        cx.focus_self(window);
-
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
             checked: true,
-            focus_handle: cx.focus_handle(),
             message: "".to_string(),
         }
     }
@@ -105,18 +101,12 @@ impl MenuStory {
     }
 }
 
-impl Focusable for MenuStory {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
 impl Render for MenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let checked = self.checked;
 
         v_flex()
-            .track_focus(&self.focus_handle)
+            .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
             .on_action(cx.listener(Self::on_paste))
@@ -176,13 +166,18 @@ impl Render for MenuStory {
                                     .separator()
                                     .submenu("Links", window, cx, |menu, _, _| {
                                         menu.link_with_icon(
-                                            "GitHub Repository",
+                                            "GPUI Component",
                                             IconName::GitHub,
                                             "https://github.com/longbridge/gpui-component",
                                         )
                                         .separator()
                                         .link("GPUI", "https://gpui.rs")
                                         .link("Zed", "https://zed.dev")
+                                    })
+                                    .separator()
+                                    .submenu("Other Links", window, cx, |menu, _, _| {
+                                        menu.link("Crates", "https://crates.io")
+                                            .link("Rust Docs", "https://docs.rs")
                                     })
                             }),
                     )

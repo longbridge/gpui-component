@@ -16,7 +16,7 @@ use crate::{
 };
 
 const CONTEXT: &str = "Modal";
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, Some(CONTEXT)),
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
@@ -416,6 +416,7 @@ impl RenderOnce for Modal {
                             .px_0()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
+                            .tab_group()
                             .when(self.keyboard, |this| {
                                 this.on_action({
                                     let on_cancel = on_cancel.clone();

@@ -5,22 +5,14 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
-    div, px, relative, DefiniteLength, Entity, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window,
-};
+use gpui::{px, relative, DefiniteLength, SharedString};
 use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, parse_document, LocalName, ParseOpts};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
 
-use crate::text::TextViewState;
-use crate::v_flex;
-
 use crate::text::node::{
     self, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table, TableRow, TextMark,
 };
-use crate::text::TextViewStyle;
 
 const BLOCK_ELEMENTS: [&str; 35] = [
     "html",
@@ -93,56 +85,6 @@ fn cleanup_html(source: &str) -> Vec<u8> {
         w.into_inner()
     } else {
         source.bytes().collect()
-    }
-}
-
-#[derive(IntoElement, Clone)]
-pub(crate) struct HtmlElement {
-    pub(super) text: SharedString,
-    style: TextViewStyle,
-    state: Entity<TextViewState>,
-}
-
-impl HtmlElement {
-    pub(crate) fn new(raw: impl Into<SharedString>, state: Entity<TextViewState>) -> Self {
-        Self {
-            text: raw.into(),
-            state,
-            style: TextViewStyle::default(),
-        }
-    }
-
-    /// Set the source of the markdown view.
-    pub(crate) fn text(mut self, raw: impl Into<SharedString>) -> Self {
-        self.text = raw.into();
-        self
-    }
-
-    /// Set TextViewStyle.
-    pub(crate) fn style(mut self, style: impl Into<TextViewStyle>) -> Self {
-        self.style = style.into();
-        self
-    }
-}
-
-impl RenderOnce for HtmlElement {
-    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
-        self.state.update(cx, |state, cx| {
-            state.parse_if_needed(self.text.clone(), true, &TextViewStyle::default(), cx);
-        });
-
-        let root = self.state.read(cx).root();
-        let node_cx = self.state.read(cx).node_cx.clone();
-
-        div().map(|this| match root {
-            Ok(node) => this.child(node.render(None, true, true, &node_cx, window, cx)),
-            Err(err) => this.child(
-                v_flex()
-                    .gap_1()
-                    .child("Error parsing HTML")
-                    .child(err.to_string()),
-            ),
-        })
     }
 }
 
@@ -519,7 +461,7 @@ fn parse_node(
                         // If last child is paragraph, merge child
                         if let Some(last_child) = children.last_mut() {
                             if let node::Node::Paragraph(last_paragraph) = last_child {
-                                last_paragraph.merge(&child_paragraph);
+                                last_paragraph.merge(child_paragraph);
                                 continue;
                             }
                         }
@@ -600,9 +542,7 @@ fn parse_node(
                     parse_paragraph(paragraph, node);
 
                     if paragraph.is_image() {
-                        let image = paragraph.clone();
-                        paragraph.reset();
-                        Some(node::Node::Paragraph(image))
+                        Some(node::Node::Paragraph(paragraph.take()))
                     } else {
                         None
                     }
@@ -641,8 +581,7 @@ fn consume_paragraph(children: &mut Vec<node::Node>, paragraph: &mut Paragraph) 
         return;
     }
 
-    children.push(node::Node::Paragraph(paragraph.clone()));
-    paragraph.reset();
+    children.push(node::Node::Paragraph(paragraph.take()));
 }
 
 #[cfg(test)]

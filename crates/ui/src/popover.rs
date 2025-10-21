@@ -11,7 +11,7 @@ use crate::{actions::Cancel, Selectable, StyledExt as _};
 
 const CONTEXT: &str = "Popover";
 
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
@@ -279,12 +279,11 @@ impl<M: ManagedView> Element for Popover<M> {
                                 div()
                                     .size_full()
                                     .occlude()
+                                    .tab_group()
                                     .when(!no_style, |this| this.popover_style(cx))
                                     .map(|this| match anchor {
-                                        Corner::TopLeft | Corner::TopRight => this.top_1p5(),
-                                        Corner::BottomLeft | Corner::BottomRight => {
-                                            this.bottom_1p5()
-                                        }
+                                        Corner::TopLeft | Corner::TopRight => this.top_1(),
+                                        Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
                                     })
                                     .child(content_view.clone())
                                     .when(!no_style, |this| {

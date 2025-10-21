@@ -143,6 +143,10 @@ impl RowsCache {
         path
     }
 
+    pub(crate) fn measured_size(&self) -> MeasuredEntrySize {
+        self.measured_size
+    }
+
     pub(crate) fn prepare_if_needed<F>(
         &mut self,
         sections_count: usize,

@@ -1,8 +1,8 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Render, Styled as _, Window, px,
 };
 
-use gpui_component::{dock::PanelControl, text::TextView, v_flex};
+use gpui_component::{dock::PanelControl, text::TextView};
 
 use crate::Story;
 
@@ -31,12 +31,16 @@ impl Story for WelcomeStory {
         "UI components for building fantastic desktop application by using GPUI."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 
     fn zoomable() -> Option<PanelControl> {
         None
+    }
+
+    fn paddings() -> gpui::Pixels {
+        px(0.)
     }
 }
 
@@ -52,9 +56,9 @@ impl Render for WelcomeStory {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        v_flex().p_4().gap_5().child(
-            TextView::markdown("intro", include_str!("../../../README.md"), window, cx)
-                .selectable(),
-        )
+        TextView::markdown("intro", include_str!("../../../README.md"), window, cx)
+            .p_4()
+            .scrollable()
+            .selectable()
     }
 }

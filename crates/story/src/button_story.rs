@@ -1,13 +1,14 @@
 use gpui::{
-    prelude::FluentBuilder, px, Action, App, AppContext as _, ClickEvent, Context, Entity,
-    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
+    Action, App, AppContext as _, ClickEvent, Context, Corner, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
+    prelude::FluentBuilder, px,
 };
 
 use gpui_component::{
+    ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
-    Theme,
+    h_flex, v_flex,
 };
 use serde::Deserialize;
 
@@ -43,8 +44,12 @@ impl ButtonStory {
         })
     }
 
-    fn on_click(ev: &ClickEvent, _window: &mut Window, _cx: &mut App) {
-        println!("Button clicked! {:?}", ev);
+    fn on_click(ev: &ClickEvent, _: &mut Window, _: &mut App) {
+        println!("Button clicked {:?}", ev);
+    }
+
+    fn on_hover(hovered: &bool, _: &mut Window, _: &mut App) {
+        println!("Button hovered {:?}", hovered);
     }
 }
 
@@ -61,7 +66,7 @@ impl super::Story for ButtonStory {
         false
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }
@@ -159,7 +164,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-2")
@@ -168,7 +174,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-4")
@@ -178,7 +185,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-4-warning")
@@ -188,7 +196,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-4-success")
@@ -198,7 +207,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-info")
@@ -208,7 +218,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-ghost")
@@ -218,7 +229,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-link")
@@ -228,7 +240,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     )
                     .child(
                         Button::new("button-5-text")
@@ -238,7 +251,8 @@ impl Render for ButtonStory {
                             .selected(selected)
                             .loading(loading)
                             .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
+                            .on_click(Self::on_click)
+                            .on_hover(Self::on_hover),
                     ),
             )
             .child(
@@ -599,8 +613,8 @@ impl Render for ButtonStory {
                 ),
             )
             .child(
-                section(
-                    h_flex().gap_2().child("Toggle Button Group").child(
+                section("Toggle Button Group")
+                    .sub_title(
                         Checkbox::new("multiple-button")
                             .text_sm()
                             .label("Multiple")
@@ -609,41 +623,40 @@ impl Render for ButtonStory {
                                 view.toggle_multiple = !view.toggle_multiple;
                                 cx.notify();
                             })),
+                    )
+                    .child(
+                        ButtonGroup::new("toggle-button-group")
+                            .outline()
+                            .compact()
+                            .multiple(toggle_multiple)
+                            .child(
+                                Button::new("disabled-toggle-button")
+                                    .label("Disabled")
+                                    .selected(disabled),
+                            )
+                            .child(
+                                Button::new("loading-toggle-button")
+                                    .label("Loading")
+                                    .selected(loading),
+                            )
+                            .child(
+                                Button::new("selected-toggle-button")
+                                    .label("Selected")
+                                    .selected(selected),
+                            )
+                            .child(
+                                Button::new("compact-toggle-button")
+                                    .label("Compact")
+                                    .selected(compact),
+                            )
+                            .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
+                                view.disabled = selected.contains(&0);
+                                view.loading = selected.contains(&1);
+                                view.selected = selected.contains(&2);
+                                view.compact = selected.contains(&3);
+                                cx.notify();
+                            })),
                     ),
-                )
-                .child(
-                    ButtonGroup::new("toggle-button-group")
-                        .outline()
-                        .compact()
-                        .multiple(toggle_multiple)
-                        .child(
-                            Button::new("disabled-toggle-button")
-                                .label("Disabled")
-                                .selected(disabled),
-                        )
-                        .child(
-                            Button::new("loading-toggle-button")
-                                .label("Loading")
-                                .selected(loading),
-                        )
-                        .child(
-                            Button::new("selected-toggle-button")
-                                .label("Selected")
-                                .selected(selected),
-                        )
-                        .child(
-                            Button::new("compact-toggle-button")
-                                .label("Compact")
-                                .selected(compact),
-                        )
-                        .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
-                            view.disabled = selected.contains(&0);
-                            view.loading = selected.contains(&1);
-                            view.selected = selected.contains(&2);
-                            view.compact = selected.contains(&3);
-                            cx.notify();
-                        })),
-                ),
             )
             .child(
                 section("Dropdown Button")
@@ -679,7 +692,7 @@ impl Render for ButtonStory {
                         DropdownButton::new("dropdown-button2")
                             .button(Button::new("btn").label("Click Me"))
                             .selected(selected)
-                            .popup_menu(move |this, _, _| {
+                            .popup_menu_with_anchor(Corner::BottomRight, move |this, _, _| {
                                 this.menu_with_check(
                                     "Disabled",
                                     disabled,

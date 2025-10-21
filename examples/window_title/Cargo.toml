@@ -1,0 +1,14 @@
+[package]
+edition = "2021"
+name = "window_title"
+description = "An example of using gpui-component to create a window with a custom title bar."
+publish = false
+version = "0.3.0-preview1"
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component = { workspace = true }
+
+[lints]
+workspace = true

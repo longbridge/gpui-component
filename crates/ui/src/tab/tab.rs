@@ -156,6 +156,7 @@ impl TabVariant {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
+                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -307,7 +308,7 @@ impl TabVariant {
         match self {
             TabVariant::Tab => TabStyle {
                 fg: cx.theme().muted_foreground,
-                bg: cx.theme().tab,
+                bg: cx.theme().transparent,
                 border_color: if selected {
                     cx.theme().border
                 } else {

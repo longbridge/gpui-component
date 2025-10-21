@@ -6,7 +6,7 @@ use crate::{
 };
 use gpui::{
     div, point, px, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges, Element,
-    FocusHandle, Hsla, Pixels, Refineable, StyleRefinement, Styled, Window,
+    FocusHandle, Hsla, ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -164,7 +164,7 @@ pub trait StyledExt: Styled + Sized {
     /// Render a border with a width of 1px, color ring color
     #[inline]
     fn focused_border(self, cx: &App) -> Self {
-        self.border_color(cx.theme().ring)
+        self.border_1().border_color(cx.theme().ring)
     }
 
     /// Wraps the element in a ScrollView.
@@ -190,8 +190,9 @@ pub trait StyledExt: Styled + Sized {
 
     /// Set as Popover style
     #[inline]
-    fn popover_style(self, cx: &mut App) -> Self {
+    fn popover_style(self, cx: &App) -> Self {
         self.bg(cx.theme().popover)
+            .text_color(cx.theme().popover_foreground)
             .border_1()
             .border_color(cx.theme().border)
             .shadow_lg()
@@ -223,7 +224,7 @@ pub enum Size {
 impl Size {
     fn as_f32(&self) -> f32 {
         match self {
-            Size::Size(val) => val.0,
+            Size::Size(val) => val.as_f32(),
             Size::XSmall => 0.,
             Size::Small => 1.,
             Size::Medium => 2.,
@@ -300,7 +301,7 @@ impl Size {
     /// e.g. `Size::XSmall.max(Size::Small)` will return `Size::XSmall`.
     pub fn max(&self, other: Self) -> Self {
         match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.0.min(b.0))),
+            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().min(b.as_f32()))),
             (Size::Size(a), _) => Size::Size(*a),
             (_, Size::Size(b)) => Size::Size(b),
             (a, b) if a.as_f32() < b.as_f32() => *a,
@@ -313,7 +314,7 @@ impl Size {
     /// e.g. `Size::XSmall.min(Size::Small)` will return `Size::Small`.
     pub fn min(&self, other: Self) -> Self {
         match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.0.max(b.0))),
+            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().max(b.as_f32()))),
             (Size::Size(a), _) => Size::Size(*a),
             (_, Size::Size(b)) => Size::Size(b),
             (a, b) if a.as_f32() > b.as_f32() => *a,
@@ -518,6 +519,92 @@ impl<T: Styled> StyleSized<T> for T {
     }
 }
 
+pub(crate) trait FocusableExt<T: ParentElement + Styled + Sized> {
+    /// Add focus ring to the element.
+    fn focus_ring(self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self;
+}
+
+impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
+    fn focus_ring(mut self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self {
+        if !is_focused {
+            return self;
+        }
+
+        const RING_BORDER_WIDTH: Pixels = px(1.5);
+        let rem_size = window.rem_size();
+        let style = self.style();
+
+        let border_widths = Edges::<Pixels> {
+            top: style
+                .border_widths
+                .top
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+            bottom: style
+                .border_widths
+                .bottom
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+            left: style
+                .border_widths
+                .left
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+            right: style
+                .border_widths
+                .right
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+        };
+
+        // Update the radius based on element's corner radii and the ring border width.
+        let radius = Corners::<Pixels> {
+            top_left: style
+                .corner_radii
+                .top_left
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+            top_right: style
+                .corner_radii
+                .top_right
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+            bottom_left: style
+                .corner_radii
+                .bottom_left
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+            bottom_right: style
+                .corner_radii
+                .bottom_right
+                .map(|v| v.to_pixels(rem_size))
+                .unwrap_or_default(),
+        }
+        .map(|v| *v + RING_BORDER_WIDTH);
+
+        let mut inner_style = StyleRefinement::default();
+        inner_style.corner_radii.top_left = Some(radius.top_left.into());
+        inner_style.corner_radii.top_right = Some(radius.top_right.into());
+        inner_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
+        inner_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
+
+        let inset = RING_BORDER_WIDTH + margins;
+
+        self.child(
+            div()
+                .flex_none()
+                .absolute()
+                .top(-(inset + border_widths.top))
+                .left(-(inset + border_widths.left))
+                .right(-(inset + border_widths.right))
+                .bottom(-(inset + border_widths.bottom))
+                .border(RING_BORDER_WIDTH)
+                .border_color(cx.theme().ring.alpha(0.2))
+                .refine_style(&inner_style),
+        )
+    }
+}
+
 pub trait AxisExt {
     fn is_horizontal(self) -> bool;
     fn is_vertical(self) -> bool;
@@ -605,6 +692,21 @@ impl Side {
 pub trait Collapsible {
     fn collapsed(self, collapsed: bool) -> Self;
     fn is_collapsed(&self) -> bool;
+}
+
+/// A trait for converting `Pixels` to `f32` and `f64`.
+pub trait PixelsExt {
+    fn as_f32(&self) -> f32;
+    fn as_f64(self) -> f64;
+}
+impl PixelsExt for Pixels {
+    fn as_f32(&self) -> f32 {
+        f32::from(self)
+    }
+
+    fn as_f64(self) -> f64 {
+        f64::from(self)
+    }
 }
 
 #[cfg(test)]

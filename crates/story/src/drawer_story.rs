@@ -2,13 +2,14 @@ use std::{sync::Arc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Task, Timer,
-    WeakEntity, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    ParentElement, Render, SharedString, Styled, Task, Timer, WeakEntity, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use raw_window_handle::HasWindowHandle;
 
 use gpui_component::{
+    ActiveTheme as _, ContextModal as _, Icon, IconName, IndexPath, Placement,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
@@ -17,11 +18,11 @@ use gpui_component::{
     list::{List, ListDelegate, ListItem},
     v_flex,
     webview::WebView,
-    wry, ActiveTheme as _, ContextModal as _, Icon, IconName, IndexPath, Placement,
+    wry,
 };
 
 use crate::TestAction;
-use crate::{section, Story};
+use crate::{Story, section};
 
 pub struct ListItemDeletegate {
     story: WeakEntity<DrawerStory>,
@@ -84,6 +85,7 @@ impl ListDelegate for ListItemDeletegate {
                 )
                 .suffix(|_, _| {
                     Button::new("like")
+                        .tab_stop(false)
                         .icon(IconName::Heart)
                         .with_variant(ButtonVariant::Ghost)
                         .size(px(18.))
@@ -122,16 +124,14 @@ impl ListDelegate for ListItemDeletegate {
         });
     }
 
-    fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
-        _ = self.story.update(cx, |this, cx| {
+    fn confirm(&mut self, _secondary: bool, _: &mut Window, cx: &mut Context<List<Self>>) {
+        _ = self.story.update(cx, |this, _| {
             self.confirmed_index = self.selected_index;
             if let Some(ix) = self.confirmed_index {
                 if let Some(item) = self.matches.get(ix) {
                     this.selected_value = Some(SharedString::from(item.to_string()));
                 }
             }
-
-            window.close_drawer(cx);
         });
     }
 
@@ -173,7 +173,7 @@ impl Story for DrawerStory {
         "Drawer for open a popup in the edge of the window"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

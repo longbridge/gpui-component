@@ -1,6 +1,6 @@
 use gpui::{
-    div, relative, Action, AsKeystroke, IntoElement, KeyContext, Keystroke, ParentElement as _,
-    RenderOnce, StyleRefinement, Styled, Window,
+    div, relative, Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke,
+    ParentElement as _, RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -45,18 +45,32 @@ impl Kbd {
         window: &Window,
     ) -> Option<Self> {
         let key_context = context.and_then(|context| KeyContext::parse(context).ok());
-        let bindings = match key_context {
-            Some(context) => window.bindings_for_action_in_context(action, context),
-            None => window.bindings_for_action(action),
-        };
-
-        bindings.first().and_then(|binding| {
-            if let Some(key) = binding.keystrokes().first() {
-                Some(Self::new(key.as_keystroke().clone()))
-            } else {
-                None
+        let binding = match key_context {
+            Some(context) => {
+                window.highest_precedence_binding_for_action_in_context(action, context)
             }
-        })
+            None => window.highest_precedence_binding_for_action(action),
+        }?;
+
+        if let Some(key) = binding.keystrokes().first() {
+            Some(Self::new(key.as_keystroke().clone()))
+        } else {
+            None
+        }
+    }
+
+    /// Return the first keybinding for the given action and focus handle.
+    pub fn binding_for_action_in(
+        action: &dyn Action,
+        focus_handle: &FocusHandle,
+        window: &Window,
+    ) -> Option<Self> {
+        let binding = window.highest_precedence_binding_for_action_in(action, focus_handle)?;
+        if let Some(key) = binding.keystrokes().first() {
+            Some(Self::new(key.as_keystroke().clone()))
+        } else {
+            None
+        }
     }
 
     /// Return the Platform specific keybinding string by KeyStroke
@@ -165,8 +179,13 @@ impl Kbd {
                 if key_str.len() == 1 {
                     keys.push_str(&key_str.to_uppercase());
                 } else {
-                    if let Some(first_char) = key_str.chars().next() {
-                        keys.push_str(&format!("{}{}", first_char.to_uppercase(), &key_str[1..]));
+                    let mut chars = key_str.chars();
+                    if let Some(first_char) = chars.next() {
+                        keys.push_str(&format!(
+                            "{}{}",
+                            first_char.to_uppercase(),
+                            chars.collect::<String>()
+                        ));
                     } else {
                         keys.push_str(&key_str);
                     }
@@ -203,6 +222,8 @@ impl RenderOnce for Kbd {
             .rounded_sm()
             .line_height(relative(1.))
             .text_xs()
+            .whitespace_normal()
+            .flex_shrink_0()
             .refine_style(&self.style)
             .child(Self::format(&self.stroke))
             .into_any_element()

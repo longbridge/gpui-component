@@ -32,7 +32,7 @@ impl super::Story for AccordionStory {
         "The accordion uses collapse internally to make it collapsible."
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
 }

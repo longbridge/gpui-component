@@ -1,13 +1,13 @@
 use gpui::{
-    div, App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement as _, Render, Styled as _, Window,
+    App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement as _, Render, Styled as _, Window, div,
 };
 use gpui_component::{
-    h_flex,
+    ActiveTheme, h_flex,
     input::{InputEvent, InputState, TextInput},
     v_flex,
     webview::WebView,
-    wry, ActiveTheme,
+    wry,
 };
 
 pub fn init(_: &mut App) {
@@ -26,7 +26,7 @@ impl super::Story for WebViewStory {
         "WebView"
     }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable> {
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
     fn on_active(&mut self, active: bool, _window: &mut Window, cx: &mut App) {

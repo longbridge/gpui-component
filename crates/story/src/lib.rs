@@ -1,5 +1,6 @@
 mod accordion_story;
 mod alert_story;
+mod app_menus;
 mod assets;
 mod avatar_story;
 mod badge_story;
@@ -44,17 +45,18 @@ mod themes;
 mod title_bar;
 mod toggle_story;
 mod tooltip_story;
+mod tree_story;
 mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
 
 pub use assets::Assets;
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, rems, size, Action, AnyElement, AnyView, App,
-    AppContext, Bounds, Context, Div, Entity, EventEmitter, Focusable, Global, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Pixels, Render,
-    RenderOnce, SharedString, Size, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    WindowBounds, WindowKind, WindowOptions,
+    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
+    Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
+    Render, RenderOnce, SharedString, Size, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, WindowBounds, WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px,
+    rems, size,
 };
 
 pub use accordion_story::AccordionStory;
@@ -102,22 +104,24 @@ pub use textarea_story::TextareaStory;
 pub use title_bar::AppTitleBar;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
-use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+pub use tree_story::TreeStory;
 pub use virtual_list_story::VirtualListStory;
 pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
 use gpui_component::{
+    ActiveTheme, ContextModal, IconName, Root, TitleBar,
     button::Button,
     context_menu::ContextMenuExt,
-    dock::{register_panel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle},
+    dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::GroupBox,
     h_flex,
     notification::Notification,
     popup_menu::PopupMenu,
     scroll::ScrollbarShow,
-    v_flex, ActiveTheme, ContextModal, IconName, Root, TitleBar,
+    v_flex,
 };
+use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -135,11 +139,22 @@ pub struct SelectFont(usize);
 #[action(namespace = story, no_json)]
 pub struct SelectRadius(usize);
 
-actions!(story, [Quit, Open, CloseWindow, ToggleSearch]);
+actions!(
+    story,
+    [
+        About,
+        Open,
+        Quit,
+        CloseWindow,
+        ToggleSearch,
+        TestAction,
+        Tab,
+        TabPrev,
+        ShowPanelInfo
+    ]
+);
 
 const PANEL_NAME: &str = "StoryContainer";
-
-actions!(story, [TestAction, Tab, TabPrev]);
 
 pub struct AppState {
     pub invisible_panels: Entity<Vec<SharedString>>,
@@ -287,6 +302,7 @@ pub fn init(cx: &mut App) {
     webview_story::init(cx);
     tooltip_story::init(cx);
     otp_input_story::init(cx);
+    tree_story::init(cx);
 
     let http_client = std::sync::Arc::new(
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
@@ -295,7 +311,14 @@ pub fn init(cx: &mut App) {
 
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-o", Open, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-o", Open, None),
+        #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-q", Quit, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("alt-f4", Quit, None),
     ]);
 
     cx.on_action(|_: &Quit, cx: &mut App| {
@@ -335,41 +358,23 @@ pub fn init(cx: &mut App) {
         Box::new(view)
     });
 
-    use gpui_component::input::{Copy, Cut, Paste, Redo, Undo};
-    cx.set_menus(vec![
-        Menu {
-            name: "GPUI App".into(),
-            items: vec![MenuItem::action("Quit", Quit)],
-        },
-        Menu {
-            name: "Edit".into(),
-            items: vec![
-                MenuItem::os_action("Undo", Undo, gpui::OsAction::Undo),
-                MenuItem::os_action("Redo", Redo, gpui::OsAction::Redo),
-                MenuItem::separator(),
-                MenuItem::os_action("Cut", Cut, gpui::OsAction::Cut),
-                MenuItem::os_action("Copy", Copy, gpui::OsAction::Copy),
-                MenuItem::os_action("Paste", Paste, gpui::OsAction::Paste),
-            ],
-        },
-        Menu {
-            name: "Window".into(),
-            items: vec![],
-        },
-    ]);
     cx.activate(true);
 }
-
-actions!(story, [ShowPanelInfo]);
 
 #[derive(IntoElement)]
 struct StorySection {
     base: Div,
-    title: AnyElement,
+    title: SharedString,
+    sub_title: Vec<AnyElement>,
     children: Vec<AnyElement>,
 }
 
 impl StorySection {
+    pub fn sub_title(mut self, sub_title: impl IntoElement) -> Self {
+        self.sub_title.push(sub_title.into_any_element());
+        self
+    }
+
     #[allow(unused)]
     fn max_w_md(mut self) -> Self {
         self.base = self.base.max_w(rems(48.));
@@ -416,7 +421,8 @@ impl RenderOnce for StorySection {
                     .justify_between()
                     .w_full()
                     .gap_4()
-                    .child(self.title),
+                    .child(self.title)
+                    .children(self.sub_title),
             )
             .content_style(
                 StyleRefinement::default()
@@ -431,9 +437,10 @@ impl RenderOnce for StorySection {
 
 impl ContextMenuExt for StorySection {}
 
-pub(crate) fn section(title: impl IntoElement) -> StorySection {
+pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
-        title: title.into_any_element(),
+        title: title.into(),
+        sub_title: vec![],
         base: h_flex()
             .flex_wrap()
             .justify_center()
@@ -455,6 +462,7 @@ pub struct StoryContainer {
     story_klass: Option<SharedString>,
     closable: bool,
     zoomable: Option<PanelControl>,
+    paddings: Pixels,
     on_active: Option<fn(AnyView, bool, &mut Window, &mut App)>,
 }
 
@@ -463,31 +471,41 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: Focusable + Render + Sized {
+pub trait Story: Render + Sized {
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
 
     fn title() -> &'static str;
+
     fn description() -> &'static str {
         ""
     }
+
     fn closable() -> bool {
         true
     }
+
     fn zoomable() -> Option<PanelControl> {
         Some(PanelControl::default())
     }
+
     fn title_bg() -> Option<Hsla> {
         None
     }
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render + Focusable>;
+
+    fn paddings() -> Pixels {
+        px(16.)
+    }
+
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
 
     fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
         let _ = active;
         let _ = window;
         let _ = cx;
     }
+
     fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
     where
         Self: 'static,
@@ -517,6 +535,7 @@ impl StoryContainer {
             story_klass: None,
             closable: true,
             zoomable: Some(PanelControl::default()),
+            paddings: px(16.),
             on_active: None,
         }
     }
@@ -526,18 +545,18 @@ impl StoryContainer {
         let description = S::description();
         let story = S::new_view(window, cx);
         let story_klass = S::klass();
-        let focus_handle = story.focus_handle(cx);
 
         let view = cx.new(|cx| {
             let mut story = Self::new(window, cx)
                 .story(story.into(), story_klass)
                 .on_active(S::on_active_any);
-            story.focus_handle = focus_handle;
+            story.focus_handle = cx.focus_handle();
             story.closable = S::closable();
             story.zoomable = S::zoomable();
             story.name = name.into();
             story.description = description.into();
             story.title_bg = S::title_bg();
+            story.paddings = S::paddings();
             story
         });
 
@@ -765,7 +784,7 @@ impl Render for StoryContainer {
                         .id("story-children")
                         .w_full()
                         .flex_1()
-                        .p_4()
+                        .p(self.paddings)
                         .child(story),
                 )
             })

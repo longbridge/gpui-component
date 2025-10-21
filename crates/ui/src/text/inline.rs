@@ -1,4 +1,8 @@
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::{
+    ops::Range,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use gpui::{
     point, px, quad, App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId,
@@ -19,33 +23,33 @@ pub(super) struct Inline {
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
 
-    state: InlineState,
+    state: Arc<Mutex<InlineState>>,
 }
 
 /// The inline text state, used RefCell to keep the selection state.
-#[derive(Debug, Default, PartialEq, Clone)]
-pub(super) struct InlineState {
-    hovered_index: Rc<RefCell<Option<usize>>>,
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct InlineState {
+    hovered_index: Option<usize>,
     /// The text that actually rendering, matched with selection.
-    pub(super) text: Rc<RefCell<SharedString>>,
-    pub(super) selection: Rc<RefCell<Option<Selection>>>,
+    pub(super) text: SharedString,
+    pub(super) selection: Option<Selection>,
 }
 
 impl InlineState {
     /// Save actually rendered text for selected text to use.
-    pub(crate) fn set_text(&self, text: SharedString) {
-        *self.text.borrow_mut() = text;
+    pub(crate) fn set_text(&mut self, text: SharedString) {
+        self.text = text;
     }
 }
 
 impl Inline {
     pub(super) fn new(
         id: impl Into<ElementId>,
-        state: InlineState,
+        state: Arc<Mutex<InlineState>>,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
     ) -> Self {
-        let text = state.text.borrow().clone();
+        let text = state.lock().unwrap().text.clone();
         Self {
             id: id.into(),
             links: Rc::new(links),
@@ -140,7 +144,6 @@ impl Inline {
 
     /// Paint the selection background.
     fn paint_selection(
-        &self,
         selection: &Selection,
         text_layout: &TextLayout,
         bounds: &Bounds<Pixels>,
@@ -292,7 +295,7 @@ impl Element for Inline {
     ) {
         let current_view = window.current_view();
         let hitbox = prepaint;
-        let state = self.state.clone();
+        let mut state = self.state.lock().unwrap();
 
         let text_layout = self.styled_text.layout().clone();
         self.styled_text
@@ -302,7 +305,7 @@ impl Element for Inline {
         let (is_selectable, is_selection, selection) =
             self.layout_selections(&text_layout, window, cx);
 
-        *state.selection.borrow_mut() = selection;
+        state.selection = selection;
 
         if is_selection || is_selectable {
             window.set_cursor_style(CursorStyle::IBeam, &hitbox);
@@ -314,25 +317,25 @@ impl Element for Inline {
             window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
         }
 
-        if let Some(selection) = *state.selection.borrow() {
-            self.paint_selection(&selection, &text_layout, &bounds, window, cx);
+        if let Some(selection) = &state.selection {
+            Self::paint_selection(selection, &text_layout, &bounds, window, cx);
         }
 
         // mouse move, update hovered link
         window.on_mouse_event({
             let hitbox = hitbox.clone();
             let text_layout = text_layout.clone();
-            let hovered_index = state.hovered_index.clone();
+            let mut hovered_index = state.hovered_index;
             move |event: &MouseMoveEvent, phase, window, cx| {
                 if !phase.bubble() || !hitbox.is_hovered(window) {
                     return;
                 }
 
-                let current = *hovered_index.borrow();
+                let current = hovered_index;
                 let updated = text_layout.index_for_position(event.position).ok();
                 //  notify update when hovering over different links
                 if current != updated {
-                    *hovered_index.borrow_mut() = updated;
+                    hovered_index = updated;
                     cx.notify(current_view);
                 }
             }

@@ -10,7 +10,7 @@ use crate::indicator::Indicator;
 use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
-use crate::{h_flex, StyledExt};
+use crate::{h_flex, Selectable, StyledExt};
 use crate::{v_flex, ActiveTheme};
 use crate::{IconName, Size};
 use crate::{Sizable, StyleSized};
@@ -31,12 +31,25 @@ pub struct TextInput {
     disabled: bool,
     bordered: bool,
     focus_bordered: bool,
+    tab_index: isize,
+    selected: bool,
 }
 
 impl Sizable for TextInput {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
+    }
+}
+
+impl Selectable for TextInput {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
     }
 }
 
@@ -56,6 +69,8 @@ impl TextInput {
             disabled: false,
             bordered: true,
             focus_bordered: true,
+            tab_index: 0,
+            selected: false,
         }
     }
 
@@ -117,11 +132,18 @@ impl TextInput {
         self
     }
 
+    /// Set the tab index for the input, default is 0.
+    pub fn tab_index(mut self, index: isize) -> Self {
+        self.tab_index = index;
+        self
+    }
+
     fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
         Button::new("toggle-mask")
             .icon(IconName::Eye)
             .xsmall()
             .ghost()
+            .tab_stop(false)
             .on_mouse_down(MouseButton::Left, {
                 let state = state.clone();
                 move |_, window, cx| {
@@ -239,7 +261,11 @@ impl RenderOnce for TextInput {
         let bg = if state.disabled {
             cx.theme().muted
         } else {
-            cx.theme().background
+            if state.mode.is_code_editor() {
+                cx.theme().editor_background()
+            } else {
+                cx.theme().background
+            }
         };
 
         let prefix = self.prefix;
@@ -252,7 +278,8 @@ impl RenderOnce for TextInput {
             .id(("input", self.state.entity_id()))
             .flex()
             .key_context(crate::input::CONTEXT)
-            .track_focus(&state.focus_handle)
+            .track_focus(&state.focus_handle.clone())
+            .tab_index(self.tab_index)
             .when(!state.disabled, |this| {
                 this.on_action(window.listener_for(&self.state, InputState::backspace))
                     .on_action(window.listener_for(&self.state, InputState::delete))
@@ -274,7 +301,9 @@ impl RenderOnce for TextInput {
                             .on_action(window.listener_for(&self.state, InputState::indent_block))
                             .on_action(window.listener_for(&self.state, InputState::outdent_block))
                     })
-                    .on_action(window.listener_for(&self.state, InputState::toggle_code_actions))
+                    .on_action(
+                        window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
+                    )
             })
             .on_action(window.listener_for(&self.state, InputState::left))
             .on_action(window.listener_for(&self.state, InputState::right))
@@ -287,6 +316,9 @@ impl RenderOnce for TextInput {
                     .on_action(window.listener_for(&self.state, InputState::select_down))
                     .on_action(window.listener_for(&self.state, InputState::page_up))
                     .on_action(window.listener_for(&self.state, InputState::page_down))
+                    .on_action(
+                        window.listener_for(&self.state, InputState::on_action_go_to_definition),
+                    )
             })
             .on_action(window.listener_for(&self.state, InputState::select_all))
             .on_action(window.listener_for(&self.state, InputState::select_to_start_of_line))
@@ -309,8 +341,16 @@ impl RenderOnce for TextInput {
                 MouseButton::Left,
                 window.listener_for(&self.state, InputState::on_mouse_down),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                window.listener_for(&self.state, InputState::on_mouse_down),
+            )
             .on_mouse_up(
                 MouseButton::Left,
+                window.listener_for(&self.state, InputState::on_mouse_up),
+            )
+            .on_mouse_up(
+                MouseButton::Right,
                 window.listener_for(&self.state, InputState::on_mouse_up),
             )
             .on_mouse_move(window.listener_for(&self.state, InputState::on_mouse_move))
@@ -375,6 +415,7 @@ impl RenderOnce for TextInput {
                                 move |_, window, cx| {
                                     state.update(cx, |state, cx| {
                                         state.clean(window, cx);
+                                        state.focus(window, cx);
                                     })
                                 }
                             }))

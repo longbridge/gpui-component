@@ -22,9 +22,25 @@ Before you start to write code, please read the existing code to follow the same
 
 ## Development and Testing
 
-There are a lot of UI test cases in the `crates/story` folder, if you change the existing features you can run the tests to make sure they are working.
+### System dependencies
+
+The `script` folder contains some useful scripts to help you set up the development environment.
+
+To install the system dependencies, run the following script:
+
+```bash
+./script/bootstrap
+```
+
+For Windows, you can run the following command in PowerShell:
+
+```powershell
+.\script\install-window.ps1
+```
 
 ### Run story
+
+There are a lot of UI test cases in the `crates/story` folder, if you change the existing features you can run the tests to make sure they are working.
 
 Use `cargo run` to run the complete story examples to display them all in a gallery of GPUI components.
 
@@ -76,3 +92,23 @@ samply record cargo run
 ```
 
 Use `samply record` command to start rust development, and do some operations in the app that you want to profile, then stop the terminal with `ctrl-c`, then samply will open the browser to show the profile results.
+
+## Release crates version
+
+When we are ready to release a new version, please follow the steps below:
+
+1. Run `cargo set-version` to set the new version for all crates.
+
+   ```bash
+   cargo set-version 0.2.0
+   ```
+
+2. Git Commit the changes with message `chore: Release v0.2.0`.
+3. Create a new git tag with the version `v0.2.0` and push `main` branch and the tag to remote.
+
+   ```bash
+   git tag v0.2.0
+   git push origin main --tags
+   ```
+
+4. Then GitHub Actions will automatically publish the crates to crates.io and create a new release in GitHub.

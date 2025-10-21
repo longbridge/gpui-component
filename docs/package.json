@@ -1,0 +1,21 @@
+{
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.15",
+    "@tailwindcss/vite": "^4.1.15",
+    "lucide-react": "^0.546.0",
+    "lucide-vue-next": "^0.546.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.15"
+  },
+  "devDependencies": {
+    "vitepress": "^2.0.0-alpha.12",
+    "vitepress-plugin-llms": "^1.8.0",
+    "vitepress-sidebar": "^1.18.0",
+    "sass": "^1"
+  },
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  }
+}

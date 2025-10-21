@@ -160,9 +160,31 @@ Input:
     en: Replace
     zh-CN: 替换
     zh-HK: 替換
-    it: Sostituisci
   Replace All:
     en: Replace All
     zh-CN: 全部替换
     zh-HK: 全部替換
-    it: Sostituisci tutto
+  Cut:
+    en: Cut
+    zh-CN: 剪切
+    zh-HK: 剪切
+  Copy:
+    en: Copy
+    zh-CN: 复制
+    zh-HK: 複製
+  Paste:
+    en: Paste
+    zh-CN: 粘贴
+    zh-HK: 貼上
+  Select All:
+    en: Select All
+    zh-CN: 全选
+    zh-HK: 全選
+  Go to Definition:
+    en: Go to Definition
+    zh-CN: 跳转到定义
+    zh-HK: 跳轉到定義
+  Show Code Actions:
+    en: Show Code Actions
+    zh-CN: 显示代码操作
+    zh-HK: 顯示代碼操作

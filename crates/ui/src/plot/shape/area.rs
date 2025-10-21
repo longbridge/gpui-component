@@ -144,6 +144,16 @@ impl<T> Area<T> {
                     line_builder.line_to(*p);
                 }
             }
+            StrokeStyle::StepAfter => {
+                area_builder.move_to(points[0]);
+                line_builder.move_to(points[0]);
+                for p in points.windows(2) {
+                    area_builder.line_to(Point::new(p[1].x, p[0].y));
+                    area_builder.line_to(Point::new(p[1].x, p[1].y));
+                    line_builder.line_to(Point::new(p[1].x, p[0].y));
+                    line_builder.line_to(Point::new(p[1].x, p[1].y));
+                }
+            }
         }
 
         // Close path

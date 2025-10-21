@@ -1,14 +1,11 @@
-use std::{borrow::Cow, path::PathBuf};
-
-use anyhow::{anyhow, Result};
-
-use gpui::AssetSource;
+use anyhow::anyhow;
+use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
+use std::borrow::Cow;
 
 #[derive(RustEmbed)]
-#[folder = "../../assets"]
-#[include = "icons/**/*"]
-#[exclude = "*.DS_Store"]
+#[folder = "$CARGO_MANIFEST_DIR/../../assets"]
+#[include = "icons/**/*.svg"]
 pub struct Assets;
 
 impl AssetSource for Assets {
@@ -19,26 +16,12 @@ impl AssetSource for Assets {
 
         Self::get(path)
             .map(|f| Some(f.data))
-            .or_else(|| {
-                let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-                let path = manifest_dir.join(path);
-
-                std::fs::read(path)
-                    .map(|data| Some(std::borrow::Cow::Owned(data)))
-                    .ok()
-            })
-            .ok_or_else(|| anyhow!("could not find asset at path \"{}\"", path))
+            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
     }
 
-    fn list(&self, path: &str) -> gpui::Result<Vec<gpui::SharedString>> {
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         Ok(Self::iter()
-            .filter_map(|p| {
-                if p.starts_with(path) {
-                    Some(p.into())
-                } else {
-                    None
-                }
-            })
+            .filter_map(|p| p.starts_with(path).then(|| p.into()))
             .collect())
     }
 }

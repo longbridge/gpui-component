@@ -1,12 +1,11 @@
 use gpui::*;
 use gpui_component::{
-    highlighter::{HighlightTheme, Language},
+    highlighter::Language,
     input::{InputEvent, InputState, TabSize, TextInput},
-    resizable::{h_resizable, resizable_panel, ResizableState},
-    text::{TextView, TextViewStyle},
-    ActiveTheme as _,
+    resizable::{ResizableState, h_resizable, resizable_panel},
+    text::TextView,
 };
-use story::Assets;
+use story::{Assets, Open};
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -41,6 +40,33 @@ impl Example {
         }
     }
 
+    fn on_action_open(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
+        let path = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: true,
+            multiple: false,
+            prompt: Some("Select a Markdown file".into()),
+        });
+
+        let input_state = self.input_state.clone();
+        cx.spawn_in(window, async move |_, window| {
+            let path = path.await.ok()?.ok()??.iter().next()?.clone();
+
+            let content = std::fs::read_to_string(&path).ok()?;
+
+            window
+                .update(|window, cx| {
+                    _ = input_state.update(cx, |this, cx| {
+                        this.set_value(content, window, cx);
+                    });
+                })
+                .ok();
+
+            Some(())
+        })
+        .detach();
+    }
+
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -48,53 +74,42 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = if cx.theme().mode.is_dark() {
-            HighlightTheme::default_dark()
-        } else {
-            HighlightTheme::default_light()
-        };
-
-        let is_dark = cx.theme().mode.is_dark();
-
-        h_resizable("container", self.resizable_state.clone())
+        div()
+            .id("editor")
+            .size_full()
+            .on_action(cx.listener(Self::on_action_open))
             .child(
-                resizable_panel().child(
-                    div()
-                        .id("source")
-                        .size_full()
-                        .font_family("Monaco")
-                        .text_size(px(12.))
-                        .child(
-                            TextInput::new(&self.input_state)
-                                .h_full()
-                                .p_0()
-                                .appearance(false)
-                                .focus_bordered(false),
+                h_resizable("container", self.resizable_state.clone())
+                    .child(
+                        resizable_panel().child(
+                            div()
+                                .id("source")
+                                .size_full()
+                                .font_family("Monaco")
+                                .text_size(px(12.))
+                                .child(
+                                    TextInput::new(&self.input_state)
+                                        .h_full()
+                                        .p_0()
+                                        .border_0()
+                                        .focus_bordered(false),
+                                ),
                         ),
-                ),
-            )
-            .child(
-                resizable_panel().child(
-                    div()
-                        .id("preview")
-                        .size_full()
-                        .p_5()
-                        .overflow_y_scroll()
-                        .child(
+                    )
+                    .child(
+                        resizable_panel().child(
                             TextView::markdown(
                                 "preview",
                                 self.input_state.read(cx).value().clone(),
                                 window,
                                 cx,
                             )
-                            .selectable()
-                            .style(TextViewStyle {
-                                highlight_theme: theme.clone(),
-                                is_dark,
-                                ..Default::default()
-                            }),
+                            .flex_none()
+                            .p_5()
+                            .scrollable()
+                            .selectable(),
                         ),
-                ),
+                    ),
             )
     }
 }

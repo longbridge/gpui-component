@@ -1,20 +1,25 @@
-use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, sync::OnceLock};
+use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, rc::Rc, sync::OnceLock};
 
+use anyhow::Result;
 use gpui::{
     actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px, AnyElement,
     App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
-    SharedString, StyleRefinement, Styled, Subscription, Window,
+    SharedString, StyleRefinement, Styled, Subscription, Task, Window,
 };
+use lsp_types::{
+    CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, Diagnostic,
+    DiagnosticSeverity, Position, TextEdit,
+};
+use ropey::Rope;
 
 use crate::{
     alert::Alert,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
     description_list::DescriptionList,
-    dropdown::{Dropdown, DropdownState, SearchableVec},
     h_flex,
-    input::{InputEvent, InputState, TabSize, TextInput},
+    input::{CompletionProvider, InputEvent, InputState, RopeExt, TabSize, TextInput},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
@@ -22,7 +27,7 @@ use crate::{
 actions!(inspector, [ToggleInspector]);
 
 /// Initialize the inspector and register the action to toggle it.
-pub fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     cx.bind_keys(vec![
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-alt-i", ToggleInspector, None),
@@ -66,7 +71,6 @@ struct EditorState {
 pub struct DivInspector {
     inspector_id: Option<InspectorElementId>,
     inspector_state: Option<DivInspectorState>,
-    rust_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
     rust_state: EditorState,
     json_state: EditorState,
     /// Initial style before any edits
@@ -78,6 +82,8 @@ pub struct DivInspector {
 
 impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let lsp_provider = Rc::new(LspProvider {});
+
         let json_input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
@@ -85,30 +91,16 @@ impl DivInspector {
         });
 
         let rust_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut editor = InputState::new(window, cx)
                 .code_editor("rust")
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
-                })
-        });
+                });
 
-        let rust_dropdown = cx.new(|cx| {
-            DropdownState::new(
-                SearchableVec::new({
-                    let mut methods: Vec<_> = StyleMethods::get()
-                        .table
-                        .iter()
-                        .map(|(_, method)| method.name.into())
-                        .collect();
-                    methods.sort();
-                    methods
-                }),
-                None,
-                window,
-                cx,
-            )
+            editor.lsp.completion_provider = Some(lsp_provider.clone());
+            editor
         });
 
         let _subscriptions = vec![
@@ -151,7 +143,6 @@ impl DivInspector {
         Self {
             inspector_id: None,
             inspector_state: None,
-            rust_dropdown,
             rust_state,
             json_state,
             initial_style: Default::default(),
@@ -212,8 +203,14 @@ impl DivInspector {
             return;
         }
 
-        let (new_style, err) = rust_to_style(self.unconvertible_style.clone(), code);
-        self.rust_state.error = err;
+        let (new_style, diagnostics) = rust_to_style(self.unconvertible_style.clone(), code);
+        self.rust_state.state.update(cx, |state, cx| {
+            if let Some(set) = state.diagnostics_mut() {
+                set.clear();
+                set.extend(diagnostics);
+            }
+            cx.notify();
+        });
         self.json_state.error = None;
         self.json_state.editing = false;
         self.update_json_from_style(&new_style, window, cx);
@@ -271,24 +268,6 @@ impl DivInspector {
             state.set_value(rust_code, window, cx);
             rust_style
         })
-    }
-
-    fn rust_add_style(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(method) = self.rust_dropdown.read(cx).selected_value() {
-            let code = self.rust_state.state.read(cx).value();
-            let new_code = format!("        .{method}()\n");
-            let Some(insert_pos) = code.rfind('}') else {
-                self.rust_state.error = Some("Failed to add method: Could not find `}`".into());
-                return;
-            };
-            let code = format!("{}{}{}", &code[..insert_pos], new_code, &code[insert_pos..]);
-
-            self.rust_state.editing = true;
-            self.rust_state.state.update(cx, |state, cx| {
-                state.set_value(code, window, cx);
-                // an edit event will be triggered, the style will be updated there
-            });
-        }
     }
 }
 
@@ -348,40 +327,77 @@ fn style_to_rust(input_style: &StyleRefinement) -> (String, StyleRefinement) {
     (code, style)
 }
 
-fn rust_to_style(
-    mut style: StyleRefinement,
-    rust_code: &str,
-) -> (StyleRefinement, Option<SharedString>) {
-    // remove line comments
-    let rust_code = rust_code
-        .lines()
-        .map(|line| line.find("//").map_or(line, |i| &line[..i]).trim())
-        .collect::<Vec<_>>()
-        .concat();
+fn rust_to_style(mut style: StyleRefinement, source: &str) -> (StyleRefinement, Vec<Diagnostic>) {
+    let rope = Rope::from(source);
+    let Some(begin) = source.find("div()").map(|i| i + "div()".len()) else {
+        let start_pos = Position::new(0, 0);
+        let end_pos = rope.offset_to_position(rope.len());
 
-    let Some(begin) = rust_code.find("div()").map(|i| i + "div()".len()) else {
-        return (style, Some("Expected `div()`".into()));
+        return (
+            style,
+            vec![Diagnostic {
+                range: lsp_types::Range::new(start_pos, end_pos),
+                severity: Some(DiagnosticSeverity::ERROR),
+                message: "expected `div()`".into(),
+                ..Default::default()
+            }],
+        );
     };
 
-    let mut err = String::new();
-    let methods = rust_code[begin..]
-        .split(&['.', '(', ')', '{', '}'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    let mut methods = vec![];
+    let mut offset = 0;
+    let mut method_offset = 0;
+    let mut method = String::new();
+    for line in rope.iter_lines() {
+        if line.to_string().trim().starts_with("//") {
+            offset += line.len() + 1;
+            continue;
+        }
+
+        for c in line.chars() {
+            offset += c.len_utf8();
+            if offset < begin {
+                continue;
+            }
+
+            if c.is_ascii_alphanumeric() || c == '_' {
+                method.push(c);
+                method_offset = offset;
+            } else {
+                if !method.is_empty() {
+                    methods.push((method_offset, method.clone()));
+                }
+                method.clear();
+            }
+        }
+
+        // +1 \n
+        offset += 1;
+    }
+
+    let mut diagnostics = vec![];
     let style_methods = StyleMethods::get();
-    for method in methods {
-        match style_methods.map.get(method) {
+
+    for (offset, method) in methods {
+        match style_methods.map.get(method.as_str()) {
             Some(method_reflection) => style = method_reflection.invoke(style),
-            None => _ = writeln!(err, "Unknown method: {method}"),
+            None => {
+                let message = format!("unknown method `{}`", method);
+                let start = rope.offset_to_position(offset.saturating_sub(method.len()));
+                let end = rope.offset_to_position(offset);
+                let diagnostic = lsp_types::Diagnostic {
+                    range: lsp_types::Range::new(start, end),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    message,
+                    ..Default::default()
+                };
+
+                diagnostics.push(diagnostic);
+            }
         }
     }
 
-    let err = if err.is_empty() {
-        None
-    } else {
-        Some(err.trim_end().to_string().into())
-    };
-    (style, err)
+    (style, diagnostics)
 }
 
 impl Render for DivInspector {
@@ -401,31 +417,18 @@ impl Render for DivInspector {
                 .child(
                     v_flex()
                         .flex_1()
+                        .h_2_5()
                         .gap_y_3()
                         .child(
-                            v_flex().gap_y_2().child("Rust Styles").child(
-                                h_flex()
-                                    .gap_x_2()
-                                    .child(
-                                        Dropdown::new(&self.rust_dropdown)
-                                            .icon(IconName::Search)
-                                            .small()
-                                            .cleanable()
-                                            .flex_1(),
-                                    )
-                                    .child(Button::new("rust-add").label("Add").small().on_click(
-                                        cx.listener(|this, _, window, cx| {
-                                            this.rust_add_style(window, cx);
-                                        }),
-                                    ))
-                                    .child(
-                                        Button::new("rust-reset").label("Reset").small().on_click(
-                                            cx.listener(|this, _, window, cx| {
-                                                this.reset_style(window, cx);
-                                            }),
-                                        ),
-                                    ),
-                            ),
+                            h_flex()
+                                .justify_between()
+                                .gap_x_2()
+                                .child("Rust Styles")
+                                .child(Button::new("rust-reset").label("Reset").small().on_click(
+                                    cx.listener(|this, _, window, cx| {
+                                        this.reset_style(window, cx);
+                                    }),
+                                )),
                         )
                         .child(
                             v_flex()
@@ -441,8 +444,9 @@ impl Render for DivInspector {
                 )
                 .child(
                     v_flex()
+                        .flex_1()
                         .gap_y_3()
-                        .h_3_5()
+                        .h_2_5()
                         .flex_shrink_0()
                         .child(
                             h_flex()
@@ -553,4 +557,129 @@ fn render_inspector(
                 .children(inspector.render_inspector_states(window, cx)),
         )
         .into_any_element()
+}
+
+struct LspProvider {}
+
+impl CompletionProvider for LspProvider {
+    fn completions(
+        &self,
+        rope: &ropey::Rope,
+        offset: usize,
+        _: lsp_types::CompletionContext,
+        _: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<CompletionResponse>> {
+        let mut left_offset = 0;
+        while left_offset < 100 {
+            match rope.char_at(offset.saturating_sub(left_offset)) {
+                Some('.') => {
+                    break;
+                }
+                None => break,
+                _ => {}
+            }
+            left_offset += 1;
+        }
+        let start = offset.saturating_sub(left_offset);
+        let trigger_character = rope.slice(start..offset).to_string();
+        if !trigger_character.starts_with('.') {
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
+        }
+
+        let start_pos = rope.offset_to_position(start);
+        let end_pos = rope.offset_to_position(offset);
+
+        cx.background_spawn(async move {
+            let styles = StyleMethods::get()
+                .map
+                .iter()
+                .filter_map(|(name, method)| {
+                    let prefix = &trigger_character[1..];
+                    if name.starts_with(&prefix) {
+                        Some(CompletionItem {
+                            label: name.to_string(),
+                            filter_text: Some(prefix.to_string()),
+                            kind: Some(CompletionItemKind::METHOD),
+                            detail: Some("()".to_string()),
+                            documentation: method
+                                .documentation
+                                .as_ref()
+                                .map(|doc| lsp_types::Documentation::String(doc.to_string())),
+                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                range: lsp_types::Range {
+                                    start: start_pos,
+                                    end: end_pos,
+                                },
+                                new_text: format!(".{}()", name),
+                            })),
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            Ok(CompletionResponse::Array(styles))
+        })
+    }
+
+    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputState>) -> bool {
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{rems, AbsoluteLength, DefiniteLength, Length};
+    use indoc::indoc;
+    use lsp_types::Position;
+
+    #[test]
+    fn test_rust_to_style() {
+        let (style, diagnostics) = super::rust_to_style(
+            Default::default(),
+            indoc! {r#"
+            fn build() -> Div {
+                div()
+                    .p_1()
+                    // This is a comment
+                    .mx_2()
+            }
+            "#},
+        );
+        assert_eq!(diagnostics, vec![]);
+        assert_eq!(
+            style.padding.left,
+            Some(DefiniteLength::Absolute(AbsoluteLength::Rems(rems(0.25))))
+        );
+        assert_eq!(
+            style.margin.left,
+            Some(Length::Definite(DefiniteLength::Absolute(
+                AbsoluteLength::Rems(rems(0.5))
+            )))
+        );
+
+        let (_, diagnostics) = super::rust_to_style(
+            Default::default(),
+            indoc! {r#"
+            fn build() -> Div {
+                div()
+                    .p_1()
+                    // This is a comment
+                    .unknown_method
+                    .bad_method()
+            }
+            "#},
+        );
+
+        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics[0].message, "unknown method `unknown_method`");
+        assert_eq!(diagnostics[0].range.start, Position::new(4, 9));
+        assert_eq!(diagnostics[0].range.end, Position::new(4, 23));
+        assert_eq!(diagnostics[1].message, "unknown method `bad_method`");
+        assert_eq!(diagnostics[1].range.start, Position::new(5, 9));
+        assert_eq!(diagnostics[1].range.end, Position::new(5, 19));
+    }
 }

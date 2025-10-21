@@ -312,8 +312,8 @@ impl Dock {
             .expect("DockArea is missing")
             .read(cx);
         let area_bounds = dock_area.bounds;
-        let mut left_dock_size = Pixels(0.0);
-        let mut right_dock_size = Pixels(0.0);
+        let mut left_dock_size = px(0.0);
+        let mut right_dock_size = px(0.0);
 
         // Get the size of the left dock if it's open and not the current dock
         if let Some(left_dock) = &dock_area.left_dock {

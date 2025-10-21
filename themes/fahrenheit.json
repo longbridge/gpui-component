@@ -35,6 +35,7 @@
         "tab.foreground": "#808080",
         "table.background": "#1e1e1e00",
         "table.hover.background": "#1E1E1E",
+        "ring": "#570101",
         "base.red": "#723202",
         "base.red.light": "#c97636",
         "base.green": "#027225",

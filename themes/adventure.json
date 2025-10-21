@@ -45,6 +45,7 @@
         "table.head.foreground": "#feffffb3",
         "table.row.border": "#4b647970",
         "title_bar.background": "#040404",
+        "ring": "#5da602",
         "base.red": "#d84a33",
         "base.red.light": "#d76b42",
         "base.green": "#5da602",

@@ -10,7 +10,7 @@ use crate::{
         shape::Line,
         Axis, AxisText, Grid, Plot, StrokeStyle, AXIS_GAP,
     },
-    ActiveTheme,
+    ActiveTheme, PixelsExt,
 };
 
 #[derive(IntoPlot)]
@@ -59,8 +59,18 @@ where
         self
     }
 
+    pub fn natural(mut self) -> Self {
+        self.stroke_style = StrokeStyle::Natural;
+        self
+    }
+
     pub fn linear(mut self) -> Self {
         self.stroke_style = StrokeStyle::Linear;
+        self
+    }
+
+    pub fn step_after(mut self) -> Self {
+        self.stroke_style = StrokeStyle::StepAfter;
         self
     }
 
@@ -85,8 +95,8 @@ where
             return;
         };
 
-        let width = bounds.size.width.0;
-        let height = bounds.size.height.0 - AXIS_GAP;
+        let width = bounds.size.width.as_f32();
+        let height = bounds.size.height.as_f32() - AXIS_GAP;
 
         // X scale
         let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);

@@ -2,16 +2,16 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, Half, HighlightStyle, IntoElement, LayoutId, MouseButton,
-    MouseMoveEvent, Path, Pixels, Point, SharedString, Size, Style, TextAlign, TextRun,
-    UnderlineStyle, Window, WrappedLine,
+    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
+    TextRun, TextStyle, UnderlineStyle, Window,
 };
-use rope::Rope;
+use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    input::{blink_cursor::CURSOR_WIDTH, RopeExt as _},
-    ActiveTheme as _, Colorize, Root,
+    input::{blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout, RopeExt as _},
+    ActiveTheme as _, Colorize, PixelsExt, Root,
 };
 
 use super::{mode::InputMode, InputState, LastLayout};
@@ -21,7 +21,7 @@ pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 
 pub(super) struct TextElement {
-    state: Entity<InputState>,
+    pub(crate) state: Entity<InputState>,
     placeholder: SharedString,
 }
 
@@ -76,11 +76,20 @@ impl TextElement {
         let line_number_width = last_layout.line_number_width;
 
         let mut selected_range = state.selected_range;
+
         if let Some(ime_marked_range) = &state.ime_marked_range {
             selected_range = (ime_marked_range.end..ime_marked_range.end).into();
         }
+        let is_selected_all = selected_range.len() == state.text.len();
 
-        let cursor = state.cursor();
+        let mut cursor = state.cursor();
+        if state.masked {
+            // Because masked use `*`, 1 char with 1 byte.
+            selected_range.start = state.text.offset_to_char_index(selected_range.start);
+            selected_range.end = state.text.offset_to_char_index(selected_range.end);
+            cursor = state.text.offset_to_char_index(cursor);
+        }
+
         let mut current_row = None;
         let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
@@ -164,10 +173,8 @@ impl TextElement {
         if let (Some(cursor_pos), Some(cursor_start), Some(cursor_end)) =
             (cursor_pos, cursor_start, cursor_end)
         {
-            let cursor_moved = state.last_cursor != Some(cursor);
             let selection_changed = state.last_selected_range != Some(selected_range);
-
-            if cursor_moved || selection_changed {
+            if selection_changed && !is_selected_all {
                 scroll_offset.x = if scroll_offset.x + cursor_pos.x
                     > (bounds.size.width - line_number_width - RIGHT_MARGIN)
                 {
@@ -225,15 +232,20 @@ impl TextElement {
             ));
         }
 
+        if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
+            scroll_offset = deferred_scroll_offset;
+        }
+
         bounds.origin = bounds.origin + scroll_offset;
 
         (cursor_bounds, scroll_offset, current_row)
     }
 
-    fn layout_match_range(
+    /// Layout the match range to a Path.
+    pub(crate) fn layout_match_range(
         range: Range<usize>,
         last_layout: &LastLayout,
-        bounds: &mut Bounds<Pixels>,
+        bounds: &Bounds<Pixels>,
     ) -> Option<Path<Pixels>> {
         if range.is_empty() {
             return None;
@@ -366,7 +378,7 @@ impl TextElement {
     fn layout_search_matches(
         &self,
         last_layout: &LastLayout,
-        bounds: &mut Bounds<Pixels>,
+        bounds: &Bounds<Pixels>,
         cx: &mut App,
     ) -> Vec<(Path<Pixels>, bool)> {
         let search_panel = self.state.read(cx).search_panel.clone();
@@ -390,6 +402,37 @@ impl TextElement {
         paths
     }
 
+    fn layout_hover_highlight(
+        &self,
+        last_layout: &LastLayout,
+        bounds: &Bounds<Pixels>,
+        cx: &mut App,
+    ) -> Option<Path<Pixels>> {
+        let hover_popover = self.state.read(cx).hover_popover.clone();
+        let Some(symbol_range) = hover_popover.map(|popover| popover.read(cx).symbol_range.clone())
+        else {
+            return None;
+        };
+
+        Self::layout_match_range(symbol_range, last_layout, bounds)
+    }
+
+    fn layout_document_colors(
+        &self,
+        document_colors: &[(Range<usize>, Hsla)],
+        last_layout: &LastLayout,
+        bounds: &Bounds<Pixels>,
+    ) -> Vec<(Path<Pixels>, Hsla)> {
+        let mut paths = vec![];
+        for (range, color) in document_colors.iter() {
+            if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
+                paths.push((path, *color));
+            }
+        }
+
+        paths
+    }
+
     fn layout_selections(
         &self,
         last_layout: &LastLayout,
@@ -405,6 +448,12 @@ impl TextElement {
         }
         if selected_range.is_empty() {
             return None;
+        }
+
+        if state.masked {
+            // Because masked use `*`, 1 char with 1 byte.
+            selected_range.start = state.text.offset_to_char_index(selected_range.start);
+            selected_range.end = state.text.offset_to_char_index(selected_range.end);
         }
 
         let (start_ix, end_ix) = if selected_range.start < selected_range.end {
@@ -439,7 +488,11 @@ impl TextElement {
         }
 
         let total_lines = state.text_wrapper.len();
-        let scroll_top = state.scroll_handle.offset().y;
+        let scroll_top = if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
+            deferred_scroll_offset.y
+        } else {
+            state.scroll_handle.offset().y
+        };
 
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
@@ -459,6 +512,134 @@ impl TextElement {
         }
 
         (visible_range, visible_top)
+    }
+
+    /// Return (line_number_width, line_number_len)
+    fn layout_line_numbers(
+        state: &InputState,
+        text: &Rope,
+        font_size: Pixels,
+        style: &TextStyle,
+        window: &mut Window,
+    ) -> (Pixels, usize) {
+        let total_lines = text.lines_len();
+        let line_number_len = match total_lines {
+            0..=9999 => 5,
+            10000..=99999 => 6,
+            100000..=999999 => 7,
+            _ => 8,
+        };
+
+        let line_number_width = if state.mode.line_number() {
+            let empty_line_number = window.text_system().shape_line(
+                "+".repeat(line_number_len).into(),
+                font_size,
+                &[TextRun {
+                    len: line_number_len,
+                    font: style.font(),
+                    color: gpui::black(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+
+            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
+        } else {
+            px(0.)
+        };
+
+        (line_number_width, line_number_len)
+    }
+
+    fn layout_lines(
+        state: &InputState,
+        display_text: &Rope,
+        last_layout: &LastLayout,
+        font_size: Pixels,
+        runs: &[TextRun],
+        bg_segments: &[(Range<usize>, Hsla)],
+        window: &mut Window,
+    ) -> Vec<LineLayout> {
+        let is_multi_line = state.mode.is_multi_line();
+        let text_wrapper = &state.text_wrapper;
+        let visible_range = &last_layout.visible_range;
+        let visible_range_offset = &last_layout.visible_range_offset;
+
+        if !is_multi_line {
+            let shaped_line = window.text_system().shape_line(
+                display_text.to_string().into(),
+                font_size,
+                &runs,
+                None,
+            );
+
+            return vec![LineLayout::new().lines(smallvec::smallvec![shaped_line])];
+        }
+
+        // Empty to use placeholder, the placeholder is not in the text_wrapper map.
+        if state.text.len() == 0 {
+            return display_text
+                .to_string()
+                .split("\n")
+                .map(|line| {
+                    let shaped_line = window.text_system().shape_line(
+                        line.to_string().into(),
+                        font_size,
+                        &runs,
+                        None,
+                    );
+                    LineLayout::new().lines(smallvec::smallvec![shaped_line])
+                })
+                .collect();
+        }
+
+        let visible_text = display_text
+            .slice_lines(visible_range.start..visible_range.end)
+            .to_string();
+
+        let mut lines = vec![];
+        let mut offset = 0;
+        for (ix, line) in visible_text.split("\n").enumerate() {
+            let line_item = text_wrapper
+                .lines
+                .get(visible_range.start + ix)
+                .expect("line should exists in text_wrapper");
+
+            debug_assert_eq!(line_item.len(), line.len());
+
+            let mut line_layout = LineLayout::new();
+            let mut wrapped_lines = SmallVec::with_capacity(1);
+
+            for range in &line_item.wrapped_lines {
+                let line_runs = runs_for_range(runs, offset, &range);
+                let line_runs = if bg_segments.is_empty() {
+                    line_runs
+                } else {
+                    split_runs_by_bg_segments(
+                        visible_range_offset.start + offset,
+                        &line_runs,
+                        bg_segments,
+                    )
+                };
+
+                let sub_line: SharedString = line[range.clone()].to_string().into();
+                let shaped_line = window
+                    .text_system()
+                    .shape_line(sub_line, font_size, &line_runs, None);
+
+                wrapped_lines.push(shaped_line);
+            }
+
+            line_layout.set_wrapped_lines(wrapped_lines);
+            lines.push(line_layout);
+
+            // +1 for the `\n`
+            offset += line.len() + 1;
+        }
+
+        lines
     }
 
     /// First usize is the offset of skipped.
@@ -486,20 +667,25 @@ impl TextElement {
         let mut styles = vec![];
 
         for line in text
-            .lines()
+            .iter_lines()
             .skip(visible_range.start)
             .take(visible_range.len())
         {
             // +1 for `\n`
             let line_len = line.len() + 1;
             let range = offset..offset + line_len;
-            let line_styles = highlighter.styles(&range, cx);
+            let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
             styles = gpui::combine_highlights(styles, line_styles).collect();
 
             offset = range.end;
         }
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
+
+        // hover definition style
+        if let Some(hover_style) = self.layout_hover_definition(cx) {
+            styles.push(hover_style);
+        }
 
         // Combine marker styles
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
@@ -512,7 +698,9 @@ pub(super) struct PrepaintState {
     /// The lines of entire lines.
     last_layout: LastLayout,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
-    line_numbers: Option<Vec<SmallVec<[WrappedLine; 1]>>>,
+    ///
+    /// The child is the soft lines.
+    line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
     cursor_bounds: Option<Bounds<Pixels>>,
@@ -520,7 +708,10 @@ pub(super) struct PrepaintState {
     /// row index (zero based), no wrap, same line as the cursor.
     current_row: Option<usize>,
     selection_path: Option<Path<Pixels>>,
+    hover_highlight_path: Option<Path<Pixels>>,
     search_match_paths: Vec<(Path<Pixels>, bool)>,
+    document_color_paths: Vec<(Path<Pixels>, Hsla)>,
+    hover_definition_hitbox: Option<Hitbox>,
     bounds: Bounds<Pixels>,
 }
 
@@ -541,21 +732,25 @@ fn print_points_as_svg_path(
     for corners in line_corners {
         println!(
             "tl: ({}, {}), tr: ({}, {}), bl: ({}, {}), br: ({}, {})",
-            corners.top_left.x.0 as i32,
-            corners.top_left.y.0 as i32,
-            corners.top_right.x.0 as i32,
-            corners.top_right.y.0 as i32,
-            corners.bottom_left.x.0 as i32,
-            corners.bottom_left.y.0 as i32,
-            corners.bottom_right.x.0 as i32,
-            corners.bottom_right.y.0 as i32,
+            corners.top_left.x.as_f32() as i32,
+            corners.top_left.y.as_f32() as i32,
+            corners.top_right.x.as_f32() as i32,
+            corners.top_right.y.as_f32() as i32,
+            corners.bottom_left.x.as_f32() as i32,
+            corners.bottom_left.y.as_f32() as i32,
+            corners.bottom_right.x.as_f32() as i32,
+            corners.bottom_right.y.as_f32() as i32,
         );
     }
 
     if points.len() > 0 {
-        println!("M{},{}", points[0].x.0 as i32, points[0].y.0 as i32);
+        println!(
+            "M{},{}",
+            points[0].x.as_f32() as i32,
+            points[0].y.as_f32() as i32
+        );
         for p in points.iter().skip(1) {
-            println!("L{},{}", p.x.0 as i32, p.y.0 as i32);
+            println!("L{},{}", p.x.as_f32() as i32, p.y.as_f32() as i32);
         }
     }
 }
@@ -639,38 +834,39 @@ impl Element for TextElement {
 
         let (display_text, text_color) = if is_empty {
             (
-                Rope::from(placeholder.as_str()),
+                &Rope::from(placeholder.as_str()),
                 cx.theme().muted_foreground,
             )
         } else if state.masked {
             (
-                Rope::from("*".repeat(text.chars_count())),
+                &Rope::from("*".repeat(text.chars().count())),
                 cx.theme().foreground,
             )
         } else {
-            (text.clone(), cx.theme().foreground)
+            (&text, cx.theme().foreground)
         };
 
         let text_style = window.text_style();
 
         // Calculate the width of the line numbers
-        let empty_line_number = window.text_system().shape_line(
-            "++++++".into(),
-            font_size,
-            &[TextRun {
-                len: 6,
-                font: style.font(),
-                color: gpui::black(),
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }],
-            None,
-        );
-        let line_number_width = if state.mode.line_number() {
-            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
+        let (line_number_width, line_number_len) =
+            Self::layout_line_numbers(&state, &text, font_size, &text_style, window);
+
+        let wrap_width = if multi_line && state.soft_wrap {
+            Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
         } else {
-            px(0.)
+            None
+        };
+
+        let mut last_layout = LastLayout {
+            visible_range,
+            visible_top,
+            visible_range_offset: visible_start_offset..visible_end_offset,
+            line_height,
+            wrap_width,
+            line_number_width,
+            lines: Rc::new(vec![]),
+            cursor_bounds: None,
         };
 
         let run = TextRun {
@@ -741,31 +937,23 @@ impl Element for TextElement {
             vec![run]
         };
 
-        let wrap_width = if multi_line && state.soft_wrap {
-            Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
-        } else {
-            None
-        };
-
-        // NOTE: Here 50 lines about 150µs
-        // let measure = crate::Measure::new("shape_text");
-        let visible_text = display_text
-            .slice_rows(visible_range.start as u32..visible_range.end as u32)
-            .to_string();
-
-        let lines = window
-            .text_system()
-            .shape_text(visible_text.into(), font_size, &runs, wrap_width, None)
-            .expect("failed to shape text");
-        // measure.end();
+        let document_colors = state
+            .lsp
+            .document_colors_for_range(&text, &last_layout.visible_range);
+        let lines = Self::layout_lines(
+            &state,
+            &display_text,
+            &last_layout,
+            font_size,
+            &runs,
+            &document_colors,
+            window,
+        );
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
         if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
-            let longtest_line: SharedString = state
-                .text
-                .line(state.text.summary().longest_row as usize)
-                .to_string()
-                .into();
+            let longest_row = state.text_wrapper.longest_row.row;
+            let longtest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
                 .text_system()
                 .shape_line(
@@ -783,13 +971,19 @@ impl Element for TextElement {
                 )
                 .width;
         }
+        last_layout.lines = Rc::new(lines);
 
         let total_wrapped_lines = state.text_wrapper.len();
-        let empty_bottom_height = bounds
-            .size
-            .height
-            .half()
-            .max(BOTTOM_MARGIN_ROWS * line_height);
+        let empty_bottom_height = if state.mode.is_auto_grow() || state.mode.is_single_line() {
+            px(0.)
+        } else {
+            bounds
+                .size
+                .height
+                .half()
+                .max(BOTTOM_MARGIN_ROWS * line_height)
+        };
+
         let scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
@@ -799,17 +993,6 @@ impl Element for TextElement {
             (total_wrapped_lines as f32 * line_height + empty_bottom_height)
                 .max(bounds.size.height),
         );
-
-        let mut last_layout = LastLayout {
-            visible_range,
-            visible_top,
-            visible_range_offset: visible_start_offset..visible_end_offset,
-            line_height,
-            wrap_width,
-            line_number_width,
-            lines: Rc::new(lines),
-            cursor_bounds: None,
-        };
 
         // `position_for_index` for example
         //
@@ -848,13 +1031,15 @@ impl Element for TextElement {
 
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
         let selection_path = self.layout_selections(&last_layout, &mut bounds, cx);
+        let hover_highlight_path = self.layout_hover_highlight(&last_layout, &mut bounds, cx);
+        let document_color_paths =
+            self.layout_document_colors(&document_colors, &last_layout, &bounds);
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
             let mut line_numbers = vec![];
-            let run_len = 4;
             let other_line_runs = vec![TextRun {
-                len: run_len,
+                len: line_number_len,
                 font: style.font(),
                 color: cx.theme().muted_foreground,
                 background_color: None,
@@ -862,7 +1047,7 @@ impl Element for TextElement {
                 strikethrough: None,
             }];
             let current_line_runs = vec![TextRun {
-                len: run_len,
+                len: line_number_len,
                 font: style.font(),
                 color: cx.theme().foreground,
                 background_color: None,
@@ -873,12 +1058,7 @@ impl Element for TextElement {
             // build line numbers
             for (ix, line) in last_layout.lines.iter().enumerate() {
                 let ix = last_layout.visible_range.start + ix;
-                let line_no = ix + 1;
-
-                let mut line_no_text = format!("{:>6}", line_no);
-                if !line.wrap_boundaries.is_empty() {
-                    line_no_text.push_str(&"\n    ".repeat(line.wrap_boundaries.len()));
-                }
+                let line_no = format!("{:>width$}", ix + 1, width = line_number_len).into();
 
                 let runs = if current_row == Some(ix) {
                     &current_line_runs
@@ -886,16 +1066,23 @@ impl Element for TextElement {
                     &other_line_runs
                 };
 
-                let shape_line = window
-                    .text_system()
-                    .shape_text(line_no_text.into(), font_size, &runs, None, None)
-                    .unwrap();
-                line_numbers.push(shape_line);
+                let mut sub_lines: SmallVec<[ShapedLine; 1]> = SmallVec::new();
+                sub_lines.push(
+                    window
+                        .text_system()
+                        .shape_line(line_no, font_size, &runs, None),
+                );
+                for _ in 0..line.wrapped_lines.len().saturating_sub(1) {
+                    sub_lines.push(ShapedLine::default());
+                }
+                line_numbers.push(sub_lines);
             }
             Some(line_numbers)
         } else {
             None
         };
+
+        let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
 
         PrepaintState {
             bounds,
@@ -907,6 +1094,9 @@ impl Element for TextElement {
             current_row,
             selection_path,
             search_match_paths,
+            hover_highlight_path,
+            hover_definition_hitbox,
+            document_color_paths,
         }
     }
 
@@ -973,7 +1163,7 @@ impl Element for TextElement {
             }
         }
 
-        let active_line_color = cx.theme().highlight_theme.style.active_line;
+        let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
 
         // Paint active line
         let mut offset_y = px(0.);
@@ -984,27 +1174,26 @@ impl Element for TextElement {
             for (ix, lines) in line_numbers.iter().enumerate() {
                 let row = visible_range.start + ix;
                 let is_active = prepaint.current_row == Some(row);
-                for line in lines {
-                    let p = point(input_bounds.origin.x, origin.y + offset_y);
-                    let line_size = line.size(line_height);
-                    // Paint the current line background
-                    if is_active {
-                        if let Some(bg_color) = active_line_color {
-                            window.paint_quad(fill(
-                                Bounds::new(p, size(bounds.size.width, line_height)),
-                                bg_color,
-                            ));
-                        }
+                let p = point(input_bounds.origin.x, origin.y + offset_y);
+                let height = line_height * lines.len() as f32;
+                // Paint the current line background
+                if is_active {
+                    if let Some(bg_color) = active_line_color {
+                        window.paint_quad(fill(
+                            Bounds::new(p, size(bounds.size.width, height)),
+                            bg_color,
+                        ));
                     }
-                    offset_y += line_size.height;
                 }
+                offset_y += height;
             }
         }
 
         // Paint selections
         if window.is_window_active() {
+            let secondary_selection = cx.theme().selection.saturation(0.1);
             for (path, is_active) in prepaint.search_match_paths.iter() {
-                window.paint_path(path.clone(), cx.theme().selection.saturation(0.1));
+                window.paint_path(path.clone(), secondary_selection);
 
                 if *is_active {
                     window.paint_path(path.clone(), cx.theme().selection);
@@ -1014,6 +1203,16 @@ impl Element for TextElement {
             if let Some(path) = prepaint.selection_path.take() {
                 window.paint_path(path, cx.theme().selection);
             }
+
+            // Paint hover highlight
+            if let Some(path) = prepaint.hover_highlight_path.take() {
+                window.paint_path(path, secondary_selection);
+            }
+        }
+
+        // Paint document colors
+        for (path, color) in prepaint.document_color_paths.iter() {
+            window.paint_path(path.clone(), *color);
         }
 
         // Paint text
@@ -1023,7 +1222,7 @@ impl Element for TextElement {
                 origin.x + prepaint.last_layout.line_number_width,
                 origin.y + offset_y,
             );
-            _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+            _ = line.paint(p, line_height, window, cx);
             offset_y += line.size(line_height).height;
         }
 
@@ -1049,33 +1248,30 @@ impl Element for TextElement {
                         input_bounds.size.height,
                     ),
                 },
-                cx.theme().background,
+                cx.theme().editor_background(),
             ));
 
             // Each item is the normal lines.
             for (ix, lines) in line_numbers.iter().enumerate() {
                 let row = visible_range.start + ix;
-                for line in lines {
-                    let p = point(input_bounds.origin.x, origin.y + offset_y);
 
-                    let is_active = prepaint.current_row == Some(row);
-                    let line_size = line.size(line_height);
+                let p = point(input_bounds.origin.x, origin.y + offset_y);
+                let is_active = prepaint.current_row == Some(row);
 
-                    // paint active line number background
-                    if is_active {
-                        if let Some(bg_color) = active_line_color {
-                            window.paint_quad(fill(
-                                Bounds::new(
-                                    p,
-                                    size(prepaint.last_layout.line_number_width, line_height),
-                                ),
-                                bg_color,
-                            ));
-                        }
+                let height = line_height * lines.len() as f32;
+                // paint active line number background
+                if is_active {
+                    if let Some(bg_color) = active_line_color {
+                        window.paint_quad(fill(
+                            Bounds::new(p, size(prepaint.last_layout.line_number_width, height)),
+                            bg_color,
+                        ));
                     }
+                }
 
-                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
-                    offset_y += line_size.height;
+                for line in lines {
+                    _ = line.paint(p, line_height, window, cx);
+                    offset_y += line_height;
                 }
             }
         }
@@ -1090,9 +1286,219 @@ impl Element for TextElement {
             state
                 .scroll_handle
                 .set_offset(prepaint.cursor_scroll_offset);
+            state.deferred_scroll_offset = None;
+
             cx.notify();
         });
 
+        if let Some(hitbox) = prepaint.hover_definition_hitbox.as_ref() {
+            window.set_cursor_style(gpui::CursorStyle::PointingHand, &hitbox);
+        }
+
         self.paint_mouse_listeners(window, cx);
+    }
+}
+
+/// Get the runs for the given range.
+///
+/// The range is the byte range of the wrapped line.
+pub(super) fn runs_for_range(
+    runs: &[TextRun],
+    line_offset: usize,
+    range: &Range<usize>,
+) -> Vec<TextRun> {
+    let mut result = vec![];
+    let range = (line_offset + range.start)..(line_offset + range.end);
+    let mut cursor = 0;
+
+    for run in runs {
+        let run_start = cursor;
+        let run_end = cursor + run.len;
+
+        if run_end <= range.start {
+            cursor = run_end;
+            continue;
+        }
+
+        if run_start >= range.end {
+            break;
+        }
+
+        let start = range.start.max(run_start) - run_start;
+        let end = range.end.min(run_end) - run_start;
+        let len = end - start;
+
+        if len > 0 {
+            result.push(TextRun { len, ..run.clone() });
+        }
+
+        cursor = run_end;
+    }
+
+    result
+}
+
+fn split_runs_by_bg_segments(
+    start_offset: usize,
+    runs: &[TextRun],
+    bg_segments: &[(Range<usize>, Hsla)],
+) -> Vec<TextRun> {
+    let mut result = vec![];
+
+    let mut cursor = start_offset;
+    for run in runs {
+        let mut run_start = cursor;
+        let run_end = cursor + run.len;
+
+        for (bg_range, bg_color) in bg_segments {
+            if run_end <= bg_range.start || run_start >= bg_range.end {
+                continue;
+            }
+
+            // Overlap exists
+            if run_start < bg_range.start {
+                // Add the part before the background range
+                result.push(TextRun {
+                    len: bg_range.start - run_start,
+                    ..run.clone()
+                });
+            }
+
+            // Add the overlapping part with background color
+            let overlap_start = run_start.max(bg_range.start);
+            let overlap_end = run_end.min(bg_range.end);
+            let text_color = if bg_color.l >= 0.5 {
+                gpui::black()
+            } else {
+                gpui::white()
+            };
+
+            let run_len = overlap_end.saturating_sub(overlap_start);
+            if run_len > 0 {
+                result.push(TextRun {
+                    len: run_len,
+                    color: text_color,
+                    ..run.clone()
+                });
+
+                cursor = bg_range.end;
+                run_start = cursor;
+            }
+        }
+
+        if run_end > cursor {
+            // Add the part after the background range
+            result.push(TextRun {
+                len: run_end - cursor,
+                ..run.clone()
+            });
+        }
+
+        cursor = run_end;
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_runs_for_range() {
+        let run = TextRun {
+            len: 0,
+            font: gpui::font(".SystemUIFont"),
+            color: gpui::black(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+
+        // use hello this-is-test
+        let runs = vec![
+            // use
+            TextRun {
+                len: 3,
+                ..run.clone()
+            },
+            // \s
+            TextRun {
+                len: 1,
+                ..run.clone()
+            },
+            // hello
+            TextRun {
+                len: 5,
+                ..run.clone()
+            },
+            // \s
+            TextRun {
+                len: 1,
+                ..run.clone()
+            },
+            // this-is-test
+            TextRun {
+                len: 12,
+                ..run.clone()
+            },
+        ];
+
+        #[track_caller]
+        fn assert_runs(actual: Vec<TextRun>, expected: &[usize]) {
+            let left = actual.iter().map(|run| run.len).collect::<Vec<_>>();
+            assert_eq!(left, expected);
+        }
+
+        assert_runs(runs_for_range(&runs, 0, &(0..0)), &[]);
+        assert_runs(runs_for_range(&runs, 0, &(0..100)), &[3, 1, 5, 1, 12]);
+
+        assert_runs(runs_for_range(&runs, 0, &(0..6)), &[3, 1, 2]);
+        assert_runs(runs_for_range(&runs, 0, &(1..6)), &[2, 1, 2]);
+        assert_runs(runs_for_range(&runs, 0, &(3..10)), &[1, 5, 1]);
+        assert_runs(runs_for_range(&runs, 0, &(5..8)), &[3]);
+        assert_runs(runs_for_range(&runs, 3, &(0..3)), &[1, 2]);
+        assert_runs(runs_for_range(&runs, 3, &(2..10)), &[4, 1, 3]);
+        assert_runs(runs_for_range(&runs, 9, &(0..8)), &[1, 7]);
+    }
+
+    #[test]
+    fn test_split_runs_by_bg_segments() {
+        let run = TextRun {
+            len: 0,
+            font: gpui::font(".SystemUIFont"),
+            color: gpui::blue(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+
+        let runs = vec![
+            TextRun {
+                len: 5,
+                ..run.clone()
+            },
+            TextRun {
+                len: 7,
+                ..run.clone()
+            },
+            TextRun {
+                len: 24,
+                ..run.clone()
+            },
+        ];
+
+        let bg_segments = vec![(8..12, gpui::red()), (12..18, gpui::blue())];
+        let result = split_runs_by_bg_segments(5, &runs, &bg_segments);
+        assert_eq!(
+            result.iter().map(|run| run.len).collect::<Vec<_>>(),
+            vec![3, 2, 2, 5, 1, 23]
+        );
+        assert_eq!(result[0].color, gpui::blue());
+        assert_eq!(result[1].color, gpui::black());
+        assert_eq!(result[2].color, gpui::black());
+        assert_eq!(result[3].color, gpui::black());
+        assert_eq!(result[4].color, gpui::black());
+        assert_eq!(result[5].color, gpui::blue());
     }
 }
