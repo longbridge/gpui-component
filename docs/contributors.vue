@@ -24,13 +24,13 @@
 <script setup>
 import { ref, onMounted } from "vue";
 
-const IGNORE_LOGINS = ["dependabot[bot]"];
+const IGNORE_LOGINS = ["dependabot[bot]", "copilot"];
 let contributors = ref([]);
 fetch("https://api.github.com/repos/longbridge/gpui-component/contributors")
     .then((res) => res.json())
     .then((items) => {
         let filtered = items.filter(
-            (item) => !IGNORE_LOGINS.includes(item.login),
+            (item) => !IGNORE_LOGINS.includes(item.login.toLowerCase()),
         );
         contributors.value = filtered.slice(0, 24);
     });
