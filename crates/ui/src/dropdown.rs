@@ -195,10 +195,16 @@ where
             .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
 
         if let Some(item) = self.delegate.item(ix) {
+            let content = item.display_title().unwrap_or_else(|| {
+                div()
+                    .whitespace_nowrap()
+                    .child(item.title().to_string())
+                    .into_any_element()
+            });
             let list_item = DropdownListItem::new(ix.row)
                 .selected(selected)
                 .with_size(size)
-                .child(div().whitespace_nowrap().child(item.title().to_string()));
+                .child(content);
             Some(list_item)
         } else {
             None
