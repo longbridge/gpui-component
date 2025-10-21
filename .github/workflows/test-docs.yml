@@ -1,0 +1,20 @@
+name: Test Docs
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - name: Install
+        working-directory: docs
+        run: bun install
+      - name: Build
+        working-directory: docs
+        run: |
+          bun run build

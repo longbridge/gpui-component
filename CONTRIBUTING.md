@@ -22,9 +22,25 @@ Before you start to write code, please read the existing code to follow the same
 
 ## Development and Testing
 
-There are a lot of UI test cases in the `crates/story` folder, if you change the existing features you can run the tests to make sure they are working.
+### System dependencies
+
+The `script` folder contains some useful scripts to help you set up the development environment.
+
+To install the system dependencies, run the following script:
+
+```bash
+./script/bootstrap
+```
+
+For Windows, you can run the following command in PowerShell:
+
+```powershell
+.\script\install-window.ps1
+```
 
 ### Run story
+
+There are a lot of UI test cases in the `crates/story` folder, if you change the existing features you can run the tests to make sure they are working.
 
 Use `cargo run` to run the complete story examples to display them all in a gallery of GPUI components.
 

@@ -1,0 +1,36 @@
+name: Release Docs
+on:
+  push:
+    paths:
+      - "docs/**"
+    branches:
+      - main
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - name: Install
+        working-directory: docs
+        run: bun install
+      - name: Build
+        working-directory: docs
+        run: |
+          bun run build
+          cp out/index.html out/404.html
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "docs/out"
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
