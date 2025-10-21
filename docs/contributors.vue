@@ -1,0 +1,52 @@
+<template>
+    <div class="contributors-page">
+        <div class="contributors-list">
+            <a
+                :href="contributor.html_url"
+                v-for="contributor in contributors"
+                :key="contributor.id"
+                class="contributor-card"
+                rel="noopener noreferrer"
+            >
+                <img
+                    :src="contributor.avatar_url"
+                    :alt="contributor.login"
+                    class="contributor-avatar"
+                />
+                <div class="contributor-info">
+                    {{ contributor.login }}
+                </div>
+            </a>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from "vue";
+
+const IGNORE_LOGINS = ["dependabot[bot]"];
+let contributors = ref([]);
+fetch("https://api.github.com/repos/longbridge/gpui-component/contributors")
+    .then((res) => res.json())
+    .then((items) => {
+        let filtered = items.filter(
+            (item) => !IGNORE_LOGINS.includes(item.login),
+        );
+        contributors.value = filtered.slice(0, 24);
+    });
+</script>
+
+<style lang="scss" scoped>
+@reference "./.vitepress/theme/style.css";
+.contributors-list {
+    @apply my-8 grid grid-cols-1 lg:grid-cols-4 gap-6;
+}
+
+.contributor-card {
+    @apply px-4 py-3 gap-3  border border-[var(--border)] rounded-lg hover:shadow-lg transition-shadow items-center text-center justify-center no-underline flex flex-col;
+
+    .contributor-avatar {
+        @apply w-12 h-12 rounded-full;
+    }
+}
+</style>

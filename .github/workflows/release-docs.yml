@@ -24,13 +24,13 @@ jobs:
         working-directory: docs
         run: |
           bun run build
-          cp out/index.html out/404.html
+          cp .vitepress/dist/index.html .vitepress/dist/404.html
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "docs/out"
+          path: ".vitepress/dist"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
