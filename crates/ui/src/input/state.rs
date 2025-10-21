@@ -1444,6 +1444,8 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
+
         let line_height = self
             .last_layout
             .as_ref()
