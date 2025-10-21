@@ -974,11 +974,16 @@ impl Element for TextElement {
         last_layout.lines = Rc::new(lines);
 
         let total_wrapped_lines = state.text_wrapper.len();
-        let empty_bottom_height = bounds
-            .size
-            .height
-            .half()
-            .max(BOTTOM_MARGIN_ROWS * line_height);
+        let empty_bottom_height = if state.mode.is_auto_grow() || state.mode.is_single_line() {
+            px(0.)
+        } else {
+            bounds
+                .size
+                .height
+                .half()
+                .max(BOTTOM_MARGIN_ROWS * line_height)
+        };
+
         let scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
