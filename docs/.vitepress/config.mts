@@ -32,7 +32,7 @@ const config: UserConfig = {
       "link",
       {
         rel: "icon",
-        href: "/logo.svg",
+        href: "/gpui-component/logo.svg",
       },
     ],
   ],
