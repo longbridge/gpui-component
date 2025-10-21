@@ -37,7 +37,7 @@ collapsed: false
 - [Input](input) - Text input with validation
 - [NumberInput](number-input) - Numeric input with increment/decrement
 - [OtpInput](otp-input) - One-time password input
-- [Textarea](textarea) - Multi-line text input
+- [Editor](editor) - Multi-line text editor and code editor
 
 ### Layout Components
 
@@ -56,7 +56,7 @@ collapsed: false
 - [Calendar](calendar) - Calendar display and navigation
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
 - [List](list) - List display with items
-- [Menu](menu) - Menu and context menu
+- [PopupMenu](popup_menu) - Menu and context menu
 - [Table](table) - High-performance data tables
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display
