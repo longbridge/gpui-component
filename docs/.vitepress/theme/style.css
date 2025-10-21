@@ -7,7 +7,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.875rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -48,6 +48,11 @@
   --vp-c-brand-1: var(--primary);
   --vp-c-default-1: var(--secondary);
   --vp-c-default-2: var(--muted);
+
+  --vp-custom-block-tip-border: var(--vp-c-default-3);
+  --vp-custom-block-tip-text: var(--vp-c-text-1);
+  --vp-custom-block-tip-bg: transparent;
+  --vp-custom-block-tip-code-bg: var(--vp-c-default-soft);
 }
 
 .dark {
@@ -82,4 +87,60 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.439 0 0);
+}
+
+.VPSidebar {
+  border-right: 1px solid var(--border);
+}
+
+.vp-doc {
+  [class*="language-"] pre {
+    @apply rounded-md py-3 text-base font-mono;
+  }
+
+  [class*="language-"] pre code {
+    @apply px-3;
+  }
+
+  [class*="language-"] > button.copy {
+    /*rtl:ignore*/
+    direction: ltr;
+    position: absolute;
+    top: 12px;
+    /*rtl:ignore*/
+    z-index: 3;
+    border: 1px solid var(--vp-code-copy-code-border-color);
+    border-radius: 4px;
+    background-color: var(--vp-code-copy-code-bg);
+    opacity: 0;
+    cursor: pointer;
+    background-image: var(--vp-icon-copy);
+    background-position: 50%;
+    background-repeat: no-repeat;
+    transition:
+      border-color 0.25s,
+      background-color 0.25s,
+      opacity 0.25s;
+
+    width: 24px;
+    height: 24px;
+    background-size: 14px;
+
+    &:hover,
+    &.copy.copied {
+      border-color: var(--vp-code-copy-code-hover-border-color);
+      background-color: var(--vp-code-copy-code-hover-bg);
+    }
+
+    &:hover.copied::before,
+    &.copied::before {
+      height: 24px;
+      line-height: 24px;
+      padding: 0 8px;
+    }
+  }
+
+  [class*="language-"] > button.copy {
+    right: 12px;
+  }
 }

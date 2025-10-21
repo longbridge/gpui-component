@@ -3,6 +3,7 @@ import type { UserConfig } from "vitepress";
 import { generateSidebar } from "vitepress-sidebar";
 import llmstxt from "vitepress-plugin-llms";
 import tailwindcss from "@tailwindcss/vite";
+import { lightTheme, darkTheme } from "./language";
 
 /**
  * https://github.com/jooy2/vitepress-sidebar
@@ -40,8 +41,22 @@ const config: UserConfig = {
     sidebar: sidebar as any,
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/vuejs/vitepress" },
+      { icon: "github", link: "https://github.com/longbridge/gpui-component" },
     ],
+    editLink: {
+      pattern:
+        "https://github.com/longbridge/gpui-component/edit/main/docs/:path",
+    },
+    search: {
+      provider: "local",
+    },
+  },
+  markdown: {
+    defaultHighlightLang: "rs",
+    theme: {
+      light: lightTheme,
+      dark: darkTheme,
+    },
   },
 };
 

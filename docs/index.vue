@@ -130,7 +130,7 @@ import {
     }
 }
 .feature-card {
-    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-[var(--border)] rounded-md;
+    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-[var(--border)] rounded-lg;
 
     h3 {
         @apply m-0 p-0 text-lg text-[var(--primary)] flex gap-3 items-center;
