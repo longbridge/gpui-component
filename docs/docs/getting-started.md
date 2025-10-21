@@ -6,22 +6,6 @@ order: -2
 
 # Getting Started
 
-GPUI Component is a comprehensive UI component library for building fantastic desktop applications using [GPUI](https://gpui.rs). It provides 40+ cross-platform components with modern design, theming support, and high performance.
-
-## Features
-
-- **Richness**: 40+ cross-platform desktop UI components
-- **Native**: Inspired by macOS and Windows controls, combined with shadcn/ui design
-- **Ease of Use**: Stateless `RenderOnce` components, simple and user-friendly
-- **Customizable**: Built-in `Theme` and `ThemeColor`, supporting multi-theme
-- **Versatile**: Supports sizes like `xs`, `sm`, `md`, and `lg`
-- **Flexible Layout**: Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts
-- **High Performance**: Virtualized Table and List components for smooth large-data rendering
-- **Content Rendering**: Native support for Markdown and simple HTML
-- **Charting**: Built-in charts for visualization
-- **Editor**: High performance code editor with LSP support
-- **Syntax Highlighting**: Using Tree Sitter
-
 ## Installation
 
 Add dependencies to your `Cargo.toml`:
@@ -81,11 +65,58 @@ fn main() {
 }
 ```
 
+:::info
+Make sure to call `gpui_component::init(cx);` at first line inside the `app.run` closure. This initializes the GPUI Component system.
+
+This is required for theming and other global settings to work correctly.
+:::
+
 ## Basic Concepts
 
-### Stateless Components
+### Stateless Elements
 
-GPUI Component uses stateless `RenderOnce` components, making them simple and predictable. State management is handled at the view level, not in individual components.
+GPUI Component uses stateless [RenderOnce] elements, making them simple and predictable. State management is handled at the view level, not in individual components.
+
+The are all implemented [IntoElement] types.
+
+For example:
+
+```rs
+struct MyView;
+
+impl Render for MyView {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .child(Button::new("btn").label("Click Me"))
+            .child(Tag::secondary().child("Secondary"))
+    }
+}
+```
+
+### Stateful Components
+
+There are some stateful components like `Dropdown`, `List`, and `Table` that manage their own internal state for convenience, these components implement the [Render] trait.
+
+Those components to use are a bit different, we need create the [Entity] and hold it in the view struct.
+
+```rs
+struct MyView {
+    input: Entity<InputState>,
+}
+
+impl MyView {
+    fn new(window: &Window, cx: &mut Context<Self>) -> Self {
+        let input = cx.new(|cx| InputState::new(window, cx).default_value("Hello 世界"));
+        Self { input }
+    }
+}
+
+impl Render for MyView {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.input.clone()
+    }
+}
+```
 
 ### Theming
 
@@ -160,3 +191,7 @@ More examples can be found in the `examples` directory:
 ```bash
 cargo run --example <example_name>
 ```
+
+[RenderOnce]: https://docs.rs/gpui/latest/gpui/trait.RenderOnce.html
+[IntoElement]: https://docs.rs/gpui/latest/gpui/trait.IntoElement.html
+[Render]: https://docs.rs/gpui/latest/gpui/trait.Render.html
