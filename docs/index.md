@@ -1,30 +1,12 @@
 ---
 layout: home
-hero:
-  name: GPUI Component
-  text: Rust GUI components for building fantastic cross-platform desktop
-    application by using GPUI.
-  actions:
-    - theme: brand
-      text: Getting Started
-      link: /docs/getting-started/
-    - theme: alt
-      text: GitHub
-      link: https://github.com/longbridge/gpui-component
-features:
-  - title: 40+ Components
-    details: Comprehensive library of cross-platform desktop UI components for building feature-rich applications.
-  - title: High Performance
-    details: Virtualized Table and List components for smooth rendering of large datasets with minimal memory footprint.
-  - title: Themeable
-    details: Built-in theme system with with 20+ themes, and dark mode out of the box.
-  - title: Flexible Layouts
-    details: Dock layout for panel arrangements, resizable panels, and freeform layouts for any application structure.
-  - title: Data Visualization
-    details: Built-in chart components for visualizing data with Line, Bar, Area, and Pie charts.
-  - title: Code Editor
-    details: High-performance code editor with LSP support, syntax highlighting, powered by Tree-sitter and Rope.
 ---
+
+<script setup>
+import Index from './index.vue'
+</script>
+
+<Index />
 
 ## Simple and Intuitive API
 
