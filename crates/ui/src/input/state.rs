@@ -120,7 +120,7 @@ pub(crate) fn init(cx: &mut App) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
+        KeyBinding::new("shift-enter", Enter { secondary: true }, Some(CONTEXT)),
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("up", MoveUp, Some(CONTEXT)),
         KeyBinding::new("down", MoveDown, Some(CONTEXT)),
@@ -332,6 +332,10 @@ pub struct InputState {
     /// The first element is the x-coordinate (Pixels), preferred to use this.
     /// The second element is the column (usize), fallback to use this.
     pub(super) preferred_column: Option<(Pixels, usize)>,
+    /// When true, Enter key will emit PressEnter event without inserting newline (submit behavior).
+    /// Shift+Enter will still insert newline.
+    /// Default is false (traditional multi-line behavior).
+    pub(super) submit_on_enter: bool,
     _subscriptions: Vec<Subscription>,
 
     pub(super) _context_menu_task: Task<Result<()>>,
@@ -404,6 +408,7 @@ impl InputState {
             scroll_size: gpui::size(px(0.), px(0.)),
             deferred_scroll_offset: None,
             preferred_column: None,
+            submit_on_enter: false,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             lsp: Lsp::default(),
@@ -536,6 +541,21 @@ impl InputState {
             }
             _ => {}
         }
+        self
+    }
+
+    /// Set submit on Enter behavior for multi-line input.
+    ///
+    /// When set to true:
+    /// - Enter key: Emits PressEnter event without inserting newline (submit behavior)
+    /// - Shift+Enter: Inserts newline
+    ///
+    /// When set to false (default):
+    /// - Both Enter and Shift+Enter insert newline
+    ///
+    /// This is only effective in multi-line mode.
+    pub fn submit_on_enter(mut self, enabled: bool) -> Self {
+        self.submit_on_enter = enabled;
         self
     }
 
@@ -1144,17 +1164,38 @@ impl InputState {
         }
 
         if self.mode.is_multi_line() {
-            // Get current line indent
-            let indent = if self.mode.is_code_editor() {
-                self.indent_of_next_line()
-            } else {
-                "".to_string()
-            };
+            // Check if submit_on_enter is enabled
+            if self.submit_on_enter {
+                // Submit behavior: only insert newline on Shift+Enter
+                if action.secondary {
+                    // Shift+Enter: Insert newline with indent, don't emit event
+                    let indent = if self.mode.is_code_editor() {
+                        self.indent_of_next_line()
+                    } else {
+                        "".to_string()
+                    };
 
-            // Add newline and indent
-            let new_line_text = format!("\n{}", indent);
-            self.replace_text_in_range_silent(None, &new_line_text, window, cx);
-            self.pause_blink_cursor(cx);
+                    let new_line_text = format!("\n{}", indent);
+                    self.replace_text_in_range_silent(None, &new_line_text, window, cx);
+                    self.pause_blink_cursor(cx);
+                    // Don't emit PressEnter event for Shift+Enter when submit_on_enter is enabled
+                    return;
+                } else {
+                    // Enter: Just emit event (for submit), don't insert newline
+                    cx.propagate();
+                }
+            } else {
+                // Traditional behavior: both Enter and Shift+Enter insert newline
+                let indent = if self.mode.is_code_editor() {
+                    self.indent_of_next_line()
+                } else {
+                    "".to_string()
+                };
+
+                let new_line_text = format!("\n{}", indent);
+                self.replace_text_in_range_silent(None, &new_line_text, window, cx);
+                self.pause_blink_cursor(cx);
+            }
         } else {
             // Single line input, just emit the event (e.g.: In a modal dialog to confirm).
             cx.propagate();
