@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ops::Range, rc::Rc, time::Duration};
+use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     actions::{Cancel, SelectDown, SelectUp},
