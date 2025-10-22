@@ -1610,29 +1610,27 @@ impl RenderOnce for Table {
                             .child((self.render_context.render_empty)(window, cx)),
                     )
                 } else {
-                    this.child(
-                        h_flex().id("table-body").flex_grow().size_full().child(
+                    this.child(h_flex().id("table-body").flex_grow().size_full().child(
+                        self.state.update(cx, |_, cx| {
                             uniform_list("table-uniform-list", render_rows_count, {
-                                let state = self.state.clone();
                                 let render_context = self.render_context.clone();
                                 let size = self.size;
                                 let stripe = self.stripe;
-                                move |visible_range: Range<usize>, window, cx| {
-                                    // We must calculate the col sizes here, because the col sizes
-                                    // need render_th first, then that method will set the bounds of each col.
-                                    let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-                                        state
-                                            .read(cx)
-                                            .col_groups
-                                            .iter()
-                                            .skip(left_columns_count)
-                                            .map(|col| col.bounds.size)
-                                            .collect(),
-                                    );
+                                cx.processor(
+                                    move |state, visible_range: Range<usize>, window, cx| {
+                                        // We must calculate the col sizes here, because the col sizes
+                                        // need render_th first, then that method will set the bounds of each col.
+                                        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
+                                            state
+                                                .col_groups
+                                                .iter()
+                                                .skip(left_columns_count)
+                                                .map(|col| col.bounds.size)
+                                                .collect(),
+                                        );
 
-                                    dbg!("col_groups: {:?}", &col_sizes);
+                                        dbg!("col_groups: {:?}", &col_sizes);
 
-                                    state.update(cx, |state, cx| {
                                         state.load_more_if_need(
                                             rows_count,
                                             visible_range.end,
@@ -1682,16 +1680,16 @@ impl RenderOnce for Table {
                                         });
 
                                         items
-                                    })
-                                }
+                                    },
+                                )
                             })
                             .flex_grow()
                             .size_full()
                             .with_sizing_behavior(ListSizingBehavior::Auto)
                             .track_scroll(vertical_scroll_handle)
-                            .into_any_element(),
-                        ),
-                    )
+                            .into_any_element()
+                        }),
+                    ))
                 }
             });
 
