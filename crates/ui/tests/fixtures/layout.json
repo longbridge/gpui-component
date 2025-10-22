@@ -73,7 +73,7 @@
             "children": [],
             "info": {
               "panel": {
-                "story_klass": "TableStory"
+                "story_klass": "DataTableStory"
               }
             }
           },

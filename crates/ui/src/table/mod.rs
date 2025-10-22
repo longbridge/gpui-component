@@ -26,14 +26,14 @@ pub use delegate::*;
 
 actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
+const CONTEXT: &str = "DataTable";
 pub(crate) fn init(cx: &mut App) {
-    let context = Some("Table");
     cx.bind_keys([
-        KeyBinding::new("escape", Cancel, context),
-        KeyBinding::new("up", SelectUp, context),
-        KeyBinding::new("down", SelectDown, context),
-        KeyBinding::new("left", SelectPrevColumn, context),
-        KeyBinding::new("right", SelectNextColumn, context),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("left", SelectPrevColumn, Some(CONTEXT)),
+        KeyBinding::new("right", SelectNextColumn, Some(CONTEXT)),
     ]);
 }
 
@@ -75,7 +75,7 @@ impl VisibleRangeState {
     }
 }
 
-pub struct Table<D: TableDelegate> {
+pub struct DataTable<D: TableDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
     /// The bounds of the table container.
@@ -129,7 +129,7 @@ pub struct Table<D: TableDelegate> {
     _load_more_task: Task<()>,
 }
 
-impl<D> Table<D>
+impl<D> DataTable<D>
 where
     D: TableDelegate,
 {
@@ -1293,7 +1293,7 @@ where
     }
 }
 
-impl<D> Sizable for Table<D>
+impl<D> Sizable for DataTable<D>
 where
     D: TableDelegate,
 {
@@ -1302,7 +1302,7 @@ where
         self
     }
 }
-impl<D> Focusable for Table<D>
+impl<D> Focusable for DataTable<D>
 where
     D: TableDelegate,
 {
@@ -1310,9 +1310,9 @@ where
         self.focus_handle.clone()
     }
 }
-impl<D> EventEmitter<TableEvent> for Table<D> where D: TableDelegate {}
+impl<D> EventEmitter<TableEvent> for DataTable<D> where D: TableDelegate {}
 
-impl<D> Render for Table<D>
+impl<D> Render for DataTable<D>
 where
     D: TableDelegate,
 {
@@ -1338,8 +1338,8 @@ where
         };
 
         let inner_table = v_flex()
-            .key_context("Table")
-            .id("table")
+            .key_context(CONTEXT)
+            .id("data-table")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::action_cancel))
             .on_action(cx.listener(Self::action_select_next))

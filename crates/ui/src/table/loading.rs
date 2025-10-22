@@ -2,16 +2,16 @@ use crate::{h_flex, skeleton::Skeleton, v_flex, ActiveTheme, Size};
 use gpui::{prelude::FluentBuilder as _, IntoElement, ParentElement as _, RenderOnce, Styled};
 
 #[derive(IntoElement)]
-pub struct Loading {
+pub(super) struct Loading {
     size: Size,
 }
 
 impl Loading {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self { size: Size::Medium }
     }
 
-    pub fn size(mut self, size: Size) -> Self {
+    pub(super) fn size(mut self, size: Size) -> Self {
         self.size = size;
         self
     }

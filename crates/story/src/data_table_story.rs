@@ -6,11 +6,12 @@ use std::{
 
 use fake::Fake;
 use gpui::{
-    div, prelude::FluentBuilder as _, Action, AnyElement, App, AppContext, ClickEvent, Context,
-    Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, TextAlign, Timer, Window,
+    Action, AnyElement, App, AppContext, ClickEvent, Context, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, TextAlign, Timer, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
+    ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
     button::Button,
     checkbox::Checkbox,
     h_flex,
@@ -18,8 +19,8 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
-    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
+    table::{Column, ColumnFixed, ColumnSort, DataTable, TableDelegate, TableEvent},
+    v_flex,
 };
 use serde::{Deserialize, Serialize};
 
@@ -269,7 +270,12 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_percent(&self, col: &Column, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
+    fn render_percent(
+        &self,
+        col: &Column,
+        val: f64,
+        cx: &mut Context<DataTable<Self>>,
+    ) -> AnyElement {
         let right_num = ((val - val.floor()) * 1000.).floor() as i32;
 
         div()
@@ -297,7 +303,7 @@ impl StockTableDelegate {
         &self,
         col: &Column,
         val: f64,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> AnyElement {
         let this = div()
             .h_full()
@@ -341,7 +347,7 @@ impl TableDelegate for StockTableDelegate {
         &self,
         col_ix: usize,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<DataTable<Self>>,
     ) -> impl IntoElement {
         let col = self.columns.get(col_ix).unwrap();
 
@@ -377,7 +383,7 @@ impl TableDelegate for StockTableDelegate {
         &self,
         row_ix: usize,
         _: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> gpui::Stateful<gpui::Div> {
         div()
             .id(row_ix)
@@ -402,7 +408,7 @@ impl TableDelegate for StockTableDelegate {
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
         let col = self.columns.get(col_ix).unwrap();
@@ -500,7 +506,7 @@ impl TableDelegate for StockTableDelegate {
         col_ix: usize,
         to_ix: usize,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<DataTable<Self>>,
     ) {
         let col = self.columns.remove(col_ix);
         self.columns.insert(to_ix, col);
@@ -511,7 +517,7 @@ impl TableDelegate for StockTableDelegate {
         col_ix: usize,
         sort: ColumnSort,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<DataTable<Self>>,
     ) {
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
@@ -547,7 +553,7 @@ impl TableDelegate for StockTableDelegate {
         150
     }
 
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<DataTable<Self>>) {
         self.loading = true;
 
         cx.spawn(async move |view, cx| {
@@ -569,7 +575,7 @@ impl TableDelegate for StockTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<DataTable<Self>>,
     ) {
         self.visible_rows = visible_range;
     }
@@ -578,23 +584,23 @@ impl TableDelegate for StockTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<DataTable<Self>>,
     ) {
         self.visible_cols = visible_range;
     }
 }
 
-pub struct TableStory {
-    table: Entity<Table<StockTableDelegate>>,
+pub struct DataTableStory {
+    table: Entity<DataTable<StockTableDelegate>>,
     num_stocks_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
     size: Size,
 }
 
-impl super::Story for TableStory {
+impl super::Story for DataTableStory {
     fn title() -> &'static str {
-        "Table"
+        "DataTable"
     }
 
     fn description() -> &'static str {
@@ -610,13 +616,13 @@ impl super::Story for TableStory {
     }
 }
 
-impl Focusable for TableStory {
+impl Focusable for DataTableStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
         self.table.focus_handle(cx)
     }
 }
 
-impl TableStory {
+impl DataTableStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -632,7 +638,7 @@ impl TableStory {
         });
 
         let delegate = StockTableDelegate::new(5000);
-        let table = cx.new(|cx| Table::new(delegate, window, cx));
+        let table = cx.new(|cx| DataTable::new(delegate, window, cx));
 
         cx.subscribe_in(&table, window, Self::on_table_event)
             .detach();
@@ -769,7 +775,7 @@ impl TableStory {
 
     fn on_table_event(
         &mut self,
-        _: &Entity<Table<StockTableDelegate>>,
+        _: &Entity<DataTable<StockTableDelegate>>,
         event: &TableEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
@@ -788,7 +794,7 @@ impl TableStory {
     }
 }
 
-impl Render for TableStory {
+impl Render for DataTableStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let table = &self.table.read(cx);
         let delegate = table.delegate();

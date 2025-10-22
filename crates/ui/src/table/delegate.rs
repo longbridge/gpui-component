@@ -8,7 +8,7 @@ use gpui::{
 use crate::{
     h_flex,
     popup_menu::PopupMenu,
-    table::{loading::Loading, Column, ColumnSort, Table},
+    table::{loading::Loading, Column, ColumnSort, DataTable},
     ActiveTheme as _, Icon, IconName, Size,
 };
 
@@ -30,7 +30,7 @@ pub trait TableDelegate: Sized + 'static {
         col_ix: usize,
         sort: ColumnSort,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) {
     }
 
@@ -39,7 +39,7 @@ pub trait TableDelegate: Sized + 'static {
         &self,
         col_ix: usize,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> impl IntoElement {
         div()
             .size_full()
@@ -51,7 +51,7 @@ pub trait TableDelegate: Sized + 'static {
         &self,
         row_ix: usize,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> Stateful<Div> {
         h_flex().id(("row", row_ix))
     }
@@ -67,7 +67,7 @@ pub trait TableDelegate: Sized + 'static {
         row_ix: usize,
         col_ix: usize,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> impl IntoElement;
 
     /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
@@ -76,12 +76,16 @@ pub trait TableDelegate: Sized + 'static {
         col_ix: usize,
         to_ix: usize,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) {
     }
 
     /// Return a Element to show when table is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_empty(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<DataTable<Self>>,
+    ) -> impl IntoElement {
         h_flex()
             .size_full()
             .justify_center()
@@ -102,7 +106,7 @@ pub trait TableDelegate: Sized + 'static {
         &self,
         size: Size,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> impl IntoElement {
         Loading::new().size(size)
     }
@@ -129,13 +133,13 @@ pub trait TableDelegate: Sized + 'static {
     ///
     /// This is always called when the table is near the bottom,
     /// so you must check if there is more data to load or lock the loading state.
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) {}
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<DataTable<Self>>) {}
 
     /// Render the last empty column, default to empty.
     fn render_last_empty_col(
         &mut self,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) -> impl IntoElement {
         h_flex().w_3().h_full().flex_shrink_0()
     }
@@ -150,7 +154,7 @@ pub trait TableDelegate: Sized + 'static {
         &mut self,
         visible_range: Range<usize>,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) {
     }
 
@@ -164,7 +168,7 @@ pub trait TableDelegate: Sized + 'static {
         &mut self,
         visible_range: Range<usize>,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<DataTable<Self>>,
     ) {
     }
 }

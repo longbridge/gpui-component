@@ -10,6 +10,7 @@ mod chart_story;
 mod checkbox_story;
 mod clipboard_story;
 mod color_picker_story;
+mod data_table_story;
 mod date_picker_story;
 mod description_list_story;
 mod drawer_story;
@@ -37,7 +38,6 @@ mod sidebar_story;
 mod skeleton_story;
 mod slider_story;
 mod switch_story;
-mod table_story;
 mod tabs_story;
 mod tag_story;
 mod textarea_story;
@@ -69,6 +69,7 @@ pub use chart_story::ChartStory;
 pub use checkbox_story::CheckboxStory;
 pub use clipboard_story::ClipboardStory;
 pub use color_picker_story::ColorPickerStory;
+pub use data_table_story::DataTableStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
 pub use drawer_story::DrawerStory;
@@ -97,7 +98,6 @@ pub use sidebar_story::SidebarStory;
 pub use skeleton_story::SkeletonStory;
 pub use slider_story::SliderStory;
 pub use switch_story::SwitchStory;
-pub use table_story::TableStory;
 pub use tabs_story::TabsStory;
 pub use tag_story::TagStory;
 pub use textarea_story::TextareaStory;
@@ -671,7 +671,7 @@ impl StoryState {
             "ResizableStory" => story!(ResizableStory),
             "ScrollableStory" => story!(ScrollableStory),
             "SwitchStory" => story!(SwitchStory),
-            "TableStory" => story!(TableStory),
+            "DataTableStory" => story!(DataTableStory),
             "LabelStory" => story!(LabelStory),
             "TooltipStory" => story!(TooltipStory),
             "WebViewStory" => story!(WebViewStory),

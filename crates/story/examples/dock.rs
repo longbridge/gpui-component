@@ -1,19 +1,19 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
+    IconName, Root, Sizable,
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
     popup_menu::PopupMenuExt,
-    IconName, Root, Sizable,
 };
 
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
-    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
-    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory,
+    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DataTableStory,
+    DropdownStory, FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory,
     NotificationStory, Open, PopoverStory, ProgressStory, ResizableStory, ScrollableStory,
-    SidebarStory, StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
+    SidebarStory, StoryContainer, SwitchStory, TooltipStory, WebViewStory,
 };
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -351,7 +351,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<DataTableStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
@@ -439,7 +439,7 @@ impl StoryWorkspace {
             5 => Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
             6 => Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
             7 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
-            8 => Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
+            8 => Arc::new(StoryContainer::panel::<DataTableStory>(window, cx)),
             9 => Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
             10 => Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
             11 => Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
