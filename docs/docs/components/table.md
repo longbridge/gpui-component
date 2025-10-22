@@ -10,63 +10,66 @@ A comprehensive data table component designed for handling large datasets with h
 ## Import
 
 ```rust
-use gpui_component::table::{Table, TableDelegate, Column, ColumnSort, ColumnFixed, TableEvent};
+use gpui_component::table::{Table, TableState, Column, ColumnSort, ColumnFixed, TableEvent};
 ```
+
+- [Table]: The table UI element.
+- [TableState]: State management for the table to hold selected rows, column widths, scroll positions, etc.
 
 ## Usage
 
 ### Basic Table
 
-To create a table, you need to implement the `TableDelegate` trait and provide column definitions:
+To create a table, you need use [TableState] to manage the state and use [Table] to render the table.
 
 ```rust
 use std::ops::Range;
 use gpui::{App, Context, Window, IntoElement};
-use gpui_component::table::{Table, TableDelegate, Column, ColumnSort};
+use gpui_component::table::{Table, TableState, Column, ColumnSort};
 
-struct MyData {
+struct User {
     id: usize,
     name: String,
     age: u32,
     email: String,
 }
 
-struct MyTableDelegate {
-    data: Vec<MyData>,
+struct UserList {
+    table: Entity<TableState>,
     columns: Vec<Column>,
+    users: Vec<User>,
 }
 
-impl MyTableDelegate {
-    fn new() -> Self {
+impl UserList {
+    fn new(window: &mut Window, cx: &mut App) -> Self {
+        let columns = vec![
+            Column::new("id", "ID").width(60.),
+            Column::new("name", "Name").width(150.).sortable(),
+            Column::new("age", "Age").width(80.).sortable(),
+            Column::new("email", "Email").width(200.),
+        ];
+
+        let users = vec![
+            User { id: 1, name: "John".to_string(), age: 30, email: "john@example.com".to_string() },
+            User { id: 2, name: "Jane".to_string(), age: 25, email: "jane@example.com".to_string() },
+        ];
+
+        let table = cx.new(|cx| {
+            TableState::new(columns.clone, users.len(), window, cx)
+                .col_movable(true)
+                .sortable(true)
+                .row_selectable(true)
+                .col_selectable(true)
+        });
+
         Self {
-            data: vec![
-                MyData { id: 1, name: "John".to_string(), age: 30, email: "john@example.com".to_string() },
-                MyData { id: 2, name: "Jane".to_string(), age: 25, email: "jane@example.com".to_string() },
-            ],
-            columns: vec![
-                Column::new("id", "ID").width(60.),
-                Column::new("name", "Name").width(150.).sortable(),
-                Column::new("age", "Age").width(80.).sortable(),
-                Column::new("email", "Email").width(200.),
-            ],
+            table,
+            columns,
+            users:
         }
     }
-}
 
-impl TableDelegate for MyTableDelegate {
-    fn columns_count(&self, _: &App) -> usize {
-        self.columns.len()
-    }
-
-    fn rows_count(&self, _: &App) -> usize {
-        self.data.len()
-    }
-
-    fn column(&self, col_ix: usize, _: &App) -> &Column {
-        &self.columns[col_ix]
-    }
-
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -80,9 +83,27 @@ impl TableDelegate for MyTableDelegate {
     }
 }
 
-// Create the table
-let delegate = MyTableDelegate::new();
-let table = cx.new(|cx| Table::new(delegate, window, cx));
+impl Render for UserList {
+    fn render(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .child(
+                Table::new(&self.table)
+                    .stripe(true)
+                    .cell(cx.processor(|this, (row_ix, col_ix), window, cx| {
+                        let row = &this.data[row_ix];
+                        let col = &this.columns[col_ix];
+
+                        match col.key.as_ref() {
+                            "id" => row.id.to_string(),
+                            "name" => row.name.clone(),
+                            "age" => row.age.to_string(),
+                            "email" => row.email.clone(),
+                            _ => "".to_string(),
+                        }.into_any_element()
+                    }))
+            )
+    }
+}
 ```
 
 ### Column Configuration
@@ -127,45 +148,14 @@ Column::new("modified", "Modified")
     .descending() // Default descending
 ```
 
-### Virtual Scrolling for Large Datasets
-
-The table automatically handles virtual scrolling for optimal performance:
-
-```rust
-struct LargeDataDelegate {
-    data: Vec<Record>, // Could be 10,000+ items
-    columns: Vec<Column>,
-}
-
-impl TableDelegate for LargeDataDelegate {
-    fn rows_count(&self, _: &App) -> usize {
-        self.data.len() // No performance impact regardless of size
-    }
-
-    // Only visible rows are rendered
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<Table<Self>>) -> impl IntoElement {
-        // This is only called for visible rows
-        // Efficiently render cell content
-        let row = &self.data[row_ix];
-        format_cell_data(row, col_ix)
-    }
-
-    // Track visible range for optimizations
-    fn visible_rows_changed(&mut self, visible_range: Range<usize>, _: &mut Window, _: &mut Context<Table<Self>>) {
-        // Only update data for visible rows if needed
-        // This is called when user scrolls
-    }
-}
-```
-
 ### Sorting Implementation
 
 Implement sorting in your delegate:
 
 ```rust
-impl TableDelegate for MyTableDelegate {
-    fn perform_sort(&mut self, col_ix: usize, sort: ColumnSort, _: &mut Window, _: &mut Context<Table<Self>>) {
-        let col = &self.columns[col_ix];
+Table::new(&self.table)
+    .on_sort(cx.processor(|this, (col_ix, sort), window, cx| {
+        let col = &this.columns[col_ix];
 
         match col.key.as_ref() {
             "name" => {
@@ -187,17 +177,16 @@ impl TableDelegate for MyTableDelegate {
             }
             _ => {}
         }
-    }
-}
+    }))
 ```
 
-### Row Selection
+### Custom Row Rendering
 
-Handle row selection and interaction:
+Use `row` method for custom row elements:
 
 ```rust
-impl TableDelegate for MyTableDelegate {
-    fn render_tr(&self, row_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> gpui::Stateful<gpui::Div> {
+Table::new(&self.table)
+    .row(cx.processor(|this, row_ix, window, cx| {
         div()
             .id(row_ix)
             .on_click(cx.listener(move |_, ev, _, _| {
@@ -207,16 +196,21 @@ impl TableDelegate for MyTableDelegate {
                     println!("Selected row {}", row_ix);
                 }
             }))
-    }
+    }))
+```
 
-    // Context menu for right-click
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &Window, _: &App) -> PopupMenu {
-        let row = &self.data[row_ix];
+### Context Menu
+
+Use `context_menu` method for row actions to build context menus:
+
+```rust
+Table::new(&self.table)
+    .context_menu(|(row_ix, menu), _, _| {
         menu.menu(format!("Edit {}", row.name), Box::new(EditRowAction(row_ix)))
             .menu("Delete", Box::new(DeleteRowAction(row_ix)))
             .separator()
             .menu("Duplicate", Box::new(DuplicateRowAction(row_ix)))
-    }
+    })
 }
 
 // Handle table events
@@ -242,8 +236,9 @@ cx.subscribe_in(&table, window, |view, table, event, _, cx| {
 Create rich cell content with custom rendering:
 
 ```rust
-impl TableDelegate for MyTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+Table::new(&self.table)
+    .stripe(true)
+    .cell(cx.processor(|this, (row_ix, col_ix), window, cx| {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -306,8 +301,7 @@ impl TableDelegate for MyTableDelegate {
             }
             _ => row.get_field_value(col.key.as_ref()).into_any_element(),
         }
-    }
-}
+    }))
 ```
 
 ### Column Resizing and Moving
@@ -317,7 +311,7 @@ Enable dynamic column management:
 ```rust
 // Configure table features
 let table = cx.new(|cx| {
-    Table::new(delegate, window, cx)
+    TableState::new(columns, rows_count, window, cx)
         .col_resizable(true)  // Allow column resizing
         .col_movable(true)    // Allow column reordering
         .sortable(true)       // Enable sorting
@@ -346,16 +340,10 @@ cx.subscribe_in(&table, window, |view, table, event, _, cx| {
 Implement loading more data as user scrolls:
 
 ```rust
-impl TableDelegate for MyTableDelegate {
-    fn is_eof(&self, _: &App) -> bool {
-        !self.has_more_data
-    }
-
-    fn load_more_threshold(&self) -> usize {
-        50 // Load more when 50 rows from bottom
-    }
-
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+Table::new(&self.table)
+    // Set loading state to show skeleton.
+    .loading(self.loading)
+    .on_load_more(cx.processor(|this, _, window, cx| {
         if self.loading {
             return; // Prevent multiple loads
         }
@@ -375,11 +363,7 @@ impl TableDelegate for MyTableDelegate {
                 });
             })
         }).detach();
-    }
-
-    fn loading(&self, _: &App) -> bool {
-        self.loading
-    }
+    }))
 }
 ```
 
@@ -388,177 +372,10 @@ impl TableDelegate for MyTableDelegate {
 Customize table appearance:
 
 ```rust
-let table = cx.new(|cx| {
-    Table::new(delegate, window, cx)
-        .stripe(true)           // Alternating row colors
-        .border(true)           // Border around table
-        .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
-});
-
-// Set table size
-table.update(cx, |table, cx| {
-    table.set_size(Size::Small, cx);
-});
-```
-
-## API Reference
-
-### Table
-
-| Method                      | Description                                   |
-| --------------------------- | --------------------------------------------- |
-| `new(delegate, window, cx)` | Create a new table with delegate              |
-| `stripe(bool)`              | Enable alternating row colors                 |
-| `border(bool)`              | Show table border                             |
-| `loop_selection(bool)`      | Enable looping selection with keyboard        |
-| `col_movable(bool)`         | Allow column reordering                       |
-| `col_resizable(bool)`       | Allow column resizing                         |
-| `sortable(bool)`            | Enable column sorting                         |
-| `row_selectable(bool)`      | Allow row selection                           |
-| `col_selectable(bool)`      | Allow column selection                        |
-| `col_fixed(bool)`           | Enable fixed columns feature                  |
-| `scrollbar_visible(v, h)`   | Set scrollbar visibility                      |
-| `set_size(size, cx)`        | Set table size (Small, Medium, Large, XSmall) |
-| `scroll_to_row(ix, cx)`     | Scroll to specific row                        |
-| `scroll_to_col(ix, cx)`     | Scroll to specific column                     |
-| `set_selected_row(ix, cx)`  | Select specific row                           |
-| `set_selected_col(ix, cx)`  | Select specific column                        |
-| `clear_selection(cx)`       | Clear all selections                          |
-| `refresh(cx)`               | Refresh table after data changes              |
-
-### Column
-
-| Method                     | Description                             |
-| -------------------------- | --------------------------------------- |
-| `new(key, name)`           | Create column with key and display name |
-| `width(pixels)`            | Set column width                        |
-| `sortable()`               | Enable sorting with default order       |
-| `ascending()`              | Set default ascending sort              |
-| `descending()`             | Set default descending sort             |
-| `text_right()`             | Right-align column content              |
-| `fixed(ColumnFixed::Left)` | Pin column to left side                 |
-| `fixed_left()`             | Pin column to left side (shorthand)     |
-| `resizable(bool)`          | Allow column resizing                   |
-| `movable(bool)`            | Allow column moving                     |
-| `selectable(bool)`         | Allow column selection                  |
-| `paddings(edges)`          | Set custom cell padding                 |
-| `p_0()`                    | Remove cell padding                     |
-
-### TableDelegate
-
-Required methods to implement:
-
-| Method                                         | Description              |
-| ---------------------------------------------- | ------------------------ |
-| `columns_count(&self, cx)`                     | Return number of columns |
-| `rows_count(&self, cx)`                        | Return number of rows    |
-| `column(&self, col_ix, cx)`                    | Get column definition    |
-| `render_td(&self, row_ix, col_ix, window, cx)` | Render table cell        |
-
-Optional methods:
-
-| Method                                                  | Description                      |
-| ------------------------------------------------------- | -------------------------------- |
-| `render_th(&self, col_ix, window, cx)`                  | Custom header cell rendering     |
-| `render_tr(&self, row_ix, window, cx)`                  | Custom row rendering             |
-| `render_empty(&self, window, cx)`                       | Empty state content              |
-| `render_loading(&self, size, window, cx)`               | Loading state content            |
-| `context_menu(&self, row_ix, menu, window, cx)`         | Row context menu                 |
-| `perform_sort(&mut self, col_ix, sort, window, cx)`     | Handle column sorting            |
-| `move_column(&mut self, col_ix, to_ix, window, cx)`     | Handle column reordering         |
-| `load_more(&mut self, window, cx)`                      | Load more data                   |
-| `loading(&self, cx)`                                    | Return loading state             |
-| `is_eof(&self, cx)`                                     | Return if no more data           |
-| `load_more_threshold(&self)`                            | Rows from bottom to trigger load |
-| `visible_rows_changed(&mut self, range, window, cx)`    | Visible range changed            |
-| `visible_columns_changed(&mut self, range, window, cx)` | Visible columns changed          |
-
-### TableEvent
-
-Events emitted by the table:
-
-| Event                              | Description             |
-| ---------------------------------- | ----------------------- |
-| `SelectRow(usize)`                 | Row selected            |
-| `DoubleClickedRow(usize)`          | Row double-clicked      |
-| `SelectColumn(usize)`              | Column selected         |
-| `ColumnWidthsChanged(Vec<Pixels>)` | Column widths changed   |
-| `MoveColumn(usize, usize)`         | Column moved (from, to) |
-
-### ColumnSort
-
-| Value        | Description        |
-| ------------ | ------------------ |
-| `Default`    | No sorting applied |
-| `Ascending`  | Sort ascending     |
-| `Descending` | Sort descending    |
-
-## Examples
-
-### Financial Data Table
-
-```rust
-struct StockData {
-    symbol: String,
-    price: f64,
-    change: f64,
-    change_percent: f64,
-    volume: u64,
-}
-
-impl TableDelegate for StockTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
-        let stock = &self.stocks[row_ix];
-        let col = &self.columns[col_ix];
-
-        match col.key.as_ref() {
-            "symbol" => div().font_weight(FontWeight::BOLD).child(stock.symbol.clone()),
-            "price" => div().text_right().child(format!("${:.2}", stock.price)),
-            "change" => {
-                let color = if stock.change >= 0.0 { cx.theme().green } else { cx.theme().red };
-                div()
-                    .text_right()
-                    .text_color(color)
-                    .child(format!("{:+.2}", stock.change))
-            }
-            "change_percent" => {
-                let color = if stock.change_percent >= 0.0 { cx.theme().green } else { cx.theme().red };
-                div()
-                    .text_right()
-                    .text_color(color)
-                    .child(format!("{:+.1}%", stock.change_percent * 100.0))
-            }
-            "volume" => div().text_right().child(format!("{:,}", stock.volume)),
-            _ => div(),
-        }
-    }
-}
-```
-
-### User Management Table
-
-```rust
-struct UserTableDelegate {
-    users: Vec<User>,
-    columns: Vec<Column>,
-}
-
-impl UserTableDelegate {
-    fn new() -> Self {
-        Self {
-            users: Vec::new(),
-            columns: vec![
-                Column::new("avatar", "").width(50.).resizable(false).movable(false),
-                Column::new("name", "Name").width(150.).sortable().fixed_left(),
-                Column::new("email", "Email").width(200.).sortable(),
-                Column::new("role", "Role").width(100.).sortable(),
-                Column::new("status", "Status").width(100.),
-                Column::new("last_login", "Last Login").width(120.).sortable(),
-                Column::new("actions", "Actions").width(100.).resizable(false),
-            ],
-        }
-    }
-}
+Table::new(&self.table)
+    .stripe(true)           // Alternating row colors
+    .border(true)           // Border around table
+    .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
 ```
 
 ## Accessibility
@@ -575,3 +392,6 @@ impl UserTableDelegate {
 - Loading states announced to screen readers
 - Sort order changes announced
 - Row/column count announced
+
+[Table]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.Table.html
+[TableState]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.TableState.html
