@@ -33,6 +33,15 @@ const config: UserConfig = {
       {
         rel: "icon",
         href: "/gpui-component/logo.svg",
+        media: "(prefers-color-scheme: light)",
+      },
+    ],
+    [
+      "link",
+      {
+        rel: "icon",
+        href: "/gpui-component/logo-dark.svg",
+        media: "(prefers-color-scheme: dark)",
       },
     ],
   ],
@@ -40,7 +49,14 @@ const config: UserConfig = {
     plugins: [llmstxt(), tailwindcss()],
   },
   themeConfig: {
-    logo: "/logo.svg",
+    logo: {
+      light: "/logo.svg",
+      dark: "/logo-dark.svg",
+    },
+    footer: {
+      message:
+        "GPUI Component is an open source project under the Apache-2.0 License, developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.",
+    },
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: "Home", link: "/" },

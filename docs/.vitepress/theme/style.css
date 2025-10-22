@@ -41,7 +41,7 @@
   --sidebar-ring: oklch(0.708 0 0);
 
   --vp-c-bg: var(--background);
-  --vp-c-bg-alt: var(--secondary);
+  --vp-c-bg-alt: var(--secondary/75);
   --vp-c-bg-elv: var(--popover);
   --vp-c-bg-soft: var(--secondary);
 
@@ -95,11 +95,11 @@
 
 .vp-doc {
   [class*="language-"] pre {
-    @apply rounded-md py-3 text-base font-mono;
+    @apply rounded-md py-5 text-base font-mono;
   }
 
   [class*="language-"] pre code {
-    @apply px-3;
+    @apply px-5;
   }
 
   [class*="language-"] > button.copy {

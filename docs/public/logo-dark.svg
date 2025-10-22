@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<svg
+    width="22px"
+    height="21px"
+    viewBox="0 0 22 21"
+    version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+>
+    <title>gpui-component</title>
+    <g
+        id="Page-1"
+        stroke="none"
+        stroke-width="1"
+        fill="none"
+        fill-rule="evenodd"
+    >
+        <g
+            id="gpui-component"
+            transform="translate(11.394059, 10.636736) rotate(-180.000000) translate(-11.394059, -10.636736) translate(2.257359, 2.000000)"
+        >
+            <rect
+                id="Rectangle"
+                fill="#FFFFFF"
+                x="9.27339927"
+                y="0"
+                width="9"
+                height="6"
+                rx="1"
+            />
+            <rect
+                id="Rectangle"
+                stroke="#FFFFFF"
+                stroke-width="1.65"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                x="9.27339927"
+                y="9"
+                width="9"
+                height="8"
+            />
+            <rect
+                id="Rectangle-Copy"
+                stroke="#FFFFFF"
+                stroke-width="1.65"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                x="9.27339927"
+                y="9"
+                width="9"
+                height="8"
+            />
+            <rect
+                id="Rectangle"
+                stroke="#FFFFFF"
+                stroke-width="1.65"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                x="0.273399268"
+                y="0.5"
+                width="6"
+                height="8"
+            />
+            <rect
+                id="Rectangle"
+                stroke="#FFFFFF"
+                stroke-width="1.65"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                transform="translate(3.424871, 14.141421) rotate(-210.000000) translate(-3.424871, -14.141421) "
+                x="0.624871131"
+                y="12.1414214"
+                width="5.6"
+                height="4"
+                rx="2"
+            />
+        </g>
+    </g>
+</svg>
