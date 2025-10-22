@@ -1,9 +1,12 @@
 ---
+layout: home
 ---
 
 <script setup>
 import Contributors from './contributors.vue'
 </script>
+
+<div class="py-10"></div>
 
 # Contributors
 

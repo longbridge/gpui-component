@@ -41,10 +41,11 @@
   --sidebar-ring: oklch(0.708 0 0);
 
   --vp-c-bg: var(--background);
-  --vp-c-bg-alt: var(--secondary/75);
+  --vp-c-bg-alt: var(--sidebar);
   --vp-c-bg-elv: var(--popover);
   --vp-c-bg-soft: var(--secondary);
 
+  --vp-c-text-1: var(--foreground);
   --vp-c-brand-1: var(--primary);
   --vp-c-default-1: var(--secondary);
   --vp-c-default-2: var(--muted);
