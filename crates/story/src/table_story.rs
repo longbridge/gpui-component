@@ -18,7 +18,7 @@ use gpui_component::{
     indicator::Indicator,
     input::{InputEvent, InputState, TextInput},
     label::Label,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    popup_menu::PopupMenuExt,
     table::{Column, ColumnFixed, ColumnSort, Table, TableEvent, TableState},
     v_flex,
 };
@@ -324,18 +324,6 @@ impl StockTableDelegate {
         .into_any_element()
     }
 
-    fn columns_count(&self, _: &App) -> usize {
-        self.columns.len()
-    }
-
-    fn rows_count(&self, _: &App) -> usize {
-        self.stocks.len()
-    }
-
-    fn column(&self, col_ix: usize, _cx: &App) -> &Column {
-        &self.columns[col_ix]
-    }
-
     fn render_th(
         &self,
         col_ix: usize,
@@ -352,40 +340,6 @@ impl StockTableDelegate {
             .when(col.align == TextAlign::Right, |this| {
                 this.h_flex().w_full().justify_end()
             })
-    }
-
-    fn context_menu(
-        &self,
-        row_ix: usize,
-        menu: PopupMenu,
-        _window: &Window,
-        _cx: &App,
-    ) -> PopupMenu {
-        menu.menu(
-            format!("Selected Row: {}", row_ix),
-            Box::new(OpenDetail(row_ix)),
-        )
-        .separator()
-        .menu("Size Large", Box::new(ChangeSize(Size::Large)))
-        .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
-        .menu("Size Small", Box::new(ChangeSize(Size::Small)))
-        .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
-    }
-
-    fn render_tr(
-        &self,
-        row_ix: usize,
-        _: &mut Window,
-        cx: &mut Context<TableStory>,
-    ) -> gpui::Stateful<gpui::Div> {
-        div()
-            .id(row_ix)
-            .on_click(cx.listener(|_, ev: &ClickEvent, _, _| {
-                println!(
-                    "You have clicked row with secondary: {}",
-                    ev.modifiers().secondary()
-                )
-            }))
     }
 
     /// NOTE: Performance metrics
@@ -532,14 +486,6 @@ impl StockTableDelegate {
                 _ => {}
             }
         }
-    }
-
-    fn loading(&self, _: &App) -> bool {
-        self.full_loading
-    }
-
-    fn is_eof(&self, _: &App) -> bool {
-        return !self.loading && !self.eof;
     }
 
     fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableStory>) {
@@ -904,26 +850,7 @@ impl Render for TableStory {
                                     table.scroll_to_row(table.rows_count() - 1, cx);
                                 })
                             })),
-                    ), // .child(
-                       //     Button::new("scroll-first-col")
-                       //         .child("Scroll to First Column")
-                       //         .small()
-                       //         .on_click(cx.listener(|this, _, window, cx| {
-                       //             this.table.update(cx, |table, cx| {
-                       //                 table.scroll_to_col(0, cx);
-                       //             })
-                       //         })),
-                       // )
-                       // .child(
-                       //     Button::new("scroll-last-col")
-                       //         .child("Scroll to Last Column")
-                       //         .small()
-                       //         .on_click(cx.listener(|this, _, window, cx| {
-                       //             this.table.update(cx, |table, cx| {
-                       //                 table.scroll_to_col(table.delegate().columns_count(cx), cx);
-                       //             })
-                       //         })),
-                       // ),
+                    ),
             )
             .child(
                 h_flex().items_center().gap_2().child(
@@ -966,6 +893,7 @@ impl Render for TableStory {
                 Table::new(&self.table)
                     .stripe(self.stripe)
                     .with_size(self.size)
+                    .loading(self.delegate.full_loading)
                     .head(cx.processor(|this, col_ix, window, cx| {
                         this.delegate
                             .render_th(col_ix, window, cx)
@@ -980,14 +908,32 @@ impl Render for TableStory {
                             .child("No data available")
                             .into_any_element()
                     })
-                    .row(cx.processor(|this, row_ix, window, cx| {
-                        this.delegate.render_tr(row_ix, window, cx)
+                    .row(cx.processor(|_, row_ix, _, cx| {
+                        div()
+                            .id(row_ix)
+                            .on_click(cx.listener(|_, ev: &ClickEvent, _, _| {
+                                println!(
+                                    "You have clicked row with secondary: {}",
+                                    ev.modifiers().secondary()
+                                )
+                            }))
                     }))
                     .cell(cx.processor(|this, (row_ix, col_ix), window, cx| {
                         this.delegate
                             .render_td(row_ix, col_ix, window, cx)
                             .into_any_element()
                     }))
+                    .context_menu(|(row_ix, menu), _, _| {
+                        menu.menu(
+                            format!("Selected Row: {}", row_ix),
+                            Box::new(OpenDetail(row_ix)),
+                        )
+                        .separator()
+                        .menu("Size Large", Box::new(ChangeSize(Size::Large)))
+                        .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
+                        .menu("Size Small", Box::new(ChangeSize(Size::Small)))
+                        .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
+                    })
                     .on_move_column(cx.processor(|this, (origin_idx, target_idx), window, cx| {
                         this.delegate
                             .move_column(origin_idx, target_idx, window, cx)

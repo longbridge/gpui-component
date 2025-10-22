@@ -890,7 +890,6 @@ impl TableState {
                 let state = cx.entity();
                 canvas(
                     move |bounds, _, cx| {
-                        dbg!("col {} bounds: {:?}", col_ix, bounds);
                         state.update(cx, |state, _| state.col_groups[col_ix].bounds = bounds)
                     },
                     |_, _, _, _| {},
@@ -975,10 +974,11 @@ impl TableState {
                                     .iter()
                                     .skip(left_columns_count)
                                     .enumerate()
-                                    .map(|(col_ix, col)| {
-                                        (render_context.render_head)(
+                                    .map(|(col_ix, _)| {
+                                        self.render_th(
                                             left_columns_count + col_ix,
-                                            &col.column,
+                                            size,
+                                            &render_context,
                                             window,
                                             cx,
                                         )
@@ -1314,6 +1314,12 @@ impl Table {
         self
     }
 
+    /// Set to loading state.
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
+
     /// Set scrollbar visibility.
     pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
         self.scrollbar_visible = Edges {
@@ -1373,7 +1379,7 @@ impl Table {
     }
 
     /// Return a Element to show when table is loading, default is a Loading element.
-    pub fn loading<F, E>(mut self, f: F) -> Self
+    pub fn render_loading<F, E>(mut self, f: F) -> Self
     where
         F: Fn(Size, &mut Window, &mut App) -> AnyElement + 'static,
     {
@@ -1505,11 +1511,16 @@ impl Table {
 
     fn render_horizontal_scrollbar(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = self.state.read(cx);
+        let left = if state.fixed_left_cols_count() > 0 {
+            state.fixed_head_cols_bounds.size.width
+        } else {
+            px(0.)
+        };
 
         div()
             .occlude()
             .absolute()
-            .left(state.fixed_head_cols_bounds.size.width)
+            .left(left)
             .right_0()
             .bottom_0()
             .h(Scrollbar::width())
@@ -1539,31 +1550,16 @@ impl Focusable for TableState {
 
 impl RenderOnce for Table {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let col_fixed = self.state.read(cx).col_fixed;
-        let left_columns_count = self
-            .state
-            .read(cx)
-            .col_groups
-            .iter()
-            .filter(|col| col_fixed && col.column.fixed == Some(ColumnFixed::Left))
-            .count();
-
-        // Reset fixed head columns bounds, if no fixed columns are present
-        if left_columns_count == 0 {
-            self.state.update(cx, |state, _| {
-                state.fixed_head_cols_bounds = Bounds::default();
-            });
-        }
-
         let state = self.state.read(cx);
+
+        let loading = self.loading;
+        let left_columns_count = state.fixed_left_cols_count();
         let focus_handle = state.focus_handle.clone();
         let vertical_scroll_handle = state.vertical_scroll_handle.clone();
         let horizontal_scroll_handle = state.horizontal_scroll_handle.clone();
         let right_clicked_row = state.right_clicked_row;
-        let columns_count: usize = state.columns_count();
-
+        let columns_count = state.columns_count();
         let rows_count = state.rows_count;
-        let loading = self.loading;
         let extra_rows_count = state.calculate_extra_rows_needed(self.size, rows_count);
         let render_rows_count = if self.stripe {
             rows_count + extra_rows_count
@@ -1592,10 +1588,9 @@ impl RenderOnce for Table {
                 )
             }))
             .context_menu({
-                let state = self.state.clone();
                 let context_menu = self.render_context.context_menu.clone();
                 move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
-                    if let Some(row_ix) = state.read(cx).right_clicked_row {
+                    if let Some(row_ix) = right_clicked_row {
                         (context_menu)(row_ix, this, window, cx)
                     } else {
                         this
@@ -1629,8 +1624,6 @@ impl RenderOnce for Table {
                                                 .collect(),
                                         );
 
-                                        dbg!("col_groups: {:?}", &col_sizes);
-
                                         state.load_more_if_need(
                                             rows_count,
                                             visible_range.end,
@@ -1638,6 +1631,7 @@ impl RenderOnce for Table {
                                             window,
                                             cx,
                                         );
+
                                         state.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Vertical,
