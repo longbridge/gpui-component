@@ -1,4 +1,4 @@
-use std::{ops::Range, rc::Rc, time::Duration};
+use std::{marker::PhantomData, ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     actions::{Cancel, SelectDown, SelectUp},
@@ -6,23 +6,23 @@ use crate::{
     h_flex,
     popup_menu::PopupMenu,
     scroll::{ScrollableMask, Scrollbar, ScrollbarState},
+    table::loading::Loading,
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
     VirtualListScrollHandle,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
-    Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
-    Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
-    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
+    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AnyElement, App, AppContext,
+    Axis, Bounds, Context, Div, DragMoveEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Point, Render, RenderOnce, ScrollStrategy, ScrollWheelEvent,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle,
+    Window,
 };
 
 mod column;
-mod delegate;
 mod loading;
 
 pub use column::*;
-pub use delegate::*;
 
 actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
@@ -75,15 +75,28 @@ impl VisibleRangeState {
     }
 }
 
-pub struct Table<D: TableDelegate> {
+pub struct TableState {
     focus_handle: FocusHandle,
-    delegate: D,
+    col_groups: Vec<ColGroup>,
+    rows_count: usize,
+
     /// The bounds of the table container.
     bounds: Bounds<Pixels>,
     /// The bounds of the fixed head cols.
     fixed_head_cols_bounds: Bounds<Pixels>,
 
-    col_groups: Vec<ColGroup>,
+    pub vertical_scroll_handle: UniformListScrollHandle,
+    pub vertical_scroll_state: ScrollbarState,
+    pub horizontal_scroll_handle: VirtualListScrollHandle,
+    pub horizontal_scroll_state: ScrollbarState,
+
+    selected_row: Option<usize>,
+    selection_state: SelectionState,
+    right_clicked_row: Option<usize>,
+    selected_col: Option<usize>,
+
+    /// The column index that is being resized.
+    resizing_col: Option<usize>,
 
     /// Whether the table can loop selection, default is true.
     ///
@@ -102,26 +115,8 @@ pub struct Table<D: TableDelegate> {
     /// Enable/disable fixed columns feature.
     pub col_fixed: bool,
 
-    pub vertical_scroll_handle: UniformListScrollHandle,
-    pub vertical_scroll_state: ScrollbarState,
-    pub horizontal_scroll_handle: VirtualListScrollHandle,
-    pub horizontal_scroll_state: ScrollbarState,
+    load_more_threshold: usize,
 
-    scrollbar_visible: Edges<bool>,
-    selected_row: Option<usize>,
-    selection_state: SelectionState,
-    right_clicked_row: Option<usize>,
-    selected_col: Option<usize>,
-
-    /// The column index that is being resized.
-    resizing_col: Option<usize>,
-
-    /// Set stripe style of the table.
-    stripe: bool,
-    /// Set to use border style of the table.
-    border: bool,
-    /// The cell size of the table.
-    size: Size,
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
 
@@ -129,15 +124,17 @@ pub struct Table<D: TableDelegate> {
     _load_more_task: Task<()>,
 }
 
-impl<D> Table<D>
-where
-    D: TableDelegate,
-{
-    pub fn new(delegate: D, _: &mut Window, cx: &mut Context<Self>) -> Self {
-        let mut this = Self {
+impl TableState {
+    pub fn new(
+        columns: Vec<Column>,
+        rows_count: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState>,
+    ) -> Self {
+        Self {
             focus_handle: cx.focus_handle(),
-            delegate,
-            col_groups: Vec::new(),
+            col_groups: Self::prepare_col_groups(columns),
+            rows_count,
             horizontal_scroll_handle: VirtualListScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             vertical_scroll_state: ScrollbarState::default(),
@@ -149,10 +146,6 @@ where
             resizing_col: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
-            stripe: false,
-            border: true,
-            size: Size::default(),
-            scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
             loop_selection: true,
             col_selectable: true,
@@ -161,37 +154,15 @@ where
             col_movable: true,
             col_resizable: true,
             col_fixed: true,
+            load_more_threshold: 20,
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
-        };
-
-        this.prepare_col_groups(cx);
-        this
+        }
     }
 
-    pub fn delegate(&self) -> &D {
-        &self.delegate
-    }
-
-    pub fn delegate_mut(&mut self) -> &mut D {
-        &mut self.delegate
-    }
-
-    /// Set to use stripe style of the table, default to false.
-    pub fn stripe(mut self, stripe: bool) -> Self {
-        self.stripe = stripe;
-        self
-    }
-
-    pub fn set_stripe(&mut self, stripe: bool, cx: &mut Context<Self>) {
-        self.stripe = stripe;
+    pub fn set_columns(&mut self, columns: Vec<Column>, cx: &mut Context<Self>) {
+        self.col_groups = Self::prepare_col_groups(columns);
         cx.notify();
-    }
-
-    /// Set to use border style of the table, default to true.
-    pub fn border(mut self, border: bool) -> Self {
-        self.border = border;
-        self
     }
 
     /// Set to loop selection, default to true.
@@ -230,44 +201,34 @@ where
         self
     }
 
-    /// Set the size to the table.
-    pub fn set_size(&mut self, size: Size, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
-    }
-
-    /// Get the size of the table.
-    pub fn size(&self) -> Size {
-        self.size
-    }
-
-    /// Set scrollbar visibility.
-    pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
-        self.scrollbar_visible = Edges {
-            right: vertical,
-            bottom: horizontal,
-            ..Default::default()
-        };
+    /// Set a threshold value (n rows), of course, when scrolling to the bottom,
+    /// the remaining number of rows triggers `load_more`.
+    /// This should smaller than the total number of first load rows.
+    ///
+    /// Default: 20 rows
+    pub fn load_more_threshold(mut self, threshold: usize) -> Self {
+        self.load_more_threshold = threshold;
         self
     }
 
-    /// When we update columns or rows, we need to refresh the table.
-    pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        self.prepare_col_groups(cx);
+    pub fn set_rows_count(&mut self, rows_count: usize, cx: &mut Context<Self>) {
+        self.rows_count = rows_count;
+        cx.notify();
     }
 
-    fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
-        self.col_groups = (0..self.delegate.columns_count(cx))
-            .map(|col_ix| {
-                let column = self.delegate().column(col_ix, cx);
-                ColGroup {
-                    width: column.width,
-                    bounds: Bounds::default(),
-                    column: column.clone(),
-                }
+    pub fn rows_count(&self) -> usize {
+        self.rows_count
+    }
+
+    fn prepare_col_groups(columns: Vec<Column>) -> Vec<ColGroup> {
+        columns
+            .iter()
+            .map(|column| ColGroup {
+                width: column.width,
+                bounds: Bounds::default(),
+                column: column.clone(),
             })
-            .collect();
-        cx.notify();
+            .collect()
     }
 
     fn fixed_left_cols_count(&self) -> usize {
@@ -390,8 +351,12 @@ where
         cx.propagate();
     }
 
+    fn columns_count(&self) -> usize {
+        self.col_groups.len()
+    }
+
     fn action_select_prev(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
-        let rows_count = self.delegate.rows_count(cx);
+        let rows_count = self.rows_count;
         if rows_count < 1 {
             return;
         }
@@ -409,7 +374,7 @@ where
     }
 
     fn action_select_next(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
-        let rows_count = self.delegate.rows_count(cx);
+        let rows_count = self.rows_count;
         if rows_count < 1 {
             return;
         }
@@ -436,7 +401,7 @@ where
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
-        let columns_count = self.delegate.columns_count(cx);
+        let columns_count = self.columns_count();
         if selected_col > 0 {
             selected_col = selected_col.saturating_sub(1);
         } else {
@@ -454,7 +419,7 @@ where
         cx: &mut Context<Self>,
     ) {
         let mut selected_col = self.selected_col.unwrap_or(0);
-        if selected_col < self.delegate.columns_count(cx).saturating_sub(1) {
+        if selected_col < self.columns_count().saturating_sub(1) {
             selected_col += 1;
         } else {
             if self.loop_selection {
@@ -501,6 +466,7 @@ where
 
         const MIN_WIDTH: Pixels = px(10.0);
         const MAX_WIDTH: Pixels = px(1200.0);
+
         let Some(col_group) = self.col_groups.get_mut(ix) else {
             return;
         };
@@ -525,7 +491,13 @@ where
         cx.notify();
     }
 
-    fn perform_sort(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        on_sort: Rc<dyn Fn(usize, ColumnSort, &mut Window, &mut App)>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.sortable {
             return;
         }
@@ -552,7 +524,7 @@ where
             }
         }
 
-        self.delegate_mut().perform_sort(col_ix, sort, window, cx);
+        (on_sort)(col_ix, sort, window, cx);
 
         cx.notify();
     }
@@ -561,6 +533,7 @@ where
         &mut self,
         col_ix: usize,
         to_ix: usize,
+        on_move_column: Rc<dyn Fn(usize, usize, &mut Window, &mut App)>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -568,7 +541,7 @@ where
             return;
         }
 
-        self.delegate.move_column(col_ix, to_ix, window, cx);
+        (on_move_column)(col_ix, to_ix, window, cx);
         let col_group = self.col_groups.remove(col_ix);
         self.col_groups.insert(to_ix, col_group);
 
@@ -581,19 +554,16 @@ where
         &mut self,
         rows_count: usize,
         visible_end: usize,
+        load_more: Rc<dyn Fn(&mut Window, &mut App)>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let threshold = self.delegate.load_more_threshold();
+        let threshold = self.load_more_threshold;
         // Securely handle subtract logic to prevent attempt to subtract with overflow
         if visible_end >= rows_count.saturating_sub(threshold) {
-            if !self.delegate.is_eof(cx) {
-                return;
-            }
-
             self._load_more_task = cx.spawn_in(window, async move |view, window| {
-                _ = view.update_in(window, |view, window, cx| {
-                    view.delegate.load_more(window, cx);
+                _ = view.update_in(window, |_, window, cx| {
+                    (load_more)(window, cx);
                 });
             });
         }
@@ -603,6 +573,8 @@ where
         &mut self,
         visible_range: Range<usize>,
         axis: Axis,
+        on_visible_rows_changed: Rc<dyn Fn(Range<usize>, &mut Window, &mut App)>,
+        on_visible_columns_changed: Rc<dyn Fn(Range<usize>, &mut Window, &mut App)>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -616,20 +588,24 @@ where
             if self.visible_range.rows == visible_range {
                 return;
             }
-            self.delegate_mut()
-                .visible_rows_changed(visible_range.clone(), window, cx);
+            (on_visible_rows_changed)(visible_range.clone(), window, cx);
             self.visible_range.rows = visible_range;
         } else {
             if self.visible_range.cols == visible_range {
                 return;
             }
-            self.delegate_mut()
-                .visible_columns_changed(visible_range.clone(), window, cx);
+            (on_visible_columns_changed)(visible_range.clone(), window, cx);
             self.visible_range.cols = visible_range;
         }
     }
 
-    fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
+    fn render_cell(
+        &self,
+        col_ix: usize,
+        size: Size,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
             return div();
         };
@@ -643,7 +619,7 @@ where
             .flex_shrink_0()
             .overflow_hidden()
             .whitespace_nowrap()
-            .table_cell_size(self.size)
+            .table_cell_size(size)
             .map(|this| match col_padding {
                 Some(padding) => this
                     .pl(padding.left)
@@ -672,51 +648,6 @@ where
         } else {
             el
         }
-    }
-
-    fn render_vertical_scrollbar(
-        &self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        let state = self.vertical_scroll_state.clone();
-
-        Some(
-            div()
-                .occlude()
-                .absolute()
-                .top(self.size.table_row_height())
-                .right_0()
-                .bottom_0()
-                .w(Scrollbar::width())
-                .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
-                    cx.notify();
-                }))
-                .child(Scrollbar::uniform_scroll(&state, &self.vertical_scroll_handle).max_fps(60)),
-        )
-    }
-
-    fn render_horizontal_scrollbar(
-        &self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let state = self.horizontal_scroll_state.clone();
-
-        div()
-            .occlude()
-            .absolute()
-            .left(self.fixed_head_cols_bounds.size.width)
-            .right_0()
-            .bottom_0()
-            .h(Scrollbar::width())
-            .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
-                cx.notify();
-            }))
-            .child(Scrollbar::horizontal(
-                &state,
-                &self.horizontal_scroll_handle,
-            ))
     }
 
     fn render_resize_handle(
@@ -818,6 +749,7 @@ where
         &self,
         col_ix: usize,
         col_group: &ColGroup,
+        render_context: &TableRenderContext,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
@@ -835,6 +767,7 @@ where
             ColumnSort::Default => (IconName::ChevronsUpDown, false),
         };
 
+        let on_sort = render_context.on_sort.clone();
         Some(
             div()
                 .id(("icon-sort", col_ix))
@@ -846,9 +779,9 @@ where
                 })
                 .hover(|this| this.bg(cx.theme().secondary).opacity(7.))
                 .active(|this| this.bg(cx.theme().secondary_active).opacity(1.))
-                .on_click(
-                    cx.listener(move |table, _, window, cx| table.perform_sort(col_ix, window, cx)),
-                )
+                .on_click(cx.listener(move |table, _, window, cx| {
+                    table.perform_sort(col_ix, on_sort.clone(), window, cx)
+                }))
                 .child(
                     Icon::new(icon)
                         .size_3()
@@ -864,6 +797,8 @@ where
     fn render_th(
         &self,
         col_ix: usize,
+        size: Size,
+        render_context: &TableRenderContext,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -874,10 +809,12 @@ where
         let paddings = col_group.column.paddings;
         let name = col_group.column.name.clone();
 
+        let on_move_column = render_context.on_move_column.clone();
+
         h_flex()
             .h_full()
             .child(
-                self.render_cell(col_ix, window, cx)
+                self.render_cell(col_ix, size, window, cx)
                     .id(("col-header", col_ix))
                     .on_mouse_down(
                         MouseButton::Left,
@@ -890,14 +827,24 @@ where
                             .size_full()
                             .justify_between()
                             .items_center()
-                            .child(self.delegate.render_th(col_ix, window, cx))
+                            .child((render_context.render_head)(
+                                col_ix,
+                                &col_group.column,
+                                window,
+                                cx,
+                            ))
                             .when_some(paddings, |this, paddings| {
                                 // Leave right space for the sort icon, if this column have custom padding
-                                let offset_pr =
-                                    self.size.table_cell_padding().right - paddings.right;
+                                let offset_pr = size.table_cell_padding().right - paddings.right;
                                 this.pr(offset_pr.max(px(0.)))
                             })
-                            .children(self.render_sort_icon(col_ix, &col_group, window, cx)),
+                            .children(self.render_sort_icon(
+                                col_ix,
+                                &col_group,
+                                render_context,
+                                window,
+                                cx,
+                            )),
                     )
                     .when(movable, |this| {
                         this.on_drag(
@@ -925,7 +872,13 @@ where
                                     return;
                                 }
 
-                                table.move_column(drag.col_ix, col_ix, window, cx);
+                                table.move_column(
+                                    drag.col_ix,
+                                    col_ix,
+                                    on_move_column.clone(),
+                                    window,
+                                    cx,
+                                );
                             },
                         ))
                     }),
@@ -937,6 +890,7 @@ where
                 let view = cx.entity().clone();
                 canvas(
                     move |bounds, _, cx| {
+                        dbg!("col {} bounds: {:?}", col_ix, bounds);
                         view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds)
                     },
                     |_, _, _, _| {},
@@ -947,22 +901,19 @@ where
     }
 
     fn render_table_head(
-        &mut self,
+        &self,
         left_columns_count: usize,
+        size: Size,
+        render_context: TableRenderContext,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
-        // Reset fixed head columns bounds, if no fixed columns are present
-        if left_columns_count == 0 {
-            self.fixed_head_cols_bounds = Bounds::default();
-        }
-
         h_flex()
             .w_full()
-            .h(self.size.table_row_height())
+            .h(size.table_row_height())
             .flex_shrink_0()
             .border_b_1()
             .border_color(cx.theme().border)
@@ -980,7 +931,9 @@ where
                                 .iter()
                                 .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
                                 .enumerate()
-                                .map(|(col_ix, _)| self.render_th(col_ix, window, cx)),
+                                .map(|(col_ix, _)| {
+                                    self.render_th(col_ix, size, &render_context, window, cx)
+                                }),
                         )
                         .child(
                             // Fixed columns border
@@ -1023,11 +976,16 @@ where
                                     .iter()
                                     .skip(left_columns_count)
                                     .enumerate()
-                                    .map(|(col_ix, _)| {
-                                        self.render_th(left_columns_count + col_ix, window, cx)
+                                    .map(|(col_ix, col)| {
+                                        (render_context.render_head)(
+                                            left_columns_count + col_ix,
+                                            &col.column,
+                                            window,
+                                            cx,
+                                        )
                                     }),
                             )
-                            .child(self.delegate.render_last_empty_col(window, cx)),
+                            .child((render_context.render_last_empty_column)(window, cx)),
                     ),
             )
     }
@@ -1041,13 +999,20 @@ where
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         columns_count: usize,
         extra_rows_count: usize,
+        size: Size,
+        stripe: bool,
+        render_context: &TableRenderContext,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
-        let is_stripe_row = self.stripe && row_ix % 2 != 0;
+        let is_stripe_row = stripe && row_ix % 2 != 0;
         let is_selected = self.selected_row == Some(row_ix);
         let view = cx.entity().clone();
+
+        let render_cell = render_context.render_cell.clone();
+        let on_visible_rows_changed = render_context.on_visible_rows_changed.clone();
+        let on_visible_columns_changed = render_context.on_visible_columns_changed.clone();
 
         if row_ix < rows_count {
             let is_last_row = row_ix == rows_count - 1;
@@ -1058,18 +1023,18 @@ where
                 } else if table_is_filled {
                     false
                 } else {
-                    !self.stripe
+                    !stripe
                 }
             } else {
                 true
             };
 
-            let mut tr = self.delegate.render_tr(row_ix, window, cx);
+            let mut tr = (render_context.render_row)(row_ix, window, cx);
             let style = tr.style().clone();
 
             tr.h_flex()
                 .w_full()
-                .h(self.size.table_row_height())
+                .h(size.table_row_height())
                 .when(need_render_border, |this| {
                     this.border_b_1().border_color(cx.theme().table_row_border)
                 })
@@ -1093,8 +1058,14 @@ where
 
                                 (0..left_columns_count).for_each(|col_ix| {
                                     items.push(self.render_col_wrap(col_ix, window, cx).child(
-                                        self.render_cell(col_ix, window, cx).child(
-                                            self.measure_render_td(row_ix, col_ix, window, cx),
+                                        self.render_cell(col_ix, size, window, cx).child(
+                                            self.measure_render_td(
+                                                row_ix,
+                                                col_ix,
+                                                render_cell.clone(),
+                                                window,
+                                                cx,
+                                            ),
                                         ),
                                     ));
                                 });
@@ -1132,6 +1103,8 @@ where
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Horizontal,
+                                            on_visible_rows_changed.clone(),
+                                            on_visible_columns_changed.clone(),
                                             window,
                                             cx,
                                         );
@@ -1144,11 +1117,15 @@ where
                                             let col_ix = col_ix + left_columns_count;
                                             let el =
                                                 table.render_col_wrap(col_ix, window, cx).child(
-                                                    table.render_cell(col_ix, window, cx).child(
-                                                        table.measure_render_td(
-                                                            row_ix, col_ix, window, cx,
-                                                        ),
-                                                    ),
+                                                    table
+                                                        .render_cell(col_ix, size, window, cx)
+                                                        .child(table.measure_render_td(
+                                                            row_ix,
+                                                            col_ix,
+                                                            render_cell.clone(),
+                                                            window,
+                                                            cx,
+                                                        )),
                                                 );
 
                                             items.push(el);
@@ -1160,7 +1137,7 @@ where
                             )
                             .with_scroll_handle(&self.horizontal_scroll_handle),
                         )
-                        .child(self.delegate.render_last_empty_col(window, cx)),
+                        .child((render_context.render_last_empty_column)(window, cx)),
                 )
                 // Row selected style
                 .when_some(self.selected_row, |this, _| {
@@ -1208,8 +1185,7 @@ where
                 )
         } else {
             // Render fake rows to fill the rest table space
-            self.delegate
-                .render_tr(row_ix, window, cx)
+            (render_context.render_row)(row_ix, window, cx)
                 .h_flex()
                 .w_full()
                 .h_full()
@@ -1219,17 +1195,17 @@ where
                 .children((0..columns_count).map(|col_ix| {
                     h_flex()
                         .left(horizontal_scroll_handle.offset().x)
-                        .child(self.render_cell(col_ix, window, cx))
+                        .child(self.render_cell(col_ix, size, window, cx))
                 }))
-                .child(self.delegate.render_last_empty_col(window, cx))
+                .child((render_context.render_last_empty_column)(window, cx))
         }
     }
 
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
-    fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
+    fn calculate_extra_rows_needed(&self, size: Size, rows_count: usize) -> usize {
         let mut extra_rows_needed = 0;
 
-        let row_height = self.size.table_row_height();
+        let row_height = size.table_row_height();
         let total_height = self
             .vertical_scroll_handle
             .0
@@ -1254,18 +1230,16 @@ where
         &mut self,
         row_ix: usize,
         col_ix: usize,
+        render_cell: Rc<dyn Fn(usize, usize, &mut Window, &mut App) -> AnyElement>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         if !crate::measure_enable() {
-            return self
-                .delegate
-                .render_td(row_ix, col_ix, window, cx)
-                .into_any_element();
+            return render_cell(row_ix, col_ix, window, cx).into_any_element();
         }
 
         let start = std::time::Instant::now();
-        let el = self.delegate.render_td(row_ix, col_ix, window, cx);
+        let el = render_cell(row_ix, col_ix, window, cx);
         self._measure.push(start.elapsed());
         el.into_any_element()
     }
@@ -1293,44 +1267,354 @@ where
     }
 }
 
-impl<D> Sizable for Table<D>
-where
-    D: TableDelegate,
-{
+impl EventEmitter<TableEvent> for TableState {}
+
+impl Render for TableState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
+}
+
+#[derive(Clone)]
+struct TableRenderContext {
+    render_last_empty_column: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
+    render_head: Rc<dyn Fn(usize, &Column, &mut Window, &mut App) -> AnyElement>,
+    render_row: Rc<dyn Fn(usize, &mut Window, &mut App) -> Stateful<Div>>,
+    render_cell: Rc<dyn Fn(usize, usize, &mut Window, &mut App) -> AnyElement>,
+    render_empty: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
+    render_loading: Rc<dyn Fn(Size, &mut Window, &mut App) -> AnyElement>,
+    on_sort: Rc<dyn Fn(usize, ColumnSort, &mut Window, &mut App)>,
+    on_move_column: Rc<dyn Fn(usize, usize, &mut Window, &mut App)>,
+    on_load_more: Rc<dyn Fn(&mut Window, &mut App)>,
+    on_visible_rows_changed: Rc<dyn Fn(Range<usize>, &mut Window, &mut App)>,
+    on_visible_columns_changed: Rc<dyn Fn(Range<usize>, &mut Window, &mut App)>,
+    context_menu: Rc<dyn Fn(usize, PopupMenu, &Window, &App) -> PopupMenu>,
+}
+
+impl Default for TableRenderContext {
+    fn default() -> Self {
+        Self {
+            render_last_empty_column: Rc::new(|_, _| {
+                h_flex().w_3().h_full().flex_shrink_0().into_any_element()
+            }),
+            render_cell: Rc::new(|_, _, _, _| div().into_any_element()),
+            render_row: Rc::new(|row_ix, _, _| h_flex().id(("row", row_ix))),
+            render_head: Rc::new(|_, column, _, _| {
+                div()
+                    .size_full()
+                    .child(column.name.clone())
+                    .into_any_element()
+            }),
+            render_empty: Rc::new(|_, cx| {
+                h_flex()
+                    .size_full()
+                    .justify_center()
+                    .text_color(cx.theme().muted_foreground.opacity(0.6))
+                    .child(Icon::new(IconName::Inbox).size_12())
+                    .into_any_element()
+            }),
+            render_loading: Rc::new(|size, _, _| Loading::new().size(size).into_any_element()),
+            context_menu: Rc::new(|_, menu, _, _| menu),
+            on_sort: Rc::new(|_, _, _, _| {}),
+            on_move_column: Rc::new(|_, _, _, _| {}),
+            on_load_more: Rc::new(|_, _| {}),
+            on_visible_rows_changed: Rc::new(|_, _, _| {}),
+            on_visible_columns_changed: Rc::new(|_, _, _| {}),
+        }
+    }
+}
+
+#[derive(IntoElement)]
+pub struct Table {
+    state: Entity<TableState>,
+    render_context: TableRenderContext,
+
+    scrollbar_visible: Edges<bool>,
+    /// Set stripe style of the table.
+    stripe: bool,
+    /// Set to use border style of the table.
+    border: bool,
+    loading: bool,
+    /// The cell size of the table.
+    size: Size,
+}
+
+impl Table {
+    pub fn new(state: &Entity<TableState>) -> Self {
+        Self {
+            state: state.clone(),
+            stripe: false,
+            border: true,
+            loading: false,
+            size: Size::default(),
+            scrollbar_visible: Edges::all(true),
+            render_context: TableRenderContext::default(),
+        }
+    }
+
+    /// Set to use stripe style of the table, default to false.
+    pub fn stripe(mut self, stripe: bool) -> Self {
+        self.stripe = stripe;
+        self
+    }
+
+    /// Set to use border style of the table, default to true.
+    pub fn border(mut self, border: bool) -> Self {
+        self.border = border;
+        self
+    }
+
+    /// Set scrollbar visibility.
+    pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
+        self.scrollbar_visible = Edges {
+            right: vertical,
+            bottom: horizontal,
+            ..Default::default()
+        };
+        self
+    }
+
+    /// Render the row at the given row and column if you want to customize the row element.
+    ///
+    /// Default is a h_flex with id ("row", row_ix).
+    pub fn row<F>(mut self, f: F) -> Self
+    where
+        F: Fn(usize, &mut Window, &mut App) -> Stateful<Div> + 'static,
+    {
+        self.render_context.render_row = Rc::new(f);
+        self
+    }
+
+    /// Render the header cell at the given column index, default to the column name.
+    ///
+    /// The callback arguments:
+    ///
+    /// - `(col_ix, column)`: The column index and column reference.
+    /// - `&mut Window`: The window reference.
+    /// - `&mut App`: The app context reference.
+    pub fn head<F>(mut self, f: F) -> Self
+    where
+        F: Fn(usize, &mut Window, &mut App) -> AnyElement + 'static,
+    {
+        self.render_context.render_head =
+            Rc::new(move |col_ix, _, window, cx| f(col_ix, window, cx).into_any_element());
+        self
+    }
+
+    /// Custom last empty column element, default to a 12px width div.
+    pub fn last_empty_column<F, E>(mut self, f: F) -> Self
+    where
+        E: IntoElement,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
+    {
+        self.render_context.render_last_empty_column =
+            Rc::new(move |window, cx| f(window, cx).into_any_element());
+        self
+    }
+
+    /// Return a Element to show when table is empty.
+    pub fn empty<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut Window, &mut App) -> AnyElement + 'static,
+    {
+        self.render_context.render_empty =
+            Rc::new(move |window, cx| f(window, cx).into_any_element());
+        self
+    }
+
+    /// Return a Element to show when table is loading, default is a Loading element.
+    pub fn loading<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(Size, &mut Window, &mut App) -> AnyElement + 'static,
+    {
+        self.render_context.render_loading =
+            Rc::new(move |size, window, cx| f(size, window, cx).into_any_element());
+        self
+    }
+
+    /// Render cell at the given row index and column index.
+    ///
+    /// The callback arguments:
+    ///
+    /// - `(row, col)`: The row and column index tuple.
+    /// - `&mut Window`: The window reference.
+    /// - `&mut App`: The app context reference.
+    pub fn cell<F>(mut self, f: F) -> Self
+    where
+        F: Fn((usize, usize), &mut Window, &mut App) -> AnyElement + 'static,
+    {
+        self.render_context.render_cell = Rc::new(move |row_ix, col_ix, window, cx| {
+            f((row_ix, col_ix), window, cx).into_any_element()
+        });
+        self
+    }
+
+    /// Render the context menu for the row at the given row index.
+    ///
+    /// The callback arguments:
+    ///
+    /// - `(row_ix, menu)`: The row index and the current PopupMenu.
+    pub fn context_menu<F>(mut self, f: F) -> Self
+    where
+        F: Fn((usize, PopupMenu), &Window, &App) -> PopupMenu + 'static,
+    {
+        self.render_context.context_menu =
+            Rc::new(move |row_ix, menu, window, cx| f((row_ix, menu), window, cx));
+        self
+    }
+
+    /// Add callback to listen to sort.
+    ///
+    /// The callback arguments:
+    ///
+    /// - `(col_ix, sort)`: The column index and the new ColumnSort.
+    pub fn on_sort<F>(mut self, f: F) -> Self
+    where
+        F: Fn((usize, ColumnSort), &mut Window, &mut App) + 'static,
+    {
+        self.render_context.on_sort =
+            Rc::new(move |col_ix, sort, window, cx| f((col_ix, sort), window, cx));
+        self
+    }
+
+    /// Add callback to listen to move column.
+    ///
+    /// The callback arguments:
+    ///
+    /// - `(from_col_ix, to_col_ix)`: The `from` column index and `to` column index.
+    pub fn on_move_column<F>(mut self, f: F) -> Self
+    where
+        F: Fn((usize, usize), &mut Window, &mut App) + 'static,
+    {
+        self.render_context.on_move_column = Rc::new(move |from_col_ix, to_col_ix, window, cx| {
+            f((from_col_ix, to_col_ix), window, cx)
+        });
+        self
+    }
+
+    /// Add callback to listen to load more rows.
+    pub fn on_visible_rows_changed<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Range<usize>, &mut Window, &mut App) + 'static,
+    {
+        self.render_context.on_visible_rows_changed =
+            Rc::new(move |range, window, cx| f(range, window, cx));
+        self
+    }
+
+    /// Add callback to listen to visible columns changed.
+    pub fn on_visible_columns_changed<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Range<usize>, &mut Window, &mut App) + 'static,
+    {
+        self.render_context.on_visible_columns_changed =
+            Rc::new(move |range, window, cx| f(range, window, cx));
+        self
+    }
+
+    /// Add callback to load more rows when scrolling to the bottom.
+    pub fn on_load_more<F>(mut self, f: F) -> Self
+    where
+        F: Fn(usize, &mut Window, &mut App) + 'static,
+    {
+        self.render_context.on_load_more = Rc::new(move |window, cx| f(0, window, cx));
+        self
+    }
+
+    fn render_vertical_scrollbar(
+        &self,
+        size: Size,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<impl IntoElement> {
+        let state = self.state.read(cx);
+
+        Some(
+            div()
+                .occlude()
+                .absolute()
+                .top(size.table_row_height())
+                .right_0()
+                .bottom_0()
+                .w(Scrollbar::width())
+                .on_scroll_wheel(window.listener_for(
+                    &self.state,
+                    |_, _: &ScrollWheelEvent, _, cx| {
+                        cx.notify();
+                    },
+                ))
+                .child(
+                    Scrollbar::uniform_scroll(
+                        &state.vertical_scroll_state,
+                        &state.vertical_scroll_handle,
+                    )
+                    .max_fps(60),
+                ),
+        )
+    }
+
+    fn render_horizontal_scrollbar(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.read(cx);
+
+        div()
+            .occlude()
+            .absolute()
+            .left(state.fixed_head_cols_bounds.size.width)
+            .right_0()
+            .bottom_0()
+            .h(Scrollbar::width())
+            .on_scroll_wheel(
+                window.listener_for(&self.state, |_, _: &ScrollWheelEvent, _, cx| {
+                    cx.notify();
+                }),
+            )
+            .child(Scrollbar::horizontal(
+                &state.horizontal_scroll_state,
+                &state.horizontal_scroll_handle,
+            ))
+    }
+}
+
+impl Sizable for Table {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
-impl<D> Focusable for Table<D>
-where
-    D: TableDelegate,
-{
+impl Focusable for TableState {
     fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
-impl<D> EventEmitter<TableEvent> for Table<D> where D: TableDelegate {}
 
-impl<D> Render for Table<D>
-where
-    D: TableDelegate,
-{
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.measure(window, cx);
-
-        let view = cx.entity().clone();
-        let vertical_scroll_handle = self.vertical_scroll_handle.clone();
-        let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
-        let columns_count: usize = self.delegate.columns_count(cx);
+impl RenderOnce for Table {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let col_fixed = self.state.read(cx).col_fixed;
         let left_columns_count = self
+            .state
+            .read(cx)
             .col_groups
             .iter()
-            .filter(|col| self.col_fixed && col.column.fixed == Some(ColumnFixed::Left))
+            .filter(|col| col_fixed && col.column.fixed == Some(ColumnFixed::Left))
             .count();
-        let rows_count = self.delegate.rows_count(cx);
-        let loading = self.delegate.loading(cx);
-        let extra_rows_count = self.calculate_extra_rows_needed(rows_count);
+        self.state.update(cx, |state, cx| {
+            // Reset fixed head columns bounds, if no fixed columns are present
+            if left_columns_count == 0 {
+                state.fixed_head_cols_bounds = Bounds::default();
+            }
+            state.measure(window, cx);
+        });
+
+        let state = self.state.read(cx);
+        let focus_handle = state.focus_handle.clone();
+        let vertical_scroll_handle = state.vertical_scroll_handle.clone();
+        let horizontal_scroll_handle = state.horizontal_scroll_handle.clone();
+        let right_clicked_row = state.right_clicked_row;
+        let columns_count: usize = state.columns_count();
+
+        let rows_count = state.rows_count;
+        let loading = self.loading;
+        let extra_rows_count = state.calculate_extra_rows_needed(self.size, rows_count);
         let render_rows_count = if self.stripe {
             rows_count + extra_rows_count
         } else {
@@ -1340,22 +1624,29 @@ where
         let inner_table = v_flex()
             .key_context("Table")
             .id("table")
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::action_cancel))
-            .on_action(cx.listener(Self::action_select_next))
-            .on_action(cx.listener(Self::action_select_prev))
-            .on_action(cx.listener(Self::action_select_next_col))
-            .on_action(cx.listener(Self::action_select_prev_col))
+            .track_focus(&focus_handle)
+            .on_action(window.listener_for(&self.state, TableState::action_cancel))
+            .on_action(window.listener_for(&self.state, TableState::action_select_next))
+            .on_action(window.listener_for(&self.state, TableState::action_select_prev))
+            .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
+            .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
             .size_full()
             .overflow_hidden()
-            .child(self.render_table_head(left_columns_count, window, cx))
+            .child(self.state.update(cx, |state, cx| {
+                state.render_table_head(
+                    left_columns_count,
+                    self.size,
+                    self.render_context.clone(),
+                    window,
+                    cx,
+                )
+            }))
             .context_menu({
-                let view = view.clone();
+                let state = self.state.clone();
+                let context_menu = self.render_context.context_menu.clone();
                 move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
-                    if let Some(row_ix) = view.read(cx).right_clicked_row {
-                        view.read(cx)
-                            .delegate
-                            .context_menu(row_ix, this, window, cx)
+                    if let Some(row_ix) = state.read(cx).right_clicked_row {
+                        (context_menu)(row_ix, this, window, cx)
                     } else {
                         this
                     }
@@ -1366,20 +1657,22 @@ where
                     this.child(
                         div()
                             .size_full()
-                            .child(self.delegate.render_empty(window, cx)),
+                            .child((self.render_context.render_empty)(window, cx)),
                     )
                 } else {
                     this.child(
                         h_flex().id("table-body").flex_grow().size_full().child(
-                            uniform_list(
-                                "table-uniform-list",
-                                render_rows_count,
-                                cx.processor(
-                                    move |table, visible_range: Range<usize>, window, cx| {
+                            uniform_list("table-uniform-list", render_rows_count, {
+                                let state = self.state.clone();
+                                let render_context = self.render_context.clone();
+                                let size = self.size;
+                                let stripe = self.stripe;
+                                move |visible_range: Range<usize>, window, cx| {
+                                    state.update(cx, |state, cx| {
                                         // We must calculate the col sizes here, because the col sizes
                                         // need render_th first, then that method will set the bounds of each col.
                                         let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-                                            table
+                                            state
                                                 .col_groups
                                                 .iter()
                                                 .skip(left_columns_count)
@@ -1387,21 +1680,27 @@ where
                                                 .collect(),
                                         );
 
-                                        table.load_more_if_need(
+                                        dbg!("col_groups: {:?}", &state.col_groups);
+                                        // dbg!(&col_sizes);
+
+                                        state.load_more_if_need(
                                             rows_count,
                                             visible_range.end,
+                                            render_context.on_load_more.clone(),
                                             window,
                                             cx,
                                         );
-                                        table.update_visible_range_if_need(
+                                        state.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Vertical,
+                                            render_context.on_visible_rows_changed.clone(),
+                                            render_context.on_visible_columns_changed.clone(),
                                             window,
                                             cx,
                                         );
 
                                         if visible_range.end > rows_count {
-                                            table.scroll_to_row(
+                                            state.scroll_to_row(
                                                 std::cmp::min(
                                                     visible_range.start,
                                                     rows_count.saturating_sub(1),
@@ -1417,22 +1716,25 @@ where
                                         // Render fake rows to fill the table
                                         visible_range.for_each(|row_ix| {
                                             // Render real rows for available data
-                                            items.push(table.render_table_row(
+                                            items.push(state.render_table_row(
                                                 row_ix,
                                                 rows_count,
                                                 left_columns_count,
                                                 col_sizes.clone(),
                                                 columns_count,
                                                 extra_rows_count,
+                                                size,
+                                                stripe,
+                                                &render_context,
                                                 window,
                                                 cx,
                                             ));
                                         });
 
                                         items
-                                    },
-                                ),
-                            )
+                                    })
+                                }
+                            })
                             .flex_grow()
                             .size_full()
                             .with_sizing_behavior(ListSizingBehavior::Auto)
@@ -1443,7 +1745,7 @@ where
                 }
             });
 
-        let view = cx.entity().clone();
+        let state = self.state.clone();
         div()
             .size_full()
             .when(self.border, |this| {
@@ -1453,24 +1755,24 @@ where
             })
             .bg(cx.theme().table)
             .when(loading, |this| {
-                this.child(self.delegate().render_loading(self.size, window, cx))
+                this.child((self.render_context.render_loading)(self.size, window, cx))
             })
             .when(!loading, |this| {
                 this.child(inner_table)
                     .child(ScrollableMask::new(
-                        cx.entity().entity_id(),
+                        self.state.entity_id(),
                         Axis::Horizontal,
                         &horizontal_scroll_handle,
                     ))
-                    .when(self.right_clicked_row.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                    .when(right_clicked_row.is_some(), |this| {
+                        this.on_mouse_down_out(window.listener_for(&state, |this, _, _, cx| {
                             this.right_clicked_row = None;
                             cx.notify();
                         }))
                     })
             })
             .child(canvas(
-                move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
+                move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds),
                 |_, _, _, _| {},
             ))
             .when(!window.is_inspector_picking(cx), |this| {
@@ -1483,7 +1785,7 @@ where
                             this.child(self.render_horizontal_scrollbar(window, cx))
                         })
                         .when(self.scrollbar_visible.right && rows_count > 0, |this| {
-                            this.children(self.render_vertical_scrollbar(window, cx))
+                            this.children(self.render_vertical_scrollbar(self.size, window, cx))
                         }),
                 )
             })

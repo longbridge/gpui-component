@@ -6,11 +6,12 @@ use std::{
 
 use fake::Fake;
 use gpui::{
-    div, prelude::FluentBuilder as _, Action, AnyElement, App, AppContext, ClickEvent, Context,
-    Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, TextAlign, Timer, Window,
+    Action, AnyElement, App, AppContext, ClickEvent, Context, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, TextAlign, Timer, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
+    ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
     button::Button,
     checkbox::Checkbox,
     h_flex,
@@ -18,8 +19,8 @@ use gpui_component::{
     input::{InputEvent, InputState, TextInput},
     label::Label,
     popup_menu::{PopupMenu, PopupMenuExt},
-    table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
-    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
+    table::{Column, ColumnFixed, ColumnSort, Table, TableEvent, TableState},
+    v_flex,
 };
 use serde::{Deserialize, Serialize};
 
@@ -269,7 +270,7 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_percent(&self, col: &Column, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
+    fn render_percent(&self, col: &Column, val: f64, cx: &mut Context<TableStory>) -> AnyElement {
         let right_num = ((val - val.floor()) * 1000.).floor() as i32;
 
         div()
@@ -297,7 +298,7 @@ impl StockTableDelegate {
         &self,
         col: &Column,
         val: f64,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableStory>,
     ) -> AnyElement {
         let this = div()
             .h_full()
@@ -322,9 +323,7 @@ impl StockTableDelegate {
         })
         .into_any_element()
     }
-}
 
-impl TableDelegate for StockTableDelegate {
     fn columns_count(&self, _: &App) -> usize {
         self.columns.len()
     }
@@ -341,7 +340,7 @@ impl TableDelegate for StockTableDelegate {
         &self,
         col_ix: usize,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableStory>,
     ) -> impl IntoElement {
         let col = self.columns.get(col_ix).unwrap();
 
@@ -377,7 +376,7 @@ impl TableDelegate for StockTableDelegate {
         &self,
         row_ix: usize,
         _: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableStory>,
     ) -> gpui::Stateful<gpui::Div> {
         div()
             .id(row_ix)
@@ -402,7 +401,7 @@ impl TableDelegate for StockTableDelegate {
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableStory>,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
         let col = self.columns.get(col_ix).unwrap();
@@ -500,7 +499,7 @@ impl TableDelegate for StockTableDelegate {
         col_ix: usize,
         to_ix: usize,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableStory>,
     ) {
         let col = self.columns.remove(col_ix);
         self.columns.insert(to_ix, col);
@@ -511,7 +510,7 @@ impl TableDelegate for StockTableDelegate {
         col_ix: usize,
         sort: ColumnSort,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableStory>,
     ) {
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
@@ -543,22 +542,17 @@ impl TableDelegate for StockTableDelegate {
         return !self.loading && !self.eof;
     }
 
-    fn load_more_threshold(&self) -> usize {
-        150
-    }
-
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableStory>) {
         self.loading = true;
-
         cx.spawn(async move |view, cx| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
 
             cx.update(|cx| {
                 let _ = view.update(cx, |view, _| {
-                    view.delegate_mut().stocks.extend(random_stocks(200));
-                    view.delegate_mut().loading = false;
-                    view.delegate_mut().eof = view.delegate().stocks.len() >= 6000;
+                    view.delegate.stocks.extend(random_stocks(200));
+                    view.delegate.loading = false;
+                    view.delegate.eof = view.delegate.stocks.len() >= 6000;
                 });
             })
         })
@@ -569,7 +563,7 @@ impl TableDelegate for StockTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableStory>,
     ) {
         self.visible_rows = visible_range;
     }
@@ -578,14 +572,15 @@ impl TableDelegate for StockTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableStory>,
     ) {
         self.visible_cols = visible_range;
     }
 }
 
 pub struct TableStory {
-    table: Entity<Table<StockTableDelegate>>,
+    table: Entity<TableState>,
+    delegate: StockTableDelegate,
     num_stocks_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
@@ -632,7 +627,10 @@ impl TableStory {
         });
 
         let delegate = StockTableDelegate::new(5000);
-        let table = cx.new(|cx| Table::new(delegate, window, cx));
+        let table = cx.new(|cx| {
+            TableState::new(delegate.columns.clone(), delegate.stocks.len(), window, cx)
+                .load_more_threshold(150)
+        });
 
         cx.subscribe_in(&table, window, Self::on_table_event)
             .detach();
@@ -649,17 +647,17 @@ impl TableStory {
                         return;
                     }
 
-                    this.table.update(cx, |table, _| {
-                        table.delegate_mut().stocks.iter_mut().enumerate().for_each(
-                            |(i, stock)| {
-                                let n = (3..10).fake::<usize>();
-                                // update 30% of the stocks
-                                if i % n == 0 {
-                                    stock.random_update();
-                                }
-                            },
-                        );
-                    });
+                    this.delegate
+                        .stocks
+                        .iter_mut()
+                        .enumerate()
+                        .for_each(|(i, stock)| {
+                            let n = (3..10).fake::<usize>();
+                            // update 30% of the stocks
+                            if i % n == 0 {
+                                stock.random_update();
+                            }
+                        });
                     cx.notify();
                 })
                 .ok();
@@ -669,6 +667,7 @@ impl TableStory {
 
         Self {
             table,
+            delegate,
             num_stocks_input,
             stripe: false,
             refresh_data: false,
@@ -689,13 +688,11 @@ impl TableStory {
             InputEvent::PressEnter { .. } | InputEvent::Blur => {
                 let text = self.num_stocks_input.read(cx).value().to_string();
                 if let Ok(total_count) = text.parse::<usize>() {
-                    if total_count == self.table.read(cx).delegate().stocks.len() {
+                    if total_count == self.delegate.stocks.len() {
                         return;
                     }
 
-                    self.table.update(cx, |table, _| {
-                        table.delegate_mut().update_stocks(total_count);
-                    });
+                    self.delegate.update_stocks(total_count);
                     cx.notify();
                 }
             }
@@ -747,19 +744,12 @@ impl TableStory {
 
     fn toggle_stripe(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
-        let stripe = self.stripe;
-        self.table.update(cx, |table, cx| {
-            table.set_stripe(stripe, cx);
-            cx.notify();
-        });
+        cx.notify();
     }
 
     fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
         self.size = a.0;
-        self.table.update(cx, |table, cx| {
-            table.set_size(a.0, cx);
-            table.delegate_mut().size = a.0;
-        });
+        cx.notify();
     }
 
     fn toggle_refresh_data(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
@@ -769,7 +759,7 @@ impl TableStory {
 
     fn on_table_event(
         &mut self,
-        _: &Entity<Table<StockTableDelegate>>,
+        _: &Entity<TableState>,
         event: &TableEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
@@ -791,8 +781,7 @@ impl TableStory {
 impl Render for TableStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let table = &self.table.read(cx);
-        let delegate = table.delegate();
-        let rows_count = delegate.rows_count(cx);
+        let rows_count = self.delegate.stocks.len();
         let size = self.size;
 
         v_flex()
@@ -850,12 +839,10 @@ impl Render for TableStory {
                     .child(
                         Checkbox::new("loading")
                             .label("Loading")
-                            .checked(self.table.read(cx).delegate().full_loading)
+                            .checked(self.delegate.full_loading)
                             .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.table.update(cx, |this, cx| {
-                                    this.delegate_mut().full_loading = *check;
-                                    cx.notify();
-                                })
+                                this.delegate.full_loading = *check;
+                                cx.notify();
                             })),
                     )
                     .child(
@@ -914,7 +901,7 @@ impl Render for TableStory {
                             .child("Scroll to Bottom")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.table.update(cx, |table, cx| {
-                                    table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);
+                                    table.scroll_to_row(table.rows_count() - 1, cx);
                                 })
                             })),
                     ), // .child(
@@ -956,7 +943,7 @@ impl Render for TableStory {
                                         .child(TextInput::new(&self.num_stocks_input).small())
                                         .into_any_element(),
                                 )
-                                .when(delegate.loading, |this| {
+                                .when(self.delegate.loading, |this| {
                                     this.child(
                                         h_flex()
                                             .gap_1()
@@ -969,12 +956,56 @@ impl Render for TableStory {
                             h_flex()
                                 .gap_2()
                                 .child(format!("Total Rows: {}", rows_count))
-                                .child(format!("Visible Rows: {:?}", delegate.visible_rows))
-                                .child(format!("Visible Cols: {:?}", delegate.visible_cols))
-                                .when(delegate.eof, |this| this.child("All data loaded.")),
+                                .child(format!("Visible Rows: {:?}", self.delegate.visible_rows))
+                                .child(format!("Visible Cols: {:?}", self.delegate.visible_cols))
+                                .when(self.delegate.eof, |this| this.child("All data loaded.")),
                         ),
                 ),
             )
-            .child(self.table.clone())
+            .child(
+                Table::new(&self.table)
+                    .stripe(self.stripe)
+                    .with_size(self.size)
+                    .head(cx.processor(|this, col_ix, window, cx| {
+                        this.delegate
+                            .render_th(col_ix, window, cx)
+                            .into_any_element()
+                    }))
+                    .empty(|_, _| {
+                        div()
+                            .h_flex()
+                            .justify_center()
+                            .items_center()
+                            .h_32()
+                            .child("No data available")
+                            .into_any_element()
+                    })
+                    .row(cx.processor(|this, row_ix, window, cx| {
+                        this.delegate.render_tr(row_ix, window, cx)
+                    }))
+                    .cell(cx.processor(|this, (row_ix, col_ix), window, cx| {
+                        this.delegate
+                            .render_td(row_ix, col_ix, window, cx)
+                            .into_any_element()
+                    }))
+                    .on_move_column(cx.processor(|this, (origin_idx, target_idx), window, cx| {
+                        this.delegate
+                            .move_column(origin_idx, target_idx, window, cx)
+                    }))
+                    .on_sort(cx.processor(|this, (col_ix, sort), window, cx| {
+                        this.delegate.perform_sort(col_ix, sort, window, cx)
+                    }))
+                    .on_load_more(
+                        cx.processor(|this, _, window, cx| this.delegate.load_more(window, cx)),
+                    )
+                    .on_visible_columns_changed(cx.processor(|this, visible_range, window, cx| {
+                        this.delegate
+                            .visible_columns_changed(visible_range, window, cx)
+                    }))
+                    .on_visible_rows_changed(cx.processor(|this, visible_range, window, cx| {
+                        this.delegate
+                            .visible_rows_changed(visible_range, window, cx)
+                    })),
+            )
     }
 }
