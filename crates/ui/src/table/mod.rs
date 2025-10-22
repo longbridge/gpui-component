@@ -1,4 +1,4 @@
-use std::{ops::Range, rc::Rc, time::Duration};
+use std::{ops::Range, rc::Rc};
 
 use crate::{
     actions::{Cancel, SelectDown, SelectUp},
@@ -120,7 +120,6 @@ pub struct TableState {
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
 
-    _measure: Vec<Duration>,
     _load_more_task: Task<()>,
 }
 
@@ -156,7 +155,6 @@ impl TableState {
             col_fixed: true,
             load_more_threshold: 20,
             _load_more_task: Task::ready(()),
-            _measure: Vec::new(),
         }
     }
 
@@ -339,6 +337,7 @@ impl TableState {
         self.set_selected_col(col_ix, cx)
     }
 
+    #[inline]
     fn has_selection(&self) -> bool {
         self.selected_row.is_some() || self.selected_col.is_some()
     }
@@ -351,6 +350,7 @@ impl TableState {
         cx.propagate();
     }
 
+    #[inline]
     fn columns_count(&self) -> usize {
         self.col_groups.len()
     }
@@ -779,8 +779,8 @@ impl TableState {
                 })
                 .hover(|this| this.bg(cx.theme().secondary).opacity(7.))
                 .active(|this| this.bg(cx.theme().secondary_active).opacity(1.))
-                .on_click(cx.listener(move |table, _, window, cx| {
-                    table.perform_sort(col_ix, on_sort.clone(), window, cx)
+                .on_click(cx.listener(move |state, _, window, cx| {
+                    state.perform_sort(col_ix, on_sort.clone(), window, cx)
                 }))
                 .child(
                     Icon::new(icon)
@@ -887,11 +887,11 @@ impl TableState {
             .child(self.render_resize_handle(col_ix, window, cx))
             // to save the bounds of this col.
             .child({
-                let view = cx.entity().clone();
+                let state = cx.entity();
                 canvas(
                     move |bounds, _, cx| {
                         dbg!("col {} bounds: {:?}", col_ix, bounds);
-                        view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds)
+                        state.update(cx, |state, _| state.col_groups[col_ix].bounds = bounds)
                     },
                     |_, _, _, _| {},
                 )
@@ -904,11 +904,10 @@ impl TableState {
         &self,
         left_columns_count: usize,
         size: Size,
-        render_context: TableRenderContext,
+        render_context: &TableRenderContext,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
         h_flex()
@@ -919,7 +918,7 @@ impl TableState {
             .border_color(cx.theme().border)
             .text_color(cx.theme().table_head_foreground)
             .when(left_columns_count > 0, |this| {
-                let view = view.clone();
+                let state = cx.entity();
                 // Render left fixed columns
                 this.child(
                     h_flex()
@@ -950,7 +949,7 @@ impl TableState {
                         .child(
                             canvas(
                                 move |bounds, _, cx| {
-                                    view.update(cx, |r, _| r.fixed_head_cols_bounds = bounds)
+                                    state.update(cx, |r, _| r.fixed_head_cols_bounds = bounds)
                                 },
                                 |_, _, _, _| {},
                             )
@@ -1057,17 +1056,12 @@ impl TableState {
                                 let mut items = Vec::with_capacity(left_columns_count);
 
                                 (0..left_columns_count).for_each(|col_ix| {
-                                    items.push(self.render_col_wrap(col_ix, window, cx).child(
-                                        self.render_cell(col_ix, size, window, cx).child(
-                                            self.measure_render_td(
-                                                row_ix,
-                                                col_ix,
-                                                render_cell.clone(),
-                                                window,
-                                                cx,
-                                            ),
+                                    items.push(
+                                        self.render_col_wrap(col_ix, window, cx).child(
+                                            self.render_cell(col_ix, size, window, cx)
+                                                .child(render_cell(row_ix, col_ix, window, cx)),
                                         ),
-                                    ));
+                                    );
                                 });
 
                                 items
@@ -1119,13 +1113,10 @@ impl TableState {
                                                 table.render_col_wrap(col_ix, window, cx).child(
                                                     table
                                                         .render_cell(col_ix, size, window, cx)
-                                                        .child(table.measure_render_td(
-                                                            row_ix,
-                                                            col_ix,
-                                                            render_cell.clone(),
-                                                            window,
-                                                            cx,
-                                                        )),
+                                                        .child(
+                                                            render_cell(row_ix, col_ix, window, cx)
+                                                                .into_any_element(),
+                                                        ),
                                                 );
 
                                             items.push(el);
@@ -1223,47 +1214,6 @@ impl TableState {
         }
 
         extra_rows_needed
-    }
-
-    #[inline]
-    fn measure_render_td(
-        &mut self,
-        row_ix: usize,
-        col_ix: usize,
-        render_cell: Rc<dyn Fn(usize, usize, &mut Window, &mut App) -> AnyElement>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        if !crate::measure_enable() {
-            return render_cell(row_ix, col_ix, window, cx).into_any_element();
-        }
-
-        let start = std::time::Instant::now();
-        let el = render_cell(row_ix, col_ix, window, cx);
-        self._measure.push(start.elapsed());
-        el.into_any_element()
-    }
-
-    fn measure(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
-        if !crate::measure_enable() {
-            return;
-        }
-
-        // Print avg measure time of each td
-        if self._measure.len() > 0 {
-            let total = self
-                ._measure
-                .iter()
-                .fold(Duration::default(), |acc, d| acc + *d);
-            let avg = total / self._measure.len() as u32;
-            eprintln!(
-                "last render {} cells total: {:?}, avg: {:?}",
-                self._measure.len(),
-                total,
-                avg,
-            );
-        }
-        self._measure.clear();
     }
 }
 
@@ -1597,13 +1547,13 @@ impl RenderOnce for Table {
             .iter()
             .filter(|col| col_fixed && col.column.fixed == Some(ColumnFixed::Left))
             .count();
-        self.state.update(cx, |state, cx| {
-            // Reset fixed head columns bounds, if no fixed columns are present
-            if left_columns_count == 0 {
+
+        // Reset fixed head columns bounds, if no fixed columns are present
+        if left_columns_count == 0 {
+            self.state.update(cx, |state, _| {
                 state.fixed_head_cols_bounds = Bounds::default();
-            }
-            state.measure(window, cx);
-        });
+            });
+        }
 
         let state = self.state.read(cx);
         let focus_handle = state.focus_handle.clone();
@@ -1636,7 +1586,7 @@ impl RenderOnce for Table {
                 state.render_table_head(
                     left_columns_count,
                     self.size,
-                    self.render_context.clone(),
+                    &self.render_context,
                     window,
                     cx,
                 )
@@ -1668,21 +1618,21 @@ impl RenderOnce for Table {
                                 let size = self.size;
                                 let stripe = self.stripe;
                                 move |visible_range: Range<usize>, window, cx| {
+                                    // We must calculate the col sizes here, because the col sizes
+                                    // need render_th first, then that method will set the bounds of each col.
+                                    let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
+                                        state
+                                            .read(cx)
+                                            .col_groups
+                                            .iter()
+                                            .skip(left_columns_count)
+                                            .map(|col| col.bounds.size)
+                                            .collect(),
+                                    );
+
+                                    dbg!("col_groups: {:?}", &col_sizes);
+
                                     state.update(cx, |state, cx| {
-                                        // We must calculate the col sizes here, because the col sizes
-                                        // need render_th first, then that method will set the bounds of each col.
-                                        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-                                            state
-                                                .col_groups
-                                                .iter()
-                                                .skip(left_columns_count)
-                                                .map(|col| col.bounds.size)
-                                                .collect(),
-                                        );
-
-                                        dbg!("col_groups: {:?}", &state.col_groups);
-                                        // dbg!(&col_sizes);
-
                                         state.load_more_if_need(
                                             rows_count,
                                             visible_range.end,
