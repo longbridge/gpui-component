@@ -1,16 +1,16 @@
 ---
-title: Table
+title: DataTable
 description: High-performance data table with virtual scrolling, sorting, filtering, and column management.
 ---
 
-# Table
+# DataTable
 
 A comprehensive data table component designed for handling large datasets with high performance. Features virtual scrolling, column configuration, sorting, filtering, row selection, and custom cell rendering. Perfect for displaying tabular data with thousands of rows while maintaining smooth performance.
 
 ## Import
 
 ```rust
-use gpui_component::table::{Table, TableDelegate, Column, ColumnSort, ColumnFixed, TableEvent};
+use gpui_component::table::{DataTable, TableDelegate, Column, ColumnSort, ColumnFixed, TableEvent};
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ To create a table, you need to implement the `TableDelegate` trait and provide c
 ```rust
 use std::ops::Range;
 use gpui::{App, Context, Window, IntoElement};
-use gpui_component::table::{Table, TableDelegate, Column, ColumnSort};
+use gpui_component::table::{DataTable, TableDelegate, Column, ColumnSort};
 
 struct MyData {
     id: usize,
@@ -82,7 +82,7 @@ impl TableDelegate for MyTableDelegate {
 
 // Create the table
 let delegate = MyTableDelegate::new();
-let table = cx.new(|cx| Table::new(delegate, window, cx));
+let table = cx.new(|cx| DataTable::new(delegate, window, cx));
 ```
 
 ### Column Configuration
@@ -129,7 +129,7 @@ Column::new("modified", "Modified")
 
 ### Virtual Scrolling for Large Datasets
 
-The table automatically handles virtual scrolling for optimal performance:
+The data table automatically handles virtual scrolling for optimal performance:
 
 ```rust
 struct LargeDataDelegate {
@@ -143,7 +143,7 @@ impl TableDelegate for LargeDataDelegate {
     }
 
     // Only visible rows are rendered
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<DataTable<Self>>) -> impl IntoElement {
         // This is only called for visible rows
         // Efficiently render cell content
         let row = &self.data[row_ix];
@@ -151,7 +151,7 @@ impl TableDelegate for LargeDataDelegate {
     }
 
     // Track visible range for optimizations
-    fn visible_rows_changed(&mut self, visible_range: Range<usize>, _: &mut Window, _: &mut Context<Table<Self>>) {
+    fn visible_rows_changed(&mut self, visible_range: Range<usize>, _: &mut Window, _: &mut Context<DataTable<Self>>) {
         // Only update data for visible rows if needed
         // This is called when user scrolls
     }
@@ -164,7 +164,7 @@ Implement sorting in your delegate:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn perform_sort(&mut self, col_ix: usize, sort: ColumnSort, _: &mut Window, _: &mut Context<Table<Self>>) {
+    fn perform_sort(&mut self, col_ix: usize, sort: ColumnSort, _: &mut Window, _: &mut Context<DataTable<Self>>) {
         let col = &self.columns[col_ix];
 
         match col.key.as_ref() {
@@ -197,7 +197,7 @@ Handle row selection and interaction:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn render_tr(&self, row_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> gpui::Stateful<gpui::Div> {
+    fn render_tr(&self, row_ix: usize, _: &mut Window, cx: &mut Context<DataTable<Self>>) -> gpui::Stateful<gpui::Div> {
         div()
             .id(row_ix)
             .on_click(cx.listener(move |_, ev, _, _| {
@@ -243,7 +243,7 @@ Create rich cell content with custom rendering:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<DataTable<Self>>) -> impl IntoElement {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -317,7 +317,7 @@ Enable dynamic column management:
 ```rust
 // Configure table features
 let table = cx.new(|cx| {
-    Table::new(delegate, window, cx)
+    DataTable::new(delegate, window, cx)
         .col_resizable(true)  // Allow column resizing
         .col_movable(true)    // Allow column reordering
         .sortable(true)       // Enable sorting
@@ -355,7 +355,7 @@ impl TableDelegate for MyTableDelegate {
         50 // Load more when 50 rows from bottom
     }
 
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<DataTable<Self>>) {
         if self.loading {
             return; // Prevent multiple loads
         }
@@ -383,13 +383,13 @@ impl TableDelegate for MyTableDelegate {
 }
 ```
 
-### Table Styling
+### Styling
 
-Customize table appearance:
+Customize data table appearance:
 
 ```rust
 let table = cx.new(|cx| {
-    Table::new(delegate, window, cx)
+    DataTable::new(delegate, window, cx)
         .stripe(true)           // Alternating row colors
         .border(true)           // Border around table
         .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
@@ -400,98 +400,6 @@ table.update(cx, |table, cx| {
     table.set_size(Size::Small, cx);
 });
 ```
-
-## API Reference
-
-### Table
-
-| Method                      | Description                                   |
-| --------------------------- | --------------------------------------------- |
-| `new(delegate, window, cx)` | Create a new table with delegate              |
-| `stripe(bool)`              | Enable alternating row colors                 |
-| `border(bool)`              | Show table border                             |
-| `loop_selection(bool)`      | Enable looping selection with keyboard        |
-| `col_movable(bool)`         | Allow column reordering                       |
-| `col_resizable(bool)`       | Allow column resizing                         |
-| `sortable(bool)`            | Enable column sorting                         |
-| `row_selectable(bool)`      | Allow row selection                           |
-| `col_selectable(bool)`      | Allow column selection                        |
-| `col_fixed(bool)`           | Enable fixed columns feature                  |
-| `scrollbar_visible(v, h)`   | Set scrollbar visibility                      |
-| `set_size(size, cx)`        | Set table size (Small, Medium, Large, XSmall) |
-| `scroll_to_row(ix, cx)`     | Scroll to specific row                        |
-| `scroll_to_col(ix, cx)`     | Scroll to specific column                     |
-| `set_selected_row(ix, cx)`  | Select specific row                           |
-| `set_selected_col(ix, cx)`  | Select specific column                        |
-| `clear_selection(cx)`       | Clear all selections                          |
-| `refresh(cx)`               | Refresh table after data changes              |
-
-### Column
-
-| Method                     | Description                             |
-| -------------------------- | --------------------------------------- |
-| `new(key, name)`           | Create column with key and display name |
-| `width(pixels)`            | Set column width                        |
-| `sortable()`               | Enable sorting with default order       |
-| `ascending()`              | Set default ascending sort              |
-| `descending()`             | Set default descending sort             |
-| `text_right()`             | Right-align column content              |
-| `fixed(ColumnFixed::Left)` | Pin column to left side                 |
-| `fixed_left()`             | Pin column to left side (shorthand)     |
-| `resizable(bool)`          | Allow column resizing                   |
-| `movable(bool)`            | Allow column moving                     |
-| `selectable(bool)`         | Allow column selection                  |
-| `paddings(edges)`          | Set custom cell padding                 |
-| `p_0()`                    | Remove cell padding                     |
-
-### TableDelegate
-
-Required methods to implement:
-
-| Method                                         | Description              |
-| ---------------------------------------------- | ------------------------ |
-| `columns_count(&self, cx)`                     | Return number of columns |
-| `rows_count(&self, cx)`                        | Return number of rows    |
-| `column(&self, col_ix, cx)`                    | Get column definition    |
-| `render_td(&self, row_ix, col_ix, window, cx)` | Render table cell        |
-
-Optional methods:
-
-| Method                                                  | Description                      |
-| ------------------------------------------------------- | -------------------------------- |
-| `render_th(&self, col_ix, window, cx)`                  | Custom header cell rendering     |
-| `render_tr(&self, row_ix, window, cx)`                  | Custom row rendering             |
-| `render_empty(&self, window, cx)`                       | Empty state content              |
-| `render_loading(&self, size, window, cx)`               | Loading state content            |
-| `context_menu(&self, row_ix, menu, window, cx)`         | Row context menu                 |
-| `perform_sort(&mut self, col_ix, sort, window, cx)`     | Handle column sorting            |
-| `move_column(&mut self, col_ix, to_ix, window, cx)`     | Handle column reordering         |
-| `load_more(&mut self, window, cx)`                      | Load more data                   |
-| `loading(&self, cx)`                                    | Return loading state             |
-| `is_eof(&self, cx)`                                     | Return if no more data           |
-| `load_more_threshold(&self)`                            | Rows from bottom to trigger load |
-| `visible_rows_changed(&mut self, range, window, cx)`    | Visible range changed            |
-| `visible_columns_changed(&mut self, range, window, cx)` | Visible columns changed          |
-
-### TableEvent
-
-Events emitted by the table:
-
-| Event                              | Description             |
-| ---------------------------------- | ----------------------- |
-| `SelectRow(usize)`                 | Row selected            |
-| `DoubleClickedRow(usize)`          | Row double-clicked      |
-| `SelectColumn(usize)`              | Column selected         |
-| `ColumnWidthsChanged(Vec<Pixels>)` | Column widths changed   |
-| `MoveColumn(usize, usize)`         | Column moved (from, to) |
-
-### ColumnSort
-
-| Value        | Description        |
-| ------------ | ------------------ |
-| `Default`    | No sorting applied |
-| `Ascending`  | Sort ascending     |
-| `Descending` | Sort descending    |
 
 ## Examples
 
@@ -507,7 +415,7 @@ struct StockData {
 }
 
 impl TableDelegate for StockTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<DataTable<Self>>) -> impl IntoElement {
         let stock = &self.stocks[row_ix];
         let col = &self.columns[col_ix];
 
