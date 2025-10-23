@@ -285,7 +285,7 @@ impl Tiles {
         _: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        let Some(resizing_id) = self.resizing_id.clone() else {
+        let Some(resizing_id) = self.resizing_id else {
             return;
         };
         let Some(item) = self.panels.iter_mut().find(|item| item.id == resizing_id) else {
@@ -829,7 +829,7 @@ impl Tiles {
         item: &TileItem,
     ) -> AnyElement {
         let item_id = item.id;
-        let item_bounds = item.bounds.clone();
+        let item_bounds = item.bounds;
 
         h_flex()
             .id("drag-bar")
