@@ -75,11 +75,19 @@ impl TextareaStory {
                 )
         });
 
+        let textarea_no_wrap = cx.new(|cx| {
+            InputState::new(window, cx)
+                .multi_line()
+                .rows(6)
+                .soft_wrap(false)
+                .default_value("This is a very long line of text to test if the horizontal scrolling function is working properly, and it should not wrap automatically but display a horizontal scrollbar.\nThe second line is also very long text, used to test the horizontal scrolling effect under multiple lines, and you can input more content to test.\nThe third line: Here you can input other long text content that requires horizontal scrolling.\n")
+        });
+
         let textarea_auto_grow = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(1, 5)
                 .placeholder("Enter text here...")
-                .default_value("Hello 世界，this is GPUI component.")
+                .default_value("Hello 世界, this is a very long line of text to test if the horizontal scrolling function is working properly, and it should not wrap automatically but display a horizontal scrollbar.\nThe second line is also very long text, used to test the horizontal scrolling effect under multiple lines, and you can input more content to test.\nThe third line: Here you can input other long text content that requires horizontal scrolling.\n")
         });
 
         let textarea_auto_grow_no_wrap = cx.new(|cx| {
@@ -88,14 +96,6 @@ impl TextareaStory {
                 .soft_wrap(false)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
-        });
-
-        let textarea_no_wrap = cx.new(|cx| {
-            InputState::new(window, cx)
-                .multi_line()
-                .rows(6)
-                .soft_wrap(false)
-                .default_value("This is a very long line of text to test if the horizontal scrolling function is working properly, and it should not wrap automatically but display a horizontal scrollbar.\nThe second line is also very long text, used to test the horizontal scrolling effect under multiple lines, and you can input more content to test.\nThe third line: Here you can input other long text content that requires horizontal scrolling.\n")
         });
 
         Self {
