@@ -522,27 +522,8 @@ impl Tiles {
         cx: &mut Context<Self>,
         entity_id: EntityId,
         item: &TileItem,
-        is_occluded: impl Fn(&Bounds<Pixels>) -> bool,
     ) -> Vec<AnyElement> {
         let panel_bounds = item.bounds;
-        let right_handle_bounds = Bounds::new(
-            panel_bounds.origin + point(panel_bounds.size.width - HANDLE_SIZE, px(0.0)),
-            size(HANDLE_SIZE, panel_bounds.size.height),
-        );
-
-        let bottom_handle_bounds = Bounds::new(
-            panel_bounds.origin + point(px(0.0), panel_bounds.size.height - HANDLE_SIZE.half()),
-            size(panel_bounds.size.width, HANDLE_SIZE.half()),
-        );
-
-        let corner_handle_bounds = Bounds::new(
-            panel_bounds.origin
-                + point(
-                    panel_bounds.size.width - HANDLE_SIZE.half(),
-                    panel_bounds.size.height - HANDLE_SIZE.half(),
-                ),
-            size(HANDLE_SIZE.half(), HANDLE_SIZE.half()),
-        );
         let handle_offset = -HANDLE_SIZE + px(1.);
 
         let mut elements = Vec::new();
@@ -919,24 +900,8 @@ impl Tiles {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let entity_id = cx.entity_id();
-        let panel_id = item.id;
+        let item_id = item.id;
         let panel_view = item.panel.view();
-        let is_occluded = {
-            let panels = self.panels.clone();
-            move |bounds: &Bounds<Pixels>| {
-                let this_z = panels[ix].z_index;
-                let this_ix = ix;
-                panels.iter().enumerate().any(|(sub_ix, other_item)| {
-                    if sub_ix == this_ix {
-                        return false;
-                    }
-                    let other_is_above = (other_item.z_index > this_z)
-                        || (other_item.z_index == this_z && sub_ix > this_ix);
-
-                    other_is_above && other_item.bounds.intersects(bounds)
-                })
-            }
-        };
 
         v_flex()
             .occlude()
@@ -951,21 +916,21 @@ impl Tiles {
             .h(item.bounds.size.height + px(1.))
             .rounded(cx.theme().radius)
             .child(h_flex().overflow_hidden().size_full().child(panel_view))
-            .children(self.render_resize_handles(window, cx, entity_id, &item, &is_occluded))
-            .child(self.render_drag_bar(window, cx, entity_id, &item, &is_occluded))
+            .children(self.render_resize_handles(window, cx, entity_id, &item))
+            .child(self.render_drag_bar(window, cx, entity_id, &item))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, _| {
-                    this.dragging_id = Some(panel_id);
+                    this.dragging_id = Some(item_id);
                 }),
             )
             // Here must be mouse up for avoid conflict with Drag event
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    if this.dragging_id == Some(panel_id) {
+                    if this.dragging_id == Some(item_id) {
                         this.dragging_id = None;
-                        this.bring_to_front(Some(panel_id), cx);
+                        this.bring_to_front(Some(item_id), cx);
                     }
                 }),
             )
