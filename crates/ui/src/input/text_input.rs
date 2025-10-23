@@ -247,6 +247,7 @@ impl RenderOnce for TextInput {
 
         self.state.update(cx, |state, cx| {
             state.text_wrapper.set_font(font, font_size, cx);
+            state.text_wrapper.prepare_if_need(&state.text, cx);
             state.disabled = self.disabled;
         });
 

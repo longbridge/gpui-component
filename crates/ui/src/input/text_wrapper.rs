@@ -59,6 +59,8 @@ pub(super) struct TextWrapper {
     pub(super) longest_row: LongestRow,
     /// The lines by split \n
     pub(super) lines: Vec<LineItem>,
+
+    _initialized: bool,
 }
 
 #[allow(unused)]
@@ -72,6 +74,7 @@ impl TextWrapper {
             soft_lines: 0,
             longest_row: LongestRow::default(),
             lines: Vec::new(),
+            _initialized: false,
         }
     }
 
@@ -109,6 +112,14 @@ impl TextWrapper {
         self.font = font;
         self.font_size = font_size;
         self.update_all(&self.text.clone(), cx);
+    }
+
+    pub(super) fn prepare_if_need(&mut self, text: &Rope, cx: &mut App) {
+        if self._initialized {
+            return;
+        }
+        self._initialized = true;
+        self.update_all(text, cx);
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
