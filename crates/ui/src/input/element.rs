@@ -974,14 +974,14 @@ impl Element for TextElement {
         last_layout.lines = Rc::new(lines);
 
         let total_wrapped_lines = state.text_wrapper.len();
-        let empty_bottom_height = if state.mode.is_auto_grow() || state.mode.is_single_line() {
-            px(0.)
-        } else {
+        let empty_bottom_height = if state.mode.is_code_editor() {
             bounds
                 .size
                 .height
                 .half()
                 .max(BOTTOM_MARGIN_ROWS * line_height)
+        } else {
+            px(0.)
         };
 
         let scroll_size = size(
@@ -1283,9 +1283,7 @@ impl Element for TextElement {
             state.set_input_bounds(input_bounds, cx);
             state.last_selected_range = Some(selected_range);
             state.scroll_size = prepaint.scroll_size;
-            state
-                .scroll_handle
-                .set_offset(prepaint.cursor_scroll_offset);
+            state.update_scroll_offset(Some(prepaint.cursor_scroll_offset), cx);
             state.deferred_scroll_offset = None;
 
             cx.notify();
