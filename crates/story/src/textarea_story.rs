@@ -1,14 +1,15 @@
 use gpui::{
-    px, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Styled, Window,
+    App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Window, px,
 };
 
 use crate::section;
 use gpui_component::{
+    Sizable,
     button::Button,
     h_flex,
     input::{InputState, TextInput},
-    v_flex, Sizable,
+    v_flex,
 };
 
 pub fn init(_: &mut App) {}
@@ -17,6 +18,7 @@ pub struct TextareaStory {
     textarea: Entity<InputState>,
     textarea_auto_grow: Entity<InputState>,
     textarea_no_wrap: Entity<InputState>,
+    textarea_auto_grow_no_wrap: Entity<InputState>,
 }
 
 impl super::Story for TextareaStory {
@@ -76,6 +78,14 @@ impl TextareaStory {
         let textarea_auto_grow = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(1, 5)
+                .soft_wrap(true)
+                .placeholder("Enter text here...")
+                .default_value("Hello 世界，this is GPUI component.")
+        });
+
+        let textarea_auto_grow_no_wrap = cx.new(|cx| {
+            InputState::new(window, cx)
+                .auto_grow(1, 5)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
         });
@@ -92,6 +102,7 @@ impl TextareaStory {
             textarea,
             textarea_auto_grow,
             textarea_no_wrap,
+            textarea_auto_grow_no_wrap,
         }
     }
 
@@ -166,11 +177,20 @@ impl Render for TextareaStory {
                         ),
                 ),
             )
-            .child(section("Textarea Auto Grow").child(TextInput::new(&self.textarea_auto_grow)))
             .child(
                 section("No Wrap")
                     .max_w_md()
                     .child(TextInput::new(&self.textarea_no_wrap).h(px(200.))),
+            )
+            .child(
+                section("Auto Grow")
+                    .max_w_md()
+                    .child(TextInput::new(&self.textarea_auto_grow)),
+            )
+            .child(
+                section("Auto Grow with No Wrap")
+                    .max_w_md()
+                    .child(TextInput::new(&self.textarea_auto_grow_no_wrap)),
             )
     }
 }
