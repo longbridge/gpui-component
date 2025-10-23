@@ -20,27 +20,9 @@ use crate::{
         InputState, RopeExt,
     },
     label::Label,
-    list::{List, ListDelegate, ListEvent},
-    ActiveTheme, IndexPath, Selectable,
+    list::{List, ListEvent, ListState},
+    ActiveTheme, IndexPath, ListItem, Selectable,
 };
-
-struct ContextMenuDelegate {
-    query: SharedString,
-    menu: Entity<CompletionMenu>,
-    items: Vec<Rc<CompletionItem>>,
-    selected_ix: usize,
-}
-
-impl ContextMenuDelegate {
-    fn set_items(&mut self, items: Vec<CompletionItem>) {
-        self.items = items.into_iter().map(Rc::new).collect();
-        self.selected_ix = 0;
-    }
-
-    fn selected_item(&self) -> Option<&Rc<CompletionItem>> {
-        self.items.get(self.selected_ix)
-    }
-}
 
 #[derive(IntoElement)]
 struct CompletionMenuItem {
@@ -128,57 +110,20 @@ impl RenderOnce for CompletionMenuItem {
     }
 }
 
-impl EventEmitter<DismissEvent> for ContextMenuDelegate {}
-
-impl ListDelegate for ContextMenuDelegate {
-    type Item = CompletionMenuItem;
-
-    fn items_count(&self, _: usize, _: &gpui::App) -> usize {
-        self.items.len()
-    }
-
-    fn render_item(
-        &self,
-        ix: crate::IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
-        let item = self.items.get(ix.row)?;
-        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
-    }
-
-    fn set_selected_index(
-        &mut self,
-        ix: Option<crate::IndexPath>,
-        _: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) {
-        self.selected_ix = ix.map(|i| i.row).unwrap_or(0);
-        cx.notify();
-    }
-
-    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
-        let Some(item) = self.selected_item() else {
-            return;
-        };
-
-        self.menu.update(cx, |this, cx| {
-            this.select_item(&item, window, cx);
-        });
-    }
-}
-
 /// A context menu for code completions and code actions.
 pub struct CompletionMenu {
     offset: usize,
     editor: Entity<InputState>,
-    list: Entity<List<ContextMenuDelegate>>,
+    list: Entity<ListState>,
+    items: Vec<Rc<CompletionItem>>,
+
+    selected_ix: usize,
+    query: SharedString,
     open: bool,
     bounds: Bounds<Pixels>,
 
     /// The offset of the first character that triggered the completion.
     pub(crate) trigger_start_offset: Option<usize>,
-    query: SharedString,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -192,19 +137,7 @@ impl CompletionMenu {
         cx: &mut App,
     ) -> Entity<Self> {
         cx.new(|cx| {
-            let view = cx.entity();
-            let menu = ContextMenuDelegate {
-                query: SharedString::default(),
-                menu: view,
-                items: vec![],
-                selected_ix: 0,
-            };
-
-            let list = cx.new(|cx| {
-                List::new(menu, window, cx)
-                    .no_query()
-                    .max_h(MAX_MENU_HEIGHT)
-            });
+            let list = cx.new(|cx| ListState::new(0, window, cx).no_query());
 
             let _subscriptions =
                 vec![
@@ -223,13 +156,24 @@ impl CompletionMenu {
                 offset: 0,
                 editor,
                 list,
+                items: vec![],
+                selected_ix: 0,
+                query: SharedString::default(),
                 open: false,
                 trigger_start_offset: None,
-                query: SharedString::default(),
                 bounds: Bounds::default(),
                 _subscriptions,
             }
         })
+    }
+
+    fn set_items(&mut self, items: Vec<CompletionItem>) {
+        self.items = items.into_iter().map(Rc::new).collect();
+        self.selected_ix = 0;
+    }
+
+    fn selected_item(&self) -> Option<&Rc<CompletionItem>> {
+        self.items.get(self.selected_ix)
     }
 
     fn select_item(&mut self, item: &CompletionItem, window: &mut Window, cx: &mut Context<Self>) {
@@ -305,7 +249,7 @@ impl CompletionMenu {
     }
 
     fn on_action_enter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(item) = self.list.read(cx).delegate().selected_item().cloned() else {
+        let Some(item) = self.selected_item().cloned() else {
             return;
         };
         self.select_item(&item, window, cx);
@@ -356,6 +300,9 @@ impl CompletionMenu {
         let items = items.into();
         self.offset = offset;
         self.open = true;
+        self.query = self.query.clone();
+        self.set_items(items.clone());
+
         self.list.update(cx, |this, cx| {
             let longest_ix = items
                 .iter()
@@ -366,8 +313,6 @@ impl CompletionMenu {
                 .map(|(ix, _)| ix)
                 .unwrap_or(0);
 
-            this.delegate_mut().query = self.query.clone();
-            this.delegate_mut().set_items(items);
             this.set_selected_index(Some(IndexPath::new(0)), window, cx);
             this.set_item_to_measure_index(IndexPath::new(longest_ix), window, cx);
         });
@@ -391,6 +336,24 @@ impl CompletionMenu {
                 + Point::new(-px(4.), last_layout.line_height + px(4.)),
         )
     }
+
+    fn render_item(
+        &self,
+        ix: crate::IndexPath,
+        _: &mut Window,
+        _: &mut App,
+    ) -> Option<CompletionMenuItem> {
+        let item = self.items.get(ix.row)?;
+        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
+    }
+
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(item) = self.selected_item().cloned() else {
+            return;
+        };
+
+        self.select_item(&item, window, cx);
+    }
 }
 
 impl Render for CompletionMenu {
@@ -399,7 +362,7 @@ impl Render for CompletionMenu {
             return Empty.into_any_element();
         }
 
-        if self.list.read(cx).delegate().items.is_empty() {
+        if self.items.is_empty() {
             self.open = false;
             return Empty.into_any_element();
         }
@@ -411,9 +374,6 @@ impl Render for CompletionMenu {
         };
 
         let selected_documentation = self
-            .list
-            .read(cx)
-            .delegate()
             .selected_item()
             .and_then(|item| item.documentation.clone());
 
@@ -437,7 +397,20 @@ impl Render for CompletionMenu {
                     editor_popover("completion-menu", cx)
                         .max_w(max_width)
                         .min_w(px(120.))
-                        .child(self.list.clone())
+                        .child(
+                            List::new(&self.list)
+                                .max_h(MAX_MENU_HEIGHT)
+                                .on_select(cx.processor(
+                                    move |this, ix: Option<IndexPath>, _, cx| {
+                                        this.selected_ix = ix.map(|i| i.row).unwrap_or(0);
+                                        cx.notify();
+                                    },
+                                ))
+                                .on_confirm(cx.processor(|this, secondary, window, cx| {
+                                    this.confirm(secondary, window, cx);
+                                }))
+                                .item(|ix, window, cx| self.render_item(ix, window, cx)),
+                        )
                         .child(
                             canvas(
                                 move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),

@@ -1,9 +1,9 @@
 use gpui::{
     anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext,
-    Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Empty, Entity, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement,
-    Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Subscription, Task, WeakEntity, Window,
+    Bounds, ClickEvent, Context, DismissEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels, Render,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
+    Task, WeakEntity, Window,
 };
 use rust_i18n::t;
 
@@ -11,9 +11,9 @@ use crate::{
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     h_flex,
     input::clear_button,
-    list::{List, ListDelegate},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size,
-    StyleSized, StyledExt,
+    list::{List, ListState},
+    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, ListItem, Selectable, Sizable,
+    Size, StyleSized, StyledExt,
 };
 
 #[derive(Clone)]
@@ -138,144 +138,6 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
     }
 }
 
-struct DropdownListDelegate<D: DropdownDelegate + 'static> {
-    delegate: D,
-    dropdown: WeakEntity<DropdownState<D>>,
-    selected_index: Option<IndexPath>,
-}
-
-impl<D> ListDelegate for DropdownListDelegate<D>
-where
-    D: DropdownDelegate + 'static,
-{
-    type Item = DropdownListItem;
-
-    fn sections_count(&self, cx: &App) -> usize {
-        self.delegate.sections_count(cx)
-    }
-
-    fn items_count(&self, section: usize, _: &App) -> usize {
-        self.delegate.items_count(section)
-    }
-
-    fn render_section_header(
-        &self,
-        section: usize,
-        _: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> Option<impl IntoElement> {
-        let dropdown = self.dropdown.upgrade()?.read(cx);
-        let Some(item) = self.delegate.section(section) else {
-            return None;
-        };
-
-        return Some(
-            div()
-                .py_0p5()
-                .px_2()
-                .list_size(dropdown.size)
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child(item),
-        );
-    }
-
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        _: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
-        let selected = self
-            .selected_index
-            .map_or(false, |selected_index| selected_index == ix);
-        let size = self
-            .dropdown
-            .upgrade()
-            .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
-
-        if let Some(item) = self.delegate.item(ix) {
-            let content = item.display_title().unwrap_or_else(|| {
-                div()
-                    .whitespace_nowrap()
-                    .child(item.title().to_string())
-                    .into_any_element()
-            });
-            let list_item = DropdownListItem::new(ix.row)
-                .selected(selected)
-                .with_size(size)
-                .child(content);
-            Some(list_item)
-        } else {
-            None
-        }
-    }
-
-    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
-        let dropdown = self.dropdown.clone();
-        cx.defer_in(window, move |_, window, cx| {
-            _ = dropdown.update(cx, |this, cx| {
-                this.open = false;
-                this.focus(window, cx);
-            });
-        });
-    }
-
-    fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
-        let selected_value = self
-            .selected_index
-            .and_then(|ix| self.delegate.item(ix))
-            .map(|item| item.value().clone());
-        let dropdown = self.dropdown.clone();
-
-        cx.defer_in(window, move |_, window, cx| {
-            _ = dropdown.update(cx, |this, cx| {
-                cx.emit(DropdownEvent::Confirm(selected_value.clone()));
-                this.selected_value = selected_value;
-                this.open = false;
-                this.focus(window, cx);
-            });
-        });
-    }
-
-    fn perform_search(
-        &mut self,
-        query: &str,
-        window: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> Task<()> {
-        self.dropdown.upgrade().map_or(Task::ready(()), |dropdown| {
-            dropdown.update(cx, |_, cx| self.delegate.perform_search(query, window, cx))
-        })
-    }
-
-    fn set_selected_index(
-        &mut self,
-        ix: Option<IndexPath>,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) {
-        self.selected_index = ix;
-    }
-
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
-        if let Some(empty) = self
-            .dropdown
-            .upgrade()
-            .and_then(|dropdown| dropdown.read(cx).empty.as_ref())
-        {
-            empty(window, cx).into_any_element()
-        } else {
-            h_flex()
-                .justify_center()
-                .py_6()
-                .text_color(cx.theme().muted_foreground.opacity(0.6))
-                .child(Icon::new(IconName::Inbox).size(px(28.)))
-                .into_any_element()
-        }
-    }
-}
-
 pub enum DropdownEvent<D: DropdownDelegate + 'static> {
     Confirm(Option<<D::Item as DropdownItem>::Value>),
 }
@@ -283,7 +145,9 @@ pub enum DropdownEvent<D: DropdownDelegate + 'static> {
 /// State of the [`Dropdown`].
 pub struct DropdownState<D: DropdownDelegate + 'static> {
     focus_handle: FocusHandle,
-    list: Entity<List<DropdownListDelegate<D>>>,
+    list: Entity<ListState>,
+    delegate: D,
+    selected_index: Option<IndexPath>,
     size: Size,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement>>,
     /// Store the bounds of the input
@@ -508,19 +372,15 @@ where
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
-        let delegate = DropdownListDelegate {
-            delegate,
-            dropdown: cx.entity().downgrade(),
-            selected_index,
-        };
 
-        let searchable = delegate.delegate.searchable();
+        let searchable = delegate.searchable();
+        let section_items_count = (0..delegate.sections_count(cx))
+            .map(|section| delegate.items_count(section))
+            .collect();
 
         let list = cx.new(|cx| {
-            let mut list = List::new(delegate, window, cx)
-                .max_h(rems(20.))
-                .paddings(Edges::all(px(4.)))
-                .reset_on_cancel(false);
+            let mut list =
+                ListState::sections(section_items_count, window, cx).reset_on_cancel(false);
             if !searchable {
                 list = list.no_query();
             }
@@ -534,6 +394,8 @@ where
 
         let mut this = Self {
             focus_handle,
+            delegate,
+            selected_index,
             list,
             size: Size::Medium,
             selected_value: None,
@@ -575,8 +437,7 @@ where
     ) where
         <<D as DropdownDelegate>::Item as DropdownItem>::Value: PartialEq,
     {
-        let delegate = self.list.read(cx).delegate();
-        let selected_index = delegate.delegate.position(selected_value);
+        let selected_index = self.delegate.position(selected_value);
         self.set_selected_index(selected_index, window, cx);
     }
 
@@ -587,7 +448,7 @@ where
     fn update_selected_value(&mut self, _: &Window, cx: &App) {
         self.selected_value = self
             .selected_index(cx)
-            .and_then(|ix| self.list.read(cx).delegate().delegate.item(ix))
+            .and_then(|ix| self.delegate.item(ix))
             .map(|item| item.value().clone());
     }
 
@@ -664,12 +525,16 @@ where
     }
 
     /// Set the items for the dropdown.
-    pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
+    pub fn set_items(&mut self, items: D, window: &mut Window, cx: &mut Context<Self>)
     where
         D: DropdownDelegate + 'static,
     {
-        self.list.update(cx, |list, _| {
-            list.delegate_mut().delegate = items;
+        let section_items_count = (0..items.sections_count(cx))
+            .map(|section| items.items_count(section))
+            .collect();
+
+        self.list.update(cx, |list, cx| {
+            list.reset(section_items_count, window, cx);
         });
     }
 }
@@ -775,9 +640,6 @@ where
         let Some(title) = self
             .state
             .read(cx)
-            .list
-            .read(cx)
-            .delegate()
             .delegate
             .item(*selected_index)
             .map(|item| {
@@ -800,6 +662,69 @@ where
                 this.text_color(cx.theme().muted_foreground)
             })
             .child(title)
+    }
+
+    fn render_item(&self, ix: IndexPath, _: &mut Window, cx: &mut App) -> Option<ListItem> {
+        let selected = self.state.read(cx).selected_index == Some(ix);
+        let Some(item) = self.state.read(cx).delegate.item(ix) else {
+            return None;
+        };
+
+        let size = self.size;
+
+        let content = item.display_title().unwrap_or_else(|| {
+            div()
+                .whitespace_nowrap()
+                .child(item.title().to_string())
+                .into_any_element()
+        });
+        let list_item = DropdownListItem::new(ix.row)
+            .selected(selected)
+            .with_size(size)
+            .child(content);
+        Some(list_item)
+    }
+
+    fn cancel(state: &Entity<DropdownState<D>>, window: &mut Window, cx: &mut App) {
+        state.update(cx, |state, cx| {
+            state.open = false;
+            state.focus(window, cx);
+        })
+    }
+
+    fn confirm(
+        state: &Entity<DropdownState<D>>,
+        _secondary: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let selected_value = state
+            .read(cx)
+            .selected_index
+            .and_then(|ix| state.read(cx).delegate.item(ix))
+            .map(|item| item.value().clone());
+
+        state.update(cx, |state, cx| {
+            cx.emit(DropdownEvent::Confirm(selected_value.clone()));
+            state.selected_value = selected_value;
+            state.open = false;
+            state.focus(window, cx);
+        })
+    }
+
+    fn perform_search(&self, query: &str, window: &mut Window, cx: &mut App) -> Task<()> {
+        self.state.update(cx, |state, cx| {
+            state.delegate.perform_search(query, window, cx)
+        })
+    }
+
+    fn render_empty(_: &mut Window, cx: &mut App) -> AnyElement {
+        h_flex()
+            .justify_center()
+            .py_6()
+            .text_color(cx.theme().muted_foreground.opacity(0.6))
+            .child(Icon::new(IconName::Inbox).size(px(28.)))
+            .into_any_element()
     }
 }
 
@@ -865,10 +790,13 @@ where
         }
 
         let state = self.state.read(cx);
+        let list_state = state.list.clone();
+        let is_open = state.open;
+        let size = self.size;
         let show_clean = self.cleanable && state.selected_index(cx).is_some();
         let bounds = state.bounds;
-        let allow_open = !(state.open || self.disabled);
-        let outline_visible = state.open || is_focused && !self.disabled;
+        let allow_open = !(is_open || self.disabled);
+        let outline_visible = is_open || is_focused && !self.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
 
         div()
@@ -944,7 +872,7 @@ where
                                 let icon = match self.icon.clone() {
                                     Some(icon) => icon,
                                     None => {
-                                        if state.open {
+                                        if is_open {
                                             Icon::new(IconName::ChevronUp)
                                         } else {
                                             Icon::new(IconName::ChevronDown)
@@ -970,7 +898,7 @@ where
                         .size_full(),
                     ),
             )
-            .when(state.open, |this| {
+            .when(is_open, |this| {
                 this.child(
                     deferred(
                         anchored().snap_to_window_with_margin(px(8.)).child(
@@ -989,7 +917,63 @@ where
                                         .border_color(cx.theme().border)
                                         .rounded(popup_radius)
                                         .shadow_md()
-                                        .child(state.list.clone()),
+                                        .child(
+                                            List::new(&list_state)
+                                                .max_h(rems(20.))
+                                                .p(px(4.))
+                                                // .item(|ix, window, cx| {
+                                                //     // self.render_item(ix, window, cx)
+                                                // })
+                                                .section_header({
+                                                    let state = self.state.clone();
+                                                    move |section, _, cx| {
+                                                        let Some(item) = state
+                                                            .read(cx)
+                                                            .delegate
+                                                            .section(section)
+                                                        else {
+                                                            return None;
+                                                        };
+
+                                                        Some(
+                                                            div()
+                                                                .py_0p5()
+                                                                .px_2()
+                                                                .list_size(size)
+                                                                .text_sm()
+                                                                .text_color(
+                                                                    cx.theme().muted_foreground,
+                                                                )
+                                                                .child(item)
+                                                                .into_any_element(),
+                                                        )
+                                                    }
+                                                })
+                                                .empty(Self::render_empty)
+                                                .on_select({
+                                                    let state = self.state.clone();
+                                                    move |ix, window, cx| {
+                                                        state.update(cx, |state, cx| {
+                                                            state
+                                                                .set_selected_index(ix, window, cx);
+                                                        })
+                                                    }
+                                                })
+                                                .on_confirm({
+                                                    let state = self.state.clone();
+                                                    move |secondary, window, cx| {
+                                                        Self::confirm(&state, secondary, window, cx)
+                                                    }
+                                                })
+                                                .on_cancel({
+                                                    let state = self.state.clone();
+                                                    move |window, cx| {
+                                                        Self::cancel(&state, window, cx);
+                                                    }
+                                                }), // .on_search(|query, window, cx| {
+                                                    //     self.perform_search(query, window, cx)
+                                                    // }),
+                                        ),
                                 )
                                 .on_mouse_down_out(window.listener_for(
                                     &self.state,

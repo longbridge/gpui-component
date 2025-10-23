@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::{
     canvas, deferred, div, prelude::FluentBuilder, px, relative, Action, AnyElement, App,
-    AppContext, Bounds, Context, DismissEvent, Empty, Entity, EventEmitter,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
-    SharedString, Styled, StyledText, Subscription, Window,
+    AppContext, Bounds, Context, Empty, Entity, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Styled, StyledText,
+    Subscription, Window,
 };
 use lsp_types::CodeAction;
 
@@ -14,7 +14,7 @@ const MAX_MENU_HEIGHT: Pixels = px(480.);
 use crate::{
     actions, h_flex,
     input::{self, popovers::editor_popover, InputState},
-    list::{List, ListDelegate, ListEvent},
+    list::{List, ListEvent, ListState},
     ActiveTheme, IndexPath, Selectable,
 };
 
@@ -23,23 +23,6 @@ pub(crate) struct CodeActionItem {
     /// The `id` of the `CodeActionProvider` that provided this item.
     pub(crate) provider_id: SharedString,
     pub(crate) action: CodeAction,
-}
-
-struct MenuDelegate {
-    menu: Entity<CodeActionMenu>,
-    items: Vec<Rc<CodeActionItem>>,
-    selected_ix: usize,
-}
-
-impl MenuDelegate {
-    fn set_items(&mut self, items: Vec<CodeActionItem>) {
-        self.items = items.into_iter().map(Rc::new).collect();
-        self.selected_ix = 0;
-    }
-
-    fn selected_item(&self) -> Option<&Rc<CodeActionItem>> {
-        self.items.get(self.selected_ix)
-    }
 }
 
 #[derive(IntoElement)]
@@ -101,51 +84,14 @@ impl RenderOnce for MenuItem {
     }
 }
 
-impl EventEmitter<DismissEvent> for MenuDelegate {}
-
-impl ListDelegate for MenuDelegate {
-    type Item = MenuItem;
-
-    fn items_count(&self, _: usize, _: &gpui::App) -> usize {
-        self.items.len()
-    }
-
-    fn render_item(
-        &self,
-        ix: crate::IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
-        let item = self.items.get(ix.row)?;
-        Some(MenuItem::new(ix.row, item.clone()))
-    }
-
-    fn set_selected_index(
-        &mut self,
-        ix: Option<crate::IndexPath>,
-        _: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) {
-        self.selected_ix = ix.map(|i| i.row).unwrap_or(0);
-        cx.notify();
-    }
-
-    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
-        let Some(item) = self.selected_item() else {
-            return;
-        };
-
-        self.menu.update(cx, |this, cx| {
-            this.select_item(&item, window, cx);
-        });
-    }
-}
-
 /// A context menu for code completions and code actions.
 pub struct CodeActionMenu {
     offset: usize,
     state: Entity<InputState>,
-    list: Entity<List<MenuDelegate>>,
+    list: Entity<ListState>,
+    items: Vec<Rc<CodeActionItem>>,
+    selected_ix: usize,
+
     open: bool,
     bounds: Bounds<Pixels>,
 
@@ -162,18 +108,7 @@ impl CodeActionMenu {
         cx: &mut App,
     ) -> Entity<Self> {
         cx.new(|cx| {
-            let view = cx.entity();
-            let menu = MenuDelegate {
-                menu: view,
-                items: vec![],
-                selected_ix: 0,
-            };
-
-            let list = cx.new(|cx| {
-                List::new(menu, window, cx)
-                    .no_query()
-                    .max_h(MAX_MENU_HEIGHT)
-            });
+            let list = cx.new(|cx| ListState::new(0, window, cx).no_query());
 
             let _subscriptions =
                 vec![
@@ -192,11 +127,30 @@ impl CodeActionMenu {
                 offset: 0,
                 state,
                 list,
+                items: vec![],
+                selected_ix: 0,
                 open: false,
                 bounds: Bounds::default(),
                 _subscriptions,
             }
         })
+    }
+
+    fn set_items(
+        &mut self,
+        items: Vec<CodeActionItem>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.items = items.into_iter().map(Rc::new).collect();
+        self.list.update(cx, |this, cx| {
+            this.reset(vec![self.items.len()], window, cx);
+        });
+        self.selected_ix = 0;
+    }
+
+    fn selected_item(&self) -> Option<&Rc<CodeActionItem>> {
+        self.items.get(self.selected_ix)
     }
 
     fn select_item(&mut self, item: &CodeActionItem, window: &mut Window, cx: &mut Context<Self>) {
@@ -308,6 +262,36 @@ impl CodeActionMenu {
                 + Point::new(-px(4.), last_layout.line_height + px(4.)),
         )
     }
+
+    fn render_item(
+        &self,
+        ix: crate::IndexPath,
+        _: &mut Window,
+        _: &mut Context<List<Self>>,
+    ) -> Option<Self::Item> {
+        let item = self.items.get(ix.row)?;
+        Some(MenuItem::new(ix.row, item.clone()))
+    }
+
+    fn set_selected_index(
+        &mut self,
+        ix: Option<crate::IndexPath>,
+        _: &mut Window,
+        cx: &mut Context<List<Self>>,
+    ) {
+        self.selected_ix = ix.map(|i| i.row).unwrap_or(0);
+        cx.notify();
+    }
+
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+        let Some(item) = self.selected_item() else {
+            return;
+        };
+
+        self.menu.update(cx, |this, cx| {
+            this.select_item(&item, window, cx);
+        });
+    }
 }
 
 impl Render for CodeActionMenu {
@@ -336,7 +320,18 @@ impl Render for CodeActionMenu {
                 .top(pos.y)
                 .max_w(max_width)
                 .min_w(px(120.))
-                .child(self.list.clone())
+                .child(
+                    List::new(&self.list)
+                        .max_h(MAX_MENU_HEIGHT)
+                        .on_select(|ix, window, cx| {
+                            self.selected_ix = ix;
+                            cx.notify(view.entity_id());
+                        })
+                        .on_confirm(|secondary, window, cx| {
+                            self.confirm(secondary, window, cx);
+                        })
+                        .item(|ix, window, cx| self.render_item(ix, window, cx)),
+                )
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
