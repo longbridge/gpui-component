@@ -16,8 +16,8 @@ path = "src/reqwest_client.rs"
 doctest = true
 
 [dependencies]
+gpui.workspace = true
 reqwest.workspace = true
-http-client.workspace = true
 anyhow.workspace = true
 log.workspace = true
 
