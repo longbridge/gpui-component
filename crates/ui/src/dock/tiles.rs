@@ -84,6 +84,7 @@ struct ResizeDrag {
 /// TileItem is a moveable and resizable panel that can be added to a Tiles view.
 #[derive(Clone)]
 pub struct TileItem {
+    id: EntityId,
     pub(crate) panel: Arc<dyn PanelView>,
     bounds: Bounds<Pixels>,
     z_index: usize,
@@ -101,6 +102,7 @@ impl Debug for TileItem {
 impl TileItem {
     pub fn new(panel: Arc<dyn PanelView>, bounds: Bounds<Pixels>) -> Self {
         Self {
+            id: panel.view().entity_id(),
             panel,
             bounds,
             z_index: 0,
@@ -130,10 +132,10 @@ impl AnyDrag {
 pub struct Tiles {
     focus_handle: FocusHandle,
     pub(crate) panels: Vec<TileItem>,
-    dragging_index: Option<usize>,
+    dragging_id: Option<EntityId>,
     dragging_initial_mouse: Point<Pixels>,
     dragging_initial_bounds: Bounds<Pixels>,
-    resizing_index: Option<usize>,
+    resizing_id: Option<EntityId>,
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
@@ -184,10 +186,10 @@ impl Tiles {
         Self {
             focus_handle: cx.focus_handle(),
             panels: vec![],
-            dragging_index: None,
+            dragging_id: None,
             dragging_initial_mouse: Point::default(),
             dragging_initial_bounds: Bounds::default(),
-            resizing_index: None,
+            resizing_id: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
@@ -208,35 +210,22 @@ impl Tiles {
 
     /// Return the index of the panel.
     #[inline]
-    pub(crate) fn index_of(&self, panel: Arc<dyn PanelView>) -> Option<usize> {
-        self.panels.iter().position(|p| &p.panel == &panel)
+    pub(crate) fn index_of(&self, id: &EntityId) -> Option<usize> {
+        self.panels.iter().position(|p| &p.id == id)
+    }
+
+    #[inline]
+    pub(crate) fn panel(&self, id: &EntityId) -> Option<&TileItem> {
+        self.panels.iter().find(|p| &p.id == id)
     }
 
     /// Remove panel from the children.
     pub fn remove(&mut self, panel: Arc<dyn PanelView>, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ix) = self.index_of(panel.clone()) {
+        if let Some(ix) = self.index_of(&panel.panel_id(cx)) {
             self.panels.remove(ix);
 
             cx.emit(PanelEvent::LayoutChanged);
         }
-    }
-
-    fn update_initial_position(
-        &mut self,
-        position: Point<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
-        let Some((index, item)) = self.find_at_position(position) else {
-            return;
-        };
-
-        let inner_pos = position - self.bounds.origin;
-        let bounds = item.bounds;
-        self.dragging_index = Some(index);
-        self.dragging_initial_mouse = inner_pos;
-        self.dragging_initial_bounds = bounds;
-        cx.notify();
     }
 
     fn update_position(
@@ -245,11 +234,11 @@ impl Tiles {
         _: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        let Some(index) = self.dragging_index else {
+        let Some(dragging_id) = self.dragging_id else {
             return;
         };
 
-        let Some(item) = self.panels.get_mut(index) else {
+        let Some(item) = self.panels.iter_mut().find(|p| p.id == dragging_id) else {
             return;
         };
 
@@ -294,8 +283,8 @@ impl Tiles {
         _: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        if let Some((index, _item)) = self.find_at_position(drag_data.last_position) {
-            self.resizing_index = Some(index);
+        if let Some((_, item)) = self.find_at_position(drag_data.last_position) {
+            self.resizing_id = Some(item.id);
             self.resizing_drag_data = Some(drag_data);
             cx.notify();
         }
@@ -310,58 +299,61 @@ impl Tiles {
         _: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        if let Some(index) = self.resizing_index {
-            if let Some(item) = self.panels.get_mut(index) {
-                let previous_bounds = item.bounds;
-                let final_x = if let Some(x) = new_x {
-                    round_to_nearest_ten(x, cx)
-                } else {
-                    previous_bounds.origin.x
-                };
-                let final_y = if let Some(y) = new_y {
-                    round_to_nearest_ten(y, cx)
-                } else {
-                    previous_bounds.origin.y
-                };
-                let final_width = if let Some(width) = new_width {
-                    round_to_nearest_ten(width, cx)
-                } else {
-                    previous_bounds.size.width
-                };
+        let Some(resizing_id) = self.resizing_id.clone() else {
+            return;
+        };
+        let Some(item) = self.panels.iter_mut().find(|item| item.id == resizing_id) else {
+            return;
+        };
 
-                let final_height = if let Some(height) = new_height {
-                    round_to_nearest_ten(height, cx)
-                } else {
-                    previous_bounds.size.height
-                };
+        let previous_bounds = item.bounds;
+        let final_x = if let Some(x) = new_x {
+            round_to_nearest_ten(x, cx)
+        } else {
+            previous_bounds.origin.x
+        };
+        let final_y = if let Some(y) = new_y {
+            round_to_nearest_ten(y, cx)
+        } else {
+            previous_bounds.origin.y
+        };
+        let final_width = if let Some(width) = new_width {
+            round_to_nearest_ten(width, cx)
+        } else {
+            previous_bounds.size.width
+        };
 
-                // Only push to history if size has changed
-                if final_width != item.bounds.size.width
-                    || final_height != item.bounds.size.height
-                    || final_x != item.bounds.origin.x
-                    || final_y != item.bounds.origin.y
-                {
-                    item.bounds.origin.x = final_x;
-                    item.bounds.origin.y = final_y;
-                    item.bounds.size.width = final_width;
-                    item.bounds.size.height = final_height;
+        let final_height = if let Some(height) = new_height {
+            round_to_nearest_ten(height, cx)
+        } else {
+            previous_bounds.size.height
+        };
 
-                    // Only push if not during history operations
-                    if !self.history.ignore {
-                        self.history.push(TileChange {
-                            tile_id: item.panel.view().entity_id(),
-                            old_bounds: Some(previous_bounds),
-                            new_bounds: Some(item.bounds),
-                            old_order: None,
-                            new_order: None,
-                            version: 0,
-                        });
-                    }
-                }
+        // Only push to history if size has changed
+        if final_width != item.bounds.size.width
+            || final_height != item.bounds.size.height
+            || final_x != item.bounds.origin.x
+            || final_y != item.bounds.origin.y
+        {
+            item.bounds.origin.x = final_x;
+            item.bounds.origin.y = final_y;
+            item.bounds.size.width = final_width;
+            item.bounds.size.height = final_height;
 
-                cx.notify();
+            // Only push if not during history operations
+            if !self.history.ignore {
+                self.history.push(TileChange {
+                    tile_id: item.panel.view().entity_id(),
+                    old_bounds: Some(previous_bounds),
+                    new_bounds: Some(item.bounds),
+                    old_order: None,
+                    new_order: None,
+                    version: 0,
+                });
             }
         }
+
+        cx.notify();
     }
 
     pub fn add_item(
@@ -422,32 +414,36 @@ impl Tiles {
 
     #[inline]
     fn reset_current_index(&mut self) {
-        self.dragging_index = None;
-        self.resizing_index = None;
+        self.dragging_id = None;
+        self.resizing_id = None;
     }
 
     /// Bring the panel of target_index to front, returns (old_index, new_index) if successful
     fn bring_to_front(
         &mut self,
-        target_index: Option<usize>,
+        target_id: Option<EntityId>,
         cx: &mut Context<Self>,
-    ) -> Option<(usize, usize)> {
-        if let Some(old_index) = target_index {
-            if old_index < self.panels.len() {
-                let item = self.panels.remove(old_index);
-                self.panels.push(item);
-                let new_index = self.panels.len() - 1;
-                self.history.push(TileChange {
-                    tile_id: self.panels[new_index].panel.view().entity_id(),
-                    old_bounds: None,
-                    new_bounds: None,
-                    old_order: Some(old_index),
-                    new_order: Some(new_index),
-                    version: 0,
-                });
-                cx.notify();
-                return Some((old_index, new_index));
-            }
+    ) -> Option<EntityId> {
+        let Some(old_id) = target_id else {
+            return None;
+        };
+
+        let old_ix = self.panels.iter().position(|item| item.id == old_id)?;
+        if old_ix < self.panels.len() {
+            let item = self.panels.remove(old_ix);
+            self.panels.push(item);
+            let new_ix = self.panels.len() - 1;
+            let new_id = self.panels[new_ix].id;
+            self.history.push(TileChange {
+                tile_id: new_id,
+                old_bounds: None,
+                new_bounds: None,
+                old_order: Some(old_ix),
+                new_order: Some(new_ix),
+                version: 0,
+            });
+            cx.notify();
+            return Some(new_id);
         }
         None
     }
@@ -552,7 +548,7 @@ impl Tiles {
         let mut elements = Vec::new();
 
         // Left resize handle
-        elements.push(if !is_occluded(&right_handle_bounds) {
+        elements.push(
             div()
                 .id("left-resize-handle")
                 .cursor_ew_resize()
@@ -572,9 +568,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
-                            {
-                                this.resizing_index = Some(new_ix);
+                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
+                                this.resizing_id = Some(new_id);
                             }
                         }
                     }),
@@ -607,13 +602,11 @@ impl Tiles {
                         }
                     },
                 ))
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        });
+                .into_any_element(),
+        );
 
         // Right resize handle
-        elements.push(if !is_occluded(&right_handle_bounds) {
+        elements.push(
             div()
                 .id("right-resize-handle")
                 .cursor_ew_resize()
@@ -633,9 +626,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
-                            {
-                                this.resizing_index = Some(new_ix);
+                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
+                                this.resizing_id = Some(new_id);
                             }
                         }
                     }),
@@ -667,13 +659,11 @@ impl Tiles {
                         }
                     },
                 ))
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        });
+                .into_any_element(),
+        );
 
         // Top resize handle
-        elements.push(if !is_occluded(&bottom_handle_bounds) {
+        elements.push(
             div()
                 .id("top-resize-handle")
                 .cursor_ns_resize()
@@ -693,9 +683,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
-                            {
-                                this.resizing_index = Some(new_ix);
+                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
+                                this.resizing_id = Some(new_id);
                             }
                         }
                     }),
@@ -728,13 +717,11 @@ impl Tiles {
                         }
                     },
                 ))
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        });
+                .into_any_element(),
+        );
 
         // Bottom resize handle
-        elements.push(if !is_occluded(&bottom_handle_bounds) {
+        elements.push(
             div()
                 .id("bottom-resize-handle")
                 .cursor_ns_resize()
@@ -754,9 +741,8 @@ impl Tiles {
                                 last_bounds: panel_bounds,
                             };
                             this.update_resizing_drag(drag_data, window, cx);
-                            if let Some((_, new_ix)) = this.bring_to_front(this.resizing_index, cx)
-                            {
-                                this.resizing_index = Some(new_ix);
+                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
+                                this.resizing_id = Some(new_id);
                             }
                         }
                     }),
@@ -788,13 +774,11 @@ impl Tiles {
                         }
                     },
                 ))
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        });
+                .into_any_element(),
+        );
 
         // Corner resize handle
-        elements.push(if !is_occluded(&corner_handle_bounds) {
+        elements.push(
             div()
                 .child(
                     Icon::new(IconName::ResizeCorner)
@@ -823,10 +807,9 @@ impl Tiles {
                                         last_bounds: panel_bounds,
                                     };
                                     this.update_resizing_drag(drag_data, window, cx);
-                                    if let Some((_, new_ix)) =
-                                        this.bring_to_front(this.resizing_index, cx)
+                                    if let Some(new_id) = this.bring_to_front(this.resizing_id, cx)
                                     {
-                                        this.resizing_index = Some(new_ix);
+                                        this.resizing_id = Some(new_id);
                                     }
                                 }
                             }),
@@ -873,10 +856,8 @@ impl Tiles {
                             },
                         )),
                 )
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        });
+                .into_any_element(),
+        );
 
         elements
     }
@@ -888,51 +869,46 @@ impl Tiles {
         cx: &mut Context<Self>,
         entity_id: EntityId,
         item: &TileItem,
-        is_occluded: &impl Fn(&Bounds<Pixels>) -> bool,
     ) -> AnyElement {
-        let drag_bar_bounds = Bounds::new(
-            item.bounds.origin,
-            Size {
-                width: item.bounds.size.width,
-                height: DRAG_BAR_HEIGHT,
-            },
-        );
+        let item_id = item.id;
+        let item_bounds = item.bounds.clone();
 
-        if !is_occluded(&drag_bar_bounds) {
-            h_flex()
-                .id("drag-bar")
-                .absolute()
-                .w_full()
-                .h(DRAG_BAR_HEIGHT)
-                .bg(cx.theme().transparent)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                        let last_position = event.position;
-                        this.update_initial_position(last_position, window, cx);
-                        if let Some((_, new_ix)) = this.bring_to_front(this.dragging_index, cx) {
-                            this.dragging_index = Some(new_ix);
-                        }
-                    }),
-                )
-                .on_drag(DragMoving(entity_id), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &DragMoveEvent<DragMoving>, window, cx| match e.drag(cx) {
+        h_flex()
+            .id("drag-bar")
+            .absolute()
+            .w_full()
+            .h(DRAG_BAR_HEIGHT)
+            .bg(cx.theme().transparent)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    let inner_pos = event.position - this.bounds.origin;
+                    this.dragging_id = Some(item_id);
+                    this.dragging_initial_mouse = inner_pos;
+                    this.dragging_initial_bounds = item_bounds;
+
+                    if let Some(new_id) = this.bring_to_front(Some(item_id), cx) {
+                        this.dragging_id = Some(new_id);
+                    }
+                }),
+            )
+            .on_drag(DragMoving(entity_id), |drag, _, _, cx| {
+                cx.stop_propagation();
+                cx.new(|_| drag.clone())
+            })
+            .on_drag_move(
+                cx.listener(move |this, e: &DragMoveEvent<DragMoving>, window, cx| {
+                    match e.drag(cx) {
                         DragMoving(id) => {
                             if *id != entity_id {
                                 return;
                             }
                             this.update_position(e.event.position, window, cx);
                         }
-                    },
-                ))
-                .into_any_element()
-        } else {
-            div().into_any_element()
-        }
+                    }
+                }),
+            )
+            .into_any_element()
     }
 
     fn render_panel(
@@ -943,6 +919,7 @@ impl Tiles {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let entity_id = cx.entity_id();
+        let panel_id = item.id;
         let panel_view = item.panel.view();
         let is_occluded = {
             let panels = self.panels.clone();
@@ -976,11 +953,20 @@ impl Tiles {
             .child(h_flex().overflow_hidden().size_full().child(panel_view))
             .children(self.render_resize_handles(window, cx, entity_id, &item, &is_occluded))
             .child(self.render_drag_bar(window, cx, entity_id, &item, &is_occluded))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, _| {
+                    this.dragging_id = Some(panel_id);
+                }),
+            )
             // Here must be mouse up for avoid conflict with Drag event
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.bring_to_front(Some(ix), cx);
+                    if this.dragging_id == Some(panel_id) {
+                        this.dragging_id = None;
+                        this.bring_to_front(Some(panel_id), cx);
+                    }
                 }),
             )
     }
@@ -988,15 +974,15 @@ impl Tiles {
     /// Handle the mouse up event to finalize drag or resize operations
     fn on_mouse_up(&mut self, _: &mut Window, cx: &mut Context<'_, Tiles>) {
         // Check if a drag or resize was active
-        if self.dragging_index.is_some()
-            || self.resizing_index.is_some()
+        if self.dragging_id.is_some()
+            || self.resizing_id.is_some()
             || self.resizing_drag_data.is_some()
         {
             let mut changes_to_push = vec![];
 
             // Handle dragging
-            if let Some(index) = self.dragging_index {
-                if let Some(item) = self.panels.get(index) {
+            if let Some(dragging_id) = self.dragging_id {
+                if let Some(item) = self.panel(&dragging_id) {
                     let initial_bounds = self.dragging_initial_bounds;
                     let current_bounds = item.bounds;
                     if initial_bounds.origin != current_bounds.origin
@@ -1015,9 +1001,9 @@ impl Tiles {
             }
 
             // Handle resizing
-            if let Some(index) = self.resizing_index {
+            if let Some(resizing_id) = self.resizing_id {
                 if let Some(drag_data) = &self.resizing_drag_data {
-                    if let Some(item) = self.panels.get(index) {
+                    if let Some(item) = self.panel(&resizing_id) {
                         let initial_bounds = drag_data.last_bounds;
                         let current_bounds = item.bounds;
                         if initial_bounds.size != current_bounds.size {
@@ -1126,10 +1112,10 @@ impl Render for Tiles {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    if this.resizing_index.is_none() && this.dragging_index.is_none() {
+                    if this.resizing_id.is_none() && this.dragging_id.is_none() {
                         let position = event.position;
-                        if let Some((index, _)) = this.find_at_position(position) {
-                            this.bring_to_front(Some(index), cx);
+                        if let Some((_, item)) = this.find_at_position(position) {
+                            this.bring_to_front(Some(item.id), cx);
                             cx.notify();
                         }
                     }
