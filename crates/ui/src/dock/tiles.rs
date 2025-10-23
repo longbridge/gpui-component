@@ -15,14 +15,13 @@ use super::{
     DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
 };
 use gpui::{
-    actions, canvas, div, point, px, size, AnyElement, App, AppContext, Bounds, Context,
-    DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, Half,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
-    Window,
+    actions, canvas, div, px, size, AnyElement, App, AppContext, Bounds, Context, DismissEvent,
+    DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render,
+    ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity, Window,
 };
 
-actions!(tiles, [Undo, Redo,]);
+actions!(tiles, [Undo, Redo]);
 
 const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 const DRAG_BAR_HEIGHT: Pixels = px(30.);
@@ -277,19 +276,6 @@ impl Tiles {
         cx.notify();
     }
 
-    fn update_resizing_drag(
-        &mut self,
-        drag_data: ResizeDrag,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
-        if let Some((_, item)) = self.find_at_position(drag_data.last_position) {
-            self.resizing_id = Some(item.id);
-            self.resizing_drag_data = Some(drag_data);
-            cx.notify();
-        }
-    }
-
     fn resize(
         &mut self,
         new_x: Option<Pixels>,
@@ -388,28 +374,6 @@ impl Tiles {
 
         cx.emit(PanelEvent::LayoutChanged);
         cx.notify();
-    }
-
-    /// Find the panel at a given position, considering z-index
-    fn find_at_position(&self, position: Point<Pixels>) -> Option<(usize, &TileItem)> {
-        let inner_pos = position - self.bounds.origin;
-        let mut panels_with_indices: Vec<(usize, &TileItem)> =
-            self.panels.iter().enumerate().collect();
-
-        panels_with_indices
-            .sort_by(|a, b| b.1.z_index.cmp(&a.1.z_index).then_with(|| b.0.cmp(&a.0)));
-
-        for (index, item) in panels_with_indices {
-            let extended_bounds = Bounds::new(
-                item.bounds.origin,
-                item.bounds.size + size(HANDLE_SIZE, HANDLE_SIZE) / 2.0,
-            );
-            if extended_bounds.contains(&inner_pos) {
-                return Some((index, item));
-            }
-        }
-
-        None
     }
 
     #[inline]
@@ -523,7 +487,8 @@ impl Tiles {
         entity_id: EntityId,
         item: &TileItem,
     ) -> Vec<AnyElement> {
-        let panel_bounds = item.bounds;
+        let item_id = item.id;
+        let item_bounds = item.bounds;
         let handle_offset = -HANDLE_SIZE + px(1.);
 
         let mut elements = Vec::new();
@@ -537,21 +502,19 @@ impl Tiles {
                 .top_0()
                 .left(handle_offset)
                 .w(HANDLE_SIZE)
-                .h(panel_bounds.size.height)
+                .h(item_bounds.size.height)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
                         move |this, event: &MouseDownEvent, window, cx| {
-                            let last_position = event.position;
-                            let drag_data = ResizeDrag {
-                                side: ResizeSide::Left,
-                                last_position,
-                                last_bounds: panel_bounds,
-                            };
-                            this.update_resizing_drag(drag_data, window, cx);
-                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
-                                this.resizing_id = Some(new_id);
-                            }
+                            this.on_resize_handle_mouse_down(
+                                ResizeSide::Left,
+                                item_id,
+                                item_bounds,
+                                event,
+                                window,
+                                cx,
+                            );
                         }
                     }),
                 )
@@ -595,21 +558,19 @@ impl Tiles {
                 .top_0()
                 .right(handle_offset)
                 .w(HANDLE_SIZE)
-                .h(panel_bounds.size.height)
+                .h(item_bounds.size.height)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
                         move |this, event: &MouseDownEvent, window, cx| {
-                            let last_position = event.position;
-                            let drag_data = ResizeDrag {
-                                side: ResizeSide::Right,
-                                last_position,
-                                last_bounds: panel_bounds,
-                            };
-                            this.update_resizing_drag(drag_data, window, cx);
-                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
-                                this.resizing_id = Some(new_id);
-                            }
+                            this.on_resize_handle_mouse_down(
+                                ResizeSide::Right,
+                                item_id,
+                                item_bounds,
+                                event,
+                                window,
+                                cx,
+                            );
                         }
                     }),
                 )
@@ -651,22 +612,20 @@ impl Tiles {
                 .absolute()
                 .left(px(0.0))
                 .top(handle_offset)
-                .w(panel_bounds.size.width)
+                .w(item_bounds.size.width)
                 .h(HANDLE_SIZE)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
                         move |this, event: &MouseDownEvent, window, cx| {
-                            let last_position = event.position;
-                            let drag_data = ResizeDrag {
-                                side: ResizeSide::Top,
-                                last_position,
-                                last_bounds: panel_bounds,
-                            };
-                            this.update_resizing_drag(drag_data, window, cx);
-                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
-                                this.resizing_id = Some(new_id);
-                            }
+                            this.on_resize_handle_mouse_down(
+                                ResizeSide::Top,
+                                item_id,
+                                item_bounds,
+                                event,
+                                window,
+                                cx,
+                            );
                         }
                     }),
                 )
@@ -709,22 +668,20 @@ impl Tiles {
                 .absolute()
                 .left(px(0.0))
                 .bottom(handle_offset)
-                .w(panel_bounds.size.width)
+                .w(item_bounds.size.width)
                 .h(HANDLE_SIZE)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
                         move |this, event: &MouseDownEvent, window, cx| {
-                            let last_position = event.position;
-                            let drag_data = ResizeDrag {
-                                side: ResizeSide::Bottom,
-                                last_position,
-                                last_bounds: panel_bounds,
-                            };
-                            this.update_resizing_drag(drag_data, window, cx);
-                            if let Some(new_id) = this.bring_to_front(this.resizing_id, cx) {
-                                this.resizing_id = Some(new_id);
-                            }
+                            this.on_resize_handle_mouse_down(
+                                ResizeSide::Bottom,
+                                item_id,
+                                item_bounds,
+                                event,
+                                window,
+                                cx,
+                            );
                         }
                     }),
                 )
@@ -781,17 +738,14 @@ impl Tiles {
                             MouseButton::Left,
                             cx.listener({
                                 move |this, event: &MouseDownEvent, window, cx| {
-                                    let last_position = event.position;
-                                    let drag_data = ResizeDrag {
-                                        side: ResizeSide::BottomRight,
-                                        last_position,
-                                        last_bounds: panel_bounds,
-                                    };
-                                    this.update_resizing_drag(drag_data, window, cx);
-                                    if let Some(new_id) = this.bring_to_front(this.resizing_id, cx)
-                                    {
-                                        this.resizing_id = Some(new_id);
-                                    }
+                                    this.on_resize_handle_mouse_down(
+                                        ResizeSide::BottomRight,
+                                        item_id,
+                                        item_bounds,
+                                        event,
+                                        window,
+                                        cx,
+                                    );
                                 }
                             }),
                         )
@@ -841,6 +795,29 @@ impl Tiles {
         );
 
         elements
+    }
+
+    fn on_resize_handle_mouse_down(
+        &mut self,
+        side: ResizeSide,
+        item_id: EntityId,
+        item_bounds: Bounds<Pixels>,
+        event: &MouseDownEvent,
+        _: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let last_position = event.position;
+        self.resizing_id = Some(item_id);
+        self.resizing_drag_data = Some(ResizeDrag {
+            side,
+            last_position,
+            last_bounds: item_bounds,
+        });
+
+        if let Some(new_id) = self.bring_to_front(self.resizing_id, cx) {
+            self.resizing_id = Some(new_id);
+        }
+        cx.stop_propagation();
     }
 
     /// Produce the drag-bar element for the given panel item
@@ -895,7 +872,6 @@ impl Tiles {
     fn render_panel(
         &mut self,
         item: &TileItem,
-        ix: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -1053,8 +1029,7 @@ impl Render for Tiles {
                     .children(
                         panels
                             .into_iter()
-                            .enumerate()
-                            .map(|(ix, item)| self.render_panel(&item, ix, window, cx)),
+                            .map(|item| self.render_panel(&item, window, cx)),
                     )
                     .child({
                         canvas(
@@ -1072,18 +1047,6 @@ impl Render for Tiles {
                 MouseButton::Left,
                 cx.listener(move |this, _event: &MouseUpEvent, window, cx| {
                     this.on_mouse_up(window, cx);
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    if this.resizing_id.is_none() && this.dragging_id.is_none() {
-                        let position = event.position;
-                        if let Some((_, item)) = this.find_at_position(position) {
-                            this.bring_to_front(Some(item.id), cx);
-                            cx.notify();
-                        }
-                    }
                 }),
             )
             .child(
