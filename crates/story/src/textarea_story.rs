@@ -78,7 +78,6 @@ impl TextareaStory {
         let textarea_auto_grow = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(1, 5)
-                .soft_wrap(true)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
         });
@@ -86,6 +85,7 @@ impl TextareaStory {
         let textarea_auto_grow_no_wrap = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(1, 5)
+                .soft_wrap(false)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
         });
