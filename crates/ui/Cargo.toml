@@ -7,7 +7,7 @@ license = "Apache-2.0"
 name = "gpui-component"
 publish = true
 readme = "../../README.md"
-version = "0.3.0-preview1"
+version = "0.3.0-preview2"
 
 [lib]
 doctest = false
