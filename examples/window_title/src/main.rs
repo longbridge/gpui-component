@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use gpui::*;
 use gpui_component::{
     button::{Button, ButtonVariants},
-    v_flex, Root, TitleBar,
+    h_flex, v_flex, Root, TitleBar,
 };
 use rust_embed::Embed;
 use std::borrow::Cow;
@@ -37,11 +37,14 @@ impl Render for Example {
             .size_full()
             .child(
                 // Render custom title bar on top of Root view.
-                TitleBar::new()
-                    .justify_between()
-                    .pr_2()
-                    .child("App with Custom title bar")
-                    .child("Right Item"),
+                TitleBar::new().child(
+                    h_flex()
+                        .w_full()
+                        .pr_2()
+                        .justify_between()
+                        .child("App with Custom title bar")
+                        .child("Right Item"),
+                ),
             )
             .child(
                 div()
