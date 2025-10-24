@@ -1,8 +1,34 @@
+use anyhow::anyhow;
 use gpui::*;
 use gpui_component::{
     button::{Button, ButtonVariants},
     v_flex, Root, TitleBar,
 };
+use rust_embed::Embed;
+use std::borrow::Cow;
+
+#[derive(Embed)]
+#[folder = "./assets"]
+#[include = "icons/**/*.svg"]
+pub struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if path.is_empty() {
+            return Ok(None);
+        }
+
+        Self::get(path)
+            .map(|f| Some(f.data))
+            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        Ok(Self::iter()
+            .filter_map(|p| p.starts_with(path).then(|| p.into()))
+            .collect())
+    }
+}
 
 pub struct Example;
 impl Render for Example {
@@ -36,7 +62,7 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = Application::new();
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         gpui_component::init(cx);
