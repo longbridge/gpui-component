@@ -5,7 +5,7 @@ use std::{any::type_name, borrow::Cow, mem, pin::Pin, task::Poll, time::Duration
 use anyhow::anyhow;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{AsyncRead, FutureExt as _, TryStreamExt as _};
-use http_client::{RedirectPolicy, Url, http};
+use gpui::http_client::{self, RedirectPolicy, Url, http};
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -298,7 +298,7 @@ impl http_client::HttpClient for ReqwestClient {
 
 #[cfg(test)]
 mod tests {
-    use http_client::{HttpClient, Url};
+    use gpui::http_client::{HttpClient, Url};
 
     use crate::ReqwestClient;
 

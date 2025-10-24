@@ -119,7 +119,7 @@ struct UpdateFuture {
     current_style: TextViewStyle,
     current_text: SharedString,
     timer: Timer,
-    rx: smol::channel::Receiver<Update>,
+    rx: Pin<Box<smol::channel::Receiver<Update>>>,
     tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
     delay: Duration,
 }
@@ -140,7 +140,7 @@ impl UpdateFuture {
             current_style: style,
             current_text: text,
             timer: Timer::never(),
-            rx,
+            rx: Box::pin(rx),
             tx_result,
             delay,
         }

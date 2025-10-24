@@ -1,6 +1,6 @@
 [package]
 name = "reqwest_client"
-version = "0.3.0-preview1"
+version = "0.3.0"
 publish = false
 license = "Apache-2.0"
 edition = "2024"
@@ -16,8 +16,8 @@ path = "src/reqwest_client.rs"
 doctest = true
 
 [dependencies]
+gpui.workspace = true
 reqwest.workspace = true
-http-client.workspace = true
 anyhow.workspace = true
 log.workspace = true
 

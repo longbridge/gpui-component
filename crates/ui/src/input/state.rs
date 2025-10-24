@@ -1444,6 +1444,8 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
+
         let line_height = self
             .last_layout
             .as_ref()
@@ -1454,7 +1456,11 @@ impl InputState {
         self.diagnostic_popover = None;
     }
 
-    fn update_scroll_offset(&mut self, offset: Option<Point<Pixels>>, cx: &mut Context<Self>) {
+    pub(super) fn update_scroll_offset(
+        &mut self,
+        offset: Option<Point<Pixels>>,
+        cx: &mut Context<Self>,
+    ) {
         let mut offset = offset.unwrap_or(self.scroll_handle.offset());
 
         let safe_y_range =
@@ -1514,7 +1520,11 @@ impl InputState {
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
-        let edge_height = 3 * line_height;
+        let edge_height = if self.mode.is_code_editor() {
+            3 * line_height
+        } else {
+            line_height
+        };
         if row_offset_y - edge_height < -scroll_offset.y {
             // Scroll up
             scroll_offset.y = -row_offset_y + edge_height;

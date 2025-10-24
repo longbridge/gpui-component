@@ -13,12 +13,11 @@ resolver = "2"
 
 [workspace.dependencies]
 gpui-component = { path = "crates/ui" }
-gpui-component-macros = { path = "crates/macros", version = "0.3.0-preview1" }
+gpui-component-macros = { path = "crates/macros", version = "0.3.0" }
 story = { path = "crates/story" }
 
-gpui = "0.2.0"
-gpui-macros = "0.2.0"
-http-client = { version = "0.2.0", package = "zed-http-client" }
+gpui = "0.2.2"
+gpui-macros = "0.2.2"
 reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 
@@ -37,7 +36,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1"
 serde_repr = "0.1"
 smallvec = "1"
-smol = "1"
+smol = "2"
 tracing = "0.1.41"
 
 [workspace.dependencies.windows]

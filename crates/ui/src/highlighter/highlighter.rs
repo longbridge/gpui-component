@@ -565,10 +565,30 @@ impl SyntaxHighlighter {
         (language_name, content_node, include_children)
     }
 
-    /// The argument `range` is the range of the line in the text.
+    /// Returns the syntax highlight styles for a range of text.
     ///
-    /// Returns `range` is the range in the line.
-    pub(crate) fn styles(
+    /// The argument `range` is the range of bytes in the text to highlight.
+    ///
+    /// Returns a vector of tuples where each tuple contains:
+    /// - A byte range relative to the text
+    /// - The corresponding highlight style for that range
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use gpui_component::highlighter::{HighlightTheme, SyntaxHighlighter};
+    /// use ropey::Rope;
+    ///
+    /// let code = "fn main() {\n    println!(\"Hello\");\n}";
+    /// let rope = Rope::from_str(code);
+    /// let mut highlighter = SyntaxHighlighter::new("rust");
+    /// highlighter.update(None, &rope);
+    ///
+    /// let theme = HighlightTheme::default_dark();
+    /// let range = 0..code.len();
+    /// let styles = highlighter.styles(&range, &theme);
+    /// ```
+    pub fn styles(
         &self,
         range: &Range<usize>,
         theme: &HighlightTheme,
