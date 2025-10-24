@@ -1,5 +1,6 @@
 use gpui::{
-    point, px, Context, EntityInputHandler as _, Path, PathBuilder, Pixels, SharedString, Window,
+    point, px, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString,
+    TextRun, TextStyle, Window,
 };
 use ropey::RopeSlice;
 
@@ -80,14 +81,39 @@ impl InputMode {
 }
 
 impl TextElement {
+    /// Measure the indent width in pixels for given column count.
+    fn measure_indent_width(&self, style: &TextStyle, column: usize, window: &Window) -> Pixels {
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        let layout = window.text_system().shape_line(
+            SharedString::from(" ".repeat(column)),
+            font_size,
+            &[TextRun {
+                len: column,
+                font: style.font(),
+                color: Hsla::default(),
+                background_color: None,
+                strikethrough: None,
+                underline: None,
+            }],
+            None,
+        );
+
+        layout.width
+    }
+
     pub(super) fn layout_indent_guides(
         &self,
         state: &InputState,
         last_layout: &LastLayout,
+        text_style: &TextStyle,
+        window: &mut Window,
     ) -> Option<Path<Pixels>> {
         if !state.mode.has_indent_guides() {
             return None;
         }
+
+        let indent_width =
+            self.measure_indent_width(text_style, state.mode.tab_size().tab_size, window);
 
         let tab_size = state.mode.tab_size();
         let line_height = last_layout.line_height;
@@ -103,12 +129,13 @@ impl TextElement {
             if line.len() > 0 {
                 let indent_count = tab_size.indent_count(&line);
                 for offset in (0..indent_count).step_by(tab_size.tab_size) {
-                    let mut pos = line_layout
-                        .position_for_index(offset, line_height)
-                        .unwrap_or(point(px(0.), px(0.)));
+                    let x = if indent_count > 0 {
+                        indent_width * offset as f32 / tab_size.tab_size as f32
+                    } else {
+                        px(0.)
+                    };
 
-                    pos.x += last_layout.line_number_width;
-                    pos.y += offset_y;
+                    let pos = point(x + last_layout.line_number_width, offset_y);
 
                     builder.move_to(pos);
                     builder.line_to(point(pos.x, pos.y + line_height));

@@ -1084,7 +1084,8 @@ impl Element for TextElement {
         };
 
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
-        let indent_guides_path = self.layout_indent_guides(state, &last_layout);
+        let indent_guides_path =
+            self.layout_indent_guides(state, &last_layout, &text_style, window);
 
         PrepaintState {
             bounds,
@@ -1194,7 +1195,7 @@ impl Element for TextElement {
 
         // Paint indent guides
         if let Some(path) = prepaint.indent_guides_path.take() {
-            window.paint_path(path, cx.theme().secondary);
+            window.paint_path(path, cx.theme().border.opacity(0.85));
         }
 
         // Paint selections
