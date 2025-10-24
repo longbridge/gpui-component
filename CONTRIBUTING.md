@@ -111,7 +111,7 @@ When we are ready to release a new version, please follow the steps below:
    cargo set-version x.y.z
    ```
 
-2. Git Commit the changes with message `chore: Release vx.y.z`.
+2. Git Commit the changes with message `Bump vx.y.z`.
 3. Create a new git tag with the version `vx.y.z` and push `main` branch and the tag to remote.
 
    ```bash
