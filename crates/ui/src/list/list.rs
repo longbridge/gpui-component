@@ -18,8 +18,8 @@ use gpui::{
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
-    px, size, App, AvailableSpace, Context, Edges, EventEmitter, ListSizingBehavior,
-    MouseDownEvent, Pixels, ScrollStrategy, Subscription,
+    px, size, App, AvailableSpace, ClickEvent, Context, Edges, EventEmitter, ListSizingBehavior,
+    Pixels, ScrollStrategy, SharedString, StatefulInteractiveElement, Subscription,
 };
 use rust_i18n::t;
 use smol::Timer;
@@ -422,9 +422,10 @@ where
             .mouse_right_clicked_index
             .map(|s| s.eq_row(ix))
             .unwrap_or(false);
+        let id = SharedString::from(format!("list-item-{}", ix));
 
         div()
-            .id("list-item")
+            .id(id)
             .w_full()
             .relative()
             .children(self.delegate.render_item(ix, window, cx).map(|item| {
@@ -432,20 +433,17 @@ where
                     .secondary_selected(mouse_right_clicked)
             }))
             .when(self.selectable, |this| {
-                this.on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
-                        this.mouse_right_clicked_index = None;
-                        this.selected_index = Some(ix);
-                        this.on_action_confirm(
-                            &Confirm {
-                                secondary: ev.modifiers.secondary(),
-                            },
-                            window,
-                            cx,
-                        );
-                    }),
-                )
+                this.on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
+                    this.mouse_right_clicked_index = None;
+                    this.selected_index = Some(ix);
+                    this.on_action_confirm(
+                        &Confirm {
+                            secondary: e.modifiers().secondary(),
+                        },
+                        window,
+                        cx,
+                    );
+                }))
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, _, _, cx| {

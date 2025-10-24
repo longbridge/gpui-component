@@ -200,7 +200,6 @@ impl RenderOnce for ButtonGroup {
                                     bottom: true,
                                 })
                         }
-                        .stop_propagation(false)
                         .when_some(self.size, |this, size| this.with_size(size))
                         .when_some(self.variant, |this, variant| this.with_variant(variant))
                         .when(self.compact, |this| this.compact())
