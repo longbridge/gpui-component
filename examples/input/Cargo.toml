@@ -1,6 +1,6 @@
 [package]
 name = "input"
-version = "0.3.0-preview2"
+version = "0.3.0"
 publish = false
 edition = "2024"
 
