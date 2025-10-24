@@ -120,7 +120,7 @@ impl TextElement {
         let visible_range = last_layout.visible_range.clone();
         let mut builder = PathBuilder::stroke(px(1.));
         let mut offset_y =
-            last_layout.visible_top + state.scroll_handle.offset().y + (line_height * 2 - px(3.));
+            last_layout.visible_top + state.scroll_handle.offset().y + (line_height * 2 - px(3.5));
         let mut last_indents = vec![];
         for ix in visible_range {
             let line = state.text.slice_line(ix);
