@@ -9,7 +9,7 @@ use std::{
 use anyhow::Ok;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
+    ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
     button::{Button, ButtonVariants as _},
     dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
@@ -998,16 +998,18 @@ impl Render for Example {
                                         Button::new("soft-wrap")
                                             .ghost()
                                             .xsmall()
+                                            .when(self.soft_wrap, |this| this.icon(IconName::Check))
                                             .label("Soft Wrap")
-                                            .selected(self.soft_wrap)
                                             .on_click(cx.listener(Self::toggle_soft_wrap))
                                     })
                                     .child({
                                         Button::new("indent-guides")
                                             .ghost()
                                             .xsmall()
+                                            .when(self.indent_guides, |this| {
+                                                this.icon(IconName::Check)
+                                            })
                                             .label("Indent Guides")
-                                            .selected(self.indent_guides)
                                             .on_click(cx.listener(Self::toggle_indent_guides))
                                     }),
                             )
