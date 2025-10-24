@@ -19,13 +19,8 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    blink_cursor::BlinkCursor,
-    change::Change,
-    element::TextElement,
-    mask_pattern::MaskPattern,
-    mode::{InputMode, TabSize},
-    number_input,
-    text_wrapper::TextWrapper,
+    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
+    mode::InputMode, number_input, text_wrapper::TextWrapper, TabSize,
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::{
@@ -468,6 +463,7 @@ impl InputState {
             language,
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
+            indent_guides: true,
             diagnostics: DiagnosticSet::new(&Rope::new()),
         };
         self.searchable = true;
@@ -503,19 +499,6 @@ impl InputState {
             *l = line_number;
         }
         cx.notify();
-    }
-
-    /// Set the tab size for the input.
-    ///
-    /// Only for [`InputMode::MultiLine`] and [`InputMode::CodeEditor`] mode.
-    pub fn tab_size(mut self, tab: TabSize) -> Self {
-        debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
-        match &mut self.mode {
-            InputMode::MultiLine { tab: t, .. } => *t = tab,
-            InputMode::CodeEditor { tab: t, .. } => *t = tab,
-            _ => {}
-        }
-        self
     }
 
     /// Set the number of rows for the multi-line Textarea.
@@ -992,7 +975,11 @@ impl InputState {
     /// Get start line of selection start or end (The min value).
     ///
     /// This is means is always get the first line of selection.
-    fn start_of_line_of_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
+    pub(super) fn start_of_line_of_selection(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> usize {
         if self.mode.is_single_line() {
             return 0;
         }
@@ -1163,169 +1150,6 @@ impl InputState {
         cx.emit(InputEvent::PressEnter {
             secondary: action.secondary,
         });
-    }
-
-    pub(super) fn indent_inline(
-        &mut self,
-        _: &IndentInline,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.indent(false, window, cx);
-    }
-
-    pub(super) fn indent_block(&mut self, _: &Indent, window: &mut Window, cx: &mut Context<Self>) {
-        self.indent(true, window, cx);
-    }
-
-    pub(super) fn outdent_inline(
-        &mut self,
-        _: &OutdentInline,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.outdent(false, window, cx);
-    }
-
-    pub(super) fn outdent_block(
-        &mut self,
-        _: &Outdent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.outdent(true, window, cx);
-    }
-
-    pub(super) fn indent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(tab_size) = self.mode.tab_size() else {
-            cx.propagate();
-            return;
-        };
-
-        let tab_indent = tab_size.to_string();
-        let selected_range = self.selected_range;
-        let mut added_len = 0;
-        let is_selected = !self.selected_range.is_empty();
-
-        if is_selected || block {
-            let start_offset = self.start_of_line_of_selection(window, cx);
-            let mut offset = start_offset;
-
-            let selected_text = self
-                .text_for_range(
-                    self.range_to_utf16(&(offset..selected_range.end)),
-                    &mut None,
-                    window,
-                    cx,
-                )
-                .unwrap_or("".into());
-
-            for line in selected_text.split('\n') {
-                self.replace_text_in_range_silent(
-                    Some(self.range_to_utf16(&(offset..offset))),
-                    &tab_indent,
-                    window,
-                    cx,
-                );
-                added_len += tab_indent.len();
-                // +1 for "\n", the `\r` is included in the `line`.
-                offset += line.len() + tab_indent.len() + 1;
-            }
-
-            if is_selected {
-                self.selected_range = (start_offset..selected_range.end + added_len).into();
-            } else {
-                self.selected_range =
-                    (selected_range.start + added_len..selected_range.end + added_len).into();
-            }
-        } else {
-            // Selected none
-            let offset = self.selected_range.start;
-            self.replace_text_in_range_silent(
-                Some(self.range_to_utf16(&(offset..offset))),
-                &tab_indent,
-                window,
-                cx,
-            );
-            added_len = tab_indent.len();
-
-            self.selected_range =
-                (selected_range.start + added_len..selected_range.end + added_len).into();
-        }
-    }
-
-    pub(super) fn outdent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(tab_size) = self.mode.tab_size() else {
-            cx.propagate();
-            return;
-        };
-
-        let tab_indent = tab_size.to_string();
-        let selected_range = self.selected_range;
-        let mut removed_len = 0;
-        let is_selected = !self.selected_range.is_empty();
-
-        if is_selected || block {
-            let start_offset = self.start_of_line_of_selection(window, cx);
-            let mut offset = start_offset;
-
-            let selected_text = self
-                .text_for_range(
-                    self.range_to_utf16(&(offset..selected_range.end)),
-                    &mut None,
-                    window,
-                    cx,
-                )
-                .unwrap_or("".into());
-
-            for line in selected_text.split('\n') {
-                if line.starts_with(tab_indent.as_ref()) {
-                    self.replace_text_in_range_silent(
-                        Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
-                        "",
-                        window,
-                        cx,
-                    );
-                    removed_len += tab_indent.len();
-
-                    // +1 for "\n"
-                    offset += line.len().saturating_sub(tab_indent.len()) + 1;
-                } else {
-                    offset += line.len() + 1;
-                }
-            }
-
-            if is_selected {
-                self.selected_range =
-                    (start_offset..selected_range.end.saturating_sub(removed_len)).into();
-            } else {
-                self.selected_range = (selected_range.start.saturating_sub(removed_len)
-                    ..selected_range.end.saturating_sub(removed_len))
-                    .into();
-            }
-        } else {
-            // Selected none
-            let start_offset = self.selected_range.start;
-            let offset = self.start_of_line_of_selection(window, cx);
-            let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
-            // FIXME: To improve performance
-            if self
-                .text
-                .slice(offset..self.text.len())
-                .to_string()
-                .starts_with(tab_indent.as_ref())
-            {
-                self.replace_text_in_range_silent(
-                    Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
-                    "",
-                    window,
-                    cx,
-                );
-                removed_len = tab_indent.len();
-                let new_offset = start_offset.saturating_sub(removed_len);
-                self.selected_range = (new_offset..new_offset).into();
-            }
-        }
     }
 
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {

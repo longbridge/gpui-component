@@ -712,6 +712,7 @@ pub(super) struct PrepaintState {
     search_match_paths: Vec<(Path<Pixels>, bool)>,
     document_color_paths: Vec<(Path<Pixels>, Hsla)>,
     hover_definition_hitbox: Option<Hitbox>,
+    indent_guides_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
 }
 
@@ -1083,6 +1084,7 @@ impl Element for TextElement {
         };
 
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
+        let indent_guides_path = self.layout_indent_guides(state, &last_layout);
 
         PrepaintState {
             bounds,
@@ -1097,6 +1099,7 @@ impl Element for TextElement {
             hover_highlight_path,
             hover_definition_hitbox,
             document_color_paths,
+            indent_guides_path,
         }
     }
 
@@ -1187,6 +1190,11 @@ impl Element for TextElement {
                 }
                 offset_y += height;
             }
+        }
+
+        // Paint indent guides
+        if let Some(path) = prepaint.indent_guides_path.take() {
+            window.paint_path(path, cx.theme().secondary);
         }
 
         // Paint selections

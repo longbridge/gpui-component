@@ -3,6 +3,7 @@ mod change;
 mod clear_button;
 mod cursor;
 mod element;
+mod indent;
 mod lsp;
 mod mask_pattern;
 mod mode;
@@ -18,9 +19,9 @@ mod text_wrapper;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
+pub use indent::TabSize;
 pub use lsp::*;
 pub use mask_pattern::MaskPattern;
-pub use mode::TabSize;
 pub use number_input::{NumberInput, NumberInputEvent, StepAction};
 pub use otp_input::*;
 pub use state::*;
