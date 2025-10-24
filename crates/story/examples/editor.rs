@@ -46,6 +46,7 @@ pub struct Example {
     language_state: Entity<DropdownState<Vec<SharedString>>>,
     language: Lang,
     line_number: bool,
+    indent_guides: bool,
     need_update: bool,
     soft_wrap: bool,
     lsp_store: ExampleLspStore,
@@ -671,6 +672,7 @@ impl Example {
             let mut editor = InputState::new(window, cx)
                 .code_editor(default_language.0.name().to_string())
                 .line_number(true)
+                .indent_guides(true)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
@@ -725,6 +727,7 @@ impl Example {
             language_state,
             language: default_language.0,
             line_number: true,
+            indent_guides: true,
             need_update: false,
             soft_wrap: false,
             lsp_store,
@@ -800,6 +803,19 @@ impl Example {
         self.soft_wrap = !self.soft_wrap;
         self.editor.update(cx, |state, cx| {
             state.set_soft_wrap(self.soft_wrap, window, cx);
+        });
+        cx.notify();
+    }
+
+    fn toggle_indent_guides(
+        &mut self,
+        _: &ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.indent_guides = !self.indent_guides;
+        self.editor.update(cx, |state, cx| {
+            state.set_indent_guides(self.indent_guides, window, cx);
         });
         cx.notify();
     }
@@ -985,6 +1001,14 @@ impl Render for Example {
                                             .label("Soft Wrap")
                                             .selected(self.soft_wrap)
                                             .on_click(cx.listener(Self::toggle_soft_wrap))
+                                    })
+                                    .child({
+                                        Button::new("indent-guides")
+                                            .ghost()
+                                            .xsmall()
+                                            .label("Indent Guides")
+                                            .selected(self.indent_guides)
+                                            .on_click(cx.listener(Self::toggle_indent_guides))
                                     }),
                             )
                             .child({
