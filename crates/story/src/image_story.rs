@@ -1,9 +1,23 @@
 use crate::section;
 use gpui::{
-    img, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Image, ImageFormat, IntoElement,
+    ParentElement as _, Render, Styled, Window, img,
 };
 use gpui_component::{dock::PanelControl, v_flex};
+use std::sync::{Arc, LazyLock};
+
+macro_rules! include_svg {
+    ($file:expr $(,)?) => {{
+        Arc::new(Image::from_bytes(
+            ImageFormat::Svg,
+            include_bytes!($file).into(),
+        ))
+    }};
+}
+
+static IMAGE_GOOGLE: LazyLock<Arc<Image>> = LazyLock::new(|| include_svg!("fixtures/google.svg"));
+static IMAGE_COLOR_WHEEL: LazyLock<Arc<Image>> =
+    LazyLock::new(|| include_svg!("fixtures/color-wheel.svg"));
 
 pub struct ImageStory {
     focus_handle: gpui::FocusHandle,
@@ -47,16 +61,14 @@ impl Focusable for ImageStory {
 
 impl Render for ImageStory {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        // The svg file are from Assets
-        // See: crates/story/src/assets.rs#L21
+        let google = IMAGE_GOOGLE.clone();
+        let color_wheel = IMAGE_COLOR_WHEEL.clone();
+
         v_flex()
             .gap_4()
             .size_full()
-            .child(section("SVG 160px").child(img("src/fixtures/google.svg").size_40().flex_grow()))
-            .child(
-                section("SVG 80px")
-                    .child(img("src/fixtures/color-wheel.svg").size_20().flex_grow()),
-            )
+            .child(section("SVG 160px").child(img(google).size_40().flex_grow()))
+            .child(section("SVG 80px").child(img(color_wheel).size_20().flex_grow()))
             .child(
                 section("SVG from img 40px").child(
                     img("https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg").h_24(),
