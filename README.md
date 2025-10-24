@@ -6,7 +6,7 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 
 ## Features
 
-- **Richness**: 40+ cross-platform desktop UI components.
+- **Richness**: 60+ cross-platform desktop UI components.
 - **Native**: Inspired by macOS and Windows controls, combined with shadcn/ui design for a modern experience.
 - **Ease of Use**: Stateless `RenderOnce` components, simple and user-friendly.
 - **Customizable**: Built-in `Theme` and `ThemeColor`, supporting multi-theme and variable-based configurations.
@@ -31,8 +31,8 @@ We built multi-theme support in the application. This feature is not included in
 GPUI and GPUI Component are still in development, so you need to add dependencies by git.
 
 ```toml
-gpui = "0.2.0"
-gpui-component = "0.2.0"
+gpui = "0.2.2"
+gpui-component = "0.3.0"
 ```
 
 ### Basic Example
@@ -88,7 +88,7 @@ fn main() {
 GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-apps/wry). This is an optional feature, which you can enable with a feature flag.
 
 ```toml
-gpui-component = { version = "0.2.0", features = ["webview"] }
+gpui-component = { version = "0.3.0", features = ["webview"] }
 wry = { version = "0.53.3, package = "lb-wry" }
 ```
 
