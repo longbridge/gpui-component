@@ -16,7 +16,6 @@ if [ -z "$new_version" ]
 then
   echo -e "${RED}${BOLD}Error:${RESET} Version argument is required"
   echo -e "${YELLOW}USAGE:${RESET} ./bump.sh [VERSION]"
-  echo -e "${CYAN}Example:${RESET} ./bump.sh 1.0.0"
   exit 1
 fi
 
