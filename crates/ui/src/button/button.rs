@@ -202,7 +202,6 @@ pub struct Button {
     )>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
-    pub(crate) stop_propagation: bool,
     loading: bool,
     loading_icon: Option<Icon>,
 
@@ -238,7 +237,6 @@ impl Button {
             tooltip: None,
             on_click: None,
             on_hover: None,
-            stop_propagation: true,
             loading: false,
             compact: false,
             outline: false,
@@ -331,11 +329,6 @@ impl Button {
     /// Add hover handler, the bool parameter indicates whether the mouse is hovering.
     pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_hover = Some(Rc::new(handler));
-        self
-    }
-
-    pub fn stop_propagation(mut self, val: bool) -> Self {
-        self.stop_propagation = val;
         self
     }
 
@@ -536,13 +529,7 @@ impl RenderOnce for Button {
                 window.prevent_default();
             })
             .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
-                let stop_propagation = self.stop_propagation;
-                this.on_click(move |_, _, cx| {
-                    if stop_propagation {
-                        cx.stop_propagation();
-                    }
-                })
-                .on_click(move |event, window, cx| {
+                this.on_click(move |event, window, cx| {
                     (on_click)(event, window, cx);
                 })
             })
