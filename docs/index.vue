@@ -17,7 +17,7 @@
                 <div class="icon bg-green-500 dark:bg-green-700">
                     <Blocks />
                 </div>
-                <div>40+ Components</div>
+                <div>60+ Components</div>
             </h3>
             <div>
                 Comprehensive library of cross-platform desktop UI components

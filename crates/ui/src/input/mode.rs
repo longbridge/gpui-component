@@ -8,34 +8,7 @@ use tree_sitter::InputEdit;
 use super::text_wrapper::TextWrapper;
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
-use crate::input::RopeExt as _;
-
-#[derive(Debug, Copy, Clone)]
-pub struct TabSize {
-    /// Default is 2
-    pub tab_size: usize,
-    /// Set true to use `\t` as tab indent, default is false
-    pub hard_tabs: bool,
-}
-
-impl Default for TabSize {
-    fn default() -> Self {
-        Self {
-            tab_size: 2,
-            hard_tabs: false,
-        }
-    }
-}
-
-impl TabSize {
-    pub(super) fn to_string(&self) -> SharedString {
-        if self.hard_tabs {
-            "\t".into()
-        } else {
-            " ".repeat(self.tab_size).into()
-        }
-    }
-}
+use crate::input::{RopeExt as _, TabSize};
 
 #[derive(Default, Clone)]
 pub enum InputMode {
@@ -56,6 +29,7 @@ pub enum InputMode {
         /// Show line number
         line_number: bool,
         language: SharedString,
+        indent_guides: bool,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         diagnostics: DiagnosticSet,
     },
@@ -155,15 +129,6 @@ impl InputMode {
         }
     }
 
-    #[inline]
-    pub(super) fn tab_size(&self) -> Option<&TabSize> {
-        match self {
-            InputMode::MultiLine { tab, .. } => Some(tab),
-            InputMode::CodeEditor { tab, .. } => Some(tab),
-            _ => None,
-        }
-    }
-
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
@@ -235,35 +200,5 @@ impl InputMode {
             InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TabSize;
-
-    #[test]
-    fn test_tab_size() {
-        let tab = TabSize {
-            tab_size: 2,
-            hard_tabs: false,
-        };
-        assert_eq!(tab.to_string(), "  ");
-        let tab = TabSize {
-            tab_size: 4,
-            hard_tabs: false,
-        };
-        assert_eq!(tab.to_string(), "    ");
-
-        let tab = TabSize {
-            tab_size: 2,
-            hard_tabs: true,
-        };
-        assert_eq!(tab.to_string(), "\t");
-        let tab = TabSize {
-            tab_size: 4,
-            hard_tabs: true,
-        };
-        assert_eq!(tab.to_string(), "\t");
     }
 }

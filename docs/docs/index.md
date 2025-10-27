@@ -7,11 +7,11 @@ description: Rust GUI components for building fantastic cross-platform desktop a
 
 GPUI Component is a Rust UI component library for building fantastic desktop applications using [GPUI](https://gpui.rs).
 
-GPUI Component is a comprehensive UI component library for building fantastic desktop applications using [GPUI](https://gpui.rs). It provides 40+ cross-platform components with modern design, theming support, and high performance.
+GPUI Component is a comprehensive UI component library for building fantastic desktop applications using [GPUI](https://gpui.rs). It provides 60+ cross-platform components with modern design, theming support, and high performance.
 
 ## Features
 
-- **Richness**: 40+ cross-platform desktop UI components
+- **Richness**: 60+ cross-platform desktop UI components
 - **Native**: Inspired by macOS and Windows controls, combined with shadcn/ui design
 - **Ease of Use**: Stateless `RenderOnce` components, simple and user-friendly
 - **Customizable**: Built-in `Theme` and `ThemeColor`, supporting multi-theme
