@@ -14,7 +14,7 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **Flexible Layout**: Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts.
 - **High Performance**: Virtualized Table and List components for smooth large-data rendering.
 - **Content Rendering**: Native support for Markdown and simple HTML.
-- **Charting**: Built-in charts for visualization your data.
+- **Charting**: Built-in charts for visualizing your data.
 - **Editor**: High performance code editor (support up to 200K lines) with LSP (diagnostics, completion, hover, etc).
 - **Syntax Highlighting**: Syntax highlighting for editor and markdown components using Tree Sitter.
 
