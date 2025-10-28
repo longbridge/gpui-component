@@ -18,7 +18,7 @@ Supports search functionality, grouped items, custom rendering, and various stat
 ## Import
 
 ```rust
-use gpui_component::dropdown::{
+use gpui_component::select::{
     Select, SelectState, SelectItem, SelectDelegate,
     SelectEvent, SearchableVec, SelectGroup
 };

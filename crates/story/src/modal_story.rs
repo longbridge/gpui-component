@@ -24,7 +24,7 @@ pub struct ModalStory {
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
-    dropdown: Entity<SelectState<Vec<String>>>,
+    select: Entity<SelectState<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
     model_keyboard: bool,
@@ -56,7 +56,7 @@ impl ModalStory {
             InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
         let date = cx.new(|cx| DatePickerState::new(window, cx));
-        let dropdown = cx.new(|cx| {
+        let select = cx.new(|cx| {
             SelectState::new(
                 vec![
                     "Option 1".to_string(),
@@ -75,7 +75,7 @@ impl ModalStory {
             input1,
             input2,
             date,
-            dropdown,
+            select,
             modal_overlay: true,
             model_show_close: true,
             model_keyboard: true,
@@ -89,7 +89,7 @@ impl ModalStory {
         let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
-        let dropdown = self.dropdown.clone();
+        let select = self.select.clone();
         let view = cx.entity().clone();
         let keyboard = self.model_keyboard;
 
@@ -106,7 +106,7 @@ impl ModalStory {
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
                         .child(TextInput::new(&input1))
-                        .child(Select::new(&dropdown))
+                        .child(Select::new(&select))
                         .child(DatePicker::new(&date).placeholder("Date of Birth")),
                 )
                 .footer({

@@ -270,7 +270,7 @@ v_form()
     .child(
         form_field()
             .label("Account Type")
-            .child(Dropdown::new(&account_type))
+            .child(Select::new(&account_type))
     )
     .child(
         form_field()
@@ -498,12 +498,12 @@ v_form()
     .child(
         form_field()
             .label("Theme")
-            .child(Dropdown::new(&theme_state))
+            .child(Select::new(&theme_state))
     )
     .child(
         form_field()
             .label("Language")
-            .child(Dropdown::new(&language_state))
+            .child(Select::new(&language_state))
     )
     .child(
         form_field()
@@ -528,7 +528,7 @@ v_form()
                 h_flex()
                     .gap_2()
                     .child(
-                        Dropdown::new(&prefix_state)
+                        Select::new(&prefix_state)
                             .w(px(80.))
                     )
                     .child(
@@ -548,7 +548,7 @@ v_form()
     .child(
         form_field()
             .label("Subject")
-            .child(Dropdown::new(&subject_state))
+            .child(Select::new(&subject_state))
     )
     .child(
         form_field()

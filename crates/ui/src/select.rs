@@ -536,15 +536,7 @@ where
         this
     }
 
-    pub fn empty<E, F>(mut self, f: F) -> Self
-    where
-        E: IntoElement,
-        F: Fn(&Window, &App) -> E + 'static,
-    {
-        self.empty = Some(Box::new(move |window, cx| f(window, cx).into_any_element()));
-        self
-    }
-
+    /// Set the selected index for the select.
     pub fn set_selected_index(
         &mut self,
         selected_index: Option<IndexPath>,
@@ -557,6 +549,11 @@ where
         self.update_selected_value(window, cx);
     }
 
+    /// Set selected value for the select.
+    ///
+    /// This method will to get position from delegate and set selected index.
+    ///
+    /// If the value is not found, the None will be sets.
     pub fn set_selected_value(
         &mut self,
         selected_value: &<D::Item as SelectItem>::Value,
@@ -570,8 +567,28 @@ where
         self.set_selected_index(selected_index, window, cx);
     }
 
+    /// Set the items for the select state.
+    pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
+    where
+        D: SelectDelegate + 'static,
+    {
+        self.list.update(cx, |list, _| {
+            list.delegate_mut().delegate = items;
+        });
+    }
+
+    /// Get the selected index of the select.
     pub fn selected_index(&self, cx: &App) -> Option<IndexPath> {
         self.list.read(cx).selected_index()
+    }
+
+    /// Get the selected value of the select.
+    pub fn selected_value(&self) -> Option<&<D::Item as SelectItem>::Value> {
+        self.selected_value.as_ref()
+    }
+
+    pub fn focus(&self, window: &mut Window, _: &mut App) {
+        self.focus_handle.focus(window);
     }
 
     fn update_selected_value(&mut self, _: &Window, cx: &App) {
@@ -579,14 +596,6 @@ where
             .selected_index(cx)
             .and_then(|ix| self.list.read(cx).delegate().delegate.item(ix))
             .map(|item| item.value().clone());
-    }
-
-    pub fn selected_value(&self) -> Option<&<D::Item as SelectItem>::Value> {
-        self.selected_value.as_ref()
-    }
-
-    pub fn focus(&self, window: &mut Window, _: &mut App) {
-        self.focus_handle.focus(window);
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -651,16 +660,6 @@ where
     fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.set_selected_index(None, window, cx);
         cx.emit(SelectEvent::Confirm(None));
-    }
-
-    /// Set the items for the select.
-    pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
-    where
-        D: SelectDelegate + 'static,
-    {
-        self.list.update(cx, |list, _| {
-            list.delegate_mut().delegate = items;
-        });
     }
 }
 
@@ -734,6 +733,7 @@ where
         self
     }
 
+    /// Set the element to display when the select list is empty.
     pub fn empty(mut self, el: impl IntoElement) -> Self {
         self.empty = Some(el.into_any_element());
         self
@@ -817,14 +817,6 @@ where
         }
     }
 }
-impl<D> Focusable for Select<D>
-where
-    D: SelectDelegate,
-{
-    fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.state.focus_handle(cx)
-    }
-}
 
 impl<D> Styled for Select<D>
 where
@@ -840,7 +832,8 @@ where
     D: SelectDelegate + 'static,
 {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let is_focused = self.focus_handle(cx).is_focused(window);
+        let focus_handle = self.state.focus_handle(cx);
+        let is_focused = focus_handle.is_focused(window);
         // If the size has change, set size to self.list, to change the QueryInput size.
         let old_size = self.state.read(cx).list.read(cx).size;
         if old_size != self.size {
@@ -865,7 +858,7 @@ where
             .id(self.id.clone())
             .key_context(CONTEXT)
             .when(!self.disabled, |this| {
-                this.track_focus(&self.focus_handle(cx).tab_stop(true))
+                this.track_focus(&focus_handle.tab_stop(true))
             })
             .on_action(window.listener_for(&self.state, SelectState::up))
             .on_action(window.listener_for(&self.state, SelectState::down))
