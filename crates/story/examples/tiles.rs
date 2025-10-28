@@ -1,12 +1,12 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Root, Sizable, TitleBar,
     dock::{
-        register_panel, DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo,
-        PanelRegistry, PanelState, PanelView,
+        DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo, PanelRegistry,
+        PanelState, PanelView, register_panel,
     },
     input::{InputState, TextInput},
-    ActiveTheme, Root, Sizable, TitleBar,
 };
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
@@ -100,7 +100,7 @@ impl Panel for ContainerPanel {
         Some(
             div()
                 .w_24()
-                .h_5()
+                .h_6()
                 .px_0p5()
                 .rounded_lg()
                 .border_1()
