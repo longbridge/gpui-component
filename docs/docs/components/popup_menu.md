@@ -314,6 +314,7 @@ menu.action_context(focus_handle)
 | `separator()`                                 | Add visual separator              |
 | `link(label, url)`                            | Add link menu item                |
 | `link_with_icon(label, icon, url)`            | Add link with icon                |
+| `item(item)`                                  | Add custom menu item              |
 
 ### Custom Elements
 
@@ -325,11 +326,9 @@ menu.action_context(focus_handle)
 
 ### Submenus
 
-| Method                                                        | Description                     |
-| ------------------------------------------------------------- | ------------------------------- |
-| `submenu(label, window, cx, builder)`                         | Add submenu                     |
-| `submenu_with_icon(icon, label, window, cx, builder)`         | Add submenu with icon           |
-| `submenu_with_disabled(label, disabled, window, cx, builder)` | Add submenu with disabled state |
+| Method                                | Description |
+| ------------------------------------- | ----------- |
+| `submenu(label, window, cx, builder)` | Add submenu |
 
 ### PopupMenuExt Trait
 
@@ -366,6 +365,30 @@ div()
             .menu_with_icon("Delete", IconName::Trash, Box::new(Delete))
             .separator()
             .menu("Properties", Box::new(ShowProperties))
+    })
+```
+
+### Add MenuItem without action
+
+Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and `PopupMenuItem` can help you:
+
+```rust
+use gpui_component::{popup_menu::PopupMenuItem, Button};
+
+Button::new("custom-item-menu")
+    .label("Options")
+    .popup_menu(|menu, window, cx| {
+        menu.item(
+            PopupMenuItem::new("Custom Action")
+                .disabled(false)
+                .icon(IconName::Star)
+                .on_click(|window, cx| {
+                    // Custom click handler logic
+                    println!("Custom Action Clicked!");
+                })
+        )
+        .separator()
+        .menu("Standard Action", Box::new(StandardAction))
     })
 ```
 
