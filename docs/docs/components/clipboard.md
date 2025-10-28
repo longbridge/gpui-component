@@ -68,11 +68,11 @@ Clipboard::new("custom-clipboard")
 The Clipboard component is commonly used as a suffix in input fields:
 
 ```rust
-use gpui_component::input::{InputState, TextInput};
+use gpui_component::input::{InputState, Input};
 
 let url_state = cx.new(|cx| InputState::new(window, cx).default_value("https://github.com"));
 
-TextInput::new(&url_state)
+Input::new(&url_state)
     .suffix(
         Clipboard::new("url-clipboard")
             .value_fn({
@@ -192,7 +192,7 @@ Clipboard::new("feedback")
 
 ```rust
 use gpui_component::{
-    input::{InputState, TextInput},
+    input::{InputState, Input},
     h_flex, label::Label
 };
 
@@ -203,7 +203,7 @@ h_flex()
     .items_center()
     .child(Label::new("API Key:"))
     .child(
-        TextInput::new(&input_state)
+        Input::new(&input_state)
             .value(api_key)
             .readonly(true)
             .suffix(

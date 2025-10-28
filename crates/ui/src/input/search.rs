@@ -13,7 +13,7 @@ use crate::{
     actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
-    input::{Enter, Escape, IndentInline, InputEvent, InputState, RopeExt as _, Search, TextInput},
+    input::{Enter, Escape, IndentInline, Input, InputEvent, InputState, RopeExt as _, Search},
     label::Label,
     v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable,
 };
@@ -433,7 +433,7 @@ impl Render for SearchPanel {
                             .flex_1()
                             .gap_1()
                             .child(
-                                TextInput::new(&self.search_input)
+                                Input::new(&self.search_input)
                                     .focus_bordered(false)
                                     .suffix(
                                         Button::new("case-insensitive")
@@ -529,7 +529,7 @@ impl Render for SearchPanel {
                         .w_full()
                         .gap_2()
                         .child(
-                            TextInput::new(&self.replace_input)
+                            Input::new(&self.replace_input)
                                 .focus_bordered(false)
                                 .small()
                                 .w(self.input_width)

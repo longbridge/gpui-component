@@ -11,7 +11,7 @@ use gpui_component::{
     divider::Divider,
     form::{form_field, v_form},
     h_flex,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     select::{Select, SelectState},
     switch::Switch,
     v_flex,
@@ -202,22 +202,24 @@ impl Render for FormStory {
                                             .appearance(false),
                                     ),
                                 )
-                                .child(div().flex_1().child(
-                                    TextInput::new(&self.name_input).pl_0().appearance(false),
-                                )),
+                                .child(
+                                    div().flex_1().child(
+                                        Input::new(&self.name_input).pl_0().appearance(false),
+                                    ),
+                                ),
                         ),
                     )
                     .child(
                         form_field()
                             .label("Email")
-                            .child(TextInput::new(&self.email_input))
+                            .child(Input::new(&self.email_input))
                             .required(true),
                     )
                     .child(
                         form_field()
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
-                            .child(TextInput::new(&self.bio_input))
+                            .child(Input::new(&self.bio_input))
                             .description_fn(|_, _| {
                                 div().child("Use at most 100 words to describe yourself.")
                             }),

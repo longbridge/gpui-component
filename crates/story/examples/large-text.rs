@@ -1,9 +1,10 @@
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, ContextModal, Selectable, Sizable,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{self, InputEvent, InputState, TabSize, TextInput},
-    v_flex, ActiveTheme, ContextModal, Selectable, Sizable,
+    input::{self, Input, InputEvent, InputState, TabSize},
+    v_flex,
 };
 use story::Assets;
 
@@ -65,7 +66,7 @@ impl Example {
 
             modal
                 .title("Go to line")
-                .child(TextInput::new(&input_state))
+                .child(Input::new(&input_state))
                 .confirm()
                 .on_ok({
                     let editor = editor.clone();
@@ -114,7 +115,7 @@ impl Render for Example {
                 .w_full()
                 .flex_1()
                 .child(
-                    TextInput::new(&self.editor)
+                    Input::new(&self.editor)
                         .bordered(false)
                         .h_full()
                         .focus_bordered(false),

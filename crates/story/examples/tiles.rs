@@ -6,7 +6,7 @@ use gpui_component::{
         DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo, PanelRegistry,
         PanelState, PanelView, register_panel,
     },
-    input::{InputState, TextInput},
+    input::{Input, InputState},
 };
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
@@ -105,11 +105,7 @@ impl Panel for ContainerPanel {
                 .rounded_lg()
                 .border_1()
                 .border_color(cx.theme().input)
-                .child(
-                    TextInput::new(&self.search_state)
-                        .xsmall()
-                        .appearance(false),
-                )
+                .child(Input::new(&self.search_state).xsmall().appearance(false))
                 .into_any_element(),
         )
     }

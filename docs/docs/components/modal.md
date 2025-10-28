@@ -69,7 +69,7 @@ window.open_modal(cx, |modal, _, _| {
             v_flex()
                 .gap_3()
                 .child("Please enter your details:")
-                .child(TextInput::new(&input))
+                .child(Input::new(&input))
         )
         .footer(|_, _, _, _| {
             vec![

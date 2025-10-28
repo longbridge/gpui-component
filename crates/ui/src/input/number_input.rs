@@ -9,7 +9,7 @@ use crate::{
     h_flex, ActiveTheme, Disableable, IconName, Sizable, Size, StyleSized, StyledExt as _,
 };
 
-use super::{InputState, TextInput};
+use super::{Input, InputState};
 
 actions!(number_input, [Increment, Decrement]);
 
@@ -179,7 +179,7 @@ impl RenderOnce for NumberInput {
                     }),
             )
             .child(
-                TextInput::new(&self.state)
+                Input::new(&self.state)
                     .appearance(false)
                     .disabled(self.disabled)
                     .px(px(2.))

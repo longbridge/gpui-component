@@ -9,7 +9,7 @@ use gpui_component::{
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
     h_flex,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     modal::ModalButtonProps,
     select::{Select, SelectState},
     text::TextView,
@@ -105,7 +105,7 @@ impl ModalStory {
                         .gap_3()
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
-                        .child(TextInput::new(&input1))
+                        .child(Input::new(&input1))
                         .child(Select::new(&select))
                         .child(DatePicker::new(&date).placeholder("Date of Birth")),
                 )
@@ -244,7 +244,7 @@ impl Render for ModalStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(TextInput::new(&self.input2))
+                            .child(Input::new(&self.input2))
                             .child(
                                 Button::new("test-action")
                                     .outline()

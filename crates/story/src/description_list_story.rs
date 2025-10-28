@@ -35,7 +35,7 @@ impl DescriptionListStory {
                 "Description",
                 "UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).\
                 \n\n \
-                Contains a lot of useful UI components, such as **Button**, **TextInput**, **Table**, **List**, **Select**, **DatePicker** ... \
+                Contains a lot of useful UI components, such as **Button**, **Input**, **Table**, **List**, **Select**, **DatePicker** ... \
                 \n\n \
                 You can easily create your native desktop application by using GPUI Component.
                 ",

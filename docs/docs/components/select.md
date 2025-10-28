@@ -325,7 +325,7 @@ h_flex()
     .child(Divider::vertical())
     .child(
         div().flex_1().child(
-            TextInput::new(&phone_input)
+            Input::new(&phone_input)
                 .appearance(false)
                 .placeholder("Phone number")
                 .pr_3()

@@ -4,10 +4,11 @@ use gpui::{
 };
 
 use gpui_component::{
+    ContextModal,
     clipboard::Clipboard,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     label::Label,
-    v_flex, ContextModal,
+    v_flex,
 };
 
 use crate::section;
@@ -74,7 +75,7 @@ impl Render for ClipboardStory {
             )
             .child(
                 section("With in an Input").max_w_md().child(
-                    TextInput::new(&self.url_state).suffix(
+                    Input::new(&self.url_state).suffix(
                         Clipboard::new("clipboard2")
                             .value_fn({
                                 let state = self.url_state.clone();

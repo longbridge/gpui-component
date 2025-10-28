@@ -254,39 +254,37 @@ impl Render for SelectStory {
                 ),
             )
             .child(
-                section("Appearance false with TextInput")
-                    .max_w_128()
-                    .child(
-                        h_flex()
-                            .border_1()
-                            .border_color(cx.theme().input)
-                            .rounded_lg()
-                            .text_color(cx.theme().secondary_foreground)
-                            .w_full()
-                            .gap_1()
-                            .child(
-                                div().w(px(140.)).child(
-                                    Select::new(&self.appearance_select)
-                                        .appearance(false)
-                                        .py_2()
-                                        .pl_3(),
-                                ),
-                            )
-                            .child(Divider::vertical())
-                            .child(
-                                div().flex_1().child(
-                                    TextInput::new(&self.input_state)
-                                        .appearance(false)
-                                        .pr_3()
-                                        .py_2(),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .p_2()
-                                    .child(Button::new("send").small().ghost().label("Send")),
+                section("Appearance false with Input").max_w_128().child(
+                    h_flex()
+                        .border_1()
+                        .border_color(cx.theme().input)
+                        .rounded_lg()
+                        .text_color(cx.theme().secondary_foreground)
+                        .w_full()
+                        .gap_1()
+                        .child(
+                            div().w(px(140.)).child(
+                                Select::new(&self.appearance_select)
+                                    .appearance(false)
+                                    .py_2()
+                                    .pl_3(),
                             ),
-                    ),
+                        )
+                        .child(Divider::vertical())
+                        .child(
+                            div().flex_1().child(
+                                Input::new(&self.input_state)
+                                    .appearance(false)
+                                    .pr_3()
+                                    .py_2(),
+                            ),
+                        )
+                        .child(
+                            div()
+                                .p_2()
+                                .child(Button::new("send").small().ghost().label("Send")),
+                        ),
+                ),
             )
             .child(
                 section("Selected Values").max_w_lg().child(

@@ -15,7 +15,7 @@ use gpui_component::{
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
-        HoverProvider, InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
+        HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
     },
     select::{Select, SelectEvent, SelectState},
     v_flex,
@@ -768,7 +768,7 @@ impl Example {
 
             modal
                 .title("Go to line")
-                .child(TextInput::new(&input_state))
+                .child(Input::new(&input_state))
                 .confirm()
                 .on_ok({
                     let editor = editor.clone();
@@ -948,7 +948,7 @@ impl Render for Example {
                     .w_full()
                     .flex_1()
                     .child(
-                        TextInput::new(&self.editor)
+                        Input::new(&self.editor)
                             .bordered(false)
                             .p_0()
                             .h_full()

@@ -1,7 +1,7 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{Input, InputEvent, InputState},
     resizable::{ResizableState, h_resizable, resizable_panel},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
@@ -221,7 +221,7 @@ impl Render for Gallery {
                                             .flex_1()
                                             .mx_1()
                                             .child(
-                                                TextInput::new(&self.search_input)
+                                                Input::new(&self.search_input)
                                                     .appearance(false)
                                                     .cleanable(),
                                             ),

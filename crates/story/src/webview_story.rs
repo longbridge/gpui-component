@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme, h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{Input, InputEvent, InputState},
     v_flex,
     webview::WebView,
     wry,
@@ -139,7 +139,7 @@ impl Render for WebViewStory {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(TextInput::new(&self.address_input)),
+                    .child(Input::new(&self.address_input)),
             )
             .child(
                 div()
