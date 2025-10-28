@@ -3,8 +3,12 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, button::Button, context_menu::ContextMenuExt, h_flex,
-    popup_menu::PopupMenuExt as _, v_flex,
+    ActiveTheme as _, IconName,
+    button::Button,
+    context_menu::ContextMenuExt,
+    h_flex,
+    popup_menu::{PopupMenuExt as _, PopupMenuItem},
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -104,6 +108,7 @@ impl MenuStory {
 impl Render for MenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let checked = self.checked;
+        let view = cx.entity();
 
         v_flex()
             .key_context(CONTEXT)
@@ -125,6 +130,14 @@ impl Render for MenuStory {
                             .popup_menu(move |this, window, cx| {
                                 this.link("About", "https://github.com/longbridge/gpui-component")
                                     .separator()
+                                    .item(PopupMenuItem::new("Handle Click").on_click(
+                                        window.listener_for(&view, |this, _, _, cx| {
+                                            this.message =
+                                                "You have clicked Handle Click".to_string();
+                                            cx.notify();
+                                        }),
+                                    ))
+                                    .separator()
                                     .menu("Copy", Box::new(Copy))
                                     .menu("Cut", Box::new(Cut))
                                     .menu("Paste", Box::new(Paste))
@@ -133,14 +146,23 @@ impl Render for MenuStory {
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
                                     .separator()
-                                    .menu_element(Box::new(Info(0)), |_, cx| {
-                                        v_flex().child("Custom Element").child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("THis is sub-title"),
-                                        )
-                                    })
+                                    .item(
+                                        PopupMenuItem::element(|_, cx| {
+                                            v_flex().child("Custom Element").child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child("This is sub-title"),
+                                            )
+                                        })
+                                        .on_click(
+                                            window.listener_for(&view, |this, _, _, cx| {
+                                                this.message = "You have clicked on custom element"
+                                                    .to_string();
+                                                cx.notify();
+                                            }),
+                                        ),
+                                    )
                                     .menu_element_with_check(checked, Box::new(Info(0)), |_, cx| {
                                         h_flex().gap_1().child("Custom Element").child(
                                             div()
