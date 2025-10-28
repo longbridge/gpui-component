@@ -114,30 +114,31 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Compare to others
 
-| Features              | GPUI Component                 | [Iced]             | [egui]                | [QT 6]                         |
-| --------------------- | ------------------------------ | ------------------ | --------------------- | ------------------------------ |
-| Language              | Rust                           | Rust               | Rust                  | C++/QML                        |
-| Core Render           | GPUI                           | wgpu               | wgpu                  | QT                             |
-| License               | Apache 2.0                     | MIT                | MIT/Apache 2.0        | Commercial                     |
-| Min Binary Size [^1]  | 12MB                           | 11MB               | 5M                    | 20MB [^2]                      |
-| Cross-Platform        | Yes                            | Yes                | Yes                   | Yes                            |
-| Documentation         | No                             | Simple             | Simple                | Good                           |
-| Web                   | No                             | Yes                | Yes                   | Yes                            |
-| UI Style              | Modern                         | Basic              | Basic                 | Basic                          |
-| CJK Support           | Yes                            | Yes                | Bad                   | Yes                            |
-| Chart                 | Yes                            | No                 | No                    | Yes                            |
-| Table (Large dataset) | Yes<br>(Virtual Rows, Columns) | No                 | Yes<br>(Virtual Rows) | Yes<br>(Virtual Rows, Columns) |
-| Table Column Resize   | Yes                            | No                 | Yes                   | Yes                            |
-| Text base             | Rope                           | [COSMIC Text] [^3] | trait TextBuffer [^4] | [QTextDocument]                |
-| CodeEditor            | Simple                         | Simple             | Simple                | Basic API                      |
-| Dock Layout           | Yes                            | Yes                | Yes                   | Yes                            |
-| Syntax Highlight      | [Tree Sitter]                  | [Syntect]          | [Syntect]             | [QSyntaxHighlighter]           |
-| Markdown Rendering    | Yes                            | Yes                | Basic                 | No                             |
-| Markdown mix HTML     | Yes                            | No                 | No                    | No                             |
-| HTML Rendering        | Basic                          | No                 | No                    | Basic                          |
-| Text Selection        | TextView                       | No                 | Any Label             | No                             |
-| Themes                | Yes                            | No                 | No                    | No                             |
-| I18n                  | Yes                            | Yes                | Yes                   | Yes                            |
+| Features              | GPUI Component                 | [Iced]             | [egui]                | [QT 6]                                            |
+| --------------------- | ------------------------------ | ------------------ | --------------------- | ------------------------------------------------- |
+| Language              | Rust                           | Rust               | Rust                  | C++/QML                                           |
+| Core Render           | GPUI                           | wgpu               | wgpu                  | QT                                                |
+| License               | Apache 2.0                     | MIT                | MIT/Apache 2.0        | [Commercial/LGPL](https://www.qt.io/qt-licensing) |
+| Min Binary Size [^1]  | 12MB                           | 11MB               | 5M                    | 20MB [^2]                                         |
+| Cross-Platform        | Yes                            | Yes                | Yes                   | Yes                                               |
+| Documentation         | Simple                         | Simple             | Simple                | Good                                              |
+| Web                   | No                             | Yes                | Yes                   | Yes                                               |
+| UI Style              | Modern                         | Basic              | Basic                 | Basic                                             |
+| CJK Support           | Yes                            | Yes                | Bad                   | Yes                                               |
+| Chart                 | Yes                            | No                 | No                    | Yes                                               |
+| Table (Large dataset) | Yes<br>(Virtual Rows, Columns) | No                 | Yes<br>(Virtual Rows) | Yes<br>(Virtual Rows, Columns)                    |
+| Table Column Resize   | Yes                            | No                 | Yes                   | Yes                                               |
+| Text base             | Rope                           | [COSMIC Text] [^3] | trait TextBuffer [^4] | [QTextDocument]                                   |
+| CodeEditor            | Simple                         | Simple             | Simple                | Basic API                                         |
+| Dock Layout           | Yes                            | Yes                | Yes                   | Yes                                               |
+| Syntax Highlight      | [Tree Sitter]                  | [Syntect]          | [Syntect]             | [QSyntaxHighlighter]                              |
+| Markdown Rendering    | Yes                            | Yes                | Basic                 | No                                                |
+| Markdown mix HTML     | Yes                            | No                 | No                    | No                                                |
+| HTML Rendering        | Basic                          | No                 | No                    | Basic                                             |
+| Text Selection        | TextView                       | No                 | Any Label             | No                                                |
+| Custom Theme          | Yes                            | Yes                | Yes                   | Yes                                               |
+| Built Themes          | Yes                            | No                 | No                    | No                                                |
+| I18n                  | Yes                            | Yes                | Yes                   | Yes                                               |
 
 > Please submit an issue or PR if any mistakes or outdated are found.
 
