@@ -314,55 +314,10 @@ let chart = LineChart::new(data)
 
 ## API Reference
 
-### LineChart
-
-| Method           | Type          | Description                               |
-| ---------------- | ------------- | ----------------------------------------- |
-| `new(data)`      | `Vec<T>`      | Create new line chart with data           |
-| `x(fn)`          | `Fn(&T) -> X` | Set X-axis data accessor                  |
-| `y(fn)`          | `Fn(&T) -> Y` | Set Y-axis data accessor                  |
-| `stroke(color)`  | `Hsla`        | Set line stroke color                     |
-| `natural()`      | `Self`        | Use natural curve interpolation (default) |
-| `linear()`       | `Self`        | Use linear interpolation                  |
-| `step_after()`   | `Self`        | Use step-after interpolation              |
-| `dot()`          | `Self`        | Show dots at data points                  |
-| `tick_margin(n)` | `usize`       | Show every nth tick on X-axis             |
-
-### BarChart
-
-| Method           | Type               | Description                    |
-| ---------------- | ------------------ | ------------------------------ |
-| `new(data)`      | `Vec<T>`           | Create new bar chart with data |
-| `x(fn)`          | `Fn(&T) -> X`      | Set X-axis data accessor       |
-| `y(fn)`          | `Fn(&T) -> Y`      | Set Y-axis data accessor       |
-| `fill(fn)`       | `Fn(&T) -> Hsla`   | Set custom fill color per bar  |
-| `label(fn)`      | `Fn(&T) -> String` | Set labels on bars             |
-| `tick_margin(n)` | `usize`            | Show every nth tick on X-axis  |
-
-### AreaChart
-
-| Method             | Type          | Description                                           |
-| ------------------ | ------------- | ----------------------------------------------------- |
-| `new(data)`        | `Vec<T>`      | Create new area chart with data                       |
-| `x(fn)`            | `Fn(&T) -> X` | Set X-axis data accessor                              |
-| `y(fn)`            | `Fn(&T) -> Y` | Add Y-axis data series (can be called multiple times) |
-| `stroke(color)`    | `Hsla`        | Set stroke color for current series                   |
-| `fill(background)` | `Background`  | Set fill for current series                           |
-| `natural()`        | `Self`        | Use natural curve interpolation for current series    |
-| `linear()`         | `Self`        | Use linear interpolation for current series           |
-| `step_after()`     | `Self`        | Use step-after interpolation for current series       |
-| `tick_margin(n)`   | `usize`       | Show every nth tick on X-axis                         |
-
-### PieChart
-
-| Method             | Type             | Description                         |
-| ------------------ | ---------------- | ----------------------------------- |
-| `new(data)`        | `Vec<T>`         | Create new pie chart with data      |
-| `value(fn)`        | `Fn(&T) -> f32`  | Set value accessor                  |
-| `color(fn)`        | `Fn(&T) -> Hsla` | Set custom color per slice          |
-| `inner_radius(r)`  | `f32`            | Set inner radius (for donut charts) |
-| `outer_radius(r)`  | `f32`            | Set outer radius                    |
-| `pad_angle(angle)` | `f32`            | Set padding angle between slices    |
+- [LineChart]
+- [BarChart]
+- [AreaChart]
+- [PieChart]
 
 ## Examples
 
@@ -667,3 +622,8 @@ impl LiveChart {
     }
 }
 ```
+
+[LineChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.LineChart.html
+[BarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.BarChart.html
+[AreaChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.AreaChart.html
+[PieChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.PieChart.html
