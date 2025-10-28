@@ -1,12 +1,7 @@
 use std::rc::Rc;
 
-use crate::{h_flex, ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _};
-use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, Div, Element,
-    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
-    Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window,
-    WindowControlArea,
-};
+use crate::{h_flex, ActiveTheme, ContextModal, Icon, IconName, InteractiveElementExt as _, Sizable as _};
+use gpui::{div, prelude::FluentBuilder as _, px, relative, AnyElement, App, AppContext, ClickEvent, Div, Element, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, MouseExitEvent, ParentElement, Pixels, RenderOnce, Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window, WindowControlArea};
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(34.);
 #[cfg(target_os = "macos")]
@@ -285,7 +280,7 @@ impl RenderOnce for TitleBar {
                                     .absolute()
                                     .size_full()
                                     .h_full()
-                                    .child(TitleBarElement {}),
+                                    .child(TitleBarElement { state: cx.new(|_| TitleBarElementState { can_start_move: false }) }),
                             )
                         })
                         .children(self.children),
@@ -297,8 +292,14 @@ impl RenderOnce for TitleBar {
     }
 }
 
+struct TitleBarElementState {
+    can_start_move: bool,
+}
+
 /// A TitleBar Element that can be move the window.
-pub struct TitleBarElement {}
+pub struct TitleBarElement {
+    state: Entity<TitleBarElementState>
+}
 
 impl IntoElement for TitleBarElement {
     type Element = Self;
@@ -352,7 +353,7 @@ impl Element for TitleBarElement {
     #[allow(unused_variables)]
     fn paint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
+        id: Option<&gpui::GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
         bounds: gpui::Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
@@ -360,19 +361,56 @@ impl Element for TitleBarElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        use gpui::{MouseButton, MouseMoveEvent, MouseUpEvent};
+        use gpui::{MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent};
+
+        let state = self.state.clone();
         window.on_mouse_event(
-            move |ev: &MouseMoveEvent, _, window: &mut Window, cx: &mut App| {
-                if bounds.contains(&ev.position) && ev.pressed_button == Some(MouseButton::Left) {
-                    window.start_window_move();
+            move |ev: &MouseDownEvent, _, window: &mut Window, cx: &mut App| {
+                if bounds.contains(&ev.position) && ev.button == MouseButton::Left {
+                    state.update(cx, |state, cx| {
+                        state.can_start_move = true;
+                        cx.notify();
+                    });
                 }
             },
         );
 
+        let state = self.state.clone();
+        window.on_mouse_event(
+            move |ev: &MouseExitEvent, _, window: &mut Window, cx: &mut App| {
+                state.update(cx, |state, cx| {
+                    state.can_start_move = false;
+                    cx.notify();
+                });
+            },
+        );
+
+        let state = self.state.clone();
         window.on_mouse_event(
             move |ev: &MouseUpEvent, _, window: &mut Window, cx: &mut App| {
-                if bounds.contains(&ev.position) && ev.button == MouseButton::Right {
-                    window.show_window_menu(ev.position);
+                if bounds.contains(&ev.position) {
+                    match ev.button {
+                        MouseButton::Right => {
+                            window.show_window_menu(ev.position)
+                        }
+                        MouseButton::Left => {
+                            state.update(cx, |state, cx| {
+                                state.can_start_move = false;
+                                cx.notify();
+                            });
+                        }
+                        _ => ()
+                    }
+                }
+            },
+        );
+
+        let state = self.state.clone();
+        window.on_mouse_event(
+            move |ev: &MouseMoveEvent, _, window: &mut Window, cx: &mut App| {
+                let can_start_move = state.read(cx).can_start_move;
+                if bounds.contains(&ev.position) && can_start_move {
+                    window.start_window_move();
                 }
             },
         );
