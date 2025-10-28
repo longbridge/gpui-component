@@ -1,24 +1,25 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, App, AppContext, Axis, Context, Entity, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, ParentElement as _, Render, Styled, Window,
+    App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
+    ActiveTheme, AxisExt, IndexPath, Selectable, Sizable, Size,
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
     divider::Divider,
-    select::{Dropdown, DropdownState},
     form::{form_field, v_form},
     h_flex,
     input::{InputState, TextInput},
+    select::{Select, SelectState},
     switch::Switch,
-    v_flex, ActiveTheme, AxisExt, IndexPath, Selectable, Sizable, Size,
+    v_flex,
 };
 
 pub struct FormStory {
     focus_handle: FocusHandle,
-    name_prefix_state: Entity<DropdownState<Vec<String>>>,
+    name_prefix_state: Entity<SelectState<Vec<String>>>,
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
     bio_input: Entity<InputState>,
@@ -55,7 +56,7 @@ impl FormStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_prefix_state = cx.new(|cx| {
-            DropdownState::new(
+            SelectState::new(
                 vec![
                     "Mr.".to_string(),
                     "Mrs.".to_string(),
@@ -196,7 +197,7 @@ impl Render for FormStory {
                                 .rounded(cx.theme().radius)
                                 .child(
                                     div().w(px(90.)).child(
-                                        Dropdown::new(&self.name_prefix_state)
+                                        Select::new(&self.name_prefix_state)
                                             .pr_0()
                                             .appearance(false),
                                     ),

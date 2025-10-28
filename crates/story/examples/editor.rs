@@ -17,7 +17,7 @@ use gpui_component::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
     },
-    select::{Dropdown, DropdownEvent, DropdownState},
+    select::{Select, SelectEvent, SelectState},
     v_flex,
 };
 use lsp_types::{
@@ -43,7 +43,7 @@ fn init() {
 pub struct Example {
     editor: Entity<InputState>,
     go_to_line_state: Entity<InputState>,
-    language_state: Entity<DropdownState<Vec<SharedString>>>,
+    language_state: Entity<SelectState<Vec<SharedString>>>,
     language: Lang,
     line_number: bool,
     indent_guides: bool,
@@ -692,7 +692,7 @@ impl Example {
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
         let language_state = cx.new(|cx| {
-            DropdownState::new(
+            SelectState::new(
                 LANGUAGES.iter().map(|s| s.0.name().into()).collect(),
                 Some(IndexPath::default()),
                 window,
@@ -706,7 +706,7 @@ impl Example {
             }),
             cx.subscribe(
                 &language_state,
-                |this, state, _: &DropdownEvent<Vec<SharedString>>, cx| {
+                |this, state, _: &SelectEvent<Vec<SharedString>>, cx| {
                     if let Some(val) = state.read(cx).selected_value() {
                         if val == "navi" {
                             this.language = Lang::External("navi");
@@ -970,7 +970,7 @@ impl Render for Example {
                                 h_flex()
                                     .gap_3()
                                     .child(
-                                        Dropdown::new(&self.language_state)
+                                        Select::new(&self.language_state)
                                             .menu_width(px(160.))
                                             .xsmall(),
                                     )

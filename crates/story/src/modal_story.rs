@@ -1,21 +1,22 @@
 use gpui::{
-    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    ParentElement, Render, SharedString, Styled, Window, div, px,
 };
 
 use gpui_component::{
+    ActiveTheme, ContextModal as _, Icon, IconName,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
-    select::{Dropdown, DropdownState},
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,
+    select::{Select, SelectState},
     text::TextView,
-    v_flex, ActiveTheme, ContextModal as _, Icon, IconName,
+    v_flex,
 };
 
-use crate::{section, TestAction};
+use crate::{TestAction, section};
 
 pub struct ModalStory {
     focus_handle: FocusHandle,
@@ -23,7 +24,7 @@ pub struct ModalStory {
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
-    dropdown: Entity<DropdownState<Vec<String>>>,
+    dropdown: Entity<SelectState<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
     model_keyboard: bool,
@@ -56,7 +57,7 @@ impl ModalStory {
         });
         let date = cx.new(|cx| DatePickerState::new(window, cx));
         let dropdown = cx.new(|cx| {
-            DropdownState::new(
+            SelectState::new(
                 vec![
                     "Option 1".to_string(),
                     "Option 2".to_string(),
@@ -105,7 +106,7 @@ impl ModalStory {
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
                         .child(TextInput::new(&input1))
-                        .child(Dropdown::new(&dropdown))
+                        .child(Select::new(&dropdown))
                         .child(DatePicker::new(&date).placeholder("Date of Birth")),
                 )
                 .footer({

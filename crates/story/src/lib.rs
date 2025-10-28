@@ -91,7 +91,7 @@ pub use progress_story::ProgressStory;
 pub use radio_story::RadioStory;
 pub use resizable_story::ResizableStory;
 pub use scrollable_story::ScrollableStory;
-pub use select_story::DropdownStory;
+pub use select_story::SelectStory;
 use serde::{Deserialize, Serialize};
 pub use sidebar_story::SidebarStory;
 pub use skeleton_story::SkeletonStory;
@@ -660,7 +660,7 @@ impl StoryState {
         match self.story_klass.to_string().as_str() {
             "ButtonStory" => story!(ButtonStory),
             "CalendarStory" => story!(CalendarStory),
-            "DropdownStory" => story!(DropdownStory),
+            "SelectStory" => story!(SelectStory),
             "IconStory" => story!(IconStory),
             "ImageStory" => story!(ImageStory),
             "InputStory" => story!(InputStory),

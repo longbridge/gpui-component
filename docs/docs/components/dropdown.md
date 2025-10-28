@@ -11,8 +11,8 @@ A versatile dropdown/select component that allows users to choose from a list of
 
 ```rust
 use gpui_component::dropdown::{
-    Dropdown, DropdownState, DropdownItem, DropdownDelegate,
-    DropdownEvent, SearchableVec, DropdownItemGroup
+    Dropdown, SelectState, SelectItem, SelectDelegate,
+    SelectEvent, SearchableVec, SelectGroup
 };
 ```
 
@@ -22,7 +22,7 @@ use gpui_component::dropdown::{
 
 ```rust
 let dropdown = cx.new(|cx| {
-    DropdownState::new(
+    SelectState::new(
         vec!["Apple".into(), "Orange".into(), "Banana".into()],
         Some(IndexPath::default()), // Select first item
         window,
@@ -37,7 +37,7 @@ Dropdown::new(&dropdown)
 
 ```rust
 let dropdown = cx.new(|cx| {
-    DropdownState::new(
+    SelectState::new(
         vec!["Rust".into(), "Go".into(), "JavaScript".into()],
         None, // No initial selection
         window,
@@ -61,7 +61,7 @@ let fruits = SearchableVec::new(vec![
 ]);
 
 let dropdown = cx.new(|cx| {
-    DropdownState::new(fruits, None, window, cx)
+    SelectState::new(fruits, None, window, cx)
 });
 
 Dropdown::new(&dropdown)
@@ -77,7 +77,7 @@ struct Country {
     code: SharedString,
 }
 
-impl DropdownItem for Country {
+impl SelectItem for Country {
     type Value = SharedString;
 
     fn title(&self) -> SharedString {
@@ -108,14 +108,14 @@ let mut grouped_items = SearchableVec::new(vec![]);
 
 // Group countries by first letter
 grouped_items.push(
-    DropdownItemGroup::new("A")
+    SelectGroup::new("A")
         .items(vec![
             Country { name: "Australia".into(), code: "AU".into() },
             Country { name: "Austria".into(), code: "AT".into() },
         ])
 );
 grouped_items.push(
-    DropdownItemGroup::new("B")
+    SelectGroup::new("B")
         .items(vec![
             Country { name: "Brazil".into(), code: "BR".into() },
             Country { name: "Belgium".into(), code: "BE".into() },
@@ -123,7 +123,7 @@ grouped_items.push(
 );
 
 let dropdown = cx.new(|cx| {
-    DropdownState::new(grouped_items, None, window, cx)
+    SelectState::new(grouped_items, None, window, cx)
 });
 
 Dropdown::new(&dropdown)
@@ -164,7 +164,7 @@ Dropdown::new(&dropdown)
 
 ```rust
 let dropdown = cx.new(|cx| {
-    DropdownState::new(Vec::<SharedString>::new(), None, window, cx)
+    SelectState::new(Vec::<SharedString>::new(), None, window, cx)
 });
 
 Dropdown::new(&dropdown)
@@ -182,7 +182,7 @@ Dropdown::new(&dropdown)
 ```rust
 cx.subscribe_in(&dropdown, window, |view, state, event, window, cx| {
     match event {
-        DropdownEvent::Confirm(value) => {
+        SelectEvent::Confirm(value) => {
             if let Some(selected_value) = value {
                 println!("Selected: {:?}", selected_value);
             } else {
@@ -221,7 +221,7 @@ dropdown.update(cx, |state, cx| {
 
 ## API Reference
 
-### DropdownState
+### SelectState
 
 | Method                                   | Description                  |
 | ---------------------------------------- | ---------------------------- |
@@ -249,7 +249,7 @@ dropdown.update(cx, |state, cx| {
 | `large()`           | Large size                        |
 | `small()`           | Small size                        |
 
-### DropdownItem Trait
+### SelectItem Trait
 
 | Method            | Description                              |
 | ----------------- | ---------------------------------------- |
@@ -258,7 +258,7 @@ dropdown.update(cx, |state, cx| {
 | `value()`         | Value returned when selected             |
 | `matches(query)`  | Custom search matching logic             |
 
-### DropdownDelegate Trait
+### SelectDelegate Trait
 
 | Method                              | Description                       |
 | ----------------------------------- | --------------------------------- |
@@ -277,14 +277,14 @@ dropdown.update(cx, |state, cx| {
 | `new(items)` | Create searchable vector |
 | `push(item)` | Add item to vector       |
 
-### DropdownItemGroup
+### SelectGroup
 
 | Method       | Description                 |
 | ------------ | --------------------------- |
 | `new(title)` | Create new group with title |
 | `items(vec)` | Set items for the group     |
 
-### DropdownEvent
+### SelectEvent
 
 | Event                    | Description              |
 | ------------------------ | ------------------------ |
@@ -304,7 +304,7 @@ let languages = SearchableVec::new(vec![
 ]);
 
 let dropdown = cx.new(|cx| {
-    DropdownState::new(languages, None, window, cx)
+    SelectState::new(languages, None, window, cx)
 });
 
 Dropdown::new(&dropdown)
@@ -323,7 +323,7 @@ struct Region {
     flag: SharedString,
 }
 
-impl DropdownItem for Region {
+impl SelectItem for Region {
     type Value = SharedString;
 
     fn title(&self) -> SharedString {
@@ -360,7 +360,7 @@ let regions = vec![
 ];
 
 let dropdown = cx.new(|cx| {
-    DropdownState::new(regions, None, window, cx)
+    SelectState::new(regions, None, window, cx)
 });
 
 Dropdown::new(&dropdown)
@@ -404,13 +404,13 @@ let mut grouped_countries = SearchableVec::new(vec![]);
 
 for (continent, countries) in countries_by_continent {
     grouped_countries.push(
-        DropdownItemGroup::new(continent)
+        SelectGroup::new(continent)
             .items(countries)
     );
 }
 
 let dropdown = cx.new(|cx| {
-    DropdownState::new(grouped_countries, None, window, cx)
+    SelectState::new(grouped_countries, None, window, cx)
 });
 
 Dropdown::new(&dropdown)

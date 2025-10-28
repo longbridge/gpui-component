@@ -16,17 +16,7 @@ use crate::{
     StyleSized, StyledExt,
 };
 
-#[derive(Clone)]
-pub enum ListEvent {
-    /// Single click or move to selected row.
-    SelectItem(usize),
-    /// Double click on the row.
-    ConfirmItem(usize),
-    // Cancel the selection.
-    Cancel,
-}
-
-const CONTEXT: &str = "Dropdown";
+const CONTEXT: &str = "Select";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("up", SelectUp, Some(CONTEXT)),
@@ -41,11 +31,11 @@ pub(crate) fn init(cx: &mut App) {
     ])
 }
 
-/// A trait for items that can be displayed in a dropdown.
-pub trait DropdownItem: Clone {
+/// A trait for items that can be displayed in a select.
+pub trait SelectItem: Clone {
     type Value: Clone;
     fn title(&self) -> SharedString;
-    /// Customize the display title used to selected item in Dropdown Input.
+    /// Customize the display title used to selected item in Select Input.
     ///
     /// If return None, the title will be used.
     fn display_title(&self) -> Option<AnyElement> {
@@ -58,7 +48,7 @@ pub trait DropdownItem: Clone {
     }
 }
 
-impl DropdownItem for String {
+impl SelectItem for String {
     type Value = Self;
 
     fn title(&self) -> SharedString {
@@ -70,7 +60,7 @@ impl DropdownItem for String {
     }
 }
 
-impl DropdownItem for SharedString {
+impl SelectItem for SharedString {
     type Value = Self;
 
     fn title(&self) -> SharedString {
@@ -82,10 +72,10 @@ impl DropdownItem for SharedString {
     }
 }
 
-pub trait DropdownDelegate: Sized {
-    type Item: DropdownItem;
+pub trait SelectDelegate: Sized {
+    type Item: SelectItem;
 
-    /// Returns the number of sections in the dropdown.
+    /// Returns the number of sections in the [`Select`].
     fn sections_count(&self, _: &App) -> usize {
         1
     }
@@ -104,7 +94,7 @@ pub trait DropdownDelegate: Sized {
     /// Returns the index of the item with the given value, or None if not found.
     fn position<V>(&self, _value: &V) -> Option<IndexPath>
     where
-        Self::Item: DropdownItem<Value = V>,
+        Self::Item: SelectItem<Value = V>,
         V: PartialEq;
 
     fn searchable(&self) -> bool {
@@ -116,7 +106,7 @@ pub trait DropdownDelegate: Sized {
     }
 }
 
-impl<T: DropdownItem> DropdownDelegate for Vec<T> {
+impl<T: SelectItem> SelectDelegate for Vec<T> {
     type Item = T;
 
     fn items_count(&self, _: usize) -> usize {
@@ -129,7 +119,7 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
 
     fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
-        Self::Item: DropdownItem<Value = V>,
+        Self::Item: SelectItem<Value = V>,
         V: PartialEq,
     {
         self.iter()
@@ -138,17 +128,17 @@ impl<T: DropdownItem> DropdownDelegate for Vec<T> {
     }
 }
 
-struct DropdownListDelegate<D: DropdownDelegate + 'static> {
+struct SelectListDelegate<D: SelectDelegate + 'static> {
     delegate: D,
-    dropdown: WeakEntity<DropdownState<D>>,
+    state: WeakEntity<SelectState<D>>,
     selected_index: Option<IndexPath>,
 }
 
-impl<D> ListDelegate for DropdownListDelegate<D>
+impl<D> ListDelegate for SelectListDelegate<D>
 where
-    D: DropdownDelegate + 'static,
+    D: SelectDelegate + 'static,
 {
-    type Item = DropdownListItem;
+    type Item = SelectListItem;
 
     fn sections_count(&self, cx: &App) -> usize {
         self.delegate.sections_count(cx)
@@ -164,7 +154,7 @@ where
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Option<impl IntoElement> {
-        let dropdown = self.dropdown.upgrade()?.read(cx);
+        let state = self.state.upgrade()?.read(cx);
         let Some(item) = self.delegate.section(section) else {
             return None;
         };
@@ -173,7 +163,7 @@ where
             div()
                 .py_0p5()
                 .px_2()
-                .list_size(dropdown.size)
+                .list_size(state.size)
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(item),
@@ -190,9 +180,9 @@ where
             .selected_index
             .map_or(false, |selected_index| selected_index == ix);
         let size = self
-            .dropdown
+            .state
             .upgrade()
-            .map_or(Size::Medium, |dropdown| dropdown.read(cx).size);
+            .map_or(Size::Medium, |state| state.read(cx).size);
 
         if let Some(item) = self.delegate.item(ix) {
             let content = item.display_title().unwrap_or_else(|| {
@@ -201,7 +191,7 @@ where
                     .child(item.title().to_string())
                     .into_any_element()
             });
-            let list_item = DropdownListItem::new(ix.row)
+            let list_item = SelectListItem::new(ix.row)
                 .selected(selected)
                 .with_size(size)
                 .child(content);
@@ -212,9 +202,9 @@ where
     }
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
-        let dropdown = self.dropdown.clone();
+        let state = self.state.clone();
         cx.defer_in(window, move |_, window, cx| {
-            _ = dropdown.update(cx, |this, cx| {
+            _ = state.update(cx, |this, cx| {
                 this.open = false;
                 this.focus(window, cx);
             });
@@ -226,11 +216,11 @@ where
             .selected_index
             .and_then(|ix| self.delegate.item(ix))
             .map(|item| item.value().clone());
-        let dropdown = self.dropdown.clone();
+        let state = self.state.clone();
 
         cx.defer_in(window, move |_, window, cx| {
-            _ = dropdown.update(cx, |this, cx| {
-                cx.emit(DropdownEvent::Confirm(selected_value.clone()));
+            _ = state.update(cx, |this, cx| {
+                cx.emit(SelectEvent::Confirm(selected_value.clone()));
                 this.selected_value = selected_value;
                 this.open = false;
                 this.focus(window, cx);
@@ -244,8 +234,8 @@ where
         window: &mut Window,
         cx: &mut Context<List<Self>>,
     ) -> Task<()> {
-        self.dropdown.upgrade().map_or(Task::ready(()), |dropdown| {
-            dropdown.update(cx, |_, cx| self.delegate.perform_search(query, window, cx))
+        self.state.upgrade().map_or(Task::ready(()), |state| {
+            state.update(cx, |_, cx| self.delegate.perform_search(query, window, cx))
         })
     }
 
@@ -260,9 +250,9 @@ where
 
     fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
         if let Some(empty) = self
-            .dropdown
+            .state
             .upgrade()
-            .and_then(|dropdown| dropdown.read(cx).empty.as_ref())
+            .and_then(|state| state.read(cx).empty.as_ref())
         {
             empty(window, cx).into_any_element()
         } else {
@@ -276,29 +266,29 @@ where
     }
 }
 
-pub enum DropdownEvent<D: DropdownDelegate + 'static> {
-    Confirm(Option<<D::Item as DropdownItem>::Value>),
+pub enum SelectEvent<D: SelectDelegate + 'static> {
+    Confirm(Option<<D::Item as SelectItem>::Value>),
 }
 
-/// State of the [`Dropdown`].
-pub struct DropdownState<D: DropdownDelegate + 'static> {
+/// State of the [`Select`].
+pub struct SelectState<D: SelectDelegate + 'static> {
     focus_handle: FocusHandle,
-    list: Entity<List<DropdownListDelegate<D>>>,
+    list: Entity<List<SelectListDelegate<D>>>,
     size: Size,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement>>,
     /// Store the bounds of the input
     bounds: Bounds<Pixels>,
     open: bool,
-    selected_value: Option<<D::Item as DropdownItem>::Value>,
+    selected_value: Option<<D::Item as SelectItem>::Value>,
     _subscriptions: Vec<Subscription>,
 }
 
-/// A Dropdown element.
+/// A Select element.
 #[derive(IntoElement)]
-pub struct Dropdown<D: DropdownDelegate + 'static> {
+pub struct Select<D: SelectDelegate + 'static> {
     id: ElementId,
     style: StyleRefinement,
-    state: Entity<DropdownState<D>>,
+    state: Entity<SelectState<D>>,
     size: Size,
     icon: Option<Icon>,
     cleanable: bool,
@@ -333,7 +323,7 @@ impl<T: Clone> SearchableVec<T> {
     }
 }
 
-impl<T: DropdownItem> From<Vec<T>> for SearchableVec<T> {
+impl<T: SelectItem> From<Vec<T>> for SearchableVec<T> {
     fn from(items: Vec<T>) -> Self {
         Self {
             items: items.clone(),
@@ -342,7 +332,7 @@ impl<T: DropdownItem> From<Vec<T>> for SearchableVec<T> {
     }
 }
 
-impl<I: DropdownItem> DropdownDelegate for SearchableVec<I> {
+impl<I: SelectItem> SelectDelegate for SearchableVec<I> {
     type Item = I;
 
     fn items_count(&self, _: usize) -> usize {
@@ -355,7 +345,7 @@ impl<I: DropdownItem> DropdownDelegate for SearchableVec<I> {
 
     fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
-        Self::Item: DropdownItem<Value = V>,
+        Self::Item: SelectItem<Value = V>,
         V: PartialEq,
     {
         for (ix, item) in self.matched_items.iter().enumerate() {
@@ -383,7 +373,7 @@ impl<I: DropdownItem> DropdownDelegate for SearchableVec<I> {
     }
 }
 
-impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
+impl<I: SelectItem> SelectDelegate for SearchableVec<SelectGroup<I>> {
     type Item = I;
 
     fn sections_count(&self, _: &App) -> usize {
@@ -414,7 +404,7 @@ impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
 
     fn position<V>(&self, value: &V) -> Option<IndexPath>
     where
-        Self::Item: DropdownItem<Value = V>,
+        Self::Item: SelectItem<Value = V>,
         V: PartialEq,
     {
         for (ix, group) in self.matched_items.iter().enumerate() {
@@ -448,16 +438,16 @@ impl<I: DropdownItem> DropdownDelegate for SearchableVec<DropdownItemGroup<I>> {
     }
 }
 
-/// A group of dropdown items with a title.
+/// A group of select items with a title.
 #[derive(Debug, Clone)]
-pub struct DropdownItemGroup<I: DropdownItem> {
+pub struct SelectGroup<I: SelectItem> {
     pub title: SharedString,
     pub items: Vec<I>,
 }
 
-// impl<I> DropdownItem for DropdownItemGroup<I>
+// impl<I> SelectItem for SelectGroup<I>
 // where
-//     I: DropdownItem,
+//     I: SelectItem,
 // {
 //     type Value = SharedString;
 
@@ -475,9 +465,9 @@ pub struct DropdownItemGroup<I: DropdownItem> {
 //     }
 // }
 
-impl<I> DropdownItemGroup<I>
+impl<I> SelectGroup<I>
 where
-    I: DropdownItem,
+    I: SelectItem,
 {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
@@ -497,9 +487,9 @@ where
     }
 }
 
-impl<D> DropdownState<D>
+impl<D> SelectState<D>
 where
-    D: DropdownDelegate + 'static,
+    D: SelectDelegate + 'static,
 {
     pub fn new(
         delegate: D,
@@ -508,9 +498,9 @@ where
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
-        let delegate = DropdownListDelegate {
+        let delegate = SelectListDelegate {
             delegate,
-            dropdown: cx.entity().downgrade(),
+            state: cx.entity().downgrade(),
             selected_index,
         };
 
@@ -569,11 +559,11 @@ where
 
     pub fn set_selected_value(
         &mut self,
-        selected_value: &<D::Item as DropdownItem>::Value,
+        selected_value: &<D::Item as SelectItem>::Value,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) where
-        <<D as DropdownDelegate>::Item as DropdownItem>::Value: PartialEq,
+        <<D as SelectDelegate>::Item as SelectItem>::Value: PartialEq,
     {
         let delegate = self.list.read(cx).delegate();
         let selected_index = delegate.delegate.position(selected_value);
@@ -591,7 +581,7 @@ where
             .map(|item| item.value().clone());
     }
 
-    pub fn selected_value(&self) -> Option<&<D::Item as DropdownItem>::Value> {
+    pub fn selected_value(&self) -> Option<&<D::Item as SelectItem>::Value> {
         self.selected_value.as_ref()
     }
 
@@ -600,7 +590,7 @@ where
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // When the dropdown and dropdown menu are both not focused, close the dropdown menu.
+        // When the select and dropdown menu are both not focused, close the dropdown menu.
         if self.list.focus_handle(cx).is_focused(window) || self.focus_handle.is_focused(window) {
             return;
         }
@@ -660,13 +650,13 @@ where
 
     fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.set_selected_index(None, window, cx);
-        cx.emit(DropdownEvent::Confirm(None));
+        cx.emit(SelectEvent::Confirm(None));
     }
 
-    /// Set the items for the dropdown.
+    /// Set the items for the select.
     pub fn set_items(&mut self, items: D, _: &mut Window, cx: &mut Context<Self>)
     where
-        D: DropdownDelegate + 'static,
+        D: SelectDelegate + 'static,
     {
         self.list.update(cx, |list, _| {
             list.delegate_mut().delegate = items;
@@ -674,22 +664,22 @@ where
     }
 }
 
-impl<D> Render for DropdownState<D>
+impl<D> Render for SelectState<D>
 where
-    D: DropdownDelegate + 'static,
+    D: SelectDelegate + 'static,
 {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         Empty
     }
 }
 
-impl<D> Dropdown<D>
+impl<D> Select<D>
 where
-    D: DropdownDelegate + 'static,
+    D: SelectDelegate + 'static,
 {
-    pub fn new(state: &Entity<DropdownState<D>>) -> Self {
+    pub fn new(state: &Entity<SelectState<D>>) -> Self {
         Self {
-            id: ("dropdown", state.entity_id()).into(),
+            id: ("select", state.entity_id()).into(),
             style: StyleRefinement::default(),
             state: state.clone(),
             placeholder: None,
@@ -710,19 +700,19 @@ where
         self
     }
 
-    /// Set the placeholder for display when dropdown value is empty.
+    /// Set the placeholder for display when select value is empty.
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = Some(placeholder.into());
         self
     }
 
-    /// Set the right icon for the dropdown input, instead of the default arrow icon.
+    /// Set the right icon for the select input, instead of the default arrow icon.
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.icon = Some(icon.into());
         self
     }
 
-    /// Set title prefix for the dropdown.
+    /// Set title prefix for the select.
     ///
     /// e.g.: Country: United States
     ///
@@ -738,7 +728,7 @@ where
         self
     }
 
-    /// Set the disable state for the dropdown.
+    /// Set the disable state for the select.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -749,20 +739,20 @@ where
         self
     }
 
-    /// Set the appearance of the dropdown, if false the dropdown input will no border, background.
+    /// Set the appearance of the select, if false the select input will no border, background.
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
         self
     }
 
-    /// Returns the title element for the dropdown input.
+    /// Returns the title element for the select input.
     fn display_title(&self, _: &Window, cx: &App) -> impl IntoElement {
         let default_title = div()
             .text_color(cx.theme().accent_foreground)
             .child(
                 self.placeholder
                     .clone()
-                    .unwrap_or_else(|| t!("Dropdown.placeholder").into()),
+                    .unwrap_or_else(|| t!("Select.placeholder").into()),
             )
             .when(self.disabled, |this| {
                 this.text_color(cx.theme().muted_foreground)
@@ -803,9 +793,9 @@ where
     }
 }
 
-impl<D> Sizable for Dropdown<D>
+impl<D> Sizable for Select<D>
 where
-    D: DropdownDelegate + 'static,
+    D: SelectDelegate + 'static,
 {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
@@ -813,11 +803,11 @@ where
     }
 }
 
-impl<D> EventEmitter<DropdownEvent<D>> for DropdownState<D> where D: DropdownDelegate + 'static {}
-impl<D> EventEmitter<DismissEvent> for DropdownState<D> where D: DropdownDelegate + 'static {}
-impl<D> Focusable for DropdownState<D>
+impl<D> EventEmitter<SelectEvent<D>> for SelectState<D> where D: SelectDelegate + 'static {}
+impl<D> EventEmitter<DismissEvent> for SelectState<D> where D: SelectDelegate + 'static {}
+impl<D> Focusable for SelectState<D>
 where
-    D: DropdownDelegate,
+    D: SelectDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         if self.open {
@@ -827,27 +817,27 @@ where
         }
     }
 }
-impl<D> Focusable for Dropdown<D>
+impl<D> Focusable for Select<D>
 where
-    D: DropdownDelegate,
+    D: SelectDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.state.focus_handle(cx)
     }
 }
 
-impl<D> Styled for Dropdown<D>
+impl<D> Styled for Select<D>
 where
-    D: DropdownDelegate,
+    D: SelectDelegate,
 {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl<D> RenderOnce for Dropdown<D>
+impl<D> RenderOnce for Select<D>
 where
-    D: DropdownDelegate + 'static,
+    D: SelectDelegate + 'static,
 {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_focused = self.focus_handle(cx).is_focused(window);
@@ -877,10 +867,10 @@ where
             .when(!self.disabled, |this| {
                 this.track_focus(&self.focus_handle(cx).tab_stop(true))
             })
-            .on_action(window.listener_for(&self.state, DropdownState::up))
-            .on_action(window.listener_for(&self.state, DropdownState::down))
-            .on_action(window.listener_for(&self.state, DropdownState::enter))
-            .on_action(window.listener_for(&self.state, DropdownState::escape))
+            .on_action(window.listener_for(&self.state, SelectState::up))
+            .on_action(window.listener_for(&self.state, SelectState::down))
+            .on_action(window.listener_for(&self.state, SelectState::enter))
+            .on_action(window.listener_for(&self.state, SelectState::escape))
             .size_full()
             .relative()
             .child(
@@ -911,7 +901,7 @@ where
                     .refine_style(&self.style)
                     .when(outline_visible, |this| this.focused_border(cx))
                     .when(allow_open, |this| {
-                        this.on_click(window.listener_for(&self.state, DropdownState::toggle_menu))
+                        this.on_click(window.listener_for(&self.state, SelectState::toggle_menu))
                     })
                     .child(
                         h_flex()
@@ -935,7 +925,7 @@ where
                                         this.disabled(true)
                                     } else {
                                         this.on_click(
-                                            window.listener_for(&self.state, DropdownState::clean),
+                                            window.listener_for(&self.state, SelectState::clean),
                                         )
                                     }
                                 }))
@@ -1006,7 +996,7 @@ where
 }
 
 #[derive(IntoElement)]
-struct DropdownListItem {
+struct SelectListItem {
     id: ElementId,
     size: Size,
     style: StyleRefinement,
@@ -1015,10 +1005,10 @@ struct DropdownListItem {
     children: Vec<AnyElement>,
 }
 
-impl DropdownListItem {
+impl SelectListItem {
     pub fn new(ix: usize) -> Self {
         Self {
-            id: ("dropdown-item", ix).into(),
+            id: ("select-item", ix).into(),
             size: Size::default(),
             style: StyleRefinement::default(),
             selected: false,
@@ -1028,20 +1018,20 @@ impl DropdownListItem {
     }
 }
 
-impl ParentElement for DropdownListItem {
+impl ParentElement for SelectListItem {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
     }
 }
 
-impl Disableable for DropdownListItem {
+impl Disableable for SelectListItem {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 }
 
-impl Selectable for DropdownListItem {
+impl Selectable for SelectListItem {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -1052,20 +1042,20 @@ impl Selectable for DropdownListItem {
     }
 }
 
-impl Sizable for DropdownListItem {
+impl Sizable for SelectListItem {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
 
-impl Styled for DropdownListItem {
+impl Styled for SelectListItem {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for DropdownListItem {
+impl RenderOnce for SelectListItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)
