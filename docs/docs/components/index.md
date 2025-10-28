@@ -30,14 +30,14 @@ collapsed: false
 
 ### Form Components
 
-- [ColorPicker](color-picker) - Color selection interface
-- [DatePicker](date-picker) - Date selection with calendar
-- [Dropdown](dropdown) - Select from dropdown options
-- [Form](form) - Form container and layout
 - [Input](input) - Text input with validation
+- [Select](select) - Select from dropdown options
 - [NumberInput](number-input) - Numeric input with increment/decrement
+- [DatePicker](date-picker) - Date selection with calendar
 - [OtpInput](otp-input) - One-time password input
+- [ColorPicker](color-picker) - Color selection interface
 - [Editor](editor) - Multi-line text editor and code editor
+- [Form](form) - Form container and layout
 
 ### Layout Components
 
