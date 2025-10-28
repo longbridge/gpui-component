@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{button::*, checkbox::*, divider::*, dropdown::*, input::*, *};
+use gpui_component::{button::*, checkbox::*, divider::*, input::*, select::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +49,7 @@ pub struct DropdownStory {
 
 impl super::Story for DropdownStory {
     fn title() -> &'static str {
-        "Dropdown"
+        "Select"
     }
 
     fn description() -> &'static str {

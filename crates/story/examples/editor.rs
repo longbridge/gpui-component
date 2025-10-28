@@ -11,13 +11,13 @@ use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
     ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
     button::{Button, ButtonVariants as _},
-    dropdown::{Dropdown, DropdownEvent, DropdownState},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, InputEvent, InputState, Position, Rope, RopeExt, TabSize, TextInput,
     },
+    select::{Dropdown, DropdownEvent, DropdownState},
     v_flex,
 };
 use lsp_types::{

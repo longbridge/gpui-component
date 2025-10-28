@@ -7,7 +7,7 @@ use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
-    dropdown::{Dropdown, DropdownState},
+    select::{Dropdown, DropdownState},
     h_flex,
     input::{InputState, TextInput},
     modal::ModalButtonProps,

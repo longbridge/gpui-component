@@ -30,7 +30,7 @@ pub mod description_list;
 pub mod divider;
 pub mod dock;
 pub mod drawer;
-pub mod dropdown;
+pub mod select;
 pub mod form;
 pub mod group_box;
 pub mod highlighter;
@@ -105,7 +105,7 @@ pub fn init(cx: &mut App) {
     color_picker::init(cx);
     dock::init(cx);
     drawer::init(cx);
-    dropdown::init(cx);
+    select::init(cx);
     input::init(cx);
     list::init(cx);
     modal::init(cx);

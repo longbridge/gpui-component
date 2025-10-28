@@ -8,7 +8,7 @@ use gpui_component::{
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
     divider::Divider,
-    dropdown::{Dropdown, DropdownState},
+    select::{Dropdown, DropdownState},
     form::{form_field, v_form},
     h_flex,
     input::{InputState, TextInput},
