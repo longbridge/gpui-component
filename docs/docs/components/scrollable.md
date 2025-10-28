@@ -483,15 +483,6 @@ impl Render for DataTable {
 }
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Use arrow keys for scrolling when focused
-- **Screen Readers**: Scrollable content is properly announced
-- **Focus Management**: Focus follows scroll position for virtualized lists
-- **High Contrast**: Scrollbars respect system high contrast settings
-- **Reduced Motion**: Honors user's reduced motion preferences
-- **Touch Support**: Supports touch scrolling on compatible devices
-
 ## Performance Tips
 
 1. **Use Virtualization**: For lists with >100 items, use `VirtualList`

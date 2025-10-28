@@ -311,32 +311,6 @@ TitleBar::new()
     )
 ```
 
-## Accessibility
-
-### Keyboard Navigation
-
-- Title bar elements are keyboard accessible
-- Tab navigation works normally within title bar content
-- Custom elements should implement proper focus management
-
-### Screen Reader Support
-
-- Window control buttons have appropriate labels
-- Custom content should include proper ARIA attributes
-- Title information is announced correctly
-
-### Window Management
-
-- Standard window controls work with assistive technologies
-- Keyboard shortcuts (Alt+F4, etc.) function normally
-- Custom close handlers should maintain expected behavior
-
-### Focus Management
-
-- Focus is properly managed during window operations
-- Title bar content participates in normal tab order
-- Custom interactive elements should handle focus correctly
-
 ## Notes
 
 - The title bar automatically handles platform-specific styling and behavior

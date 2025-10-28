@@ -409,18 +409,6 @@ Users can navigate between views by clicking on the month/year buttons in the he
 - **Tab**: Navigate between prev/next buttons and month/year selectors
 - **Enter/Space**: Activate buttons or toggle view modes
 
-## Accessibility
-
-- **Full keyboard navigation** with arrow keys, Tab, Enter, and Escape
-- **ARIA labels** and roles for screen reader compatibility
-- **Focus indicators** for all interactive elements
-- **Semantic markup** with proper heading structure
-- **High contrast** support with theme-aware colors
-- **Text scaling** support with relative sizing
-- **Screen reader announcements** for date selection
-- **Disabled state** properly communicated to assistive technology
-- **Range selection** clearly indicated with visual and semantic cues
-
 ## Examples
 
 ### Event Planning Calendar

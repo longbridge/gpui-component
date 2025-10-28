@@ -415,16 +415,6 @@ impl FloatInput {
 }
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Full support for arrow keys to increment/decrement
-- **Focus Management**: Clear focus indicators and tab navigation
-- **Screen Reader Support**: Proper labeling of increment/decrement buttons
-- **ARIA Attributes**: Appropriate roles and properties for assistive technology
-- **High Contrast**: Buttons remain visible in high contrast modes
-- **Disabled State**: Properly communicated to assistive technology
-- **Value Announcements**: Screen readers announce value changes
-
 ## Best Practices
 
 1. **Validation**: Always validate numeric input on both client and server side

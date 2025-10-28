@@ -511,15 +511,6 @@ impl ListDelegate for ContactListDelegate {
 }
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Use arrow keys to navigate items, Enter to confirm, Escape to cancel
-- **Focus Management**: Proper focus indication and management
-- **Screen Reader Support**: Semantic markup and ARIA attributes
-- **Search**: Built-in search functionality with keyboard shortcuts
-- **Selection States**: Clear visual and programmatic indication of selection
-- **Loading States**: Accessible loading indicators and announcements
-
 ## Performance
 
 - **Virtualization**: Only renders visible items for large datasets

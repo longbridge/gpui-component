@@ -492,29 +492,6 @@ impl Render for SettingsPanel {
 }
 ```
 
-## Accessibility
-
-- **Mouse Interaction**: Click and drag handles to resize panels
-- **Visual Feedback**: Handles show hover states and appropriate cursors
-- **Constraints Respected**: Panels cannot be resized beyond their limits
-- **Smooth Interaction**: Real-time visual feedback during resize operations
-- **Container Awareness**: Panels adjust to fit within container bounds
-
-### Mouse Behavior
-
-| Action            | Result                                        |
-| ----------------- | --------------------------------------------- |
-| Hover over handle | Cursor changes to resize cursor               |
-| Click and drag    | Resize adjacent panels                        |
-| Release mouse     | Complete resize operation, emit Resized event |
-
-### Handle Visual States
-
-- **Default**: Subtle border appearance
-- **Hover**: Highlighted appearance
-- **Active**: Enhanced visibility during drag operation
-- **Cursor**: `col-resize` for horizontal, `row-resize` for vertical
-
 ## Best Practices
 
 1. **State Management**: Use separate ResizableState for independent layouts

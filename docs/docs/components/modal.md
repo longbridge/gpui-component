@@ -325,11 +325,3 @@ window.open_modal(cx, |modal, _, _| {
         })
 })
 ```
-
-## Accessibility
-
-- ESC key to close (when enabled)
-- Focus trapped within modal
-- Focus returns to trigger element on close
-- Overlay click to dismiss (when enabled)
-- Clear visual focus indicators

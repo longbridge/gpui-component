@@ -245,34 +245,3 @@ Alert::warning(
 .title("Security Alert")
 .icon(IconName::Shield)
 ```
-
-## Accessibility
-
-### Keyboard Navigation
-
-- Alert close buttons can be focused and activated with keyboard
-- Tab navigation moves focus to the close button when present
-- Enter or Space activates the close button
-
-### Screen Reader Support
-
-- Alert content is announced to screen readers
-- Title and message content are properly structured
-- Icon provides semantic meaning through appropriate labeling
-- Alert variants use appropriate ARIA roles and properties
-
-### Visual Accessibility
-
-- High contrast between text and background colors
-- Clear visual hierarchy with title and message distinction
-- Icon reinforces the alert variant meaning
-- Sufficient padding and spacing for touch targets
-
-### Best Practices
-
-- Use appropriate variant for the message type
-- Keep titles concise and descriptive
-- Provide clear, actionable error messages
-- Use banner mode for system-wide notifications
-- Include close functionality for dismissible alerts
-- Test with screen readers and keyboard navigation

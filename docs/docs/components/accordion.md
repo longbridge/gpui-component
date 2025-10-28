@@ -145,10 +145,3 @@ Accordion::new("outer")
             )
     })
 ```
-
-## Accessibility
-
-- Keyboard navigation supported
-- Arrow keys to navigate between headers
-- Enter/Space to toggle items
-- Tab to move focus in/out of accordion

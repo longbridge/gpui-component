@@ -254,10 +254,3 @@ Button::new("btn")
             .child(IconName::Eye)
     )
 ```
-
-## Accessibility
-
-- Keyboard navigation with Tab
-- Activate with Enter or Space
-- Disabled buttons cannot be focused
-- Loading state announced to screen readers

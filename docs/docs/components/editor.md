@@ -458,20 +458,9 @@ impl Render for TextEditor {
 }
 ```
 
-## Accessibility
-
-- Full keyboard navigation support
-- Screen reader compatibility
-- Clear focus indicators
-- Proper ARIA labels and roles
-- Support for assistive text selection
-- Keyboard shortcuts follow platform conventions
-- ESC key handling for search and context menus
-- Tab key properly indents in multi-line mode
-
 ## Performance Notes
 
-- Optimized for large text content (up to 50K lines in code editor mode)
+- Optimized for large text content (up to 200K lines in code editor mode)
 - Efficient text wrapping and line measurement
 - Virtual scrolling for long documents
 - Minimal re-renders on text changes

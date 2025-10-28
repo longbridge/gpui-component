@@ -418,18 +418,6 @@ Dropdown::new(&dropdown)
     .placeholder("Select country...")
 ```
 
-## Accessibility
-
-- Full keyboard navigation (Arrow keys, Enter, Escape)
-- Tab to focus dropdown
-- Arrow keys to navigate options
-- Enter to select current option
-- Escape to close menu
-- Screen reader support for selected values
-- Focus management between dropdown and menu
-- Clear focus indicators
-- Proper ARIA attributes for dropdown state
-
 ## Keyboard Shortcuts
 
 | Key       | Action                                  |

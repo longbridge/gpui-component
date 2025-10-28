@@ -648,23 +648,6 @@ impl Render for DataGrid {
 }
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**:
-  - Use arrow keys to scroll through items
-  - Page Up/Page Down for faster navigation
-  - Home/End to jump to start/end
-- **Screen Reader Support**:
-  - Properly announces list items and position
-  - Supports ARIA attributes for list structure
-  - Announces total item count
-- **Focus Management**:
-  - Focus follows scroll position
-  - Keyboard navigation updates scroll position
-  - Focus indicators remain visible during scrolling
-- **High Contrast**: Respects system high contrast settings
-- **Reduced Motion**: Honors user's reduced motion preferences for scrolling animations
-
 ## Best Practices
 
 1. **Item Sizing**: Pre-calculate item sizes when possible for best performance
