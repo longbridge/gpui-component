@@ -28,10 +28,16 @@ use gpui_component::select::{
 
 ### Basic Select
 
+You can create a basic select dropdown by initializing a `SelectState` with a list of items.
+
+The first type parameter of `SelectState` is the items for the state, which must implement the [SelectItem] trait.
+
+The built-in implementations of `SelectItem` include common types like `String`, `SharedString`, and `&'static str`.
+
 ```rust
 let state = cx.new(|cx| {
     SelectState::new(
-        vec!["Apple".into(), "Orange".into(), "Banana".into()],
+        vec!["Apple", "Orange", "Banana"],
         Some(IndexPath::default()), // Select first item
         window,
         cx,
@@ -46,7 +52,7 @@ Select::new(&state)
 ```rust
 let state = cx.new(|cx| {
     SelectState::new(
-        vec!["Rust".into(), "Go".into(), "JavaScript".into()],
+        vec!["Rust", "Go", "JavaScript"],
         None, // No initial selection
         window,
         cx,
@@ -61,11 +67,7 @@ Select::new(&state)
 
 ```rust
 let fruits = SearchableVec::new(vec![
-    "Apple".into(),
-    "Orange".into(),
-    "Banana".into(),
-    "Grape".into(),
-    "Pineapple".into(),
+    "Apple", "Orange", "Banana", "Grape", "Pineapple",
 ]);
 
 let state = cx.new(|cx| {
@@ -76,7 +78,13 @@ Select::new(&state)
     .icon(IconName::Search) // Shows search icon
 ```
 
-### Custom Item
+### Impl SelectItem
+
+By default, we have implmemented `SelectItem` for common types like `String`, `SharedString` and `&'static str`. You can also create your own item types by implementing the `SelectItem` trait.
+
+This is useful when you want to display complex data structures, and also want get that data type from `select_value` method.
+
+You can also customize the search logic by overriding the `matches` method.
 
 ```rust
 #[derive(Debug, Clone)]
@@ -377,3 +385,5 @@ The dropdown respects the current theme and uses the following theme tokens:
 - `accent_foreground` - Placeholder text color
 - `border` - Menu border
 - `radius` - Border radius
+
+[SelectItem]: https://docs.rs/gpui-component/latest/gpui_component/select/trait.SelectItem.html

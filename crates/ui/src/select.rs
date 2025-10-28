@@ -72,6 +72,18 @@ impl SelectItem for SharedString {
     }
 }
 
+impl SelectItem for &'static str {
+    type Value = Self;
+
+    fn title(&self) -> SharedString {
+        SharedString::from(self.to_string())
+    }
+
+    fn value(&self) -> &Self::Value {
+        self
+    }
+}
+
 pub trait SelectDelegate: Sized {
     type Item: SelectItem;
 

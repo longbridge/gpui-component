@@ -38,9 +38,9 @@ impl SelectItem for Country {
 pub struct SelectStory {
     disabled: bool,
     country_select: Entity<SelectState<SearchableVec<SelectGroup<Country>>>>,
-    fruit_select: Entity<SelectState<SearchableVec<SharedString>>>,
-    simple_select1: Entity<SelectState<Vec<SharedString>>>,
-    simple_select2: Entity<SelectState<SearchableVec<SharedString>>>,
+    fruit_select: Entity<SelectState<SearchableVec<&'static str>>>,
+    simple_select1: Entity<SelectState<Vec<&'static str>>>,
+    simple_select2: Entity<SelectState<SearchableVec<&'static str>>>,
     simple_select3: Entity<SelectState<Vec<SharedString>>>,
     disabled_select: Entity<SelectState<Vec<SharedString>>>,
     appearance_select: Entity<SelectState<Vec<SharedString>>>,
@@ -103,13 +103,13 @@ impl SelectStory {
         let input_state = cx.new(|cx| InputState::new(window, cx).placeholder("Your phone number"));
 
         let fruits = SearchableVec::new(vec![
-            "Apple".into(),
-            "Orange".into(),
-            "Banana".into(),
-            "Grape".into(),
-            "Pineapple".into(),
-            "Watermelon & This is a long long long long long long long long long title".into(),
-            "Avocado".into(),
+            "Apple",
+            "Orange",
+            "Banana",
+            "Grape",
+            "Pineapple",
+            "Watermelon & This is a long long long long long long long long long title",
+            "Avocado",
         ]);
         let fruit_select = cx.new(|cx| SelectState::new(fruits, None, window, cx));
 
@@ -124,15 +124,8 @@ impl SelectStory {
                 simple_select1: cx.new(|cx| {
                     SelectState::new(
                         vec![
-                            "GPUI".into(),
-                            "Iced".into(),
-                            "egui".into(),
-                            "Makepad".into(),
-                            "Slint".into(),
-                            "QT".into(),
-                            "ImGui".into(),
-                            "Cocoa".into(),
-                            "WinUI".into(),
+                            "GPUI", "Iced", "egui", "Makepad", "Slint", "QT", "ImGui", "Cocoa",
+                            "WinUI",
                         ],
                         Some(IndexPath::default()),
                         window,
@@ -143,12 +136,7 @@ impl SelectStory {
                     let mut select = SelectState::new(SearchableVec::new(vec![]), None, window, cx);
 
                     select.set_items(
-                        SearchableVec::new(vec![
-                            "Rust".into(),
-                            "Go".into(),
-                            "C++".into(),
-                            "JavaScript".into(),
-                        ]),
+                        SearchableVec::new(vec!["Rust", "Go", "C++", "JavaScript"]),
                         window,
                         cx,
                     );
