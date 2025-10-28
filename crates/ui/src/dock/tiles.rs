@@ -890,7 +890,7 @@ impl Tiles {
             // More 1px to account for the border width when 2 panels are too close
             .w(item.bounds.size.width + px(1.))
             .h(item.bounds.size.height + px(1.))
-            .rounded(cx.theme().radius)
+            .rounded(cx.theme().tile_radius)
             .child(h_flex().overflow_hidden().size_full().child(panel_view))
             .children(self.render_resize_handles(window, cx, entity_id, &item))
             .child(self.render_drag_bar(window, cx, entity_id, &item))
