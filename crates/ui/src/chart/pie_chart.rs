@@ -6,7 +6,7 @@ use num_traits::Zero;
 
 use crate::{
     plot::{
-        shape::{Arc, Pie},
+        shape::{Arc, ArcData, Pie},
         Plot,
     },
     ActiveTheme, PixelsExt,
@@ -16,7 +16,9 @@ use crate::{
 pub struct PieChart<T: 'static> {
     data: Vec<T>,
     inner_radius: f32,
+    inner_radius_fn: Option<Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>>,
     outer_radius: f32,
+    outer_radius_fn: Option<Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>>,
     pad_angle: f32,
     value: Option<Rc<dyn Fn(&T) -> f32>>,
     color: Option<Rc<dyn Fn(&T) -> Hsla>>,
@@ -30,7 +32,9 @@ impl<T> PieChart<T> {
         Self {
             data: data.into_iter().collect(),
             inner_radius: 0.,
+            inner_radius_fn: None,
             outer_radius: 0.,
+            outer_radius_fn: None,
             pad_angle: 0.,
             value: None,
             color: None,
@@ -42,9 +46,41 @@ impl<T> PieChart<T> {
         self
     }
 
+    pub fn inner_radius_fn(
+        mut self,
+        inner_radius_fn: impl Fn(&ArcData<T>) -> f32 + 'static,
+    ) -> Self {
+        self.inner_radius_fn = Some(Rc::new(inner_radius_fn));
+        self
+    }
+
+    fn get_inner_radius(&self, arc: &ArcData<T>) -> f32 {
+        if let Some(inner_radius_fn) = self.inner_radius_fn.as_ref() {
+            inner_radius_fn(arc)
+        } else {
+            self.inner_radius
+        }
+    }
+
     pub fn outer_radius(mut self, outer_radius: f32) -> Self {
         self.outer_radius = outer_radius;
         self
+    }
+
+    pub fn outer_radius_fn(
+        mut self,
+        outer_radius_fn: impl Fn(&ArcData<T>) -> f32 + 'static,
+    ) -> Self {
+        self.outer_radius_fn = Some(Rc::new(outer_radius_fn));
+        self
+    }
+
+    fn get_outer_radius(&self, arc: &ArcData<T>) -> f32 {
+        if let Some(outer_radius_fn) = self.outer_radius_fn.as_ref() {
+            outer_radius_fn(arc)
+        } else {
+            self.outer_radius
+        }
     }
 
     pub fn pad_angle(mut self, pad_angle: f32) -> Self {
@@ -87,6 +123,8 @@ impl<T> Plot for PieChart<T> {
         let arcs = pie.arcs(&self.data);
 
         for a in &arcs {
+            let inner_radius = self.get_inner_radius(a);
+            let outer_radius = self.get_outer_radius(a);
             arc.paint(
                 a,
                 if let Some(color_fn) = self.color.as_ref() {
@@ -94,6 +132,8 @@ impl<T> Plot for PieChart<T> {
                 } else {
                     cx.theme().chart_2
                 },
+                Some(inner_radius),
+                Some(outer_radius),
                 &bounds,
                 window,
             );
