@@ -69,7 +69,13 @@ impl Arc {
         point(r * a.cos(), r * a.sin())
     }
 
-    fn path<T>(&self, arc: &ArcData<T>, bounds: &Bounds<Pixels>) -> Option<Path<Pixels>> {
+    fn path<T>(
+        &self,
+        arc: &ArcData<T>,
+        inner_radius: Option<f32>,
+        outer_radius: Option<f32>,
+        bounds: &Bounds<Pixels>,
+    ) -> Option<Path<Pixels>> {
         let start_angle = arc.start_angle - HALF_PI;
         let end_angle = arc.end_angle - HALF_PI;
         let da = end_angle - start_angle;
@@ -80,8 +86,8 @@ impl Arc {
         } else {
             arc.pad_angle
         };
-        let r0 = self.inner_radius.max(0.);
-        let r1 = self.outer_radius.max(0.);
+        let r0 = inner_radius.unwrap_or(self.inner_radius).max(0.);
+        let r1 = outer_radius.unwrap_or(self.outer_radius).max(0.);
 
         // Calculate the center point.
         let center_x = bounds.origin.x.as_f32() + bounds.size.width.as_f32() / 2.;
@@ -173,10 +179,12 @@ impl Arc {
         &self,
         arc: &ArcData<T>,
         color: impl Into<Hsla>,
+        inner_radius: Option<f32>,
+        outer_radius: Option<f32>,
         bounds: &Bounds<Pixels>,
         window: &mut Window,
     ) {
-        let path = self.path(arc, bounds);
+        let path = self.path(arc, inner_radius, outer_radius, bounds);
         if let Some(path) = path {
             window.paint_path(path, color.into());
         }

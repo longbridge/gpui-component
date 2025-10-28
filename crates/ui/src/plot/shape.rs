@@ -4,7 +4,7 @@ mod bar;
 mod line;
 mod pie;
 
-pub use arc::Arc;
+pub use arc::{Arc, ArcData};
 pub use area::Area;
 pub use bar::Bar;
 pub use line::Line;

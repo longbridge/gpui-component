@@ -1,13 +1,14 @@
 use gpui::{
-    div, linear_color_stop, linear_gradient, prelude::FluentBuilder, px, App, AppContext, Context,
-    Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement,
+    Render, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
+    prelude::FluentBuilder, px,
 };
 use gpui_component::{
+    ActiveTheme, StyledExt,
     chart::{AreaChart, BarChart, LineChart, PieChart},
     divider::Divider,
     dock::PanelControl,
-    h_flex, v_flex, ActiveTheme, StyledExt,
+    h_flex, v_flex,
 };
 use serde::Deserialize;
 
@@ -174,8 +175,8 @@ impl Render for ChartStory {
                         "Pie Chart - Donut",
                         PieChart::new(self.monthly_devices.clone())
                             .value(|d| d.desktop as f32)
-                            .outer_radius(100.)
                             .inner_radius(60.)
+                            .outer_radius_fn(|d| 100. - d.index as f32 * 4.)
                             .color(move |d| d.color(color)),
                         true,
                         cx,
@@ -184,8 +185,8 @@ impl Render for ChartStory {
                         "Pie Chart - Pad Angle",
                         PieChart::new(self.monthly_devices.clone())
                             .value(|d| d.desktop as f32)
-                            .outer_radius(100.)
                             .inner_radius(60.)
+                            .outer_radius(100.)
                             .pad_angle(4. / 100.)
                             .color(move |d| d.color(color)),
                         true,
@@ -227,7 +228,7 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_8()
+                    .gap_x_4()
                     .h(px(400.))
                     .child(chart_container(
                         "Line Chart",
@@ -268,7 +269,7 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_8()
+                    .gap_x_4()
                     .h(px(400.))
                     .child(chart_container(
                         "Area Chart",
