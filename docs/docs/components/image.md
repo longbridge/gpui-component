@@ -548,39 +548,6 @@ fn robust_image(src: &str, state: ImageState) -> impl IntoElement {
 }
 ```
 
-## Accessibility
-
-### Alt Text and Labels
-
-- Use semantic HTML structure for screen readers
-- Provide descriptive image context through surrounding elements
-- Include image descriptions in component documentation
-
-### Keyboard Navigation
-
-- Images within interactive containers support proper focus management
-- Implement keyboard shortcuts for image galleries and carousels
-- Ensure interactive image elements are reachable via tab navigation
-
-### Loading States
-
-- Provide loading indicators for slow-loading images
-- Use skeleton screens to maintain layout stability
-- Announce loading state changes to screen readers
-
-### Color and Contrast
-
-- Ensure sufficient contrast for text overlays on images
-- Provide alternative text descriptions for informational images
-- Consider color-blind accessibility when using color-coded image states
-
-### Performance Considerations
-
-- Use appropriate image formats (WebP, AVIF when supported)
-- Implement lazy loading for images below the fold
-- Provide multiple image sizes for responsive displays
-- Use proper caching strategies for frequently accessed images
-
 ## Best Practices
 
 ### Image Optimization

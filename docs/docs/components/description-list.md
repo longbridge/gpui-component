@@ -273,15 +273,6 @@ DescriptionList::horizontal()
     ])
 ```
 
-## Accessibility
-
-- Semantic HTML structure for screen readers
-- Proper label-value associations
-- Keyboard navigation support
-- High contrast support for visual clarity
-- Responsive design adapts to different screen sizes
-- ARIA labels for complex content where appropriate
-
 ## Design Guidelines
 
 - Use horizontal layout for simple key-value pairs

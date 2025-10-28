@@ -145,11 +145,3 @@ v_flex()
             }))
     )
 ```
-
-## Accessibility
-
-- Keyboard navigation with Tab
-- Toggle with Space
-- Clear focus indicators
-- Disabled checkboxes cannot be focused
-- Label text announced by screen readers

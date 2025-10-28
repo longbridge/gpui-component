@@ -445,19 +445,6 @@ Common date format patterns using chrono format specifiers:
 | `%A, %B %d, %Y`     | Monday, December 25, 2023 |
 | `%Y 年 %m 月 %d 日` | 2023 年 12 月 25 日       |
 
-## Accessibility
-
-- Full keyboard navigation with Tab and arrow keys
-- Enter to open/confirm date selection
-- Escape to close calendar or clear selection
-- Delete/Backspace to clear selected date
-- Clear focus indicators for all interactive elements
-- Screen reader friendly with proper ARIA attributes
-- Calendar navigation with Page Up/Down for months
-- Home/End keys for week navigation
-- Cleanable button accessible via keyboard
-- Preset buttons fully keyboard accessible
-
 ## Examples
 
 ### Event Date Picker

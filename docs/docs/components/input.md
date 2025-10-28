@@ -288,11 +288,3 @@ v_flex()
     .child(TextInput::new(&self.name_input))
     .child(TextInput::new(&self.email_input))
 ```
-
-## Accessibility
-
-- Full keyboard navigation
-- Clear focus indicators
-- Placeholder announced by screen readers
-- ESC to clear (when enabled)
-- Enter to submit

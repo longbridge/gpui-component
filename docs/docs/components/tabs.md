@@ -412,16 +412,6 @@ impl Render for CloseableTabsView {
 }
 ```
 
-## Accessibility
-
-- Keyboard navigation with Tab and Arrow keys
-- Enter or Space to activate tabs
-- Focus indicators for keyboard navigation
-- Disabled tabs cannot be focused or activated
-- Screen reader support for tab labels and states
-- ARIA attributes for tab panels and tab lists
-- Proper focus management when tabs are added or removed
-
 ## Notes
 
 - The `TabBar` manages the selection state of all child tabs

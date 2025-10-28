@@ -368,15 +368,6 @@ impl Render for PinEntry {
 - **Backspace**: Delete current digit and move backward
 - **Delete**: Clear current field
 
-## Accessibility
-
-- **Keyboard Navigation**: Full keyboard support for all interactions
-- **Focus Management**: Clear focus indicators and logical tab order
-- **Screen Reader Support**: Proper labeling and state announcements
-- **High Contrast**: Clear visual distinctions in all themes
-- **Error States**: Clear indication of validation failures
-- **Auto-completion**: Automatic progression reduces cognitive load
-
 ## Common Patterns
 
 ### Auto-Submit on Complete

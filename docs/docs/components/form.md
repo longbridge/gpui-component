@@ -578,13 +578,3 @@ v_form()
             )
     )
 ```
-
-## Accessibility
-
-- **Keyboard Navigation**: Full keyboard support for all form elements
-- **Focus Management**: Proper focus indicators and tab order
-- **Screen Readers**: Labels properly associated with form controls
-- **Required Fields**: Visual and semantic indication of required fields
-- **Error States**: Clear error messaging and validation feedback
-- **ARIA Labels**: Proper ARIA attributes for complex form structures
-- **Semantic HTML**: Uses appropriate form semantics for accessibility tools

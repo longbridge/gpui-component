@@ -440,17 +440,6 @@ Button::new("settings")
     })
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Use arrow keys to navigate menu items
-- **Activation**: Press Enter or Space to activate menu items
-- **Escape**: Press Escape to close menus
-- **Focus Management**: Focus returns to trigger element when menu closes
-- **Screen Readers**: Menu structure and states are properly announced
-- **Disabled Items**: Cannot be focused or activated
-- **Submenus**: Left/Right arrow keys navigate into and out of submenus
-- **Action Context**: Proper focus context ensures actions are handled correctly
-
 ## Keyboard Shortcuts
 
 | Key               | Action                            |

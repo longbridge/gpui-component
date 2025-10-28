@@ -227,14 +227,6 @@ let shortcut_text = Kbd::format(&Keystroke::parse("cmd-shift-p").unwrap());
 div().child(format!("Shortcut: {}", shortcut_text))
 ```
 
-## Accessibility
-
-- Keyboard shortcuts are announced by screen readers
-- The component provides semantic meaning for assistive technologies
-- Visual styling helps distinguish shortcuts from regular text
-- Platform-specific formatting ensures familiarity for users
-- Text-only mode available for custom accessibility implementations
-
 ## Styling
 
 The Kbd component uses the following default styles:

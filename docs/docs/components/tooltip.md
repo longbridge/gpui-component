@@ -340,53 +340,6 @@ v_flex()
     )
 ```
 
-### Accessibility Features
-
-```rust
-// Tooltip with screen reader friendly content
-div()
-    .child("🔒")
-    .id("security-indicator")
-    .tooltip(|window, cx| {
-        Tooltip::new("This connection is secure and encrypted")
-            .build(window, cx)
-    })
-```
-
-## Positioning and Timing
-
-Tooltips automatically position themselves to avoid viewport edges and provide optimal visibility. The positioning system:
-
-- **Auto-positioning**: Automatically adjusts to stay within viewport
-- **Smart placement**: Avoids overlapping with other UI elements
-- **Responsive**: Adapts to different screen sizes
-
-### Timing Behavior
-
-- **Show delay**: Brief delay before showing (prevents accidental triggers)
-- **Hide delay**: Immediate hiding when mouse leaves or focus is lost
-- **Keyboard navigation**: Shows immediately on focus, hides on blur
-
-## Accessibility
-
-The tooltip component follows accessibility best practices:
-
-- **Keyboard navigation**: Accessible via Tab key navigation
-- **Focus management**: Shows on focus, hides on blur
-- **Screen readers**: Content is announced to assistive technology
-- **High contrast**: Respects system high contrast preferences
-- **Escape key**: Can be dismissed with Escape key
-- **ARIA attributes**: Proper ARIA labeling for screen readers
-- **Reduced motion**: Respects user's motion preferences
-
-### Accessibility Guidelines
-
-- Keep tooltip text concise and informative
-- Don't put critical information only in tooltips
-- Ensure tooltips don't interfere with keyboard navigation
-- Test with screen readers to verify content is announced correctly
-- Use semantic HTML when creating custom tooltip content
-
 ## Best Practices
 
 ### Content Guidelines

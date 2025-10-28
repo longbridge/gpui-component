@@ -576,46 +576,6 @@ Charts automatically include:
 - Y-axis scaling starting from zero
 - Responsive tick spacing based on `tick_margin`
 
-## Accessibility
-
-### Chart Accessibility Features
-
-- **Semantic Structure**: Charts are rendered with proper element hierarchy
-- **Theme Integration**: Automatic color adaptation for light/dark themes
-- **High Contrast**: Grid lines and axis labels use theme border colors
-- **Scalable**: Charts adapt to container size and maintain proportions
-
-### Best Practices for Accessibility
-
-```rust
-// Always provide descriptive titles
-chart_container(
-    "Monthly Sales Revenue", // Clear, descriptive title
-    chart,
-    false,
-    cx,
-)
-
-// Include data summaries
-v_flex()
-    .child("Revenue increased by 15% this quarter")
-    .child("Showing data from January to March 2024")
-    .child(chart)
-
-// Use semantic color combinations
-LineChart::new(data)
-    .x(|d| d.date.clone())
-    .y(|d| d.value)
-    .stroke(cx.theme().chart_1) // Uses theme-appropriate colors
-```
-
-### Screen Reader Support
-
-- Chart containers should include descriptive text
-- Key statistics should be provided as text
-- Data trends should be summarized in text form
-- Alternative data tables can be provided for complex charts
-
 ## Performance Considerations
 
 ### Large Datasets

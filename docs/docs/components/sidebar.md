@@ -534,23 +534,3 @@ Sidebar::new(Side::Left)
             )
     )
 ```
-
-## Accessibility
-
-- **Keyboard Navigation**: Navigate menu items with arrow keys
-- **Focus Management**: Proper focus indication and management
-- **Screen Reader Support**: Semantic structure with proper labeling
-- **Collapsible State**: State changes announced to assistive technologies
-- **Interactive Elements**: All clickable elements are keyboard accessible
-- **Role Attribution**: Proper ARIA roles for navigation structure
-
-### Keyboard Shortcuts
-
-- `Tab` / `Shift+Tab` - Navigate between focusable elements
-- `Enter` / `Space` - Activate menu items
-- `Arrow Keys` - Navigate within menu groups
-- `Escape` - Close any open submenus or popups
-
-### ARIA Support
-
-The sidebar automatically provides appropriate ARIA attributes for screen readers and other assistive technologies, ensuring navigation structure is properly communicated.

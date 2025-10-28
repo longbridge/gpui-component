@@ -251,13 +251,6 @@ Icon::empty()
     .text_color(cx.theme().primary)
 ```
 
-## Accessibility
-
-- Icons inherit text color from parent context when no custom color is set
-- Icons scale with text size when no explicit size is provided
-- Consider adding appropriate labels or tooltips for icons used as interactive elements
-- Use semantic icon names that convey meaning clearly
-
 ## Notes
 
 - Icons are rendered as SVG elements and support full CSS styling

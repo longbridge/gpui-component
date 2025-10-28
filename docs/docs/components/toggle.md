@@ -442,36 +442,6 @@ v_flex()
     )
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Toggle with Tab, activate with Space or Enter
-- **Focus Management**: Clear focus indicators for individual toggles and groups
-- **State Announcement**: Screen readers announce toggle state changes
-- **Disabled State**: Disabled toggles cannot be focused or activated
-- **Semantic Markup**: Uses appropriate ARIA attributes for toggle button semantics
-- **Group Semantics**: Toggle groups are properly associated for assistive technology
-- **Label Association**: Icon toggles should have accessible labels or tooltips
-
-### Accessibility Best Practices
-
-```rust
-// Provide accessible labels for icon-only toggles
-Toggle::icon(IconName::Star)
-    .id("favorite-toggle")
-    .tooltip("Add to favorites")
-
-// Use descriptive labels
-Toggle::label("Enable dark mode")
-    .id("dark-mode-toggle")
-    .checked(self.dark_mode)
-
-// Group related toggles logically
-ToggleGroup::new("text-formatting")
-    .child(Toggle::icon(IconName::Bold).tooltip("Bold"))
-    .child(Toggle::icon(IconName::Italic).tooltip("Italic"))
-    .child(Toggle::icon(IconName::Underline).tooltip("Underline"))
-```
-
 ## Best Practices
 
 1. **Use meaningful labels**: Choose clear, descriptive text for toggle labels

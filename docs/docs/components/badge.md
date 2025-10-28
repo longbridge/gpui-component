@@ -251,19 +251,3 @@ Badge::new().count(1000).max(999) // Shows "999+"
 // Zero count hides the badge
 Badge::new().count(0)    // Badge not visible
 ```
-
-## Accessibility
-
-- Badge content is announced by screen readers
-- High contrast colors ensure visibility
-- Icon badges include appropriate semantic meaning
-- Badge positioning doesn't interfere with clickable areas
-- Color is not the only indicator of status (icons and text provide additional context)
-
-## Behavior Notes
-
-- Badges with count of 0 are automatically hidden
-- Dot and icon variants are always visible regardless of count
-- Badge size automatically adjusts based on content length
-- Multiple badges can be nested for complex status indicators
-- Badge positioning is absolute and doesn't affect layout flow

@@ -290,14 +290,6 @@ h_flex()
     .child(Tag::color(ColorName::Red).rounded_full().small().child("Go"))
 ```
 
-## Accessibility
-
-- Tags use semantic colors with sufficient contrast ratios
-- Text content is readable by screen readers
-- Color variants provide both color and textual context
-- Focus states are clearly visible for interactive use cases
-- Tags maintain readability in both light and dark themes
-
 ## Behavior Notes
 
 - Tags automatically adjust their appearance based on the current theme

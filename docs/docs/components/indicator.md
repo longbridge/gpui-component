@@ -255,23 +255,6 @@ div()
     )
 ```
 
-## Accessibility
-
-- The indicator provides visual feedback for loading states
-- Consider adding appropriate ARIA labels when using in interactive components
-- The rotating animation respects user preferences for reduced motion
-- High contrast colors ensure visibility across different themes
-- The indicator should be accompanied by appropriate loading text or context
-
-## Behavior Notes
-
-- The indicator automatically starts animating when rendered
-- Animation continues indefinitely until the component is removed
-- The rotation animation uses GPU acceleration for smooth performance
-- Default animation speed is 0.8 seconds for optimal visual feedback
-- Icons are centered within the indicator's bounds
-- The component inherits theme colors when no custom color is specified
-
 ## Performance Considerations
 
 - The animation uses CSS transforms for optimal performance

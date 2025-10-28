@@ -356,16 +356,6 @@ window.open_drawer_at(Placement::Bottom, cx, |drawer, _, _| {
 })
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: ESC key closes drawer when focused
-- **Focus Management**: Focus is trapped within drawer when open
-- **Focus Restoration**: Focus returns to trigger element when drawer closes
-- **Screen Reader Support**: Proper ARIA labels and roles
-- **Overlay Interaction**: Click outside to close (when enabled)
-- **Visual Focus**: Clear focus indicators for interactive elements
-- **Animation**: Smooth slide-in/out animations with proper timing
-
 ## Best Practices
 
 1. **Appropriate Placement**: Use left/right for navigation, top/bottom for temporary content

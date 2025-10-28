@@ -263,32 +263,6 @@ if loading {
 }
 ```
 
-## Accessibility
-
-- **Loading indication**: The continuous animation provides visual feedback that content is loading
-- **Screen readers**: Consider adding `aria-label="Loading"` or similar attributes to parent containers
-- **Color contrast**: Uses theme colors that respect user's color preferences
-- **Reduced motion**: The animation respects user's motion preferences through the gpui animation system
-- **Semantic structure**: Maintains layout structure so content doesn't shift when loaded
-
-### Best Practices
-
-```rust
-// Add semantic loading indication
-div()
-    .role("status")
-    .aria_label("Loading content")
-    .child(Skeleton::new().w(px(200.)).h_4().rounded_md())
-
-// Match the shape of actual content
-if loading {
-    // Skeleton that matches the actual button size
-    Skeleton::new().w(px(120.)).h(px(40.)).rounded_md()
-} else {
-    Button::new("btn").label("Click me")
-}
-```
-
 ## Theming
 
 The Skeleton component uses the theme's `skeleton` color, which defaults to the `secondary` color if not specified. You can customize it in your theme:

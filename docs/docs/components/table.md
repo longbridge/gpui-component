@@ -561,17 +561,9 @@ impl UserTableDelegate {
 }
 ```
 
-## Accessibility
+## Keyboard shortcuts
 
-- Full keyboard navigation support (Tab, Arrow keys, Enter, Space, Escape)
-- Screen reader support with proper ARIA labels
-- High contrast mode support
-- Focus indicators for all interactive elements
-- Keyboard shortcuts:
-  - `↑/↓` - Navigate rows
-  - `←/→` - Navigate columns
-  - `Enter/Space` - Select row/column
-  - `Escape` - Clear selection
-- Loading states announced to screen readers
-- Sort order changes announced
-- Row/column count announced
+- `↑/↓` - Navigate rows
+- `←/→` - Navigate columns
+- `Enter/Space` - Select row/column
+- `Escape` - Clear selection
