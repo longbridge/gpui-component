@@ -64,7 +64,7 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::from(ThemeColor::default())
+        Self::from(&ThemeColor::default())
     }
 }
 
@@ -181,8 +181,8 @@ impl Theme {
     }
 }
 
-impl From<ThemeColor> for Theme {
-    fn from(colors: ThemeColor) -> Self {
+impl From<&ThemeColor> for Theme {
+    fn from(colors: &ThemeColor) -> Self {
         Theme {
             mode: ThemeMode::default(),
             transparent: Hsla::transparent_black(),
@@ -201,7 +201,7 @@ impl From<ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             tile_radius: px(0.),
-            colors,
+            colors: colors.clone(),
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),

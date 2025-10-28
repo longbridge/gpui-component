@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use anyhow::Result;
-use gpui::{Hsla, SharedString};
+use gpui::{px, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +21,20 @@ pub struct ThemeSet {
     /// The URL of the theme.
     pub url: Option<SharedString>,
 
+    #[serde(rename = "themes")]
+    pub themes: Vec<ThemeConfig>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct ThemeConfig {
+    /// Whether this theme is the default theme.
+    pub is_default: bool,
+    /// The name of the theme.
+    pub name: SharedString,
+    /// The mode of the theme, default is light.
+    pub mode: ThemeMode,
+
     /// The base font size, default is 16.
     #[serde(rename = "font.size")]
     pub font_size: Option<f32>,
@@ -38,19 +52,6 @@ pub struct ThemeSet {
     #[serde(rename = "shadow")]
     pub shadow: Option<bool>,
 
-    #[serde(rename = "themes")]
-    pub themes: Vec<ThemeConfig>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(default)]
-pub struct ThemeConfig {
-    /// Whether this theme is the default theme.
-    pub is_default: bool,
-    /// The name of the theme.
-    pub name: SharedString,
-    /// The mode of the theme, default is light.
-    pub mode: ThemeMode,
     /// The colors of the theme.
     pub colors: ThemeConfigColors,
     /// The highlight theme, this part is combilbility with `style` section in Zed theme.
@@ -636,12 +637,38 @@ impl Theme {
         }
 
         let default_theme = if config.mode.is_dark() {
-            ThemeColor::dark()
+            Self::from(ThemeColor::dark().as_ref())
         } else {
-            ThemeColor::light()
+            Self::from(ThemeColor::light().as_ref())
         };
 
-        self.colors.apply_config(&config, &default_theme);
+        if let Some(font_size) = config.font_size {
+            self.font_size = px(font_size);
+        } else {
+            self.font_size = default_theme.font_size;
+        }
+        if let Some(font_family) = &config.font_family {
+            self.font_family = font_family.clone();
+        } else {
+            self.font_family = default_theme.font_family.clone();
+        }
+        if let Some(radius) = config.radius {
+            self.radius = px(radius as f32);
+        } else {
+            self.radius = default_theme.radius;
+        }
+        if let Some(radius_lg) = config.radius_lg {
+            self.radius_lg = px(radius_lg as f32);
+        } else {
+            self.radius_lg = default_theme.radius_lg;
+        }
+        if let Some(shadow) = config.shadow {
+            self.shadow = shadow;
+        } else {
+            self.shadow = default_theme.shadow;
+        }
+
+        self.colors.apply_config(&config, &default_theme.colors);
         self.mode = config.mode;
     }
 }
