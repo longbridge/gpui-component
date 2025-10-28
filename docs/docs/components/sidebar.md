@@ -199,7 +199,7 @@ Sidebar::new(Side::Left)
 ### Interactive Header with Popup Menu
 
 ```rust
-use gpui_component::popup_menu::PopupMenuExt;
+use gpui_component::menu::DropdownMenu;
 
 SidebarHeader::new()
     .child(
@@ -209,7 +209,7 @@ SidebarHeader::new()
             .child("Company Name")
             .child(Icon::new(IconName::ChevronsUpDown))
     )
-    .popup_menu(|menu, _, _| {
+    .dropdown_menu(|menu, _, _| {
         menu.menu("Acme Corp", Box::new(SelectCompany("acme")))
             .menu("Tech Solutions", Box::new(SelectCompany("tech")))
             .separator()
@@ -283,7 +283,7 @@ Sidebar::new(Side::Left)
 | `selected(bool)` | Set selected state          |
 | `child(element)` | Add child element           |
 
-Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `InteractiveElement`, `PopupMenuExt`
+Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `InteractiveElement`, `DropdownMenu`
 
 ### SidebarFooter
 
@@ -293,7 +293,7 @@ Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `Interactive
 | `selected(bool)` | Set selected state          |
 | `child(element)` | Add child element           |
 
-Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `InteractiveElement`, `PopupMenuExt`
+Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `InteractiveElement`, `DropdownMenu`
 
 ### SidebarGroup
 

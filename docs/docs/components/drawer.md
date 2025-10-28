@@ -105,7 +105,7 @@ window.open_drawer(cx, |drawer, _, _| {
             v_flex()
                 .gap_4()
                 .child("Enter your information:")
-                .child(TextInput::new(&input).placeholder("Full Name"))
+                .child(Input::new(&input).placeholder("Full Name"))
                 .child(DatePicker::new(&date).placeholder("Date of Birth"))
         )
         .footer(

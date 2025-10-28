@@ -1,15 +1,16 @@
 use gpui::{
-    div, px, rems, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
-    SharedString, Styled, Subscription, Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString,
+    Styled, Subscription, Window, div, px, rems,
 };
 
 use gpui_component::{
+    IconName, StyledExt,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     green_500, h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{Input, InputEvent, InputState},
     label::{HighlightsMatch, Label},
-    v_flex, IconName, StyledExt,
+    v_flex,
 };
 
 use crate::section;
@@ -96,7 +97,7 @@ impl Render for LabelStory {
             .child(
                 h_flex()
                     .gap_x_3()
-                    .child(TextInput::new(&self.highlights_input).cleanable().w_1_3())
+                    .child(Input::new(&self.highlights_input).cleanable().w_1_3())
                     .child(
                         Checkbox::new("prefix")
                             .label("Prefix")

@@ -8,7 +8,7 @@ use gpui_component::{
     Sizable,
     button::Button,
     h_flex,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     v_flex,
 };
 
@@ -27,7 +27,7 @@ impl super::Story for TextareaStory {
     }
 
     fn description() -> &'static str {
-        "TextInput with multi-line mode."
+        "Input with multi-line mode."
     }
 
     fn closable() -> bool {
@@ -147,7 +147,7 @@ impl Render for TextareaStory {
                     v_flex()
                         .gap_2()
                         .w_full()
-                        .child(TextInput::new(&self.textarea).h(px(320.)))
+                        .child(Input::new(&self.textarea).h(px(320.)))
                         .child(
                             h_flex()
                                 .justify_between()
@@ -180,17 +180,17 @@ impl Render for TextareaStory {
             .child(
                 section("No Wrap")
                     .max_w_md()
-                    .child(TextInput::new(&self.textarea_no_wrap).h(px(200.))),
+                    .child(Input::new(&self.textarea_no_wrap).h(px(200.))),
             )
             .child(
                 section("Auto Grow")
                     .max_w_md()
-                    .child(TextInput::new(&self.textarea_auto_grow)),
+                    .child(Input::new(&self.textarea_auto_grow)),
             )
             .child(
                 section("Auto Grow with No Wrap")
                     .max_w_md()
-                    .child(TextInput::new(&self.textarea_auto_grow_no_wrap)),
+                    .child(Input::new(&self.textarea_auto_grow_no_wrap)),
             )
     }
 }

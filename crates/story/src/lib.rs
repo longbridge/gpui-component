@@ -13,7 +13,6 @@ mod color_picker_story;
 mod date_picker_story;
 mod description_list_story;
 mod drawer_story;
-mod dropdown_story;
 mod form_story;
 mod group_box_story;
 mod icon_story;
@@ -33,6 +32,7 @@ mod progress_story;
 mod radio_story;
 mod resizable_story;
 mod scrollable_story;
+mod select_story;
 mod sidebar_story;
 mod skeleton_story;
 mod slider_story;
@@ -72,7 +72,6 @@ pub use color_picker_story::ColorPickerStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
 pub use drawer_story::DrawerStory;
-pub use dropdown_story::DropdownStory;
 pub use form_story::FormStory;
 pub use group_box_story::GroupBoxStory;
 pub use icon_story::IconStory;
@@ -92,6 +91,7 @@ pub use progress_story::ProgressStory;
 pub use radio_story::RadioStory;
 pub use resizable_story::ResizableStory;
 pub use scrollable_story::ScrollableStory;
+pub use select_story::SelectStory;
 use serde::{Deserialize, Serialize};
 pub use sidebar_story::SidebarStory;
 pub use skeleton_story::SkeletonStory;
@@ -112,12 +112,11 @@ pub use welcome_story::WelcomeStory;
 use gpui_component::{
     ActiveTheme, ContextModal, IconName, Root, TitleBar,
     button::Button,
-    context_menu::ContextMenuExt,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::GroupBox,
     h_flex,
+    menu::{ContextMenuExt, PopupMenu},
     notification::Notification,
-    popup_menu::PopupMenu,
     scroll::ScrollbarShow,
     v_flex,
 };
@@ -296,7 +295,7 @@ pub fn init(cx: &mut App) {
     input_story::init(cx);
     number_input_story::init(cx);
     textarea_story::init(cx);
-    dropdown_story::init(cx);
+    select_story::init(cx);
     popover_story::init(cx);
     menu_story::init(cx);
     webview_story::init(cx);
@@ -660,7 +659,7 @@ impl StoryState {
         match self.story_klass.to_string().as_str() {
             "ButtonStory" => story!(ButtonStory),
             "CalendarStory" => story!(CalendarStory),
-            "DropdownStory" => story!(DropdownStory),
+            "SelectStory" => story!(SelectStory),
             "IconStory" => story!(IconStory),
             "ImageStory" => story!(ImageStory),
             "InputStory" => story!(InputStory),
@@ -734,7 +733,7 @@ impl Panel for StoryContainer {
         }
     }
 
-    fn popup_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
+    fn dropdown_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
         menu.menu("Info", Box::new(ShowPanelInfo))
     }
 

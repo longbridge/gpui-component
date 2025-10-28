@@ -665,7 +665,7 @@ impl Render for ButtonStory {
                             .small()
                             .button(Button::new("btn").label("Click Me"))
                             .selected(selected)
-                            .popup_menu(move |this, _, _| {
+                            .dropdown_menu(move |this, _, _| {
                                 this.menu_with_check(
                                     "Disabled",
                                     disabled,
@@ -692,7 +692,7 @@ impl Render for ButtonStory {
                         DropdownButton::new("dropdown-button2")
                             .button(Button::new("btn").label("Click Me"))
                             .selected(selected)
-                            .popup_menu_with_anchor(Corner::BottomRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Corner::BottomRight, move |this, _, _| {
                                 this.menu_with_check(
                                     "Disabled",
                                     disabled,
@@ -720,7 +720,7 @@ impl Render for ButtonStory {
                             .outline()
                             .button(Button::new("btn").label("Outline Dropdown"))
                             .selected(selected)
-                            .popup_menu(move |this, _, _| {
+                            .dropdown_menu(move |this, _, _| {
                                 this.menu_with_check(
                                     "Disabled",
                                     disabled,
@@ -748,7 +748,7 @@ impl Render for ButtonStory {
                             .ghost()
                             .button(Button::new("btn").label("Ghost Dropdown"))
                             .selected(selected)
-                            .popup_menu(move |this, _, _| {
+                            .dropdown_menu(move |this, _, _| {
                                 this.menu_with_check(
                                     "Disabled",
                                     disabled,

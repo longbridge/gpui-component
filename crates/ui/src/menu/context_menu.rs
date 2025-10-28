@@ -7,7 +7,7 @@ use gpui::{
     ParentElement, Pixels, Point, Position, Stateful, Style, Subscription, Window,
 };
 
-use crate::menu::popup_menu::PopupMenu;
+use crate::menu::PopupMenu;
 
 pub trait ContextMenuExt: ParentElement + Sized {
     fn context_menu(

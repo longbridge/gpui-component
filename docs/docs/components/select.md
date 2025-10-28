@@ -1,28 +1,36 @@
 ---
-title: Dropdown
+title: Select
 description: Displays a list of options for the user to pick from—triggered by a button.
 ---
 
-# Dropdown
+# Select
 
-A versatile dropdown/select component that allows users to choose from a list of options. Supports search functionality, grouped items, custom rendering, and various states. Built with keyboard navigation and accessibility in mind.
+:::info
+This component was named `Dropdown` in `<= 0.3.x`.
+
+It has been renamed to `Select` to better reflect its purpose.
+:::
+
+A select component that allows users to choose from a list of options.
+
+Supports search functionality, grouped items, custom rendering, and various states. Built with keyboard navigation and accessibility in mind.
 
 ## Import
 
 ```rust
-use gpui_component::dropdown::{
-    Dropdown, DropdownState, DropdownItem, DropdownDelegate,
-    DropdownEvent, SearchableVec, DropdownItemGroup
+use gpui_component::select::{
+    Select, SelectState, SelectItem, SelectDelegate,
+    SelectEvent, SearchableVec, SelectGroup
 };
 ```
 
 ## Usage
 
-### Basic Dropdown
+### Basic Select
 
 ```rust
-let dropdown = cx.new(|cx| {
-    DropdownState::new(
+let state = cx.new(|cx| {
+    SelectState::new(
         vec!["Apple".into(), "Orange".into(), "Banana".into()],
         Some(IndexPath::default()), // Select first item
         window,
@@ -30,14 +38,14 @@ let dropdown = cx.new(|cx| {
     )
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
 ```
 
-### With Placeholder
+### Placeholder
 
 ```rust
-let dropdown = cx.new(|cx| {
-    DropdownState::new(
+let state = cx.new(|cx| {
+    SelectState::new(
         vec!["Rust".into(), "Go".into(), "JavaScript".into()],
         None, // No initial selection
         window,
@@ -45,11 +53,11 @@ let dropdown = cx.new(|cx| {
     )
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
     .placeholder("Select a language...")
 ```
 
-### Searchable Dropdown
+### Searchable
 
 ```rust
 let fruits = SearchableVec::new(vec![
@@ -60,15 +68,15 @@ let fruits = SearchableVec::new(vec![
     "Pineapple".into(),
 ]);
 
-let dropdown = cx.new(|cx| {
-    DropdownState::new(fruits, None, window, cx)
+let state = cx.new(|cx| {
+    SelectState::new(fruits, None, window, cx)
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
     .icon(IconName::Search) // Shows search icon
 ```
 
-### Custom Item Implementation
+### Custom Item
 
 ```rust
 #[derive(Debug, Clone)]
@@ -77,7 +85,7 @@ struct Country {
     code: SharedString,
 }
 
-impl DropdownItem for Country {
+impl SelectItem for Country {
     type Value = SharedString;
 
     fn title(&self) -> SharedString {
@@ -101,59 +109,59 @@ impl DropdownItem for Country {
 }
 ```
 
-### Grouped Items
+### Group Items
 
 ```rust
 let mut grouped_items = SearchableVec::new(vec![]);
 
 // Group countries by first letter
 grouped_items.push(
-    DropdownItemGroup::new("A")
+    SelectGroup::new("A")
         .items(vec![
             Country { name: "Australia".into(), code: "AU".into() },
             Country { name: "Austria".into(), code: "AT".into() },
         ])
 );
 grouped_items.push(
-    DropdownItemGroup::new("B")
+    SelectGroup::new("B")
         .items(vec![
             Country { name: "Brazil".into(), code: "BR".into() },
             Country { name: "Belgium".into(), code: "BE".into() },
         ])
 );
 
-let dropdown = cx.new(|cx| {
-    DropdownState::new(grouped_items, None, window, cx)
+let state = cx.new(|cx| {
+    SelectState::new(grouped_items, None, window, cx)
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
 ```
 
-### Dropdown Sizes
+### Sizes
 
 ```rust
-Dropdown::new(&dropdown).large()
-Dropdown::new(&dropdown) // medium (default)
-Dropdown::new(&dropdown).small()
+Select::new(&state).large()
+Select::new(&state) // medium (default)
+Select::new(&state).small()
 ```
 
 ### Disabled State
 
 ```rust
-Dropdown::new(&dropdown).disabled(true)
+Select::new(&state).disabled(true)
 ```
 
-### Cleanable Dropdown
+### Cleanable
 
 ```rust
-Dropdown::new(&dropdown)
+Select::new(&state)
     .cleanable() // Shows clear button when item is selected
 ```
 
-### Custom Width and Appearance
+### Custom Appearance
 
 ```rust
-Dropdown::new(&dropdown)
+Select::new(&state)
     .w(px(320.))                    // Set dropdown width
     .menu_width(px(400.))           // Set menu popup width
     .appearance(false)              // Remove default styling
@@ -163,11 +171,11 @@ Dropdown::new(&dropdown)
 ### Empty State
 
 ```rust
-let dropdown = cx.new(|cx| {
-    DropdownState::new(Vec::<SharedString>::new(), None, window, cx)
+let state = cx.new(|cx| {
+    SelectState::new(Vec::<SharedString>::new(), None, window, cx)
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
     .empty(
         h_flex()
             .h_24()
@@ -177,12 +185,12 @@ Dropdown::new(&dropdown)
     )
 ```
 
-### Handle Selection Events
+### Events
 
 ```rust
-cx.subscribe_in(&dropdown, window, |view, state, event, window, cx| {
+cx.subscribe_in(&state, window, |view, state, event, window, cx| {
     match event {
-        DropdownEvent::Confirm(value) => {
+        SelectEvent::Confirm(value) => {
             if let Some(selected_value) = value {
                 println!("Selected: {:?}", selected_value);
             } else {
@@ -193,102 +201,31 @@ cx.subscribe_in(&dropdown, window, |view, state, event, window, cx| {
 });
 ```
 
-### Programmatic Selection
+### Mutating
 
 ```rust
 // Set by index
-dropdown.update(cx, |state, cx| {
+state.update(cx, |state, cx| {
     state.set_selected_index(Some(IndexPath::default().row(2)), window, cx);
 });
 
 // Set by value (requires PartialEq on Value type)
-dropdown.update(cx, |state, cx| {
+state.update(cx, |state, cx| {
     state.set_selected_value(&"US".into(), window, cx);
 });
 
 // Get current selection
-let current_value = dropdown.read(cx).selected_value();
+let current_value = state.read(cx).selected_value();
 ```
 
-### Dynamic Items Update
+Update items:
 
 ```rust
-dropdown.update(cx, |state, cx| {
+state.update(cx, |state, cx| {
     let new_items = vec!["New Option 1".into(), "New Option 2".into()];
     state.set_items(new_items, window, cx);
 });
 ```
-
-## API Reference
-
-### DropdownState
-
-| Method                                   | Description                  |
-| ---------------------------------------- | ---------------------------- |
-| `new(items, selected_index, window, cx)` | Create new dropdown state    |
-| `set_selected_index(index, window, cx)`  | Set selected item by index   |
-| `set_selected_value(value, window, cx)`  | Set selected item by value   |
-| `selected_index(cx)`                     | Get currently selected index |
-| `selected_value()`                       | Get currently selected value |
-| `set_items(items, window, cx)`           | Update dropdown items        |
-| `focus(window, cx)`                      | Focus the dropdown           |
-
-### Dropdown
-
-| Method              | Description                       |
-| ------------------- | --------------------------------- |
-| `new(state)`        | Create dropdown with state entity |
-| `placeholder(str)`  | Set placeholder text              |
-| `icon(icon)`        | Set custom icon (replaces arrow)  |
-| `title_prefix(str)` | Add prefix to selected title      |
-| `cleanable()`       | Show clear button when selected   |
-| `disabled(bool)`    | Set disabled state                |
-| `appearance(bool)`  | Enable/disable default styling    |
-| `menu_width(width)` | Set popup menu width              |
-| `empty(element)`    | Custom empty state element        |
-| `large()`           | Large size                        |
-| `small()`           | Small size                        |
-
-### DropdownItem Trait
-
-| Method            | Description                              |
-| ----------------- | ---------------------------------------- |
-| `title()`         | Display text for the item                |
-| `display_title()` | Custom element for selected item display |
-| `value()`         | Value returned when selected             |
-| `matches(query)`  | Custom search matching logic             |
-
-### DropdownDelegate Trait
-
-| Method                              | Description                       |
-| ----------------------------------- | --------------------------------- |
-| `sections_count(cx)`                | Number of sections (for grouping) |
-| `section(index)`                    | Section header element            |
-| `items_count(section)`              | Number of items in section        |
-| `item(index)`                       | Get item at index path            |
-| `position(value)`                   | Find index of item with value     |
-| `searchable()`                      | Whether delegate supports search  |
-| `perform_search(query, window, cx)` | Perform search operation          |
-
-### SearchableVec
-
-| Method       | Description              |
-| ------------ | ------------------------ |
-| `new(items)` | Create searchable vector |
-| `push(item)` | Add item to vector       |
-
-### DropdownItemGroup
-
-| Method       | Description                 |
-| ------------ | --------------------------- |
-| `new(title)` | Create new group with title |
-| `items(vec)` | Set items for the group     |
-
-### DropdownEvent
-
-| Event                    | Description              |
-| ------------------------ | ------------------------ |
-| `Confirm(Option<Value>)` | Item selected or cleared |
 
 ## Examples
 
@@ -303,11 +240,11 @@ let languages = SearchableVec::new(vec![
     "JavaScript".into(),
 ]);
 
-let dropdown = cx.new(|cx| {
-    DropdownState::new(languages, None, window, cx)
+let state = cx.new(|cx| {
+    SelectState::new(languages, None, window, cx)
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
     .placeholder("Select language...")
     .title_prefix("Language: ")
     .cleanable()
@@ -323,7 +260,7 @@ struct Region {
     flag: SharedString,
 }
 
-impl DropdownItem for Region {
+impl SelectItem for Region {
     type Value = SharedString;
 
     fn title(&self) -> SharedString {
@@ -359,11 +296,11 @@ let regions = vec![
     },
 ];
 
-let dropdown = cx.new(|cx| {
-    DropdownState::new(regions, None, window, cx)
+let state = cx.new(|cx| {
+    SelectState::new(regions, None, window, cx)
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
     .placeholder("Select country...")
 ```
 
@@ -379,7 +316,7 @@ h_flex()
     .gap_1()
     .child(
         div().w(px(140.)).child(
-            Dropdown::new(&country_dropdown)
+            Select::new(&country_state)
                 .appearance(false) // No border/background
                 .py_2()
                 .pl_3()
@@ -388,7 +325,7 @@ h_flex()
     .child(Divider::vertical())
     .child(
         div().flex_1().child(
-            TextInput::new(&phone_input)
+            Input::new(&phone_input)
                 .appearance(false)
                 .placeholder("Phone number")
                 .pr_3()
@@ -397,23 +334,23 @@ h_flex()
     )
 ```
 
-### Multi-level Grouped Dropdown
+### Multi-level Grouped Select
 
 ```rust
 let mut grouped_countries = SearchableVec::new(vec![]);
 
 for (continent, countries) in countries_by_continent {
     grouped_countries.push(
-        DropdownItemGroup::new(continent)
+        SelectGroup::new(continent)
             .items(countries)
     );
 }
 
-let dropdown = cx.new(|cx| {
-    DropdownState::new(grouped_countries, None, window, cx)
+let state = cx.new(|cx| {
+    SelectState::new(grouped_countries, None, window, cx)
 });
 
-Dropdown::new(&dropdown)
+Select::new(&state)
     .menu_width(px(350.))
     .placeholder("Select country...")
 ```

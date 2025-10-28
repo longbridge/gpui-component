@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{button::Button, popup_menu::PopupMenu};
+use crate::{button::Button, menu::PopupMenu};
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Entity, EntityId, EventEmitter, FocusHandle,
     Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
@@ -118,8 +118,8 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// Only current Panel will touch this method.
     fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut App) {}
 
-    /// The addition popup menu of the panel, default is `None`.
-    fn popup_menu(&self, this: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    /// The addition dropdown menu of the panel, default is `None`.
+    fn dropdown_menu(&self, this: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
         this
     }
 
@@ -153,7 +153,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn visible(&self, cx: &App) -> bool;
     fn set_active(&self, active: bool, window: &mut Window, cx: &mut App);
     fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App);
-    fn popup_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu;
+    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu;
     fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>>;
     fn view(&self) -> AnyView;
     fn focus_handle(&self, cx: &App) -> FocusHandle;
@@ -210,8 +210,8 @@ impl<T: Panel> PanelView for Entity<T> {
         })
     }
 
-    fn popup_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
-        self.read(cx).popup_menu(menu, window, cx)
+    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+        self.read(cx).dropdown_menu(menu, window, cx)
     }
 
     fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {

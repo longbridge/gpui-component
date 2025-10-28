@@ -134,7 +134,7 @@ webview.update(cx, |webview, _| {
 ### Browser-like Interface
 
 ```rust
-use gpui_component::input::{InputState, TextInput};
+use gpui_component::input::{InputState, Input};
 
 pub struct WebBrowser {
     webview: Entity<WebView>,
@@ -238,7 +238,7 @@ webview.set_bounds(rect).unwrap();
 ```rust
 use gpui_component::{
     webview::WebView,
-    input::{TextInput, InputState, InputEvent},
+    input::{Input, InputState, InputEvent},
     h_flex, v_flex
 };
 
@@ -256,7 +256,7 @@ impl Render for SimpleBrowser {
                     .p_2()
                     .gap_2()
                     .child("Address:")
-                    .child(TextInput::new(&self.address_bar))
+                    .child(Input::new(&self.address_bar))
             )
             .child(
                 div()

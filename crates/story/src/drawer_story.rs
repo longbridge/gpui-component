@@ -14,7 +14,7 @@ use gpui_component::{
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
     h_flex,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     list::{List, ListDelegate, ListItem},
     v_flex,
     webview::WebView,
@@ -303,7 +303,7 @@ impl DrawerStory {
                 .size(px(400.))
                 .title("Drawer Title")
                 .gap_4()
-                .child(TextInput::new(&input1))
+                .child(Input::new(&input1))
                 .child(DatePicker::new(&date).placeholder("Date of Birth"))
                 .child(
                     Button::new("send-notification")
@@ -462,7 +462,7 @@ impl Render for DrawerStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(TextInput::new(&self.input2))
+                            .child(Input::new(&self.input2))
                             .child(
                                 Button::new("test-action")
                                     .outline()

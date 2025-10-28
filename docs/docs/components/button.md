@@ -145,7 +145,7 @@ use gpui::Corner;
 
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .popup_menu(|menu, _, _| {
+    .dropdown_menu(|menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
             .menu("Option 2", Box::new(MyAction))
             .separator()
@@ -155,7 +155,7 @@ DropdownButton::new("dropdown")
 // With custom anchor
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .popup_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
+    .dropdown_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
     })
 ```
@@ -224,12 +224,12 @@ Button::new("custom-btn")
 
 ### DropdownButton
 
-| Method                               | Description                   |
-| ------------------------------------ | ----------------------------- |
-| `new(id)`                            | Create a new dropdown button  |
-| `button(btn)`                        | Set the trigger button        |
-| `popup_menu(fn)`                     | Set popup menu builder        |
-| `popup_menu_with_anchor(corner, fn)` | Set menu with anchor position |
+| Method                                  | Description                   |
+| --------------------------------------- | ----------------------------- |
+| `new(id)`                               | Create a new dropdown button  |
+| `button(btn)`                           | Set the trigger button        |
+| `dropdown_menu(fn)`                     | Set dropdown menu builder     |
+| `dropdown_menu_with_anchor(corner, fn)` | Set menu with anchor position |
 
 ## Examples
 

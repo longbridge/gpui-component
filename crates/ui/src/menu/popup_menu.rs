@@ -2,10 +2,7 @@ use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
 use crate::scroll::{Scrollbar, ScrollbarState};
-use crate::{
-    button::Button, h_flex, popover::Popover, v_flex, ActiveTheme, Icon, IconName, Selectable,
-    Sizable as _,
-};
+use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
 use crate::{Kbd, Side, Size, StyledExt};
 use gpui::{
     anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
@@ -28,36 +25,6 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("right", SelectRight, Some(CONTEXT)),
     ]);
 }
-
-pub trait PopupMenuExt: Styled + Selectable + InteractiveElement + IntoElement + 'static {
-    /// Create a popup menu with the given items, anchored to the TopLeft corner
-    fn popup_menu(
-        self,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> Popover<PopupMenu> {
-        self.popup_menu_with_anchor(Corner::TopLeft, f)
-    }
-
-    /// Create a popup menu with the given items, anchored to the given corner
-    fn popup_menu_with_anchor(
-        mut self,
-        anchor: impl Into<Corner>,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> Popover<PopupMenu> {
-        let style = self.style().clone();
-        let id = self.interactivity().element_id.clone();
-
-        Popover::new(SharedString::from(format!("popup-menu:{:?}", id)))
-            .no_style()
-            .trigger(self)
-            .trigger_style(style)
-            .anchor(anchor.into())
-            .content(move |window, cx| {
-                PopupMenu::build(window, cx, |menu, window, cx| f(menu, window, cx))
-            })
-    }
-}
-impl PopupMenuExt for Button {}
 
 /// An menu item in a popup menu.
 pub enum PopupMenuItem {

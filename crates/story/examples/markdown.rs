@@ -1,7 +1,7 @@
 use gpui::*;
 use gpui_component::{
     highlighter::Language,
-    input::{InputEvent, InputState, TabSize, TextInput},
+    input::{Input, InputEvent, InputState, TabSize},
     resizable::{ResizableState, h_resizable, resizable_panel},
     text::TextView,
 };
@@ -88,7 +88,7 @@ impl Render for Example {
                                 .font_family("Monaco")
                                 .text_size(px(12.))
                                 .child(
-                                    TextInput::new(&self.input_state)
+                                    Input::new(&self.input_state)
                                         .h_full()
                                         .p_0()
                                         .border_0()

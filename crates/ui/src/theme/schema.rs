@@ -146,7 +146,7 @@ pub struct ThemeConfigColors {
     /// Info hover background color.
     #[serde(rename = "info.hover.background")]
     pub info_hover: Option<SharedString>,
-    /// Border color for inputs such as Input, Dropdown, etc.
+    /// Border color for inputs such as Input, Select, etc.
     #[serde(rename = "input.border")]
     pub input: Option<SharedString>,
     /// Link text color.

@@ -6,20 +6,21 @@ use std::{
 
 use fake::Fake;
 use gpui::{
-    div, prelude::FluentBuilder as _, Action, AnyElement, App, AppContext, ClickEvent, Context,
-    Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, TextAlign, Timer, Window,
+    Action, AnyElement, App, AppContext, ClickEvent, Context, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, TextAlign, Timer, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
+    ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
     button::Button,
     checkbox::Checkbox,
     h_flex,
     indicator::Indicator,
-    input::{InputEvent, InputState, TextInput},
+    input::{Input, InputEvent, InputState},
     label::Label,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{DropdownMenu, PopupMenu},
     table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
-    v_flex, ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
+    v_flex,
 };
 use serde::{Deserialize, Serialize};
 
@@ -873,7 +874,7 @@ impl Render for TableStory {
                             .outline()
                             .small()
                             .label(format!("size: {:?}", self.size))
-                            .popup_menu(move |menu, _, _| {
+                            .dropdown_menu(move |menu, _, _| {
                                 menu.menu_with_check(
                                     "Large",
                                     size == Size::Large,
@@ -953,7 +954,7 @@ impl Render for TableStory {
                                 .child(
                                     h_flex()
                                         .min_w_32()
-                                        .child(TextInput::new(&self.num_stocks_input).small())
+                                        .child(Input::new(&self.num_stocks_input).small())
                                         .into_any_element(),
                                 )
                                 .when(delegate.loading, |this| {

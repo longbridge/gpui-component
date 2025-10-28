@@ -37,7 +37,7 @@
             "children": [],
             "info": {
               "panel": {
-                "story_klass": "DropdownStory"
+                "story_klass": "SelectStory"
               }
             }
           },

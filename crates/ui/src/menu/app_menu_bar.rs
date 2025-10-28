@@ -2,7 +2,7 @@ use crate::{
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     h_flex,
-    popup_menu::PopupMenu,
+    menu::PopupMenu,
     Selectable, Sizable,
 };
 use gpui::{

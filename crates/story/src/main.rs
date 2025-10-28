@@ -1,7 +1,7 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{Input, InputEvent, InputState},
     resizable::{ResizableState, h_resizable, resizable_panel},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
@@ -50,7 +50,6 @@ impl Gallery {
                     StoryContainer::panel::<DatePickerStory>(window, cx),
                     StoryContainer::panel::<DescriptionListStory>(window, cx),
                     StoryContainer::panel::<DrawerStory>(window, cx),
-                    StoryContainer::panel::<DropdownStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<GroupBoxStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
@@ -70,16 +69,17 @@ impl Gallery {
                     StoryContainer::panel::<RadioStory>(window, cx),
                     StoryContainer::panel::<ResizableStory>(window, cx),
                     StoryContainer::panel::<ScrollableStory>(window, cx),
+                    StoryContainer::panel::<SelectStory>(window, cx),
                     StoryContainer::panel::<SidebarStory>(window, cx),
                     StoryContainer::panel::<SkeletonStory>(window, cx),
                     StoryContainer::panel::<SliderStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<TableStory>(window, cx),
                     StoryContainer::panel::<TabsStory>(window, cx),
-                    StoryContainer::panel::<TreeStory>(window, cx),
                     StoryContainer::panel::<TagStory>(window, cx),
                     StoryContainer::panel::<TextareaStory>(window, cx),
                     StoryContainer::panel::<TooltipStory>(window, cx),
+                    StoryContainer::panel::<TreeStory>(window, cx),
                     StoryContainer::panel::<VirtualListStory>(window, cx),
                 ],
             ),
@@ -221,7 +221,7 @@ impl Render for Gallery {
                                             .flex_1()
                                             .mx_1()
                                             .child(
-                                                TextInput::new(&self.search_input)
+                                                Input::new(&self.search_input)
                                                     .appearance(false)
                                                     .cleanable(),
                                             ),

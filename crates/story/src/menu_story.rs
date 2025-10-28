@@ -5,9 +5,8 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, IconName,
     button::Button,
-    context_menu::ContextMenuExt,
     h_flex,
-    popup_menu::{PopupMenuExt as _, PopupMenuItem},
+    menu::{ContextMenuExt, DropdownMenu as _, PopupMenuItem},
     v_flex,
 };
 use serde::Deserialize;
@@ -127,7 +126,7 @@ impl Render for MenuStory {
                         Button::new("popup-menu-1")
                             .outline()
                             .label("Edit")
-                            .popup_menu(move |this, window, cx| {
+                            .dropdown_menu(move |this, window, cx| {
                                 this.link("About", "https://github.com/longbridge/gpui-component")
                                     .separator()
                                     .item(PopupMenuItem::new("Handle Click").on_click(
@@ -236,10 +235,10 @@ impl Render for MenuStory {
             .child(
                 section("Menu with scrollbar")
                     .child(
-                        Button::new("popup-menu-scrollable-1")
+                        Button::new("dropdown-menu-scrollable-1")
                             .outline()
                             .label("Scrollable Menu (100 items)")
-                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable()
                                     .max_h(px(300.))
@@ -254,10 +253,10 @@ impl Render for MenuStory {
                             }),
                     )
                     .child(
-                        Button::new("popup-menu-scrollable-2")
+                        Button::new("dropdown-menu-scrollable-2")
                             .outline()
                             .label("Scrollable Menu (5 items)")
-                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable()
                                     .max_h(px(300.))

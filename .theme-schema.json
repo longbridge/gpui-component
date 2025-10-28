@@ -227,7 +227,7 @@
           "type": ["string", "null"]
         },
         "input.border": {
-          "description": "Border color for inputs such as Input, Dropdown, etc.",
+          "description": "Border color for inputs such as Input, Select, etc.",
           "type": ["string", "null"]
         },
         "link": {

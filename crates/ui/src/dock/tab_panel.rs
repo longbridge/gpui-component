@@ -12,7 +12,7 @@ use crate::{
     button::{Button, ButtonVariants as _},
     dock::PanelInfo,
     h_flex,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{DropdownMenu, PopupMenu},
     tab::{Tab, TabBar},
     v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
 };
@@ -114,9 +114,9 @@ impl Panel for TabPanel {
         self.visible_panels(cx).next().is_some()
     }
 
-    fn popup_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
         if let Some(panel) = self.active_panel(cx) {
-            panel.popup_menu(menu, window, cx)
+            panel.dropdown_menu(menu, window, cx)
         } else {
             menu
         }
@@ -467,13 +467,13 @@ impl TabPanel {
                     .xsmall()
                     .ghost()
                     .tab_stop(false)
-                    .popup_menu({
+                    .dropdown_menu({
                         let zoomable = state.zoomable.map_or(false, |v| v.menu_visible());
                         let closable = state.closable;
 
                         move |this, window, cx| {
                             view.read(cx)
-                                .popup_menu(this, window, cx)
+                                .dropdown_menu(this, window, cx)
                                 .separator()
                                 .menu_with_disabled(
                                     if zoomed {

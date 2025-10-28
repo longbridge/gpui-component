@@ -177,7 +177,7 @@ pub struct FormField {
     no_label_indent: bool,
     focus_handle: Option<FocusHandle>,
     description: Option<FieldBuilder>,
-    /// Used to render the actual form field, e.g.: TextInput, Switch...
+    /// Used to render the actual form field, e.g.: Input, Switch...
     child: Div,
     visible: bool,
     required: bool,

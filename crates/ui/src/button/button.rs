@@ -222,7 +222,7 @@ impl Button {
         Self {
             id: id.clone(),
             // ID must be set after div is created;
-            // `popup_menu` uses this id to create the popup menu.
+            // `dropdown_menu` uses this id to create the popup menu.
             base: div().flex_shrink_0().id(id),
             style: StyleRefinement::default(),
             icon: None,

@@ -7,7 +7,7 @@ use rust_i18n::t;
 
 use crate::{
     input::{self, popovers::ContextMenu, InputState},
-    popup_menu::PopupMenu,
+    menu::PopupMenu,
 };
 
 /// Context menu for mouse right clicks.
