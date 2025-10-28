@@ -41,11 +41,13 @@ impl<T> PieChart<T> {
         }
     }
 
+    /// Set the inner radius of the pie chart.
     pub fn inner_radius(mut self, inner_radius: f32) -> Self {
         self.inner_radius = inner_radius;
         self
     }
 
+    /// Set the inner radius of the pie chart based on the arc data.
     pub fn inner_radius_fn(
         mut self,
         inner_radius_fn: impl Fn(&ArcData<T>) -> f32 + 'static,
@@ -62,11 +64,13 @@ impl<T> PieChart<T> {
         }
     }
 
+    /// Set the outer radius of the pie chart.
     pub fn outer_radius(mut self, outer_radius: f32) -> Self {
         self.outer_radius = outer_radius;
         self
     }
 
+    /// Set the outer radius of the pie chart based on the arc data.
     pub fn outer_radius_fn(
         mut self,
         outer_radius_fn: impl Fn(&ArcData<T>) -> f32 + 'static,
@@ -83,6 +87,7 @@ impl<T> PieChart<T> {
         }
     }
 
+    /// Set the pad angle of the pie chart.
     pub fn pad_angle(mut self, pad_angle: f32) -> Self {
         self.pad_angle = pad_angle;
         self
@@ -93,6 +98,7 @@ impl<T> PieChart<T> {
         self
     }
 
+    /// Set the color of the pie chart.
     pub fn color<H>(mut self, color: impl Fn(&T) -> H + 'static) -> Self
     where
         H: Into<Hsla> + 'static,
