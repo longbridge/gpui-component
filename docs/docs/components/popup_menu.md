@@ -244,6 +244,10 @@ menu.menu_element(Box::new(CustomAction), |window, cx| {
 
 ### Scrollable Menus
 
+:::warning
+When you have enabled `scrollable()` on a menu, avoid using submenus within it, as this can lead to usability issues.
+:::
+
 For menus with many items, enable scrolling:
 
 ```rust
@@ -290,58 +294,9 @@ menu.action_context(focus_handle)
 
 ## API Reference
 
-### PopupMenu
-
-| Method                     | Description                                   |
-| -------------------------- | --------------------------------------------- |
-| `build(window, cx, f)`     | Create a new popup menu with builder function |
-| `action_context(handle)`   | Set focus handle for action dispatch          |
-| `min_w(width)`             | Set minimum width                             |
-| `max_w(width)`             | Set maximum width                             |
-| `max_h(height)`            | Set maximum height                            |
-| `scrollable()`             | Enable vertical scrolling                     |
-| `external_link_icon(bool)` | Show/hide external link icons                 |
-
-### Menu Items
-
-| Method                                        | Description                       |
-| --------------------------------------------- | --------------------------------- |
-| `menu(label, action)`                         | Add basic menu item               |
-| `menu_with_disabled(label, action, disabled)` | Add menu item with disabled state |
-| `menu_with_icon(label, icon, action)`         | Add menu item with icon           |
-| `menu_with_check(label, checked, action)`     | Add checkable menu item           |
-| `label(text)`                                 | Add non-interactive label         |
-| `separator()`                                 | Add visual separator              |
-| `link(label, url)`                            | Add link menu item                |
-| `link_with_icon(label, icon, url)`            | Add link with icon                |
-| `item(item)`                                  | Add custom menu item              |
-
-### Custom Elements
-
-| Method                                              | Description                         |
-| --------------------------------------------------- | ----------------------------------- |
-| `menu_element(action, builder)`                     | Add custom element menu item        |
-| `menu_element_with_icon(icon, action, builder)`     | Add custom element with icon        |
-| `menu_element_with_check(checked, action, builder)` | Add custom element with check state |
-
-### Submenus
-
-| Method                                | Description |
-| ------------------------------------- | ----------- |
-| `submenu(label, window, cx, builder)` | Add submenu |
-
-### PopupMenuExt Trait
-
-| Method                                    | Description                                |
-| ----------------------------------------- | ------------------------------------------ |
-| `popup_menu(builder)`                     | Add popup menu to button (top-left anchor) |
-| `popup_menu_with_anchor(corner, builder)` | Add popup menu with custom anchor          |
-
-### ContextMenuExt Trait
-
-| Method                  | Description                 |
-| ----------------------- | --------------------------- |
-| `context_menu(builder)` | Add context menu to element |
+- [PopupMenu]
+- [context_menu]
+- [PopupMenuItem]
 
 ## Examples
 
@@ -370,7 +325,7 @@ div()
 
 ### Add MenuItem without action
 
-Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and `PopupMenuItem` can help you:
+Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and [PopupMenuItem] can help you:
 
 ```rust
 use gpui_component::{popup_menu::PopupMenuItem, Button};
@@ -483,3 +438,7 @@ Button::new("settings")
 6. **Progressive Disclosure**: Use submenus for complex hierarchies
 7. **Clear Labels**: Use descriptive, action-oriented labels
 8. **Reasonable Limits**: Use scrollable menus for more than 10-15 items
+
+[PopupMenu]: https://docs.rs/gpui-component/latest/gpui_component/menu/popup_menu/struct.PopupMenu.html
+[PopupMenuItem]: https://docs.rs/gpui-component/latest/gpui_component/menu/popup_menu/struct.PopupMenuItem.html
+[context_menu]: https://docs.rs/gpui-component/latest/gpui_component/menu/context_menu/trait.ContextMenuExt.html#method.context_menu
