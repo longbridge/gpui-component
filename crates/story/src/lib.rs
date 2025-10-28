@@ -112,12 +112,11 @@ pub use welcome_story::WelcomeStory;
 use gpui_component::{
     ActiveTheme, ContextModal, IconName, Root, TitleBar,
     button::Button,
-    context_menu::ContextMenuExt,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::GroupBox,
     h_flex,
+    menu::{ContextMenuExt, PopupMenu},
     notification::Notification,
-    popup_menu::PopupMenu,
     scroll::ScrollbarShow,
     v_flex,
 };
@@ -734,7 +733,7 @@ impl Panel for StoryContainer {
         }
     }
 
-    fn popup_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
+    fn dropdown_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
         menu.menu("Info", Box::new(ShowPanelInfo))
     }
 

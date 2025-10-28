@@ -12,7 +12,7 @@ The Menu component provides both context menus (right-click menus) and popup men
 ```rust
 use gpui_component::{
     context_menu::ContextMenuExt,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{PopupMenu, DropdownMenu},
     Button
 };
 use gpui::{actions, Action};
@@ -42,11 +42,11 @@ div()
 Popup menus are triggered by buttons or other interactive elements:
 
 ```rust
-use gpui_component::popup_menu::PopupMenuExt;
+use gpui_component::menu::DropdownMenu;
 
 Button::new("menu-btn")
     .label("Open Menu")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
             .separator()
@@ -63,7 +63,7 @@ use gpui::Corner;
 
 Button::new("menu-btn")
     .label("Options")
-    .popup_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
+    .dropdown_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
         menu.menu("Option 1", Box::new(Action1))
             .menu("Option 2", Box::new(Action2))
     })
@@ -253,7 +253,7 @@ For menus with many items, enable scrolling:
 ```rust
 Button::new("large-menu")
     .label("Many Options")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         let mut menu = menu
             .scrollable()
             .max_h(px(300.))
@@ -332,7 +332,7 @@ use gpui_component::{popup_menu::PopupMenuItem, Button};
 
 Button::new("custom-item-menu")
     .label("Options")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.item(
             PopupMenuItem::new("Custom Action")
                 .disabled(false)
@@ -366,7 +366,7 @@ let editor_focus = cx.focus_handle();
 
 Button::new("editor-menu")
     .label("Edit")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.action_context(editor_focus)
             .menu("Save", Box::new(Save))           // Shows "Ctrl+S"
             .menu("Save As...", Box::new(SaveAs))   // Shows "Ctrl+Shift+S"
@@ -383,7 +383,7 @@ Button::new("editor-menu")
 ```rust
 Button::new("settings")
     .label("Settings")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.label("Display")
             .menu_element_with_check(dark_mode, Box::new(ToggleDarkMode), |window, cx| {
                 h_flex()

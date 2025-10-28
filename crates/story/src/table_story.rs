@@ -18,7 +18,7 @@ use gpui_component::{
     indicator::Indicator,
     input::{Input, InputEvent, InputState},
     label::Label,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{DropdownMenu, PopupMenu},
     table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
     v_flex,
 };
@@ -874,7 +874,7 @@ impl Render for TableStory {
                             .outline()
                             .small()
                             .label(format!("size: {:?}", self.size))
-                            .popup_menu(move |menu, _, _| {
+                            .dropdown_menu(move |menu, _, _| {
                                 menu.menu_with_check(
                                     "Large",
                                     size == Size::Large,

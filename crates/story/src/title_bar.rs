@@ -10,7 +10,7 @@ use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
     menu::AppMenuBar,
-    popup_menu::PopupMenuExt as _,
+    menu::DropdownMenu as _,
     scroll::ScrollbarShow,
 };
 
@@ -153,7 +153,7 @@ impl Render for FontSizeSelector {
                     .small()
                     .ghost()
                     .icon(IconName::Settings2)
-                    .popup_menu(move |this, _, _| {
+                    .dropdown_menu(move |this, _, _| {
                         this.scrollable()
                             .max_h(px(480.))
                             .label("Font Size")

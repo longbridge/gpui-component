@@ -145,7 +145,7 @@ use gpui::Corner;
 
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .popup_menu(|menu, _, _| {
+    .dropdown_menu(|menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
             .menu("Option 2", Box::new(MyAction))
             .separator()
@@ -155,7 +155,7 @@ DropdownButton::new("dropdown")
 // With custom anchor
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .popup_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
+    .dropdown_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
     })
 ```

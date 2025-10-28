@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::button::{Button, ButtonVariants as _};
-use crate::popup_menu::PopupMenuExt as _;
+use crate::menu::DropdownMenu as _;
 use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -283,7 +283,7 @@ impl RenderOnce for TabBar {
                         .xsmall()
                         .ghost()
                         .icon(IconName::ChevronDown)
-                        .popup_menu(move |mut this, _, _| {
+                        .dropdown_menu(move |mut this, _, _| {
                             this = this.scrollable();
                             for (ix, (label, disabled)) in item_labels.iter().enumerate() {
                                 this = this.menu_with_check_and_disabled(

@@ -4,7 +4,7 @@ use gpui_component::{
     IconName, Root, Sizable,
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
-    popup_menu::PopupMenuExt,
+    menu::DropdownMenu,
 };
 
 use serde::Deserialize;
@@ -106,7 +106,7 @@ impl StoryWorkspace {
                         .icon(IconName::LayoutDashboard)
                         .small()
                         .ghost()
-                        .popup_menu({
+                        .dropdown_menu({
                             let invisible_panels = AppState::global(cx).invisible_panels.clone();
 
                             move |menu, _, cx| {
