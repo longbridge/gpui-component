@@ -413,7 +413,7 @@ impl Styled for StorySection {
 }
 
 impl RenderOnce for StorySection {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         GroupBox::new()
             .outline()
             .title(
@@ -426,7 +426,7 @@ impl RenderOnce for StorySection {
             )
             .content_style(
                 StyleRefinement::default()
-                    .rounded_lg()
+                    .rounded(cx.theme().radius_lg)
                     .overflow_x_hidden()
                     .items_center()
                     .justify_center(),

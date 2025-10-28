@@ -214,8 +214,10 @@ impl Render for Gallery {
                                     .child(
                                         div()
                                             .bg(cx.theme().sidebar_accent)
-                                            .px_1()
                                             .rounded_full()
+                                            .when(cx.theme().radius.is_zero(), |this| {
+                                                this.rounded(px(0.))
+                                            })
                                             .flex_1()
                                             .mx_1()
                                             .child(
