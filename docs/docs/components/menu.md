@@ -11,8 +11,7 @@ The Menu component provides both context menus (right-click menus) and popup men
 
 ```rust
 use gpui_component::{
-    context_menu::ContextMenuExt,
-    menu::{PopupMenu, DropdownMenu},
+    menu::{PopupMenu, ContextMenuExt, DropdownMenu},
     Button
 };
 use gpui::{actions, Action};
@@ -37,9 +36,9 @@ div()
     })
 ```
 
-### Popup Menu
+### DropdownMenu
 
-Popup menus are triggered by buttons or other interactive elements:
+Dropdown menus are triggered by buttons or other interactive elements:
 
 ```rust
 use gpui_component::menu::DropdownMenu;
@@ -56,7 +55,7 @@ Button::new("menu-btn")
 
 ### Menu with Anchor Position
 
-Control where the popup menu appears relative to the trigger:
+Control where the dropdown menu appears relative to the trigger:
 
 ```rust
 use gpui::Corner;
@@ -328,7 +327,7 @@ div()
 Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and [PopupMenuItem] can help you:
 
 ```rust
-use gpui_component::{popup_menu::PopupMenuItem, Button};
+use gpui_component::{menu::PopupMenuItem, Button};
 
 Button::new("custom-item-menu")
     .label("Options")

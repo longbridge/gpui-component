@@ -224,12 +224,12 @@ Button::new("custom-btn")
 
 ### DropdownButton
 
-| Method                               | Description                   |
-| ------------------------------------ | ----------------------------- |
-| `new(id)`                            | Create a new dropdown button  |
-| `button(btn)`                        | Set the trigger button        |
-| `popup_menu(fn)`                     | Set popup menu builder        |
-| `popup_menu_with_anchor(corner, fn)` | Set menu with anchor position |
+| Method                                  | Description                   |
+| --------------------------------------- | ----------------------------- |
+| `new(id)`                               | Create a new dropdown button  |
+| `button(btn)`                           | Set the trigger button        |
+| `dropdown_menu(fn)`                     | Set dropdown menu builder     |
+| `dropdown_menu_with_anchor(corner, fn)` | Set menu with anchor position |
 
 ## Examples
 

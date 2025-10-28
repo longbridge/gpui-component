@@ -56,7 +56,7 @@ collapsed: false
 - [Calendar](calendar) - Calendar display and navigation
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
 - [List](list) - List display with items
-- [PopupMenu](popup_menu) - Menu and context menu
+- [Menu](menu) - Menu and context menu and dropdown menu.
 - [Table](table) - High-performance data tables
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display
