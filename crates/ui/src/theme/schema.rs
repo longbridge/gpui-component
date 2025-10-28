@@ -24,6 +24,19 @@ pub struct ThemeSet {
     /// The base font size, default is 16.
     #[serde(rename = "font.size")]
     pub font_size: Option<f32>,
+    /// The base font family, default is system font: `.SystemUIFont`.
+    #[serde(rename = "font.family")]
+    pub font_family: Option<SharedString>,
+
+    /// The border radius for general elements, default is 6.
+    #[serde(rename = "radius")]
+    pub radius: Option<usize>,
+    /// The border radius for large elements like Modals and Notifications, default is 8.
+    #[serde(rename = "radius.lg")]
+    pub radius_lg: Option<usize>,
+    /// Set shadows in the theme, for example the Input and Button, default is true.
+    #[serde(rename = "shadow")]
+    pub shadow: Option<bool>,
 
     #[serde(rename = "themes")]
     pub themes: Vec<ThemeConfig>,

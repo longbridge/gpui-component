@@ -25,6 +25,26 @@
       "format": "float",
       "default": null
     },
+    "font.family": {
+      "description": "The base font family, default is system font: `.SystemUIFont`.",
+      "type": ["string", "null"],
+      "default": null
+    },
+    "radius": {
+      "description": "The border radius for general elements, default is 6.",
+      "type": ["number", "null"],
+      "default": null
+    },
+    "radius.lg": {
+      "description": "The border radius for large elements like Modals and Notifications, default is 8.",
+      "type": ["number", "null"],
+      "default": null
+    },
+    "shadow": {
+      "description": "Set shadows in the theme, for example the Input and Button, default is true.",
+      "type": ["boolean", "null"],
+      "default": null
+    },
     "themes": {
       "type": "array",
       "items": {
