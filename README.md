@@ -114,7 +114,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Compare to others
 
-| Features              | GPUI Component                 | [Iced]             | [egui]                | [QT 6]                                            |
+| Features              | GPUI Component                 | [Iced]             | [egui]                | [Qt 6]                                            |
 | --------------------- | ------------------------------ | ------------------ | --------------------- | ------------------------------------------------- |
 | Language              | Rust                           | Rust               | Rust                  | C++/QML                                           |
 | Core Render           | GPUI                           | wgpu               | wgpu                  | QT                                                |
@@ -135,7 +135,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 | Markdown Rendering    | Yes                            | Yes                | Basic                 | No                                                |
 | Markdown mix HTML     | Yes                            | No                 | No                    | No                                                |
 | HTML Rendering        | Basic                          | No                 | No                    | Basic                                             |
-| Text Selection        | TextView                       | No                 | Any Label             | No                                                |
+| Text Selection        | TextView                       | No                 | Any Label             | Yes                                               |
 | Custom Theme          | Yes                            | Yes                | Yes                   | Yes                                               |
 | Built Themes          | Yes                            | No                 | No                    | No                                                |
 | I18n                  | Yes                            | Yes                | Yes                   | Yes                                               |
