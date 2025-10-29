@@ -72,11 +72,6 @@ impl ResizablePanelGroup {
         self
     }
 
-    /// Add a ResizablePanelGroup as a child to the group.
-    pub fn group(self, group: ResizablePanelGroup) -> Self {
-        self.child(resizable_panel().child(group.into_any_element()))
-    }
-
     /// Set size of the resizable panel group
     ///
     /// - When the axis is horizontal, the size is the height of the group.
@@ -105,6 +100,11 @@ where
 {
     fn from(value: T) -> Self {
         resizable_panel().child(value.into())
+    }
+}
+impl From<ResizablePanelGroup> for ResizablePanel {
+    fn from(value: ResizablePanelGroup) -> Self {
+        resizable_panel().child(value)
     }
 }
 

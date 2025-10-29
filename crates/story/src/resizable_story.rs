@@ -67,7 +67,7 @@ impl Render for ResizableStory {
                             .on_resize(|state, _, cx| {
                                 println!("Resized: {:?}", state.read(cx).sizes());
                             })
-                            .group(
+                            .child(
                                 h_resizable("resizable-1.1", window, cx)
                                     .size(px(150.))
                                     .child(
@@ -76,14 +76,14 @@ impl Render for ResizableStory {
                                             .size_range(px(120.)..px(300.))
                                             .child(panel_box("Left (120px .. 300px)", cx)),
                                     )
-                                    .child(resizable_panel().child(panel_box("Center", cx)))
+                                    .child(panel_box("Center", cx))
                                     .child(
                                         resizable_panel()
                                             .size(px(300.))
                                             .child(panel_box("Right", cx)),
                                     ),
                             )
-                            .child(resizable_panel().child(panel_box("Center", cx)))
+                            .child(panel_box("Center", cx))
                             .child(
                                 resizable_panel()
                                     .size(px(80.))
@@ -105,7 +105,7 @@ impl Render for ResizableStory {
                                     .size_range(px(200.)..px(400.))
                                     .child(panel_box("Left 2", cx)),
                             )
-                            .child(resizable_panel().child(panel_box("Right (Grow)", cx))),
+                            .child(panel_box("Right (Grow)", cx)),
                     ),
             )
     }
