@@ -989,7 +989,7 @@ impl Render for Example {
                     .w_full()
                     .flex_1()
                     .child(
-                        h_resizable("editor-container", window, cx)
+                        h_resizable("editor-container")
                             .child(
                                 resizable_panel()
                                     .size(px(240.))

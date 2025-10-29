@@ -76,7 +76,7 @@ impl Render for Example {
             .size_full()
             .on_action(cx.listener(Self::on_action_open))
             .child(
-                h_resizable("container", window, cx)
+                h_resizable("container")
                     .child(
                         resizable_panel().child(
                             div()

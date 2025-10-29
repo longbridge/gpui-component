@@ -12,25 +12,13 @@ pub(crate) use resize_handle::*;
 pub(crate) const PANEL_MIN_SIZE: Pixels = px(100.);
 
 /// Create a [`ResizablePanelGroup`] with horizontal resizing
-pub fn h_resizable(
-    id: impl Into<ElementId>,
-    window: &mut Window,
-    cx: &mut App,
-) -> ResizablePanelGroup {
-    let id: ElementId = id.into();
-    let state = window.use_keyed_state(id.clone(), cx, |_, _| ResizableState::default());
-    ResizablePanelGroup::new(id, state).axis(Axis::Horizontal)
+pub fn h_resizable(id: impl Into<ElementId>) -> ResizablePanelGroup {
+    ResizablePanelGroup::new(id).axis(Axis::Horizontal)
 }
 
 /// Create a [`ResizablePanelGroup`] with vertical resizing
-pub fn v_resizable(
-    id: impl Into<ElementId>,
-    window: &mut Window,
-    cx: &mut App,
-) -> ResizablePanelGroup {
-    let id: ElementId = id.into();
-    let state = window.use_keyed_state(id.clone(), cx, |_, _| ResizableState::default());
-    ResizablePanelGroup::new(id, state).axis(Axis::Vertical)
+pub fn v_resizable(id: impl Into<ElementId>) -> ResizablePanelGroup {
+    ResizablePanelGroup::new(id).axis(Axis::Vertical)
 }
 
 /// Create a [`ResizablePanel`].

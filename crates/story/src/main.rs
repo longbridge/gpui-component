@@ -113,7 +113,7 @@ impl Gallery {
 }
 
 impl Render for Gallery {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.search_input.read(cx).value().trim().to_lowercase();
 
         let stories: Vec<_> = self
@@ -146,7 +146,7 @@ impl Render for Gallery {
                 ("".into(), "".into())
             };
 
-        h_resizable("gallery-container", window, cx)
+        h_resizable("gallery-container")
             .child(
                 resizable_panel()
                     .size(px(255.))

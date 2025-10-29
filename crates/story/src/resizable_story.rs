@@ -53,7 +53,7 @@ fn panel_box(content: impl Into<SharedString>, _: &App) -> AnyElement {
 }
 
 impl Render for ResizableStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_6()
@@ -63,12 +63,12 @@ impl Render for ResizableStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .child(
-                        v_resizable("resizable-1", window, cx)
+                        v_resizable("resizable-1")
                             .on_resize(|state, _, cx| {
                                 println!("Resized: {:?}", state.read(cx).sizes());
                             })
                             .child(
-                                h_resizable("resizable-1.1", window, cx)
+                                h_resizable("resizable-1.1")
                                     .size(px(150.))
                                     .child(
                                         resizable_panel()
@@ -98,7 +98,7 @@ impl Render for ResizableStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .child(
-                        h_resizable("resizable-3", window, cx)
+                        h_resizable("resizable-3")
                             .child(
                                 resizable_panel()
                                     .size(px(200.))

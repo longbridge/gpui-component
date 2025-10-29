@@ -29,7 +29,7 @@ impl Render for DragPanel {
 #[derive(IntoElement)]
 pub struct ResizablePanelGroup {
     id: ElementId,
-    state: Entity<ResizableState>,
+    state: Option<Entity<ResizableState>>,
     axis: Axis,
     size: Option<Pixels>,
     children: Vec<ResizablePanel>,
@@ -37,15 +37,22 @@ pub struct ResizablePanelGroup {
 }
 
 impl ResizablePanelGroup {
-    pub(crate) fn new(id: impl Into<ElementId>, state: Entity<ResizableState>) -> Self {
+    /// Create a new resizable panel group.
+    pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
             axis: Axis::Horizontal,
             children: vec![],
-            state,
+            state: None,
             size: None,
             on_resize: Rc::new(|_, _, _| {}),
         }
+    }
+
+    /// Bind yourself to a resizable state entity.
+    pub fn with_state(mut self, state: &Entity<ResizableState>) -> Self {
+        self.state = Some(state.clone());
+        self
     }
 
     /// Set the axis of the resizable panel group, default is horizontal.
@@ -112,8 +119,10 @@ impl From<ResizablePanelGroup> for ResizablePanel {
 impl EventEmitter<ResizablePanelEvent> for ResizablePanelGroup {}
 
 impl RenderOnce for ResizablePanelGroup {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = self.state.clone();
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.unwrap_or(
+            window.use_keyed_state(self.id.clone(), cx, |_, _| ResizableState::default()),
+        );
         let container = if self.axis.is_horizontal() {
             h_flex()
         } else {
@@ -122,7 +131,7 @@ impl RenderOnce for ResizablePanelGroup {
 
         // Sync panels to the state
         let panels_count = self.children.len();
-        self.state.update(cx, |state, _| {
+        state.update(cx, |state, _| {
             state.sync_panels_count(self.axis, panels_count);
         });
 
@@ -136,20 +145,23 @@ impl RenderOnce for ResizablePanelGroup {
                     .map(|(ix, mut panel)| {
                         panel.panel_ix = ix;
                         panel.axis = self.axis;
-                        panel.state = Some(self.state.clone());
+                        panel.state = Some(state.clone());
                         panel
                     }),
             )
             .child({
                 canvas(
-                    move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds),
+                    {
+                        let state = state.clone();
+                        move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+                    },
                     |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full()
             })
             .child(ResizePanelGroupElement {
-                state: self.state.clone(),
+                state: state.clone(),
                 axis: self.axis,
                 on_resize: self.on_resize.clone(),
             })

@@ -418,7 +418,8 @@ impl Render for StackPanel {
             .overflow_hidden()
             .bg(cx.theme().tab_bar)
             .child(
-                ResizablePanelGroup::new("stack-panel-group", self.state.clone())
+                ResizablePanelGroup::new("stack-panel-group")
+                    .with_state(&self.state)
                     .axis(self.axis)
                     .children(self.panels.clone().into_iter().map(|panel| {
                         resizable_panel()

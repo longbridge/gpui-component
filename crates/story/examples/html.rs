@@ -47,7 +47,7 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        h_resizable("container", window, cx)
+        h_resizable("container")
             .child(
                 div()
                     .id("source")
