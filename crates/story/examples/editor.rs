@@ -1,15 +1,16 @@
 use std::{
     ops::Range,
+    path::PathBuf,
     rc::Rc,
     str::FromStr,
     sync::{Arc, RwLock},
     time::Duration,
 };
 
-use anyhow::Ok;
+use autocorrect::ignorer::Ignorer;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
+    ActiveTheme, ContextModal, IconName, ListItem, Sizable, TreeItem, TreeState,
     button::{Button, ButtonVariants as _},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
@@ -17,8 +18,8 @@ use gpui_component::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
     },
-    select::{Select, SelectEvent, SelectState},
-    v_flex,
+    resizable::{ResizableState, h_resizable, resizable_panel},
+    tree, v_flex,
 };
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
@@ -42,80 +43,17 @@ fn init() {
 
 pub struct Example {
     editor: Entity<InputState>,
+    tree_state: Entity<TreeState>,
+    panels_state: Entity<ResizableState>,
     go_to_line_state: Entity<InputState>,
-    language_state: Entity<SelectState<Vec<SharedString>>>,
-    language: Lang,
+    language: Language,
     line_number: bool,
     indent_guides: bool,
-    need_update: bool,
     soft_wrap: bool,
     lsp_store: ExampleLspStore,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Lang {
-    BuiltIn(Language),
-    External(&'static str),
-}
-
-impl Lang {
-    fn name(&self) -> &str {
-        match self {
-            Lang::BuiltIn(lang) => lang.name(),
-            Lang::External(lang) => lang,
-        }
-    }
-}
-
-const LANGUAGES: [(Lang, &'static str); 12] = [
-    (
-        Lang::BuiltIn(Language::Rust),
-        include_str!("./fixtures/test.rs"),
-    ),
-    (
-        Lang::BuiltIn(Language::Markdown),
-        include_str!("./fixtures/test.md"),
-    ),
-    (
-        Lang::BuiltIn(Language::Html),
-        include_str!("./fixtures/test.html"),
-    ),
-    (
-        Lang::BuiltIn(Language::JavaScript),
-        include_str!("./fixtures/test.js"),
-    ),
-    (
-        Lang::BuiltIn(Language::TypeScript),
-        include_str!("./fixtures/test.ts"),
-    ),
-    (
-        Lang::BuiltIn(Language::Go),
-        include_str!("./fixtures/test.go"),
-    ),
-    (
-        Lang::BuiltIn(Language::Python),
-        include_str!("./fixtures/test.py"),
-    ),
-    (
-        Lang::BuiltIn(Language::Ruby),
-        include_str!("./fixtures/test.rb"),
-    ),
-    (
-        Lang::BuiltIn(Language::Zig),
-        include_str!("./fixtures/test.zig"),
-    ),
-    (
-        Lang::BuiltIn(Language::Sql),
-        include_str!("./fixtures/test.sql"),
-    ),
-    (
-        Lang::BuiltIn(Language::Json),
-        include_str!("./fixtures/test.json"),
-    ),
-    (Lang::External("navi"), include_str!("./fixtures/test.nv")),
-];
 
 #[derive(Clone)]
 pub struct ExampleLspStore {
@@ -654,23 +592,48 @@ impl DocumentColorProvider for ExampleLspStore {
     }
 }
 
-impl Example {
-    pub fn new(default: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = if let Some(name) = default {
-            LANGUAGES
-                .iter()
-                .find(|s| s.0.name().starts_with(name.trim()))
-                .cloned()
-                .unwrap_or(LANGUAGES[0].clone())
-        } else {
-            LANGUAGES[0].clone()
-        };
+fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
+    let mut items = Vec::new();
 
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let relative_path = path.strip_prefix(root).unwrap_or(&path);
+            if ignorer.is_ignored(&relative_path.to_string_lossy())
+                || relative_path.ends_with(".git")
+            {
+                continue;
+            }
+            let file_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Unknown")
+                .to_string();
+            let id = path.to_string_lossy().to_string();
+            if path.is_dir() {
+                let children = build_file_items(ignorer, &root, &path);
+                items.push(TreeItem::new(id, file_name).children(children));
+            } else {
+                items.push(TreeItem::new(id, file_name));
+            }
+        }
+    }
+    items.sort_by(|a, b| {
+        b.is_folder()
+            .cmp(&a.is_folder())
+            .then(a.label.cmp(&b.label))
+    });
+    items
+}
+
+impl Example {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let default_language = Language::from_str("rust");
         let lsp_store = ExampleLspStore::new();
 
         let editor = cx.new(|cx| {
             let mut editor = InputState::new(window, cx)
-                .code_editor(default_language.0.name().to_string())
+                .code_editor(default_language.name())
                 .line_number(true)
                 .indent_guides(true)
                 .tab_size(TabSize {
@@ -678,7 +641,7 @@ impl Example {
                     hard_tabs: false,
                 })
                 .soft_wrap(false)
-                .default_value(default_language.1)
+                .default_value(include_str!("./fixtures/test.rs"))
                 .placeholder("Enter your code here...");
 
             let lsp_store = Rc::new(lsp_store.clone());
@@ -691,44 +654,24 @@ impl Example {
             editor
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
-        let language_state = cx.new(|cx| {
-            SelectState::new(
-                LANGUAGES.iter().map(|s| s.0.name().into()).collect(),
-                Some(IndexPath::default()),
-                window,
-                cx,
-            )
-        });
 
-        let _subscriptions = vec![
-            cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
-                this.lint_document(cx);
-            }),
-            cx.subscribe(
-                &language_state,
-                |this, state, _: &SelectEvent<Vec<SharedString>>, cx| {
-                    if let Some(val) = state.read(cx).selected_value() {
-                        if val == "navi" {
-                            this.language = Lang::External("navi");
-                        } else {
-                            this.language = Lang::BuiltIn(Language::from_str(&val));
-                        }
+        let tree_state = cx.new(|cx| TreeState::new(cx).items(vec![]));
+        Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
-                        this.need_update = true;
-                        cx.notify();
-                    }
-                },
-            ),
-        ];
+        let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
+            this.lint_document(cx);
+        })];
+
+        let panels_state = ResizableState::new(cx);
 
         Self {
             editor,
+            tree_state,
+            panels_state,
             go_to_line_state,
-            language_state,
-            language: default_language.0,
+            language: default_language,
             line_number: true,
             indent_guides: true,
-            need_update: false,
             soft_wrap: false,
             lsp_store,
             _subscriptions,
@@ -736,19 +679,15 @@ impl Example {
         }
     }
 
-    fn update_highlighter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.need_update {
-            return;
-        }
-
-        let language = self.language.name().to_string();
-        let code = LANGUAGES.iter().find(|s| s.0.name() == language).unwrap().1;
-        self.editor.update(cx, |state, cx| {
-            state.set_value(code, window, cx);
-            state.set_highlighter(language, cx);
-        });
-
-        self.need_update = false;
+    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
+        cx.spawn(async move |cx| {
+            let ignorer = Ignorer::new(&path.to_string_lossy());
+            let items = build_file_items(&ignorer, &path, &path);
+            _ = state.update(cx, |state, cx| {
+                state.set_items(items, cx);
+            });
+        })
+        .detach();
     }
 
     fn go_to_line(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -797,27 +736,6 @@ impl Example {
                     }
                 })
         });
-    }
-
-    fn toggle_soft_wrap(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        self.soft_wrap = !self.soft_wrap;
-        self.editor.update(cx, |state, cx| {
-            state.set_soft_wrap(self.soft_wrap, window, cx);
-        });
-        cx.notify();
-    }
-
-    fn toggle_indent_guides(
-        &mut self,
-        _: &ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.indent_guides = !self.indent_guides;
-        self.editor.update(cx, |state, cx| {
-            state.set_indent_guides(self.indent_guides, window, cx);
-        });
-        cx.notify();
     }
 
     fn lint_document(&mut self, cx: &mut Context<Self>) {
@@ -891,41 +809,168 @@ impl Example {
         });
 
         let view = cx.entity();
-        let editor = self.editor.clone();
         cx.spawn_in(window, async move |_, window| {
             let path = path.await.ok()?.ok()??.iter().next()?.clone();
 
-            let language = path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .unwrap_or_default();
-            let language = Language::from_str(&language);
-            let lang = Lang::BuiltIn(language.clone());
-            let content = std::fs::read_to_string(&path).ok()?;
-
             window
-                .update(|window, cx| {
-                    _ = editor.update(cx, |this, cx| {
+                .update(|window, cx| Self::open_file(view, path, window, cx))
+                .ok()
+        })
+        .detach();
+    }
+
+    fn open_file(
+        view: Entity<Self>,
+        path: PathBuf,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<()> {
+        let language = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default();
+        let language = Language::from_str(&language);
+        let content = std::fs::read_to_string(&path)?;
+
+        window
+            .spawn(cx, async move |window| {
+                _ = view.update_in(window, |this, window, cx| {
+                    _ = this.editor.update(cx, |this, cx| {
                         this.set_highlighter(language.name(), cx);
                         this.set_value(content, window, cx);
                     });
-                    view.update(cx, |this, cx| {
-                        this.language = lang;
-                        cx.notify();
-                    })
-                })
-                .ok();
 
-            Some(())
-        })
-        .detach();
+                    this.language = language;
+                    cx.notify();
+                });
+            })
+            .detach();
+
+        Ok(())
+    }
+
+    fn render_file_tree(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.entity();
+        tree(
+            &self.tree_state,
+            move |ix, entry, _selected, _window, cx| {
+                view.update(cx, |_, cx| {
+                    let item = entry.item();
+                    let icon = if !entry.is_folder() {
+                        IconName::File
+                    } else if entry.is_expanded() {
+                        IconName::FolderOpen
+                    } else {
+                        IconName::Folder
+                    };
+
+                    ListItem::new(ix)
+                        .w_full()
+                        .rounded(cx.theme().radius)
+                        .py_0p5()
+                        .px_2()
+                        .pl(px(16.) * entry.depth() + px(8.))
+                        .child(h_flex().gap_2().child(icon).child(item.label.clone()))
+                        .on_click(cx.listener({
+                            let item = item.clone();
+                            move |_, _, _window, cx| {
+                                if item.is_folder() {
+                                    return;
+                                }
+
+                                Self::open_file(
+                                    cx.entity(),
+                                    PathBuf::from(item.id.as_str()),
+                                    _window,
+                                    cx,
+                                )
+                                .ok();
+
+                                cx.notify();
+                            }
+                        }))
+                })
+            },
+        )
+        .text_sm()
+        .p_1()
+        .bg(cx.theme().sidebar)
+        .text_color(cx.theme().sidebar_foreground)
+        .h_full()
+    }
+
+    fn render_line_number_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        Button::new("line-number")
+            .when(self.line_number, |this| this.icon(IconName::Check))
+            .label("Line Number")
+            .ghost()
+            .xsmall()
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.line_number = !this.line_number;
+                this.editor.update(cx, |state, cx| {
+                    state.set_line_number(this.line_number, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_soft_wrap_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Button::new("soft-wrap")
+            .ghost()
+            .xsmall()
+            .when(self.soft_wrap, |this| this.icon(IconName::Check))
+            .label("Soft Wrap")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.soft_wrap = !this.soft_wrap;
+                this.editor.update(cx, |state, cx| {
+                    state.set_soft_wrap(this.soft_wrap, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_indent_guides_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        Button::new("indent-guides")
+            .ghost()
+            .xsmall()
+            .when(self.indent_guides, |this| this.icon(IconName::Check))
+            .label("Indent Guides")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.indent_guides = !this.indent_guides;
+                this.editor.update(cx, |state, cx| {
+                    state.set_indent_guides(this.indent_guides, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_go_to_line_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let position = self.editor.read(cx).cursor_position();
+        let cursor = self.editor.read(cx).cursor();
+
+        Button::new("line-column")
+            .ghost()
+            .xsmall()
+            .label(format!(
+                "{}:{} ({} byte)",
+                position.line + 1,
+                position.character + 1,
+                cursor
+            ))
+            .on_click(cx.listener(Self::go_to_line))
     }
 }
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.update_highlighter(window, cx);
-
         // Update diagnostics
         if self.lsp_store.is_dirty() {
             let diagnostics = self.lsp_store.diagnostics();
@@ -948,13 +993,23 @@ impl Render for Example {
                     .w_full()
                     .flex_1()
                     .child(
-                        Input::new(&self.editor)
-                            .bordered(false)
-                            .p_0()
-                            .h_full()
-                            .font_family("Monaco")
-                            .text_size(px(12.))
-                            .focus_bordered(false),
+                        h_resizable("editor-container", self.panels_state.clone())
+                            .child(
+                                resizable_panel()
+                                    .size(px(240.))
+                                    .child(self.render_file_tree(window, cx)),
+                            )
+                            .child(
+                                resizable_panel().child(
+                                    Input::new(&self.editor)
+                                        .bordered(false)
+                                        .p_0()
+                                        .h_full()
+                                        .font_family("Monaco")
+                                        .text_size(px(12.))
+                                        .focus_bordered(false),
+                                ),
+                            ),
                     )
                     .child(
                         h_flex()
@@ -969,65 +1024,11 @@ impl Render for Example {
                             .child(
                                 h_flex()
                                     .gap_3()
-                                    .child(
-                                        Select::new(&self.language_state)
-                                            .menu_width(px(160.))
-                                            .xsmall(),
-                                    )
-                                    .child(
-                                        Button::new("line-number")
-                                            .ghost()
-                                            .when(self.line_number, |this| {
-                                                this.icon(IconName::Check)
-                                            })
-                                            .label("Line Number")
-                                            .xsmall()
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.line_number = !this.line_number;
-                                                this.editor.update(cx, |state, cx| {
-                                                    state.set_line_number(
-                                                        this.line_number,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                });
-                                                cx.notify();
-                                            })),
-                                    )
-                                    .child({
-                                        Button::new("soft-wrap")
-                                            .ghost()
-                                            .xsmall()
-                                            .when(self.soft_wrap, |this| this.icon(IconName::Check))
-                                            .label("Soft Wrap")
-                                            .on_click(cx.listener(Self::toggle_soft_wrap))
-                                    })
-                                    .child({
-                                        Button::new("indent-guides")
-                                            .ghost()
-                                            .xsmall()
-                                            .when(self.indent_guides, |this| {
-                                                this.icon(IconName::Check)
-                                            })
-                                            .label("Indent Guides")
-                                            .on_click(cx.listener(Self::toggle_indent_guides))
-                                    }),
+                                    .child(self.render_line_number_button(window, cx))
+                                    .child(self.render_soft_wrap_button(window, cx))
+                                    .child(self.render_indent_guides_button(window, cx)),
                             )
-                            .child({
-                                let position = self.editor.read(cx).cursor_position();
-                                let cursor = self.editor.read(cx).cursor();
-
-                                Button::new("line-column")
-                                    .ghost()
-                                    .xsmall()
-                                    .label(format!(
-                                        "{}:{} ({} byte)",
-                                        position.line + 1,
-                                        position.character + 1,
-                                        cursor
-                                    ))
-                                    .on_click(cx.listener(Self::go_to_line))
-                            }),
+                            .child(self.render_go_to_line_button(window, cx)),
                     ),
             )
     }
@@ -1035,9 +1036,6 @@ impl Render for Example {
 
 fn main() {
     let app = Application::new().with_assets(Assets);
-
-    // Parse `cargo run -- <story_name>`
-    let name = std::env::args().nth(1);
 
     app.run(move |cx| {
         story::init(cx);
@@ -1047,7 +1045,7 @@ fn main() {
         story::create_new_window_with_size(
             "Editor",
             Some(size(px(1200.), px(960.))),
-            |window, cx| cx.new(|cx| Example::new(name, window, cx)),
+            |window, cx| cx.new(|cx| Example::new(window, cx)),
             cx,
         );
     });
