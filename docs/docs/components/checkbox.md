@@ -82,17 +82,7 @@ Checkbox::new("checkbox")
 
 ## API Reference
 
-### Checkbox
-
-| Method             | Description                                                 |
-| ------------------ | ----------------------------------------------------------- |
-| `new(id)`          | Create a new checkbox with the given ID                     |
-| `label(text)`      | Set label text                                              |
-| `checked(bool)`    | Set checked state                                           |
-| `disabled(bool)`   | Set disabled state                                          |
-| `on_click(fn)`     | Callback when clicked, receives `&bool` (new checked state) |
-| `tab_stop(bool)`   | Enable/disable tab navigation (default: true)               |
-| `tab_index(isize)` | Set tab order index (default: 0)                            |
+- [Checkbox]
 
 ### Styling
 
@@ -145,3 +135,5 @@ v_flex()
             }))
     )
 ```
+
+[Checkbox]: https://docs.rs/gpui-component/latest/gpui_component/checkbox/struct.Checkbox.html

@@ -51,24 +51,26 @@ Alert::error("error-alert", "An error occurred while processing your request.")
 ### Alert Sizes
 
 ```rust
-Alert::info("alert", "Message content")
-    .with_size(Size::XSmall)    // Extra small
-    .title("XSmall Alert")
+use gpui_component::{alert::Alert, Sizable as _};
 
 Alert::info("alert", "Message content")
-    .with_size(Size::Small)     // Small
+    .xsmall()
+    .title("XSmall Alert")
+Alert::info("alert", "Message content")
+    .small()
     .title("Small Alert")
 
 Alert::info("alert", "Message content")
-    .with_size(Size::Medium)    // Medium (default)
     .title("Medium Alert")
 
 Alert::info("alert", "Message content")
-    .with_size(Size::Large)     // Large
+    .large()
     .title("Large Alert")
 ```
 
 ### Closable Alerts
+
+When you add an `on_close` handler, a close button appears on the alert:
 
 ```rust
 Alert::info("closable-alert", "This alert can be dismissed.")
@@ -140,40 +142,7 @@ Alert::info("conditional-alert", "This alert may be hidden.")
 
 ## API Reference
 
-### Alert Methods
-
-| Method                 | Description                                         |
-| ---------------------- | --------------------------------------------------- |
-| `new(id, message)`     | Create a new alert with default (secondary) variant |
-| `info(id, message)`    | Create an info alert with blue styling              |
-| `success(id, message)` | Create a success alert with green styling           |
-| `warning(id, message)` | Create a warning alert with yellow/orange styling   |
-| `error(id, message)`   | Create an error alert with red styling              |
-| `title(text)`          | Set the alert title (not shown in banner mode)      |
-| `icon(icon)`           | Set a custom icon for the alert                     |
-| `banner()`             | Enable banner mode (full width, no title)           |
-| `on_close(callback)`   | Make alert closable with close button               |
-| `visible(bool)`        | Control alert visibility                            |
-| `with_size(size)`      | Set alert size (XSmall, Small, Medium, Large)       |
-
-### Alert Variants
-
-| Variant     | Description                   | Default Icon  |
-| ----------- | ----------------------------- | ------------- |
-| `Secondary` | Default gray styling          | Info          |
-| `Info`      | Blue informational styling    | Info          |
-| `Success`   | Green success styling         | CircleCheck   |
-| `Warning`   | Yellow/orange warning styling | TriangleAlert |
-| `Error`     | Red error styling             | CircleX       |
-
-### Size Options
-
-| Size     | Padding   | Gap  | Border Radius |
-| -------- | --------- | ---- | ------------- |
-| `XSmall` | 12px/6px  | 6px  | Default       |
-| `Small`  | 12px/8px  | 6px  | Default       |
-| `Medium` | 16px/10px | 12px | Default       |
-| `Large`  | 20px/14px | 12px | Large         |
+- [Alert]
 
 ## Examples
 
@@ -188,7 +157,6 @@ Alert::error(
     - Terms of service must be accepted"
 )
 .title("Validation Failed")
-.with_size(Size::Medium)
 ```
 
 ### Success Notification
@@ -210,7 +178,7 @@ Alert::warning(
     Some services may be temporarily unavailable."
 )
 .banner()
-.with_size(Size::Large)
+.large()
 ```
 
 ### Interactive Alert with Custom Action
@@ -245,3 +213,5 @@ Alert::warning(
 .title("Security Alert")
 .icon(IconName::Shield)
 ```
+
+[Alert]: https://docs.rs/gpui-component/latest/gpui_component/alert/struct.Alert.html

@@ -93,13 +93,14 @@ const config: UserConfig = {
           },
         ],
       },
+      {
+        component: "GitHubStar",
+      },
     ],
 
     sidebar: sidebar as any,
 
-    socialLinks: [
-      { icon: "github", link: "https://github.com/longbridge/gpui-component" },
-    ],
+    socialLinks: null,
     editLink: {
       pattern:
         "https://github.com/longbridge/gpui-component/edit/main/docs/:path",

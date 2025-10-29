@@ -15,7 +15,11 @@ use gpui_component::badge::Badge;
 
 ## Usage
 
-### Basic Badge with Count
+### Badge with Count
+
+Use `count` to display a numeric badge, if the count is greater than zero (`> 0`) the badge will be shown, otherwise it will be hidden.
+
+There is a default maximum count of `99`, any count above this will be displayed as `99+`. You can customize this maximum using the [max](https://docs.rs/gpui-component/latest/gpui_component/badge/struct.Badge.html#method.max) method.
 
 ```rust
 Badge::new()
@@ -23,7 +27,11 @@ Badge::new()
     .child(Icon::new(IconName::Bell))
 ```
 
-### Badge Variants
+### Variants
+
+- Default: Displays a numeric count.
+- Dot: A small dot indicator, typically used for status.
+- Icon: Displays an icon instead of a number.
 
 ```rust
 // Number badge (default)
@@ -43,6 +51,8 @@ Badge::new()
 ```
 
 ### Badge Sizes
+
+The Badge is also implemented with the [Sizable] trait, allowing you to set small, medium (default), or large sizes.
 
 ```rust
 // Small badge
@@ -161,26 +171,7 @@ Badge::new()
 
 ## API Reference
 
-### Badge
-
-| Method           | Description                                  |
-| ---------------- | -------------------------------------------- |
-| `new()`          | Create a new badge                           |
-| `count(usize)`   | Set the count to display (0 hides the badge) |
-| `dot()`          | Display as a small dot indicator             |
-| `icon(icon)`     | Display an icon instead of count             |
-| `max(usize)`     | Set maximum count to show (default: 99)      |
-| `color(color)`   | Set badge background color                   |
-| `child(element)` | Add child element to position badge on       |
-
-### Size Methods (from Sizable trait)
-
-| Method            | Description                       |
-| ----------------- | --------------------------------- |
-| `small()`         | Small badge size (10px)           |
-| `medium()`        | Medium badge size (16px, default) |
-| `large()`         | Large badge size (24px)           |
-| `with_size(size)` | Custom size                       |
+- [Badge]
 
 ## Examples
 
@@ -251,3 +242,6 @@ Badge::new().count(1000).max(999) // Shows "999+"
 // Zero count hides the badge
 Badge::new().count(0)    // Badge not visible
 ```
+
+[Badge]: https://docs.rs/gpui_component/latest/gpui_component/badge/struct.Badge.html
+[Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

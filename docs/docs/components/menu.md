@@ -11,7 +11,7 @@ The Menu component provides both context menus (right-click menus) and popup men
 
 ```rust
 use gpui_component::{
-    menu::{PopupMenu, ContextMenuExt, DropdownMenu},
+    menu::{PopupMenu, PopupMenuItem, ContextMenuExt, DropdownMenu},
     Button
 };
 use gpui::{actions, Action};
@@ -19,7 +19,7 @@ use gpui::{actions, Action};
 
 ## Usage
 
-### Context Menu
+### ContextMenu
 
 Context menus appear when right-clicking on an element:
 
@@ -41,17 +41,37 @@ div()
 Dropdown menus are triggered by buttons or other interactive elements:
 
 ```rust
-use gpui_component::menu::DropdownMenu;
+use gpui_component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
 
+let view = cx.entity();
 Button::new("menu-btn")
     .label("Open Menu")
     .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
+            .link("Documentation", "https://longbridge.github.io/gpui-component/")
+            .separator()
+            .item(PopupMenuItem::new("Custom Action")
+                .on_click(window.listener_for(&view, |this, _, window, cx| {
+                    // Custom action logic here
+                    this.
+                })
+            )
             .separator()
             .menu("Exit", Box::new(Exit))
     })
 ```
+
+:::tip
+As you see, the each menu item is associated with an [Action],
+we choice this design to better integrate with GPUI's action and key binding system,
+allowing menu items to automatically display keyboard shortcuts when applicable.
+
+So, the [Action] is the recommended way to define menu item behaviors.
+
+However, if you prefer not to use [Action]s, you can create custom menu items using the `item` method along with [PopupMenuItem].
+There have a `on_click` callback to handle the click event directly.
+:::
 
 ### Menu with Anchor Position
 
@@ -438,6 +458,7 @@ Button::new("settings")
 7. **Clear Labels**: Use descriptive, action-oriented labels
 8. **Reasonable Limits**: Use scrollable menus for more than 10-15 items
 
-[PopupMenu]: https://docs.rs/gpui-component/latest/gpui_component/menu/popup_menu/struct.PopupMenu.html
-[PopupMenuItem]: https://docs.rs/gpui-component/latest/gpui_component/menu/popup_menu/struct.PopupMenuItem.html
-[context_menu]: https://docs.rs/gpui-component/latest/gpui_component/menu/context_menu/trait.ContextMenuExt.html#method.context_menu
+[PopupMenu]: https://docs.rs/gpui-component/latest/gpui_component/menu/struct.PopupMenu.html
+[PopupMenuItem]: https://docs.rs/gpui-component/latest/gpui_component/menu/struct.PopupMenuItem.html
+[context_menu]: https://docs.rs/gpui-component/latest/gpui_component/menu/trait.ContextMenuExt.html#method.context_menu
+[Action]: https://docs.rs/gpui/latest/gpui/trait.Action.html
