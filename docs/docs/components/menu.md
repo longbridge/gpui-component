@@ -19,6 +19,23 @@ use gpui::{actions, Action};
 
 ## Usage
 
+### ContextMenu
+
+Context menus appear when right-clicking on an element:
+
+```rust
+use gpui_component::context_menu::ContextMenuExt;
+
+div()
+    .child("Right click me")
+    .context_menu(|menu, window, cx| {
+        menu.menu("Copy", Box::new(Copy))
+            .menu("Paste", Box::new(Paste))
+            .separator()
+            .menu("Delete", Box::new(Delete))
+    })
+```
+
 ### DropdownMenu
 
 Dropdown menus are triggered by buttons or other interactive elements:
@@ -55,23 +72,6 @@ So, the [Action] is the recommended way to define menu item behaviors.
 However, if you prefer not to use [Action]s, you can create custom menu items using the `item` method along with [PopupMenuItem].
 There have a `on_click` callback to handle the click event directly.
 :::
-
-### ContextMenu
-
-Context menus appear when right-clicking on an element:
-
-```rust
-use gpui_component::context_menu::ContextMenuExt;
-
-div()
-    .child("Right click me")
-    .context_menu(|menu, window, cx| {
-        menu.menu("Copy", Box::new(Copy))
-            .menu("Paste", Box::new(Paste))
-            .separator()
-            .menu("Delete", Box::new(Delete))
-    })
-```
 
 ### Menu with Anchor Position
 
