@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use gpui::{px, Context, Pixels, Timer};
+use gpui::{px, Context, Pixels, Task, Timer};
 
 static INTERVAL: Duration = Duration::from_millis(500);
 static PAUSE_DELAY: Duration = Duration::from_millis(300);
@@ -16,6 +16,8 @@ pub(crate) struct BlinkCursor {
     visible: bool,
     paused: bool,
     epoch: usize,
+
+    _task: Task<()>,
 }
 
 impl BlinkCursor {
@@ -24,6 +26,7 @@ impl BlinkCursor {
             visible: false,
             paused: false,
             epoch: 0,
+            _task: Task::ready(()),
         }
     }
 
@@ -53,13 +56,12 @@ impl BlinkCursor {
 
         // Schedule the next blink
         let epoch = self.next_epoch();
-        cx.spawn(async move |this, cx| {
+        self._task = cx.spawn(async move |this, cx| {
             Timer::after(INTERVAL).await;
             if let Some(this) = this.upgrade() {
                 this.update(cx, |this, cx| this.blink(epoch, cx)).ok();
             }
-        })
-        .detach();
+        });
     }
 
     pub fn visible(&self) -> bool {
@@ -75,7 +77,7 @@ impl BlinkCursor {
 
         // delay 500ms to start the blinking
         let epoch = self.next_epoch();
-        cx.spawn(async move |this, cx| {
+        self._task = cx.spawn(async move |this, cx| {
             Timer::after(PAUSE_DELAY).await;
 
             if let Some(this) = this.upgrade() {
@@ -85,7 +87,6 @@ impl BlinkCursor {
                 })
                 .ok();
             }
-        })
-        .detach();
+        });
     }
 }
