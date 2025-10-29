@@ -8,7 +8,8 @@ use fake::Fake;
 use gpui::{
     Action, AnyElement, App, AppContext, ClickEvent, Context, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, TextAlign, Timer, Window, div, prelude::FluentBuilder as _,
+    StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Timer, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
@@ -181,6 +182,8 @@ struct StockTableDelegate {
     eof: bool,
     visible_rows: Range<usize>,
     visible_cols: Range<usize>,
+
+    _load_task: Task<()>,
 }
 
 impl StockTableDelegate {
@@ -260,6 +263,7 @@ impl StockTableDelegate {
             eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
+            _load_task: Task::ready(()),
         }
     }
 
@@ -551,19 +555,18 @@ impl TableDelegate for StockTableDelegate {
     fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
         self.loading = true;
 
-        cx.spawn(async move |view, cx| {
+        self._load_task = cx.spawn(async move |view, cx| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
 
-            cx.update(|cx| {
+            _ = cx.update(|cx| {
                 let _ = view.update(cx, |view, _| {
                     view.delegate_mut().stocks.extend(random_stocks(200));
                     view.delegate_mut().loading = false;
                     view.delegate_mut().eof = view.delegate().stocks.len() >= 6000;
                 });
-            })
-        })
-        .detach();
+            });
+        });
     }
 
     fn visible_rows_changed(
@@ -591,6 +594,9 @@ pub struct TableStory {
     stripe: bool,
     refresh_data: bool,
     size: Size,
+
+    _subscriptions: Vec<Subscription>,
+    _load_task: Task<()>,
 }
 
 impl super::Story for TableStory {
@@ -635,13 +641,13 @@ impl TableStory {
         let delegate = StockTableDelegate::new(5000);
         let table = cx.new(|cx| Table::new(delegate, window, cx));
 
-        cx.subscribe_in(&table, window, Self::on_table_event)
-            .detach();
-        cx.subscribe_in(&num_stocks_input, window, Self::on_num_stocks_input_change)
-            .detach();
+        let _subscriptions = vec![
+            cx.subscribe_in(&table, window, Self::on_table_event),
+            cx.subscribe_in(&num_stocks_input, window, Self::on_num_stocks_input_change),
+            // Spawn a background to random refresh the list
+        ];
 
-        // Spawn a background to random refresh the list
-        cx.spawn(async move |this, cx| {
+        let _load_task = cx.spawn(async move |this, cx| {
             loop {
                 Timer::after(time::Duration::from_millis(33)).await;
 
@@ -665,8 +671,7 @@ impl TableStory {
                 })
                 .ok();
             }
-        })
-        .detach();
+        });
 
         Self {
             table,
@@ -674,6 +679,8 @@ impl TableStory {
             stripe: false,
             refresh_data: false,
             size: Size::default(),
+            _subscriptions,
+            _load_task,
         }
     }
 
