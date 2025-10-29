@@ -16,7 +16,7 @@ div().id("my-element").child("Hello, World!")
 
 In this case, the `div` element has an `id` of `"my-element"`. The add `id` is used for GPUI for binding events, for example `on_click` or `on_mouse_move`, the `element` with `id` in GPUI we call [Stateful\<E\>].
 
-We also used `id` (Actually it used [GlobalElementId] in GPUI internal) for manage the `state` in some element, by use `window.use_keyed_state`, so it important to keep the `id` unique.
+We also use `id` (actually, it uses [GlobalElementId] internally in GPUI) to manage the `state` in some elements, by using `window.use_keyed_state`, so it is important to keep the `id` unique.
 
 ## Unique
 
