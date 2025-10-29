@@ -18,10 +18,16 @@ use gpui_component::resizable::{
 
 ## Usage
 
-### Basic Horizontal Layout
+Use `h_resizable` to create a horizontal layout, `v_resizable` to create a vertical layout.
+
+The first argument is the `id` for this [ResizablePanelGroup].
+
+:::tip
+In GPUI, the `id` must be unique within the layout scope (The nearest parent has presents `id`).
+:::
 
 ```rust
-h_resizable("my-layout", window, cx)
+h_resizable("my-layout")
     .on_resize(|state, window, cx| {
         // Handle resize event
         // You can read the panel sizes from the state.
@@ -42,10 +48,10 @@ h_resizable("my-layout", window, cx)
     )
 ```
 
-### Basic Vertical Layout
+The `v_resizable` component is used to create a vertical layout.
 
 ```rust
-v_resizable("vertical-layout", window, cx)
+v_resizable("vertical-layout")
     .child(
         resizable_panel()
             .size(px(100.))
