@@ -996,15 +996,14 @@ impl Render for Example {
                                     .child(self.render_file_tree(window, cx)),
                             )
                             .child(
-                                resizable_panel().child(
-                                    Input::new(&self.editor)
-                                        .bordered(false)
-                                        .p_0()
-                                        .h_full()
-                                        .font_family("Monaco")
-                                        .text_size(px(12.))
-                                        .focus_bordered(false),
-                                ),
+                                Input::new(&self.editor)
+                                    .bordered(false)
+                                    .p_0()
+                                    .h_full()
+                                    .font_family("Monaco")
+                                    .text_size(px(12.))
+                                    .focus_bordered(false)
+                                    .into_any_element(),
                             ),
                     )
                     .child(

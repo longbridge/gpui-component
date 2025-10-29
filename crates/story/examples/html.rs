@@ -2,7 +2,7 @@ use gpui::*;
 use gpui_component::{
     highlighter::Language,
     input::{Input, InputState, TabSize},
-    resizable::{h_resizable, resizable_panel},
+    resizable::h_resizable,
     text::TextView,
 };
 use story::Assets;
@@ -49,32 +49,30 @@ impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         h_resizable("container", window, cx)
             .child(
-                resizable_panel().child(
-                    div()
-                        .id("source")
-                        .size_full()
-                        .font_family("Menlo")
-                        .text_size(px(13.))
-                        .child(
-                            Input::new(&self.input_state)
-                                .h_full()
-                                .appearance(false)
-                                .focus_bordered(false),
-                        ),
-                ),
+                div()
+                    .id("source")
+                    .size_full()
+                    .font_family("Menlo")
+                    .text_size(px(13.))
+                    .child(
+                        Input::new(&self.input_state)
+                            .h_full()
+                            .appearance(false)
+                            .focus_bordered(false),
+                    )
+                    .into_any(),
             )
             .child(
-                resizable_panel().child(
-                    TextView::html(
-                        "preview",
-                        self.input_state.read(cx).value().clone(),
-                        window,
-                        cx,
-                    )
-                    .p_5()
-                    .scrollable()
-                    .selectable(),
-                ),
+                TextView::html(
+                    "preview",
+                    self.input_state.read(cx).value().clone(),
+                    window,
+                    cx,
+                )
+                .p_5()
+                .scrollable()
+                .selectable()
+                .into_any(),
             )
     }
 }

@@ -102,6 +102,7 @@ where
         resizable_panel().child(value.into())
     }
 }
+
 impl From<ResizablePanelGroup> for ResizablePanel {
     fn from(value: ResizablePanelGroup) -> Self {
         resizable_panel().child(value)
