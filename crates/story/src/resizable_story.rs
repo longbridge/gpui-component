@@ -1,17 +1,15 @@
 use gpui::{
-    div, px, AnyElement, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, Styled, Window,
+    AnyElement, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, Styled, Window, div, px,
 };
 use gpui_component::{
-    resizable::{h_resizable, resizable_panel, v_resizable, ResizableState},
-    v_flex, ActiveTheme,
+    ActiveTheme,
+    resizable::{h_resizable, resizable_panel, v_resizable},
+    v_flex,
 };
 
 pub struct ResizableStory {
     focus_handle: FocusHandle,
-    state1: Entity<ResizableState>,
-    state2: Entity<ResizableState>,
-    state3: Entity<ResizableState>,
 }
 
 impl super::Story for ResizableStory {
@@ -40,15 +38,8 @@ impl ResizableStory {
     }
 
     fn new(_: &mut Window, cx: &mut App) -> Self {
-        let state1 = ResizableState::new(cx);
-        let state2 = ResizableState::new(cx);
-        let state3 = ResizableState::new(cx);
-
         Self {
             focus_handle: cx.focus_handle(),
-            state1,
-            state2,
-            state3,
         }
     }
 }
@@ -62,7 +53,7 @@ fn panel_box(content: impl Into<SharedString>, _: &App) -> AnyElement {
 }
 
 impl Render for ResizableStory {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_6()
@@ -72,9 +63,12 @@ impl Render for ResizableStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .child(
-                        v_resizable("resizable-1", self.state1.clone())
-                            .group(
-                                h_resizable("resizable-1.1", self.state2.clone())
+                        v_resizable("resizable-1")
+                            .on_resize(|state, _, cx| {
+                                println!("Resized: {:?}", state.read(cx).sizes());
+                            })
+                            .child(
+                                h_resizable("resizable-1.1")
                                     .size(px(150.))
                                     .child(
                                         resizable_panel()
@@ -82,14 +76,14 @@ impl Render for ResizableStory {
                                             .size_range(px(120.)..px(300.))
                                             .child(panel_box("Left (120px .. 300px)", cx)),
                                     )
-                                    .child(resizable_panel().child(panel_box("Center", cx)))
+                                    .child(panel_box("Center", cx))
                                     .child(
                                         resizable_panel()
                                             .size(px(300.))
                                             .child(panel_box("Right", cx)),
                                     ),
                             )
-                            .child(resizable_panel().child(panel_box("Center", cx)))
+                            .child(panel_box("Center", cx))
                             .child(
                                 resizable_panel()
                                     .size(px(80.))
@@ -104,14 +98,14 @@ impl Render for ResizableStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .child(
-                        h_resizable("resizable-3", self.state3.clone())
+                        h_resizable("resizable-3")
                             .child(
                                 resizable_panel()
                                     .size(px(200.))
                                     .size_range(px(200.)..px(400.))
                                     .child(panel_box("Left 2", cx)),
                             )
-                            .child(resizable_panel().child(panel_box("Right (Grow)", cx))),
+                            .child(panel_box("Right (Grow)", cx)),
                     ),
             )
     }

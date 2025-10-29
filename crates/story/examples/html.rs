@@ -2,14 +2,13 @@ use gpui::*;
 use gpui_component::{
     highlighter::Language,
     input::{Input, InputState, TabSize},
-    resizable::{ResizableState, h_resizable, resizable_panel},
+    resizable::h_resizable,
     text::TextView,
 };
 use story::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,
-    resizable_state: Entity<ResizableState>,
     _subscribe: Subscription,
 }
 
@@ -28,8 +27,6 @@ impl Example {
                 .placeholder("Enter your HTML here...")
         });
 
-        let resizable_state = ResizableState::new(cx);
-
         let _subscribe = cx.subscribe(
             &input_state,
             |_, _, _: &gpui_component::input::InputEvent, cx| {
@@ -39,7 +36,6 @@ impl Example {
 
         Self {
             input_state,
-            resizable_state,
             _subscribe,
         }
     }
@@ -51,34 +47,32 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        h_resizable("container", self.resizable_state.clone())
+        h_resizable("container")
             .child(
-                resizable_panel().child(
-                    div()
-                        .id("source")
-                        .size_full()
-                        .font_family("Menlo")
-                        .text_size(px(13.))
-                        .child(
-                            Input::new(&self.input_state)
-                                .h_full()
-                                .appearance(false)
-                                .focus_bordered(false),
-                        ),
-                ),
+                div()
+                    .id("source")
+                    .size_full()
+                    .font_family("Menlo")
+                    .text_size(px(13.))
+                    .child(
+                        Input::new(&self.input_state)
+                            .h_full()
+                            .appearance(false)
+                            .focus_bordered(false),
+                    )
+                    .into_any(),
             )
             .child(
-                resizable_panel().child(
-                    TextView::html(
-                        "preview",
-                        self.input_state.read(cx).value().clone(),
-                        window,
-                        cx,
-                    )
-                    .p_5()
-                    .scrollable()
-                    .selectable(),
-                ),
+                TextView::html(
+                    "preview",
+                    self.input_state.read(cx).value().clone(),
+                    window,
+                    cx,
+                )
+                .p_5()
+                .scrollable()
+                .selectable()
+                .into_any(),
             )
     }
 }

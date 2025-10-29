@@ -18,7 +18,7 @@ use gpui_component::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
     },
-    resizable::{ResizableState, h_resizable, resizable_panel},
+    resizable::{h_resizable, resizable_panel},
     tree, v_flex,
 };
 use lsp_types::{
@@ -44,7 +44,6 @@ fn init() {
 pub struct Example {
     editor: Entity<InputState>,
     tree_state: Entity<TreeState>,
-    panels_state: Entity<ResizableState>,
     go_to_line_state: Entity<InputState>,
     language: Language,
     line_number: bool,
@@ -662,12 +661,9 @@ impl Example {
             this.lint_document(cx);
         })];
 
-        let panels_state = ResizableState::new(cx);
-
         Self {
             editor,
             tree_state,
-            panels_state,
             go_to_line_state,
             language: default_language,
             line_number: true,
@@ -993,22 +989,21 @@ impl Render for Example {
                     .w_full()
                     .flex_1()
                     .child(
-                        h_resizable("editor-container", self.panels_state.clone())
+                        h_resizable("editor-container")
                             .child(
                                 resizable_panel()
                                     .size(px(240.))
                                     .child(self.render_file_tree(window, cx)),
                             )
                             .child(
-                                resizable_panel().child(
-                                    Input::new(&self.editor)
-                                        .bordered(false)
-                                        .p_0()
-                                        .h_full()
-                                        .font_family("Monaco")
-                                        .text_size(px(12.))
-                                        .focus_bordered(false),
-                                ),
+                                Input::new(&self.editor)
+                                    .bordered(false)
+                                    .p_0()
+                                    .h_full()
+                                    .font_family("Monaco")
+                                    .text_size(px(12.))
+                                    .focus_bordered(false)
+                                    .into_any_element(),
                             ),
                     )
                     .child(
