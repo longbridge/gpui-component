@@ -19,7 +19,7 @@ use gpui::{actions, Action};
 
 ## Usage
 
-### Dropdown Menu
+### DropdownMenu
 
 Dropdown menus are triggered by buttons or other interactive elements:
 
@@ -56,7 +56,7 @@ However, if you prefer not to use [Action]s, you can create custom menu items us
 There have a `on_click` callback to handle the click event directly.
 :::
 
-### Context Menu
+### ContextMenu
 
 Context menus appear when right-clicking on an element:
 
@@ -70,23 +70,6 @@ div()
             .menu("Paste", Box::new(Paste))
             .separator()
             .menu("Delete", Box::new(Delete))
-    })
-```
-
-### DropdownMenu
-
-Dropdown menus are triggered by buttons or other interactive elements:
-
-```rust
-use gpui_component::menu::DropdownMenu;
-
-Button::new("menu-btn")
-    .label("Open Menu")
-    .dropdown_menu(|menu, window, cx| {
-        menu.menu("New File", Box::new(NewFile))
-            .menu("Open File", Box::new(OpenFile))
-            .separator()
-            .menu("Exit", Box::new(Exit))
     })
 ```
 
