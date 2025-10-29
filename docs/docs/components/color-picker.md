@@ -212,49 +212,9 @@ The color picker preserves alpha values when selecting colors and allows modific
 
 ## API Reference
 
-### ColorPickerState
-
-| Method                         | Description                            |
-| ------------------------------ | -------------------------------------- |
-| `new(window, cx)`              | Create a new color picker state        |
-| `default_value(color)`         | Set the default selected color         |
-| `set_value(color, window, cx)` | Programmatically set the current color |
-| `value()`                      | Get the currently selected color       |
-
-### ColorPicker
-
-| Method                    | Description                                        |
-| ------------------------- | -------------------------------------------------- |
-| `new(state)`              | Create a new color picker with the given state     |
-| `featured_colors(colors)` | Set custom featured colors array                   |
-| `size(size)`              | Set the picker size (XSmall, Small, Medium, Large) |
-| `icon(icon)`              | Display icon instead of color square               |
-| `label(text)`             | Add a label to the color picker                    |
-| `anchor(corner)`          | Set dropdown anchor position                       |
-
-### ColorPickerEvent
-
-| Event                  | Description                          |
-| ---------------------- | ------------------------------------ |
-| `Change(Option<Hsla>)` | Emitted when color selection changes |
-
-### Size Options
-
-| Size           | Description                    |
-| -------------- | ------------------------------ |
-| `Size::XSmall` | Extra small picker button      |
-| `Size::Small`  | Small picker button            |
-| `Size::Medium` | Medium picker button (default) |
-| `Size::Large`  | Large picker button            |
-
-### Anchor Positions
-
-| Corner                | Description                           |
-| --------------------- | ------------------------------------- |
-| `Corner::TopLeft`     | Dropdown opens below and to the right |
-| `Corner::TopRight`    | Dropdown opens below and to the left  |
-| `Corner::BottomLeft`  | Dropdown opens above and to the right |
-| `Corner::BottomRight` | Dropdown opens above and to the left  |
+- [ColorPicker]
+- [ColorPickerState]
+- [ColorPickerEvent]
 
 ## Examples
 
@@ -409,3 +369,7 @@ let _subscription = cx.subscribe(&color_picker, |this, _, ev, _| match ev {
     }
 });
 ```
+
+[ColorPicker]: https://docs.rs/gpui-component/latest/gpui_component/color_picker/struct.ColorPicker.html
+[ColorPickerState]: https://docs.rs/gpui-component/latest/gpui_component/color_picker/struct.ColorPickerState.html
+[ColorPickerEvent]: https://docs.rs/gpui-component/latest/gpui_component/color_picker/enum.ColorPickerEvent.html

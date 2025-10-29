@@ -87,86 +87,7 @@ Input::new(&url_state)
 
 ## API Reference
 
-### Clipboard
-
-| Method          | Description                                             |
-| --------------- | ------------------------------------------------------- |
-| `new(id)`       | Create a new clipboard component with the given ID      |
-| `value(str)`    | Set static text to copy to clipboard                    |
-| `value_fn(fn)`  | Set dynamic function that returns the value to copy     |
-| `content(fn)`   | Set custom content to display alongside the copy button |
-| `on_copied(fn)` | Callback executed when content is successfully copied   |
-
-### Method Details
-
-#### `value(value: impl Into<SharedString>)`
-
-Sets a static value that will be copied to the clipboard when the button is clicked.
-
-```rust
-Clipboard::new("static")
-    .value("Static text to copy")
-```
-
-#### `value_fn(fn: impl Fn(&mut Window, &mut App) -> SharedString + 'static)`
-
-Sets a function that will be called to get the value when the copy action occurs. This is useful for dynamic content that may change over time.
-
-```rust
-Clipboard::new("dynamic")
-    .value_fn(|_, cx| {
-        format!("Current time: {}", SystemTime::now())
-    })
-```
-
-#### `content(fn: impl Fn(&mut Window, &mut App) -> E + 'static)`
-
-Sets custom content to display before the copy button. The content can be any element that implements `IntoElement`.
-
-```rust
-Clipboard::new("with-content")
-    .content(|_, _| Label::new("Copy me"))
-    .value("Hello")
-```
-
-#### `on_copied(fn: impl Fn(SharedString, &mut Window, &mut App) + 'static)`
-
-Sets a callback that is executed when content is successfully copied. Receives the copied value as the first parameter.
-
-```rust
-Clipboard::new("with-callback")
-    .value("Hello")
-    .on_copied(|value, window, cx| {
-        println!("Copied: {}", value);
-        window.push_notification("Copied to clipboard!", cx);
-    })
-```
-
-## Behavior
-
-### Visual States
-
-The clipboard button has two visual states:
-
-1. **Default State**: Shows a copy icon (IconName::Copy)
-2. **Copied State**: Shows a checkmark icon (IconName::Check) for 2 seconds after successful copy
-
-### Copy Process
-
-1. User clicks the clipboard button
-2. The component determines the value to copy:
-   - If `value_fn` is set, calls the function to get the current value
-   - Otherwise, uses the static `value`
-3. Writes the value to the system clipboard using `ClipboardItem::new_string()`
-4. Changes the button icon to a checkmark
-5. Calls the `on_copied` callback if provided
-6. After 2 seconds, resets the icon back to the copy icon
-
-### Event Handling
-
-- Click events are handled internally and call `cx.stop_propagation()` to prevent bubbling
-- The component is disabled (unclickable) while in the "copied" state
-- Uses GPUI's clipboard API (`cx.write_to_clipboard()`) for system integration
+- [Clipboard]
 
 ## Examples
 
@@ -247,3 +168,5 @@ The Clipboard component currently supports copying text strings to the clipboard
 - Plain text strings
 - UTF-8 encoded content
 - Cross-platform clipboard integration
+
+[Clipboard]: https://docs.rs/gpui-component/latest/gpui_component/clipboard/struct.Clipboard.html
