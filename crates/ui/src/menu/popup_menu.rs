@@ -247,6 +247,15 @@ impl PopupMenuItem {
     fn is_separator(&self) -> bool {
         matches!(self, PopupMenuItem::Separator)
     }
+
+    fn has_icon(&self) -> bool {
+        match self {
+            PopupMenuItem::Item { icon, .. } => icon.is_some(),
+            PopupMenuItem::ElementItem { icon, .. } => icon.is_some(),
+            PopupMenuItem::Submenu { icon, .. } => icon.is_some(),
+            _ => false,
+        }
+    }
 }
 
 pub struct PopupMenu {
@@ -617,7 +626,11 @@ impl PopupMenu {
 
     /// Add menu item.
     pub fn item(mut self, item: impl Into<PopupMenuItem>) -> Self {
-        self.menu_items.push(item.into());
+        let item: PopupMenuItem = item.into();
+        if item.has_icon() {
+            self.has_icon = true;
+        }
+        self.menu_items.push(item);
         self
     }
 

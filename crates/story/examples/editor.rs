@@ -9,7 +9,7 @@ use std::{
 use anyhow::Ok;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, IndexPath, Sizable,
+    ActiveTheme, ContextModal, IconName, Sizable,
     button::{Button, ButtonVariants as _},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
@@ -17,7 +17,7 @@ use gpui_component::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
     },
-    select::{Select, SelectEvent, SelectState},
+    menu::{DropdownMenu, PopupMenuItem},
     v_flex,
 };
 use lsp_types::{
@@ -43,7 +43,6 @@ fn init() {
 pub struct Example {
     editor: Entity<InputState>,
     go_to_line_state: Entity<InputState>,
-    language_state: Entity<SelectState<Vec<SharedString>>>,
     language: Lang,
     line_number: bool,
     indent_guides: bool,
@@ -691,40 +690,14 @@ impl Example {
             editor
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
-        let language_state = cx.new(|cx| {
-            SelectState::new(
-                LANGUAGES.iter().map(|s| s.0.name().into()).collect(),
-                Some(IndexPath::default()),
-                window,
-                cx,
-            )
-        });
 
-        let _subscriptions = vec![
-            cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
-                this.lint_document(cx);
-            }),
-            cx.subscribe(
-                &language_state,
-                |this, state, _: &SelectEvent<Vec<SharedString>>, cx| {
-                    if let Some(val) = state.read(cx).selected_value() {
-                        if val == "navi" {
-                            this.language = Lang::External("navi");
-                        } else {
-                            this.language = Lang::BuiltIn(Language::from_str(&val));
-                        }
-
-                        this.need_update = true;
-                        cx.notify();
-                    }
-                },
-            ),
-        ];
+        let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
+            this.lint_document(cx);
+        })];
 
         Self {
             editor,
             go_to_line_state,
-            language_state,
             language: default_language.0,
             line_number: true,
             indent_guides: true,
@@ -797,27 +770,6 @@ impl Example {
                     }
                 })
         });
-    }
-
-    fn toggle_soft_wrap(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        self.soft_wrap = !self.soft_wrap;
-        self.editor.update(cx, |state, cx| {
-            state.set_soft_wrap(self.soft_wrap, window, cx);
-        });
-        cx.notify();
-    }
-
-    fn toggle_indent_guides(
-        &mut self,
-        _: &ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.indent_guides = !self.indent_guides;
-        self.editor.update(cx, |state, cx| {
-            state.set_indent_guides(self.indent_guides, window, cx);
-        });
-        cx.notify();
     }
 
     fn lint_document(&mut self, cx: &mut Context<Self>) {
@@ -920,6 +872,99 @@ impl Example {
         })
         .detach();
     }
+
+    fn render_language_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.entity();
+        Button::new("file")
+            .label(self.language.name().to_string())
+            .ghost()
+            .xsmall()
+            .dropdown_menu(move |this, window, cx| {
+                LANGUAGES.iter().fold(this, |this, (lang, _)| {
+                    let checked = lang == &view.read(cx).language;
+                    this.item(
+                        PopupMenuItem::new(lang.name().to_string())
+                            .checked(checked)
+                            .on_click({
+                                window.listener_for(&view, move |this, _, _, cx| {
+                                    this.language = lang.clone();
+                                    this.need_update = true;
+                                    cx.notify();
+                                })
+                            }),
+                    )
+                })
+            })
+    }
+
+    fn render_line_number_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        Button::new("line-number")
+            .when(self.line_number, |this| this.icon(IconName::Check))
+            .label("Line Number")
+            .ghost()
+            .xsmall()
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.line_number = !this.line_number;
+                this.editor.update(cx, |state, cx| {
+                    state.set_line_number(this.line_number, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_soft_wrap_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Button::new("soft-wrap")
+            .ghost()
+            .xsmall()
+            .when(self.soft_wrap, |this| this.icon(IconName::Check))
+            .label("Soft Wrap")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.soft_wrap = !this.soft_wrap;
+                this.editor.update(cx, |state, cx| {
+                    state.set_soft_wrap(this.soft_wrap, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_indent_guides_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        Button::new("indent-guides")
+            .ghost()
+            .xsmall()
+            .when(self.indent_guides, |this| this.icon(IconName::Check))
+            .label("Indent Guides")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.indent_guides = !this.indent_guides;
+                this.editor.update(cx, |state, cx| {
+                    state.set_indent_guides(this.indent_guides, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_go_to_line_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let position = self.editor.read(cx).cursor_position();
+        let cursor = self.editor.read(cx).cursor();
+
+        Button::new("line-column")
+            .ghost()
+            .xsmall()
+            .label(format!(
+                "{}:{} ({} byte)",
+                position.line + 1,
+                position.character + 1,
+                cursor
+            ))
+            .on_click(cx.listener(Self::go_to_line))
+    }
 }
 
 impl Render for Example {
@@ -969,65 +1014,12 @@ impl Render for Example {
                             .child(
                                 h_flex()
                                     .gap_3()
-                                    .child(
-                                        Select::new(&self.language_state)
-                                            .menu_width(px(160.))
-                                            .xsmall(),
-                                    )
-                                    .child(
-                                        Button::new("line-number")
-                                            .ghost()
-                                            .when(self.line_number, |this| {
-                                                this.icon(IconName::Check)
-                                            })
-                                            .label("Line Number")
-                                            .xsmall()
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.line_number = !this.line_number;
-                                                this.editor.update(cx, |state, cx| {
-                                                    state.set_line_number(
-                                                        this.line_number,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                });
-                                                cx.notify();
-                                            })),
-                                    )
-                                    .child({
-                                        Button::new("soft-wrap")
-                                            .ghost()
-                                            .xsmall()
-                                            .when(self.soft_wrap, |this| this.icon(IconName::Check))
-                                            .label("Soft Wrap")
-                                            .on_click(cx.listener(Self::toggle_soft_wrap))
-                                    })
-                                    .child({
-                                        Button::new("indent-guides")
-                                            .ghost()
-                                            .xsmall()
-                                            .when(self.indent_guides, |this| {
-                                                this.icon(IconName::Check)
-                                            })
-                                            .label("Indent Guides")
-                                            .on_click(cx.listener(Self::toggle_indent_guides))
-                                    }),
+                                    .child(self.render_language_button(window, cx))
+                                    .child(self.render_line_number_button(window, cx))
+                                    .child(self.render_soft_wrap_button(window, cx))
+                                    .child(self.render_indent_guides_button(window, cx)),
                             )
-                            .child({
-                                let position = self.editor.read(cx).cursor_position();
-                                let cursor = self.editor.read(cx).cursor();
-
-                                Button::new("line-column")
-                                    .ghost()
-                                    .xsmall()
-                                    .label(format!(
-                                        "{}:{} ({} byte)",
-                                        position.line + 1,
-                                        position.character + 1,
-                                        cursor
-                                    ))
-                                    .on_click(cx.listener(Self::go_to_line))
-                            }),
+                            .child(self.render_go_to_line_button(window, cx)),
                     ),
             )
     }
