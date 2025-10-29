@@ -168,6 +168,30 @@ impl PopupMenuItem {
         self
     }
 
+    /// Set checked state for the menu item by adding or removing check icon.
+    ///
+    /// If true, will set the icon to check icon, otherwise remove the icon.
+    pub fn checked(mut self, checked: bool) -> Self {
+        match &mut self {
+            PopupMenuItem::Item { icon: i, .. } => {
+                if checked {
+                    *i = Some(IconName::Check.into());
+                } else {
+                    *i = None;
+                }
+            }
+            PopupMenuItem::ElementItem { icon: i, .. } => {
+                if checked {
+                    *i = Some(IconName::Check.into());
+                } else {
+                    *i = None;
+                }
+            }
+            _ => {}
+        }
+        self
+    }
+
     /// Add a click handler for the menu item.
     ///
     /// Only works for [`PopupMenuItem::Item`] and [`PopupMenuItem::ElementItem`].

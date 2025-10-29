@@ -1,22 +1,15 @@
-use std::sync::Arc;
-
-use crate::button::{Button, ButtonVariants as _};
-use crate::menu::DropdownMenu as _;
-use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, Action, AnyElement, App, Corner, Div, Edges, ElementId, IntoElement, ParentElement,
-    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window,
+    div, prelude::FluentBuilder as _, px, AnyElement, App, Corner, Div, Edges, ElementId,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
-use gpui::{px, InteractiveElement};
 use smallvec::SmallVec;
+use std::rc::Rc;
 
 use super::{Tab, TabVariant};
-
-#[derive(Action, Debug, Clone, Copy, PartialEq, Eq)]
-#[action(namespace = tab_bar, no_json)]
-pub struct SelectTab(usize);
+use crate::button::{Button, ButtonVariants as _};
+use crate::menu::{DropdownMenu as _, PopupMenuItem};
+use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
 
 #[derive(IntoElement)]
 pub struct TabBar {
@@ -31,7 +24,7 @@ pub struct TabBar {
     variant: TabVariant,
     size: Size,
     menu: bool,
-    on_click: Option<Arc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
     /// Special for internal TabPanel to remove the top border.
     tab_item_top_offset: Pixels,
 }
@@ -138,8 +131,11 @@ impl TabBar {
     /// Set the on_click callback of the TabBar, the first parameter is the index of the clicked tab.
     ///
     /// When this is set, the children's on_click will be ignored.
-    pub fn on_click(mut self, on_click: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
-        self.on_click = Some(Arc::new(on_click));
+    pub fn on_click<F>(mut self, on_click: F) -> Self
+    where
+        F: Fn(&usize, &mut Window, &mut App) + 'static,
+    {
+        self.on_click = Some(Rc::new(on_click));
         self
     }
 
@@ -212,17 +208,10 @@ impl RenderOnce for TabBar {
 
         let mut item_labels = Vec::new();
         let selected_index = self.selected_index;
+        let on_click = self.on_click.clone();
 
         self.base
             .group("tab-bar")
-            .on_action({
-                let on_click = self.on_click.clone();
-                move |action: &SelectTab, window: &mut Window, cx: &mut App| {
-                    if let Some(on_click) = on_click.clone() {
-                        on_click(&action.0, window, cx);
-                    }
-                }
-            })
             .relative()
             .flex()
             .items_center()
@@ -286,12 +275,16 @@ impl RenderOnce for TabBar {
                         .dropdown_menu(move |mut this, _, _| {
                             this = this.scrollable();
                             for (ix, (label, disabled)) in item_labels.iter().enumerate() {
-                                this = this.menu_with_check_and_disabled(
-                                    label.clone().unwrap_or_default(),
-                                    selected_index == Some(ix),
-                                    Box::new(SelectTab(ix)),
-                                    *disabled,
-                                );
+                                this = this.item(
+                                    PopupMenuItem::new(label.clone().unwrap_or_default())
+                                        .checked(selected_index == Some(ix))
+                                        .disabled(*disabled)
+                                        .when_some(on_click.clone(), |this, on_click| {
+                                            this.on_click(move |_, window, cx| {
+                                                on_click(&ix, window, cx)
+                                            })
+                                        }),
+                                )
                             }
 
                             this
