@@ -38,8 +38,8 @@ pub fn resizable_panel() -> ResizablePanel {
     ResizablePanel::new()
 }
 
-#[derive(Debug, Clone)]
 /// State for a [`ResizablePanel`]
+#[derive(Debug, Clone)]
 pub struct ResizableState {
     /// The `axis` will sync to actual axis of the ResizablePanelGroup in use.
     axis: Axis,
@@ -62,7 +62,12 @@ impl Default for ResizableState {
 }
 
 impl ResizableState {
-    pub fn insert_panel(
+    /// Get the size of the panels.
+    pub fn sizes(&self) -> &Vec<Pixels> {
+        &self.sizes
+    }
+
+    pub(crate) fn insert_panel(
         &mut self,
         size: Option<Pixels>,
         ix: Option<usize>,
@@ -135,11 +140,6 @@ impl ResizableState {
     pub(crate) fn clear(&mut self) {
         self.panels.clear();
         self.sizes.clear();
-    }
-
-    /// Get the size of the panels.
-    pub fn sizes(&self) -> &Vec<Pixels> {
-        &self.sizes
     }
 
     pub(crate) fn total_size(&self) -> Pixels {

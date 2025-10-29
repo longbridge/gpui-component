@@ -64,6 +64,9 @@ impl Render for ResizableStory {
                     .border_color(cx.theme().border)
                     .child(
                         v_resizable("resizable-1", window, cx)
+                            .on_resize(|state, _, cx| {
+                                println!("Resized: {:?}", state.read(cx).sizes());
+                            })
                             .group(
                                 h_resizable("resizable-1.1", window, cx)
                                     .size(px(150.))

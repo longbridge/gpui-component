@@ -1,4 +1,7 @@
-use std::ops::{Deref, Range};
+use std::{
+    ops::{Deref, Range},
+    rc::Rc,
+};
 
 use gpui::{
     canvas, div, prelude::FluentBuilder, AnyElement, App, AppContext, Axis, Bounds, Context,
@@ -30,6 +33,7 @@ pub struct ResizablePanelGroup {
     axis: Axis,
     size: Option<Pixels>,
     children: Vec<ResizablePanel>,
+    on_resize: Rc<dyn Fn(&Entity<ResizableState>, &mut Window, &mut App)>,
 }
 
 impl ResizablePanelGroup {
@@ -40,6 +44,7 @@ impl ResizablePanelGroup {
             children: vec![],
             state,
             size: None,
+            on_resize: Rc::new(|_, _, _| {}),
         }
     }
 
@@ -78,6 +83,19 @@ impl ResizablePanelGroup {
     /// - When the axis is vertical, the size is the width of the group.
     pub fn size(mut self, size: Pixels) -> Self {
         self.size = Some(size);
+        self
+    }
+
+    /// Set the callback to be called when the panels are resized.
+    ///
+    /// ## Callback arguments
+    ///
+    /// - Entity<ResizableState>: The state of the ResizablePanelGroup.
+    pub fn on_resize(
+        mut self,
+        on_resize: impl Fn(&Entity<ResizableState>, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_resize = Rc::new(on_resize);
         self
     }
 }
@@ -132,6 +150,7 @@ impl RenderOnce for ResizablePanelGroup {
             .child(ResizePanelGroupElement {
                 state: self.state.clone(),
                 axis: self.axis,
+                on_resize: self.on_resize.clone(),
             })
     }
 }
@@ -267,6 +286,7 @@ impl RenderOnce for ResizablePanel {
 
 struct ResizePanelGroupElement {
     state: Entity<ResizableState>,
+    on_resize: Rc<dyn Fn(&Entity<ResizableState>, &mut Window, &mut App)>,
     axis: Axis,
 }
 
@@ -352,12 +372,14 @@ impl Element for ResizePanelGroupElement {
         window.on_mouse_event({
             let state = self.state.clone();
             let current_ix = state.read(cx).resizing_panel_ix;
-            move |_: &MouseUpEvent, phase, _, cx| {
+            let on_resize = self.on_resize.clone();
+            move |_: &MouseUpEvent, phase, window, cx| {
                 if current_ix.is_none() {
                     return;
                 }
                 if phase.bubble() {
                     state.update(cx, |state, cx| state.done_resizing(cx));
+                    on_resize(&state, window, cx);
                 }
             }
         })
