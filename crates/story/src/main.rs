@@ -2,7 +2,7 @@ use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex,
     input::{Input, InputEvent, InputState},
-    resizable::{ResizableState, h_resizable, resizable_panel},
+    resizable::{h_resizable, resizable_panel},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
@@ -14,7 +14,6 @@ pub struct Gallery {
     active_index: Option<usize>,
     collapsed: bool,
     search_input: Entity<InputState>,
-    sidebar_state: Entity<ResizableState>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -91,7 +90,6 @@ impl Gallery {
             active_group_index: Some(0),
             active_index: Some(0),
             collapsed: false,
-            sidebar_state: ResizableState::new(cx),
             _subscriptions,
         };
 
@@ -115,7 +113,7 @@ impl Gallery {
 }
 
 impl Render for Gallery {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.search_input.read(cx).value().trim().to_lowercase();
 
         let stories: Vec<_> = self
@@ -148,7 +146,7 @@ impl Render for Gallery {
                 ("".into(), "".into())
             };
 
-        h_resizable("gallery-container", self.sidebar_state.clone())
+        h_resizable("gallery-container", window, cx)
             .child(
                 resizable_panel()
                     .size(px(255.))

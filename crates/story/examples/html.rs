@@ -2,14 +2,13 @@ use gpui::*;
 use gpui_component::{
     highlighter::Language,
     input::{Input, InputState, TabSize},
-    resizable::{ResizableState, h_resizable, resizable_panel},
+    resizable::{h_resizable, resizable_panel},
     text::TextView,
 };
 use story::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,
-    resizable_state: Entity<ResizableState>,
     _subscribe: Subscription,
 }
 
@@ -28,8 +27,6 @@ impl Example {
                 .placeholder("Enter your HTML here...")
         });
 
-        let resizable_state = ResizableState::new(cx);
-
         let _subscribe = cx.subscribe(
             &input_state,
             |_, _, _: &gpui_component::input::InputEvent, cx| {
@@ -39,7 +36,6 @@ impl Example {
 
         Self {
             input_state,
-            resizable_state,
             _subscribe,
         }
     }
@@ -51,7 +47,7 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        h_resizable("container", self.resizable_state.clone())
+        h_resizable("container", window, cx)
             .child(
                 resizable_panel().child(
                     div()

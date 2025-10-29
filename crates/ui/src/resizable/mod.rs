@@ -1,9 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
-    px, Along, App, AppContext, Axis, Bounds, Context, ElementId, Entity, EventEmitter, Pixels,
-    Window,
-};
+use gpui::{px, Along, App, Axis, Bounds, Context, ElementId, EventEmitter, Pixels, Window};
 
 use crate::PixelsExt;
 
@@ -15,12 +12,24 @@ pub(crate) use resize_handle::*;
 pub(crate) const PANEL_MIN_SIZE: Pixels = px(100.);
 
 /// Create a [`ResizablePanelGroup`] with horizontal resizing
-pub fn h_resizable(id: impl Into<ElementId>, state: Entity<ResizableState>) -> ResizablePanelGroup {
+pub fn h_resizable(
+    id: impl Into<ElementId>,
+    window: &mut Window,
+    cx: &mut App,
+) -> ResizablePanelGroup {
+    let id: ElementId = id.into();
+    let state = window.use_keyed_state(id.clone(), cx, |_, _| ResizableState::default());
     ResizablePanelGroup::new(id, state).axis(Axis::Horizontal)
 }
 
 /// Create a [`ResizablePanelGroup`] with vertical resizing
-pub fn v_resizable(id: impl Into<ElementId>, state: Entity<ResizableState>) -> ResizablePanelGroup {
+pub fn v_resizable(
+    id: impl Into<ElementId>,
+    window: &mut Window,
+    cx: &mut App,
+) -> ResizablePanelGroup {
+    let id: ElementId = id.into();
+    let state = window.use_keyed_state(id.clone(), cx, |_, _| ResizableState::default());
     ResizablePanelGroup::new(id, state).axis(Axis::Vertical)
 }
 
@@ -40,17 +49,19 @@ pub struct ResizableState {
     bounds: Bounds<Pixels>,
 }
 
-impl ResizableState {
-    pub fn new(cx: &mut App) -> Entity<Self> {
-        cx.new(|_| Self {
+impl Default for ResizableState {
+    fn default() -> Self {
+        Self {
             axis: Axis::Horizontal,
             panels: vec![],
             sizes: vec![],
             resizing_panel_ix: None,
             bounds: Bounds::default(),
-        })
+        }
     }
+}
 
+impl ResizableState {
     pub fn insert_panel(
         &mut self,
         size: Option<Pixels>,
