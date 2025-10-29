@@ -54,6 +54,8 @@
   --vp-custom-block-tip-text: var(--vp-c-text-1);
   --vp-custom-block-tip-bg: transparent;
   --vp-custom-block-tip-code-bg: var(--vp-c-default-soft);
+  --vp-input-switch-bg-color: var(--secondary);
+  --vp-input-border-color: var(--input);
 }
 
 .dark {
@@ -92,6 +94,20 @@
 
 .VPSidebar {
   border-right: 1px solid var(--border);
+}
+
+#app {
+  .VPMenu {
+    @apply p-1 rounded-md bg-[var(--popover)];
+
+    .link {
+      @apply text-sm py-1;
+    }
+  }
+
+  .DocSearch-Button {
+    @apply rounded-md py-0 px-2 h-8 lg:w-56 xl:w-64;
+  }
 }
 
 .vp-doc {

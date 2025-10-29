@@ -25,8 +25,8 @@ Button::new("ok")
 Add the following to your `Cargo.toml`:
 
 ```toml
-gpui-component = "0.2"
 gpui = "0.2"
+gpui-component = "0.3"
 ```
 
 ## Hello World

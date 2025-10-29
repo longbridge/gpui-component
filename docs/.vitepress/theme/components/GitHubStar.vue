@@ -30,10 +30,11 @@ const starLabel =
 @reference "../style.css";
 
 .github-star-button {
-    @apply inline-flex items-center text-sm px-2 gap-2 text-[var(--foreground)] rounded hover:text-[var(--secondary-foreground)] no-underline;
+    @apply flex w-full py-3 px-0 lg:inline-flex lg:w-auto lg:py-0 lg:px-2;
+    @apply items-center text-sm gap-2 text-[var(--vp-c-text-1)] rounded hover:text-[var(--vp-c-brand-1)] no-underline;
 
     svg {
-        @apply w-5 h-5 text-[var(--secondary-foreground)];
+        @apply w-5 h-5;
     }
 }
 </style>
