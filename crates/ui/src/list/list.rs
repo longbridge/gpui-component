@@ -376,10 +376,10 @@ where
 
         // Measure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        measured_size.item_size =
-            List::render_list_item(&cx.entity(), self.item_to_measure_index, window, cx)
-                .into_any_element()
-                .layout_as_root(available_space, window, cx);
+        measured_size.item_size = self
+            .render_list_item(self.item_to_measure_index, window, cx)
+            .into_any_element()
+            .layout_as_root(available_space, window, cx);
 
         if let Some(mut el) = self
             .delegate
@@ -401,6 +401,51 @@ where
                 self.delegate.items_count(section_ix, cx)
             });
     }
+
+    fn render_list_item(
+        &self,
+        ix: IndexPath,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let selectable = self.selectable;
+
+        let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
+        let mouse_right_clicked = self
+            .mouse_right_clicked_index
+            .map(|s| s.eq_row(ix))
+            .unwrap_or(false);
+        let id = SharedString::from(format!("list-item-{}", ix));
+
+        div()
+            .id(id)
+            .w_full()
+            .relative()
+            .children(self.delegate.render_item(ix, window, cx).map(|item| {
+                item.selected(selected)
+                    .secondary_selected(mouse_right_clicked)
+            }))
+            .when(selectable, |this| {
+                this.on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
+                    this.mouse_right_clicked_index = None;
+                    this.selected_index = Some(ix);
+                    this.on_action_confirm(
+                        &Confirm {
+                            secondary: e.modifiers().secondary(),
+                        },
+                        window,
+                        cx,
+                    );
+                }))
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, _, _, cx| {
+                        this.mouse_right_clicked_index = Some(ix);
+                        cx.notify();
+                    }),
+                )
+            })
+    }
 }
 
 impl<D> Focusable for ListState<D>
@@ -420,9 +465,7 @@ impl<D> Render for ListState<D>
 where
     D: ListDelegate,
 {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.prepare_items_if_needed(window, cx);
-
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         // Scroll to the selected item if it is set.
         if let Some((ix, strategy)) = self.deferred_scroll_to_index.take() {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
@@ -474,57 +517,6 @@ where
     pub fn scrollbar_visible(mut self, visible: bool) -> Self {
         self.scrollbar_visible = visible;
         self
-    }
-
-    fn render_list_item(
-        list_state: &Entity<ListState<D>>,
-        ix: IndexPath,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        let state = list_state.read(cx);
-        let selectable = state.selectable;
-
-        let selected = state.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
-        let mouse_right_clicked = state
-            .mouse_right_clicked_index
-            .map(|s| s.eq_row(ix))
-            .unwrap_or(false);
-        let id = SharedString::from(format!("list-item-{}", ix));
-
-        div()
-            .id(id)
-            .w_full()
-            .relative()
-            .children(list_state.update(cx, |state, cx| {
-                state.delegate.render_item(ix, window, cx).map(|item| {
-                    item.selected(selected)
-                        .secondary_selected(mouse_right_clicked)
-                })
-            }))
-            .when(selectable, |this| {
-                this.on_click(window.listener_for(
-                    &list_state,
-                    move |this, e: &ClickEvent, window, cx| {
-                        this.mouse_right_clicked_index = None;
-                        this.selected_index = Some(ix);
-                        this.on_action_confirm(
-                            &Confirm {
-                                secondary: e.modifiers().secondary(),
-                            },
-                            window,
-                            cx,
-                        );
-                    },
-                ))
-                .on_mouse_down(
-                    MouseButton::Right,
-                    window.listener_for(&list_state, move |this, _, _, cx| {
-                        this.mouse_right_clicked_index = Some(ix);
-                        cx.notify();
-                    }),
-                )
-            })
     }
 
     fn render_items(
@@ -579,13 +571,8 @@ where
 
                                             div().children(match entry {
                                                 RowEntry::Entry(index) => Some(
-                                                    Self::render_list_item(
-                                                        &cx.entity(),
-                                                        index,
-                                                        window,
-                                                        cx,
-                                                    )
-                                                    .into_any_element(),
+                                                    list.render_list_item(index, window, cx)
+                                                        .into_any_element(),
                                                 ),
                                                 RowEntry::SectionHeader(section_ix) => list
                                                     .delegate()
@@ -631,30 +618,30 @@ where
     D: ListDelegate + 'static,
 {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, query_input) = {
-            let state = self.state.read(cx);
-            (state.delegate.loading(cx), state.query_input.clone())
-        };
+        let mut loading = false;
+        let mut query_input = None;
+        let mut loading_view = None;
+        let mut initial_view = None;
 
-        let initial_view = if let Some(input) = &query_input {
-            if input.read(cx).value().is_empty() {
-                self.state
-                    .update(cx, |state, cx| state.delegate.render_initial(window, cx))
+        self.state.update(cx, |state, cx| {
+            state.prepare_items_if_needed(window, cx);
+            loading = state.delegate().loading(cx);
+            query_input = state.query_input.clone();
+            loading_view = if loading {
+                Some(state.delegate.render_loading(window, cx).into_any_element())
             } else {
                 None
-            }
-        } else {
-            None
-        };
-        // let loading_view = if loading {
-        //     // Some(
-        //     //     self.state
-        //     //         .update(cx, |state, cx| state.delegate.render_loading(window, cx)),
-        //     // )
-        //     None
-        // } else {
-        //     None
-        // };
+            };
+            initial_view = if let Some(input) = &query_input {
+                if input.read(cx).value().is_empty() {
+                    state.delegate.render_initial(window, cx)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+        });
 
         let state = self.state.read(cx);
         let focus_handle = state.focus_handle.clone();
