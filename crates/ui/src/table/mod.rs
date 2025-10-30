@@ -10,10 +10,11 @@ use crate::{
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
-    Context, Div, DragMoveEvent, Edges, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement,
-    Pixels, Point, Render, ScrollStrategy, ScrollWheelEvent, SharedString,
-    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
+    Context, Div, DragMoveEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Point, Render, RenderOnce, ScrollHandle, ScrollStrategy,
+    ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled, Task,
+    UniformListScrollHandle, Window,
 };
 
 mod column;
@@ -74,7 +75,8 @@ impl VisibleRangeState {
     }
 }
 
-pub struct Table<D: TableDelegate> {
+/// The state for Table.
+pub struct TableState<D: TableDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
     /// The bounds of the table container.
@@ -106,7 +108,6 @@ pub struct Table<D: TableDelegate> {
     pub horizontal_scroll_handle: VirtualListScrollHandle,
     pub horizontal_scroll_state: ScrollbarState,
 
-    scrollbar_visible: Edges<bool>,
     selected_row: Option<usize>,
     selection_state: SelectionState,
     right_clicked_row: Option<usize>,
@@ -115,20 +116,16 @@ pub struct Table<D: TableDelegate> {
     /// The column index that is being resized.
     resizing_col: Option<usize>,
 
-    /// Set stripe style of the table.
-    stripe: bool,
-    /// Set to use border style of the table.
-    border: bool,
-    /// The cell size of the table.
-    size: Size,
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
+
+    size: Size,
 
     _measure: Vec<Duration>,
     _load_more_task: Task<()>,
 }
 
-impl<D> Table<D>
+impl<D> TableState<D>
 where
     D: TableDelegate,
 {
@@ -148,10 +145,6 @@ where
             resizing_col: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
-            stripe: false,
-            border: true,
-            size: Size::default(),
-            scrollbar_visible: Edges::all(true),
             visible_range: VisibleRangeState::default(),
             loop_selection: true,
             col_selectable: true,
@@ -160,6 +153,7 @@ where
             col_movable: true,
             col_resizable: true,
             col_fixed: true,
+            size: Size::default(),
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
         };
@@ -174,23 +168,6 @@ where
 
     pub fn delegate_mut(&mut self) -> &mut D {
         &mut self.delegate
-    }
-
-    /// Set to use stripe style of the table, default to false.
-    pub fn stripe(mut self, stripe: bool) -> Self {
-        self.stripe = stripe;
-        self
-    }
-
-    pub fn set_stripe(&mut self, stripe: bool, cx: &mut Context<Self>) {
-        self.stripe = stripe;
-        cx.notify();
-    }
-
-    /// Set to use border style of the table, default to true.
-    pub fn border(mut self, border: bool) -> Self {
-        self.border = border;
-        self
     }
 
     /// Set to loop selection, default to true.
@@ -226,27 +203,6 @@ where
     /// Set to enable/disable column selectable, default true
     pub fn col_selectable(mut self, col_selectable: bool) -> Self {
         self.col_selectable = col_selectable;
-        self
-    }
-
-    /// Set the size to the table.
-    pub fn set_size(&mut self, size: Size, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
-    }
-
-    /// Get the size of the table.
-    pub fn size(&self) -> Size {
-        self.size
-    }
-
-    /// Set scrollbar visibility.
-    pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
-        self.scrollbar_visible = Edges {
-            right: vertical,
-            bottom: horizontal,
-            ..Default::default()
-        };
         self
     }
 
@@ -671,51 +627,6 @@ where
         } else {
             el
         }
-    }
-
-    fn render_vertical_scrollbar(
-        &self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        let state = self.vertical_scroll_state.clone();
-
-        Some(
-            div()
-                .occlude()
-                .absolute()
-                .top(self.size.table_row_height())
-                .right_0()
-                .bottom_0()
-                .w(Scrollbar::width())
-                .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
-                    cx.notify();
-                }))
-                .child(Scrollbar::uniform_scroll(&state, &self.vertical_scroll_handle).max_fps(60)),
-        )
-    }
-
-    fn render_horizontal_scrollbar(
-        &self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let state = self.horizontal_scroll_state.clone();
-
-        div()
-            .occlude()
-            .absolute()
-            .left(self.fixed_head_cols_bounds.size.width)
-            .right_0()
-            .bottom_0()
-            .h(Scrollbar::width())
-            .on_scroll_wheel(cx.listener(|_, _: &ScrollWheelEvent, _, cx| {
-                cx.notify();
-            }))
-            .child(Scrollbar::horizontal(
-                &state,
-                &self.horizontal_scroll_handle,
-            ))
     }
 
     fn render_resize_handle(
@@ -1292,6 +1203,123 @@ where
     }
 }
 
+impl<D> Focusable for TableState<D>
+where
+    D: TableDelegate,
+{
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+impl<D> EventEmitter<TableEvent> for TableState<D> where D: TableDelegate {}
+
+impl<D> Render for TableState<D>
+where
+    D: TableDelegate,
+{
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
+}
+
+pub struct Table<D: TableDelegate> {
+    state: Entity<TableState<D>>,
+    scrollbar_visible: Edges<bool>,
+    /// Set stripe style of the table.
+    stripe: bool,
+    /// Set to use border style of the table.
+    border: bool,
+    /// The cell size of the table.
+    size: Size,
+}
+
+impl<D> Table<D>
+where
+    D: TableDelegate,
+{
+    /// Create a new Table element.
+    pub fn new(state: &Entity<TableState<D>>) -> Self {
+        Self {
+            state: state.clone(),
+            scrollbar_visible: Edges::all(true),
+            stripe: false,
+            border: true,
+            size: Size::default(),
+        }
+    }
+
+    /// Set to use stripe style of the table, default to false.
+    pub fn stripe(mut self, stripe: bool) -> Self {
+        self.stripe = stripe;
+        self
+    }
+
+    /// Set to use border style of the table, default to true.
+    pub fn border(mut self, border: bool) -> Self {
+        self.border = border;
+        self
+    }
+
+    /// Set scrollbar visibility.
+    pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
+        self.scrollbar_visible = Edges {
+            right: vertical,
+            bottom: horizontal,
+            ..Default::default()
+        };
+        self
+    }
+
+    fn render_vertical_scrollbar(
+        &self,
+        state: &Entity<TableState<D>>,
+        scroll_state: &ScrollbarState,
+        scroll_handle: &UniformListScrollHandle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<impl IntoElement> {
+        Some(
+            div()
+                .occlude()
+                .absolute()
+                .top(self.size.table_row_height())
+                .right_0()
+                .bottom_0()
+                .w(Scrollbar::width())
+                .on_scroll_wheel(
+                    window.listener_for(&state, |_, _: &ScrollWheelEvent, _, cx| {
+                        cx.notify();
+                    }),
+                )
+                .child(Scrollbar::uniform_scroll(scroll_state, scroll_handle).max_fps(60)),
+        )
+    }
+
+    fn render_horizontal_scrollbar(
+        &self,
+        state: &Entity<TableState<D>>,
+        fixed_head_cols_bounds: Bounds<Pixels>,
+        scroll_state: &ScrollbarState,
+        scroll_handle: &VirtualListScrollHandle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        div()
+            .occlude()
+            .absolute()
+            .left(fixed_head_cols_bounds.size.width)
+            .right_0()
+            .bottom_0()
+            .h(Scrollbar::width())
+            .on_scroll_wheel(
+                window.listener_for(&state, |_, _: &ScrollWheelEvent, _, cx| {
+                    cx.notify();
+                }),
+            )
+            .child(Scrollbar::horizontal(scroll_state, scroll_handle))
+    }
+}
+
 impl<D> Sizable for Table<D>
 where
     D: TableDelegate,
@@ -1301,50 +1329,77 @@ where
         self
     }
 }
-impl<D> Focusable for Table<D>
+
+impl<D> RenderOnce for Table<D>
 where
     D: TableDelegate,
 {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-impl<D> EventEmitter<TableEvent> for Table<D> where D: TableDelegate {}
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let mut vertical_scroll_state;
+        let mut vertical_scroll_handle;
+        let mut horizontal_scroll_state;
+        let mut horizontal_scroll_handle;
+        let mut columns_count;
+        let mut left_columns_count;
+        let mut rows_count;
+        let mut loading;
+        let mut extra_rows_count;
+        let mut render_rows_count;
+        let mut right_clicked_row;
+        let mut focus_handle;
+        let mut empty_view = None;
+        let mut loading_view = None;
+        let mut fixed_head_cols_bounds;
 
-impl<D> Render for Table<D>
-where
-    D: TableDelegate,
-{
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.measure(window, cx);
+        self.state.update(cx, |state, cx| {
+            state.size = self.size;
+            state.measure(window, cx);
 
-        let view = cx.entity().clone();
-        let vertical_scroll_handle = self.vertical_scroll_handle.clone();
-        let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
-        let columns_count: usize = self.delegate.columns_count(cx);
-        let left_columns_count = self
-            .col_groups
-            .iter()
-            .filter(|col| self.col_fixed && col.column.fixed == Some(ColumnFixed::Left))
-            .count();
-        let rows_count = self.delegate.rows_count(cx);
-        let loading = self.delegate.loading(cx);
-        let extra_rows_count = self.calculate_extra_rows_needed(rows_count);
-        let render_rows_count = if self.stripe {
-            rows_count + extra_rows_count
-        } else {
-            rows_count
-        };
+            focus_handle = state.focus_handle.clone();
+            vertical_scroll_state = state.vertical_scroll_state.clone();
+            vertical_scroll_handle = state.vertical_scroll_handle.clone();
+            horizontal_scroll_state = state.horizontal_scroll_state.clone();
+            horizontal_scroll_handle = state.horizontal_scroll_handle.clone();
+            fixed_head_cols_bounds = state.fixed_head_cols_bounds.clone();
+            state.delegate.columns_count(cx);
+            left_columns_count = state
+                .col_groups
+                .iter()
+                .filter(|col| state.col_fixed && col.column.fixed == Some(ColumnFixed::Left))
+                .count();
+            rows_count = state.delegate.rows_count(cx);
+            loading = state.delegate.loading(cx);
+            extra_rows_count = state.calculate_extra_rows_needed(rows_count);
+            render_rows_count = if self.stripe {
+                rows_count + extra_rows_count
+            } else {
+                rows_count
+            };
+            right_clicked_row = state.right_clicked_row;
 
+            if rows_count == 0 {
+                empty_view = Some(
+                    div()
+                        .size_full()
+                        .child(state.delegate.render_empty(window, cx)),
+                )
+            }
+
+            if loading {
+                loading_view = Some(state.delegate.render_loading(self.size, window, cx))
+            }
+        });
+
+        let view = self.state.clone();
         let inner_table = v_flex()
             .key_context("Table")
             .id("table")
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::action_cancel))
-            .on_action(cx.listener(Self::action_select_next))
-            .on_action(cx.listener(Self::action_select_prev))
-            .on_action(cx.listener(Self::action_select_next_col))
-            .on_action(cx.listener(Self::action_select_prev_col))
+            .track_focus(&focus_handle)
+            .on_action(window.listener_for(&self.state, TableState::action_cancel))
+            .on_action(window.listener_for(&self.state, TableState::action_select_next))
+            .on_action(window.listener_for(&self.state, TableState::action_select_prev))
+            .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
+            .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
             .size_full()
             .overflow_hidden()
             .child(self.render_table_head(left_columns_count, window, cx))
@@ -1362,11 +1417,7 @@ where
             })
             .map(|this| {
                 if rows_count == 0 {
-                    this.child(
-                        div()
-                            .size_full()
-                            .child(self.delegate.render_empty(window, cx)),
-                    )
+                    this.children(empty_view)
                 } else {
                     this.child(
                         h_flex().id("table-body").flex_grow().size_full().child(
@@ -1442,7 +1493,7 @@ where
                 }
             });
 
-        let view = cx.entity().clone();
+        let view = self.state.clone();
         div()
             .size_full()
             .when(self.border, |this| {
@@ -1451,21 +1502,22 @@ where
                     .border_color(cx.theme().border)
             })
             .bg(cx.theme().table)
-            .when(loading, |this| {
-                this.child(self.delegate().render_loading(self.size, window, cx))
-            })
+            .children(loading_view)
             .when(!loading, |this| {
                 this.child(inner_table)
                     .child(ScrollableMask::new(
-                        cx.entity().entity_id(),
+                        self.state.entity_id(),
                         Axis::Horizontal,
                         &horizontal_scroll_handle,
                     ))
-                    .when(self.right_clicked_row.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            this.right_clicked_row = None;
-                            cx.notify();
-                        }))
+                    .when(right_clicked_row.is_some(), |this| {
+                        this.on_mouse_down_out(window.listener_for(
+                            &self.state,
+                            |this, _, _, cx| {
+                                this.right_clicked_row = None;
+                                cx.notify();
+                            },
+                        ))
                     })
             })
             .child(canvas(
@@ -1479,10 +1531,23 @@ where
                         .top_0()
                         .size_full()
                         .when(self.scrollbar_visible.bottom, |this| {
-                            this.child(self.render_horizontal_scrollbar(window, cx))
+                            this.child(self.render_horizontal_scrollbar(
+                                &self.state,
+                                fixed_head_cols_bounds,
+                                &horizontal_scroll_state,
+                                &horizontal_scroll_handle,
+                                window,
+                                cx,
+                            ))
                         })
                         .when(self.scrollbar_visible.right && rows_count > 0, |this| {
-                            this.children(self.render_vertical_scrollbar(window, cx))
+                            this.children(self.render_vertical_scrollbar(
+                                &self.state,
+                                &vertical_scroll_state,
+                                &vertical_scroll_handle,
+                                window,
+                                cx,
+                            ))
                         }),
                 )
             })
