@@ -466,13 +466,6 @@ where
     D: ListDelegate,
 {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        // Scroll to the selected item if it is set.
-        if let Some((ix, strategy)) = self.deferred_scroll_to_index.take() {
-            if let Some(item_ix) = self.rows_cache.position_of(&ix) {
-                self.scroll_handle.scroll_to_item(item_ix, strategy);
-            }
-        }
-
         div()
     }
 }
@@ -625,6 +618,14 @@ where
 
         self.state.update(cx, |state, cx| {
             state.prepare_items_if_needed(window, cx);
+
+            // Scroll to the selected item if it is set.
+            if let Some((ix, strategy)) = state.deferred_scroll_to_index.take() {
+                if let Some(item_ix) = state.rows_cache.position_of(&ix) {
+                    state.scroll_handle.scroll_to_item(item_ix, strategy);
+                }
+            }
+
             loading = state.delegate().loading(cx);
             query_input = state.query_input.clone();
             loading_view = if loading {
