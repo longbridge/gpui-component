@@ -11,7 +11,7 @@ use crate::{
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     h_flex,
     input::clear_button,
-    list::{List, ListDelegate},
+    list::{List, ListDelegate, ListState},
     v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size,
     StyleSized, StyledExt,
 };
@@ -113,7 +113,12 @@ pub trait SelectDelegate: Sized {
         false
     }
 
-    fn perform_search(&mut self, _query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        _query: &str,
+        _window: &mut Window,
+        _: &mut Context<SelectState<Self>>,
+    ) -> Task<()> {
         Task::ready(())
     }
 }
@@ -164,7 +169,7 @@ where
         &self,
         section: usize,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         let state = self.state.upgrade()?.read(cx);
         let Some(item) = self.delegate.section(section) else {
@@ -182,12 +187,7 @@ where
         );
     }
 
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        _: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, _: &mut Window, cx: &mut App) -> Option<Self::Item> {
         let selected = self
             .selected_index
             .map_or(false, |selected_index| selected_index == ix);
@@ -213,7 +213,7 @@ where
         }
     }
 
-    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn cancel(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         let state = self.state.clone();
         cx.defer_in(window, move |_, window, cx| {
             _ = state.update(cx, |this, cx| {
@@ -223,7 +223,12 @@ where
         });
     }
 
-    fn confirm(&mut self, _secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn confirm(
+        &mut self,
+        _secondary: bool,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) {
         let selected_value = self
             .selected_index
             .and_then(|ix| self.delegate.item(ix))
@@ -244,7 +249,7 @@ where
         &mut self,
         query: &str,
         window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         self.state.upgrade().map_or(Task::ready(()), |state| {
             state.update(cx, |_, cx| self.delegate.perform_search(query, window, cx))
@@ -255,12 +260,12 @@ where
         &mut self,
         ix: Option<IndexPath>,
         _: &mut Window,
-        _: &mut Context<List<Self>>,
+        _: &mut Context<ListState<Self>>,
     ) {
         self.selected_index = ix;
     }
 
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         if let Some(empty) = self
             .state
             .upgrade()
@@ -285,7 +290,7 @@ pub enum SelectEvent<D: SelectDelegate + 'static> {
 /// State of the [`Select`].
 pub struct SelectState<D: SelectDelegate + 'static> {
     focus_handle: FocusHandle,
-    list: Entity<List<SelectListDelegate<D>>>,
+    list: Entity<ListState<SelectListDelegate<D>>>,
     size: Size,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement>>,
     /// Store the bounds of the input
@@ -373,7 +378,12 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<I> {
         true
     }
 
-    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        _window: &mut Window,
+        _: &mut Context<SelectState<Self>>,
+    ) -> Task<()> {
         self.matched_items = self
             .items
             .iter()
@@ -434,7 +444,12 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<SelectGroup<I>> {
         true
     }
 
-    fn perform_search(&mut self, query: &str, _window: &mut Window, _: &mut App) -> Task<()> {
+    fn perform_search(
+        &mut self,
+        query: &str,
+        _window: &mut Window,
+        _: &mut Context<SelectState<Self>>,
+    ) -> Task<()> {
         self.matched_items = self
             .items
             .iter()
@@ -519,10 +534,7 @@ where
         let searchable = delegate.delegate.searchable();
 
         let list = cx.new(|cx| {
-            let mut list = List::new(delegate, window, cx)
-                .max_h(rems(20.))
-                .paddings(Edges::all(px(4.)))
-                .reset_on_cancel(false);
+            let mut list = ListState::new(delegate, window, cx).reset_on_cancel(false);
             if !searchable {
                 list = list.no_query();
             }
@@ -847,13 +859,8 @@ where
         let focus_handle = self.state.focus_handle(cx);
         let is_focused = focus_handle.is_focused(window);
         // If the size has change, set size to self.list, to change the QueryInput size.
-        let old_size = self.state.read(cx).list.read(cx).size;
+        let old_size = self.state.read(cx).size;
         if old_size != self.size {
-            self.state
-                .read(cx)
-                .list
-                .clone()
-                .update(cx, |this, cx| this.set_size(self.size, window, cx));
             self.state.update(cx, |this, _| {
                 this.size = self.size;
             });
@@ -984,7 +991,12 @@ where
                                         .border_color(cx.theme().border)
                                         .rounded(popup_radius)
                                         .shadow_md()
-                                        .child(state.list.clone()),
+                                        .child(
+                                            List::new(&state.list)
+                                                .with_size(self.size)
+                                                .max_h(rems(20.))
+                                                .paddings(Edges::all(px(4.))),
+                                        ),
                                 )
                                 .on_mouse_down_out(window.listener_for(
                                     &self.state,
