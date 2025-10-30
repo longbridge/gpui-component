@@ -211,8 +211,8 @@ fn resize_edge(pos: Point<Pixels>, window_bounds: Bounds<Pixels>) -> Option<Resi
     // It is standard behaviour for window manager to extend the corner's hitbox
     // if the window is big enough.
     let (x1, y1, x2, y2) =
-        if x2 - x1 > 3 * x1 && y2 - y1 > 3 * y2 {
-            (x1 + x1, x2 - x1, y1 + y1, y2 - y1)
+        if window_bounds.size.width > 3 * SHADOW_SIZE && window_bounds.size.height > 3 * SHADOW_SIZE {
+            (x1 + x1, y1 + y1, x2 - x1, y2 - y1)
         } else {
             (x1, y1, x2, y2)
         };
