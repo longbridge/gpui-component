@@ -25,14 +25,14 @@ pub use delegate::*;
 
 actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
+const CONTEXT: &'static str = "Table";
 pub(crate) fn init(cx: &mut App) {
-    let context = Some("Table");
     cx.bind_keys([
-        KeyBinding::new("escape", Cancel, context),
-        KeyBinding::new("up", SelectUp, context),
-        KeyBinding::new("down", SelectDown, context),
-        KeyBinding::new("left", SelectPrevColumn, context),
-        KeyBinding::new("right", SelectNextColumn, context),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("left", SelectPrevColumn, Some(CONTEXT)),
+        KeyBinding::new("right", SelectNextColumn, Some(CONTEXT)),
     ]);
 }
 
@@ -1389,8 +1389,8 @@ where
 
             inner_table = Some(
                 v_flex()
-                    .key_context("Table")
                     .id("table")
+                    .key_context(CONTEXT)
                     .track_focus(&focus_handle)
                     .on_action(cx.listener(TableState::action_cancel))
                     .on_action(cx.listener(TableState::action_select_next))
