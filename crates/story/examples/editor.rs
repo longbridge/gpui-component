@@ -10,7 +10,7 @@ use std::{
 use autocorrect::ignorer::Ignorer;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, ListItem, Sizable, TreeItem, TreeState,
+    ActiveTheme, ContextModal, IconName, Sizable,
     button::{Button, ButtonVariants as _},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
@@ -18,8 +18,10 @@ use gpui_component::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
     },
+    list::ListItem,
     resizable::{h_resizable, resizable_panel},
-    tree, v_flex,
+    tree::{TreeItem, TreeState, tree},
+    v_flex,
 };
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,

@@ -1,15 +1,16 @@
+use gpui::{App, SharedString};
+use std::ops::Deref;
+
 mod event;
 mod global_state;
 mod icon;
 mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
-mod kbd;
 mod root;
 mod styled;
 mod time;
 mod title_bar;
-mod tree;
 mod virtual_list;
 mod window_border;
 
@@ -36,6 +37,7 @@ pub mod highlighter;
 pub mod history;
 pub mod indicator;
 pub mod input;
+pub mod kbd;
 pub mod label;
 pub mod link;
 pub mod list;
@@ -59,35 +61,29 @@ pub mod tag;
 pub mod text;
 pub mod theme;
 pub mod tooltip;
+pub mod tree;
+pub use time::{calendar, date_picker};
 
 #[cfg(feature = "webview")]
 pub mod webview;
 
-use gpui::{App, SharedString};
 // re-export
 #[cfg(feature = "webview")]
 pub use wry;
 
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
+pub use icon::*;
 pub use index_path::IndexPath;
 pub use input::{Rope, RopeExt, RopeLines};
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
-pub use list::*;
 pub use root::{ContextModal, Root};
 pub use styled::*;
-pub use time::*;
+pub use theme::*;
 pub use title_bar::*;
-pub use tree::*;
 pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList, VirtualListScrollHandle};
 pub use window_border::{window_border, window_paddings, WindowBorder};
-
-pub use icon::*;
-pub use kbd::*;
-pub use theme::*;
-
-use std::ops::Deref;
 
 rust_i18n::i18n!("locales", fallback = "en");
 
