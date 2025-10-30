@@ -10,7 +10,7 @@ A versatile tree component for displaying hierarchical data with expand/collapse
 ## Import
 
 ```rust
-use gpui_component::{tree, TreeState, TreeItem, TreeEntry};
+use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry};
 ```
 
 ## Usage

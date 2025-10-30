@@ -9,8 +9,9 @@ use gpui::{
 
 use crate::{
     actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
+    list::ListItem,
     scroll::{Scrollbar, ScrollbarState},
-    ListItem, StyledExt,
+    StyledExt,
 };
 
 const CONTEXT: &str = "Tree";
@@ -450,7 +451,7 @@ impl RenderOnce for Tree {
 mod tests {
     use indoc::indoc;
 
-    use crate::TreeState;
+    use super::TreeState;
     use gpui::AppContext as _;
 
     fn assert_entries(entries: &Vec<super::TreeEntry>, expected: &str) {

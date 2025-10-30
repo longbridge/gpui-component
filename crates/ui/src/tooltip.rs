@@ -3,7 +3,7 @@ use gpui::{
     IntoElement, ParentElement, Render, SharedString, StyleRefinement, Styled, Window,
 };
 
-use crate::{h_flex, text::Text, ActiveTheme, Kbd, StyledExt};
+use crate::{h_flex, kbd::Kbd, text::Text, ActiveTheme, StyledExt};
 
 enum TooltipContext {
     Text(Text),

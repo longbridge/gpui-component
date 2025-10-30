@@ -4,15 +4,13 @@ use std::time::Duration;
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
 use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
-use crate::list::ListDelegate;
 use crate::{
     input::{Input, InputEvent},
     scroll::{Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, IconName, Size,
 };
-use crate::{
-    v_virtual_list, Icon, IndexPath, Selectable, Sizable as _, StyledExt, VirtualListScrollHandle,
-};
+use crate::{list::ListDelegate, v_virtual_list, VirtualListScrollHandle};
+use crate::{Icon, IndexPath, Selectable, Sizable as _, StyledExt};
 use gpui::{
     div, prelude::FluentBuilder, AppContext, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
