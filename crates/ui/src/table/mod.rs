@@ -12,9 +12,8 @@ use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, RenderOnce, ScrollHandle, ScrollStrategy,
-    ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled, Task,
-    UniformListScrollHandle, Window,
+    ParentElement, Pixels, Point, Render, RenderOnce, ScrollStrategy, ScrollWheelEvent,
+    SharedString, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
 mod column;
@@ -119,6 +118,7 @@ pub struct TableState<D: TableDelegate> {
     /// The visible range of the rows and columns.
     visible_range: VisibleRangeState,
 
+    stripe: bool,
     size: Size,
 
     _measure: Vec<Duration>,
@@ -153,6 +153,7 @@ where
             col_movable: true,
             col_resizable: true,
             col_fixed: true,
+            stripe: false,
             size: Size::default(),
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
@@ -1276,7 +1277,7 @@ where
         scroll_state: &ScrollbarState,
         scroll_handle: &UniformListScrollHandle,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) -> Option<impl IntoElement> {
         Some(
             div()
@@ -1302,7 +1303,7 @@ where
         scroll_state: &ScrollbarState,
         scroll_handle: &VirtualListScrollHandle,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) -> impl IntoElement {
         div()
             .occlude()
@@ -1335,163 +1336,165 @@ where
     D: TableDelegate,
 {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut vertical_scroll_state;
-        let mut vertical_scroll_handle;
-        let mut horizontal_scroll_state;
-        let mut horizontal_scroll_handle;
-        let mut columns_count;
-        let mut left_columns_count;
-        let mut rows_count;
-        let mut loading;
-        let mut extra_rows_count;
-        let mut render_rows_count;
-        let mut right_clicked_row;
-        let mut focus_handle;
+        let state = self.state.read(cx);
+        let focus_handle = state.focus_handle.clone();
+        let vertical_scroll_state = state.vertical_scroll_state.clone();
+        let vertical_scroll_handle = state.vertical_scroll_handle.clone();
+        let horizontal_scroll_state = state.horizontal_scroll_state.clone();
+        let horizontal_scroll_handle = state.horizontal_scroll_handle.clone();
+        let fixed_head_cols_bounds = state.fixed_head_cols_bounds.clone();
+        let columns_count = state.delegate.columns_count(cx);
+        let left_columns_count = state
+            .col_groups
+            .iter()
+            .filter(|col| state.col_fixed && col.column.fixed == Some(ColumnFixed::Left))
+            .count();
+        let rows_count = state.delegate.rows_count(cx);
+        let loading = state.delegate.loading(cx);
+        let extra_rows_count = state.calculate_extra_rows_needed(rows_count);
+        let render_rows_count = if self.stripe {
+            rows_count + extra_rows_count
+        } else {
+            rows_count
+        };
+        let right_clicked_row = state.right_clicked_row;
+
         let mut empty_view = None;
         let mut loading_view = None;
-        let mut fixed_head_cols_bounds;
-
+        let mut inner_table = None;
         self.state.update(cx, |state, cx| {
             state.size = self.size;
+            state.stripe = self.stripe;
             state.measure(window, cx);
 
-            focus_handle = state.focus_handle.clone();
-            vertical_scroll_state = state.vertical_scroll_state.clone();
-            vertical_scroll_handle = state.vertical_scroll_handle.clone();
-            horizontal_scroll_state = state.horizontal_scroll_state.clone();
-            horizontal_scroll_handle = state.horizontal_scroll_handle.clone();
-            fixed_head_cols_bounds = state.fixed_head_cols_bounds.clone();
-            state.delegate.columns_count(cx);
-            left_columns_count = state
-                .col_groups
-                .iter()
-                .filter(|col| state.col_fixed && col.column.fixed == Some(ColumnFixed::Left))
-                .count();
-            rows_count = state.delegate.rows_count(cx);
-            loading = state.delegate.loading(cx);
-            extra_rows_count = state.calculate_extra_rows_needed(rows_count);
-            render_rows_count = if self.stripe {
-                rows_count + extra_rows_count
-            } else {
-                rows_count
-            };
-            right_clicked_row = state.right_clicked_row;
+            if loading {
+                loading_view = Some(
+                    state
+                        .delegate
+                        .render_loading(self.size, window, cx)
+                        .into_any_element(),
+                )
+            }
 
             if rows_count == 0 {
                 empty_view = Some(
                     div()
                         .size_full()
-                        .child(state.delegate.render_empty(window, cx)),
+                        .child(state.delegate.render_empty(window, cx))
+                        .into_any_element(),
                 )
             }
 
-            if loading {
-                loading_view = Some(state.delegate.render_loading(self.size, window, cx))
-            }
-        });
+            inner_table = Some(
+                v_flex()
+                    .key_context("Table")
+                    .id("table")
+                    .track_focus(&focus_handle)
+                    .on_action(cx.listener(TableState::action_cancel))
+                    .on_action(cx.listener(TableState::action_select_next))
+                    .on_action(cx.listener(TableState::action_select_prev))
+                    .on_action(cx.listener(TableState::action_select_next_col))
+                    .on_action(cx.listener(TableState::action_select_prev_col))
+                    .size_full()
+                    .overflow_hidden()
+                    .child(state.render_table_head(left_columns_count, window, cx))
+                    .context_menu({
+                        let view = cx.entity().clone();
+                        move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
+                            if let Some(row_ix) = view.read(cx).right_clicked_row {
+                                view.read(cx)
+                                    .delegate
+                                    .context_menu(row_ix, this, window, cx)
+                            } else {
+                                this
+                            }
+                        }
+                    })
+                    .map(|this| {
+                        if rows_count == 0 {
+                            this.children(empty_view)
+                        } else {
+                            this.child(
+                                h_flex().id("table-body").flex_grow().size_full().child(
+                                    uniform_list(
+                                        "table-uniform-list",
+                                        render_rows_count,
+                                        cx.processor(
+                                            move |table,
+                                                  visible_range: Range<usize>,
+                                                  window,
+                                                  cx| {
+                                                // We must calculate the col sizes here, because the col sizes
+                                                // need render_th first, then that method will set the bounds of each col.
+                                                let col_sizes: Rc<Vec<gpui::Size<Pixels>>> =
+                                                    Rc::new(
+                                                        table
+                                                            .col_groups
+                                                            .iter()
+                                                            .skip(left_columns_count)
+                                                            .map(|col| col.bounds.size)
+                                                            .collect(),
+                                                    );
 
-        let view = self.state.clone();
-        let inner_table = v_flex()
-            .key_context("Table")
-            .id("table")
-            .track_focus(&focus_handle)
-            .on_action(window.listener_for(&self.state, TableState::action_cancel))
-            .on_action(window.listener_for(&self.state, TableState::action_select_next))
-            .on_action(window.listener_for(&self.state, TableState::action_select_prev))
-            .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
-            .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
-            .size_full()
-            .overflow_hidden()
-            .child(self.render_table_head(left_columns_count, window, cx))
-            .context_menu({
-                let view = view.clone();
-                move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
-                    if let Some(row_ix) = view.read(cx).right_clicked_row {
-                        view.read(cx)
-                            .delegate
-                            .context_menu(row_ix, this, window, cx)
-                    } else {
-                        this
-                    }
-                }
-            })
-            .map(|this| {
-                if rows_count == 0 {
-                    this.children(empty_view)
-                } else {
-                    this.child(
-                        h_flex().id("table-body").flex_grow().size_full().child(
-                            uniform_list(
-                                "table-uniform-list",
-                                render_rows_count,
-                                cx.processor(
-                                    move |table, visible_range: Range<usize>, window, cx| {
-                                        // We must calculate the col sizes here, because the col sizes
-                                        // need render_th first, then that method will set the bounds of each col.
-                                        let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-                                            table
-                                                .col_groups
-                                                .iter()
-                                                .skip(left_columns_count)
-                                                .map(|col| col.bounds.size)
-                                                .collect(),
-                                        );
+                                                table.load_more_if_need(
+                                                    rows_count,
+                                                    visible_range.end,
+                                                    window,
+                                                    cx,
+                                                );
+                                                table.update_visible_range_if_need(
+                                                    visible_range.clone(),
+                                                    Axis::Vertical,
+                                                    window,
+                                                    cx,
+                                                );
 
-                                        table.load_more_if_need(
-                                            rows_count,
-                                            visible_range.end,
-                                            window,
-                                            cx,
-                                        );
-                                        table.update_visible_range_if_need(
-                                            visible_range.clone(),
-                                            Axis::Vertical,
-                                            window,
-                                            cx,
-                                        );
+                                                if visible_range.end > rows_count {
+                                                    table.scroll_to_row(
+                                                        std::cmp::min(
+                                                            visible_range.start,
+                                                            rows_count.saturating_sub(1),
+                                                        ),
+                                                        cx,
+                                                    );
+                                                }
 
-                                        if visible_range.end > rows_count {
-                                            table.scroll_to_row(
-                                                std::cmp::min(
-                                                    visible_range.start,
-                                                    rows_count.saturating_sub(1),
-                                                ),
-                                                cx,
-                                            );
-                                        }
+                                                let mut items = Vec::with_capacity(
+                                                    visible_range
+                                                        .end
+                                                        .saturating_sub(visible_range.start),
+                                                );
 
-                                        let mut items = Vec::with_capacity(
-                                            visible_range.end.saturating_sub(visible_range.start),
-                                        );
+                                                // Render fake rows to fill the table
+                                                visible_range.for_each(|row_ix| {
+                                                    // Render real rows for available data
+                                                    items.push(table.render_table_row(
+                                                        row_ix,
+                                                        rows_count,
+                                                        left_columns_count,
+                                                        col_sizes.clone(),
+                                                        columns_count,
+                                                        extra_rows_count,
+                                                        window,
+                                                        cx,
+                                                    ));
+                                                });
 
-                                        // Render fake rows to fill the table
-                                        visible_range.for_each(|row_ix| {
-                                            // Render real rows for available data
-                                            items.push(table.render_table_row(
-                                                row_ix,
-                                                rows_count,
-                                                left_columns_count,
-                                                col_sizes.clone(),
-                                                columns_count,
-                                                extra_rows_count,
-                                                window,
-                                                cx,
-                                            ));
-                                        });
-
-                                        items
-                                    },
+                                                items
+                                            },
+                                        ),
+                                    )
+                                    .flex_grow()
+                                    .size_full()
+                                    .with_sizing_behavior(ListSizingBehavior::Auto)
+                                    .track_scroll(vertical_scroll_handle.clone())
+                                    .into_any_element(),
                                 ),
                             )
-                            .flex_grow()
-                            .size_full()
-                            .with_sizing_behavior(ListSizingBehavior::Auto)
-                            .track_scroll(vertical_scroll_handle)
-                            .into_any_element(),
-                        ),
-                    )
-                }
-            });
+                        }
+                    }),
+            );
+        });
 
         let view = self.state.clone();
         div()
@@ -1504,7 +1507,7 @@ where
             .bg(cx.theme().table)
             .children(loading_view)
             .when(!loading, |this| {
-                this.child(inner_table)
+                this.children(inner_table)
                     .child(ScrollableMask::new(
                         self.state.entity_id(),
                         Axis::Horizontal,
