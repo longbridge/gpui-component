@@ -10,7 +10,7 @@ A powerful List component that provides a virtualized, searchable list interface
 ## Import
 
 ```rust
-use gpui_component::list::{List, ListDelegate, ListItem, ListEvent, ListSeparatorItem};
+use gpui_component::list::{List, ListState, ListDelegate, ListItem, ListEvent, ListSeparatorItem};
 use gpui_component::IndexPath;
 ```
 
@@ -37,7 +37,7 @@ impl ListDelegate for MyListDelegate {
         &self,
         ix: IndexPath,
         _window: &mut Window,
-        _cx: &mut Context<List<Self>>,
+        _cx: &mut App,
     ) -> Option<Self::Item> {
         self.items.get(ix.row).map(|item| {
             ListItem::new(ix)
@@ -50,7 +50,7 @@ impl ListDelegate for MyListDelegate {
         &mut self,
         ix: Option<IndexPath>,
         _window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_index = ix;
         cx.notify();
@@ -63,7 +63,14 @@ let delegate = MyListDelegate {
     selected_index: None,
 };
 
-let list = cx.new(|cx| List::new(delegate, window, cx));
+/// Create a list state.
+let state = cx.new(|cx| ListState::new(delegate, window, cx));
+```
+
+Now use [List] to render list:
+
+```rs
+div().child(List::new(&state))
 ```
 
 ### List with Sections
@@ -89,7 +96,7 @@ impl ListDelegate for MyListDelegate {
         &self,
         section: usize,
         _window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         let title = match section {
             0 => "Section 1",
@@ -114,7 +121,7 @@ impl ListDelegate for MyListDelegate {
         &self,
         section: usize,
         _window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         Some(
             div()
@@ -135,7 +142,7 @@ fn render_item(
     &self,
     ix: IndexPath,
     _window: &mut Window,
-    cx: &mut Context<List<Self>>,
+    cx: &mut App,
 ) -> Option<Self::Item> {
     self.items.get(ix.row).map(|item| {
         ListItem::new(ix)
@@ -170,7 +177,7 @@ impl ListDelegate for MyListDelegate {
         &mut self,
         query: &str,
         _window: &mut Window,
-        _cx: &mut Context<List<Self>>,
+        _cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         // Filter items based on query
         self.filtered_items = self.all_items
@@ -184,7 +191,7 @@ impl ListDelegate for MyListDelegate {
 }
 
 // Create list without search input
-let list = cx.new(|cx| List::new(delegate, window, cx).no_query());
+let state = cx.new(|cx| ListState::new(delegate, window, cx).no_query());
 ```
 
 ### List with Loading State
@@ -198,7 +205,7 @@ impl ListDelegate for MyListDelegate {
     fn render_loading(
         &self,
         _window: &mut Window,
-        _cx: &mut Context<List<Self>>,
+        _cx: &mut App,
     ) -> impl IntoElement {
         // Custom loading view
         v_flex()
@@ -223,7 +230,7 @@ impl ListDelegate for MyListDelegate {
         20 // Trigger when 20 items from bottom
     }
 
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         if self.is_loading {
             return;
         }
@@ -248,7 +255,7 @@ impl ListDelegate for MyListDelegate {
 
 ```rust
 // Subscribe to list events
-let _subscription = cx.subscribe(&list, |_, _, event: &ListEvent, _| {
+let _subscription = cx.subscribe(&state, |_, _, event: &ListEvent, _| {
     match event {
         ListEvent::Select(ix) => {
             println!("Item selected at: {:?}", ix);
@@ -296,7 +303,7 @@ ListSeparatorItem::new()
 
 ```rust
 impl ListDelegate for MyListDelegate {
-    fn render_empty(&self, _window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .size_full()
             .justify_center()
@@ -321,11 +328,9 @@ impl ListDelegate for MyListDelegate {
 ### List Configuration
 
 ```rust
-List::new(delegate, window, cx)
+List::new(state, window, cx)
     .max_h(px(400.))                    // Set maximum height
     .scrollbar_visible(false)           // Hide scrollbar
-    .selectable(false)                  // Disable selection
-    .no_query()                         // Remove search input
     .paddings(Edges::all(px(8.)))       // Set internal padding
 ```
 
@@ -333,8 +338,8 @@ List::new(delegate, window, cx)
 
 ```rust
 // Scroll to specific item
-list.update(cx, |list, cx| {
-    list.scroll_to_item(
+state.update(cx, |state, cx| {
+    state.scroll_to_item(
         IndexPath::new(0).section(1),  // Row 0 of section 1
         ScrollStrategy::Center,
         window,
@@ -343,13 +348,13 @@ list.update(cx, |list, cx| {
 });
 
 // Scroll to selected item
-list.update(cx, |list, cx| {
-    list.scroll_to_selected_item(window, cx);
+state.update(cx, |state, cx| {
+    state.scroll_to_selected_item(window, cx);
 });
 
 // Set selected index without scrolling
-list.update(cx, |list, cx| {
-    list.set_selected_index(Some(IndexPath::new(5)), window, cx);
+state.update(cx, |state, cx| {
+    state.set_selected_index(Some(IndexPath::new(5)), window, cx);
 });
 ```
 
@@ -373,7 +378,7 @@ struct FileInfo {
 impl ListDelegate for FileBrowserDelegate {
     type Item = ListItem;
 
-    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut Context<List<Self>>) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item> {
         self.files.get(ix.row).map(|file| {
             let icon = if file.is_directory {
                 IconName::Folder
@@ -423,7 +428,7 @@ impl ListDelegate for ContactListDelegate {
         self.contacts_by_letter.len()
     }
 
-    fn render_section_header(&self, section: usize, _window: &mut Window, cx: &mut Context<List<Self>>) -> Option<impl IntoElement> {
+    fn render_section_header(&self, section: usize, _window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
         let letter = self.contacts_by_letter.keys().nth(section)?;
 
         Some(
