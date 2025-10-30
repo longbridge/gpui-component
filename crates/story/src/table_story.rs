@@ -6,8 +6,8 @@ use std::{
 
 use fake::Fake;
 use gpui::{
-    Action, AnyElement, App, AppContext, ClickEvent, Context, Entity, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    Action, AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
     StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Timer, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -368,7 +368,7 @@ impl TableDelegate for StockTableDelegate {
         .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
     }
 
-    fn render_tr(&self, row_ix: usize, _: &mut Window, _: &mut App) -> gpui::Stateful<gpui::Div> {
+    fn render_tr(&self, row_ix: usize, _: &mut Window, _: &mut App) -> Stateful<Div> {
         div().id(row_ix).on_click(|ev: &ClickEvent, _, _| {
             println!(
                 "You have clicked row with secondary: {}",
