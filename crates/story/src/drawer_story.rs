@@ -15,7 +15,7 @@ use gpui_component::{
     date_picker::{DatePicker, DatePickerState},
     h_flex,
     input::{Input, InputState},
-    list::{List, ListDelegate, ListItem},
+    list::{ListDelegate, ListItem, ListState},
     v_flex,
     webview::WebView,
     wry,
@@ -43,7 +43,7 @@ impl ListDelegate for ListItemDeletegate {
         &mut self,
         query: &str,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         let query = query.to_string();
         cx.spawn(async move |this, cx| {
@@ -65,12 +65,7 @@ impl ListDelegate for ListItemDeletegate {
         })
     }
 
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
         let confirmed = Some(ix.row) == self.confirmed_index;
 
         if let Some(item) = self.matches.get(ix.row) {
@@ -102,7 +97,7 @@ impl ListDelegate for ListItemDeletegate {
         }
     }
 
-    fn render_empty(&self, _: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .size_full()
             .child(
@@ -118,13 +113,13 @@ impl ListDelegate for ListItemDeletegate {
             .text_color(cx.theme().muted_foreground)
     }
 
-    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn cancel(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         _ = self.story.update(cx, |this, cx| {
             this.close_drawer(window, cx);
         });
     }
 
-    fn confirm(&mut self, _secondary: bool, _: &mut Window, cx: &mut Context<List<Self>>) {
+    fn confirm(&mut self, _secondary: bool, _: &mut Window, cx: &mut Context<ListState<Self>>) {
         _ = self.story.update(cx, |this, _| {
             self.confirmed_index = self.selected_index;
             if let Some(ix) = self.confirmed_index {
@@ -139,7 +134,7 @@ impl ListDelegate for ListItemDeletegate {
         &mut self,
         ix: Option<IndexPath>,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_index = ix.map(|ix| ix.row);
 
@@ -153,7 +148,7 @@ pub struct DrawerStory {
     focus_handle: FocusHandle,
     drawer_placement: Option<Placement>,
     selected_value: Option<SharedString>,
-    list: Entity<List<ListItemDeletegate>>,
+    list: Entity<ListState<ListItemDeletegate>>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
@@ -248,7 +243,7 @@ impl DrawerStory {
             matches: items.clone(),
         };
         let list = cx.new(|cx| {
-            let mut list = List::new(delegate, window, cx);
+            let mut list = ListState::new(delegate, window, cx);
             list.focus(window, cx);
             if let Some(query_input) = list.query_input() {
                 query_input.update(cx, |input, cx| {

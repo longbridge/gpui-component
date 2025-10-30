@@ -2,18 +2,19 @@ use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    actions, div, prelude::FluentBuilder as _, px, App, AppContext, Context, Edges, ElementId,
-    Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
-    RenderOnce, ScrollStrategy, SharedString, Styled, Subscription, Task, Timer, Window,
+    App, AppContext, Context, Edges, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString, Styled,
+    Subscription, Task, Timer, Window, actions, div, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
+    ActiveTheme, Icon, IconName, IndexPath, Selectable, Sizable,
     button::Button,
     checkbox::Checkbox,
     h_flex,
     label::Label,
-    list::{List, ListDelegate, ListEvent, ListItem},
-    v_flex, ActiveTheme, Icon, IconName, IndexPath, Selectable, Sizable,
+    list::{List, ListDelegate, ListEvent, ListItem, ListState},
+    v_flex,
 };
 
 actions!(list_story, [SelectedCompany]);
@@ -221,13 +222,13 @@ impl ListDelegate for CompanyListDelegate {
         &mut self,
         query: &str,
         _: &mut Window,
-        _: &mut Context<List<Self>>,
+        _: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         self.prepare(query.to_owned());
         Task::ready(())
     }
 
-    fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         println!("Confirmed with secondary: {}", secondary);
         window.dispatch_action(Box::new(SelectedCompany), cx);
     }
@@ -236,7 +237,7 @@ impl ListDelegate for CompanyListDelegate {
         &mut self,
         ix: Option<IndexPath>,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_index = ix;
         cx.notify();
@@ -246,7 +247,7 @@ impl ListDelegate for CompanyListDelegate {
         &self,
         section: usize,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         let Some(industry) = self.industries.get(section) else {
             return None;
@@ -268,7 +269,7 @@ impl ListDelegate for CompanyListDelegate {
         &self,
         section: usize,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         let Some(_) = self.industries.get(section) else {
             return None;
@@ -288,12 +289,7 @@ impl ListDelegate for CompanyListDelegate {
         )
     }
 
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
             return Some(CompanyListItem::new(ix, company.clone(), ix, selected));
@@ -314,7 +310,7 @@ impl ListDelegate for CompanyListDelegate {
         150
     }
 
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         // TODO: The load more here will broken the scroll position,
         // because the extends will creates some new industries to make some new sections.
         cx.spawn_in(window, async move |view, window| {
@@ -334,7 +330,7 @@ impl ListDelegate for CompanyListDelegate {
 
 pub struct ListStory {
     focus_handle: FocusHandle,
-    company_list: Entity<List<CompanyListDelegate>>,
+    company_list: Entity<ListState<CompanyListDelegate>>,
     selected_company: Option<Rc<Company>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -371,8 +367,7 @@ impl ListStory {
         };
         delegate.extend_more(100);
 
-        let company_list =
-            cx.new(|cx| List::new(delegate, window, cx).paddings(Edges::all(px(8.))));
+        let company_list = cx.new(|cx| ListState::new(delegate, window, cx));
 
         let _subscriptions =
             vec![
@@ -546,7 +541,7 @@ impl Render for ListStory {
                     .border_1()
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
-                    .child(self.company_list.clone()),
+                    .child(List::new(&self.company_list).paddings(Edges::all(px(8.)))),
             )
     }
 }
