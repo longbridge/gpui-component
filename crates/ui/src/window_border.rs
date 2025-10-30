@@ -3,7 +3,7 @@
 use gpui::{
     canvas, div, point, prelude::FluentBuilder as _, px, AnyElement, App, Bounds, CursorStyle,
     Decorations, Edges, HitboxBehavior, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, Pixels, Point, RenderOnce, ResizeEdge, Size, Styled as _, Window,
+    ParentElement, Pixels, Point, RenderOnce, ResizeEdge, Styled as _, Tiling, Window,
 };
 
 use crate::ActiveTheme;
@@ -88,8 +88,12 @@ impl RenderOnce for WindowBorder {
                             },
                             move |_bounds, hitbox, window, _| {
                                 let mouse = window.mouse_position();
-                                let size = window.window_bounds().get_bounds().size;
-                                let Some(edge) = resize_edge(mouse, SHADOW_SIZE, size) else {
+                                let bounds = correct_bounds_for_tiling(window.window_bounds().get_bounds(), &tiling);
+
+                                if bounds.contains(&mouse) {
+                                    return;
+                                }
+                                let Some(edge) = resize_edge(mouse, bounds) else {
                                     return;
                                 };
                                 window.set_cursor_style(
@@ -125,10 +129,13 @@ impl RenderOnce for WindowBorder {
                     .when(!tiling.left, |div| div.pl(SHADOW_SIZE))
                     .when(!tiling.right, |div| div.pr(SHADOW_SIZE))
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
-                        let size = window.window_bounds().get_bounds().size;
+                        let bounds = correct_bounds_for_tiling(window.window_bounds().get_bounds(), &tiling);
                         let pos = window.mouse_position();
+                        if bounds.contains(&pos) {
+                            return;
+                        }
 
-                        match resize_edge(pos, SHADOW_SIZE, size) {
+                        match resize_edge(pos, bounds) {
                             Some(edge) => window.start_window_resize(edge),
                             None => {}
                         };
@@ -175,25 +182,61 @@ impl RenderOnce for WindowBorder {
     }
 }
 
-fn resize_edge(pos: Point<Pixels>, shadow_size: Pixels, size: Size<Pixels>) -> Option<ResizeEdge> {
-    let edge = if pos.y < shadow_size && pos.x < shadow_size {
-        ResizeEdge::TopLeft
-    } else if pos.y < shadow_size && pos.x > size.width - shadow_size {
-        ResizeEdge::TopRight
-    } else if pos.y < shadow_size {
-        ResizeEdge::Top
-    } else if pos.y > size.height - shadow_size && pos.x < shadow_size {
-        ResizeEdge::BottomLeft
-    } else if pos.y > size.height - shadow_size && pos.x > size.width - shadow_size {
-        ResizeEdge::BottomRight
-    } else if pos.y > size.height - shadow_size {
-        ResizeEdge::Bottom
-    } else if pos.x < shadow_size {
-        ResizeEdge::Left
-    } else if pos.x > size.width - shadow_size {
-        ResizeEdge::Right
+fn correct_bounds_for_tiling(mut bounds: Bounds<Pixels>, tiling: &Tiling) -> Bounds<Pixels> {
+    if !tiling.left {
+        bounds.origin.x += SHADOW_SIZE;
+        bounds.size.width -= SHADOW_SIZE;
+    }
+    if !tiling.top {
+        bounds.origin.y += SHADOW_SIZE;
+        bounds.size.height -= SHADOW_SIZE;
+    }
+    if !tiling.right {
+        bounds.size.width -= SHADOW_SIZE;
+    }
+    if !tiling.bottom {
+        bounds.size.height -= SHADOW_SIZE;
+    }
+
+    bounds
+}
+
+fn resize_edge(pos: Point<Pixels>, window_bounds: Bounds<Pixels>) -> Option<ResizeEdge> {
+    let mut x1 = window_bounds.origin.x;
+    let mut y1 = window_bounds.origin.y;
+
+    let mut x2 = window_bounds.origin.x + window_bounds.size.width;
+    let mut y2 = window_bounds.origin.y + window_bounds.size.height;
+
+    // It is standard behaviour for window manager to extend the corner's hitbox
+    // if the window is big enough.
+    if x2 - x1 > 3 * x1 && y2 - y1 > 3 * y2 {
+        x1 += x1;
+        x2 -= x1;
+
+        y1 += y1;
+        y2 -= y1;
+    }
+
+    let Point { x, y } = pos;
+
+    if x < x1 && y < y1 {
+        Some(ResizeEdge::TopLeft)
+    } else if x > x2 && y < y1 {
+        Some(ResizeEdge::TopRight)
+    } else if x < x1 && y > y2 {
+        Some(ResizeEdge::BottomLeft)
+    } else if x > x2 && y > y2 {
+        Some(ResizeEdge::BottomRight)
+    } else if y < y1 {
+        Some(ResizeEdge::Top)
+    } else if y > y2 {
+        Some(ResizeEdge::Bottom)
+    } else if x < x1 {
+        Some(ResizeEdge::Left)
+    } else if x > x2 {
+        Some(ResizeEdge::Right)
     } else {
-        return None;
-    };
-    Some(edge)
+        None
+    }
 }
