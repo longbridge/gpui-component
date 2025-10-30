@@ -202,21 +202,20 @@ fn correct_bounds_for_tiling(mut bounds: Bounds<Pixels>, tiling: &Tiling) -> Bou
 }
 
 fn resize_edge(pos: Point<Pixels>, window_bounds: Bounds<Pixels>) -> Option<ResizeEdge> {
-    let mut x1 = window_bounds.origin.x;
-    let mut y1 = window_bounds.origin.y;
+    let x1 = window_bounds.origin.x;
+    let y1 = window_bounds.origin.y;
 
-    let mut x2 = window_bounds.origin.x + window_bounds.size.width;
-    let mut y2 = window_bounds.origin.y + window_bounds.size.height;
+    let x2 = window_bounds.origin.x + window_bounds.size.width;
+    let y2 = window_bounds.origin.y + window_bounds.size.height;
 
     // It is standard behaviour for window manager to extend the corner's hitbox
     // if the window is big enough.
-    if x2 - x1 > 3 * x1 && y2 - y1 > 3 * y2 {
-        x1 += x1;
-        x2 -= x1;
-
-        y1 += y1;
-        y2 -= y1;
-    }
+    let (x1, y1, x2, y2) =
+        if x2 - x1 > 3 * x1 && y2 - y1 > 3 * y2 {
+            (x1 + x1, x2 - x1, y1 + y1, y2 - y1)
+        } else {
+            (x1, y1, x2, y2)
+        };
 
     let Point { x, y } = pos;
 
