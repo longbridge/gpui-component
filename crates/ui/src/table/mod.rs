@@ -1344,7 +1344,7 @@ where
         let vertical_scroll_handle = state.vertical_scroll_handle.clone();
         let horizontal_scroll_state = state.horizontal_scroll_state.clone();
         let horizontal_scroll_handle = state.horizontal_scroll_handle.clone();
-        let fixed_head_cols_bounds = state.fixed_head_cols_bounds.clone();
+        let fixed_head_cols_bounds = state.fixed_head_cols_bounds;
         let columns_count = state.delegate.columns_count(cx);
         let left_columns_count = state
             .col_groups
