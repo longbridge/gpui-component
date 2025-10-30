@@ -1218,11 +1218,13 @@ impl<D> Render for TableState<D>
 where
     D: TableDelegate,
 {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
     }
 }
 
+/// A table element.
+#[derive(IntoElement)]
 pub struct Table<D: TableDelegate> {
     state: Entity<TableState<D>>,
     scrollbar_visible: Edges<bool>,
