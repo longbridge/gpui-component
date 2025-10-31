@@ -14,9 +14,13 @@ This example demonstrates how to use the syntax error highlighting feature in th
 The code editor displays errors with different colored wavy underlines based on their severity:
 
 - **Error**: Red wavy underline
-- **Warning**: Yellow/Orange wavy underline  
+- **Warning**: Yellow/Orange wavy underline
 - **Info**: Blue wavy underline
 - **Hint**: Light blue wavy underline
+
+## Important Note
+
+**This feature is only available in Code Editor mode.** Single-line and basic multi-line input modes do not support diagnostics. You must use `InputState::code_editor(language)` to enable this functionality.
 
 ## Usage
 
@@ -138,7 +142,3 @@ Position::new(line, character)
 ```bash
 cargo run -p syntax_errors
 ```
-
-## Note
-
-This example is only available in the code editor mode. Single-line and multi-line input modes do not support diagnostics.
