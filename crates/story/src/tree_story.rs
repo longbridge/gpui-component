@@ -7,8 +7,13 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme as _, IconName, ListItem, StyledExt as _, TreeItem, TreeState, dock::PanelControl,
-    h_flex, label::Label, tree, v_flex,
+    ActiveTheme as _, IconName, StyledExt as _,
+    dock::PanelControl,
+    h_flex,
+    label::Label,
+    list::ListItem,
+    tree::{TreeItem, TreeState, tree},
+    v_flex,
 };
 
 use crate::{Story, section};

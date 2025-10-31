@@ -250,12 +250,3 @@ v_flex()
     .child(Label::new("Email:").font_semibold())
     .child(Label::new("john@example.com"))
 ```
-
-## Accessibility
-
-- Text content is announced by screen readers
-- Color alone is not used to convey information (use secondary text for context)
-- Sufficient color contrast maintained with theme colors
-- Text wrapping ensures content remains readable at different sizes
-- Masked content maintains structure for consistent layout
-- Highlighting preserves text semantics and readability

@@ -205,7 +205,7 @@ impl DatePickerState {
     // This is because mouse down out the Calendar, GPUI will move focus to the container.
     // So we need to move focus back to the Picker Input.
     //
-    // But if mouse down target is some other focusable element (e.g.: TextInput), we should not move focus.
+    // But if mouse down target is some other focusable element (e.g.: [`crate::Input`]), we should not move focus.
     fn focus_back_if_need(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             return;

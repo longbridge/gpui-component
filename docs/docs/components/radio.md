@@ -359,17 +359,6 @@ impl Render for PaymentView {
 }
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Tab key moves focus between radio buttons
-- **Toggle**: Space key selects the focused radio button
-- **Arrow Keys**: In radio groups, arrow keys move selection between options
-- **Focus Indicators**: Clear visual focus rings for keyboard navigation
-- **Disabled State**: Disabled radio buttons cannot be focused or activated
-- **Screen Reader Support**: Labels are properly announced by screen readers
-- **ARIA Attributes**: Proper roles and states for accessibility
-- **Group Navigation**: Radio groups provide proper grouping semantics
-
 ## Best Practices
 
 1. **Use RadioGroup**: Always prefer `RadioGroup` over individual `Radio` components for mutually exclusive choices

@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{button::*, checkbox::*, divider::*, dropdown::*, input::*, *};
+use gpui_component::{button::*, checkbox::*, divider::*, input::*, select::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,7 @@ impl Country {
     }
 }
 
-impl DropdownItem for Country {
+impl SelectItem for Country {
     type Value = SharedString;
 
     fn title(&self) -> SharedString {
@@ -35,21 +35,21 @@ impl DropdownItem for Country {
     }
 }
 
-pub struct DropdownStory {
+pub struct SelectStory {
     disabled: bool,
-    country_dropdown: Entity<DropdownState<SearchableVec<DropdownItemGroup<Country>>>>,
-    fruit_dropdown: Entity<DropdownState<SearchableVec<SharedString>>>,
-    simple_dropdown1: Entity<DropdownState<Vec<SharedString>>>,
-    simple_dropdown2: Entity<DropdownState<SearchableVec<SharedString>>>,
-    simple_dropdown3: Entity<DropdownState<Vec<SharedString>>>,
-    disabled_dropdown: Entity<DropdownState<Vec<SharedString>>>,
-    appearance_dropdown: Entity<DropdownState<Vec<SharedString>>>,
+    country_select: Entity<SelectState<SearchableVec<SelectGroup<Country>>>>,
+    fruit_select: Entity<SelectState<SearchableVec<&'static str>>>,
+    simple_select1: Entity<SelectState<Vec<&'static str>>>,
+    simple_select2: Entity<SelectState<SearchableVec<&'static str>>>,
+    simple_select3: Entity<SelectState<Vec<SharedString>>>,
+    disabled_select: Entity<SelectState<Vec<SharedString>>>,
+    appearance_select: Entity<SelectState<Vec<SharedString>>>,
     input_state: Entity<InputState>,
 }
 
-impl super::Story for DropdownStory {
+impl super::Story for SelectStory {
     fn title() -> &'static str {
-        "Dropdown"
+        "Select"
     }
 
     fn description() -> &'static str {
@@ -61,34 +61,33 @@ impl super::Story for DropdownStory {
     }
 }
 
-impl Focusable for DropdownStory {
+impl Focusable for SelectStory {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.fruit_dropdown.focus_handle(cx)
+        self.fruit_select.focus_handle(cx)
     }
 }
 
-impl DropdownStory {
+impl SelectStory {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let countries =
             serde_json::from_str::<Vec<Country>>(include_str!("./fixtures/countries.json"))
                 .unwrap();
-        let mut grouped_countries: SearchableVec<DropdownItemGroup<Country>> =
-            SearchableVec::new(vec![]);
+        let mut grouped_countries: SearchableVec<SelectGroup<Country>> = SearchableVec::new(vec![]);
         for (prefix, items) in countries.iter().chunk_by(|c| c.letter_prefix()).into_iter() {
             let items = items.cloned().collect::<Vec<Country>>();
-            grouped_countries.push(DropdownItemGroup::new(prefix.to_string()).items(items));
+            grouped_countries.push(SelectGroup::new(prefix.to_string()).items(items));
         }
 
-        let country_dropdown = cx.new(|cx| {
-            DropdownState::new(
+        let country_select = cx.new(|cx| {
+            SelectState::new(
                 grouped_countries,
                 Some(IndexPath::default().row(8).section(2)),
                 window,
                 cx,
             )
         });
-        let appearance_dropdown = cx.new(|cx| {
-            DropdownState::new(
+        let appearance_select = cx.new(|cx| {
+            SelectState::new(
                 vec![
                     "CN".into(),
                     "US".into(),
@@ -104,64 +103,51 @@ impl DropdownStory {
         let input_state = cx.new(|cx| InputState::new(window, cx).placeholder("Your phone number"));
 
         let fruits = SearchableVec::new(vec![
-            "Apple".into(),
-            "Orange".into(),
-            "Banana".into(),
-            "Grape".into(),
-            "Pineapple".into(),
-            "Watermelon & This is a long long long long long long long long long title".into(),
-            "Avocado".into(),
+            "Apple",
+            "Orange",
+            "Banana",
+            "Grape",
+            "Pineapple",
+            "Watermelon & This is a long long long long long long long long long title",
+            "Avocado",
         ]);
-        let fruit_dropdown = cx.new(|cx| DropdownState::new(fruits, None, window, cx));
+        let fruit_select = cx.new(|cx| SelectState::new(fruits, None, window, cx));
 
         cx.new(|cx| {
-            cx.subscribe_in(&country_dropdown, window, Self::on_dropdown_event)
+            cx.subscribe_in(&country_select, window, Self::on_select_event)
                 .detach();
 
             Self {
                 disabled: false,
-                country_dropdown,
-                fruit_dropdown,
-                simple_dropdown1: cx.new(|cx| {
-                    DropdownState::new(
+                country_select,
+                fruit_select,
+                simple_select1: cx.new(|cx| {
+                    SelectState::new(
                         vec![
-                            "GPUI".into(),
-                            "Iced".into(),
-                            "egui".into(),
-                            "Makepad".into(),
-                            "Slint".into(),
-                            "QT".into(),
-                            "ImGui".into(),
-                            "Cocoa".into(),
-                            "WinUI".into(),
+                            "GPUI", "Iced", "egui", "Makepad", "Slint", "QT", "ImGui", "Cocoa",
+                            "WinUI",
                         ],
                         Some(IndexPath::default()),
                         window,
                         cx,
                     )
                 }),
-                simple_dropdown2: cx.new(|cx| {
-                    let mut dropdown =
-                        DropdownState::new(SearchableVec::new(vec![]), None, window, cx);
+                simple_select2: cx.new(|cx| {
+                    let mut select = SelectState::new(SearchableVec::new(vec![]), None, window, cx);
 
-                    dropdown.set_items(
-                        SearchableVec::new(vec![
-                            "Rust".into(),
-                            "Go".into(),
-                            "C++".into(),
-                            "JavaScript".into(),
-                        ]),
+                    select.set_items(
+                        SearchableVec::new(vec!["Rust", "Go", "C++", "JavaScript"]),
                         window,
                         cx,
                     );
 
-                    dropdown
+                    select
                 }),
-                simple_dropdown3: cx
-                    .new(|cx| DropdownState::new(Vec::<SharedString>::new(), None, window, cx)),
-                disabled_dropdown: cx
-                    .new(|cx| DropdownState::new(Vec::<SharedString>::new(), None, window, cx)),
-                appearance_dropdown,
+                simple_select3: cx
+                    .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
+                disabled_select: cx
+                    .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
+                appearance_select,
                 input_state,
             }
         })
@@ -171,15 +157,15 @@ impl DropdownStory {
         Self::new(window, cx)
     }
 
-    fn on_dropdown_event(
+    fn on_select_event(
         &mut self,
-        _: &Entity<DropdownState<SearchableVec<DropdownItemGroup<Country>>>>,
-        event: &DropdownEvent<SearchableVec<DropdownItemGroup<Country>>>,
+        _: &Entity<SelectState<SearchableVec<SelectGroup<Country>>>>,
+        event: &SelectEvent<SearchableVec<SelectGroup<Country>>>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
         match event {
-            DropdownEvent::Confirm(value) => println!("Selected country: {:?}", value),
+            SelectEvent::Confirm(value) => println!("Selected country: {:?}", value),
         }
     }
 
@@ -189,13 +175,13 @@ impl DropdownStory {
     }
 }
 
-impl Render for DropdownStory {
+impl Render for SelectStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_4()
             .child(
-                Checkbox::new("disable-dropdowns")
+                Checkbox::new("disable-selects")
                     .label("Disabled")
                     .checked(self.disabled)
                     .on_click(cx.listener(|this, checked, window, cx| {
@@ -203,15 +189,15 @@ impl Render for DropdownStory {
                     })),
             )
             .child(
-                section("Dropdown").max_w_128().child(
-                    Dropdown::new(&self.country_dropdown)
+                section("Select").max_w_128().child(
+                    Select::new(&self.country_select)
                         .cleanable()
                         .disabled(self.disabled),
                 ),
             )
             .child(
                 section("Searchable").max_w_128().child(
-                    Dropdown::new(&self.fruit_dropdown)
+                    Select::new(&self.fruit_select)
                         .disabled(self.disabled)
                         .icon(IconName::Search)
                         .w(px(320.))
@@ -221,11 +207,11 @@ impl Render for DropdownStory {
             .child(
                 section("Disabled")
                     .max_w_128()
-                    .child(Dropdown::new(&self.disabled_dropdown).disabled(true)),
+                    .child(Select::new(&self.disabled_select).disabled(true)),
             )
             .child(
                 section("With preview label").max_w_128().child(
-                    Dropdown::new(&self.simple_dropdown1)
+                    Select::new(&self.simple_select1)
                         .disabled(self.disabled)
                         .small()
                         .placeholder("UI")
@@ -233,8 +219,8 @@ impl Render for DropdownStory {
                 ),
             )
             .child(
-                section("Searchable Dropdown").max_w_128().child(
-                    Dropdown::new(&self.simple_dropdown2)
+                section("Searchable Select").max_w_128().child(
+                    Select::new(&self.simple_select2)
                         .disabled(self.disabled)
                         .small()
                         .placeholder("Language")
@@ -243,7 +229,7 @@ impl Render for DropdownStory {
             )
             .child(
                 section("Empty Items").max_w_128().child(
-                    Dropdown::new(&self.simple_dropdown3)
+                    Select::new(&self.simple_select3)
                         .disabled(self.disabled)
                         .small()
                         .empty(
@@ -256,39 +242,37 @@ impl Render for DropdownStory {
                 ),
             )
             .child(
-                section("Appearance false with TextInput")
-                    .max_w_128()
-                    .child(
-                        h_flex()
-                            .border_1()
-                            .border_color(cx.theme().input)
-                            .rounded_lg()
-                            .text_color(cx.theme().secondary_foreground)
-                            .w_full()
-                            .gap_1()
-                            .child(
-                                div().w(px(140.)).child(
-                                    Dropdown::new(&self.appearance_dropdown)
-                                        .appearance(false)
-                                        .py_2()
-                                        .pl_3(),
-                                ),
-                            )
-                            .child(Divider::vertical())
-                            .child(
-                                div().flex_1().child(
-                                    TextInput::new(&self.input_state)
-                                        .appearance(false)
-                                        .pr_3()
-                                        .py_2(),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .p_2()
-                                    .child(Button::new("send").small().ghost().label("Send")),
+                section("Appearance false with Input").max_w_128().child(
+                    h_flex()
+                        .border_1()
+                        .border_color(cx.theme().input)
+                        .rounded_lg()
+                        .text_color(cx.theme().secondary_foreground)
+                        .w_full()
+                        .gap_1()
+                        .child(
+                            div().w(px(140.)).child(
+                                Select::new(&self.appearance_select)
+                                    .appearance(false)
+                                    .py_2()
+                                    .pl_3(),
                             ),
-                    ),
+                        )
+                        .child(Divider::vertical())
+                        .child(
+                            div().flex_1().child(
+                                Input::new(&self.input_state)
+                                    .appearance(false)
+                                    .pr_3()
+                                    .py_2(),
+                            ),
+                        )
+                        .child(
+                            div()
+                                .p_2()
+                                .child(Button::new("send").small().ghost().label("Send")),
+                        ),
+                ),
             )
             .child(
                 section("Selected Values").max_w_lg().child(
@@ -296,19 +280,19 @@ impl Render for DropdownStory {
                         .gap_3()
                         .child(format!(
                             "Country: {:?}",
-                            self.country_dropdown.read(cx).selected_value()
+                            self.country_select.read(cx).selected_value()
                         ))
                         .child(format!(
                             "fruit: {:?}",
-                            self.fruit_dropdown.read(cx).selected_value()
+                            self.fruit_select.read(cx).selected_value()
                         ))
                         .child(format!(
                             "UI: {:?}",
-                            self.simple_dropdown1.read(cx).selected_value()
+                            self.simple_select1.read(cx).selected_value()
                         ))
                         .child(format!(
                             "Language: {:?}",
-                            self.simple_dropdown2.read(cx).selected_value()
+                            self.simple_select2.read(cx).selected_value()
                         ))
                         .child("This is other text."),
                 ),

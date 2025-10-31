@@ -5,7 +5,7 @@ use gpui::{
 };
 
 use crate::{
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{DropdownMenu, PopupMenu},
     IconName, Selectable, Sizable, Size, StyledExt as _,
 };
 
@@ -16,7 +16,7 @@ pub struct DropdownButton {
     id: ElementId,
     style: StyleRefinement,
     button: Option<Button>,
-    popup_menu:
+    menu:
         Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
     selected: bool,
     // The button props
@@ -34,7 +34,7 @@ impl DropdownButton {
             id: id.into(),
             style: StyleRefinement::default(),
             button: None,
-            popup_menu: None,
+            menu: None,
             selected: false,
             compact: None,
             outline: None,
@@ -50,20 +50,20 @@ impl DropdownButton {
         self
     }
 
-    pub fn popup_menu(
+    pub fn dropdown_menu(
         mut self,
-        popup_menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
-        self.popup_menu = Some(Box::new(popup_menu));
+        self.menu = Some(Box::new(menu));
         self
     }
 
-    pub fn popup_menu_with_anchor(
+    pub fn dropdown_menu_with_anchor(
         mut self,
         anchor: impl Into<Corner>,
-        popup_menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
-        self.popup_menu = Some(Box::new(popup_menu));
+        self.menu = Some(Box::new(menu));
         self.anchor = anchor.into();
         self
     }
@@ -148,7 +148,7 @@ impl RenderOnce for DropdownButton {
                         .when_some(self.size, |this, size| this.with_size(size))
                         .when_some(self.variant, |this, variant| this.with_variant(variant)),
                 )
-                .when_some(self.popup_menu, |this, popup_menu| {
+                .when_some(self.menu, |this, menu| {
                     this.child(
                         Button::new("popup")
                             .icon(IconName::ChevronDown)
@@ -170,9 +170,7 @@ impl RenderOnce for DropdownButton {
                             .when_some(self.outline, |this, _| this.outline())
                             .when_some(self.size, |this, size| this.with_size(size))
                             .when_some(self.variant, |this, variant| this.with_variant(variant))
-                            .popup_menu_with_anchor(self.anchor, move |this, window, cx| {
-                                popup_menu(this, window, cx)
-                            }),
+                            .dropdown_menu_with_anchor(self.anchor, menu),
                     )
                 })
             })

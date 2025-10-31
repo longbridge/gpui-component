@@ -1,8 +1,8 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex,
-    input::{InputEvent, InputState, TextInput},
-    resizable::{ResizableState, h_resizable, resizable_panel},
+    input::{Input, InputEvent, InputState},
+    resizable::{h_resizable, resizable_panel},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
@@ -14,7 +14,6 @@ pub struct Gallery {
     active_index: Option<usize>,
     collapsed: bool,
     search_input: Entity<InputState>,
-    sidebar_state: Entity<ResizableState>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -50,7 +49,6 @@ impl Gallery {
                     StoryContainer::panel::<DatePickerStory>(window, cx),
                     StoryContainer::panel::<DescriptionListStory>(window, cx),
                     StoryContainer::panel::<DrawerStory>(window, cx),
-                    StoryContainer::panel::<DropdownStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<GroupBoxStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
@@ -70,16 +68,17 @@ impl Gallery {
                     StoryContainer::panel::<RadioStory>(window, cx),
                     StoryContainer::panel::<ResizableStory>(window, cx),
                     StoryContainer::panel::<ScrollableStory>(window, cx),
+                    StoryContainer::panel::<SelectStory>(window, cx),
                     StoryContainer::panel::<SidebarStory>(window, cx),
                     StoryContainer::panel::<SkeletonStory>(window, cx),
                     StoryContainer::panel::<SliderStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<TableStory>(window, cx),
                     StoryContainer::panel::<TabsStory>(window, cx),
-                    StoryContainer::panel::<TreeStory>(window, cx),
                     StoryContainer::panel::<TagStory>(window, cx),
                     StoryContainer::panel::<TextareaStory>(window, cx),
                     StoryContainer::panel::<TooltipStory>(window, cx),
+                    StoryContainer::panel::<TreeStory>(window, cx),
                     StoryContainer::panel::<VirtualListStory>(window, cx),
                 ],
             ),
@@ -91,7 +90,6 @@ impl Gallery {
             active_group_index: Some(0),
             active_index: Some(0),
             collapsed: false,
-            sidebar_state: ResizableState::new(cx),
             _subscriptions,
         };
 
@@ -148,7 +146,7 @@ impl Render for Gallery {
                 ("".into(), "".into())
             };
 
-        h_resizable("gallery-container", self.sidebar_state.clone())
+        h_resizable("gallery-container")
             .child(
                 resizable_panel()
                     .size(px(255.))
@@ -214,12 +212,14 @@ impl Render for Gallery {
                                     .child(
                                         div()
                                             .bg(cx.theme().sidebar_accent)
-                                            .px_1()
                                             .rounded_full()
+                                            .when(cx.theme().radius.is_zero(), |this| {
+                                                this.rounded(px(0.))
+                                            })
                                             .flex_1()
                                             .mx_1()
                                             .child(
-                                                TextInput::new(&self.search_input)
+                                                Input::new(&self.search_input)
                                                     .appearance(false)
                                                     .cleanable(),
                                             ),

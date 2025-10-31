@@ -134,7 +134,7 @@ webview.update(cx, |webview, _| {
 ### Browser-like Interface
 
 ```rust
-use gpui_component::input::{InputState, TextInput};
+use gpui_component::input::{InputState, Input};
 
 pub struct WebBrowser {
     webview: Entity<WebView>,
@@ -238,7 +238,7 @@ webview.set_bounds(rect).unwrap();
 ```rust
 use gpui_component::{
     webview::WebView,
-    input::{TextInput, InputState, InputEvent},
+    input::{Input, InputState, InputEvent},
     h_flex, v_flex
 };
 
@@ -256,7 +256,7 @@ impl Render for SimpleBrowser {
                     .p_2()
                     .gap_2()
                     .child("Address:")
-                    .child(TextInput::new(&self.address_bar))
+                    .child(Input::new(&self.address_bar))
             )
             .child(
                 div()
@@ -403,26 +403,6 @@ fn execute_safe_script(webview: &mut WebView, script: &str) -> anyhow::Result<()
     webview.evaluate_script(script)
 }
 ```
-
-## Accessibility
-
-### Focus Management
-
-- WebView participates in focus navigation
-- Clicking outside webview transfers focus back to parent
-- Use `focus_handle()` for programmatic focus control
-
-### Screen Reader Support
-
-- WebView content is accessible to screen readers
-- HTML semantic elements work normally
-- Use proper ARIA attributes in web content
-
-### Keyboard Navigation
-
-- Standard web keyboard shortcuts work within webview
-- Tab navigation between webview and parent application
-- Escape key handling for modal-like behavior
 
 ## Performance Tips
 

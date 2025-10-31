@@ -1,15 +1,14 @@
 use gpui::*;
 use gpui_component::{
     highlighter::Language,
-    input::{InputEvent, InputState, TabSize, TextInput},
-    resizable::{ResizableState, h_resizable, resizable_panel},
+    input::{Input, InputEvent, InputState, TabSize},
+    resizable::{h_resizable, resizable_panel},
     text::TextView,
 };
 use story::{Assets, Open};
 
 pub struct Example {
     input_state: Entity<InputState>,
-    resizable_state: Entity<ResizableState>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -29,12 +28,10 @@ impl Example {
                 .placeholder("Enter your Markdown here...")
                 .default_value(EXAMPLE)
         });
-        let resizable_state = ResizableState::new(cx);
 
         let _subscriptions = vec![cx.subscribe(&input_state, |_, _, _: &InputEvent, _| {})];
 
         Self {
-            resizable_state,
             input_state,
             _subscriptions,
         }
@@ -79,7 +76,7 @@ impl Render for Example {
             .size_full()
             .on_action(cx.listener(Self::on_action_open))
             .child(
-                h_resizable("container", self.resizable_state.clone())
+                h_resizable("container")
                     .child(
                         resizable_panel().child(
                             div()
@@ -88,7 +85,7 @@ impl Render for Example {
                                 .font_family("Monaco")
                                 .text_size(px(12.))
                                 .child(
-                                    TextInput::new(&self.input_state)
+                                    Input::new(&self.input_state)
                                         .h_full()
                                         .p_0()
                                         .border_0()

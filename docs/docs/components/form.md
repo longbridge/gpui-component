@@ -22,12 +22,12 @@ v_form()
     .child(
         form_field()
             .label("Name")
-            .child(TextInput::new(&name_input))
+            .child(Input::new(&name_input))
     )
     .child(
         form_field()
             .label("Email")
-            .child(TextInput::new(&email_input))
+            .child(Input::new(&email_input))
             .required(true)
     )
 ```
@@ -40,12 +40,12 @@ h_form()
     .child(
         form_field()
             .label("First Name")
-            .child(TextInput::new(&first_name))
+            .child(Input::new(&first_name))
     )
     .child(
         form_field()
             .label("Last Name")
-            .child(TextInput::new(&last_name))
+            .child(Input::new(&last_name))
     )
 ```
 
@@ -57,18 +57,18 @@ v_form()
     .child(
         form_field()
             .label("First Name")
-            .child(TextInput::new(&first_name))
+            .child(Input::new(&first_name))
     )
     .child(
         form_field()
             .label("Last Name")
-            .child(TextInput::new(&last_name))
+            .child(Input::new(&last_name))
     )
     .child(
         form_field()
             .label("Bio")
             .col_span(2) // Span across both columns
-            .child(TextInput::new(&bio_input))
+            .child(Input::new(&bio_input))
     )
 ```
 
@@ -113,7 +113,7 @@ v_form()
 form_field()
     .label("Email")
     .required(true) // Shows asterisk (*) next to label
-    .child(TextInput::new(&email_input))
+    .child(Input::new(&email_input))
 ```
 
 ### Field Descriptions
@@ -122,7 +122,7 @@ form_field()
 form_field()
     .label("Password")
     .description("Must be at least 8 characters long")
-    .child(TextInput::new(&password_input))
+    .child(Input::new(&password_input))
 ```
 
 ### Dynamic Descriptions
@@ -133,7 +133,7 @@ form_field()
     .description_fn(|_, _| {
         div().child("Use at most 100 words to describe yourself.")
     })
-    .child(TextInput::new(&bio_input))
+    .child(Input::new(&bio_input))
 ```
 
 ### Field Visibility
@@ -173,8 +173,8 @@ impl FormView {
 
 // Form with submit button
 v_form()
-    .child(form_field().label("Name").child(TextInput::new(&self.name_input)))
-    .child(form_field().label("Email").child(TextInput::new(&self.email_input)))
+    .child(form_field().label("Name").child(Input::new(&self.name_input)))
+    .child(form_field().label("Email").child(Input::new(&self.email_input)))
     .child(
         form_field()
             .no_label_indent()
@@ -191,8 +191,8 @@ v_form()
 
 ```rust
 v_form()
-    .child(form_field().label("Title").child(TextInput::new(&title)))
-    .child(form_field().label("Content").child(TextInput::new(&content)))
+    .child(form_field().label("Title").child(Input::new(&title)))
+    .child(form_field().label("Content").child(Input::new(&content)))
     .child(
         form_field()
             .no_label_indent()
@@ -218,8 +218,8 @@ v_form()
             .child(
                 h_flex()
                     .gap_2()
-                    .child(div().flex_1().child(TextInput::new(&first_name)))
-                    .child(div().flex_1().child(TextInput::new(&last_name)))
+                    .child(div().flex_1().child(Input::new(&first_name)))
+                    .child(div().flex_1().child(Input::new(&last_name)))
             )
     )
     .child(
@@ -229,12 +229,12 @@ v_form()
             .child(
                 v_flex()
                     .gap_2()
-                    .child(TextInput::new(&street))
+                    .child(Input::new(&street))
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(div().flex_1().child(TextInput::new(&city)))
-                            .child(div().w(px(100.)).child(TextInput::new(&zip)))
+                            .child(div().flex_1().child(Input::new(&city)))
+                            .child(div().w(px(100.)).child(Input::new(&zip)))
                     )
             )
     )
@@ -270,20 +270,20 @@ v_form()
     .child(
         form_field()
             .label("Account Type")
-            .child(Dropdown::new(&account_type))
+            .child(Select::new(&account_type))
     )
     .child(
         form_field()
             .label("Company Name")
             .visible(is_business_account) // Show only for business accounts
-            .child(TextInput::new(&company_name))
+            .child(Input::new(&company_name))
     )
     .child(
         form_field()
             .label("Tax ID")
             .visible(is_business_account)
             .required(is_business_account)
-            .child(TextInput::new(&tax_id))
+            .child(Input::new(&tax_id))
     )
 ```
 
@@ -301,7 +301,7 @@ v_form()
         form_field()
             .label("Full Width")
             .col_span(3) // Spans all three columns
-            .child(TextInput::new(&full_width))
+            .child(Input::new(&full_width))
     )
 ```
 
@@ -400,13 +400,13 @@ impl Render for RegistrationForm {
                             .gap_3()
                             .child(
                                 div().flex_1().child(
-                                    TextInput::new(&self.first_name)
+                                    Input::new(&self.first_name)
                                         .placeholder("First name")
                                 )
                             )
                             .child(
                                 div().flex_1().child(
-                                    TextInput::new(&self.last_name)
+                                    Input::new(&self.last_name)
                                         .placeholder("Last name")
                                 )
                             )
@@ -416,20 +416,20 @@ impl Render for RegistrationForm {
                 form_field()
                     .label("Email")
                     .required(true)
-                    .child(TextInput::new(&self.email))
+                    .child(Input::new(&self.email))
             )
             .child(
                 form_field()
                     .label("Password")
                     .required(true)
                     .description("Must be at least 8 characters")
-                    .child(TextInput::new(&self.password))
+                    .child(Input::new(&self.password))
             )
             .child(
                 form_field()
                     .label("Confirm Password")
                     .required(true)
-                    .child(TextInput::new(&self.confirm_password))
+                    .child(Input::new(&self.confirm_password))
             )
             .child(
                 form_field()
@@ -474,19 +474,19 @@ v_form()
     .child(
         form_field()
             .label("Display Name")
-            .child(TextInput::new(&display_name))
+            .child(Input::new(&display_name))
     )
     .child(
         form_field()
             .label("Email")
-            .child(TextInput::new(&email))
+            .child(Input::new(&email))
     )
     .child(
         form_field()
             .label("Bio")
             .col_span(2)
             .items_start()
-            .child(TextInput::new(&bio))
+            .child(Input::new(&bio))
     )
     .child(
         form_field()
@@ -498,12 +498,12 @@ v_form()
     .child(
         form_field()
             .label("Theme")
-            .child(Dropdown::new(&theme_state))
+            .child(Select::new(&theme_state))
     )
     .child(
         form_field()
             .label("Language")
-            .child(Dropdown::new(&language_state))
+            .child(Select::new(&language_state))
     )
     .child(
         form_field()
@@ -528,12 +528,12 @@ v_form()
                 h_flex()
                     .gap_2()
                     .child(
-                        Dropdown::new(&prefix_state)
+                        Select::new(&prefix_state)
                             .w(px(80.))
                     )
                     .child(
                         div().flex_1().child(
-                            TextInput::new(&name_input)
+                            Input::new(&name_input)
                                 .placeholder("Your name")
                         )
                     )
@@ -543,12 +543,12 @@ v_form()
         form_field()
             .label("Email")
             .required(true)
-            .child(TextInput::new(&email_input))
+            .child(Input::new(&email_input))
     )
     .child(
         form_field()
             .label("Subject")
-            .child(Dropdown::new(&subject_state))
+            .child(Select::new(&subject_state))
     )
     .child(
         form_field()
@@ -556,7 +556,7 @@ v_form()
             .required(true)
             .items_start()
             .description("Please describe your inquiry in detail")
-            .child(TextInput::new(&message_input))
+            .child(Input::new(&message_input))
     )
     .child(
         form_field()
@@ -578,13 +578,3 @@ v_form()
             )
     )
 ```
-
-## Accessibility
-
-- **Keyboard Navigation**: Full keyboard support for all form elements
-- **Focus Management**: Proper focus indicators and tab order
-- **Screen Readers**: Labels properly associated with form controls
-- **Required Fields**: Visual and semantic indication of required fields
-- **Error States**: Clear error messaging and validation feedback
-- **ARIA Labels**: Proper ARIA attributes for complex form structures
-- **Semantic HTML**: Uses appropriate form semantics for accessibility tools

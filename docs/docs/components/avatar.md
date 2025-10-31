@@ -17,11 +17,12 @@ use gpui_component::avatar::{Avatar, AvatarGroup};
 
 ### Basic Avatar
 
+You can create an [Avatar] by providing an image source URL and a user name:
+
 ```rust
-// Avatar with image
 Avatar::new()
-    .src("https://example.com/avatar.jpg")
     .name("John Doe")
+    .src("https://example.com/avatar.jpg")
 ```
 
 ### Avatar with Fallback Text
@@ -91,7 +92,7 @@ Avatar::new()
 
 ## AvatarGroup
 
-Display multiple avatars in a compact, overlapping layout:
+The [AvatarGroup] component allows you to display multiple avatars in a compact, overlapping layout:
 
 ### Basic Group
 
@@ -117,7 +118,9 @@ AvatarGroup::new()
 
 ### Group with Ellipsis
 
-Show an ellipsis indicator when avatars are hidden due to the limit:
+Show an ellipsis indicator when avatars are hidden due to the limit.
+
+In this example, only 3 avatars are shown, and "..." indicates there are more:
 
 ```rust
 AvatarGroup::new()
@@ -131,6 +134,8 @@ AvatarGroup::new()
 ```
 
 ### Group Sizes
+
+The [Sizeable] trait can also be applied to AvatarGroup, and it will set the size for all contained avatars.
 
 ```rust
 // Extra small group
@@ -175,44 +180,8 @@ AvatarGroup::new()
 
 ## API Reference
 
-### Avatar
-
-| Method              | Description                                |
-| ------------------- | ------------------------------------------ |
-| `new()`             | Create a new avatar                        |
-| `src(source)`       | Set image source (ImageSource)             |
-| `name(name)`        | Set user name (used for initials fallback) |
-| `placeholder(icon)` | Set placeholder icon (default: User icon)  |
-
-### Avatar Sizes (via Sizable trait)
-
-| Method              | Description           |
-| ------------------- | --------------------- |
-| `xsmall()`          | 20px avatar           |
-| `small()`           | 24px avatar           |
-| `medium()`          | 48px avatar (default) |
-| `large()`           | 80px avatar           |
-| `with_size(pixels)` | Custom size in pixels |
-
-### AvatarGroup
-
-| Method              | Description                             |
-| ------------------- | --------------------------------------- |
-| `new()`             | Create a new avatar group               |
-| `child(avatar)`     | Add single avatar to group              |
-| `children(avatars)` | Add multiple avatars to group           |
-| `limit(count)`      | Maximum avatars to display (default: 3) |
-| `ellipsis()`        | Show "..." when limit exceeded          |
-
-### AvatarGroup Sizes (via Sizable trait)
-
-| Method            | Description                     |
-| ----------------- | ------------------------------- |
-| `xsmall()`        | Group of 20px avatars           |
-| `small()`         | Group of 24px avatars           |
-| `medium()`        | Group of 48px avatars (default) |
-| `large()`         | Group of 80px avatars           |
-| `with_size(size)` | Custom size for all avatars     |
+- [Avatar]
+- [AvatarGroup]
 
 ## Examples
 
@@ -277,54 +246,6 @@ Avatar::new().name("Bob")      // Gets a different color
 Avatar::new().name("Charlie")  // Gets another color
 ```
 
-## Accessibility
-
-### Avatar
-
-- Images include appropriate alt text derived from the user's name
-- Fallback initials provide text content for screen readers
-- Color contrast meets WCAG guidelines for text on colored backgrounds
-- Placeholder icons are properly labeled
-
-### AvatarGroup
-
-- Each avatar maintains individual accessibility properties
-- Group semantics indicate collection of user avatars
-- Ellipsis indicator announces hidden avatar count to screen readers
-- Keyboard navigation respects individual avatar focus states
-
-### Color Generation
-
-- Avatar background colors are generated deterministically from user names
-- Colors provide sufficient contrast with white text
-- Color system supports users with color vision differences
-
-## Implementation Notes
-
-### Text Initials Extraction
-
-The component automatically extracts initials from names:
-
-- Two words: "John Doe" → "JD"
-- Multiple words: "John Smith Doe" → "JS" (first two words)
-- Single word: "Superman" → "SU" (first two characters)
-- All initials are converted to uppercase
-
-### Color Generation
-
-- Uses a hash of the user's name to determine color
-- Rotates through a palette of 24 distinct hues
-- Applies consistent opacity for background colors
-- Ensures good contrast with white text
-
-### Image Loading
-
-- Gracefully handles failed image loads by falling back to initials
-- Supports all GPUI ImageSource types (URLs, local files, etc.)
-- Images are automatically sized and cropped to fit the avatar circle
-
-### Performance
-
-- AvatarGroup efficiently renders only visible avatars
-- Color calculations are cached per name
-- Image loading is handled by GPUI's built-in optimization
+[Avatar]: https://docs.rs/gpui-component/latest/gpui_component/avatar/struct.Avatar.html
+[AvatarGroup]: https://docs.rs/gpui-component/latest/gpui_component/avatar/struct.AvatarGroup.html
+[Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

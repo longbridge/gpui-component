@@ -18,37 +18,49 @@ use gpui_component::resizable::{
 
 ## Usage
 
-### Basic Horizontal Layout
+Use `h_resizable` to create a horizontal layout, `v_resizable` to create a vertical layout.
+
+The first argument is the `id` for this [ResizablePanelGroup].
+
+:::tip
+In GPUI, the `id` must be unique within the layout scope (The nearest parent has presents `id`).
+:::
 
 ```rust
-let state = ResizableState::new(cx);
-
-h_resizable("my-layout", state)
+h_resizable("my-layout")
+    .on_resize(|state, window, cx| {
+        // Handle resize event
+        // You can read the panel sizes from the state.
+        let state = state.read(cx);
+        let sizes = state.sizes();
+    })
     .child(
+        // Use resizable_panel() to create a sized panel.
         resizable_panel()
             .size(px(200.))
             .child("Left Panel")
     )
     .child(
-        resizable_panel()
+        // Or you can just add AnyElement without a size.
+        div()
             .child("Right Panel")
+            .into_any_element()
     )
 ```
 
-### Basic Vertical Layout
+The `v_resizable` component is used to create a vertical layout.
 
 ```rust
-let state = ResizableState::new(cx);
-
-v_resizable("vertical-layout", state)
+v_resizable("vertical-layout")
     .child(
         resizable_panel()
             .size(px(100.))
             .child("Top Panel")
     )
     .child(
-        resizable_panel()
+        div()
             .child("Bottom Panel")
+            .into_any_element()
     )
 ```
 
@@ -85,15 +97,12 @@ h_resizable("multi-panel", state)
 ### Nested Layouts
 
 ```rust
-let main_state = ResizableState::new(cx);
-let nested_state = ResizableState::new(cx);
-
-v_resizable("main-layout", main_state)
+v_resizable("main-layout", window, cx)
     .child(
         resizable_panel()
             .size(px(300.))
             .child(
-                h_resizable("nested-layout", nested_state)
+                h_resizable("nested-layout", window, cx)
                     .child(
                         resizable_panel()
                             .size(px(200.))
@@ -114,17 +123,14 @@ v_resizable("main-layout", main_state)
 ### Nested Panel Groups
 
 ```rust
-let outer_state = ResizableState::new(cx);
-let inner_state = ResizableState::new(cx);
-
-h_resizable("outer", outer_state)
+h_resizable("outer", window, cx)
     .child(
         resizable_panel()
             .size(px(200.))
             .child("Left Panel")
     )
     .group(
-        v_resizable("inner", inner_state)
+        v_resizable("inner", window, cx)
             .child(
                 resizable_panel()
                     .size(px(150.))
@@ -135,42 +141,6 @@ h_resizable("outer", outer_state)
                     .child("Bottom Right")
             )
     )
-```
-
-### Handling Resize Events
-
-```rust
-struct MyView {
-    resizable_state: Entity<ResizableState>,
-}
-
-impl MyView {
-    fn new(cx: &mut Context<Self>) -> Self {
-        let resizable_state = ResizableState::new(cx);
-
-        // Subscribe to resize events
-        let subscription = cx.subscribe(&resizable_state, |this, _, event: &ResizablePanelEvent, cx| {
-            match event {
-                ResizablePanelEvent::Resized => {
-                    // Handle resize completion
-                    println!("Panel resized!");
-                    this.handle_resize_complete(cx);
-                }
-            }
-        });
-
-        Self {
-            resizable_state,
-        }
-    }
-
-    fn handle_resize_complete(&mut self, cx: &mut Context<Self>) {
-        // Access current panel sizes
-        let sizes = self.resizable_state.read(cx).sizes();
-        println!("Current panel sizes: {:?}", sizes);
-        cx.notify();
-    }
-}
 ```
 
 ### Conditional Panel Visibility
@@ -202,114 +172,18 @@ resizable_panel()
     .child("Fixed Panel")
 ```
 
-## API Reference
-
-### ResizableState
-
-| Method    | Description                               |
-| --------- | ----------------------------------------- |
-| `new(cx)` | Create a new resizable state entity       |
-| `sizes()` | Get current panel sizes as `&Vec<Pixels>` |
-
-### Resizable Panel Group Functions
-
-| Function                 | Description                             |
-| ------------------------ | --------------------------------------- |
-| `h_resizable(id, state)` | Create horizontal resizable panel group |
-| `v_resizable(id, state)` | Create vertical resizable panel group   |
-| `resizable_panel()`      | Create a new resizable panel            |
-
-### ResizablePanelGroup
-
-| Method             | Description                               |
-| ------------------ | ----------------------------------------- |
-| `new(id, state)`   | Create a new panel group                  |
-| `axis(axis)`       | Set resize axis (Horizontal/Vertical)     |
-| `child(panel)`     | Add a resizable panel to the group        |
-| `children(panels)` | Add multiple panels at once               |
-| `group(group)`     | Add another panel group as a nested child |
-| `size(size)`       | Set the size of the group container       |
-
-### ResizablePanel
-
-| Method              | Description                     |
-| ------------------- | ------------------------------- |
-| `new()`             | Create a new resizable panel    |
-| `child(element)`    | Add child element to the panel  |
-| `size(pixels)`      | Set initial panel size          |
-| `size_range(range)` | Set size constraints (min..max) |
-| `visible(bool)`     | Control panel visibility        |
-
-### Size Constraints
-
-| Constraint                    | Description                     |
-| ----------------------------- | ------------------------------- |
-| `px(100.)..px(400.)`          | Panel can be 100px to 400px     |
-| `px(150.)..Pixels::MAX`       | Panel minimum 150px, no maximum |
-| `PANEL_MIN_SIZE..Pixels::MAX` | Default constraints             |
-
-### ResizablePanelEvent
-
-| Event     | Description                            |
-| --------- | -------------------------------------- |
-| `Resized` | Emitted when a panel finishes resizing |
-
-## Drag Handles
-
-Resize handles are automatically created between panels:
-
-- **Horizontal layouts**: Vertical drag handles between panels
-- **Vertical layouts**: Horizontal drag handles between panels
-- **Visual feedback**: Handles show hover and active states
-- **Cursor changes**: Appropriate resize cursors on hover
-- **Handle size**: 1px wide with 4px padding for easier interaction
-
-### Handle Behavior
-
-- Handles appear between adjacent panels
-- Dragging adjusts sizes of neighboring panels
-- Panels respect their size constraints during resize
-- Overflow is handled by adjusting panel sizes proportionally
-
-## Direction Support
-
-### Horizontal Resizing
-
-```rust
-h_resizable("horizontal", state)
-    .child(resizable_panel().child("Left"))
-    .child(resizable_panel().child("Right"))
-```
-
-- Panels are arranged side by side
-- Vertical drag handles between panels
-- Resize by dragging left/right
-
-### Vertical Resizing
-
-```rust
-v_resizable("vertical", state)
-    .child(resizable_panel().child("Top"))
-    .child(resizable_panel().child("Bottom"))
-```
-
-- Panels are stacked vertically
-- Horizontal drag handles between panels
-- Resize by dragging up/down
-
 ## Examples
 
 ### File Explorer Layout
 
 ```rust
 struct FileExplorer {
-    layout_state: Entity<ResizableState>,
     show_sidebar: bool,
 }
 
 impl Render for FileExplorer {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        h_resizable("file-explorer", self.layout_state.clone())
+        h_resizable("file-explorer", window, cx)
             .child(
                 resizable_panel()
                     .visible(self.show_sidebar)
@@ -325,15 +199,13 @@ impl Render for FileExplorer {
                     )
             )
             .child(
-                resizable_panel()
-                    .child(
-                        v_flex()
-                            .p_4()
-                            .child("📄 Files")
-                            .child("file1.txt")
-                            .child("file2.pdf")
-                            .child("image.png")
-                    )
+                v_flex()
+                    .p_4()
+                    .child("📄 Files")
+                    .child("file1.txt")
+                    .child("file2.pdf")
+                    .child("image.png")
+                    .into_any_element()
             )
     }
 }
@@ -491,29 +363,6 @@ impl Render for SettingsPanel {
     }
 }
 ```
-
-## Accessibility
-
-- **Mouse Interaction**: Click and drag handles to resize panels
-- **Visual Feedback**: Handles show hover states and appropriate cursors
-- **Constraints Respected**: Panels cannot be resized beyond their limits
-- **Smooth Interaction**: Real-time visual feedback during resize operations
-- **Container Awareness**: Panels adjust to fit within container bounds
-
-### Mouse Behavior
-
-| Action            | Result                                        |
-| ----------------- | --------------------------------------------- |
-| Hover over handle | Cursor changes to resize cursor               |
-| Click and drag    | Resize adjacent panels                        |
-| Release mouse     | Complete resize operation, emit Resized event |
-
-### Handle Visual States
-
-- **Default**: Subtle border appearance
-- **Hover**: Highlighted appearance
-- **Active**: Enhanced visibility during drag operation
-- **Cursor**: `col-resize` for horizontal, `row-resize` for vertical
 
 ## Best Practices
 

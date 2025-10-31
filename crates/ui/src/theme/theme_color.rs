@@ -62,7 +62,7 @@ pub struct ThemeColor {
     pub info_foreground: Hsla,
     /// Info hover background color.
     pub info_hover: Hsla,
-    /// Border color for inputs such as Input, Dropdown, etc.
+    /// Border color for inputs such as Input, Select, etc.
     pub input: Hsla,
     /// Link text color.
     pub link: Hsla,

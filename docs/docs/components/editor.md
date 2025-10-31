@@ -10,7 +10,7 @@ A powerful multi-line text input component that extends the basic input function
 ## Import
 
 ```rust
-use gpui_component::input::{InputState, TextInput};
+use gpui_component::input::{InputState, Input};
 ```
 
 ## Usage
@@ -24,7 +24,7 @@ let textarea = cx.new(|cx|
         .placeholder("Enter your message...")
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
 ```
 
 ### Fixed Height Textarea
@@ -37,7 +37,7 @@ let textarea = cx.new(|cx|
         .placeholder("Enter text here...")
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
     .h(px(320.)) // Set explicit height
 ```
 
@@ -50,7 +50,7 @@ let textarea = cx.new(|cx|
         .placeholder("Type here and watch it grow...")
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
 ```
 
 ### With Default Content
@@ -63,7 +63,7 @@ let textarea = cx.new(|cx|
         .default_value("Hello World!\n\nThis is a multi-line textarea with default content.")
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
 ```
 
 ### Code Editor Mode
@@ -77,7 +77,7 @@ let code_editor = cx.new(|cx|
         .default_value("fn main() {\n    println!(\"Hello, world!\");\n}")
 );
 
-TextInput::new(&code_editor)
+Input::new(&code_editor)
     .h_full() // Full height
 ```
 
@@ -95,7 +95,7 @@ let textarea = cx.new(|cx|
         })
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
 ```
 
 ### Searchable Textarea
@@ -109,7 +109,7 @@ let textarea = cx.new(|cx|
         .default_value("Search through this content...")
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
 ```
 
 ### Soft Wrap Control
@@ -134,8 +134,8 @@ let textarea_no_wrap = cx.new(|cx|
 
 v_flex()
     .gap_4()
-    .child(TextInput::new(&textarea_wrap))
-    .child(TextInput::new(&textarea_no_wrap))
+    .child(Input::new(&textarea_wrap))
+    .child(Input::new(&textarea_no_wrap))
 ```
 
 ### Character Counting
@@ -153,7 +153,7 @@ impl Render for TextareaView {
         v_flex()
             .gap_2()
             .child(
-                TextInput::new(&self.textarea)
+                Input::new(&self.textarea)
                     .h(px(120.))
             )
             .child(
@@ -206,7 +206,7 @@ let textarea = cx.new(|cx|
         })
 );
 
-TextInput::new(&textarea)
+Input::new(&textarea)
 ```
 
 ### Handle Events
@@ -234,7 +234,7 @@ cx.subscribe_in(&textarea, window, |view, state, event, window, cx| {
 ### Disabled State
 
 ```rust
-TextInput::new(&textarea)
+Input::new(&textarea)
     .disabled(true)
     .h(px(200.))
 ```
@@ -243,7 +243,7 @@ TextInput::new(&textarea)
 
 ```rust
 // Without default appearance
-TextInput::new(&textarea)
+Input::new(&textarea)
     .appearance(false)
     .h(px(200.))
 
@@ -255,7 +255,7 @@ div()
     .rounded_lg()
     .p_4()
     .child(
-        TextInput::new(&textarea)
+        Input::new(&textarea)
             .appearance(false)
             .h(px(150.))
     )
@@ -280,7 +280,7 @@ div()
 | `insert(text, window, cx)`             | Insert text at cursor                            |
 | `replace(text, window, cx)`            | Replace all content                              |
 
-### TextInput (Multi-line Methods)
+### Input (Multi-line Methods)
 
 | Method      | Description                |
 | ----------- | -------------------------- |
@@ -350,7 +350,7 @@ impl Render for CommentBox {
 
         v_flex()
             .gap_2()
-            .child(TextInput::new(&self.textarea))
+            .child(Input::new(&self.textarea))
             .child(
                 h_flex()
                     .justify_between()
@@ -402,7 +402,7 @@ impl Render for CodeEditor {
                     )
             )
             .child(
-                TextInput::new(&self.editor)
+                Input::new(&self.editor)
                     .h(px(400.))
                     .bordered(true)
             )
@@ -451,27 +451,16 @@ impl Render for TextEditor {
                     )
             )
             .child(
-                TextInput::new(&self.editor)
+                Input::new(&self.editor)
                     .h(px(300.))
             )
     }
 }
 ```
 
-## Accessibility
-
-- Full keyboard navigation support
-- Screen reader compatibility
-- Clear focus indicators
-- Proper ARIA labels and roles
-- Support for assistive text selection
-- Keyboard shortcuts follow platform conventions
-- ESC key handling for search and context menus
-- Tab key properly indents in multi-line mode
-
 ## Performance Notes
 
-- Optimized for large text content (up to 50K lines in code editor mode)
+- Optimized for large text content (up to 200K lines in code editor mode)
 - Efficient text wrapping and line measurement
 - Virtual scrolling for long documents
 - Minimal re-renders on text changes

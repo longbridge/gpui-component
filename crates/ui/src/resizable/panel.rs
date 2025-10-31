@@ -1,4 +1,7 @@
-use std::ops::{Deref, Range};
+use std::{
+    ops::{Deref, Range},
+    rc::Rc,
+};
 
 use gpui::{
     canvas, div, prelude::FluentBuilder, AnyElement, App, AppContext, Axis, Bounds, Context,
@@ -26,21 +29,30 @@ impl Render for DragPanel {
 #[derive(IntoElement)]
 pub struct ResizablePanelGroup {
     id: ElementId,
-    state: Entity<ResizableState>,
+    state: Option<Entity<ResizableState>>,
     axis: Axis,
     size: Option<Pixels>,
     children: Vec<ResizablePanel>,
+    on_resize: Rc<dyn Fn(&Entity<ResizableState>, &mut Window, &mut App)>,
 }
 
 impl ResizablePanelGroup {
-    pub(crate) fn new(id: impl Into<ElementId>, state: Entity<ResizableState>) -> Self {
+    /// Create a new resizable panel group.
+    pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
             axis: Axis::Horizontal,
             children: vec![],
-            state,
+            state: None,
             size: None,
+            on_resize: Rc::new(|_, _, _| {}),
         }
+    }
+
+    /// Bind yourself to a resizable state entity.
+    pub fn with_state(mut self, state: &Entity<ResizableState>) -> Self {
+        self.state = Some(state.clone());
+        self
     }
 
     /// Set the axis of the resizable panel group, default is horizontal.
@@ -67,17 +79,25 @@ impl ResizablePanelGroup {
         self
     }
 
-    /// Add a ResizablePanelGroup as a child to the group.
-    pub fn group(self, group: ResizablePanelGroup) -> Self {
-        self.child(resizable_panel().child(group.into_any_element()))
-    }
-
     /// Set size of the resizable panel group
     ///
     /// - When the axis is horizontal, the size is the height of the group.
     /// - When the axis is vertical, the size is the width of the group.
     pub fn size(mut self, size: Pixels) -> Self {
         self.size = Some(size);
+        self
+    }
+
+    /// Set the callback to be called when the panels are resized.
+    ///
+    /// ## Callback arguments
+    ///
+    /// - Entity<ResizableState>: The state of the ResizablePanelGroup.
+    pub fn on_resize(
+        mut self,
+        on_resize: impl Fn(&Entity<ResizableState>, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_resize = Rc::new(on_resize);
         self
     }
 }
@@ -90,11 +110,19 @@ where
     }
 }
 
+impl From<ResizablePanelGroup> for ResizablePanel {
+    fn from(value: ResizablePanelGroup) -> Self {
+        resizable_panel().child(value)
+    }
+}
+
 impl EventEmitter<ResizablePanelEvent> for ResizablePanelGroup {}
 
 impl RenderOnce for ResizablePanelGroup {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = self.state.clone();
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = self.state.unwrap_or(
+            window.use_keyed_state(self.id.clone(), cx, |_, _| ResizableState::default()),
+        );
         let container = if self.axis.is_horizontal() {
             h_flex()
         } else {
@@ -103,7 +131,7 @@ impl RenderOnce for ResizablePanelGroup {
 
         // Sync panels to the state
         let panels_count = self.children.len();
-        self.state.update(cx, |state, _| {
+        state.update(cx, |state, _| {
             state.sync_panels_count(self.axis, panels_count);
         });
 
@@ -117,21 +145,25 @@ impl RenderOnce for ResizablePanelGroup {
                     .map(|(ix, mut panel)| {
                         panel.panel_ix = ix;
                         panel.axis = self.axis;
-                        panel.state = Some(self.state.clone());
+                        panel.state = Some(state.clone());
                         panel
                     }),
             )
             .child({
                 canvas(
-                    move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds),
+                    {
+                        let state = state.clone();
+                        move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+                    },
                     |_, _, _, _| {},
                 )
                 .absolute()
                 .size_full()
             })
             .child(ResizePanelGroupElement {
-                state: self.state.clone(),
+                state: state.clone(),
                 axis: self.axis,
+                on_resize: self.on_resize.clone(),
             })
     }
 }
@@ -267,6 +299,7 @@ impl RenderOnce for ResizablePanel {
 
 struct ResizePanelGroupElement {
     state: Entity<ResizableState>,
+    on_resize: Rc<dyn Fn(&Entity<ResizableState>, &mut Window, &mut App)>,
     axis: Axis,
 }
 
@@ -352,12 +385,14 @@ impl Element for ResizePanelGroupElement {
         window.on_mouse_event({
             let state = self.state.clone();
             let current_ix = state.read(cx).resizing_panel_ix;
-            move |_: &MouseUpEvent, phase, _, cx| {
+            let on_resize = self.on_resize.clone();
+            move |_: &MouseUpEvent, phase, window, cx| {
                 if current_ix.is_none() {
                     return;
                 }
                 if phase.bubble() {
                     state.update(cx, |state, cx| state.done_resizing(cx));
+                    on_resize(&state, window, cx);
                 }
             }
         })

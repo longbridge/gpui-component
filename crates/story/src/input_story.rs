@@ -153,31 +153,31 @@ impl Render for InputStory {
             .child(
                 section("Normal Input")
                     .max_w_md()
-                    .child(TextInput::new(&self.input1).cleanable())
-                    .child(TextInput::new(&self.input2)),
+                    .child(Input::new(&self.input1).cleanable())
+                    .child(Input::new(&self.input2)),
             )
             .child(
                 section("Input State")
                     .max_w_md()
-                    .child(TextInput::new(&self.disabled_input).disabled(true))
-                    .child(TextInput::new(&self.mask_input).mask_toggle().cleanable()),
+                    .child(Input::new(&self.disabled_input).disabled(true))
+                    .child(Input::new(&self.mask_input).mask_toggle().cleanable()),
             )
             .child(
                 section("Prefix and Suffix")
                     .max_w_md()
                     .child(
-                        TextInput::new(&self.prefix_input1)
+                        Input::new(&self.prefix_input1)
                             .cleanable()
                             .prefix(Icon::new(IconName::Search).small()),
                     )
                     .child(
-                        TextInput::new(&self.both_input1)
+                        Input::new(&self.both_input1)
                             .cleanable()
                             .prefix(div().child(Icon::new(IconName::Search).small()))
                             .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                     )
                     .child(
-                        TextInput::new(&self.suffix_input1)
+                        Input::new(&self.suffix_input1)
                             .cleanable()
                             .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                     ),
@@ -185,7 +185,7 @@ impl Render for InputStory {
             .child(
                 section("Currency Input with thousands separator")
                     .max_w_md()
-                    .child(TextInput::new(&self.currency_input))
+                    .child(Input::new(&self.currency_input))
                     .child(
                         div().child(format!("Value: {:?}", self.currency_input.read(cx).value())),
                     ),
@@ -193,7 +193,7 @@ impl Render for InputStory {
             .child(
                 section("Input with mask pattern: (999)-999-9999")
                     .max_w_md()
-                    .child(TextInput::new(&self.phone_input))
+                    .child(Input::new(&self.phone_input))
                     .child(
                         v_flex()
                             .child(format!("Value: {:?}", self.phone_input.read(cx).value()))
@@ -206,7 +206,7 @@ impl Render for InputStory {
             .child(
                 section("Input with mask pattern: AAA-###-AAA")
                     .max_w_md()
-                    .child(TextInput::new(&self.mask_input2))
+                    .child(Input::new(&self.mask_input2))
                     .child(
                         v_flex()
                             .child(format!("Value: {:?}", self.mask_input2.read(cx).value()))
@@ -219,13 +219,13 @@ impl Render for InputStory {
             .child(
                 section("Input Size")
                     .max_w_md()
-                    .child(TextInput::new(&self.large_input).large().cleanable())
-                    .child(TextInput::new(&self.small_input).small().cleanable()),
+                    .child(Input::new(&self.large_input).large().cleanable())
+                    .child(Input::new(&self.small_input).small().cleanable()),
             )
             .child(
                 section("Cleanable and ESC to clean")
                     .max_w_md()
-                    .child(TextInput::new(&self.input_esc).cleanable()),
+                    .child(Input::new(&self.input_esc).cleanable()),
             )
             .child(
                 section("Focused Input")
@@ -247,7 +247,7 @@ impl Render for InputStory {
                         .bg(cx.theme().secondary)
                         .text_color(cx.theme().secondary_foreground)
                         .w_full()
-                        .child(TextInput::new(&self.custom_input).appearance(false)),
+                        .child(Input::new(&self.custom_input).appearance(false)),
                 ),
             )
     }

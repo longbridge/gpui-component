@@ -11,8 +11,7 @@ The Menu component provides both context menus (right-click menus) and popup men
 
 ```rust
 use gpui_component::{
-    context_menu::ContextMenuExt,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{PopupMenu, PopupMenuItem, ContextMenuExt, DropdownMenu},
     Button
 };
 use gpui::{actions, Action};
@@ -20,7 +19,7 @@ use gpui::{actions, Action};
 
 ## Usage
 
-### Context Menu
+### ContextMenu
 
 Context menus appear when right-clicking on an element:
 
@@ -37,33 +36,53 @@ div()
     })
 ```
 
-### Popup Menu
+### DropdownMenu
 
-Popup menus are triggered by buttons or other interactive elements:
+Dropdown menus are triggered by buttons or other interactive elements:
 
 ```rust
-use gpui_component::popup_menu::PopupMenuExt;
+use gpui_component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
 
+let view = cx.entity();
 Button::new("menu-btn")
     .label("Open Menu")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
+            .link("Documentation", "https://longbridge.github.io/gpui-component/")
+            .separator()
+            .item(PopupMenuItem::new("Custom Action")
+                .on_click(window.listener_for(&view, |this, _, window, cx| {
+                    // Custom action logic here
+                    this.
+                })
+            )
             .separator()
             .menu("Exit", Box::new(Exit))
     })
 ```
 
+:::tip
+As you see, the each menu item is associated with an [Action],
+we choice this design to better integrate with GPUI's action and key binding system,
+allowing menu items to automatically display keyboard shortcuts when applicable.
+
+So, the [Action] is the recommended way to define menu item behaviors.
+
+However, if you prefer not to use [Action]s, you can create custom menu items using the `item` method along with [PopupMenuItem].
+There have a `on_click` callback to handle the click event directly.
+:::
+
 ### Menu with Anchor Position
 
-Control where the popup menu appears relative to the trigger:
+Control where the dropdown menu appears relative to the trigger:
 
 ```rust
 use gpui::Corner;
 
 Button::new("menu-btn")
     .label("Options")
-    .popup_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
+    .dropdown_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
         menu.menu("Option 1", Box::new(Action1))
             .menu("Option 2", Box::new(Action2))
     })
@@ -244,12 +263,16 @@ menu.menu_element(Box::new(CustomAction), |window, cx| {
 
 ### Scrollable Menus
 
+:::warning
+When you have enabled `scrollable()` on a menu, avoid using submenus within it, as this can lead to usability issues.
+:::
+
 For menus with many items, enable scrolling:
 
 ```rust
 Button::new("large-menu")
     .label("Many Options")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         let mut menu = menu
             .scrollable()
             .max_h(px(300.))
@@ -290,59 +313,9 @@ menu.action_context(focus_handle)
 
 ## API Reference
 
-### PopupMenu
-
-| Method                     | Description                                   |
-| -------------------------- | --------------------------------------------- |
-| `build(window, cx, f)`     | Create a new popup menu with builder function |
-| `action_context(handle)`   | Set focus handle for action dispatch          |
-| `min_w(width)`             | Set minimum width                             |
-| `max_w(width)`             | Set maximum width                             |
-| `max_h(height)`            | Set maximum height                            |
-| `scrollable()`             | Enable vertical scrolling                     |
-| `external_link_icon(bool)` | Show/hide external link icons                 |
-
-### Menu Items
-
-| Method                                        | Description                       |
-| --------------------------------------------- | --------------------------------- |
-| `menu(label, action)`                         | Add basic menu item               |
-| `menu_with_disabled(label, action, disabled)` | Add menu item with disabled state |
-| `menu_with_icon(label, icon, action)`         | Add menu item with icon           |
-| `menu_with_check(label, checked, action)`     | Add checkable menu item           |
-| `label(text)`                                 | Add non-interactive label         |
-| `separator()`                                 | Add visual separator              |
-| `link(label, url)`                            | Add link menu item                |
-| `link_with_icon(label, icon, url)`            | Add link with icon                |
-
-### Custom Elements
-
-| Method                                              | Description                         |
-| --------------------------------------------------- | ----------------------------------- |
-| `menu_element(action, builder)`                     | Add custom element menu item        |
-| `menu_element_with_icon(icon, action, builder)`     | Add custom element with icon        |
-| `menu_element_with_check(checked, action, builder)` | Add custom element with check state |
-
-### Submenus
-
-| Method                                                        | Description                     |
-| ------------------------------------------------------------- | ------------------------------- |
-| `submenu(label, window, cx, builder)`                         | Add submenu                     |
-| `submenu_with_icon(icon, label, window, cx, builder)`         | Add submenu with icon           |
-| `submenu_with_disabled(label, disabled, window, cx, builder)` | Add submenu with disabled state |
-
-### PopupMenuExt Trait
-
-| Method                                    | Description                                |
-| ----------------------------------------- | ------------------------------------------ |
-| `popup_menu(builder)`                     | Add popup menu to button (top-left anchor) |
-| `popup_menu_with_anchor(corner, builder)` | Add popup menu with custom anchor          |
-
-### ContextMenuExt Trait
-
-| Method                  | Description                 |
-| ----------------------- | --------------------------- |
-| `context_menu(builder)` | Add context menu to element |
+- [PopupMenu]
+- [context_menu]
+- [PopupMenuItem]
 
 ## Examples
 
@@ -369,6 +342,30 @@ div()
     })
 ```
 
+### Add MenuItem without action
+
+Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and [PopupMenuItem] can help you:
+
+```rust
+use gpui_component::{menu::PopupMenuItem, Button};
+
+Button::new("custom-item-menu")
+    .label("Options")
+    .dropdown_menu(|menu, window, cx| {
+        menu.item(
+            PopupMenuItem::new("Custom Action")
+                .disabled(false)
+                .icon(IconName::Star)
+                .on_click(|window, cx| {
+                    // Custom click handler logic
+                    println!("Custom Action Clicked!");
+                })
+        )
+        .separator()
+        .menu("Standard Action", Box::new(StandardAction))
+    })
+```
+
 ### Editor Menu with Shortcuts
 
 ```rust
@@ -388,7 +385,7 @@ let editor_focus = cx.focus_handle();
 
 Button::new("editor-menu")
     .label("Edit")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.action_context(editor_focus)
             .menu("Save", Box::new(Save))           // Shows "Ctrl+S"
             .menu("Save As...", Box::new(SaveAs))   // Shows "Ctrl+Shift+S"
@@ -405,7 +402,7 @@ Button::new("editor-menu")
 ```rust
 Button::new("settings")
     .label("Settings")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.label("Display")
             .menu_element_with_check(dark_mode, Box::new(ToggleDarkMode), |window, cx| {
                 h_flex()
@@ -440,17 +437,6 @@ Button::new("settings")
     })
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Use arrow keys to navigate menu items
-- **Activation**: Press Enter or Space to activate menu items
-- **Escape**: Press Escape to close menus
-- **Focus Management**: Focus returns to trigger element when menu closes
-- **Screen Readers**: Menu structure and states are properly announced
-- **Disabled Items**: Cannot be focused or activated
-- **Submenus**: Left/Right arrow keys navigate into and out of submenus
-- **Action Context**: Proper focus context ensures actions are handled correctly
-
 ## Keyboard Shortcuts
 
 | Key               | Action                            |
@@ -471,3 +457,8 @@ Button::new("settings")
 6. **Progressive Disclosure**: Use submenus for complex hierarchies
 7. **Clear Labels**: Use descriptive, action-oriented labels
 8. **Reasonable Limits**: Use scrollable menus for more than 10-15 items
+
+[PopupMenu]: https://docs.rs/gpui-component/latest/gpui_component/menu/struct.PopupMenu.html
+[PopupMenuItem]: https://docs.rs/gpui-component/latest/gpui_component/menu/struct.PopupMenuItem.html
+[context_menu]: https://docs.rs/gpui-component/latest/gpui_component/menu/trait.ContextMenuExt.html#method.context_menu
+[Action]: https://docs.rs/gpui/latest/gpui/trait.Action.html

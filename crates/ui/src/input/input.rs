@@ -17,8 +17,9 @@ use crate::{Sizable, StyleSized};
 
 use super::InputState;
 
+/// A text input element bind to an [`InputState`].
 #[derive(IntoElement)]
-pub struct TextInput {
+pub struct Input {
     state: Entity<InputState>,
     style: StyleRefinement,
     size: Size,
@@ -35,14 +36,14 @@ pub struct TextInput {
     selected: bool,
 }
 
-impl Sizable for TextInput {
+impl Sizable for Input {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
 
-impl Selectable for TextInput {
+impl Selectable for Input {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -53,8 +54,8 @@ impl Selectable for TextInput {
     }
 }
 
-impl TextInput {
-    /// Create a new [`TextInput`] element bind to the [`InputState`].
+impl Input {
+    /// Create a new [`Input`] element bind to the [`InputState`].
     pub fn new(state: &Entity<InputState>) -> Self {
         Self {
             state: state.clone(),
@@ -233,13 +234,13 @@ impl TextInput {
     }
 }
 
-impl Styled for TextInput {
+impl Styled for Input {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for TextInput {
+impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let font = window.text_style().font();

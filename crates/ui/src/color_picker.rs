@@ -11,7 +11,7 @@ use crate::{
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
-    input::{InputEvent, InputState, TextInput},
+    input::{Input, InputEvent, InputState},
     tooltip::Tooltip,
     v_flex, ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable,
     Size, StyleSized, StyledExt,
@@ -332,7 +332,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(TextInput::new(&state.read(cx).state).small()),
+                        .child(Input::new(&state.read(cx).state).small()),
                 )
             })
     }

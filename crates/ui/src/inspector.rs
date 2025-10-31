@@ -19,7 +19,7 @@ use crate::{
     clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
-    input::{CompletionProvider, InputEvent, InputState, RopeExt, TabSize, TextInput},
+    input::{CompletionProvider, Input, InputEvent, InputState, RopeExt, TabSize},
     link::Link,
     v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
 };
@@ -436,7 +436,7 @@ impl Render for DivInspector {
                                 .gap_y_1()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .child(TextInput::new(&self.rust_state.state).h_full())
+                                .child(Input::new(&self.rust_state.state).h_full())
                                 .when_some(self.rust_state.error.clone(), |this, err| {
                                     this.child(Alert::error("rust-error", err).text_xs())
                                 }),
@@ -464,7 +464,7 @@ impl Render for DivInspector {
                                 .gap_y_1()
                                 .font_family("Monaco")
                                 .text_size(px(12.))
-                                .child(TextInput::new(&self.json_state.state).h_full())
+                                .child(Input::new(&self.json_state.state).h_full())
                                 .when_some(self.json_state.error.clone(), |this, err| {
                                     this.child(Alert::error("json-error", err).text_xs())
                                 }),

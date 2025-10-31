@@ -9,8 +9,8 @@ use crate::{ActiveTheme, AxisExt};
 use gpui::{
     fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
     CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
-    IntoElement, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad,
-    Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer,
+    IntoElement, IsZero, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    PaintQuad, Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer,
     UniformListScrollHandle, Window,
 };
 use schemars::JsonSchema;
@@ -728,7 +728,10 @@ impl Element for Scrollbar {
             |window| {
                 for state in prepaint.states.iter() {
                     let axis = state.axis;
-                    let radius = state.radius;
+                    let mut radius = state.radius;
+                    if cx.theme().radius.is_zero() {
+                        radius = px(0.);
+                    }
                     let bounds = state.bounds;
                     let thumb_bounds = state.thumb_bounds;
                     let scroll_area_size = state.scroll_size;

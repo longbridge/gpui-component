@@ -3,7 +3,7 @@ use gpui::{
     Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement, Render, Styled, Window,
 };
-use gpui_component::{AxisExt, h_flex, popup_menu::PopupMenuExt as _};
+use gpui_component::{AxisExt, h_flex, menu::DropdownMenu as _};
 use gpui_component::{
     Sizable as _, Size,
     button::Button,
@@ -35,7 +35,7 @@ impl DescriptionListStory {
                 "Description",
                 "UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).\
                 \n\n \
-                Contains a lot of useful UI components, such as **Button**, **TextInput**, **Table**, **List**, **Dropdown**, **DatePicker** ... \
+                Contains a lot of useful UI components, such as **Button**, **Input**, **Table**, **List**, **Select**, **DatePicker** ... \
                 \n\n \
                 You can easily create your native desktop application by using GPUI Component.
                 ",
@@ -152,7 +152,7 @@ impl Render for DescriptionListStory {
                             .small()
                             .outline()
                             .label(format!("size: {:?}", self.size))
-                            .popup_menu({
+                            .dropdown_menu({
                                 let size = self.size;
                                 move |menu, _, _| {
                                     menu.menu_with_check(

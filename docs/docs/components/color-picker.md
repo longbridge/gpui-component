@@ -212,49 +212,9 @@ The color picker preserves alpha values when selecting colors and allows modific
 
 ## API Reference
 
-### ColorPickerState
-
-| Method                         | Description                            |
-| ------------------------------ | -------------------------------------- |
-| `new(window, cx)`              | Create a new color picker state        |
-| `default_value(color)`         | Set the default selected color         |
-| `set_value(color, window, cx)` | Programmatically set the current color |
-| `value()`                      | Get the currently selected color       |
-
-### ColorPicker
-
-| Method                    | Description                                        |
-| ------------------------- | -------------------------------------------------- |
-| `new(state)`              | Create a new color picker with the given state     |
-| `featured_colors(colors)` | Set custom featured colors array                   |
-| `size(size)`              | Set the picker size (XSmall, Small, Medium, Large) |
-| `icon(icon)`              | Display icon instead of color square               |
-| `label(text)`             | Add a label to the color picker                    |
-| `anchor(corner)`          | Set dropdown anchor position                       |
-
-### ColorPickerEvent
-
-| Event                  | Description                          |
-| ---------------------- | ------------------------------------ |
-| `Change(Option<Hsla>)` | Emitted when color selection changes |
-
-### Size Options
-
-| Size           | Description                    |
-| -------------- | ------------------------------ |
-| `Size::XSmall` | Extra small picker button      |
-| `Size::Small`  | Small picker button            |
-| `Size::Medium` | Medium picker button (default) |
-| `Size::Large`  | Large picker button            |
-
-### Anchor Positions
-
-| Corner                | Description                           |
-| --------------------- | ------------------------------------- |
-| `Corner::TopLeft`     | Dropdown opens below and to the right |
-| `Corner::TopRight`    | Dropdown opens below and to the left  |
-| `Corner::BottomLeft`  | Dropdown opens above and to the right |
-| `Corner::BottomRight` | Dropdown opens above and to the left  |
+- [ColorPicker]
+- [ColorPickerState]
+- [ColorPickerEvent]
 
 ## Examples
 
@@ -410,45 +370,6 @@ let _subscription = cx.subscribe(&color_picker, |this, _, ev, _| match ev {
 });
 ```
 
-## Accessibility
-
-### Keyboard Navigation
-
-- **Tab**: Navigate to color picker button
-- **Enter/Space**: Open/close color picker dropdown
-- **Escape**: Close dropdown without selecting
-- **Arrow Keys**: Navigate through color palette (when focused)
-- **Enter**: Select highlighted color
-- **Tab**: Navigate to hex input field within dropdown
-
-### Screen Reader Support
-
-- Color picker button announces current color value
-- Color swatches include color names and hex values
-- Dropdown state changes are announced
-- Hex input field provides real-time feedback
-- Selected color is announced when changed
-
-### Focus Management
-
-- Clear focus indicators on all interactive elements
-- Focus is trapped within the dropdown when open
-- Focus returns to trigger button when closed
-- Logical tab order through color options
-
-### Color Accessibility
-
-- High contrast borders around color swatches
-- Color information available in multiple formats
-- Sufficient touch target sizes for mobile devices
-- Support for high contrast mode
-- Color choices not solely dependent on color perception
-
-### Best Practices
-
-- Provide text labels alongside color pickers
-- Include color names or descriptions when possible
-- Ensure sufficient contrast ratios for text over colored backgrounds
-- Test with screen readers and keyboard navigation
-- Consider colorblind users by providing additional visual cues
-- Use semantic HTML structure for better accessibility
+[ColorPicker]: https://docs.rs/gpui-component/latest/gpui_component/color_picker/struct.ColorPicker.html
+[ColorPickerState]: https://docs.rs/gpui-component/latest/gpui_component/color_picker/struct.ColorPickerState.html
+[ColorPickerEvent]: https://docs.rs/gpui-component/latest/gpui_component/color_picker/enum.ColorPickerEvent.html

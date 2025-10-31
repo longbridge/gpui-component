@@ -444,19 +444,7 @@ impl Render for TemperatureControl {
 }
 ```
 
-## Accessibility
-
-- **Keyboard Navigation**: Sliders are focusable and support keyboard interaction
-- **Arrow Keys**: Use left/right (horizontal) or up/down (vertical) arrows to adjust values
-- **Page Up/Down**: Make larger adjustments
-- **Home/End**: Jump to minimum/maximum values
-- **Tab Navigation**: Properly integrated into tab order
-- **Screen Readers**: Value changes are announced
-- **Tooltips**: Display current value on hover
-- **Focus Indicators**: Clear visual focus state
-- **Disabled State**: Disabled sliders cannot be focused or interacted with
-
-### Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Key           | Action                         |
 | ------------- | ------------------------------ |

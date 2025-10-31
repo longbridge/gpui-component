@@ -30,14 +30,14 @@ collapsed: false
 
 ### Form Components
 
-- [ColorPicker](color-picker) - Color selection interface
-- [DatePicker](date-picker) - Date selection with calendar
-- [Dropdown](dropdown) - Select from dropdown options
-- [Form](form) - Form container and layout
-- [Input](input) - Text input with validation
+- [Input](input) - An input field or a component that looks like an input field.
+- [Select](select) - A list of options for the user to pick.
 - [NumberInput](number-input) - Numeric input with increment/decrement
+- [DatePicker](date-picker) - Date selection with calendar
 - [OtpInput](otp-input) - One-time password input
+- [ColorPicker](color-picker) - Color selection interface
 - [Editor](editor) - Multi-line text editor and code editor
+- [Form](form) - Form container and layout
 
 ### Layout Components
 
@@ -56,7 +56,7 @@ collapsed: false
 - [Calendar](calendar) - Calendar display and navigation
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
 - [List](list) - List display with items
-- [PopupMenu](popup_menu) - Menu and context menu
+- [Menu](menu) - Menu and context menu and dropdown menu.
 - [Table](table) - High-performance data tables
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display

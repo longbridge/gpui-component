@@ -3,8 +3,11 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, button::Button, context_menu::ContextMenuExt, h_flex,
-    popup_menu::PopupMenuExt as _, v_flex,
+    ActiveTheme as _, IconName,
+    button::Button,
+    h_flex,
+    menu::{ContextMenuExt, DropdownMenu as _, PopupMenuItem},
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -104,6 +107,7 @@ impl MenuStory {
 impl Render for MenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let checked = self.checked;
+        let view = cx.entity();
 
         v_flex()
             .key_context(CONTEXT)
@@ -122,8 +126,16 @@ impl Render for MenuStory {
                         Button::new("popup-menu-1")
                             .outline()
                             .label("Edit")
-                            .popup_menu(move |this, window, cx| {
+                            .dropdown_menu(move |this, window, cx| {
                                 this.link("About", "https://github.com/longbridge/gpui-component")
+                                    .separator()
+                                    .item(PopupMenuItem::new("Handle Click").on_click(
+                                        window.listener_for(&view, |this, _, _, cx| {
+                                            this.message =
+                                                "You have clicked Handle Click".to_string();
+                                            cx.notify();
+                                        }),
+                                    ))
                                     .separator()
                                     .menu("Copy", Box::new(Copy))
                                     .menu("Cut", Box::new(Cut))
@@ -133,14 +145,23 @@ impl Render for MenuStory {
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
                                     .separator()
-                                    .menu_element(Box::new(Info(0)), |_, cx| {
-                                        v_flex().child("Custom Element").child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("THis is sub-title"),
-                                        )
-                                    })
+                                    .item(
+                                        PopupMenuItem::element(|_, cx| {
+                                            v_flex().child("Custom Element").child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child("This is sub-title"),
+                                            )
+                                        })
+                                        .on_click(
+                                            window.listener_for(&view, |this, _, _, cx| {
+                                                this.message = "You have clicked on custom element"
+                                                    .to_string();
+                                                cx.notify();
+                                            }),
+                                        ),
+                                    )
                                     .menu_element_with_check(checked, Box::new(Info(0)), |_, cx| {
                                         h_flex().gap_1().child("Custom Element").child(
                                             div()
@@ -214,10 +235,10 @@ impl Render for MenuStory {
             .child(
                 section("Menu with scrollbar")
                     .child(
-                        Button::new("popup-menu-scrollable-1")
+                        Button::new("dropdown-menu-scrollable-1")
                             .outline()
                             .label("Scrollable Menu (100 items)")
-                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable()
                                     .max_h(px(300.))
@@ -232,10 +253,10 @@ impl Render for MenuStory {
                             }),
                     )
                     .child(
-                        Button::new("popup-menu-scrollable-2")
+                        Button::new("dropdown-menu-scrollable-2")
                             .outline()
                             .label("Scrollable Menu (5 items)")
-                            .popup_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable()
                                     .max_h(px(300.))

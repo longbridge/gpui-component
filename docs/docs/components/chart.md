@@ -314,55 +314,10 @@ let chart = LineChart::new(data)
 
 ## API Reference
 
-### LineChart
-
-| Method           | Type          | Description                               |
-| ---------------- | ------------- | ----------------------------------------- |
-| `new(data)`      | `Vec<T>`      | Create new line chart with data           |
-| `x(fn)`          | `Fn(&T) -> X` | Set X-axis data accessor                  |
-| `y(fn)`          | `Fn(&T) -> Y` | Set Y-axis data accessor                  |
-| `stroke(color)`  | `Hsla`        | Set line stroke color                     |
-| `natural()`      | `Self`        | Use natural curve interpolation (default) |
-| `linear()`       | `Self`        | Use linear interpolation                  |
-| `step_after()`   | `Self`        | Use step-after interpolation              |
-| `dot()`          | `Self`        | Show dots at data points                  |
-| `tick_margin(n)` | `usize`       | Show every nth tick on X-axis             |
-
-### BarChart
-
-| Method           | Type               | Description                    |
-| ---------------- | ------------------ | ------------------------------ |
-| `new(data)`      | `Vec<T>`           | Create new bar chart with data |
-| `x(fn)`          | `Fn(&T) -> X`      | Set X-axis data accessor       |
-| `y(fn)`          | `Fn(&T) -> Y`      | Set Y-axis data accessor       |
-| `fill(fn)`       | `Fn(&T) -> Hsla`   | Set custom fill color per bar  |
-| `label(fn)`      | `Fn(&T) -> String` | Set labels on bars             |
-| `tick_margin(n)` | `usize`            | Show every nth tick on X-axis  |
-
-### AreaChart
-
-| Method             | Type          | Description                                           |
-| ------------------ | ------------- | ----------------------------------------------------- |
-| `new(data)`        | `Vec<T>`      | Create new area chart with data                       |
-| `x(fn)`            | `Fn(&T) -> X` | Set X-axis data accessor                              |
-| `y(fn)`            | `Fn(&T) -> Y` | Add Y-axis data series (can be called multiple times) |
-| `stroke(color)`    | `Hsla`        | Set stroke color for current series                   |
-| `fill(background)` | `Background`  | Set fill for current series                           |
-| `natural()`        | `Self`        | Use natural curve interpolation for current series    |
-| `linear()`         | `Self`        | Use linear interpolation for current series           |
-| `step_after()`     | `Self`        | Use step-after interpolation for current series       |
-| `tick_margin(n)`   | `usize`       | Show every nth tick on X-axis                         |
-
-### PieChart
-
-| Method             | Type             | Description                         |
-| ------------------ | ---------------- | ----------------------------------- |
-| `new(data)`        | `Vec<T>`         | Create new pie chart with data      |
-| `value(fn)`        | `Fn(&T) -> f32`  | Set value accessor                  |
-| `color(fn)`        | `Fn(&T) -> Hsla` | Set custom color per slice          |
-| `inner_radius(r)`  | `f32`            | Set inner radius (for donut charts) |
-| `outer_radius(r)`  | `f32`            | Set outer radius                    |
-| `pad_angle(angle)` | `f32`            | Set padding angle between slices    |
+- [LineChart]
+- [BarChart]
+- [AreaChart]
+- [PieChart]
 
 ## Examples
 
@@ -576,46 +531,6 @@ Charts automatically include:
 - Y-axis scaling starting from zero
 - Responsive tick spacing based on `tick_margin`
 
-## Accessibility
-
-### Chart Accessibility Features
-
-- **Semantic Structure**: Charts are rendered with proper element hierarchy
-- **Theme Integration**: Automatic color adaptation for light/dark themes
-- **High Contrast**: Grid lines and axis labels use theme border colors
-- **Scalable**: Charts adapt to container size and maintain proportions
-
-### Best Practices for Accessibility
-
-```rust
-// Always provide descriptive titles
-chart_container(
-    "Monthly Sales Revenue", // Clear, descriptive title
-    chart,
-    false,
-    cx,
-)
-
-// Include data summaries
-v_flex()
-    .child("Revenue increased by 15% this quarter")
-    .child("Showing data from January to March 2024")
-    .child(chart)
-
-// Use semantic color combinations
-LineChart::new(data)
-    .x(|d| d.date.clone())
-    .y(|d| d.value)
-    .stroke(cx.theme().chart_1) // Uses theme-appropriate colors
-```
-
-### Screen Reader Support
-
-- Chart containers should include descriptive text
-- Key statistics should be provided as text
-- Data trends should be summarized in text form
-- Alternative data tables can be provided for complex charts
-
 ## Performance Considerations
 
 ### Large Datasets
@@ -707,3 +622,8 @@ impl LiveChart {
     }
 }
 ```
+
+[LineChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.LineChart.html
+[BarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.BarChart.html
+[AreaChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.AreaChart.html
+[PieChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.PieChart.html

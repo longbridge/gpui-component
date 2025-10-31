@@ -355,14 +355,6 @@ Progress::new().value(75.0) // Uses theme colors
 - **Animation**: Smooth transitions when value changes
 - **Corners**: Rounded on completion, left-rounded during progress
 
-## Accessibility
-
-- Progress value is semantically meaningful for screen readers
-- Visual progress is complemented by text indicators
-- High contrast between background and fill colors
-- Smooth transitions provide visual feedback
-- Progress state can be announced programmatically
-
 ## Behavior Notes
 
 - Values less than 0 are clamped to 0%

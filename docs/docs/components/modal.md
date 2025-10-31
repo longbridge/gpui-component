@@ -69,7 +69,7 @@ window.open_modal(cx, |modal, _, _| {
             v_flex()
                 .gap_3()
                 .child("Please enter your details:")
-                .child(TextInput::new(&input))
+                .child(Input::new(&input))
         )
         .footer(|_, _, _, _| {
             vec![
@@ -325,11 +325,3 @@ window.open_modal(cx, |modal, _, _| {
         })
 })
 ```
-
-## Accessibility
-
-- ESC key to close (when enabled)
-- Focus trapped within modal
-- Focus returns to trigger element on close
-- Overlay click to dismiss (when enabled)
-- Clear visual focus indicators

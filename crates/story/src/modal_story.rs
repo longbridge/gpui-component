@@ -1,21 +1,22 @@
 use gpui::{
-    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    ParentElement, Render, SharedString, Styled, Window, div, px,
 };
 
 use gpui_component::{
+    ActiveTheme, ContextModal as _, Icon, IconName,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
-    dropdown::{Dropdown, DropdownState},
     h_flex,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     modal::ModalButtonProps,
+    select::{Select, SelectState},
     text::TextView,
-    v_flex, ActiveTheme, ContextModal as _, Icon, IconName,
+    v_flex,
 };
 
-use crate::{section, TestAction};
+use crate::{TestAction, section};
 
 pub struct ModalStory {
     focus_handle: FocusHandle,
@@ -23,7 +24,7 @@ pub struct ModalStory {
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
-    dropdown: Entity<DropdownState<Vec<String>>>,
+    select: Entity<SelectState<Vec<String>>>,
     modal_overlay: bool,
     model_show_close: bool,
     model_keyboard: bool,
@@ -55,8 +56,8 @@ impl ModalStory {
             InputState::new(window, cx).placeholder("For test focus back on modal close.")
         });
         let date = cx.new(|cx| DatePickerState::new(window, cx));
-        let dropdown = cx.new(|cx| {
-            DropdownState::new(
+        let select = cx.new(|cx| {
+            SelectState::new(
                 vec![
                     "Option 1".to_string(),
                     "Option 2".to_string(),
@@ -74,7 +75,7 @@ impl ModalStory {
             input1,
             input2,
             date,
-            dropdown,
+            select,
             modal_overlay: true,
             model_show_close: true,
             model_keyboard: true,
@@ -88,7 +89,7 @@ impl ModalStory {
         let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
-        let dropdown = self.dropdown.clone();
+        let select = self.select.clone();
         let view = cx.entity().clone();
         let keyboard = self.model_keyboard;
 
@@ -104,8 +105,8 @@ impl ModalStory {
                         .gap_3()
                         .child("This is a modal dialog.")
                         .child("You can put anything here.")
-                        .child(TextInput::new(&input1))
-                        .child(Dropdown::new(&dropdown))
+                        .child(Input::new(&input1))
+                        .child(Select::new(&select))
                         .child(DatePicker::new(&date).placeholder("Date of Birth")),
                 )
                 .footer({
@@ -243,7 +244,7 @@ impl Render for ModalStory {
                     .child(
                         section("Focus back test")
                             .max_w_md()
-                            .child(TextInput::new(&self.input2))
+                            .child(Input::new(&self.input2))
                             .child(
                                 Button::new("test-action")
                                     .outline()

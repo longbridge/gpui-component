@@ -5,7 +5,7 @@ description: Displays a button or a component that looks like a button.
 
 # Button
 
-A versatile button component with multiple variants, sizes, and states. Supports icons, loading states, and can be grouped together.
+The [Button] element with multiple variants, sizes, and states. Supports icons, loading states, and can be grouped together.
 
 ## Import
 
@@ -25,7 +25,7 @@ Button::new("my-button")
     })
 ```
 
-### Button Variants
+### Variants
 
 ```rust
 // Primary button
@@ -58,12 +58,27 @@ Button::new("btn-text").text().label("Text")
 
 ### Outline Buttons
 
+Outline style is not a variant itself, but can be combined with other variants.
+
 ```rust
 Button::new("btn").primary().outline().label("Primary Outline")
 Button::new("btn").danger().outline().label("Danger Outline")
 ```
 
-### Button Sizes
+### Compact Button
+
+The `compact` method reduces the padding of the button for a more condensed appearance.
+
+```rust
+// Compact (reduced padding)
+Button::new("btn")
+    .label("Compact")
+    .compact()
+```
+
+### Sizeable
+
+The Button supports the [Sizable] trait for different sizes.
 
 ```rust
 Button::new("btn").xsmall().label("Extra Small")
@@ -94,6 +109,8 @@ Button::new("btn")
 
 ### Button States
 
+There have `disabled`, `loading`, `selected` state for buttons to indicate different statuses.
+
 ```rust
 // Disabled
 Button::new("btn")
@@ -109,14 +126,9 @@ Button::new("btn")
 Button::new("btn")
     .label("Selected")
     .selected(true)
-
-// Compact (reduced padding)
-Button::new("btn")
-    .label("Compact")
-    .compact()
 ```
 
-### Button Group
+## Button Group
 
 ```rust
 ButtonGroup::new("btn-group")
@@ -138,14 +150,14 @@ ButtonGroup::new("toggle-group")
     })
 ```
 
-### Dropdown Button
+## Dropdown Button
 
 ```rust
 use gpui::Corner;
 
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .popup_menu(|menu, _, _| {
+    .dropdown_menu(|menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
             .menu("Option 2", Box::new(MyAction))
             .separator()
@@ -155,12 +167,12 @@ DropdownButton::new("dropdown")
 // With custom anchor
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .popup_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
+    .dropdown_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
     })
 ```
 
-### Custom Variant
+## Custom Variant
 
 ```rust
 use gpui_component::button::ButtonCustomVariant;
@@ -179,57 +191,10 @@ Button::new("custom-btn")
 
 ## API Reference
 
-### Button
-
-| Method               | Description                           |
-| -------------------- | ------------------------------------- |
-| `new(id)`            | Create a new button with the given ID |
-| `label(str)`         | Set button label text                 |
-| `icon(icon)`         | Add icon to button (before label)     |
-| `loading_icon(icon)` | Custom loading icon                   |
-| `child(el)`          | Add custom child element              |
-| `on_click(fn)`       | Click event handler                   |
-| `on_hover(fn)`       | Hover event handler                   |
-| `disabled(bool)`     | Set disabled state                    |
-| `loading(bool)`      | Set loading state                     |
-| `selected(bool)`     | Set selected state                    |
-| `compact()`          | Reduce padding                        |
-
-### Button Variants
-
-| Method            | Description                            |
-| ----------------- | -------------------------------------- |
-| `primary()`       | Primary button style                   |
-| `danger()`        | Danger button style                    |
-| `warning()`       | Warning button style                   |
-| `success()`       | Success button style                   |
-| `info()`          | Info button style                      |
-| `ghost()`         | Ghost button style                     |
-| `link()`          | Link button style                      |
-| `text()`          | Text button style                      |
-| `outline()`       | Outline style (combines with variants) |
-| `custom(variant)` | Custom variant                         |
-
-### ButtonGroup
-
-| Method           | Description                        |
-| ---------------- | ---------------------------------- |
-| `new(id)`        | Create a new button group          |
-| `child(button)`  | Add button to group                |
-| `multiple(bool)` | Allow multiple selections          |
-| `compact()`      | Compact spacing                    |
-| `outline()`      | Apply outline style to all buttons |
-| `disabled(bool)` | Disable all buttons                |
-| `on_click(fn)`   | Called with selected indices       |
-
-### DropdownButton
-
-| Method                               | Description                   |
-| ------------------------------------ | ----------------------------- |
-| `new(id)`                            | Create a new dropdown button  |
-| `button(btn)`                        | Set the trigger button        |
-| `popup_menu(fn)`                     | Set popup menu builder        |
-| `popup_menu_with_anchor(corner, fn)` | Set menu with anchor position |
+- [Button]
+- [ButtonGroup]
+- [DropdownButton]
+- [ButtonCustomVariant]
 
 ## Examples
 
@@ -255,9 +220,8 @@ Button::new("btn")
     )
 ```
 
-## Accessibility
-
-- Keyboard navigation with Tab
-- Activate with Enter or Space
-- Disabled buttons cannot be focused
-- Loading state announced to screen readers
+[Button]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.Button.html
+[ButtonGroup]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonGroup.html
+[DropdownButton]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.DropdownButton.html
+[ButtonCustomVariant]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonCustomVariant.html
+[Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

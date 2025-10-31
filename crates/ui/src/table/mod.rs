@@ -2,9 +2,8 @@ use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     actions::{Cancel, SelectDown, SelectUp},
-    context_menu::ContextMenuExt,
     h_flex,
-    popup_menu::PopupMenu,
+    menu::{ContextMenuExt, PopupMenu},
     scroll::{ScrollableMask, Scrollbar, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt,
     VirtualListScrollHandle,

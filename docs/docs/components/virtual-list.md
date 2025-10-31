@@ -356,50 +356,6 @@ impl MyView {
 }
 ```
 
-## API Reference
-
-### Virtual List Functions
-
-| Function                                     | Description                    |
-| -------------------------------------------- | ------------------------------ |
-| `v_virtual_list(view, id, sizes, render_fn)` | Create vertical virtual list   |
-| `h_virtual_list(view, id, sizes, render_fn)` | Create horizontal virtual list |
-
-### VirtualList Methods
-
-| Method                           | Description                      |
-| -------------------------------- | -------------------------------- |
-| `track_scroll(handle)`           | Attach scroll handle for control |
-| `with_sizing_behavior(behavior)` | Set list sizing behavior         |
-
-### VirtualListScrollHandle
-
-| Method                            | Description               |
-| --------------------------------- | ------------------------- |
-| `new()`                           | Create new scroll handle  |
-| `scroll_to_item(index, strategy)` | Scroll to specific item   |
-| `scroll_to_bottom()`              | Scroll to the bottom      |
-| `offset()`                        | Get current scroll offset |
-| `set_offset(point)`               | Set scroll position       |
-| `content_size()`                  | Get total content size    |
-
-### ScrollStrategy
-
-| Strategy | Description                      |
-| -------- | -------------------------------- |
-| `Top`    | Align item to top of viewport    |
-| `Center` | Center item in viewport          |
-| `Bottom` | Align item to bottom of viewport |
-
-### Parameters
-
-| Parameter    | Type                    | Description                      |
-| ------------ | ----------------------- | -------------------------------- |
-| `view`       | `Entity<V>`             | View entity containing the data  |
-| `id`         | `impl Into<ElementId>`  | Unique identifier for the list   |
-| `item_sizes` | `Rc<Vec<Size<Pixels>>>` | Size of each item                |
-| `render_fn`  | Closure                 | Function to render visible items |
-
 ## Examples
 
 ### File Explorer with Virtual Scrolling
@@ -647,23 +603,6 @@ impl Render for DataGrid {
     }
 }
 ```
-
-## Accessibility
-
-- **Keyboard Navigation**:
-  - Use arrow keys to scroll through items
-  - Page Up/Page Down for faster navigation
-  - Home/End to jump to start/end
-- **Screen Reader Support**:
-  - Properly announces list items and position
-  - Supports ARIA attributes for list structure
-  - Announces total item count
-- **Focus Management**:
-  - Focus follows scroll position
-  - Keyboard navigation updates scroll position
-  - Focus indicators remain visible during scrolling
-- **High Contrast**: Respects system high contrast settings
-- **Reduced Motion**: Honors user's reduced motion preferences for scrolling animations
 
 ## Best Practices
 

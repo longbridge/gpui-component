@@ -10,7 +10,7 @@ A versatile tree component for displaying hierarchical data with expand/collapse
 ## Import
 
 ```rust
-use gpui_component::{tree, TreeState, TreeItem, TreeEntry};
+use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry};
 ```
 
 ## Usage
@@ -408,12 +408,3 @@ tree(&tree_state)
         // Handle custom actions
     }))
 ```
-
-## Accessibility
-
-- **Keyboard Navigation**: Full keyboard support for navigation and interaction
-- **Focus Management**: Proper focus handling with visual indicators
-- **Screen Reader Support**: Announces tree structure, selection state, and expand/collapse actions
-- **Disabled State**: Disabled items are skipped during navigation and announced appropriately
-- **ARIA Attributes**: Proper tree role and expanded state attributes
-- **High Contrast**: Respects system high contrast settings

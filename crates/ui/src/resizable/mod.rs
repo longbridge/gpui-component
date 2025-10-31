@@ -1,9 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
-    px, Along, App, AppContext, Axis, Bounds, Context, ElementId, Entity, EventEmitter, Pixels,
-    Window,
-};
+use gpui::{px, Along, App, Axis, Bounds, Context, ElementId, EventEmitter, Pixels, Window};
 
 use crate::PixelsExt;
 
@@ -15,13 +12,13 @@ pub(crate) use resize_handle::*;
 pub(crate) const PANEL_MIN_SIZE: Pixels = px(100.);
 
 /// Create a [`ResizablePanelGroup`] with horizontal resizing
-pub fn h_resizable(id: impl Into<ElementId>, state: Entity<ResizableState>) -> ResizablePanelGroup {
-    ResizablePanelGroup::new(id, state).axis(Axis::Horizontal)
+pub fn h_resizable(id: impl Into<ElementId>) -> ResizablePanelGroup {
+    ResizablePanelGroup::new(id).axis(Axis::Horizontal)
 }
 
 /// Create a [`ResizablePanelGroup`] with vertical resizing
-pub fn v_resizable(id: impl Into<ElementId>, state: Entity<ResizableState>) -> ResizablePanelGroup {
-    ResizablePanelGroup::new(id, state).axis(Axis::Vertical)
+pub fn v_resizable(id: impl Into<ElementId>) -> ResizablePanelGroup {
+    ResizablePanelGroup::new(id).axis(Axis::Vertical)
 }
 
 /// Create a [`ResizablePanel`].
@@ -29,8 +26,8 @@ pub fn resizable_panel() -> ResizablePanel {
     ResizablePanel::new()
 }
 
-#[derive(Debug, Clone)]
 /// State for a [`ResizablePanel`]
+#[derive(Debug, Clone)]
 pub struct ResizableState {
     /// The `axis` will sync to actual axis of the ResizablePanelGroup in use.
     axis: Axis,
@@ -40,18 +37,25 @@ pub struct ResizableState {
     bounds: Bounds<Pixels>,
 }
 
-impl ResizableState {
-    pub fn new(cx: &mut App) -> Entity<Self> {
-        cx.new(|_| Self {
+impl Default for ResizableState {
+    fn default() -> Self {
+        Self {
             axis: Axis::Horizontal,
             panels: vec![],
             sizes: vec![],
             resizing_panel_ix: None,
             bounds: Bounds::default(),
-        })
+        }
+    }
+}
+
+impl ResizableState {
+    /// Get the size of the panels.
+    pub fn sizes(&self) -> &Vec<Pixels> {
+        &self.sizes
     }
 
-    pub fn insert_panel(
+    pub(crate) fn insert_panel(
         &mut self,
         size: Option<Pixels>,
         ix: Option<usize>,
@@ -124,11 +128,6 @@ impl ResizableState {
     pub(crate) fn clear(&mut self) {
         self.panels.clear();
         self.sizes.clear();
-    }
-
-    /// Get the size of the panels.
-    pub fn sizes(&self) -> &Vec<Pixels> {
-        &self.sizes
     }
 
     pub(crate) fn total_size(&self) -> Pixels {

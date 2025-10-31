@@ -10,7 +10,7 @@ A flexible text input component with support for validation, masking, prefix/suf
 ## Import
 
 ```rust
-use gpui_component::input::{InputState, TextInput};
+use gpui_component::input::{InputState, Input};
 ```
 
 ## Usage
@@ -20,7 +20,7 @@ use gpui_component::input::{InputState, TextInput};
 ```rust
 let input = cx.new(|cx| InputState::new(window, cx));
 
-TextInput::new(&input)
+Input::new(&input)
 ```
 
 ### With Placeholder
@@ -31,7 +31,7 @@ let input = cx.new(|cx|
         .placeholder("Enter your name...")
 );
 
-TextInput::new(&input)
+Input::new(&input)
 ```
 
 ### With Default Value
@@ -42,13 +42,13 @@ let input = cx.new(|cx|
         .default_value("John Doe")
 );
 
-TextInput::new(&input)
+Input::new(&input)
 ```
 
 ### Cleanable Input
 
 ```rust
-TextInput::new(&input)
+Input::new(&input)
     .cleanable() // Shows clear button when input has value
 ```
 
@@ -58,12 +58,12 @@ TextInput::new(&input)
 use gpui_component::{Icon, IconName};
 
 // With prefix icon
-TextInput::new(&input)
+Input::new(&input)
     .prefix(Icon::new(IconName::Search).small())
     .cleanable()
 
 // With suffix button
-TextInput::new(&input)
+Input::new(&input)
     .suffix(
         Button::new("info")
             .ghost()
@@ -72,7 +72,7 @@ TextInput::new(&input)
     )
 
 // With both
-TextInput::new(&input)
+Input::new(&input)
     .prefix(Icon::new(IconName::Search).small())
     .suffix(Button::new("btn").ghost().icon(IconName::Info).xsmall())
     .cleanable()
@@ -87,22 +87,22 @@ let input = cx.new(|cx|
         .default_value("password123")
 );
 
-TextInput::new(&input)
+Input::new(&input)
     .mask_toggle() // Shows toggle button to reveal password
 ```
 
 ### Input Sizes
 
 ```rust
-TextInput::new(&input).large()
-TextInput::new(&input) // medium (default)
-TextInput::new(&input).small()
+Input::new(&input).large()
+Input::new(&input) // medium (default)
+Input::new(&input).small()
 ```
 
 ### Disabled Input
 
 ```rust
-TextInput::new(&input).disabled(true)
+Input::new(&input).disabled(true)
 ```
 
 ### Clean on ESC
@@ -113,7 +113,7 @@ let input = cx.new(|cx|
         .clean_on_escape() // Clear input when ESC is pressed
 );
 
-TextInput::new(&input).cleanable()
+Input::new(&input).cleanable()
 ```
 
 ### Input Validation
@@ -183,7 +183,7 @@ cx.subscribe_in(&input, window, |view, state, event, window, cx| {
 
 ```rust
 // Without default styling
-TextInput::new(&input).appearance(false)
+Input::new(&input).appearance(false)
 
 // Use in custom container
 div()
@@ -192,7 +192,7 @@ div()
     .py_3()
     .border_color(cx.theme().border)
     .bg(cx.theme().secondary)
-    .child(TextInput::new(&input).appearance(false))
+    .child(Input::new(&input).appearance(false))
 ```
 
 ## API Reference
@@ -214,7 +214,7 @@ div()
 | `set_value(str, window, cx)` | Set input value programmatically       |
 | `focus_handle(cx)`           | Get focus handle                       |
 
-### TextInput
+### Input
 
 | Method             | Description                              |
 | ------------------ | ---------------------------------------- |
@@ -254,7 +254,7 @@ let search = cx.new(|cx|
         .placeholder("Search...")
 );
 
-TextInput::new(&search)
+Input::new(&search)
     .prefix(Icon::new(IconName::Search).small())
     .cleanable()
 ```
@@ -271,7 +271,7 @@ let amount = cx.new(|cx|
 );
 
 div()
-    .child(TextInput::new(&amount))
+    .child(Input::new(&amount))
     .child(format!("Value: {}", amount.read(cx).value()))
 ```
 
@@ -285,14 +285,6 @@ struct FormView {
 
 v_flex()
     .gap_3()
-    .child(TextInput::new(&self.name_input))
-    .child(TextInput::new(&self.email_input))
+    .child(Input::new(&self.name_input))
+    .child(Input::new(&self.email_input))
 ```
-
-## Accessibility
-
-- Full keyboard navigation
-- Clear focus indicators
-- Placeholder announced by screen readers
-- ESC to clear (when enabled)
-- Enter to submit

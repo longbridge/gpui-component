@@ -288,17 +288,6 @@ Switch::new("custom")
     })
 ```
 
-## Accessibility
-
-- Keyboard navigation with Tab
-- Toggle with Space or Enter
-- Clear focus indicators
-- Disabled switches cannot be focused
-- Label text announced by screen readers
-- Tooltip content announced when present
-- State changes announced to assistive technology
-- Follows ARIA switch role semantics
-
 ## Animation
 
 The switch features smooth animations:

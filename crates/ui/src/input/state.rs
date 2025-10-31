@@ -256,7 +256,7 @@ impl LastLayout {
     }
 }
 
-/// InputState to keep editing state of the [`super::TextInput`].
+/// InputState to keep editing state of the [`super::Input`].
 pub struct InputState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,

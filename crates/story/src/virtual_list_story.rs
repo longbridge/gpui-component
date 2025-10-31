@@ -1,16 +1,16 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    div, px, size, App, AppContext, Context, Div, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, ScrollStrategy, Size, Styled,
-    Window,
+    App, AppContext, Context, Div, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Pixels, Render, ScrollStrategy, Size, Styled, Window, div, px, size,
 };
 use gpui_component::{
+    ActiveTheme as _, Selectable, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonGroup},
     divider::Divider,
     h_flex,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
-    v_flex, v_virtual_list, ActiveTheme as _, Selectable, Sizable, VirtualListScrollHandle,
+    v_flex, v_virtual_list,
 };
 
 pub struct VirtualListStory {

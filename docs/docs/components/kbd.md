@@ -10,7 +10,7 @@ A component for displaying keyboard shortcuts and key combinations with proper p
 ## Import
 
 ```rust
-use gpui_component::Kbd;
+use gpui_component::kbd::Kbd;
 use gpui::Keystroke;
 ```
 
@@ -130,32 +130,6 @@ The Kbd component automatically formats shortcuts according to platform conventi
 | `enter`             | ⏎     | Enter             |
 | `left`              | ←     | Left              |
 
-## API Reference
-
-### Kbd
-
-| Method                                                | Description                                 |
-| ----------------------------------------------------- | ------------------------------------------- |
-| `new(keystroke)`                                      | Create a new Kbd component from a keystroke |
-| `appearance(bool)`                                    | Show/hide visual styling (default: true)    |
-| `binding_for_action(action, context, window)`         | Get keybinding for action in context        |
-| `binding_for_action_in(action, focus_handle, window)` | Get keybinding for action in focus          |
-| `format(keystroke)`                                   | Static method to format keystroke as string |
-
-### Static Methods
-
-| Method                    | Description                                    |
-| ------------------------- | ---------------------------------------------- |
-| `Kbd::format(&keystroke)` | Format a keystroke as platform-specific string |
-
-### Trait Implementations
-
-| Trait             | Description                       |
-| ----------------- | --------------------------------- |
-| `From<Keystroke>` | Convert keystroke directly to Kbd |
-| `Styled`          | Apply styling refinements         |
-| `IntoElement`     | Render as UI element              |
-
 ## Examples
 
 ### Keyboard Shortcut Help
@@ -226,14 +200,6 @@ Kbd::new(Keystroke::parse("cmd-k").unwrap())
 let shortcut_text = Kbd::format(&Keystroke::parse("cmd-shift-p").unwrap());
 div().child(format!("Shortcut: {}", shortcut_text))
 ```
-
-## Accessibility
-
-- Keyboard shortcuts are announced by screen readers
-- The component provides semantic meaning for assistive technologies
-- Visual styling helps distinguish shortcuts from regular text
-- Platform-specific formatting ensures familiarity for users
-- Text-only mode available for custom accessibility implementations
 
 ## Styling
 

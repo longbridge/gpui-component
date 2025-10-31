@@ -1,15 +1,16 @@
 use gpui::{
-    actions, div, px, Action, App, AppContext, Context, Corner, DismissEvent, Element, Entity,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, MouseButton,
-    ParentElement as _, Render, Styled as _, Window,
+    Action, App, AppContext, Context, Corner, DismissEvent, Element, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, MouseButton,
+    ParentElement as _, Render, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
+    ContextModal, Sizable,
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     popover::{Popover, PopoverContent},
-    v_flex, ContextModal, Sizable,
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -67,7 +68,7 @@ impl Render for Form {
             .p_4()
             .size_full()
             .child("This is a form container.")
-            .child(TextInput::new(&self.input1))
+            .child(Input::new(&self.input1))
             .child(
                 Button::new("submit")
                     .label("Submit")

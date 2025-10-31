@@ -7,7 +7,7 @@ use gpui::{
 
 use crate::{
     h_flex,
-    popup_menu::PopupMenu,
+    menu::PopupMenu,
     table::{loading::Loading, Column, ColumnSort, Table},
     ActiveTheme as _, Icon, IconName, Size,
 };

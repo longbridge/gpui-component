@@ -389,37 +389,6 @@ Notifications appear in a fixed position at the top right of the window:
 - **Hover pause**: Timer pauses while hovering over notification area
 - **Manual dismiss**: Immediate when close button clicked
 
-## Accessibility
-
-### Keyboard Navigation
-
-- Close button can be focused with Tab navigation
-- Enter or Space activates the close button
-- Action buttons are keyboard accessible
-- Focus management handles notification dismissal
-
-### Screen Reader Support
-
-- Notification content is announced when shown
-- Title and message are properly structured for screen readers
-- Icon provides semantic meaning through appropriate labeling
-- Action buttons have descriptive labels
-
-### Visual Accessibility
-
-- High contrast between text and background
-- Clear visual hierarchy with title, message, and actions
-- Icon reinforces notification type meaning
-- Sufficient touch targets for interactive elements
-- Consistent spacing and typography
-
-### ARIA Properties
-
-- Notifications use appropriate ARIA roles
-- Live regions announce new notifications
-- Action buttons have proper ARIA labels
-- Dismissible notifications indicate their closable state
-
 ## Best Practices
 
 ### Content Guidelines

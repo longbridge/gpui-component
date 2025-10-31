@@ -105,7 +105,7 @@ window.open_drawer(cx, |drawer, _, _| {
             v_flex()
                 .gap_4()
                 .child("Enter your information:")
-                .child(TextInput::new(&input).placeholder("Full Name"))
+                .child(Input::new(&input).placeholder("Full Name"))
                 .child(DatePicker::new(&date).placeholder("Date of Birth"))
         )
         .footer(
@@ -355,16 +355,6 @@ window.open_drawer_at(Placement::Bottom, cx, |drawer, _, _| {
         )
 })
 ```
-
-## Accessibility
-
-- **Keyboard Navigation**: ESC key closes drawer when focused
-- **Focus Management**: Focus is trapped within drawer when open
-- **Focus Restoration**: Focus returns to trigger element when drawer closes
-- **Screen Reader Support**: Proper ARIA labels and roles
-- **Overlay Interaction**: Click outside to close (when enabled)
-- **Visual Focus**: Clear focus indicators for interactive elements
-- **Animation**: Smooth slide-in/out animations with proper timing
 
 ## Best Practices
 

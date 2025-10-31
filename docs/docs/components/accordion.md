@@ -86,29 +86,12 @@ Accordion::new("my-accordion")
 
 ## API Reference
 
-### Accordion
-
-| Method                | Description                                                          |
-| --------------------- | -------------------------------------------------------------------- |
-| `new(id)`             | Create a new accordion with the given ID                             |
-| `multiple(bool)`      | Allow multiple items to be open simultaneously                       |
-| `bordered(bool)`      | Show borders around accordion items                                  |
-| `disabled(bool)`      | Disable all accordion items                                          |
-| `item(fn)`            | Add an accordion item using a builder function                       |
-| `on_toggle_click(fn)` | Callback when items are toggled, receives `&[usize]` of open indices |
-
-### AccordionItem
-
-| Method           | Description                       |
-| ---------------- | --------------------------------- |
-| `header(str)`    | Set the header text               |
-| `child(el)`      | Add content to the accordion item |
-| `open(bool)`     | Set initial open state            |
-| `disabled(bool)` | Disable this specific item        |
+- [Accordion]
+- [AccordionItem]
 
 ### Sizing
 
-Implements `Sizable` trait:
+Implements [Sizable] trait:
 
 - `small()` - Small size
 - `medium()` - Medium size (default)
@@ -146,9 +129,6 @@ Accordion::new("outer")
     })
 ```
 
-## Accessibility
-
-- Keyboard navigation supported
-- Arrow keys to navigate between headers
-- Enter/Space to toggle items
-- Tab to move focus in/out of accordion
+[Accordion]: https://docs.rs/gpui-component/latest/gpui_component/accordion/struct.Accordion.html
+[AccordionItem]: https://docs.rs/gpui-component/latest/gpui_component/accordion/struct.AccordionItem.html
+[Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

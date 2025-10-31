@@ -1,19 +1,19 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
+    IconName, Root, Sizable,
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
-    popup_menu::PopupMenuExt,
-    IconName, Root, Sizable,
+    menu::DropdownMenu,
 };
 
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
-    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DropdownStory,
-    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory,
-    NotificationStory, Open, PopoverStory, ProgressStory, ResizableStory, ScrollableStory,
-    SidebarStory, StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
+    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, FormStory,
+    IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory, NotificationStory, Open,
+    PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SelectStory, SidebarStory,
+    StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -106,7 +106,7 @@ impl StoryWorkspace {
                         .icon(IconName::LayoutDashboard)
                         .small()
                         .ghost()
-                        .popup_menu({
+                        .dropdown_menu({
                             let invisible_panels = AppState::global(cx).invisible_panels.clone();
 
                             move |menu, _, cx| {
@@ -345,7 +345,7 @@ impl StoryWorkspace {
                 vec![
                     Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<DropdownStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<SelectStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<LabelStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
@@ -433,7 +433,7 @@ impl StoryWorkspace {
         let panel = match rand::random::<usize>() % 18 {
             0 => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
             1 => Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
-            2 => Arc::new(StoryContainer::panel::<DropdownStory>(window, cx)),
+            2 => Arc::new(StoryContainer::panel::<SelectStory>(window, cx)),
             3 => Arc::new(StoryContainer::panel::<LabelStory>(window, cx)),
             4 => Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
             5 => Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),

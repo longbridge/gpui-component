@@ -308,14 +308,6 @@ GroupBox::new()
     )
 ```
 
-## Accessibility
-
-- **Semantic Structure**: GroupBox provides semantic grouping of related content
-- **Keyboard Navigation**: Content within GroupBox maintains proper tab order
-- **Screen Readers**: Titles are properly associated with content for screen reader users
-- **Focus Management**: Focus flows naturally through grouped elements
-- **ARIA Support**: When using with form elements, proper labeling and grouping is maintained
-
 ## Best Practices
 
 1. **Use titles for clarity** - Always include a descriptive title when grouping form controls
