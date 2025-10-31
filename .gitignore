@@ -6,3 +6,5 @@
 index.scip
 *.log
 node_modules/
+*.o
+*.rcgu.o

@@ -7153,6 +7153,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "syntax_errors"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-component",
+]
+
+[[package]]
 name = "sys-locale"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

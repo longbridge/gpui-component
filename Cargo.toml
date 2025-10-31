@@ -7,6 +7,7 @@ members = [
     "examples/app_assets",
     "examples/hello_world",
     "examples/input",
+    "examples/syntax_errors",
     "examples/window_title",
 ]
 resolver = "2"
