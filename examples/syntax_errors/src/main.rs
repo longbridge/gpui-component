@@ -45,16 +45,6 @@ impl Example {
                     .with_code("E0425"),
                 );
 
-                // Add error: missing semicolon
-                diagnostics.push(
-                    Diagnostic::new(
-                        Position::new(4, 18)..Position::new(4, 19),
-                        "expected `;`, found `}`",
-                    )
-                    .with_severity(DiagnosticSeverity::Error)
-                    .with_code("E0308"),
-                );
-
                 // Add warning: unused variable
                 diagnostics.push(
                     Diagnostic::new(
