@@ -1,6 +1,6 @@
 use gpui::*;
 use gpui_component::{
-    input::{Input, InputEvent, InputState},
+    input::{TextInput, InputEvent, InputState},
     *,
 };
 
@@ -47,7 +47,7 @@ impl Render for Example {
             .size_full()
             .items_center()
             .justify_center()
-            .child(Input::new(&self.input_state))
+            .child(TextInput::new(&self.input_state))
             .child(self.display_text.clone())
     }
 }
