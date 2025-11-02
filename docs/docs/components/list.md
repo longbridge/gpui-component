@@ -328,7 +328,7 @@ impl ListDelegate for MyListDelegate {
 ### List Configuration
 
 ```rust
-List::new(state, window, cx)
+List::new(&state)
     .max_h(px(400.))                    // Set maximum height
     .scrollbar_visible(false)           // Hide scrollbar
     .paddings(Edges::all(px(8.)))       // Set internal padding
