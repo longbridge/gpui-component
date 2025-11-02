@@ -136,9 +136,10 @@ impl ButtonCustomVariant {
 }
 
 /// The veriant of the Button.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonVariant {
     Primary,
+    #[default]
     Secondary,
     Danger,
     Info,
@@ -148,12 +149,6 @@ pub enum ButtonVariant {
     Link,
     Text,
     Custom(ButtonCustomVariant),
-}
-
-impl Default for ButtonVariant {
-    fn default() -> Self {
-        Self::Secondary
-    }
 }
 
 impl ButtonVariant {
