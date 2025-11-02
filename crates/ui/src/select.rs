@@ -117,7 +117,7 @@ pub trait SelectDelegate: Sized {
         &mut self,
         _query: &str,
         _window: &mut Window,
-        _: &mut Context<ListState<Self>>,
+        _: &mut Context<SelectState<Self>>,
     ) -> Task<()> {
         Task::ready(())
     }
