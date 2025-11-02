@@ -649,7 +649,6 @@ where
         let items_count = state.rows_cache.items_count();
         let entities_count = state.rows_cache.len();
         let mouse_right_clicked_index = state.mouse_right_clicked_index;
-        let loading = state.delegate.loading(cx);
 
         v_flex()
             .key_context("List")
@@ -680,7 +679,7 @@ where
                         ),
                 )
             })
-            // .children(loading_view)
+            .children(loading_view)
             .when(!loading, |this| {
                 this.on_action(window.listener_for(&self.state, ListState::on_action_cancel))
                     .on_action(window.listener_for(&self.state, ListState::on_action_confirm))
