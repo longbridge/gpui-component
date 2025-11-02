@@ -2,7 +2,7 @@ use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as 
 
 use crate::{
     h_flex,
-    list::{loading::Loading, List},
+    list::{loading::Loading, ListState},
     ActiveTheme as _, Icon, IconName, IndexPath, Selectable,
 };
 
@@ -17,7 +17,7 @@ pub trait ListDelegate: Sized + 'static {
         &mut self,
         query: &str,
         window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         Task::ready(())
     }
@@ -35,12 +35,7 @@ pub trait ListDelegate: Sized + 'static {
     /// Return None will skip the item.
     ///
     /// NOTE: Every item should have same height.
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        window: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> Option<Self::Item>;
+    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item>;
 
     /// Render the section header at the given index, default is None.
     ///
@@ -49,7 +44,7 @@ pub trait ListDelegate: Sized + 'static {
         &self,
         section: usize,
         window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         None::<AnyElement>
     }
@@ -61,13 +56,13 @@ pub trait ListDelegate: Sized + 'static {
         &self,
         section: usize,
         window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
         None::<AnyElement>
     }
 
     /// Return a Element to show when list is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<List<Self>>) -> impl IntoElement {
+    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .size_full()
             .justify_center()
@@ -84,11 +79,7 @@ pub trait ListDelegate: Sized + 'static {
     /// For example: The last search results, or the last selected item.
     ///
     /// Default is None, that means no initial state.
-    fn render_initial(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> Option<AnyElement> {
+    fn render_initial(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         None
     }
 
@@ -99,11 +90,7 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Returns a Element to show when loading, default is built-in Skeleton
     /// loading view.
-    fn render_loading(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<List<Self>>,
-    ) -> impl IntoElement {
+    fn render_loading(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         Loading
     }
 
@@ -112,17 +99,18 @@ pub trait ListDelegate: Sized + 'static {
         &mut self,
         ix: Option<IndexPath>,
         window: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     );
 
     /// Set the confirm and give the selected index,
     /// this is means user have clicked the item or pressed Enter.
     ///
     /// This will always to `set_selected_index` before confirm.
-    fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<List<Self>>) {}
+    fn confirm(&mut self, secondary: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+    }
 
     /// Cancel the selection, e.g.: Pressed ESC.
-    fn cancel(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
+    fn cancel(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {}
 
     /// Return true to enable load more data when scrolling to the bottom.
     ///
@@ -149,5 +137,5 @@ pub trait ListDelegate: Sized + 'static {
     /// This is always called when the table is near the bottom,
     /// so you must check if there is more data to load or lock
     /// the loading state.
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<List<Self>>) {}
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {}
 }

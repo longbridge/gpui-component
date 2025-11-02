@@ -11,7 +11,7 @@ use std::{
 };
 
 const DEFAULT_THEME: &str = include_str!("./default-theme.json");
-pub(crate) const DEFAULT_THEME_COLORS: LazyLock<
+pub(crate) static DEFAULT_THEME_COLORS: LazyLock<
     HashMap<ThemeMode, (Arc<ThemeColor>, Arc<HighlightTheme>)>,
 > = LazyLock::new(|| {
     let mut colors = HashMap::new();

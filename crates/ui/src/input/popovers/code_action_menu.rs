@@ -14,7 +14,7 @@ const MAX_MENU_HEIGHT: Pixels = px(480.);
 use crate::{
     actions, h_flex,
     input::{self, popovers::editor_popover, InputState},
-    list::{List, ListDelegate, ListEvent},
+    list::{List, ListDelegate, ListEvent, ListState},
     ActiveTheme, IndexPath, Selectable,
 };
 
@@ -110,12 +110,7 @@ impl ListDelegate for MenuDelegate {
         self.items.len()
     }
 
-    fn render_item(
-        &self,
-        ix: crate::IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: crate::IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
         Some(MenuItem::new(ix.row, item.clone()))
     }
@@ -124,13 +119,13 @@ impl ListDelegate for MenuDelegate {
         &mut self,
         ix: Option<crate::IndexPath>,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_ix = ix.map(|i| i.row).unwrap_or(0);
         cx.notify();
     }
 
-    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         let Some(item) = self.selected_item() else {
             return;
         };
@@ -145,7 +140,7 @@ impl ListDelegate for MenuDelegate {
 pub struct CodeActionMenu {
     offset: usize,
     state: Entity<InputState>,
-    list: Entity<List<MenuDelegate>>,
+    list: Entity<ListState<MenuDelegate>>,
     open: bool,
     bounds: Bounds<Pixels>,
 
@@ -169,11 +164,7 @@ impl CodeActionMenu {
                 selected_ix: 0,
             };
 
-            let list = cx.new(|cx| {
-                List::new(menu, window, cx)
-                    .no_query()
-                    .max_h(MAX_MENU_HEIGHT)
-            });
+            let list = cx.new(|cx| ListState::new(menu, window, cx).no_query());
 
             let _subscriptions =
                 vec![
@@ -336,7 +327,7 @@ impl Render for CodeActionMenu {
                 .top(pos.y)
                 .max_w(max_width)
                 .min_w(px(120.))
-                .child(self.list.clone())
+                .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
