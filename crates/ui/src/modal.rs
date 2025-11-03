@@ -247,10 +247,9 @@ impl Modal {
     /// Set the overlay closable of the modal, defaults to `true`.
     ///
     /// When the overlay is clicked, the modal will be closed.
+    ///
+    /// Note: This has no effect if [`overlay`](Self::overlay) is set to `false`.
     pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
-        if !self.overlay && overlay_closable {
-            eprintln!("Warning: overlay_closable has no effect when overlay is disabled.");
-        }
         self.overlay_closable = overlay_closable;
         self
     }
