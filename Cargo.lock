@@ -4374,7 +4374,6 @@ dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
- "rust-embed",
 ]
 
 [[package]]
