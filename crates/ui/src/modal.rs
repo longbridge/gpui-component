@@ -248,6 +248,9 @@ impl Modal {
     ///
     /// When the overlay is clicked, the modal will be closed.
     pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
+        if !self.overlay && overlay_closable {
+            eprintln!("Warning: overlay_closable has no effect when overlay is disabled.");
+        }
         self.overlay_closable = overlay_closable;
         self
     }
@@ -382,24 +385,29 @@ impl RenderOnce for Modal {
                     .id("modal")
                     .w(view_size.width)
                     .h(view_size.height)
-                    .when(self.overlay_visible, |this| {
-                        this.occlude().bg(overlay_color(self.overlay, cx))
-                    })
-                    .when(self.overlay_closable, |this| {
+                    .when(self.overlay, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.
                         if (self.layer_ix + 1) != Root::read(window, cx).active_modals.len() {
                             return this;
                         }
-
-                        this.on_mouse_down(MouseButton::Left, {
-                            let on_cancel = on_cancel.clone();
-                            let on_close = on_close.clone();
-                            move |_, window, cx| {
-                                on_cancel(&ClickEvent::default(), window, cx);
-                                on_close(&ClickEvent::default(), window, cx);
-                                window.close_modal(cx);
+                        this.on_any_mouse_down( {
+                                let on_cancel = on_cancel.clone();
+                                let on_close = on_close.clone();
+                                move |event, window, cx| {
+                                if event.button == MouseButton::Left && self.overlay_closable {
+                                    on_cancel(&ClickEvent::default(), window, cx);
+                                    on_close(&ClickEvent::default(), window, cx);
+                                    window.close_modal(cx);
+                                    return;
+                                }
+                                // If overlay is true, then block background interaction, such as ContextMenu.
+                                // (for example, prevent right-click menus from opening behind the modal)
+                                cx.stop_propagation();
                             }
                         })
+                    })
+                    .when(self.overlay_visible, |this| {
+                        this.occlude().bg(overlay_color(self.overlay, cx))
                     })
                     .child(
                         v_flex()
