@@ -149,7 +149,7 @@ impl RenderOnce for Drawer {
                         this.on_any_mouse_down(move |event, window, cx| {
                             cx.stop_propagation();
 
-                            if event.button == MouseButton::Left && self.overlay_closable {
+                            if self.overlay_closable && event.button == MouseButton::Left {
                                 on_close(&ClickEvent::default(), window, cx);
                                 window.close_drawer(cx);
                             }
