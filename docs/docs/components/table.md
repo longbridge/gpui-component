@@ -210,7 +210,7 @@ impl TableDelegate for MyTableDelegate {
     }
 
     // Context menu for right-click
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &Window, _: &App) -> PopupMenu {
+    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &mut Window, _: &mut App) -> PopupMenu {
         let row = &self.data[row_ix];
         menu.menu(format!("Edit {}", row.name), Box::new(EditRowAction(row_ix)))
             .menu("Delete", Box::new(DeleteRowAction(row_ix)))

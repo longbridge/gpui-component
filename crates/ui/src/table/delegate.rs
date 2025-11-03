@@ -47,7 +47,13 @@ pub trait TableDelegate: Sized + 'static {
     }
 
     /// Render the context menu for the row at the given row index.
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn context_menu(
+        &self,
+        row_ix: usize,
+        menu: PopupMenu,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> PopupMenu {
         menu
     }
 

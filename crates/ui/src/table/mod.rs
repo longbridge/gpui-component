@@ -1404,9 +1404,9 @@ where
                         let view = cx.entity().clone();
                         move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
                             if let Some(row_ix) = view.read(cx).right_clicked_row {
-                                view.read(cx)
-                                    .delegate
-                                    .context_menu(row_ix, this, window, cx)
+                                view.update(cx, |menu, cx| {
+                                    menu.delegate().context_menu(row_ix, this, window, cx)
+                                })
                             } else {
                                 this
                             }

@@ -354,8 +354,8 @@ impl TableDelegate for StockTableDelegate {
         &self,
         row_ix: usize,
         menu: PopupMenu,
-        _window: &Window,
-        _cx: &App,
+        _window: &mut Window,
+        _cx: &mut App,
     ) -> PopupMenu {
         menu.menu(
             format!("Selected Row: {}", row_ix),
