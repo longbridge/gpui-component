@@ -4368,6 +4368,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "modal_overlay"
+version = "0.4.0-preview0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-component",
+ "rust-embed",
+]
+
+[[package]]
 name = "naga"
 version = "25.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

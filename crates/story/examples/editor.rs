@@ -706,7 +706,6 @@ impl Example {
             modal
                 .title("Go to line")
                 .child(Input::new(&input_state))
-                .confirm()
                 .on_ok({
                     let editor = editor.clone();
                     let input_state = input_state.clone();
