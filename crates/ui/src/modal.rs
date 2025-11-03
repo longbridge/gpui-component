@@ -384,6 +384,9 @@ impl RenderOnce for Modal {
                     .id("modal")
                     .w(view_size.width)
                     .h(view_size.height)
+                    .when(self.overlay_visible, |this| {
+                        this.occlude().bg(overlay_color(self.overlay, cx))
+                    })
                     .when(self.overlay, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.
                         if (self.layer_ix + 1) != Root::read(window, cx).active_modals.len() {
@@ -404,9 +407,6 @@ impl RenderOnce for Modal {
                                 cx.stop_propagation();
                             }
                         })
-                    })
-                    .when(self.overlay_visible, |this| {
-                        this.occlude().bg(overlay_color(self.overlay, cx))
                     })
                     .child(
                         v_flex()
