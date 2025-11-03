@@ -8,6 +8,7 @@ members = [
     "examples/hello_world",
     "examples/input",
     "examples/window_title",
+    "examples/modal_overlay",
 ]
 resolver = "2"
 

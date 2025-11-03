@@ -144,12 +144,16 @@ impl RenderOnce for Drawer {
                     .w(size.width)
                     .h(size.height - titlebar_height)
                     .bg(overlay_color(self.overlay, cx))
-                    .when(self.overlay_closable, |this| {
-                        this.on_mouse_down(MouseButton::Left, {
+                    .when(self.overlay, |this| {
+                        this.on_any_mouse_down({
                             let on_close = self.on_close.clone();
-                            move |_, window, cx| {
-                                on_close(&ClickEvent::default(), window, cx);
-                                window.close_drawer(cx);
+                            move |event, window, cx| {
+                                cx.stop_propagation();
+
+                                if self.overlay_closable && event.button == MouseButton::Left {
+                                    on_close(&ClickEvent::default(), window, cx);
+                                    window.close_drawer(cx);
+                                }
                             }
                         })
                     })

@@ -380,24 +380,29 @@ impl RenderOnce for Modal {
             .child(
                 div()
                     .id("modal")
+                    .occlude()
                     .w(view_size.width)
                     .h(view_size.height)
                     .when(self.overlay_visible, |this| {
-                        this.occlude().bg(overlay_color(self.overlay, cx))
+                        this.bg(overlay_color(self.overlay, cx))
                     })
-                    .when(self.overlay_closable, |this| {
+                    .when(self.overlay, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.
                         if (self.layer_ix + 1) != Root::read(window, cx).active_modals.len() {
                             return this;
                         }
 
-                        this.on_mouse_down(MouseButton::Left, {
+                        this.on_any_mouse_down({
                             let on_cancel = on_cancel.clone();
                             let on_close = on_close.clone();
-                            move |_, window, cx| {
-                                on_cancel(&ClickEvent::default(), window, cx);
-                                on_close(&ClickEvent::default(), window, cx);
-                                window.close_modal(cx);
+                            move |event, window, cx| {
+                                cx.stop_propagation();
+
+                                if self.overlay_closable && event.button == MouseButton::Left {
+                                    on_cancel(&ClickEvent::default(), window, cx);
+                                    on_close(&ClickEvent::default(), window, cx);
+                                    window.close_modal(cx);
+                                }
                             }
                         })
                     })
