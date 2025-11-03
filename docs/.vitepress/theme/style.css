@@ -50,12 +50,14 @@
   --vp-c-default-1: var(--secondary);
   --vp-c-default-2: var(--muted);
 
+  --vp-nav-bg-color: var(--background);
   --vp-custom-block-tip-border: var(--vp-c-default-3);
   --vp-custom-block-tip-text: var(--vp-c-text-1);
   --vp-custom-block-tip-bg: transparent;
   --vp-custom-block-tip-code-bg: var(--vp-c-default-soft);
   --vp-input-switch-bg-color: var(--secondary);
   --vp-input-border-color: var(--input);
+  --vp-c-divider: var(--border);
 }
 
 .dark {
@@ -92,13 +94,9 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
-.VPSidebar {
-  border-right: 1px solid var(--border);
-}
-
 #app {
   .VPMenu {
-    @apply p-1 rounded-md bg-[var(--popover)];
+    @apply p-1 rounded-md bg-(--popover);
 
     .link {
       @apply text-sm py-1;
@@ -108,9 +106,56 @@
   .DocSearch-Button {
     @apply rounded-md py-0 px-2 h-8 lg:w-56 xl:w-64;
   }
+
+  .VPNav {
+    @apply bg-(--background) border-b border-(--border) border-dashed;
+
+    .divider {
+      @apply hidden;
+    }
+  }
+
+  .VPFooter {
+    @apply border-dashed;
+  }
+
+  .VPSidebar {
+    @apply border-r border-dashed border-(--border) bg-(--background);
+
+    .VPSidebarItem .items {
+      @apply border-dashed;
+    }
+  }
+
+  .VPNavBarTitle {
+    a.title {
+      border-bottom: 0 !important;
+    }
+  }
+
+  .aside {
+    .content {
+      @apply border-dashed;
+    }
+  }
+
+  .prev-next {
+    @apply border-0 pt-0;
+
+    .pager-link {
+      @apply border-dashed;
+    }
+  }
 }
 
 .vp-doc {
+  h2 {
+    @apply border-t-0 mt-10 pt-0 pb-3 border-b border-dashed border-(--border);
+
+    .header-anchor {
+      @apply top-0;
+    }
+  }
   [class*="language-"] pre {
     @apply rounded-md py-5 text-base font-mono;
   }
