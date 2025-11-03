@@ -682,6 +682,7 @@ where
     }
 
     fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        cx.stop_propagation();
         self.set_selected_index(None, window, cx);
         cx.emit(SelectEvent::Confirm(None));
     }
