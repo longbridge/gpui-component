@@ -367,9 +367,7 @@ where
             return;
         }
 
-        let prev_ix = self
-            .rows_cache
-            .prev(self.selected_index.unwrap_or(IndexPath::default()));
+        let prev_ix = self.rows_cache.prev(self.selected_index);
         self.select_item(prev_ix, window, cx);
     }
 
@@ -383,9 +381,7 @@ where
             return;
         }
 
-        let next_ix = self
-            .rows_cache
-            .next(self.selected_index.unwrap_or_default());
+        let next_ix = self.rows_cache.next(self.selected_index);
         self.select_item(next_ix, window, cx);
     }
 
