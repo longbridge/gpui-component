@@ -215,7 +215,24 @@ where
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         let state = self.state.clone();
-        cx.defer_in(window, move |_, window, cx| {
+        let final_selected_index = state
+            .read_with(cx, |this, _| this.final_selected_index)
+            .ok()
+            .flatten();
+
+        // If the selected index is not the final selected index, we need to restore it.
+        let need_restore = if final_selected_index != self.selected_index {
+            self.selected_index = final_selected_index;
+            true
+        } else {
+            false
+        };
+
+        cx.defer_in(window, move |this, window, cx| {
+            if need_restore {
+                this.set_selected_index(final_selected_index, window, cx);
+            }
+
             _ = state.update(cx, |this, cx| {
                 this.open = false;
                 this.focus(window, cx);
@@ -223,14 +240,9 @@ where
         });
     }
 
-    fn confirm(
-        &mut self,
-        _secondary: bool,
-        window: &mut Window,
-        cx: &mut Context<ListState<Self>>,
-    ) {
-        let selected_value = self
-            .selected_index
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+        let selected_index = self.selected_index;
+        let selected_value = selected_index
             .and_then(|ix| self.delegate.item(ix))
             .map(|item| item.value().clone());
         let state = self.state.clone();
@@ -238,6 +250,7 @@ where
         cx.defer_in(window, move |_, window, cx| {
             _ = state.update(cx, |this, cx| {
                 cx.emit(SelectEvent::Confirm(selected_value.clone()));
+                this.final_selected_index = selected_index;
                 this.selected_value = selected_value;
                 this.open = false;
                 this.focus(window, cx);
@@ -327,6 +340,7 @@ pub struct SelectState<D: SelectDelegate + 'static> {
     bounds: Bounds<Pixels>,
     open: bool,
     selected_value: Option<<D::Item as SelectItem>::Value>,
+    final_selected_index: Option<IndexPath>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -575,6 +589,7 @@ where
             open: false,
             bounds: Bounds::default(),
             empty: None,
+            final_selected_index: None,
             _subscriptions,
         };
         this.set_selected_index(selected_index, window, cx);
@@ -591,6 +606,7 @@ where
         self.list.update(cx, |list, cx| {
             list._set_selected_index(selected_index, window, cx);
         });
+        self.final_selected_index = selected_index;
         self.update_selected_value(window, cx);
     }
 
@@ -647,6 +663,15 @@ where
         // When the select and dropdown menu are both not focused, close the dropdown menu.
         if self.list.focus_handle(cx).is_focused(window) || self.focus_handle.is_focused(window) {
             return;
+        }
+
+        // If the selected index is not the final selected index, we need to restore it.
+        let final_selected_index = self.final_selected_index;
+        let selected_index = self.selected_index(cx);
+        if final_selected_index != selected_index {
+            self.list.update(cx, |list, cx| {
+                list.set_selected_index(self.final_selected_index, window, cx);
+            });
         }
 
         self.open = false;
