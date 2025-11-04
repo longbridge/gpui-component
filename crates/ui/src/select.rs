@@ -291,6 +291,7 @@ struct SelectOptions {
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
     searchable: bool,
+    search_placeholder: Option<SharedString>,
     empty: Option<AnyElement>,
     menu_width: Length,
     disabled: bool,
@@ -311,6 +312,7 @@ impl Default for SelectOptions {
             disabled: false,
             appearance: true,
             searchable: true,
+            search_placeholder: None,
         }
     }
 }
@@ -859,6 +861,7 @@ where
                                         .child(
                                             List::new(&self.list)
                                                 .searchable(self.options.searchable)
+                                                .search_placeholder(self.options.search_placeholder)
                                                 .with_size(self.options.size)
                                                 .max_h(rems(20.))
                                                 .paddings(Edges::all(px(4.))),
@@ -926,6 +929,12 @@ where
     /// When `true`, there will be a search input at the top of the dropdown menu.
     pub fn searchable(mut self, searchable: bool) -> Self {
         self.options.searchable = searchable;
+        self
+    }
+
+    /// Sets the placeholder text for the search input.
+    pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.options.search_placeholder = Some(placeholder.into());
         self
     }
 
