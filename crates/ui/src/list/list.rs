@@ -703,6 +703,6 @@ where
             state.options = self.options;
         });
 
-        self.state.clone()
+        div().id("list").size_full().child(self.state.clone())
     }
 }
