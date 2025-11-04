@@ -1,7 +1,7 @@
 use gpui::{
     px, relative, App, Axis, BorderStyle, Bounds, ContentMask, Corners, Edges, Element, ElementId,
-    EntityId, GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels,
-    Point, Position, ScrollHandle, ScrollWheelEvent, Style, Window,
+    GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point,
+    Position, ScrollHandle, ScrollWheelEvent, Style, Window,
 };
 
 use crate::AxisExt;
@@ -12,7 +12,6 @@ use crate::AxisExt;
 /// You can use this `scroll_handle` to control what you want to scroll.
 /// This is only can handle once axis scrolling.
 pub struct ScrollableMask {
-    view_id: EntityId,
     axis: Axis,
     scroll_handle: ScrollHandle,
     debug: Option<Hsla>,
@@ -20,9 +19,8 @@ pub struct ScrollableMask {
 
 impl ScrollableMask {
     /// Create a new scrollable mask element.
-    pub fn new(view_id: EntityId, axis: Axis, scroll_handle: &ScrollHandle) -> Self {
+    pub fn new(axis: Axis, scroll_handle: &ScrollHandle) -> Self {
         Self {
-            view_id,
             scroll_handle: scroll_handle.clone(),
             axis,
             debug: None,
@@ -123,7 +121,7 @@ impl Element for ScrollableMask {
             }
 
             window.on_mouse_event({
-                let view_id = self.view_id;
+                let view_id = window.current_view();
                 let scroll_handle = self.scroll_handle.clone();
 
                 move |event: &ScrollWheelEvent, _, window, cx| {
@@ -153,7 +151,7 @@ impl Element for ScrollableMask {
 
                     if offset != scroll_handle.offset() {
                         scroll_handle.set_offset(offset);
-                        window.refresh();
+                        cx.notify(view_id);
                         cx.stop_propagation();
                     }
                 }

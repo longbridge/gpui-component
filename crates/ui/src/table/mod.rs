@@ -1498,14 +1498,10 @@ where
             .children(loading_view)
             .when(!loading, |this| {
                 this.children(inner_table)
-                    .child(
-                        ScrollableMask::new(
-                            self.state.entity_id(),
-                            Axis::Horizontal,
-                            &horizontal_scroll_handle,
-                        )
-                        .debug(),
-                    )
+                    .child(ScrollableMask::new(
+                        Axis::Horizontal,
+                        &horizontal_scroll_handle,
+                    ))
                     .when(right_clicked_row.is_some(), |this| {
                         this.on_mouse_down_out(window.listener_for(
                             &self.state,
