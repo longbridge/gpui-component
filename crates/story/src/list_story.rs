@@ -2,7 +2,7 @@ use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    App, AppContext, Context, Edges, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
+    App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString, Styled,
     Subscription, Task, Timer, Window, actions, div, prelude::FluentBuilder as _, px,
 };
@@ -535,13 +535,13 @@ impl Render for ListStory {
                     ),
             )
             .child(
-                div()
+                List::new(&self.company_list)
+                    .p(px(8.))
                     .flex_1()
                     .w_full()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius)
-                    .child(List::new(&self.company_list).paddings(Edges::all(px(8.)))),
+                    .rounded(cx.theme().radius),
             )
     }
 }
