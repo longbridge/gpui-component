@@ -12,8 +12,8 @@ use gpui::{
     actions, canvas, div, prelude::FluentBuilder, px, uniform_list, App, AppContext, Axis, Bounds,
     Context, Div, DragMoveEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, RenderOnce, ScrollStrategy, ScrollWheelEvent,
-    SharedString, StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
+    ParentElement, Pixels, Point, Render, RenderOnce, ScrollStrategy, SharedString,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window,
 };
 
 mod column;
@@ -1275,10 +1275,9 @@ where
 
     fn render_vertical_scrollbar(
         &self,
-        state: &Entity<TableState<D>>,
         scroll_state: &ScrollbarState,
         scroll_handle: &UniformListScrollHandle,
-        window: &mut Window,
+        _: &mut Window,
         _: &mut App,
     ) -> Option<impl IntoElement> {
         Some(
@@ -1289,22 +1288,16 @@ where
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
-                .on_scroll_wheel(
-                    window.listener_for(&state, |_, _: &ScrollWheelEvent, _, cx| {
-                        cx.notify();
-                    }),
-                )
                 .child(Scrollbar::uniform_scroll(scroll_state, scroll_handle).max_fps(60)),
         )
     }
 
     fn render_horizontal_scrollbar(
         &self,
-        state: &Entity<TableState<D>>,
         fixed_head_cols_bounds: Bounds<Pixels>,
         scroll_state: &ScrollbarState,
         scroll_handle: &VirtualListScrollHandle,
-        window: &mut Window,
+        _: &mut Window,
         _: &mut App,
     ) -> impl IntoElement {
         div()
@@ -1314,11 +1307,6 @@ where
             .right_0()
             .bottom_0()
             .h(Scrollbar::width())
-            .on_scroll_wheel(
-                window.listener_for(&state, |_, _: &ScrollWheelEvent, _, cx| {
-                    cx.notify();
-                }),
-            )
             .child(Scrollbar::horizontal(scroll_state, scroll_handle))
     }
 }
@@ -1510,11 +1498,14 @@ where
             .children(loading_view)
             .when(!loading, |this| {
                 this.children(inner_table)
-                    .child(ScrollableMask::new(
-                        self.state.entity_id(),
-                        Axis::Horizontal,
-                        &horizontal_scroll_handle,
-                    ))
+                    .child(
+                        ScrollableMask::new(
+                            self.state.entity_id(),
+                            Axis::Horizontal,
+                            &horizontal_scroll_handle,
+                        )
+                        .debug(),
+                    )
                     .when(right_clicked_row.is_some(), |this| {
                         this.on_mouse_down_out(window.listener_for(
                             &self.state,
@@ -1537,7 +1528,6 @@ where
                         .size_full()
                         .when(self.scrollbar_visible.bottom, |this| {
                             this.child(self.render_horizontal_scrollbar(
-                                &self.state,
                                 fixed_head_cols_bounds,
                                 &horizontal_scroll_state,
                                 &horizontal_scroll_handle,
@@ -1547,7 +1537,6 @@ where
                         })
                         .when(self.scrollbar_visible.right && rows_count > 0, |this| {
                             this.children(self.render_vertical_scrollbar(
-                                &self.state,
                                 &vertical_scroll_state,
                                 &vertical_scroll_handle,
                                 window,

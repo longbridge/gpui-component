@@ -129,11 +129,8 @@ impl Element for ScrollableMask {
                 let mouse_position = window.mouse_position();
                 let last_offset = scroll_handle.offset();
 
-                move |event: &ScrollWheelEvent, phase, window, cx| {
-                    if bounds.contains(&mouse_position)
-                        && phase.bubble()
-                        && hitbox.is_hovered(window)
-                    {
+                move |event: &ScrollWheelEvent, _, window, cx| {
+                    if bounds.contains(&mouse_position) && hitbox.is_hovered(window) {
                         let mut offset = scroll_handle.offset();
                         let mut delta = event.delta.pixel_delta(line_height);
 
