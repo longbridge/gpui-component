@@ -7,7 +7,7 @@ use std::{
 use crate::{
     h_flex,
     history::{History, HistoryItem},
-    scroll::{Scrollbar, ScrollbarState},
+    scroll::{Scrollbar, ScrollbarShow, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName,
 };
 
@@ -140,6 +140,7 @@ pub struct Tiles {
     history: History<TileChange>,
     scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
+    scrollbar_behavior: Option<ScrollbarShow>,
 }
 
 impl Panel for Tiles {
@@ -189,12 +190,18 @@ impl Tiles {
             dragging_initial_mouse: Point::default(),
             dragging_initial_bounds: Bounds::default(),
             resizing_id: None,
+            scrollbar_behavior: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
         }
+    }
+
+    pub fn scrollbar_behavior(&mut self, behavior: ScrollbarShow) -> &mut Self {
+        self.scrollbar_behavior = Some(behavior);
+        self
     }
 
     pub fn panels(&self) -> &[TileItem] {
@@ -880,7 +887,7 @@ impl Tiles {
         let panel_view = item.panel.view();
 
         v_flex()
-            .occlude()
+            .block_mouse_except_scroll()
             .bg(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)
@@ -1058,7 +1065,8 @@ impl Render for Tiles {
                     .bottom_0()
                     .child(
                         Scrollbar::both(&self.scroll_state, &self.scroll_handle)
-                            .scroll_size(scroll_size),
+                            .scroll_size(scroll_size)
+                            .with_behavior(self.scrollbar_behavior),
                     ),
             )
             .size_full()
