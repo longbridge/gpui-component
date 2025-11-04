@@ -887,7 +887,7 @@ impl Tiles {
         let panel_view = item.panel.view();
 
         v_flex()
-            .block_mouse_except_scroll()
+            .occlude()
             .bg(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)

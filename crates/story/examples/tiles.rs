@@ -156,13 +156,12 @@ struct DockAreaTab {
 impl StoryTiles {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let dock_area = cx.new(|cx| {
-            let dock_area = DockArea::new(
+            DockArea::new(
                 TILES_DOCK_AREA.id,
                 Some(TILES_DOCK_AREA.version),
                 window,
                 cx,
-            );
-            dock_area
+            )
         });
         let weak_dock_area = dock_area.downgrade();
 
