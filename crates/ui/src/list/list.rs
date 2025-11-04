@@ -76,6 +76,7 @@ pub struct ListState<D: ListDelegate> {
     selected_index: Option<IndexPath>,
     item_to_measure_index: IndexPath,
     deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
+    deferred_select_first: bool,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
     _search_task: Task<()>,
@@ -104,6 +105,7 @@ where
             selected_index: None,
             item_to_measure_index: IndexPath::default(),
             deferred_scroll_to_index: None,
+            deferred_select_first: false,
             mouse_right_clicked_index: None,
             scroll_handle: VirtualListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
@@ -164,6 +166,7 @@ where
         cx: &mut Context<Self>,
     ) {
         self.selected_index = ix;
+        self.deferred_select_first = false;
         self.delegate.set_selected_index(ix, window, cx);
         self.scroll_to_selected_item(window, cx);
     }
@@ -177,6 +180,7 @@ where
         cx: &mut Context<Self>,
     ) {
         self.selected_index = ix;
+        self.deferred_select_first = false;
         self.delegate.set_selected_index(ix, window, cx);
     }
 
@@ -245,16 +249,11 @@ where
                 self.set_querying(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
-                if self.rows_cache.len() > 0 {
-                    self._set_selected_index(Some(IndexPath::default()), window, cx);
-                } else {
-                    self._set_selected_index(None, window, cx);
-                }
-
                 self._search_task = cx.spawn_in(window, async move |this, window| {
                     search.await;
 
                     _ = this.update_in(window, |this, _, _| {
+                        this.deferred_select_first |= this.selectable;
                         this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
                         this.last_query = Some(text);
                     });
@@ -351,6 +350,7 @@ where
 
     fn select_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<Self>) {
         self.selected_index = Some(ix);
+        self.deferred_select_first = false;
         self.delegate.set_selected_index(Some(ix), window, cx);
         self.scroll_to_selected_item(window, cx);
         cx.emit(ListEvent::Select(ix));
@@ -363,7 +363,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.rows_cache.len() == 0 {
+        if self.rows_cache.len() == 0 || !self.selectable {
             return;
         }
 
@@ -377,7 +377,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.rows_cache.len() == 0 {
+        if self.rows_cache.len() == 0 || !self.selectable {
             return;
         }
 
@@ -445,6 +445,7 @@ where
                 this.on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
                     this.mouse_right_clicked_index = None;
                     this.selected_index = Some(ix);
+                    this.deferred_select_first = false;
                     this.on_action_confirm(
                         &Confirm {
                             secondary: e.modifiers().secondary(),
@@ -568,6 +569,17 @@ where
         if let Some((ix, strategy)) = self.deferred_scroll_to_index.take() {
             if let Some(item_ix) = self.rows_cache.position_of(&ix) {
                 self.scroll_handle.scroll_to_item(item_ix, strategy);
+            }
+        }
+            
+        // Select first item after completing search
+        if self.deferred_select_first {
+            self.deferred_select_first = false;
+            
+            if self.rows_cache.len() > 0 {
+                self._set_selected_index(Some(IndexPath::default()), window, cx);
+            } else {
+                self._set_selected_index(None, window, cx);
             }
         }
 
