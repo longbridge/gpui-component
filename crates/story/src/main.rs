@@ -220,8 +220,7 @@ impl Render for Gallery {
                                             .mx_1()
                                             .child(
                                                 Input::new(&self.search_input)
-                                                    .appearance(false)
-                                                    .cleanable(),
+                                                    .appearance(false),
                                             ),
                                     ),
                             )

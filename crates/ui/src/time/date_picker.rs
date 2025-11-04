@@ -318,9 +318,9 @@ impl DatePicker {
         self
     }
 
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.cleanable = true;
+    /// Set whether to show the clear button when the input field is not empty, default is true.
+    pub fn cleanable(mut self, cleanable: bool) -> Self {
+        self.cleanable = cleanable;
         self
     }
 

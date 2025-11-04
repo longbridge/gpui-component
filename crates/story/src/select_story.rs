@@ -191,7 +191,6 @@ impl Render for SelectStory {
             .child(
                 section("Select").max_w_128().child(
                     Select::new(&self.country_select)
-                        .cleanable()
                         .disabled(self.disabled),
                 ),
             )

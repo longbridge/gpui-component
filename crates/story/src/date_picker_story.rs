@@ -172,7 +172,6 @@ impl Render for DatePickerStory {
             .child(
                 section("Normal").max_w_128().child(
                     DatePicker::new(&self.date_picker)
-                        .cleanable()
                         .presets(presets),
                 ),
             )
@@ -195,7 +194,6 @@ impl Render for DatePickerStory {
                 section("Date Range").max_w_128().child(
                     DatePicker::new(&self.date_range_picker)
                         .number_of_months(2)
-                        .cleanable()
                         .presets(range_presets.clone()),
                 ),
             )
@@ -203,7 +201,6 @@ impl Render for DatePickerStory {
                 section("Default Range Mode").max_w_128().child(
                     DatePicker::new(&self.default_range_mode_picker)
                         .placeholder("Range mode picker")
-                        .cleanable()
                         .presets(range_presets.clone()),
                 ),
             )
@@ -217,8 +214,7 @@ impl Render for DatePickerStory {
                     div().w_full().bg(cx.theme().secondary).child(
                         DatePicker::new(&self.without_appearance_picker)
                             .appearance(false)
-                            .placeholder("Without appearance")
-                            .cleanable(),
+                            .placeholder("Without appearance"),
                     ),
                 ),
             )
