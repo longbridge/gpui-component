@@ -324,7 +324,7 @@ impl Default for SelectOptions {
             menu_width: Length::Auto,
             disabled: false,
             appearance: true,
-            searchable: true,
+            searchable: false,
             search_placeholder: None,
         }
     }
@@ -559,9 +559,12 @@ where
         };
 
         let list = cx.new(|cx| ListState::new(delegate, window, cx).reset_on_cancel(false));
+        let list_focus_handle = list.read(cx).focus_handle.clone();
+        let list_search_focus_handle = list.read(cx).query_input.focus_handle(cx);
 
         let _subscriptions = vec![
-            cx.on_blur(&list.focus_handle(cx), window, Self::on_blur),
+            cx.on_blur(&list_focus_handle, window, Self::on_blur),
+            cx.on_blur(&list_search_focus_handle, window, Self::on_blur),
             cx.on_blur(&focus_handle, window, Self::on_blur),
         ];
 
@@ -645,7 +648,7 @@ where
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // When the select and dropdown menu are both not focused, close the dropdown menu.
-        if self.list.focus_handle(cx).is_focused(window) || self.focus_handle.is_focused(window) {
+        if self.list.read(cx).is_focused(window, cx) || self.focus_handle.is_focused(window) {
             return;
         }
 
@@ -954,7 +957,7 @@ where
         self
     }
 
-    /// Sets whether the dropdown menu is searchable, default is `true`.
+    /// Sets whether the dropdown menu is searchable, default is `false`.
     ///
     /// When `true`, there will be a search input at the top of the dropdown menu.
     pub fn searchable(mut self, searchable: bool) -> Self {

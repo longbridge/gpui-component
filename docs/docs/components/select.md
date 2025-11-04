@@ -65,6 +65,8 @@ Select::new(&state)
 
 ### Searchable
 
+Use `searchable(true)` to enable search functionality within the dropdown.
+
 ```rust
 let fruits = SearchableVec::new(vec![
     "Apple", "Orange", "Banana", "Grape", "Pineapple",
@@ -75,6 +77,7 @@ let state = cx.new(|cx| {
 });
 
 Select::new(&state)
+    .searchable(true)
     .icon(IconName::Search) // Shows search icon
 ```
 

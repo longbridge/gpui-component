@@ -61,7 +61,7 @@ impl Default for ListOptions {
             scrollbar_visible: true,
             max_height: None,
             selectable: true,
-            searchable: true,
+            searchable: false,
             search_placeholder: None,
             paddings: EdgesRefinement::default(),
         }
@@ -70,9 +70,9 @@ impl Default for ListOptions {
 
 /// The state for List.
 pub struct ListState<D: ListDelegate> {
-    focus_handle: FocusHandle,
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) query_input: Entity<InputState>,
     options: ListOptions,
-    query_input: Option<Entity<InputState>>,
     delegate: D,
     last_query: Option<String>,
     scroll_handle: VirtualListScrollHandle,
@@ -104,7 +104,7 @@ where
             options: ListOptions::default(),
             delegate,
             rows_cache: RowsCache::default(),
-            query_input: Some(query_input),
+            query_input,
             last_query: None,
             selected_index: None,
             item_to_measure_index: IndexPath::default(),
@@ -129,6 +129,11 @@ where
 
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
         self.focus_handle(cx).focus(window);
+    }
+
+    /// Return true if either the list or the search input is focused.
+    pub(crate) fn is_focused(&self, window: &Window, cx: &App) -> bool {
+        self.focus_handle.is_focused(window) || self.query_input.focus_handle(cx).is_focused(window)
     }
 
     /// Set the selected index of the list,
@@ -254,10 +259,8 @@ where
     }
 
     fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| input.set_loading(searching, window, cx))
-        }
-        cx.notify();
+        self.query_input
+            .update(cx, |input, cx| input.set_loading(searching, window, cx));
     }
 
     /// Dispatch delegate's `load_more` method when the
@@ -523,12 +526,8 @@ where
     D: ListDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        if !self.options.searchable {
-            return self.focus_handle.clone();
-        }
-
-        if let Some(query_input) = &self.query_input {
-            query_input.focus_handle(cx)
+        if self.options.searchable {
+            self.query_input.focus_handle(cx)
         } else {
             self.focus_handle.clone()
         }
@@ -552,16 +551,12 @@ where
         let loading = self.delegate().loading(cx);
         let query_input = if self.options.searchable {
             // sync placeholder
-            if let Some(query_input) = &self.query_input {
-                if let Some(placeholder) = &self.options.search_placeholder {
-                    query_input.update(cx, |input, cx| {
-                        input.set_placeholder(placeholder.clone(), window, cx);
-                    });
-                }
-                Some(query_input.clone())
-            } else {
-                None
+            if let Some(placeholder) = &self.options.search_placeholder {
+                self.query_input.update(cx, |input, cx| {
+                    input.set_placeholder(placeholder.clone(), window, cx);
+                });
             }
+            Some(self.query_input.clone())
         } else {
             None
         };
@@ -591,7 +586,7 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
-            .when_some(query_input.clone(), |this, input| {
+            .when_some(query_input, |this, input| {
                 this.child(
                     div()
                         .map(|this| match self.options.size {
@@ -670,7 +665,7 @@ where
         self
     }
 
-    /// Sets whether the list is searchable, default is `true`.
+    /// Sets whether the list is searchable, default is `false`.
     ///
     /// When `true`, there will be a search input at the top of the list.
     pub fn searchable(mut self, searchable: bool) -> Self {

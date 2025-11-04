@@ -304,6 +304,7 @@ impl DrawerStory {
                 )
                 .child(
                     List::new(&list)
+                        .searchable(true)
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
