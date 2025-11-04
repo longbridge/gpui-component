@@ -240,7 +240,7 @@ impl StoryTiles {
         Ok(())
     }
 
-    fn set_scrollbar_behavior(dock_area: &mut DockArea, cx: &mut App) {
+    fn set_scrollbar_show(dock_area: &mut DockArea, cx: &mut App) {
         match dock_area.items() {
             DockItem::Tiles { view, .. } => {
                 view.update(cx, |this, _| {
@@ -285,7 +285,7 @@ impl StoryTiles {
 
         dock_area.update(cx, |dock_area, cx| {
             dock_area.load(state, window, cx).context("load layout")?;
-            Self::set_scrollbar_behavior(dock_area, cx);
+            Self::set_scrollbar_show(dock_area, cx);
             Ok::<(), anyhow::Error>(())
         })
     }
@@ -300,7 +300,7 @@ impl StoryTiles {
             dock_area.set_version(TILES_DOCK_AREA.version, window, cx);
             dock_area.set_center(dock_item, window, cx);
 
-            Self::set_scrollbar_behavior(dock_area, cx);
+            Self::set_scrollbar_show(dock_area, cx);
             Self::save_tiles(&dock_area.dump(cx)).unwrap();
         });
     }
