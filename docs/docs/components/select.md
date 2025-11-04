@@ -166,7 +166,7 @@ Select::new(&state).disabled(true)
 
 ```rust
 Select::new(&state)
-    .cleanable(false) // Hides clear button when item is selected
+    .cleanable(true) // Show clear button when item is selected
 ```
 
 ### Custom Appearance

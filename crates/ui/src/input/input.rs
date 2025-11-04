@@ -65,7 +65,7 @@ impl Input {
             suffix: None,
             height: None,
             appearance: true,
-            cleanable: true,
+            cleanable: false,
             mask_toggle: false,
             disabled: false,
             bordered: true,
@@ -115,7 +115,7 @@ impl Input {
         self
     }
 
-    /// Set whether to show the clear button when the input field is not empty, default is true.
+    /// Set whether to show the clear button when the input field is not empty, default is false.
     pub fn cleanable(mut self, cleanable: bool) -> Self {
         self.cleanable = cleanable;
         self

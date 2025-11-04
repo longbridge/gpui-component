@@ -1,12 +1,12 @@
 use chrono::{Datelike, Days, Duration, Utc};
 use gpui::{
-    div, px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
-    Styled as _, Subscription, Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
+    Styled as _, Subscription, Window, div, px,
 };
 use gpui_component::{
-    calendar,
+    ActiveTheme as _, Sizable as _, calendar,
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
-    v_flex, ActiveTheme as _, Sizable as _,
+    v_flex,
 };
 
 use crate::section;
@@ -172,6 +172,7 @@ impl Render for DatePickerStory {
             .child(
                 section("Normal").max_w_128().child(
                     DatePicker::new(&self.date_picker)
+                        .cleanable(true)
                         .presets(presets),
                 ),
             )
@@ -194,6 +195,7 @@ impl Render for DatePickerStory {
                 section("Date Range").max_w_128().child(
                     DatePicker::new(&self.date_range_picker)
                         .number_of_months(2)
+                        .cleanable(true)
                         .presets(range_presets.clone()),
                 ),
             )
@@ -201,6 +203,7 @@ impl Render for DatePickerStory {
                 section("Default Range Mode").max_w_128().child(
                     DatePicker::new(&self.default_range_mode_picker)
                         .placeholder("Range mode picker")
+                        .cleanable(true)
                         .presets(range_presets.clone()),
                 ),
             )

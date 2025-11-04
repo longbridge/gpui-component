@@ -193,6 +193,7 @@ impl Render for SelectStory {
                     Select::new(&self.country_select)
                         .searchable(true)
                         .search_placeholder("Search country by name or code")
+                        .cleanable(true)
                         .disabled(self.disabled),
                 ),
             )

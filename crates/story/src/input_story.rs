@@ -153,29 +153,32 @@ impl Render for InputStory {
             .child(
                 section("Normal Input")
                     .max_w_md()
-                    .child(Input::new(&self.input1))
-                    .child(Input::new(&self.input2).cleanable(false)),
+                    .child(Input::new(&self.input1).cleanable(true))
+                    .child(Input::new(&self.input2)),
             )
             .child(
                 section("Input State")
                     .max_w_md()
                     .child(Input::new(&self.disabled_input).disabled(true))
-                    .child(Input::new(&self.mask_input).mask_toggle()),
+                    .child(Input::new(&self.mask_input).mask_toggle().cleanable(true)),
             )
             .child(
                 section("Prefix and Suffix")
                     .max_w_md()
                     .child(
                         Input::new(&self.prefix_input1)
+                            .cleanable(true)
                             .prefix(Icon::new(IconName::Search).small()),
                     )
                     .child(
                         Input::new(&self.both_input1)
+                            .cleanable(true)
                             .prefix(div().child(Icon::new(IconName::Search).small()))
                             .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                     )
                     .child(
                         Input::new(&self.suffix_input1)
+                            .cleanable(true)
                             .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
                     ),
             )
@@ -222,7 +225,7 @@ impl Render for InputStory {
             .child(
                 section("Cleanable and ESC to clean")
                     .max_w_md()
-                    .child(Input::new(&self.input_esc)),
+                    .child(Input::new(&self.input_esc).cleanable(true)),
             )
             .child(
                 section("Focused Input")
