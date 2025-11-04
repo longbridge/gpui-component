@@ -94,7 +94,7 @@ DatePicker::new(&date_picker)
 
 ```rust
 DatePicker::new(&date_picker)
-    .cleanable() // Shows clear button when date is selected
+    .cleanable(false) // Hides clear button when date is selected
 ```
 
 ### Different Sizes

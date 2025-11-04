@@ -49,7 +49,7 @@ Input::new(&input)
 
 ```rust
 Input::new(&input)
-    .cleanable() // Shows clear button when input has value
+    .cleanable(false) // Hides clear button when input has value
 ```
 
 ### With Prefix and Suffix
@@ -60,7 +60,6 @@ use gpui_component::{Icon, IconName};
 // With prefix icon
 Input::new(&input)
     .prefix(Icon::new(IconName::Search).small())
-    .cleanable()
 
 // With suffix button
 Input::new(&input)
@@ -75,7 +74,6 @@ Input::new(&input)
 Input::new(&input)
     .prefix(Icon::new(IconName::Search).small())
     .suffix(Button::new("btn").ghost().icon(IconName::Info).xsmall())
-    .cleanable()
 ```
 
 ### Password Input (Masked)
@@ -113,7 +111,7 @@ let input = cx.new(|cx|
         .clean_on_escape() // Clear input when ESC is pressed
 );
 
-Input::new(&input).cleanable()
+Input::new(&input)
 ```
 
 ### Input Validation
@@ -221,7 +219,7 @@ div()
 | `new(state)`       | Create input with state entity           |
 | `prefix(el)`       | Add prefix element                       |
 | `suffix(el)`       | Add suffix element                       |
-| `cleanable()`      | Show clear button                        |
+| `cleanable(bool)`  | Enable/disable clear button              |
 | `mask_toggle()`    | Show password toggle (for masked inputs) |
 | `disabled(bool)`   | Set disabled state                       |
 | `appearance(bool)` | Enable/disable default styling           |
@@ -256,7 +254,6 @@ let search = cx.new(|cx|
 
 Input::new(&search)
     .prefix(Icon::new(IconName::Search).small())
-    .cleanable()
 ```
 
 ### Currency Input
