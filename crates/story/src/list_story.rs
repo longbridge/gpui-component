@@ -332,6 +332,8 @@ pub struct ListStory {
     focus_handle: FocusHandle,
     company_list: Entity<ListState<CompanyListDelegate>>,
     selected_company: Option<Rc<Company>>,
+    selectable: bool,
+    searchable: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -408,6 +410,8 @@ impl ListStory {
 
         Self {
             focus_handle: cx.focus_handle(),
+            searchable: true,
+            selectable: true,
             company_list,
             selected_company: None,
             _subscriptions,
@@ -419,6 +423,20 @@ impl ListStory {
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);
         }
+    }
+
+    fn toggle_selectable(&mut self, selectable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.selectable = selectable;
+        self.company_list.update(cx, |list, cx| {
+            list.set_selectable(self.selectable, cx);
+        })
+    }
+
+    fn toggle_searchable(&mut self, searchable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.searchable = searchable;
+        self.company_list.update(cx, |list, cx| {
+            list.set_searchable(self.searchable, cx);
+        })
     }
 }
 
@@ -520,6 +538,22 @@ impl Render for ListStory {
                                         cx,
                                     );
                                 })
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("selectable")
+                            .label("Selectable")
+                            .checked(self.selectable)
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_selectable(*check, window, cx)
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("searchable")
+                            .label("Searchable")
+                            .checked(self.searchable)
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_searchable(*check, window, cx)
                             })),
                     )
                     .child(

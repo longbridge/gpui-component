@@ -138,6 +138,12 @@ where
         self
     }
 
+    /// Sets whether the list is selectable, default is true.
+    pub fn set_selectable(&mut self, selectable: bool, cx: &mut Context<Self>) {
+        self.selectable = selectable;
+        cx.notify();
+    }
+
     pub fn delegate(&self) -> &D {
         &self.delegate
     }
@@ -163,6 +169,10 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.selectable {
+            return;
+        }
+
         self.selected_index = ix;
         self.delegate.set_selected_index(ix, window, cx);
         self.scroll_to_selected_item(window, cx);
@@ -347,6 +357,10 @@ where
     }
 
     fn select_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.selectable {
+            return;
+        }
+
         self.selected_index = Some(ix);
         self.delegate.set_selected_index(Some(ix), window, cx);
         self.scroll_to_selected_item(window, cx);
