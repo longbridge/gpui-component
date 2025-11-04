@@ -16,8 +16,9 @@ use gpui::{
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
-    px, size, App, AvailableSpace, ClickEvent, Context, Edges, EventEmitter, ListSizingBehavior,
-    Pixels, RenderOnce, ScrollStrategy, SharedString, StatefulInteractiveElement, Subscription,
+    px, size, App, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement,
+    EventEmitter, ListSizingBehavior, RenderOnce, ScrollStrategy, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Subscription,
 };
 use rust_i18n::t;
 use smol::Timer;
@@ -46,8 +47,11 @@ pub enum ListEvent {
 struct ListOptions {
     size: Size,
     scrollbar_visible: bool,
+    selectable: bool,
+    searchable: bool,
+    search_placeholder: Option<SharedString>,
     max_height: Option<Length>,
-    paddings: Edges<Pixels>,
+    paddings: EdgesRefinement<DefiniteLength>,
 }
 
 impl Default for ListOptions {
@@ -56,20 +60,21 @@ impl Default for ListOptions {
             size: Size::default(),
             scrollbar_visible: true,
             max_height: None,
-            paddings: Edges::default(),
+            selectable: true,
+            searchable: false,
+            search_placeholder: None,
+            paddings: EdgesRefinement::default(),
         }
     }
 }
 
 /// The state for List.
 pub struct ListState<D: ListDelegate> {
-    focus_handle: FocusHandle,
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) query_input: Entity<InputState>,
     options: ListOptions,
-    query_input: Option<Entity<InputState>>,
     delegate: D,
     last_query: Option<String>,
-    selectable: bool,
-    querying: bool,
     scroll_handle: VirtualListScrollHandle,
     scroll_state: ScrollbarState,
     rows_cache: RowsCache,
@@ -99,7 +104,7 @@ where
             options: ListOptions::default(),
             delegate,
             rows_cache: RowsCache::default(),
-            query_input: Some(query_input),
+            query_input,
             last_query: None,
             selected_index: None,
             item_to_measure_index: IndexPath::default(),
@@ -107,40 +112,11 @@ where
             mouse_right_clicked_index: None,
             scroll_handle: VirtualListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
-            selectable: true,
-            querying: false,
             reset_on_cancel: true,
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
             _query_input_subscription,
         }
-    }
-
-    pub fn no_query(mut self) -> Self {
-        self.query_input = None;
-        self
-    }
-
-    /// Sets whether the list is selectable, default is true.
-    pub fn selectable(mut self, selectable: bool) -> Self {
-        self.selectable = selectable;
-        self
-    }
-
-    pub fn set_query_input(
-        &mut self,
-        query_input: Entity<InputState>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self._query_input_subscription =
-            cx.subscribe_in(&query_input, window, Self::on_query_input_event);
-        self.query_input = Some(query_input);
-    }
-
-    /// Get the query input entity.
-    pub fn query_input(&self) -> Option<&Entity<InputState>> {
-        self.query_input.as_ref()
     }
 
     pub fn delegate(&self) -> &D {
@@ -153,6 +129,11 @@ where
 
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
         self.focus_handle(cx).focus(window);
+    }
+
+    /// Return true if either the list or the search input is focused.
+    pub(crate) fn is_focused(&self, window: &Window, cx: &App) -> bool {
+        self.focus_handle.is_focused(window) || self.query_input.focus_handle(cx).is_focused(window)
     }
 
     /// Set the selected index of the list,
@@ -242,7 +223,7 @@ where
                     return;
                 }
 
-                self.set_querying(true, window, cx);
+                self.set_searching(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
                 if self.rows_cache.len() > 0 {
@@ -262,7 +243,7 @@ where
                     // Always wait 100ms to avoid flicker
                     Timer::after(Duration::from_millis(100)).await;
                     _ = this.update_in(window, |this, window, cx| {
-                        this.set_querying(false, window, cx);
+                        this.set_searching(false, window, cx);
                     });
                 });
             }
@@ -277,12 +258,9 @@ where
         }
     }
 
-    fn set_querying(&mut self, querying: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.querying = querying;
-        if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| input.set_loading(querying, window, cx))
-        }
-        cx.notify();
+    fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.query_input
+            .update(cx, |input, cx| input.set_loading(searching, window, cx));
     }
 
     /// Dispatch delegate's `load_more` method when the
@@ -424,8 +402,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let selectable = self.selectable;
-
+        let selectable = self.options.selectable;
         let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
         let mouse_right_clicked = self
             .mouse_right_clicked_index
@@ -529,7 +506,7 @@ where
                                     .collect::<Vec<_>>()
                             },
                         )
-                        .paddings(self.options.paddings)
+                        .paddings(self.options.paddings.clone())
                         .when(self.options.max_height.is_some(), |this| {
                             this.with_sizing_behavior(ListSizingBehavior::Infer)
                         })
@@ -549,8 +526,8 @@ where
     D: ListDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        if let Some(query_input) = &self.query_input {
-            query_input.focus_handle(cx)
+        if self.options.searchable {
+            self.query_input.focus_handle(cx)
         } else {
             self.focus_handle.clone()
         }
@@ -572,7 +549,18 @@ where
         }
 
         let loading = self.delegate().loading(cx);
-        let query_input = self.query_input.clone();
+        let query_input = if self.options.searchable {
+            // sync placeholder
+            if let Some(placeholder) = &self.options.search_placeholder {
+                self.query_input.update(cx, |input, cx| {
+                    input.set_placeholder(placeholder.clone(), window, cx);
+                });
+            }
+            Some(self.query_input.clone())
+        } else {
+            None
+        };
+
         let loading_view = if loading {
             Some(self.delegate.render_loading(window, cx).into_any_element())
         } else {
@@ -598,7 +586,7 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
-            .when_some(query_input.clone(), |this, input| {
+            .when_some(query_input, |this, input| {
                 this.child(
                     div()
                         .map(|this| match self.options.size {
@@ -647,6 +635,7 @@ where
 #[derive(IntoElement)]
 pub struct List<D: ListDelegate + 'static> {
     state: Entity<ListState<D>>,
+    style: StyleRefinement,
     options: ListOptions,
 }
 
@@ -658,24 +647,44 @@ where
     pub fn new(state: &Entity<ListState<D>>) -> Self {
         Self {
             state: state.clone(),
+            style: StyleRefinement::default(),
             options: ListOptions::default(),
         }
     }
 
-    /// Set paddings for the list.
-    pub fn paddings(mut self, paddings: Edges<Pixels>) -> Self {
-        self.options.paddings = paddings;
-        self
-    }
-
-    pub fn max_h(mut self, max_height: impl Into<Length>) -> Self {
-        self.options.max_height = Some(max_height.into());
-        self
-    }
-
+    /// Set whether the scrollbar is visible, default is `true`.
     pub fn scrollbar_visible(mut self, visible: bool) -> Self {
         self.options.scrollbar_visible = visible;
         self
+    }
+
+    /// Sets whether the list is selectable, default is true.
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.options.selectable = selectable;
+        self
+    }
+
+    /// Sets whether the list is searchable, default is `false`.
+    ///
+    /// When `true`, there will be a search input at the top of the list.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.options.searchable = searchable;
+        self
+    }
+
+    /// Sets the placeholder text for the search input.
+    pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.options.search_placeholder = Some(placeholder.into());
+        self
+    }
+}
+
+impl<D> Styled for List<D>
+where
+    D: ListDelegate + 'static,
+{
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -693,11 +702,22 @@ impl<D> RenderOnce for List<D>
 where
     D: ListDelegate + 'static,
 {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        // Take paddings, max_height to options, and clear them from style,
+        // because they would be applied to the inner virtual list.
+        self.options.paddings = self.style.padding.clone();
+        self.options.max_height = self.style.max_size.height;
+        self.style.padding = EdgesRefinement::default();
+        self.style.max_size.height = None;
+
         self.state.update(cx, |state, _| {
             state.options = self.options;
         });
 
-        div().id("list").size_full().child(self.state.clone())
+        div()
+            .id("list")
+            .size_full()
+            .refine_style(&self.style)
+            .child(self.state.clone())
     }
 }

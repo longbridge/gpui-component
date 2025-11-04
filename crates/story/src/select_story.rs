@@ -191,12 +191,15 @@ impl Render for SelectStory {
             .child(
                 section("Select").max_w_128().child(
                     Select::new(&self.country_select)
+                        .searchable(true)
+                        .search_placeholder("Search country by name or code")
                         .disabled(self.disabled),
                 ),
             )
             .child(
                 section("Searchable").max_w_128().child(
                     Select::new(&self.fruit_select)
+                        .searchable(true)
                         .disabled(self.disabled)
                         .icon(IconName::Search)
                         .w(px(320.))
