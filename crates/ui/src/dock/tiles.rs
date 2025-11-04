@@ -199,7 +199,11 @@ impl Tiles {
         }
     }
 
-    pub fn scrollbar_show(&mut self, scrollbar_show: ScrollbarShow) -> &mut Self {
+    pub fn set_scrollbar_show(
+        &mut self,
+        scrollbar_show: ScrollbarShow,
+        _: &mut Context<Self>,
+    ) -> &mut Self {
         self.scrollbar_show = Some(scrollbar_show);
         self
     }
