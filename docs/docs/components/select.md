@@ -73,11 +73,10 @@ let fruits = SearchableVec::new(vec![
 ]);
 
 let state = cx.new(|cx| {
-    SelectState::new(fruits, None, window, cx)
+    SelectState::new(fruits, None, window, cx).searchable(true)
 });
 
 Select::new(&state)
-    .searchable(true)
     .icon(IconName::Search) // Shows search icon
 ```
 
