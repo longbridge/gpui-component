@@ -536,6 +536,7 @@ impl Render for ListStory {
             )
             .child(
                 List::new(&self.company_list)
+                    .searchable(true)
                     .p(px(8.))
                     .flex_1()
                     .w_full()

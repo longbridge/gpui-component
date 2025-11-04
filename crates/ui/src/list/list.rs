@@ -61,7 +61,7 @@ impl Default for ListOptions {
             scrollbar_visible: true,
             max_height: None,
             selectable: true,
-            searchable: true,
+            searchable: false,
             search_placeholder: None,
             paddings: EdgesRefinement::default(),
         }
@@ -670,7 +670,7 @@ where
         self
     }
 
-    /// Sets whether the list is searchable, default is `true`.
+    /// Sets whether the list is searchable, default is `false`.
     ///
     /// When `true`, there will be a search input at the top of the list.
     pub fn searchable(mut self, searchable: bool) -> Self {

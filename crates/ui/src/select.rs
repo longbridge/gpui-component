@@ -324,7 +324,7 @@ impl Default for SelectOptions {
             menu_width: Length::Auto,
             disabled: false,
             appearance: true,
-            searchable: true,
+            searchable: false,
             search_placeholder: None,
         }
     }
@@ -954,7 +954,7 @@ where
         self
     }
 
-    /// Sets whether the dropdown menu is searchable, default is `true`.
+    /// Sets whether the dropdown menu is searchable, default is `false`.
     ///
     /// When `true`, there will be a search input at the top of the dropdown menu.
     pub fn searchable(mut self, searchable: bool) -> Self {
