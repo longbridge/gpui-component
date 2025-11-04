@@ -784,8 +784,7 @@ impl Render for StoryContainer {
                         .w_full()
                         .flex_1()
                         .p(self.paddings)
-                        // Add for test UI update when enabled cached layout.
-                        .child(story.cached(StyleRefinement::default().size_full())),
+                        .child(story),
                 )
             })
     }

@@ -124,8 +124,8 @@ impl Element for ScrollableMask {
                 let view_id = window.current_view();
                 let scroll_handle = self.scroll_handle.clone();
 
-                move |event: &ScrollWheelEvent, _, _, cx| {
-                    if !bounds.contains(&event.position) {
+                move |event: &ScrollWheelEvent, phase, _, cx| {
+                    if !(bounds.contains(&event.position) && phase.bubble()) {
                         return;
                     }
 
