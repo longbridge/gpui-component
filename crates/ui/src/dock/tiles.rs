@@ -199,9 +199,13 @@ impl Tiles {
         }
     }
 
-    /// Set the scrollbar show mode,if not set, use the theme's `scrollbar_show` mode.
-    pub fn set_scrollbar_show(&mut self, scrollbar_show: ScrollbarShow, cx: &mut Context<Self>) {
-        self.scrollbar_show = Some(scrollbar_show);
+    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
+    pub fn set_scrollbar_show(
+        &mut self,
+        scrollbar_show: Option<ScrollbarShow>,
+        cx: &mut Context<Self>,
+    ) {
+        self.scrollbar_show = scrollbar_show;
         cx.notify();
     }
 
@@ -1024,6 +1028,12 @@ impl Render for Tiles {
                 });
         let scroll_size = scroll_bounds.size - size(scroll_bounds.origin.x, scroll_bounds.origin.y);
 
+        let mut scrollbar =
+            Scrollbar::both(&self.scroll_state, &self.scroll_handle).scroll_size(scroll_size);
+        if let Some(scrollbar_show) = self.scrollbar_show {
+            scrollbar = scrollbar.scrollbar_show(scrollbar_show);
+        }
+
         div()
             .relative()
             .bg(cx.theme().tiles)
@@ -1064,11 +1074,7 @@ impl Render for Tiles {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .child(
-                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
-                            .scroll_size(scroll_size)
-                            .scrollbar_show(self.scrollbar_show),
-                    ),
+                    .child(scrollbar),
             )
             .size_full()
     }

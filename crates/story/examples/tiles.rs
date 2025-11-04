@@ -244,7 +244,7 @@ impl StoryTiles {
         match dock_area.items() {
             DockItem::Tiles { view, .. } => {
                 view.update(cx, |this, cx| {
-                    this.set_scrollbar_show(ScrollbarShow::Always, cx);
+                    this.set_scrollbar_show(Some(ScrollbarShow::Always), cx);
                 });
             }
             _ => {}

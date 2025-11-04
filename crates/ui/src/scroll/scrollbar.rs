@@ -329,9 +329,9 @@ impl Scrollbar {
         Self::new(ScrollbarAxis::Both, state, scroll_handle)
     }
 
-    /// Set the scrollbar show mode,if not set, use the theme's `scrollbar_show` setting.
-    pub fn scrollbar_show(mut self, scrollbar_show: Option<ScrollbarShow>) -> Self {
-        self.scrollbar_show = scrollbar_show;
+    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
+    pub fn scrollbar_show(mut self, scrollbar_show: ScrollbarShow) -> Self {
+        self.scrollbar_show = Some(scrollbar_show);
         self
     }
 
@@ -416,12 +416,9 @@ impl Scrollbar {
         )
     }
 
-    fn inner_scrollbar_show(&self, cx: &App) -> ScrollbarShow {
-        self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show)
-    }
-
     fn style_for_normal(&self, cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let (width, inset, radius) = match self.inner_scrollbar_show(cx) {
+        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
+        let (width, inset, radius) = match scrollbar_show {
             ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
         };
@@ -437,7 +434,8 @@ impl Scrollbar {
     }
 
     fn style_for_idle(&self, cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let (width, inset, radius) = match self.inner_scrollbar_show(cx) {
+        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
+        let (width, inset, radius) = match scrollbar_show {
             ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
         };
@@ -589,9 +587,10 @@ impl Element for Scrollbar {
                 },
             };
 
+            let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
             let state = self.state.clone();
-            let is_always_to_show = self.inner_scrollbar_show(cx).is_always();
-            let is_hover_to_show = self.inner_scrollbar_show(cx).is_hover();
+            let is_always_to_show = scrollbar_show.is_always();
+            let is_hover_to_show = scrollbar_show.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
             let is_offset_changed = state.get().last_scroll_offset != self.scroll_handle.offset();
@@ -717,11 +716,11 @@ impl Element for Scrollbar {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
         let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible =
-            self.state.get().is_scrollbar_visible() || self.inner_scrollbar_show(cx).is_always();
-        let is_hover_to_show = self.inner_scrollbar_show(cx).is_hover();
+        let is_visible = self.state.get().is_scrollbar_visible() || scrollbar_show.is_always();
+        let is_hover_to_show = scrollbar_show.is_hover();
 
         // Update last_scroll_time when offset is changed.
         if self.scroll_handle.offset() != self.state.get().last_scroll_offset {
