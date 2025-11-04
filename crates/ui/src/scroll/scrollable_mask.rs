@@ -126,7 +126,7 @@ impl Element for ScrollableMask {
                 let view_id = self.view_id;
                 let scroll_handle = self.scroll_handle.clone();
 
-                move |event: &ScrollWheelEvent, _, _, cx| {
+                move |event: &ScrollWheelEvent, _, window, cx| {
                     if !bounds.contains(&event.position) {
                         return;
                     }
@@ -153,7 +153,7 @@ impl Element for ScrollableMask {
 
                     if offset != scroll_handle.offset() {
                         scroll_handle.set_offset(offset);
-                        cx.notify(view_id);
+                        window.refresh();
                         cx.stop_propagation();
                     }
                 }
