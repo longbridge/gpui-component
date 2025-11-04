@@ -7,11 +7,11 @@ use std::{
 
 use crate::{ActiveTheme, AxisExt};
 use gpui::{
-    fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
-    CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
-    IntoElement, IsZero, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    PaintQuad, Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer,
-    UniformListScrollHandle, Window,
+    fill, point, px, relative, size, App, Axis, BorderStyle, Bounds,
+    ContentMask, Corner, CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior,
+    Hsla, InspectorElementId, IntoElement, IsZero, LayoutId, ListState, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, Position, ScrollHandle,
+    ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

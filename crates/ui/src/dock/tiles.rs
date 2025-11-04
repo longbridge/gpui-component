@@ -15,10 +15,11 @@ use super::{
     DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
 };
 use gpui::{
-    actions, canvas, div, px, size, AnyElement, App, AppContext, Bounds, Context, DismissEvent,
-    DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render,
-    ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    actions, canvas, div, prelude::FluentBuilder, px, size, AnyElement, App, AppContext, Bounds,
+    Context, DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
+    Window,
 };
 
 actions!(tiles, [Undo, Redo]);
@@ -1028,12 +1029,6 @@ impl Render for Tiles {
                 });
         let scroll_size = scroll_bounds.size - size(scroll_bounds.origin.x, scroll_bounds.origin.y);
 
-        let mut scrollbar =
-            Scrollbar::both(&self.scroll_state, &self.scroll_handle).scroll_size(scroll_size);
-        if let Some(scrollbar_show) = self.scrollbar_show {
-            scrollbar = scrollbar.scrollbar_show(scrollbar_show);
-        }
-
         div()
             .relative()
             .bg(cx.theme().tiles)
@@ -1074,7 +1069,13 @@ impl Render for Tiles {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .child(scrollbar),
+                    .child(
+                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
+                            .scroll_size(scroll_size)
+                            .when_some(self.scrollbar_show, |this, scrollbar_show| {
+                                this.scrollbar_show(scrollbar_show)
+                            }),
+                    ),
             )
             .size_full()
     }
