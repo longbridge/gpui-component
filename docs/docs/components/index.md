@@ -48,6 +48,7 @@ collapsed: false
 - [Notification](notification) - Toast notifications
 - [Popover](popover) - Floating content display
 - [Resizable](resizable) - Resizable panels and containers
+- [Scrollable](scrollable) - Scrollable containers
 - [Sidebar](sidebar) - Navigation sidebar
 
 ### Advanced Components
