@@ -199,13 +199,10 @@ impl Tiles {
         }
     }
 
-    pub fn set_scrollbar_show(
-        &mut self,
-        scrollbar_show: ScrollbarShow,
-        _: &mut Context<Self>,
-    ) -> &mut Self {
+    /// Set the scrollbar show mode,if not set, use the theme's `scrollbar_show` mode.
+    pub fn set_scrollbar_show(&mut self, scrollbar_show: ScrollbarShow, cx: &mut Context<Self>) {
         self.scrollbar_show = Some(scrollbar_show);
-        self
+        cx.notify();
     }
 
     pub fn panels(&self) -> &[TileItem] {
@@ -1070,7 +1067,7 @@ impl Render for Tiles {
                     .child(
                         Scrollbar::both(&self.scroll_state, &self.scroll_handle)
                             .scroll_size(scroll_size)
-                            .set_scrollbar_show(self.scrollbar_show, cx),
+                            .scrollbar_show(self.scrollbar_show),
                     ),
             )
             .size_full()
