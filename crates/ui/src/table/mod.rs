@@ -1319,14 +1319,7 @@ where
         };
 
         let inner_table = v_flex()
-            .id("table")
-            .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(TableState::action_cancel))
-            .on_action(cx.listener(TableState::action_select_next))
-            .on_action(cx.listener(TableState::action_select_prev))
-            .on_action(cx.listener(TableState::action_select_next_col))
-            .on_action(cx.listener(TableState::action_select_prev_col))
+            .id("table-inner")
             .size_full()
             .overflow_hidden()
             .child(self.render_table_head(left_columns_count, window, cx))
@@ -1422,12 +1415,6 @@ where
 
         div()
             .size_full()
-            .when(self.options.border, |this| {
-                this.rounded(cx.theme().radius)
-                    .border_1()
-                    .border_color(cx.theme().border)
-            })
-            .bg(cx.theme().table)
             .children(loading_view)
             .when(!loading, |this| {
                 this.child(inner_table)
@@ -1444,8 +1431,8 @@ where
             })
             .child(canvas(
                 {
-                    let view = cx.entity();
-                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds)
+                    let state = cx.entity();
+                    move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
                 },
                 |_, _, _, _| {},
             ))
@@ -1523,11 +1510,29 @@ impl<D> RenderOnce for Table<D>
 where
     D: TableDelegate,
 {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let border = self.options.border;
+        let focus_handle = self.state.focus_handle(cx);
         self.state.update(cx, |state, _| {
             state.options = self.options;
         });
 
-        div().size_full().child(self.state)
+        div()
+            .id("table")
+            .size_full()
+            .key_context(CONTEXT)
+            .track_focus(&focus_handle)
+            .on_action(window.listener_for(&self.state, TableState::action_cancel))
+            .on_action(window.listener_for(&self.state, TableState::action_select_next))
+            .on_action(window.listener_for(&self.state, TableState::action_select_prev))
+            .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
+            .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
+            .bg(cx.theme().table)
+            .when(border, |this| {
+                this.rounded(cx.theme().radius)
+                    .border_1()
+                    .border_color(cx.theme().border)
+            })
+            .child(self.state)
     }
 }
