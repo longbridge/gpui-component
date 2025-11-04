@@ -43,9 +43,28 @@ pub enum ListEvent {
     Cancel,
 }
 
+struct ListOptions {
+    size: Size,
+    scrollbar_visible: bool,
+    max_height: Option<Length>,
+    paddings: Edges<Pixels>,
+}
+
+impl Default for ListOptions {
+    fn default() -> Self {
+        Self {
+            size: Size::default(),
+            scrollbar_visible: true,
+            max_height: None,
+            paddings: Edges::default(),
+        }
+    }
+}
+
 /// The state for List.
 pub struct ListState<D: ListDelegate> {
     focus_handle: FocusHandle,
+    options: ListOptions,
     query_input: Option<Entity<InputState>>,
     delegate: D,
     last_query: Option<String>,
@@ -59,10 +78,6 @@ pub struct ListState<D: ListDelegate> {
     deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
-    size: Size,
-    scrollbar_visible: bool,
-    max_height: Option<Length>,
-    paddings: Edges<Pixels>,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
     _query_input_subscription: Subscription,
@@ -81,6 +96,7 @@ where
 
         Self {
             focus_handle: cx.focus_handle(),
+            options: ListOptions::default(),
             delegate,
             rows_cache: RowsCache::default(),
             query_input: Some(query_input),
@@ -94,10 +110,6 @@ where
             selectable: true,
             querying: false,
             reset_on_cancel: true,
-            size: Size::default(),
-            scrollbar_visible: true,
-            max_height: None,
-            paddings: Edges::default(),
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
             _query_input_subscription,
@@ -463,7 +475,7 @@ where
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let rows_cache = self.rows_cache.clone();
-        let scrollbar_visible = self.scrollbar_visible;
+        let scrollbar_visible = self.options.scrollbar_visible;
         let scroll_handle = self.scroll_handle.clone();
         let scroll_state = self.scroll_state.clone();
         let measured_size = rows_cache.measured_size();
@@ -473,7 +485,7 @@ where
             .relative()
             .h_full()
             .min_w(measured_size.item_size.width)
-            .when_some(self.max_height, |this, h| this.max_h(h))
+            .when_some(self.options.max_height, |this, h| this.max_h(h))
             .overflow_hidden()
             .when(items_count == 0, |this| {
                 this.child(self.delegate.render_empty(window, cx))
@@ -521,8 +533,8 @@ where
                                     .collect::<Vec<_>>()
                             },
                         )
-                        .paddings(self.paddings)
-                        .when(self.max_height.is_some(), |this| {
+                        .paddings(self.options.paddings)
+                        .when(self.options.max_height.is_some(), |this| {
                             this.with_sizing_behavior(ListSizingBehavior::Infer)
                         })
                         .track_scroll(&scroll_handle)
@@ -593,7 +605,7 @@ where
             .when_some(query_input.clone(), |this, input| {
                 this.child(
                     div()
-                        .map(|this| match self.size {
+                        .map(|this| match self.options.size {
                             Size::Small => this.px_1p5(),
                             _ => this.px_2(),
                         })
@@ -601,7 +613,7 @@ where
                         .border_color(cx.theme().border)
                         .child(
                             Input::new(&input)
-                                .with_size(self.size)
+                                .with_size(self.options.size)
                                 .prefix(
                                     Icon::new(IconName::Search)
                                         .text_color(cx.theme().muted_foreground),
@@ -640,11 +652,7 @@ where
 #[derive(IntoElement)]
 pub struct List<D: ListDelegate + 'static> {
     state: Entity<ListState<D>>,
-
-    max_height: Option<Length>,
-    paddings: Edges<Pixels>,
-    scrollbar_visible: bool,
-    pub(crate) size: Size,
+    options: ListOptions,
 }
 
 impl<D> List<D>
@@ -655,26 +663,23 @@ where
     pub fn new(state: &Entity<ListState<D>>) -> Self {
         Self {
             state: state.clone(),
-            max_height: None,
-            paddings: Edges::default(),
-            scrollbar_visible: true,
-            size: Size::default(),
+            options: ListOptions::default(),
         }
     }
 
     /// Set paddings for the list.
     pub fn paddings(mut self, paddings: Edges<Pixels>) -> Self {
-        self.paddings = paddings;
+        self.options.paddings = paddings;
         self
     }
 
     pub fn max_h(mut self, max_height: impl Into<Length>) -> Self {
-        self.max_height = Some(max_height.into());
+        self.options.max_height = Some(max_height.into());
         self
     }
 
     pub fn scrollbar_visible(mut self, visible: bool) -> Self {
-        self.scrollbar_visible = visible;
+        self.options.scrollbar_visible = visible;
         self
     }
 }
@@ -684,7 +689,7 @@ where
     D: ListDelegate + 'static,
 {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.size = size.into();
+        self.options.size = size.into();
         self
     }
 }
@@ -695,10 +700,7 @@ where
 {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, _| {
-            state.size = self.size;
-            state.scrollbar_visible = self.scrollbar_visible;
-            state.max_height = self.max_height;
-            state.paddings = self.paddings;
+            state.options = self.options;
         });
 
         self.state.clone()
