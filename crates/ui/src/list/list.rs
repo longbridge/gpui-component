@@ -72,7 +72,7 @@ impl Default for ListOptions {
 pub struct ListState<D: ListDelegate> {
     focus_handle: FocusHandle,
     options: ListOptions,
-    query_input: Option<Entity<InputState>>,
+    query_input: Entity<InputState>,
     delegate: D,
     last_query: Option<String>,
     scroll_handle: VirtualListScrollHandle,
@@ -104,7 +104,7 @@ where
             options: ListOptions::default(),
             delegate,
             rows_cache: RowsCache::default(),
-            query_input: Some(query_input),
+            query_input,
             last_query: None,
             selected_index: None,
             item_to_measure_index: IndexPath::default(),
@@ -254,10 +254,8 @@ where
     }
 
     fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| input.set_loading(searching, window, cx))
-        }
-        cx.notify();
+        self.query_input
+            .update(cx, |input, cx| input.set_loading(searching, window, cx));
     }
 
     /// Dispatch delegate's `load_more` method when the
@@ -523,12 +521,8 @@ where
     D: ListDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        if !self.options.searchable {
-            return self.focus_handle.clone();
-        }
-
-        if let Some(query_input) = &self.query_input {
-            query_input.focus_handle(cx)
+        if self.options.searchable {
+            self.query_input.focus_handle(cx)
         } else {
             self.focus_handle.clone()
         }
@@ -552,16 +546,12 @@ where
         let loading = self.delegate().loading(cx);
         let query_input = if self.options.searchable {
             // sync placeholder
-            if let Some(query_input) = &self.query_input {
-                if let Some(placeholder) = &self.options.search_placeholder {
-                    query_input.update(cx, |input, cx| {
-                        input.set_placeholder(placeholder.clone(), window, cx);
-                    });
-                }
-                Some(query_input.clone())
-            } else {
-                None
+            if let Some(placeholder) = &self.options.search_placeholder {
+                self.query_input.update(cx, |input, cx| {
+                    input.set_placeholder(placeholder.clone(), window, cx);
+                });
             }
+            Some(self.query_input.clone())
         } else {
             None
         };
@@ -591,7 +581,7 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
-            .when_some(query_input.clone(), |this, input| {
+            .when_some(query_input, |this, input| {
                 this.child(
                     div()
                         .map(|this| match self.options.size {
