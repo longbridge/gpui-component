@@ -191,6 +191,7 @@ impl Render for SelectStory {
             .child(
                 section("Select").max_w_128().child(
                     Select::new(&self.country_select)
+                        .search_placeholder("Search country by name or code")
                         .cleanable()
                         .disabled(self.disabled),
                 ),

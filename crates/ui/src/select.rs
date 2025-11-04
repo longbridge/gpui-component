@@ -109,10 +109,6 @@ pub trait SelectDelegate: Sized {
         Self::Item: SelectItem<Value = V>,
         V: PartialEq;
 
-    fn searchable(&self) -> bool {
-        false
-    }
-
     fn perform_search(
         &mut self,
         _query: &str,
@@ -307,6 +303,8 @@ struct SelectOptions {
     cleanable: bool,
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
+    searchable: bool,
+    search_placeholder: Option<SharedString>,
     empty: Option<AnyElement>,
     menu_width: Length,
     disabled: bool,
@@ -326,6 +324,8 @@ impl Default for SelectOptions {
             menu_width: Length::Auto,
             disabled: false,
             appearance: true,
+            searchable: true,
+            search_placeholder: None,
         }
     }
 }
@@ -409,10 +409,6 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<I> {
         None
     }
 
-    fn searchable(&self) -> bool {
-        true
-    }
-
     fn perform_search(
         &mut self,
         query: &str,
@@ -473,10 +469,6 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<SelectGroup<I>> {
         }
 
         None
-    }
-
-    fn searchable(&self) -> bool {
-        true
     }
 
     fn perform_search(
@@ -566,15 +558,7 @@ where
             selected_index,
         };
 
-        let searchable = delegate.delegate.searchable();
-
-        let list = cx.new(|cx| {
-            let mut list = ListState::new(delegate, window, cx).reset_on_cancel(false);
-            if !searchable {
-                list = list.no_query();
-            }
-            list
-        });
+        let list = cx.new(|cx| ListState::new(delegate, window, cx).reset_on_cancel(false));
 
         let _subscriptions = vec![
             cx.on_blur(&list.focus_handle(cx), window, Self::on_blur),
@@ -901,6 +885,13 @@ where
                                         .shadow_md()
                                         .child(
                                             List::new(&self.list)
+                                                .searchable(self.options.searchable)
+                                                .when_some(
+                                                    self.options.search_placeholder.clone(),
+                                                    |this, placeholder| {
+                                                        this.search_placeholder(placeholder)
+                                                    },
+                                                )
                                                 .with_size(self.options.size)
                                                 .max_h(rems(20.))
                                                 .paddings(Edges::all(px(4.))),
@@ -960,6 +951,20 @@ where
     /// Set true to show the clear button when the input field is not empty.
     pub fn cleanable(mut self) -> Self {
         self.options.cleanable = true;
+        self
+    }
+
+    /// Sets whether the dropdown menu is searchable, default is `true`.
+    ///
+    /// When `true`, there will be a search input at the top of the dropdown menu.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.options.searchable = searchable;
+        self
+    }
+
+    /// Sets the placeholder text for the search input.
+    pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.options.search_placeholder = Some(placeholder.into());
         self
     }
 

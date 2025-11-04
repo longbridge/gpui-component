@@ -15,7 +15,7 @@ use gpui_component::{
     date_picker::{DatePicker, DatePickerState},
     h_flex,
     input::{Input, InputState},
-    list::{ListDelegate, ListItem, ListState},
+    list::{List, ListDelegate, ListItem, ListState},
     v_flex,
     webview::WebView,
     wry,
@@ -245,11 +245,6 @@ impl DrawerStory {
         let list = cx.new(|cx| {
             let mut list = ListState::new(delegate, window, cx);
             list.focus(window, cx);
-            if let Some(query_input) = list.query_input() {
-                query_input.update(cx, |input, cx| {
-                    input.set_placeholder("Pickup your country...", window, cx);
-                })
-            }
             list
         });
 
@@ -308,14 +303,13 @@ impl DrawerStory {
                         }),
                 )
                 .child(
-                    div()
+                    List::new(&list)
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
                         .size_full()
                         .flex_1()
-                        .h(list_h)
-                        .child(list.clone()),
+                        .h(list_h),
                 )
                 .footer(
                     h_flex()

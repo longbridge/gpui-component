@@ -191,7 +191,8 @@ impl ListDelegate for MyListDelegate {
 }
 
 // Create list without search input
-let state = cx.new(|cx| ListState::new(delegate, window, cx).no_query());
+let state = cx.new(|cx| ListState::new(delegate, window, cx));
+List::new(&state).searchable(false)
 ```
 
 ### List with Loading State
