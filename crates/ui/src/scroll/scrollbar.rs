@@ -289,7 +289,7 @@ impl ScrollbarAxis {
 /// Scrollbar control for scroll-area or a uniform-list.
 pub struct Scrollbar {
     axis: ScrollbarAxis,
-    behavior: Option<ScrollbarShow>,
+    scrollbar_show: Option<ScrollbarShow>,
     scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
     state: ScrollbarState,
     scroll_size: Option<Size<Pixels>>,
@@ -309,7 +309,7 @@ impl Scrollbar {
         Self {
             state: state.clone(),
             axis: axis.into(),
-            behavior: None,
+            scrollbar_show: None,
             scroll_handle: Rc::new(Box::new(scroll_handle.clone())),
             max_fps: 120,
             scroll_size: None,
@@ -329,8 +329,12 @@ impl Scrollbar {
         Self::new(ScrollbarAxis::Both, state, scroll_handle)
     }
 
-    pub fn with_behavior(mut self, behavior: Option<ScrollbarShow>) -> Self {
-        self.behavior = behavior;
+    pub fn set_scrollbar_show(
+        mut self,
+        scrollbar_show: Option<ScrollbarShow>,
+        _: &mut App,
+    ) -> Self {
+        self.scrollbar_show = scrollbar_show;
         self
     }
 
@@ -416,7 +420,7 @@ impl Scrollbar {
     }
 
     fn scrollbar_show(&self, cx: &App) -> ScrollbarShow {
-        self.behavior.unwrap_or(cx.theme().scrollbar_show)
+        self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show)
     }
 
     fn style_for_normal(&self, cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
@@ -718,8 +722,8 @@ impl Element for Scrollbar {
     ) {
         let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible =
-            self.state.get().is_scrollbar_visible() || self.scrollbar_show(cx).is_always();
+        let is_visible = self.state.get().is_scrollbar_visible()
+            || self.scrollbar_show(cx).is_always();
         let is_hover_to_show = self.scrollbar_show(cx).is_hover();
 
         // Update last_scroll_time when offset is changed.

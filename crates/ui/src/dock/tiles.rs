@@ -140,7 +140,7 @@ pub struct Tiles {
     history: History<TileChange>,
     scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
-    scrollbar_behavior: Option<ScrollbarShow>,
+    scrollbar_show: Option<ScrollbarShow>,
 }
 
 impl Panel for Tiles {
@@ -190,7 +190,7 @@ impl Tiles {
             dragging_initial_mouse: Point::default(),
             dragging_initial_bounds: Bounds::default(),
             resizing_id: None,
-            scrollbar_behavior: None,
+            scrollbar_show: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
@@ -199,8 +199,8 @@ impl Tiles {
         }
     }
 
-    pub fn scrollbar_behavior(&mut self, behavior: ScrollbarShow) -> &mut Self {
-        self.scrollbar_behavior = Some(behavior);
+    pub fn scrollbar_show(&mut self, scrollbar_show: ScrollbarShow) -> &mut Self {
+        self.scrollbar_show = Some(scrollbar_show);
         self
     }
 
@@ -1066,7 +1066,7 @@ impl Render for Tiles {
                     .child(
                         Scrollbar::both(&self.scroll_state, &self.scroll_handle)
                             .scroll_size(scroll_size)
-                            .with_behavior(self.scrollbar_behavior),
+                            .set_scrollbar_show(self.scrollbar_show, cx),
                     ),
             )
             .size_full()
