@@ -306,7 +306,7 @@ impl Default for SelectOptions {
             style: StyleRefinement::default(),
             size: Size::default(),
             icon: None,
-            cleanable: true,
+            cleanable: false,
             placeholder: None,
             title_prefix: None,
             empty: None,

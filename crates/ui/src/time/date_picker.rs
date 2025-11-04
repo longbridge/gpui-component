@@ -301,7 +301,7 @@ impl DatePicker {
         Self {
             id: ("date-picker", state.entity_id()).into(),
             state: state.clone(),
-            cleanable: true,
+            cleanable: false,
             placeholder: None,
             size: Size::default(),
             style: StyleRefinement::default(),
