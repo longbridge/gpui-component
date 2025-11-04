@@ -85,6 +85,7 @@ impl SelectStory {
                 window,
                 cx,
             )
+            .searchable(true)
         });
         let appearance_select = cx.new(|cx| {
             SelectState::new(
@@ -111,7 +112,7 @@ impl SelectStory {
             "Watermelon & This is a long long long long long long long long long title",
             "Avocado",
         ]);
-        let fruit_select = cx.new(|cx| SelectState::new(fruits, None, window, cx));
+        let fruit_select = cx.new(|cx| SelectState::new(fruits, None, window, cx).searchable(true));
 
         cx.new(|cx| {
             cx.subscribe_in(&country_select, window, Self::on_select_event)
@@ -191,7 +192,6 @@ impl Render for SelectStory {
             .child(
                 section("Select").max_w_128().child(
                     Select::new(&self.country_select)
-                        .searchable(true)
                         .search_placeholder("Search country by name or code")
                         .cleanable()
                         .disabled(self.disabled),
@@ -200,7 +200,6 @@ impl Render for SelectStory {
             .child(
                 section("Searchable").max_w_128().child(
                     Select::new(&self.fruit_select)
-                        .searchable(true)
                         .disabled(self.disabled)
                         .icon(IconName::Search)
                         .w(px(320.))

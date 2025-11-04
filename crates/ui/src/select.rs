@@ -303,7 +303,6 @@ struct SelectOptions {
     cleanable: bool,
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
-    searchable: bool,
     search_placeholder: Option<SharedString>,
     empty: Option<AnyElement>,
     menu_width: Length,
@@ -324,7 +323,6 @@ impl Default for SelectOptions {
             menu_width: Length::Auto,
             disabled: false,
             appearance: true,
-            searchable: false,
             search_placeholder: None,
         }
     }
@@ -334,6 +332,7 @@ impl Default for SelectOptions {
 pub struct SelectState<D: SelectDelegate + 'static> {
     focus_handle: FocusHandle,
     options: SelectOptions,
+    searchable: bool,
     list: Entity<ListState<SelectListDelegate<D>>>,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement>>,
     /// Store the bounds of the input
@@ -571,6 +570,7 @@ where
         let mut this = Self {
             focus_handle,
             options: SelectOptions::default(),
+            searchable: false,
             list,
             selected_value: None,
             open: false,
@@ -581,6 +581,14 @@ where
         };
         this.set_selected_index(selected_index, window, cx);
         this
+    }
+
+    /// Sets whether the dropdown menu is searchable, default is `false`.
+    ///
+    /// When `true`, there will be a search input at the top of the dropdown menu.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
+        self
     }
 
     /// Set the selected index for the select.
@@ -772,12 +780,16 @@ where
     D: SelectDelegate + 'static,
 {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let searchable = self.searchable;
         let is_focused = self.focus_handle.is_focused(window);
         let show_clean = self.options.cleanable && self.selected_index(cx).is_some();
         let bounds = self.bounds;
         let allow_open = !(self.open || self.options.disabled);
         let outline_visible = self.open || is_focused && !self.options.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
+
+        self.list
+            .update(cx, |list, cx| list.set_searchable(searchable, cx));
 
         div()
             .size_full()
@@ -888,7 +900,6 @@ where
                                         .shadow_md()
                                         .child(
                                             List::new(&self.list)
-                                                .searchable(self.options.searchable)
                                                 .when_some(
                                                     self.options.search_placeholder.clone(),
                                                     |this, placeholder| {
@@ -954,14 +965,6 @@ where
     /// Set true to show the clear button when the input field is not empty.
     pub fn cleanable(mut self) -> Self {
         self.options.cleanable = true;
-        self
-    }
-
-    /// Sets whether the dropdown menu is searchable, default is `false`.
-    ///
-    /// When `true`, there will be a search input at the top of the dropdown menu.
-    pub fn searchable(mut self, searchable: bool) -> Self {
-        self.options.searchable = searchable;
         self
     }
 

@@ -327,11 +327,7 @@ impl Render for CodeActionMenu {
                 .top(pos.y)
                 .max_w(max_width)
                 .min_w(px(120.))
-                .child(
-                    List::new(&self.list)
-                        .searchable(false)
-                        .max_h(MAX_MENU_HEIGHT),
-                )
+                .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
                 .child(
                     canvas(
                         move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),

@@ -367,7 +367,7 @@ impl ListStory {
         };
         delegate.extend_more(100);
 
-        let company_list = cx.new(|cx| ListState::new(delegate, window, cx));
+        let company_list = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
 
         let _subscriptions =
             vec![
@@ -536,7 +536,6 @@ impl Render for ListStory {
             )
             .child(
                 List::new(&self.company_list)
-                    .searchable(true)
                     .p(px(8.))
                     .flex_1()
                     .w_full()
