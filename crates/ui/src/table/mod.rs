@@ -969,7 +969,6 @@ where
         left_columns_count: usize,
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         columns_count: usize,
-        extra_rows_count: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -980,12 +979,9 @@ where
 
         if row_ix < rows_count {
             let is_last_row = row_ix == rows_count - 1;
-            let table_is_filled = extra_rows_count == 0;
             let need_render_border = if is_last_row {
                 if is_selected {
                     true
-                } else if table_is_filled {
-                    false
                 } else {
                     !self.options.stripe
                 }
@@ -1159,14 +1155,7 @@ where
         let mut extra_rows_needed = 0;
 
         let row_height = self.options.size.table_row_height();
-        let total_height = self
-            .vertical_scroll_handle
-            .0
-            .borrow()
-            .base_handle
-            .bounds()
-            .size
-            .height;
+        let total_height = self.bounds.size.height;
 
         let actual_height = row_height * rows_count as f32;
         let remaining_height = total_height - actual_height;
@@ -1393,7 +1382,6 @@ where
                                                 left_columns_count,
                                                 col_sizes.clone(),
                                                 columns_count,
-                                                extra_rows_count,
                                                 window,
                                                 cx,
                                             ));
@@ -1435,7 +1423,7 @@ where
                     move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
                 },
                 |_, _, _, _| {},
-            ))
+            ).size_full())
             .when(!window.is_inspector_picking(cx), |this| {
                 this.child(
                     div()
