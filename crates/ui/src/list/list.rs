@@ -59,6 +59,10 @@ pub struct ListState<D: ListDelegate> {
     deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
+    size: Size,
+    scrollbar_visible: bool,
+    max_height: Option<Length>,
+    paddings: Edges<Pixels>,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
     _query_input_subscription: Subscription,
@@ -90,6 +94,10 @@ where
             selectable: true,
             querying: false,
             reset_on_cancel: true,
+            size: Size::default(),
+            scrollbar_visible: true,
+            max_height: None,
+            paddings: Edges::default(),
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
             _query_input_subscription,
@@ -446,6 +454,86 @@ where
                 )
             })
     }
+
+    fn render_items(
+        &self,
+        items_count: usize,
+        entities_count: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let rows_cache = self.rows_cache.clone();
+        let scrollbar_visible = self.scrollbar_visible;
+        let scroll_handle = self.scroll_handle.clone();
+        let scroll_state = self.scroll_state.clone();
+        let measured_size = rows_cache.measured_size();
+
+        v_flex()
+            .flex_grow()
+            .relative()
+            .h_full()
+            .min_w(measured_size.item_size.width)
+            .when_some(self.max_height, |this, h| this.max_h(h))
+            .overflow_hidden()
+            .when(items_count == 0, |this| {
+                this.child(self.delegate.render_empty(window, cx))
+            })
+            .when(items_count > 0, {
+                |this| {
+                    this.child(
+                        v_virtual_list(
+                            cx.entity(),
+                            "virtual-list",
+                            rows_cache.entries_sizes.clone(),
+                            move |list, visible_range: Range<usize>, window, cx| {
+                                list.load_more_if_need(
+                                    entities_count,
+                                    visible_range.end,
+                                    window,
+                                    cx,
+                                );
+
+                                // NOTE: Here the v_virtual_list would not able to have gap_y,
+                                // because the section header, footer is always have rendered as a empty child item,
+                                // even the delegate give a None result.
+
+                                visible_range
+                                    .map(|ix| {
+                                        let Some(entry) = rows_cache.get(ix) else {
+                                            return div();
+                                        };
+
+                                        div().children(match entry {
+                                            RowEntry::Entry(index) => Some(
+                                                list.render_list_item(index, window, cx)
+                                                    .into_any_element(),
+                                            ),
+                                            RowEntry::SectionHeader(section_ix) => list
+                                                .delegate()
+                                                .render_section_header(section_ix, window, cx)
+                                                .map(|r| r.into_any_element()),
+                                            RowEntry::SectionFooter(section_ix) => list
+                                                .delegate()
+                                                .render_section_footer(section_ix, window, cx)
+                                                .map(|r| r.into_any_element()),
+                                        })
+                                    })
+                                    .collect::<Vec<_>>()
+                            },
+                        )
+                        .paddings(self.paddings)
+                        .when(self.max_height.is_some(), |this| {
+                            this.with_sizing_behavior(ListSizingBehavior::Infer)
+                        })
+                        .track_scroll(&scroll_handle)
+                        .into_any_element(),
+                    )
+                }
+            })
+            .when(scrollbar_visible, |this| {
+                this.child(Scrollbar::uniform_scroll(&scroll_state, &scroll_handle))
+            })
+    }
 }
 
 impl<D> Focusable for ListState<D>
@@ -465,8 +553,86 @@ impl<D> Render for ListState<D>
 where
     D: ListDelegate,
 {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.prepare_items_if_needed(window, cx);
+
+        // Scroll to the selected item if it is set.
+        if let Some((ix, strategy)) = self.deferred_scroll_to_index.take() {
+            if let Some(item_ix) = self.rows_cache.position_of(&ix) {
+                self.scroll_handle.scroll_to_item(item_ix, strategy);
+            }
+        }
+
+        let loading = self.delegate().loading(cx);
+        let query_input = self.query_input.clone();
+        let loading_view = if loading {
+            Some(self.delegate.render_loading(window, cx).into_any_element())
+        } else {
+            None
+        };
+        let initial_view = if let Some(input) = &query_input {
+            if input.read(cx).value().is_empty() {
+                self.delegate.render_initial(window, cx)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let items_count = self.rows_cache.items_count();
+        let entities_count = self.rows_cache.len();
+        let mouse_right_clicked_index = self.mouse_right_clicked_index;
+
+        v_flex()
+            .key_context("List")
+            .id("list-state")
+            .track_focus(&self.focus_handle)
+            .size_full()
+            .relative()
+            .overflow_hidden()
+            .when_some(query_input.clone(), |this, input| {
+                this.child(
+                    div()
+                        .map(|this| match self.size {
+                            Size::Small => this.px_1p5(),
+                            _ => this.px_2(),
+                        })
+                        .border_b_1()
+                        .border_color(cx.theme().border)
+                        .child(
+                            Input::new(&input)
+                                .with_size(self.size)
+                                .prefix(
+                                    Icon::new(IconName::Search)
+                                        .text_color(cx.theme().muted_foreground),
+                                )
+                                .cleanable()
+                                .p_0()
+                                .appearance(false),
+                        ),
+                )
+            })
+            .when(!loading, |this| {
+                this.on_action(cx.listener(Self::on_action_cancel))
+                    .on_action(cx.listener(Self::on_action_confirm))
+                    .on_action(cx.listener(Self::on_action_select_next))
+                    .on_action(cx.listener(Self::on_action_select_prev))
+                    .map(|this| {
+                        if let Some(view) = initial_view {
+                            this.child(view)
+                        } else {
+                            this.child(self.render_items(items_count, entities_count, window, cx))
+                        }
+                    })
+                    // Click out to cancel right clicked row
+                    .when(mouse_right_clicked_index.is_some(), |this| {
+                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                            this.mouse_right_clicked_index = None;
+                            cx.notify();
+                        }))
+                    })
+            })
+            .children(loading_view)
     }
 }
 
@@ -511,89 +677,6 @@ where
         self.scrollbar_visible = visible;
         self
     }
-
-    fn render_items(
-        &self,
-        items_count: usize,
-        entities_count: usize,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        self.state.update(cx, |state, cx| {
-            let rows_cache = state.rows_cache.clone();
-
-            let scrollbar_visible = self.scrollbar_visible;
-            let scroll_handle = state.scroll_handle.clone();
-            let scroll_state = state.scroll_state.clone();
-            let measured_size = rows_cache.measured_size();
-
-            v_flex()
-                .flex_grow()
-                .relative()
-                .h_full()
-                .min_w(measured_size.item_size.width)
-                .when_some(self.max_height, |this, h| this.max_h(h))
-                .overflow_hidden()
-                .when(items_count == 0, |this| {
-                    this.child(state.delegate.render_empty(window, cx))
-                })
-                .when(items_count > 0, {
-                    |this| {
-                        this.child(
-                            v_virtual_list(
-                                self.state.clone(),
-                                "virtual-list",
-                                rows_cache.entries_sizes.clone(),
-                                move |list, visible_range: Range<usize>, window, cx| {
-                                    list.load_more_if_need(
-                                        entities_count,
-                                        visible_range.end,
-                                        window,
-                                        cx,
-                                    );
-
-                                    // NOTE: Here the v_virtual_list would not able to have gap_y,
-                                    // because the section header, footer is always have rendered as a empty child item,
-                                    // even the delegate give a None result.
-
-                                    visible_range
-                                        .map(|ix| {
-                                            let Some(entry) = rows_cache.get(ix) else {
-                                                return div();
-                                            };
-
-                                            div().children(match entry {
-                                                RowEntry::Entry(index) => Some(
-                                                    list.render_list_item(index, window, cx)
-                                                        .into_any_element(),
-                                                ),
-                                                RowEntry::SectionHeader(section_ix) => list
-                                                    .delegate()
-                                                    .render_section_header(section_ix, window, cx)
-                                                    .map(|r| r.into_any_element()),
-                                                RowEntry::SectionFooter(section_ix) => list
-                                                    .delegate()
-                                                    .render_section_footer(section_ix, window, cx)
-                                                    .map(|r| r.into_any_element()),
-                                            })
-                                        })
-                                        .collect::<Vec<_>>()
-                                },
-                            )
-                            .paddings(self.paddings)
-                            .when(self.max_height.is_some(), |this| {
-                                this.with_sizing_behavior(ListSizingBehavior::Infer)
-                            })
-                            .track_scroll(&scroll_handle)
-                            .into_any_element(),
-                        )
-                    }
-                })
-                .when(scrollbar_visible, |this| {
-                    this.child(Scrollbar::uniform_scroll(&scroll_state, &scroll_handle))
-                })
-        })
-    }
 }
 
 impl<D> Sizable for List<D>
@@ -610,98 +693,14 @@ impl<D> RenderOnce for List<D>
 where
     D: ListDelegate + 'static,
 {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut loading = false;
-        let mut query_input = None;
-        let mut loading_view = None;
-        let mut initial_view = None;
-
-        self.state.update(cx, |state, cx| {
-            state.prepare_items_if_needed(window, cx);
-
-            // Scroll to the selected item if it is set.
-            if let Some((ix, strategy)) = state.deferred_scroll_to_index.take() {
-                if let Some(item_ix) = state.rows_cache.position_of(&ix) {
-                    state.scroll_handle.scroll_to_item(item_ix, strategy);
-                }
-            }
-
-            loading = state.delegate().loading(cx);
-            query_input = state.query_input.clone();
-            loading_view = if loading {
-                Some(state.delegate.render_loading(window, cx).into_any_element())
-            } else {
-                None
-            };
-            initial_view = if let Some(input) = &query_input {
-                if input.read(cx).value().is_empty() {
-                    state.delegate.render_initial(window, cx)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.state.update(cx, |state, _| {
+            state.size = self.size;
+            state.scrollbar_visible = self.scrollbar_visible;
+            state.max_height = self.max_height;
+            state.paddings = self.paddings;
         });
 
-        let state = self.state.read(cx);
-        let focus_handle = state.focus_handle.clone();
-        let items_count = state.rows_cache.items_count();
-        let entities_count = state.rows_cache.len();
-        let mouse_right_clicked_index = state.mouse_right_clicked_index;
-
-        v_flex()
-            .key_context("List")
-            .id("list")
-            .track_focus(&focus_handle)
-            .size_full()
-            .relative()
-            .overflow_hidden()
-            .when_some(query_input.clone(), |this, input| {
-                this.child(
-                    div()
-                        .map(|this| match self.size {
-                            Size::Small => this.px_1p5(),
-                            _ => this.px_2(),
-                        })
-                        .border_b_1()
-                        .border_color(cx.theme().border)
-                        .child(
-                            Input::new(&input)
-                                .with_size(self.size)
-                                .prefix(
-                                    Icon::new(IconName::Search)
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                                .cleanable()
-                                .p_0()
-                                .appearance(false),
-                        ),
-                )
-            })
-            .children(loading_view)
-            .when(!loading, |this| {
-                this.on_action(window.listener_for(&self.state, ListState::on_action_cancel))
-                    .on_action(window.listener_for(&self.state, ListState::on_action_confirm))
-                    .on_action(window.listener_for(&self.state, ListState::on_action_select_next))
-                    .on_action(window.listener_for(&self.state, ListState::on_action_select_prev))
-                    .map(|this| {
-                        if let Some(view) = initial_view {
-                            this.child(view)
-                        } else {
-                            this.child(self.render_items(items_count, entities_count, window, cx))
-                        }
-                    })
-                    // Click out to cancel right clicked row
-                    .when(mouse_right_clicked_index.is_some(), |this| {
-                        this.on_mouse_down_out(window.listener_for(
-                            &self.state,
-                            |this, _, _, cx| {
-                                this.mouse_right_clicked_index = None;
-                                cx.notify();
-                            },
-                        ))
-                    })
-            })
+        self.state.clone()
     }
 }
