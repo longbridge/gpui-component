@@ -1062,19 +1062,20 @@ impl InputState {
     ) {
         if !self.selected_range.is_empty() {
             self.replace_text_in_range(None, "", window, cx);
-        } else {
-            let mut offset = self.start_of_line();
-            if offset == self.cursor() {
-                offset = offset.saturating_sub(1);
-            }
-            self.replace_text_in_range_silent(
-                Some(self.range_to_utf16(&(offset..self.cursor()))),
-                "",
-                window,
-                cx,
-            );
+            self.pause_blink_cursor(cx);
+            return;
         }
 
+        let mut offset = self.start_of_line();
+        if offset == self.cursor() {
+            offset = offset.saturating_sub(1);
+        }
+        self.replace_text_in_range_silent(
+            Some(self.range_to_utf16(&(offset..self.cursor()))),
+            "",
+            window,
+            cx,
+        );
         self.pause_blink_cursor(cx);
     }
 
@@ -1086,19 +1087,20 @@ impl InputState {
     ) {
         if !self.selected_range.is_empty() {
             self.replace_text_in_range(None, "", window, cx);
-        } else {
-            let mut offset = self.end_of_line();
-            if offset == self.cursor() {
-                offset = (offset + 1).clamp(0, self.text.len());
-            }
-            self.replace_text_in_range_silent(
-                Some(self.range_to_utf16(&(self.cursor()..offset))),
-                "",
-                window,
-                cx,
-            );
+            self.pause_blink_cursor(cx);
+            return;
         }
 
+        let mut offset = self.end_of_line();
+        if offset == self.cursor() {
+            offset = (offset + 1).clamp(0, self.text.len());
+        }
+        self.replace_text_in_range_silent(
+            Some(self.range_to_utf16(&(self.cursor()..offset))),
+            "",
+            window,
+            cx,
+        );
         self.pause_blink_cursor(cx);
     }
 
@@ -1110,16 +1112,17 @@ impl InputState {
     ) {
         if !self.selected_range.is_empty() {
             self.replace_text_in_range(None, "", window, cx);
-        } else {
-            let offset = self.previous_start_of_word();
-            self.replace_text_in_range_silent(
-                Some(self.range_to_utf16(&(offset..self.cursor()))),
-                "",
-                window,
-                cx,
-            );
+            self.pause_blink_cursor(cx);
+            return;
         }
 
+        let offset = self.previous_start_of_word();
+        self.replace_text_in_range_silent(
+            Some(self.range_to_utf16(&(offset..self.cursor()))),
+            "",
+            window,
+            cx,
+        );
         self.pause_blink_cursor(cx);
     }
 
@@ -1131,16 +1134,17 @@ impl InputState {
     ) {
         if !self.selected_range.is_empty() {
             self.replace_text_in_range(None, "", window, cx);
-        } else {
-            let offset = self.next_end_of_word();
-            self.replace_text_in_range_silent(
-                Some(self.range_to_utf16(&(self.cursor()..offset))),
-                "",
-                window,
-                cx,
-            );
+            self.pause_blink_cursor(cx);
+            return;
         }
 
+        let offset = self.next_end_of_word();
+        self.replace_text_in_range_silent(
+            Some(self.range_to_utf16(&(self.cursor()..offset))),
+            "",
+            window,
+            cx,
+        );
         self.pause_blink_cursor(cx);
     }
 
