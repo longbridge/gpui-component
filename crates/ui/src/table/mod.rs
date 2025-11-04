@@ -278,12 +278,23 @@ where
 
     /// Sets the selected row to the given index.
     pub fn set_selected_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
+        let is_down = match self.selected_row {
+            Some(selected_row) => row_ix > selected_row,
+            None => true,
+        };
+
         self.selection_state = SelectionState::Row;
         self.right_clicked_row = None;
         self.selected_row = Some(row_ix);
         if let Some(row_ix) = self.selected_row {
-            self.vertical_scroll_handle
-                .scroll_to_item(row_ix, ScrollStrategy::Top);
+            self.vertical_scroll_handle.scroll_to_item(
+                row_ix,
+                if is_down {
+                    ScrollStrategy::Bottom
+                } else {
+                    ScrollStrategy::Top
+                },
+            );
         }
         cx.emit(TableEvent::SelectRow(row_ix));
         cx.notify();
