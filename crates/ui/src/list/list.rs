@@ -70,9 +70,9 @@ impl Default for ListOptions {
 
 /// The state for List.
 pub struct ListState<D: ListDelegate> {
-    focus_handle: FocusHandle,
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) query_input: Entity<InputState>,
     options: ListOptions,
-    query_input: Entity<InputState>,
     delegate: D,
     last_query: Option<String>,
     scroll_handle: VirtualListScrollHandle,
@@ -129,6 +129,11 @@ where
 
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
         self.focus_handle(cx).focus(window);
+    }
+
+    /// Return true if either the list or the search input is focused.
+    pub(crate) fn is_focused(&self, window: &Window, cx: &App) -> bool {
+        self.focus_handle.is_focused(window) || self.query_input.focus_handle(cx).is_focused(window)
     }
 
     /// Set the selected index of the list,
