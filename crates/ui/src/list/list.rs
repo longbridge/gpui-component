@@ -551,7 +551,17 @@ where
 
         let loading = self.delegate().loading(cx);
         let query_input = if self.options.searchable {
-            self.query_input.clone()
+            // sync placeholder
+            if let Some(query_input) = &self.query_input {
+                if let Some(placeholder) = &self.options.search_placeholder {
+                    query_input.update(cx, |input, cx| {
+                        input.set_placeholder(placeholder.clone(), window, cx);
+                    });
+                }
+                Some(query_input.clone())
+            } else {
+                None
+            }
         } else {
             None
         };

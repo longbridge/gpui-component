@@ -861,7 +861,12 @@ where
                                         .child(
                                             List::new(&self.list)
                                                 .searchable(self.options.searchable)
-                                                .search_placeholder(self.options.search_placeholder)
+                                                .when_some(
+                                                    self.options.search_placeholder.clone(),
+                                                    |this, placeholder| {
+                                                        this.search_placeholder(placeholder)
+                                                    },
+                                                )
                                                 .with_size(self.options.size)
                                                 .max_h(rems(20.))
                                                 .paddings(Edges::all(px(4.))),
