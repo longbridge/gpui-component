@@ -165,7 +165,7 @@ Select::new(&state).disabled(true)
 
 ```rust
 Select::new(&state)
-    .cleanable() // Shows clear button when item is selected
+    .cleanable(true) // Show clear button when item is selected
 ```
 
 ### Custom Appearance
@@ -257,7 +257,6 @@ let state = cx.new(|cx| {
 Select::new(&state)
     .placeholder("Select language...")
     .title_prefix("Language: ")
-    .cleanable()
 ```
 
 ### Country/Region Selector

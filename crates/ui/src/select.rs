@@ -316,7 +316,7 @@ impl Default for SelectOptions {
             style: StyleRefinement::default(),
             size: Size::default(),
             icon: None,
-            cleanable: true,
+            cleanable: false,
             placeholder: None,
             title_prefix: None,
             empty: None,
@@ -962,9 +962,9 @@ where
         self
     }
 
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.options.cleanable = true;
+    /// Set whether to show the clear button when the input field is not empty, default is false.
+    pub fn cleanable(mut self, cleanable: bool) -> Self {
+        self.options.cleanable = cleanable;
         self
     }
 
