@@ -15,6 +15,7 @@ pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
+/// The content of the popover.
 pub struct PopoverContent {
     style: StyleRefinement,
     focus_handle: FocusHandle,
@@ -64,6 +65,7 @@ impl Render for PopoverContent {
     }
 }
 
+/// A popover element that can be triggered by a button or any other element.
 pub struct Popover<M: ManagedView> {
     id: ElementId,
     anchor: Corner,
@@ -73,7 +75,7 @@ pub struct Popover<M: ManagedView> {
     /// This is used for hotfix the trigger element style to support w_full.
     trigger_style: Option<StyleRefinement>,
     mouse_button: MouseButton,
-    no_style: bool,
+    appearance: bool,
 }
 
 impl<M> Popover<M>
@@ -89,10 +91,11 @@ where
             trigger_style: None,
             content: None,
             mouse_button: MouseButton::Left,
-            no_style: false,
+            appearance: true,
         }
     }
 
+    /// Set the anchor corner of the popover, default is `Corner::TopLeft`.
     pub fn anchor(mut self, anchor: Corner) -> Self {
         self.anchor = anchor;
         self
@@ -104,6 +107,7 @@ where
         self
     }
 
+    /// Set the trigger element of the popover.
     pub fn trigger<T>(mut self, trigger: T) -> Self
     where
         T: Selectable + IntoElement + 'static,
@@ -115,6 +119,7 @@ where
         self
     }
 
+    /// Set the style for the trigger element.
     pub fn trigger_style(mut self, style: StyleRefinement) -> Self {
         self.trigger_style = Some(style);
         self
@@ -137,8 +142,8 @@ where
     ///
     /// - The popover will not have a bg, border, shadow, or padding.
     /// - The click out of the popover will not dismiss it.
-    pub fn no_style(mut self) -> Self {
-        self.no_style = true;
+    pub fn appearance(mut self, appearance: bool) -> Self {
+        self.appearance = appearance;
         self
     }
 
@@ -273,20 +278,20 @@ impl<M: ManagedView> Element for Popover<M> {
                     let mut element = {
                         let content_view_mut = element_state.content_view.clone();
                         let anchor = view.anchor;
-                        let no_style = view.no_style;
+                        let appearance = view.appearance;
                         deferred(
                             anchored.child(
                                 div()
                                     .size_full()
                                     .occlude()
                                     .tab_group()
-                                    .when(!no_style, |this| this.popover_style(cx))
+                                    .when(appearance, |this| this.popover_style(cx))
                                     .map(|this| match anchor {
                                         Corner::TopLeft | Corner::TopRight => this.top_1(),
                                         Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
                                     })
                                     .child(content_view.clone())
-                                    .when(!no_style, |this| {
+                                    .when(appearance, |this| {
                                         this.on_mouse_down_out(move |_, window, _| {
                                             // Update the element_state.content_view to `None`,
                                             // so that the `paint`` method will not paint it.

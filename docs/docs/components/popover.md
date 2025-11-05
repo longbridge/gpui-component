@@ -155,7 +155,7 @@ Popover::new("rich-content")
 ```rust
 // For custom styled popovers or when you want full control
 Popover::new("custom-popover")
-    .no_style()
+    .appearance(false)
     .trigger(Button::new("custom").label("Custom Style"))
     .content(|window, cx| {
         cx.new(|cx| {
@@ -408,40 +408,6 @@ impl InfoPopover {
     })
 })
 ```
-
-## API Reference
-
-### Popover
-
-| Method                 | Description                                                      |
-| ---------------------- | ---------------------------------------------------------------- |
-| `new(id)`              | Create a new popover with element ID                             |
-| `anchor(corner)`       | Set anchor position (TopLeft, TopRight, BottomLeft, BottomRight) |
-| `mouse_button(button)` | Set trigger mouse button (Left, Right, Middle)                   |
-| `trigger(element)`     | Set the trigger element (must implement Selectable)              |
-| `trigger_style(style)` | Apply custom styling to trigger container                        |
-| `content(closure)`     | Set popover content builder function                             |
-| `no_style()`           | Remove default popover styling                                   |
-
-### PopoverContent
-
-| Method                        | Description                                  |
-| ----------------------------- | -------------------------------------------- |
-| `new(window, cx, content_fn)` | Create popover content with builder function |
-
-PopoverContent also implements `Styled` for custom styling:
-
-| Method         | Description       |
-| -------------- | ----------------- |
-| `p_*()`        | Padding utilities |
-| `m_*()`        | Margin utilities  |
-| `bg()`         | Background color  |
-| `text_color()` | Text color        |
-| `rounded_*()`  | Border radius     |
-| `border_*()`   | Border styling    |
-| `shadow_*()`   | Shadow effects    |
-| `max_w()`      | Maximum width     |
-| `min_w()`      | Minimum width     |
 
 ### Default Styling
 
