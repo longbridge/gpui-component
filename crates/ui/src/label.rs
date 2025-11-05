@@ -75,6 +75,7 @@ impl Label {
         self
     }
 
+    /// Set whether to mask the label text.
     pub fn masked(mut self, masked: bool) -> Self {
         self.masked = masked;
         self

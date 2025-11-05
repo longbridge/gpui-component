@@ -18,7 +18,7 @@ use crate::{
     v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable,
 };
 
-const KEY_CONTEXT: &'static str = "SearchPanel";
+const CONTEXT: &'static str = "SearchPanel";
 
 actions!(input, [Tab]);
 
@@ -26,7 +26,7 @@ pub(super) fn init(cx: &mut App) {
     cx.bind_keys(vec![KeyBinding::new(
         "shift-enter",
         SelectUp,
-        Some(KEY_CONTEXT),
+        Some(CONTEXT),
     )]);
 }
 
@@ -409,7 +409,7 @@ impl Render for SearchPanel {
             .id("search-panel")
             .occlude()
             .track_focus(&self.focus_handle(cx))
-            .key_context(KEY_CONTEXT)
+            .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_prev))
             .on_action(cx.listener(Self::on_action_next))
             .on_action(cx.listener(Self::on_action_escape))

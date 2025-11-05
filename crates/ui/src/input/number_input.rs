@@ -13,15 +13,15 @@ use super::{Input, InputState};
 
 actions!(number_input, [Increment, Decrement]);
 
-const KEY_CONTENT: &str = "NumberInput";
-
+const CONTEXT: &str = "NumberInput";
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
-        KeyBinding::new("up", Increment, Some(KEY_CONTENT)),
-        KeyBinding::new("down", Decrement, Some(KEY_CONTENT)),
+        KeyBinding::new("up", Increment, Some(CONTEXT)),
+        KeyBinding::new("down", Decrement, Some(CONTEXT)),
     ]);
 }
 
+/// A number input element with increment and decrement buttons.
 #[derive(IntoElement)]
 pub struct NumberInput {
     state: Entity<InputState>,
@@ -49,33 +49,19 @@ impl NumberInput {
         }
     }
 
+    /// Set the placeholder text of the number input.
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
         self
     }
 
-    pub fn size(mut self, size: impl Into<Size>) -> Self {
-        self.size = size.into();
-        self
-    }
-
-    pub fn increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.on_action_increment(&Increment, window, cx);
-        })
-    }
-
-    pub fn decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.on_action_decrement(&Decrement, window, cx);
-        })
-    }
-
+    /// Set the prefix element of the number input.
     pub fn prefix(mut self, prefix: impl IntoElement) -> Self {
         self.prefix = Some(prefix.into_any_element());
         self
     }
 
+    /// Set the suffix element of the number input.
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
         self
@@ -85,6 +71,18 @@ impl NumberInput {
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
         self
+    }
+
+    fn on_increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
+        state.update(cx, |state, cx| {
+            state.on_action_increment(&Increment, window, cx);
+        })
+    }
+
+    fn on_decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
+        state.update(cx, |state, cx| {
+            state.on_action_decrement(&Decrement, window, cx);
+        })
     }
 }
 
@@ -148,7 +146,7 @@ impl RenderOnce for NumberInput {
 
         h_flex()
             .id(("number-input", self.state.entity_id()))
-            .key_context(KEY_CONTENT)
+            .key_context(CONTEXT)
             .on_action(window.listener_for(&self.state, InputState::on_action_increment))
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
@@ -164,7 +162,7 @@ impl RenderOnce for NumberInput {
             .when(self.disabled, |this| this.bg(cx.theme().muted))
             .when(focused, |this| this.focused_border(cx))
             .child(
-                Button::new("minus")
+                Button::new("-")
                     .ghost()
                     .with_size(self.size.smaller())
                     .icon(IconName::Minus)
@@ -174,7 +172,7 @@ impl RenderOnce for NumberInput {
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
-                            Self::decrement(&state, window, cx);
+                            Self::on_decrement(&state, window, cx);
                         }
                     }),
             )
@@ -188,7 +186,7 @@ impl RenderOnce for NumberInput {
                     .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
             )
             .child(
-                Button::new("plus")
+                Button::new("+")
                     .ghost()
                     .with_size(self.size.smaller())
                     .icon(IconName::Plus)
@@ -198,7 +196,7 @@ impl RenderOnce for NumberInput {
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
-                            Self::increment(&state, window, cx);
+                            Self::on_increment(&state, window, cx);
                         }
                     }),
             )

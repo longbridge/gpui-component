@@ -18,14 +18,14 @@ pub enum ResizablePanelEvent {
 }
 
 #[derive(Clone)]
-pub struct DragPanel(pub (usize, Axis));
-
+pub(crate) struct DragPanel;
 impl Render for DragPanel {
     fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
         Empty
     }
 }
 
+/// A group of resizable panels.
 #[derive(IntoElement)]
 pub struct ResizablePanelGroup {
     id: ElementId,
@@ -50,6 +50,8 @@ impl ResizablePanelGroup {
     }
 
     /// Bind yourself to a resizable state entity.
+    ///
+    /// If not provided, it will handle its own state internally.
     pub fn with_state(mut self, state: &Entity<ResizableState>) -> Self {
         self.state = Some(state.clone());
         self
@@ -71,6 +73,7 @@ impl ResizablePanelGroup {
         self
     }
 
+    /// Add multiple panels to the group.
     pub fn children<I>(mut self, panels: impl IntoIterator<Item = I>) -> Self
     where
         I: Into<ResizablePanel>,
@@ -101,6 +104,7 @@ impl ResizablePanelGroup {
         self
     }
 }
+
 impl<T> From<T> for ResizablePanel
 where
     T: Into<AnyElement>,
@@ -168,6 +172,7 @@ impl RenderOnce for ResizablePanelGroup {
     }
 }
 
+/// A resizable panel inside a [`ResizablePanelGroup`].
 #[derive(IntoElement)]
 pub struct ResizablePanel {
     axis: Axis,
@@ -182,6 +187,7 @@ pub struct ResizablePanel {
 }
 
 impl ResizablePanel {
+    /// Create a new resizable panel.
     pub(super) fn new() -> Self {
         Self {
             panel_ix: 0,
@@ -194,11 +200,7 @@ impl ResizablePanel {
         }
     }
 
-    pub fn child(mut self, child: impl IntoElement) -> Self {
-        self.children.push(child.into_any_element());
-        self
-    }
-
+    /// Set the visibility of the panel, default is true.
     pub fn visible(mut self, visible: bool) -> Self {
         self.visible = visible;
         self
@@ -216,6 +218,12 @@ impl ResizablePanel {
     pub fn size_range(mut self, range: impl Into<Range<Pixels>>) -> Self {
         self.size_range = range.into();
         self
+    }
+}
+
+impl ParentElement for ResizablePanel {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
@@ -283,7 +291,7 @@ impl RenderOnce for ResizablePanel {
             .when(self.panel_ix > 0, |this| {
                 let ix = self.panel_ix - 1;
                 this.child(resize_handle(("resizable-handle", ix), self.axis).on_drag(
-                    DragPanel((ix, self.axis)),
+                    DragPanel,
                     move |drag_panel, _, _, cx| {
                         cx.stop_propagation();
                         // Set current resizing panel ix

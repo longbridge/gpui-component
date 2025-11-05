@@ -28,6 +28,7 @@ pub fn init(cx: &mut App) {
 
 /// An menu item in a popup menu.
 pub enum PopupMenuItem {
+    /// A menu separator item.
     Separator,
     /// A non-interactive label item.
     Label(SharedString),

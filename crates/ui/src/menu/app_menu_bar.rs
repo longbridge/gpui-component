@@ -46,7 +46,7 @@ impl AppMenuBar {
         })
     }
 
-    fn move_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_move_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
         let Some(selected_ix) = self.selected_ix else {
             return;
         };
@@ -59,7 +59,7 @@ impl AppMenuBar {
         self.set_selected_ix(Some(new_ix), window, cx);
     }
 
-    fn move_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_move_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
         let Some(selected_ix) = self.selected_ix else {
             return;
         };
@@ -72,7 +72,7 @@ impl AppMenuBar {
         self.set_selected_ix(Some(new_ix), window, cx);
     }
 
-    fn cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         self.set_selected_ix(None, window, cx);
     }
 
@@ -92,9 +92,9 @@ impl Render for AppMenuBar {
         h_flex()
             .id("app-menu-bar")
             .key_context(CONTEXT)
-            .on_action(cx.listener(Self::move_left))
-            .on_action(cx.listener(Self::move_right))
-            .on_action(cx.listener(Self::cancel))
+            .on_action(cx.listener(Self::on_move_left))
+            .on_action(cx.listener(Self::on_move_right))
+            .on_action(cx.listener(Self::on_cancel))
             .size_full()
             .gap_x_1()
             .overflow_x_scroll()
@@ -174,7 +174,7 @@ impl AppMenu {
         self._subscription.take();
         self.popup_menu.take();
         self.menu_bar.update(cx, |state, cx| {
-            state.cancel(&Cancel, window, cx);
+            state.on_cancel(&Cancel, window, cx);
         });
     }
 

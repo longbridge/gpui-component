@@ -643,6 +643,7 @@ where
         self.selected_value.as_ref()
     }
 
+    /// Focus the select input.
     pub fn focus(&self, window: &mut Window, _: &mut App) {
         self.focus_handle.focus(window);
     }

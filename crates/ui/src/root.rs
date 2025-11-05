@@ -14,12 +14,12 @@ use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
-const CONTENT: &str = "Root";
+const CONTEXT: &str = "Root";
 
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("tab", Tab, Some(CONTENT)),
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTENT)),
+        KeyBinding::new("tab", Tab, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
     ]);
 }
 
@@ -394,7 +394,7 @@ impl Render for Root {
         window_border().child(
             div()
                 .id("root")
-                .key_context(CONTENT)
+                .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_tab))
                 .on_action(cx.listener(Self::on_action_tab_prev))
                 .relative()
