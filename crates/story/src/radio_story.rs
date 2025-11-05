@@ -1,12 +1,12 @@
 use gpui::{
-    div, px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Window, div, px,
 };
 
 use gpui_component::{
-    h_flex,
+    ActiveTheme, Sizable, h_flex,
     radio::{Radio, RadioGroup},
-    v_flex, ActiveTheme, Sizable,
+    v_flex,
 };
 
 use crate::section;
@@ -131,7 +131,7 @@ impl Render for RadioStory {
                         RadioGroup::horizontal("radio_group_1")
                             .children(["One", "Two", "Three"])
                             .selected_index(self.radio_group_checked)
-                            .on_change(cx.listener(|this, selected_ix: &usize, _, cx| {
+                            .on_click(cx.listener(|this, selected_ix: &usize, _, cx| {
                                 this.radio_group_checked = Some(*selected_ix);
                                 cx.notify();
                             })),
