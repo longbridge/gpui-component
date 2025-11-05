@@ -346,8 +346,8 @@ impl PopupMenu {
     /// Set the menu to be scrollable to show vertical scrollbar.
     ///
     /// NOTE: If this is true, the sub-menus will cannot be support.
-    pub fn scrollable(mut self) -> Self {
-        self.scrollable = true;
+    pub fn scrollable(mut self, scrollable: bool) -> Self {
+        self.scrollable = scrollable;
         self
     }
 

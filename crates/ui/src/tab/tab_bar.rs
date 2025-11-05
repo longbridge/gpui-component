@@ -273,7 +273,7 @@ impl RenderOnce for TabBar {
                         .ghost()
                         .icon(IconName::ChevronDown)
                         .dropdown_menu(move |mut this, _, _| {
-                            this = this.scrollable();
+                            this = this.scrollable(true);
                             for (ix, (label, disabled)) in item_labels.iter().enumerate() {
                                 this = this.item(
                                     PopupMenuItem::new(label.clone().unwrap_or_default())

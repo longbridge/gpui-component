@@ -240,7 +240,7 @@ impl Render for MenuStory {
                             .label("Scrollable Menu (100 items)")
                             .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
                                 let mut this = this
-                                    .scrollable()
+                                    .scrollable(true)
                                     .max_h(px(300.))
                                     .label(format!("Total {} items", 100));
                                 for i in 0..100 {
@@ -258,7 +258,7 @@ impl Render for MenuStory {
                             .label("Scrollable Menu (5 items)")
                             .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
                                 let mut this = this
-                                    .scrollable()
+                                    .scrollable(true)
                                     .max_h(px(300.))
                                     .label(format!("Total {} items", 100));
                                 for i in 0..5 {

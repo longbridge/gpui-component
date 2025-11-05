@@ -70,8 +70,8 @@ impl Render for Example {
                     cx,
                 )
                 .p_5()
-                .scrollable()
-                .selectable()
+                .scrollable(true)
+                .selectable(true)
                 .into_any(),
             )
     }
