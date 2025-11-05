@@ -12,13 +12,13 @@ use gpui::{
 use serde::{Deserialize, Serialize};
 
 /// Returns a `Div` as horizontal flex layout.
-#[inline]
+#[inline(always)]
 pub fn h_flex() -> Div {
     div().h_flex()
 }
 
 /// Returns a `Div` as vertical flex layout.
-#[inline]
+#[inline(always)]
 pub fn v_flex() -> Div {
     div().v_flex()
 }
@@ -30,7 +30,7 @@ pub fn v_flex() -> Div {
 /// If CSS is `box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);`
 ///
 /// Then the equivalent in Rust is `box_shadow(0., 0., 10., 0., hsla(0., 0., 0., 0.1))`
-#[inline]
+#[inline(always)]
 pub fn box_shadow(
     x: impl Into<Pixels>,
     y: impl Into<Pixels>,
@@ -69,13 +69,13 @@ pub trait StyledExt: Styled + Sized {
     }
 
     /// Apply self into a horizontal flex layout.
-    #[inline]
+    #[inline(always)]
     fn h_flex(self) -> Self {
         self.flex().flex_row().items_center()
     }
 
     /// Apply self into a vertical flex layout.
-    #[inline]
+    #[inline(always)]
     fn v_flex(self) -> Self {
         self.flex().flex_col()
     }
@@ -323,6 +323,7 @@ impl Size {
         }
     }
 
+    /// Returns the horizontal input padding.
     pub fn input_px(&self) -> Pixels {
         match self {
             Self::Large => px(20.),
@@ -333,6 +334,7 @@ impl Size {
         }
     }
 
+    /// Returns the vertical input padding.
     pub fn input_py(&self) -> Pixels {
         match self {
             Size::Large => px(10.),
@@ -380,16 +382,19 @@ pub trait Sizable: Sized {
     fn with_size(self, size: impl Into<Size>) -> Self;
 
     /// Set to Size::XSmall
+    #[inline(always)]
     fn xsmall(self) -> Self {
         self.with_size(Size::XSmall)
     }
 
     /// Set to Size::Small
+    #[inline(always)]
     fn small(self) -> Self {
         self.with_size(Size::Small)
     }
 
     /// Set to Size::Large
+    #[inline(always)]
     fn large(self) -> Self {
         self.with_size(Size::Large)
     }
