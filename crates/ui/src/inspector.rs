@@ -410,9 +410,9 @@ impl Render for DivInspector {
                         .columns(1)
                         .label_width(px(110.))
                         .bordered(false)
-                        .child("Origin", format!("{}", state.bounds.origin), 1)
-                        .child("Size", format!("{}", state.bounds.size), 1)
-                        .child("Content Size", format!("{}", state.content_size), 1),
+                        .item("Origin", format!("{}", state.bounds.origin), 1)
+                        .item("Size", format!("{}", state.bounds.size), 1)
+                        .item("Content Size", format!("{}", state.content_size), 1),
                 )
                 .child(
                     v_flex()
