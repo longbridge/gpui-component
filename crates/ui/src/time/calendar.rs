@@ -16,6 +16,7 @@ use crate::{
 
 use super::utils::days_in_month;
 
+/// Events emitted by the calendar.
 pub enum CalendarEvent {
     /// The user selected a date.
     Selected(Date),
@@ -54,6 +55,51 @@ impl From<(NaiveDate, NaiveDate)> for Date {
 }
 
 impl Date {
+    /// Check if the date is set.
+    pub fn is_some(&self) -> bool {
+        match self {
+            Self::Single(Some(_)) | Self::Range(Some(_), _) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if the date is complete.
+    pub fn is_complete(&self) -> bool {
+        match self {
+            Self::Range(Some(_), Some(_)) => true,
+            Self::Single(Some(_)) => true,
+            _ => false,
+        }
+    }
+
+    /// Get the start date.
+    pub fn start(&self) -> Option<NaiveDate> {
+        match self {
+            Self::Single(Some(date)) => Some(*date),
+            Self::Range(Some(start), _) => Some(*start),
+            _ => None,
+        }
+    }
+
+    /// Get the end date.
+    pub fn end(&self) -> Option<NaiveDate> {
+        match self {
+            Self::Range(_, Some(end)) => Some(*end),
+            _ => None,
+        }
+    }
+
+    /// Return formatted date string.
+    pub fn format(&self, format: &str) -> Option<SharedString> {
+        match self {
+            Self::Single(Some(date)) => Some(date.format(format).to_string().into()),
+            Self::Range(Some(start), Some(end)) => {
+                Some(format!("{} - {}", start.format(format), end.format(format)).into())
+            }
+            _ => None,
+        }
+    }
+
     fn is_active(&self, v: &NaiveDate) -> bool {
         let v = *v;
         match self {
@@ -83,48 +129,6 @@ impl Date {
             _ => false,
         }
     }
-
-    pub fn is_some(&self) -> bool {
-        match self {
-            Self::Single(Some(_)) | Self::Range(Some(_), _) => true,
-            _ => false,
-        }
-    }
-
-    /// Check if the date is complete.
-    pub fn is_complete(&self) -> bool {
-        match self {
-            Self::Range(Some(_), Some(_)) => true,
-            Self::Single(Some(_)) => true,
-            _ => false,
-        }
-    }
-
-    pub fn start(&self) -> Option<NaiveDate> {
-        match self {
-            Self::Single(Some(date)) => Some(*date),
-            Self::Range(Some(start), _) => Some(*start),
-            _ => None,
-        }
-    }
-
-    pub fn end(&self) -> Option<NaiveDate> {
-        match self {
-            Self::Range(_, Some(end)) => Some(*end),
-            _ => None,
-        }
-    }
-
-    /// Return formatted date string.
-    pub fn format(&self, format: &str) -> Option<SharedString> {
-        match self {
-            Self::Single(Some(date)) => Some(date.format(format).to_string().into()),
-            Self::Range(Some(start), Some(end)) => {
-                Some(format!("{} - {}", start.format(format), end.format(format)).into())
-            }
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,16 +152,19 @@ impl ViewMode {
     }
 }
 
+/// Matcher to match dates before and after the interval.
 pub struct IntervalMatcher {
     before: Option<NaiveDate>,
     after: Option<NaiveDate>,
 }
 
+/// Matcher to match dates within the range.
 pub struct RangeMatcher {
     from: Option<NaiveDate>,
     to: Option<NaiveDate>,
 }
 
+/// Matcher to match dates.
 pub enum Matcher {
     /// Match declare days of the week.
     ///
@@ -205,12 +212,31 @@ where
 }
 
 impl Matcher {
+    /// Create a new interval matcher.
     pub fn interval(before: Option<NaiveDate>, after: Option<NaiveDate>) -> Self {
         Matcher::Interval(IntervalMatcher { before, after })
     }
 
+    /// Create a new range matcher.
     pub fn range(from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
         Matcher::Range(RangeMatcher { from, to })
+    }
+
+    /// Create a new custom matcher.
+    pub fn custom<F>(f: F) -> Self
+    where
+        F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
+    {
+        Matcher::Custom(Box::new(f))
+    }
+
+    /// Check if the date matches the matcher.
+    pub fn is_match(&self, date: &Date) -> bool {
+        match date {
+            Date::Single(Some(date)) => self.matched(date),
+            Date::Range(Some(start), Some(end)) => self.matched(start) || self.matched(end),
+            _ => false,
+        }
     }
 
     fn matched(&self, date: &NaiveDate) -> bool {
@@ -228,21 +254,6 @@ impl Matcher {
             }
             Matcher::Custom(f) => f(date),
         }
-    }
-
-    pub fn date_matched(&self, date: &Date) -> bool {
-        match date {
-            Date::Single(Some(date)) => self.matched(date),
-            Date::Range(Some(start), Some(end)) => self.matched(start) || self.matched(end),
-            _ => false,
-        }
-    }
-
-    pub fn custom<F>(f: F) -> Self
-    where
-        F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
-    {
-        Matcher::Custom(Box::new(f))
     }
 }
 
@@ -272,6 +283,7 @@ pub struct CalendarState {
 }
 
 impl CalendarState {
+    /// Create a new calendar state.
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().naive_local().date();
         Self {
@@ -316,7 +328,7 @@ impl CalendarState {
         let invalid = self
             .disabled_matcher
             .as_ref()
-            .map_or(false, |matcher| matcher.date_matched(&date));
+            .map_or(false, |matcher| matcher.is_match(&date));
 
         if invalid {
             return;
@@ -343,11 +355,7 @@ impl CalendarState {
         self.date
     }
 
-    // pub fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-    //     self.size = size;
-    //     cx.notify();
-    // }
-
+    /// Set number of months to show.
     pub fn set_number_of_months(
         &mut self,
         number_of_months: usize,
@@ -512,6 +520,7 @@ impl Render for CalendarState {
 }
 
 impl Calendar {
+    /// Create a new calendar element with [`CalendarState`].
     pub fn new(state: &Entity<CalendarState>) -> Self {
         Self {
             id: ("calendar", state.entity_id()).into(),
