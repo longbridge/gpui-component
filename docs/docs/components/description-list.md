@@ -40,13 +40,13 @@ DescriptionList::new()
 ```rust
 // Horizontal layout (default)
 DescriptionList::horizontal()
-    .child("Platform", "macOS, Windows, Linux", 1)
-    .child("Repository", "https://github.com/longbridge/gpui-component", 1)
+    .item("Platform", "macOS, Windows, Linux", 1)
+    .item("Repository", "https://github.com/longbridge/gpui-component", 1)
 
 // Vertical layout
 DescriptionList::vertical()
-    .child("Name", "GPUI Component", 1)
-    .child("Description", "A comprehensive UI component library", 1)
+    .item("Name", "GPUI Component", 1)
+    .item("Description", "A comprehensive UI component library", 1)
 ```
 
 ### Multiple Columns with Spans
@@ -54,8 +54,8 @@ DescriptionList::vertical()
 ```rust
 DescriptionList::new()
     .columns(3)
+    .child(DescriptionItem::new("Name").value("GPUI Component").span(1))
     .children([
-        DescriptionItem::new("Name").value("GPUI Component").span(1),
         DescriptionItem::new("Version").value("0.1.0").span(1),
         DescriptionItem::new("License").value("Apache-2.0").span(1),
         DescriptionItem::new("Description")
@@ -71,11 +71,11 @@ DescriptionList::new()
 
 ```rust
 DescriptionList::new()
-    .child("Name", "GPUI Component", 1)
-    .child("Version", "0.1.0", 1)
+    .item("Name", "GPUI Component", 1)
+    .item("Version", "0.1.0", 1)
     .divider() // Add a visual separator
-    .child("Author", "Longbridge", 1)
-    .child("License", "Apache-2.0", 1)
+    .item("Author", "Longbridge", 1)
+    .item("License", "Apache-2.0", 1)
 ```
 
 ### Different Sizes
@@ -84,16 +84,16 @@ DescriptionList::new()
 // Large size
 DescriptionList::new()
     .large()
-    .child("Title", "Large Description List", 1)
+    .item("Title", "Large Description List", 1)
 
 // Medium size (default)
 DescriptionList::new()
-    .child("Title", "Medium Description List", 1)
+    .item("Title", "Medium Description List", 1)
 
 // Small size
 DescriptionList::new()
     .small()
-    .child("Title", "Small Description List", 1)
+    .item("Title", "Small Description List", 1)
 ```
 
 ### Without Borders
@@ -101,8 +101,8 @@ DescriptionList::new()
 ```rust
 DescriptionList::new()
     .bordered(false) // Remove borders for a cleaner look
-    .child("Name", "GPUI Component", 1)
-    .child("Type", "UI Library", 1)
+    .item("Name", "GPUI Component", 1)
+    .item("Type", "UI Library", 1)
 ```
 
 ### Custom Label Width (Horizontal Layout)
@@ -112,8 +112,8 @@ use gpui::px;
 
 DescriptionList::horizontal()
     .label_width(px(200.0)) // Set custom label width
-    .child("Very Long Label Name", "Short Value", 1)
-    .child("Short", "Very long value that needs more space", 1)
+    .item("Very Long Label Name", "Short Value", 1)
+    .item("Short", "Very long value that needs more space", 1)
 ```
 
 ### Rich Content with Custom Elements
@@ -162,44 +162,6 @@ DescriptionList::new()
         DescriptionItem::new("Language").value("Rust").span(1),
     ])
 ```
-
-## API Reference
-
-### DescriptionList
-
-| Method                      | Description                                               |
-| --------------------------- | --------------------------------------------------------- |
-| `new()`                     | Create a new description list with horizontal layout      |
-| `horizontal()`              | Create a horizontal description list (default)            |
-| `vertical()`                | Create a vertical description list                        |
-| `label_width(width)`        | Set label width for horizontal layout (default: 120px)    |
-| `layout(axis)`              | Set layout direction (Axis::Horizontal or Axis::Vertical) |
-| `bordered(bool)`            | Enable/disable borders (default: true, horizontal only)   |
-| `columns(count)`            | Set number of columns (1-10, default: 3)                  |
-| `child(label, value, span)` | Add a description item directly                           |
-| `children(items)`           | Add multiple description items                            |
-| `divider()`                 | Add a visual divider                                      |
-
-### DescriptionItem
-
-| Method           | Description                              |
-| ---------------- | ---------------------------------------- |
-| `new(label)`     | Create a new description item with label |
-| `value(content)` | Set the value content                    |
-| `span(count)`    | Set column span (default: 1)             |
-| `Divider`        | Create a divider item                    |
-
-### DescriptionText
-
-Supports multiple content types:
-
-| Type           | Description           |
-| -------------- | --------------------- |
-| `&str`         | Plain text string     |
-| `String`       | Owned string          |
-| `SharedString` | GPUI shared string    |
-| `Text`         | Styled text component |
-| `AnyElement`   | Any GPUI element      |
 
 ## Examples
 

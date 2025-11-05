@@ -392,21 +392,22 @@ impl Render for SidebarStory {
                             .child(Divider::vertical().h_4())
                             .child(
                                 Breadcrumb::new()
-                                    .item(BreadcrumbItem::new("0", "Home").on_click(cx.listener(
+                                    .child("Breadcrumb")
+                                    .child(BreadcrumbItem::new("Home").on_click(cx.listener(
                                         |this, _, _, cx| {
                                             this.last_active_item = Item::Playground;
                                             cx.notify();
                                         },
                                     )))
-                                    .item(
-                                        BreadcrumbItem::new("1", self.last_active_item.label())
+                                    .child(
+                                        BreadcrumbItem::new(self.last_active_item.label())
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.active_subitem = None;
                                                 cx.notify();
                                             })),
                                     )
                                     .when_some(self.active_subitem, |this, subitem| {
-                                        this.item(BreadcrumbItem::new("2", subitem.label()))
+                                        this.child(BreadcrumbItem::new(subitem.label()))
                                     }),
                             ),
                     )
