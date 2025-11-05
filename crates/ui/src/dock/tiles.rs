@@ -382,6 +382,18 @@ impl Tiles {
         // Update position without grid rounding (smooth dragging)
         if new_origin != previous_bounds.origin {
             self.panels[item_idx].bounds.origin = new_origin;
+
+            // Only push if not during history operations
+            if !self.history.ignore {
+                self.history.push(TileChange {
+                    tile_id: self.panels[item_idx].panel.view().entity_id(),
+                    old_bounds: Some(previous_bounds),
+                    new_bounds: Some(self.panels[item_idx].bounds),
+                    old_order: None,
+                    new_order: None,
+                    version: 0,
+                });
+            }
         }
 
         cx.notify();
