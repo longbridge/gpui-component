@@ -5,8 +5,9 @@ use crate::{
     ActiveTheme,
 };
 use gpui::{
-    div, point, px, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges, Element,
-    FocusHandle, Hsla, ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window,
+    div, point, px, AbsoluteLength, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges,
+    Element, FocusHandle, Hsla, Length, ParentElement, Pixels, Refineable, StyleRefinement, Styled,
+    Window,
 };
 use serde::{Deserialize, Serialize};
 
@@ -706,6 +707,22 @@ impl PixelsExt for Pixels {
 
     fn as_f64(self) -> f64 {
         f64::from(self)
+    }
+}
+
+pub trait LengthExt {
+    /// Converts the `Length` to `Pixels` based on a given `base_size` and `rem_size`.
+    ///
+    /// If the `Length` is `Auto`, it returns `None`.
+    fn to_pixels(&self, base_size: AbsoluteLength, rem_size: Pixels) -> Option<Pixels>;
+}
+
+impl LengthExt for Length {
+    fn to_pixels(&self, base_size: AbsoluteLength, rem_size: Pixels) -> Option<Pixels> {
+        match self {
+            Length::Auto => None,
+            Length::Definite(len) => Some(len.to_pixels(base_size, rem_size)),
+        }
     }
 }
 
