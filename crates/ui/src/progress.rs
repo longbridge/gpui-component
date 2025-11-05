@@ -49,7 +49,7 @@ impl RenderOnce for Progress {
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = radius;
 
-        let color = self.color.unwrap_or(cx.theme().progress_bar.into());
+        let color = self.color.unwrap_or(cx.theme().progress_bar);
 
         let relative_w = relative(match self.value {
             v if v < 0. => 0.,
