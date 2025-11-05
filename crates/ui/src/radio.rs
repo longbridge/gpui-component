@@ -29,6 +29,7 @@ pub struct Radio {
 }
 
 impl Radio {
+    /// Create a new Radio element.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -45,16 +46,19 @@ impl Radio {
         }
     }
 
+    /// Set the label of the Radio element.
     pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());
         self
     }
 
+    /// Set the checked state of the Radio element, default is `false`.
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked = checked;
         self
     }
 
+    /// Set the disabled state of the Radio element, default is `false`.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -72,6 +76,9 @@ impl Radio {
         self
     }
 
+    /// Add a click handler for the Radio element.
+    ///
+    /// The handler receives the **new checked state**, window and app context.
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Rc::new(handler));
         self

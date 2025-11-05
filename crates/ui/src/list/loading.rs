@@ -15,7 +15,7 @@ impl RenderOnce for LoadingItem {
                 .gap_1p5()
                 .overflow_hidden()
                 .child(Skeleton::new().h_5().w_48().max_w_full())
-                .child(Skeleton::new().secondary(true).h_3().w_64().max_w_full()),
+                .child(Skeleton::new().secondary().h_3().w_64().max_w_full()),
         )
     }
 }

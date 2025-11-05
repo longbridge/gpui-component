@@ -68,11 +68,31 @@ impl RenderOnce for LoadingRow {
                 h_flex()
                     .gap_3()
                     .flex_1()
-                    .child(Skeleton::new().secondary(self.header).h(height).w_24())
-                    .child(Skeleton::new().secondary(self.header).h(height).w_48())
-                    .child(Skeleton::new().secondary(self.header).h(height).w_16()),
+                    .child(
+                        Skeleton::new()
+                            .when(self.header, |this| this.secondary())
+                            .h(height)
+                            .w_24(),
+                    )
+                    .child(
+                        Skeleton::new()
+                            .when(self.header, |this| this.secondary())
+                            .h(height)
+                            .w_48(),
+                    )
+                    .child(
+                        Skeleton::new()
+                            .when(self.header, |this| this.secondary())
+                            .h(height)
+                            .w_16(),
+                    ),
             )
-            .child(Skeleton::new().secondary(self.header).h(height).w_24())
+            .child(
+                Skeleton::new()
+                    .when(self.header, |this| this.secondary())
+                    .h(height)
+                    .w_24(),
+            )
     }
 }
 

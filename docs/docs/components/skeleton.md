@@ -90,7 +90,7 @@ Skeleton::new().size_6().rounded_md()
 ```rust
 // Use secondary color (more subtle)
 Skeleton::new()
-    .secondary(true)
+    .secondary()
     .w(px(200.))
     .h_4()
     .rounded_md()
@@ -130,28 +130,6 @@ Skeleton::new().size_8()      // 32x32px
 Skeleton::new().size_12()     // 48x48px
 Skeleton::new().size_16()     // 64x64px
 ```
-
-## API Reference
-
-### Skeleton
-
-| Method            | Description                                               |
-| ----------------- | --------------------------------------------------------- |
-| `new()`           | Create a new skeleton placeholder                         |
-| `secondary(bool)` | Use secondary color (50% opacity of theme skeleton color) |
-
-### Styling Methods
-
-Since Skeleton implements `Styled`, you can use all gpui styling methods:
-
-| Method           | Description                              |
-| ---------------- | ---------------------------------------- |
-| `w(length)`      | Set width                                |
-| `h(length)`      | Set height                               |
-| `size(length)`   | Set both width and height                |
-| `rounded_*()`    | Set border radius (sm, md, lg, xl, full) |
-| `bg(color)`      | Override background color                |
-| `opacity(value)` | Set opacity                              |
 
 ## Examples
 

@@ -41,6 +41,7 @@ pub trait SelectItem: Clone {
     fn display_title(&self) -> Option<AnyElement> {
         None
     }
+    /// Get the value of the item.
     fn value(&self) -> &Self::Value;
     /// Check if the item matches the query for search, default is to match the title.
     fn matches(&self, query: &str) -> bool {
@@ -292,6 +293,7 @@ where
     }
 }
 
+/// Events emitted by the [`SelectState`].
 pub enum SelectEvent<D: SelectDelegate + 'static> {
     Confirm(Option<<D::Item as SelectItem>::Value>),
 }
@@ -351,6 +353,7 @@ pub struct Select<D: SelectDelegate + 'static> {
     options: SelectOptions,
 }
 
+/// A bulit-in searchable vector for select items.
 #[derive(Debug, Clone)]
 pub struct SearchableVec<T> {
     items: Vec<T>,
@@ -498,30 +501,11 @@ pub struct SelectGroup<I: SelectItem> {
     pub items: Vec<I>,
 }
 
-// impl<I> SelectItem for SelectGroup<I>
-// where
-//     I: SelectItem,
-// {
-//     type Value = SharedString;
-
-//     fn title(&self) -> SharedString {
-//         self.title.clone()
-//     }
-
-//     fn value(&self) -> &Self::Value {
-//         &self.title
-//     }
-
-//     fn matches(&self, query: &str) -> bool {
-//         self.title.to_lowercase().contains(&query.to_lowercase())
-//             || self.items.iter().any(|item| item.matches(query))
-//     }
-// }
-
 impl<I> SelectGroup<I>
 where
     I: SelectItem,
 {
+    /// Create a new SelectGroup with the given title.
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             title: title.into(),
@@ -529,8 +513,15 @@ where
         }
     }
 
+    /// Add an item to the group.
+    pub fn item(mut self, item: I) -> Self {
+        self.items.push(item);
+        self
+    }
+
+    /// Add multiple items to the group.
     pub fn items(mut self, items: impl IntoIterator<Item = I>) -> Self {
-        self.items = items.into_iter().collect();
+        self.items.extend(items);
         self
     }
 
@@ -544,6 +535,7 @@ impl<D> SelectState<D>
 where
     D: SelectDelegate + 'static,
 {
+    /// Create a new Select state.
     pub fn new(
         delegate: D,
         selected_index: Option<IndexPath>,
