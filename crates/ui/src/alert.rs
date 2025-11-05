@@ -12,6 +12,7 @@ use crate::{
     ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt,
 };
 
+/// The variant of the [`Alert`].
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum AlertVariant {
     #[default]
@@ -141,18 +142,18 @@ impl Alert {
         self
     }
 
+    /// Set the visibility of the alert.
+    pub fn visible(mut self, visible: bool) -> Self {
+        self.visible = visible;
+        self
+    }
+
     /// Set alert as closable, true will show Close icon.
     pub fn on_close(
         mut self,
         on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_close = Some(Rc::new(on_close));
-        self
-    }
-
-    /// Set the visibility of the alert.
-    pub fn visible(mut self, visible: bool) -> Self {
-        self.visible = visible;
         self
     }
 }

@@ -284,6 +284,7 @@ impl Button {
         self
     }
 
+    /// Set the tooltip of the button with action to show keybinding.
     pub fn tooltip_with_action(
         mut self,
         tooltip: impl Into<SharedString>,
@@ -327,6 +328,9 @@ impl Button {
         self
     }
 
+    /// Set the loading icon of the button, it will be used when loading is true.
+    ///
+    /// Default is a spinner icon.
     pub fn loading_icon(mut self, icon: impl Into<Icon>) -> Self {
         self.loading_icon = Some(icon.into());
         self

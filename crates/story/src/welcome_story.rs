@@ -58,7 +58,7 @@ impl Render for WelcomeStory {
     ) -> impl gpui::IntoElement {
         TextView::markdown("intro", include_str!("../../../README.md"), window, cx)
             .p_4()
-            .scrollable()
-            .selectable()
+            .scrollable(true)
+            .selectable(true)
     }
 }

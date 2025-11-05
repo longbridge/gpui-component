@@ -18,11 +18,11 @@ use crate::{
 };
 
 const CONTEXT: &'static str = "ColorPicker";
-
 pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
+/// Events emitted by the [`ColorPicker`].
 #[derive(Clone)]
 pub enum ColorPickerEvent {
     Change(Option<Hsla>),
@@ -68,6 +68,7 @@ pub struct ColorPickerState {
 }
 
 impl ColorPickerState {
+    /// Create a new [`ColorPickerState`].
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|cx| InputState::new(window, cx));
 
@@ -105,14 +106,19 @@ impl ColorPickerState {
     }
 
     /// Set default color value.
-    pub fn default_value(mut self, value: Hsla) -> Self {
-        self.value = Some(value);
+    pub fn default_value(mut self, value: impl Into<Hsla>) -> Self {
+        self.value = Some(value.into());
         self
     }
 
     /// Set current color value.
-    pub fn set_value(&mut self, value: Hsla, window: &mut Window, cx: &mut Context<Self>) {
-        self.update_value(Some(value), false, window, cx)
+    pub fn set_value(
+        &mut self,
+        value: impl Into<Hsla>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.update_value(Some(value.into()), false, window, cx)
     }
 
     /// Get current color value.
@@ -161,18 +167,22 @@ impl ColorPickerState {
         cx.notify();
     }
 }
+
 impl EventEmitter<ColorPickerEvent> for ColorPickerState {}
+
 impl Render for ColorPickerState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         self.state.clone()
     }
 }
+
 impl Focusable for ColorPickerState {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
+/// A color picker element.
 #[derive(IntoElement)]
 pub struct ColorPicker {
     id: ElementId,
@@ -186,6 +196,7 @@ pub struct ColorPicker {
 }
 
 impl ColorPicker {
+    /// Create a new color picker element with the given [`ColorPickerState`].
     pub fn new(state: &Entity<ColorPickerState>) -> Self {
         Self {
             id: ("color-picker", state.entity_id()).into(),
@@ -205,12 +216,6 @@ impl ColorPicker {
     /// for example provided user's last used colors.
     pub fn featured_colors(mut self, colors: Vec<Hsla>) -> Self {
         self.featured_colors = Some(colors);
-        self
-    }
-
-    /// Set the size of the color picker, default is `Size::Medium`.
-    pub fn size(mut self, size: Size) -> Self {
-        self.size = size;
         self
     }
 

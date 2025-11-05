@@ -154,7 +154,7 @@ impl Render for FontSizeSelector {
                     .ghost()
                     .icon(IconName::Settings2)
                     .dropdown_menu(move |this, _, _| {
-                        this.scrollable()
+                        this.scrollable(true)
                             .max_h(px(480.))
                             .label("Font Size")
                             .menu_with_check("Large", font_size == 18, Box::new(SelectFont(18)))

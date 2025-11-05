@@ -656,7 +656,7 @@ impl Example {
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
-        let tree_state = cx.new(|cx| TreeState::new(cx).items(vec![]));
+        let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
         let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {

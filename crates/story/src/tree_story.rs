@@ -83,7 +83,7 @@ impl TreeStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let tree_state = cx.new(|cx| TreeState::new(cx).items(vec![]));
+        let tree_state = cx.new(|cx| TreeState::new(cx));
 
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 

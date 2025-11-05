@@ -21,15 +21,15 @@ use gpui_component::accordion::Accordion;
 Accordion::new("my-accordion")
     .item(|item| {
         item.title("Section 1")
-            .content("Content for section 1")
+            .child("Content for section 1")
     })
     .item(|item| {
         item.title("Section 2")
-            .content("Content for section 2")
+            .child("Content for section 2")
     })
     .item(|item| {
         item.title("Section 3")
-            .content("Content for section 3")
+            .child("Content for section 3")
     })
 ```
 
@@ -40,8 +40,8 @@ By default, only one accordion item can be open at a time. Use `multiple()` to a
 ```rust
 Accordion::new("my-accordion")
     .multiple(true)
-    .item(|item| item.title("Section 1").content("Content 1"))
-    .item(|item| item.title("Section 2").content("Content 2"))
+    .item(|item| item.title("Section 1").child("Content 1"))
+    .item(|item| item.title("Section 2").child("Content 2"))
 ```
 
 ### With Borders
@@ -49,7 +49,7 @@ Accordion::new("my-accordion")
 ```rust
 Accordion::new("my-accordion")
     .bordered(true)
-    .item(|item| item.title("Section 1").content("Content 1"))
+    .item(|item| item.title("Section 1").child("Content 1"))
 ```
 
 ### Different Sizes
@@ -59,11 +59,11 @@ use gpui_component::{Sizable as _, Size};
 
 Accordion::new("my-accordion")
     .small()
-    .item(|item| item.title("Small Section").content("Content"))
+    .item(|item| item.title("Small Section").child("Content"))
 
 Accordion::new("my-accordion")
     .large()
-    .item(|item| item.title("Large Section").content("Content"))
+    .item(|item| item.title("Large Section").child("Content"))
 ```
 
 ### Handle Toggle Events
@@ -73,7 +73,7 @@ Accordion::new("my-accordion")
     .on_toggle_click(|open_indices, window, cx| {
         println!("Open items: {:?}", open_indices);
     })
-    .item(|item| item.title("Section 1").content("Content 1"))
+    .item(|item| item.title("Section 1").child("Content 1"))
 ```
 
 ### Disabled State
@@ -81,7 +81,7 @@ Accordion::new("my-accordion")
 ```rust
 Accordion::new("my-accordion")
     .disabled(true)
-    .item(|item| item.title("Disabled Section").content("Content"))
+    .item(|item| item.title("Disabled Section").child("Content"))
 ```
 
 ## API Reference
@@ -111,7 +111,7 @@ Accordion::new("my-accordion")
                 .child(Icon::new(IconName::Settings))
                 .child("Settings")
         )
-        .content("Settings content here")
+        .child("Settings content here")
     })
 ```
 
@@ -123,8 +123,8 @@ Accordion::new("outer")
         item.title("Parent Section")
             .content(
                 Accordion::new("inner")
-                    .item(|item| item.title("Child 1").content("Content"))
-                    .item(|item| item.title("Child 2").content("Content"))
+                    .item(|item| item.title("Child 1").child("Content"))
+                    .item(|item| item.title("Child 2").child("Content"))
             )
     })
 ```

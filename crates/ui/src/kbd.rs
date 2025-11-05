@@ -5,7 +5,7 @@ use gpui::{
 
 use crate::{ActiveTheme, StyledExt};
 
-/// A key binding tag
+/// A tag for displaying keyboard keybindings.
 #[derive(IntoElement, Clone, Debug)]
 pub struct Kbd {
     style: StyleRefinement,
@@ -24,6 +24,7 @@ impl From<Keystroke> for Kbd {
 }
 
 impl Kbd {
+    /// Create a new Kbd element with the given [`Keystroke`].
     pub fn new(stroke: Keystroke) -> Self {
         Self {
             style: StyleRefinement::default(),
@@ -32,7 +33,7 @@ impl Kbd {
         }
     }
 
-    /// Set the appearance of the keybinding.
+    /// Set the appearance of the keybinding, default is `true`.
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
         self

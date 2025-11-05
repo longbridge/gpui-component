@@ -152,6 +152,7 @@ where
         &mut self.delegate
     }
 
+    /// Focus the list, if the list is searchable, focus the search input.
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
         self.focus_handle(cx).focus(window);
     }

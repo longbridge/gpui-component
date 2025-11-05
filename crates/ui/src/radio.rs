@@ -52,13 +52,13 @@ impl Radio {
         self
     }
 
-    /// Set the checked state of the Radio element.
+    /// Set the checked state of the Radio element, default is `false`.
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked = checked;
         self
     }
 
-    /// Set the disabled state of the Radio element.
+    /// Set the disabled state of the Radio element, default is `false`.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self

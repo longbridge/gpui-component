@@ -34,6 +34,9 @@ struct VirtualListScrollHandleState {
     pub deferred_scroll_to_item: Option<DeferredScrollToItem>,
 }
 
+/// A scroll handle for [`VirtualList`].
+///
+/// See also [`ScrollHandle`].
 #[derive(Clone)]
 pub struct VirtualListScrollHandle {
     state: Rc<RefCell<VirtualListScrollHandleState>>,
@@ -77,6 +80,7 @@ impl Deref for VirtualListScrollHandle {
 }
 
 impl VirtualListScrollHandle {
+    /// Create a new VirtualListScrollHandle.
     pub fn new() -> Self {
         VirtualListScrollHandle {
             state: Rc::new(RefCell::new(VirtualListScrollHandleState {
@@ -88,6 +92,7 @@ impl VirtualListScrollHandle {
         }
     }
 
+    /// Get the base scroll handle.
     pub fn base_handle(&self) -> &ScrollHandle {
         &self.base_handle
     }
