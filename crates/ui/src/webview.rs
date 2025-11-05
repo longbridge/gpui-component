@@ -15,7 +15,7 @@ use crate::PixelsExt;
 
 /// A webview based on wry WebView.
 ///
-/// [exprimental]
+/// [experimental]
 pub struct WebView {
     focus_handle: FocusHandle,
     webview: Rc<wry::WebView>,

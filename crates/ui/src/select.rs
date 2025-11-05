@@ -353,7 +353,7 @@ pub struct Select<D: SelectDelegate + 'static> {
     options: SelectOptions,
 }
 
-/// A bulit-in searchable vector for select items.
+/// A built-in searchable vector for select items.
 #[derive(Debug, Clone)]
 pub struct SearchableVec<T> {
     items: Vec<T>,
