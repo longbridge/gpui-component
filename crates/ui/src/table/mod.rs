@@ -42,35 +42,44 @@ enum SelectionState {
     Row,
 }
 
+/// The Table event.
 #[derive(Clone)]
 pub enum TableEvent {
     /// Single click or move to selected row.
     SelectRow(usize),
     /// Double click on the row.
     DoubleClickedRow(usize),
+    /// Selected column.
     SelectColumn(usize),
+    /// The column widths have changed.
+    ///
+    /// The `Vec<Pixels>` contains the new widths of all columns.
     ColumnWidthsChanged(Vec<Pixels>),
+    /// A column has been moved.
+    ///
+    /// The first `usize` is the original index of the column,
+    /// and the second `usize` is the new index of the column.
     MoveColumn(usize, usize),
 }
 
 /// The visible range of the rows and columns.
 #[derive(Debug, Default)]
-pub struct VisibleRangeState {
+pub struct TableVisibleRange {
     /// The visible range of the rows.
     rows: Range<usize>,
     /// The visible range of the columns.
     cols: Range<usize>,
 }
 
-impl VisibleRangeState {
+impl TableVisibleRange {
     /// Returns the visible range of the rows.
-    pub fn rows(&self) -> Range<usize> {
-        self.rows.clone()
+    pub fn rows(&self) -> &Range<usize> {
+        &self.rows
     }
 
     /// Returns the visible range of the columns.
-    pub fn cols(&self) -> Range<usize> {
-        self.cols.clone()
+    pub fn cols(&self) -> &Range<usize> {
+        &self.cols
     }
 }
 
@@ -79,7 +88,7 @@ struct TableOptions {
     /// Set stripe style of the table.
     stripe: bool,
     /// Set to use border style of the table.
-    border: bool,
+    bordered: bool,
     /// The cell size of the table.
     size: Size,
 }
@@ -89,13 +98,13 @@ impl Default for TableOptions {
         Self {
             scrollbar_visible: Edges::all(true),
             stripe: false,
-            border: true,
+            bordered: true,
             size: Size::default(),
         }
     }
 }
 
-/// The state for Table.
+/// The state for [`Table`].
 pub struct TableState<D: TableDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
@@ -138,7 +147,7 @@ pub struct TableState<D: TableDelegate> {
     resizing_col: Option<usize>,
 
     /// The visible range of the rows and columns.
-    visible_range: VisibleRangeState,
+    visible_range: TableVisibleRange,
 
     _measure: Vec<Duration>,
     _load_more_task: Task<()>,
@@ -148,6 +157,7 @@ impl<D> TableState<D>
 where
     D: TableDelegate,
 {
+    /// Create a new TableState with the given delegate.
     pub fn new(delegate: D, _: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
             focus_handle: cx.focus_handle(),
@@ -165,7 +175,7 @@ where
             resizing_col: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
-            visible_range: VisibleRangeState::default(),
+            visible_range: TableVisibleRange::default(),
             loop_selection: true,
             col_selectable: true,
             row_selectable: true,
@@ -181,10 +191,12 @@ where
         this
     }
 
+    /// Returns a reference to the delegate.
     pub fn delegate(&self) -> &D {
         &self.delegate
     }
 
+    /// Returns a mutable reference to the delegate.
     pub fn delegate_mut(&mut self) -> &mut D {
         &mut self.delegate
     }
@@ -228,31 +240,6 @@ where
     /// When we update columns or rows, we need to refresh the table.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.prepare_col_groups(cx);
-    }
-
-    fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
-        self.col_groups = (0..self.delegate.columns_count(cx))
-            .map(|col_ix| {
-                let column = self.delegate().column(col_ix, cx);
-                ColGroup {
-                    width: column.width,
-                    bounds: Bounds::default(),
-                    column: column.clone(),
-                }
-            })
-            .collect();
-        cx.notify();
-    }
-
-    fn fixed_left_cols_count(&self) -> usize {
-        if !self.col_fixed {
-            return 0;
-        }
-
-        self.col_groups
-            .iter()
-            .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
-            .count()
     }
 
     /// Scroll to the row at the given index.
@@ -325,8 +312,35 @@ where
     }
 
     /// Returns the visible range of the rows and columns.
-    pub fn visible_range(&self) -> &VisibleRangeState {
+    ///
+    /// See [`TableVisibleRange`].
+    pub fn visible_range(&self) -> &TableVisibleRange {
         &self.visible_range
+    }
+
+    fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
+        self.col_groups = (0..self.delegate.columns_count(cx))
+            .map(|col_ix| {
+                let column = self.delegate().column(col_ix, cx);
+                ColGroup {
+                    width: column.width,
+                    bounds: Bounds::default(),
+                    column: column.clone(),
+                }
+            })
+            .collect();
+        cx.notify();
+    }
+
+    fn fixed_left_cols_count(&self) -> usize {
+        if !self.col_fixed {
+            return 0;
+        }
+
+        self.col_groups
+            .iter()
+            .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
+            .count()
     }
 
     fn on_row_click(
@@ -1476,7 +1490,7 @@ impl<D> Table<D>
 where
     D: TableDelegate,
 {
-    /// Create a new Table element.
+    /// Create a new Table element with the given [`TableState`].
     pub fn new(state: &Entity<TableState<D>>) -> Self {
         Self {
             state: state.clone(),
@@ -1491,8 +1505,8 @@ where
     }
 
     /// Set to use border style of the table, default to true.
-    pub fn border(mut self, border: bool) -> Self {
-        self.options.border = border;
+    pub fn bordered(mut self, bordered: bool) -> Self {
+        self.options.bordered = bordered;
         self
     }
 
@@ -1522,7 +1536,7 @@ where
     D: TableDelegate,
 {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let border = self.options.border;
+        let bordered = self.options.bordered;
         let focus_handle = self.state.focus_handle(cx);
         self.state.update(cx, |state, _| {
             state.options = self.options;
@@ -1539,7 +1553,7 @@ where
             .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
             .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
             .bg(cx.theme().table)
-            .when(border, |this| {
+            .when(bordered, |this| {
                 this.rounded(cx.theme().radius)
                     .border_1()
                     .border_color(cx.theme().border)

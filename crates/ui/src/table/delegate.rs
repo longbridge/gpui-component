@@ -12,10 +12,12 @@ use crate::{
     ActiveTheme as _, Icon, IconName, Size,
 };
 
+/// A delegate trait for providing data and rendering for a table.
 #[allow(unused)]
 pub trait TableDelegate: Sized + 'static {
     /// Return the number of columns in the table.
     fn columns_count(&self, cx: &App) -> usize;
+
     /// Return the number of rows in the table.
     fn rows_count(&self, cx: &App) -> usize;
 
