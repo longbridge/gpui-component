@@ -105,14 +105,19 @@ impl ColorPickerState {
     }
 
     /// Set default color value.
-    pub fn default_value(mut self, value: Hsla) -> Self {
-        self.value = Some(value);
+    pub fn default_value(mut self, value: impl Into<Hsla>) -> Self {
+        self.value = Some(value.into());
         self
     }
 
     /// Set current color value.
-    pub fn set_value(&mut self, value: Hsla, window: &mut Window, cx: &mut Context<Self>) {
-        self.update_value(Some(value), false, window, cx)
+    pub fn set_value(
+        &mut self,
+        value: impl Into<Hsla>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.update_value(Some(value.into()), false, window, cx)
     }
 
     /// Get current color value.

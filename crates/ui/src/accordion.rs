@@ -33,21 +33,25 @@ impl Accordion {
         }
     }
 
+    /// Set whether multiple accordion items can be opened simultaneously, default: false
     pub fn multiple(mut self, multiple: bool) -> Self {
         self.multiple = multiple;
         self
     }
 
+    /// Set whether the accordion items have borders, default: true
     pub fn bordered(mut self, bordered: bool) -> Self {
         self.bordered = bordered;
         self
     }
 
+    /// Set whether the accordion is disabled, default: false
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
+    /// Adds an AccordionItem to the Accordion.
     pub fn item<F>(mut self, child: F) -> Self
     where
         F: FnOnce(AccordionItem) -> AccordionItem,

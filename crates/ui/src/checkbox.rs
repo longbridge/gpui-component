@@ -53,6 +53,9 @@ impl Checkbox {
         self
     }
 
+    /// Set the click handler for the checkbox.
+    ///
+    /// The `&bool` parameter indicates the new checked state after the click.
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Rc::new(handler));
         self
