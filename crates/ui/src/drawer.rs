@@ -22,6 +22,7 @@ pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
+/// A drawer component that slides in from the side of the window.
 #[derive(IntoElement)]
 pub struct Drawer {
     pub(crate) focus_handle: FocusHandle,
@@ -38,6 +39,7 @@ pub struct Drawer {
 }
 
 impl Drawer {
+    /// Creates a new drawer.
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),

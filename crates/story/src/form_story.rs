@@ -28,7 +28,7 @@ pub struct FormStory {
     date: Entity<DatePickerState>,
     layout: Axis,
     size: Size,
-    column: u16,
+    columns: usize,
 }
 
 impl super::Story for FormStory {
@@ -93,7 +93,7 @@ impl FormStory {
             subscribe_email: false,
             layout: Axis::Vertical,
             size: Size::default(),
-            column: 1,
+            columns: 1,
         }
     }
 }
@@ -106,7 +106,7 @@ impl Focusable for FormStory {
 
 impl Render for FormStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_multi_column = self.column > 1;
+        let is_multi_column = self.columns > 1;
         let is_horizontal = self.layout.is_horizontal();
 
         v_flex()
@@ -138,13 +138,13 @@ impl Render for FormStory {
                             )
                             .child(
                                 Switch::new("column")
-                                    .checked(self.column > 1)
-                                    .label("Multi Column")
+                                    .checked(self.columns > 1)
+                                    .label("Multi Columns")
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         if *checked {
-                                            this.column = 2;
+                                            this.columns = 2;
                                         } else {
-                                            this.column = 1;
+                                            this.columns = 1;
                                         }
                                         cx.notify();
                                     })),
@@ -186,7 +186,7 @@ impl Render for FormStory {
                 v_form()
                     .layout(self.layout)
                     .with_size(self.size)
-                    .column(self.column)
+                    .columns(self.columns)
                     .label_width(px(if is_multi_column { 100. } else { 140. }))
                     .child(
                         form_field().label_fn(|_, _| "Name").child(

@@ -23,6 +23,7 @@ pub fn form_field() -> FormField {
     FormField::new()
 }
 
+/// A form element that contains multiple form fields.
 #[derive(IntoElement)]
 pub struct Form {
     fields: Vec<FormField>,
@@ -37,7 +38,7 @@ struct FieldProps {
     layout: Axis,
     /// Field gap
     gap: Option<Pixels>,
-    column: u16,
+    columns: usize,
 }
 
 impl Default for FieldProps {
@@ -48,7 +49,7 @@ impl Default for FieldProps {
             layout: Axis::Vertical,
             size: Size::default(),
             gap: None,
-            column: 1,
+            columns: 1,
         }
     }
 }
@@ -110,8 +111,8 @@ impl Form {
     /// Set the column count for the form.
     ///
     /// Default is 1.
-    pub fn column(mut self, column: u16) -> Self {
-        self.props.column = column;
+    pub fn columns(mut self, columns: usize) -> Self {
+        self.props.columns = columns;
         self
     }
 }
@@ -467,7 +468,7 @@ impl RenderOnce for Form {
             .gap_x(gap * 3.)
             .gap_y(gap)
             .grid()
-            .grid_cols(props.column)
+            .grid_cols(props.columns as u16)
             .children(
                 self.fields
                     .into_iter()
