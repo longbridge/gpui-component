@@ -1,8 +1,8 @@
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    prelude::FluentBuilder, AnyElement, App, ClipboardItem, Element, ElementId, GlobalElementId,
-    IntoElement, LayoutId, SharedString, Window,
+    prelude::FluentBuilder, App, ClipboardItem, ElementId, IntoElement, RenderOnce, SharedString,
+    Window,
 };
 
 use crate::{
@@ -11,11 +11,12 @@ use crate::{
 };
 
 /// An element that provides clipboard copy functionality.
+#[derive(IntoElement)]
 pub struct Clipboard {
     id: ElementId,
     value: SharedString,
     value_fn: Option<Rc<dyn Fn(&mut Window, &mut App) -> SharedString>>,
-    copied_callback: Option<Rc<dyn Fn(SharedString, &mut Window, &mut App)>>,
+    on_copied: Option<Rc<dyn Fn(SharedString, &mut Window, &mut App)>>,
 }
 
 impl Clipboard {
@@ -25,7 +26,7 @@ impl Clipboard {
             id: id.into(),
             value: SharedString::default(),
             value_fn: None,
-            copied_callback: None,
+            on_copied: None,
         }
     }
 
@@ -51,114 +52,65 @@ impl Clipboard {
     where
         F: Fn(SharedString, &mut Window, &mut App) + 'static,
     {
-        self.copied_callback = Some(Rc::new(handler));
+        self.on_copied = Some(Rc::new(handler));
         self
     }
 }
 
-impl IntoElement for Clipboard {
-    type Element = Self;
+impl RenderOnce for Clipboard {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ClipboardState::default());
 
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
+        let value = self.value.clone();
+        let clipboard_id = self.id.clone();
+        let copied = state.read(cx).copied;
+        let value_fn = self.value_fn.clone();
 
-#[doc(hidden)]
-#[derive(Default)]
-pub struct ClipboardState {
-    copied: Cell<bool>,
-}
-
-impl Element for Clipboard {
-    type RequestLayoutState = AnyElement;
-
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        global_id: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        window.with_element_state::<ClipboardState, _>(global_id.unwrap(), |state, window| {
-            let state = state.unwrap_or_default();
-
-            let value = self.value.clone();
-            let clipboard_id = self.id.clone();
-            let copied_callback = self.copied_callback.as_ref().map(|c| c.clone());
-            let copied = state.copied.clone();
-            let copide_value = copied.get();
-            let value_fn = self.value_fn.clone();
-
-            let mut element = Button::new(clipboard_id)
-                .icon(if copide_value {
-                    IconName::Check
-                } else {
-                    IconName::Copy
-                })
-                .ghost()
-                .xsmall()
-                .when(!copide_value, |this| {
-                    this.on_click(move |_, window, cx| {
+        Button::new(clipboard_id)
+            .icon(if copied {
+                IconName::Check
+            } else {
+                IconName::Copy
+            })
+            .ghost()
+            .xsmall()
+            .when(!copied, |this| {
+                this.on_click({
+                    let state = state.clone();
+                    let on_copied = self.on_copied.clone();
+                    move |_, window, cx| {
                         cx.stop_propagation();
                         let value = value_fn
                             .as_ref()
                             .map(|f| f(window, cx))
                             .unwrap_or_else(|| value.clone());
                         cx.write_to_clipboard(ClipboardItem::new_string(value.to_string()));
-                        copied.set(true);
+                        state.update(cx, |state, cx| {
+                            state.copied = true;
+                            cx.notify();
+                        });
 
-                        let copied = copied.clone();
+                        let state = state.clone();
                         cx.spawn(async move |cx| {
                             cx.background_executor().timer(Duration::from_secs(2)).await;
-
-                            copied.set(false);
+                            _ = state.update(cx, |state, cx| {
+                                state.copied = false;
+                                cx.notify();
+                            });
                         })
                         .detach();
 
-                        if let Some(callback) = &copied_callback {
-                            callback(value.clone(), window, cx);
+                        if let Some(on_copied) = &on_copied {
+                            on_copied(value.clone(), window, cx);
                         }
-                    })
+                    }
                 })
-                .into_any_element();
-
-            ((element.request_layout(window, cx), element), state)
-        })
+            })
     }
+}
 
-    fn prepaint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        element: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        element.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
-        element: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        element.paint(window, cx)
-    }
+#[doc(hidden)]
+#[derive(Default)]
+struct ClipboardState {
+    copied: bool,
 }
