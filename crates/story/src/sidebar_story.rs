@@ -392,6 +392,7 @@ impl Render for SidebarStory {
                             .child(Divider::vertical().h_4())
                             .child(
                                 Breadcrumb::new()
+                                    .child("Breadcrumb")
                                     .child(BreadcrumbItem::new("Home").on_click(cx.listener(
                                         |this, _, _, cx| {
                                             this.last_active_item = Item::Playground;
