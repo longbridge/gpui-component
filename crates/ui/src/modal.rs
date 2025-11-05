@@ -72,6 +72,7 @@ impl ModalButtonProps {
     }
 }
 
+/// A modal to display content in a dialog box.
 #[derive(IntoElement)]
 pub struct Modal {
     style: StyleRefinement,
@@ -106,6 +107,7 @@ pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
 }
 
 impl Modal {
+    /// Create a new modal.
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
