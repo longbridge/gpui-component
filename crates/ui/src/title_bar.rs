@@ -25,6 +25,7 @@ pub struct TitleBar {
 }
 
 impl TitleBar {
+    /// Create a new TitleBar.
     pub fn new() -> Self {
         Self {
             base: div().id("title-bar").pl(TITLE_BAR_LEFT_PADDING),

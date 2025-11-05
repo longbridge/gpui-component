@@ -60,6 +60,7 @@ impl Switch {
         self
     }
 
+    /// Set tooltip for the switch.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
         self.tooltip = Some(tooltip.into());
         self
