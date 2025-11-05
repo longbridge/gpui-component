@@ -250,16 +250,127 @@ impl Tiles {
             return;
         };
 
-        let Some(item) = self.panels.iter_mut().find(|p| p.id == dragging_id) else {
+        let Some(item_idx) = self.panels.iter().position(|p| p.id == dragging_id) else {
             return;
         };
 
-        let previous_bounds = item.bounds;
+        let previous_bounds = self.panels[item_idx].bounds;
         let adjusted_position = mouse_position - self.bounds.origin;
         let delta = adjusted_position - self.dragging_initial_mouse;
         let mut new_origin = self.dragging_initial_bounds.origin + delta;
 
-        // Avoid out of bounds
+        // Apply magnetic snap before boundary checks
+        let snap_threshold = cx.theme().tile_grid_size;
+        let dragging_bounds = Bounds {
+            origin: new_origin,
+            size: self.dragging_initial_bounds.size,
+        };
+
+        // Spatial filtering: only check nearby panels
+        let margin = snap_threshold * 2.0;
+        let search_bounds = Bounds {
+            origin: Point {
+                x: dragging_bounds.left() - margin,
+                y: dragging_bounds.top() - margin,
+            },
+            size: Size {
+                width: dragging_bounds.size.width + margin * 2.0,
+                height: dragging_bounds.size.height + margin * 2.0,
+            },
+        };
+
+        let mut snap_x: Option<Pixels> = None;
+        let mut snap_y: Option<Pixels> = None;
+
+        for (idx, other) in self.panels.iter().enumerate() {
+            if idx == item_idx {
+                continue;
+            }
+
+            // Skip panels that are far away
+            if other.bounds.right() < search_bounds.left()
+                || other.bounds.left() > search_bounds.right()
+                || other.bounds.bottom() < search_bounds.top()
+                || other.bounds.top() > search_bounds.bottom()
+            {
+                continue;
+            }
+
+            // Horizontal snapping (X axis)
+            if snap_x.is_none() {
+                // Left to Left
+                let diff = (dragging_bounds.left() - other.bounds.left()).abs();
+                if diff < snap_threshold {
+                    snap_x = Some(other.bounds.left());
+                }
+                // Left to Right
+                if snap_x.is_none() {
+                    let diff = (dragging_bounds.left() - other.bounds.right()).abs();
+                    if diff < snap_threshold {
+                        snap_x = Some(other.bounds.right());
+                    }
+                }
+                // Right to Left
+                if snap_x.is_none() {
+                    let diff = (dragging_bounds.right() - other.bounds.left()).abs();
+                    if diff < snap_threshold {
+                        snap_x = Some(other.bounds.left() - dragging_bounds.size.width);
+                    }
+                }
+                // Right to Right
+                if snap_x.is_none() {
+                    let diff = (dragging_bounds.right() - other.bounds.right()).abs();
+                    if diff < snap_threshold {
+                        snap_x = Some(other.bounds.right() - dragging_bounds.size.width);
+                    }
+                }
+            }
+
+            // Vertical snapping (Y axis)
+            if snap_y.is_none() {
+                // Top to Top
+                let diff = (dragging_bounds.top() - other.bounds.top()).abs();
+                if diff < snap_threshold {
+                    snap_y = Some(other.bounds.top());
+                }
+                // Top to Bottom
+                if snap_y.is_none() {
+                    let diff = (dragging_bounds.top() - other.bounds.bottom()).abs();
+                    if diff < snap_threshold {
+                        snap_y = Some(other.bounds.bottom());
+                    }
+                }
+                // Bottom to Top
+                if snap_y.is_none() {
+                    let diff = (dragging_bounds.bottom() - other.bounds.top()).abs();
+                    if diff < snap_threshold {
+                        snap_y = Some(other.bounds.top() - dragging_bounds.size.height);
+                    }
+                }
+                // Bottom to Bottom
+                if snap_y.is_none() {
+                    let diff = (dragging_bounds.bottom() - other.bounds.bottom()).abs();
+                    if diff < snap_threshold {
+                        snap_y = Some(other.bounds.bottom() - dragging_bounds.size.height);
+                    }
+                }
+            }
+
+            // Early exit if both axes are snapped
+            if snap_x.is_some() && snap_y.is_some() {
+                break;
+            }
+        }
+
+        // Apply snapping
+        if let Some(x) = snap_x {
+            new_origin.x = x;
+        }
+        if let Some(y) = snap_y {
+            new_origin.y = y;
+        }
+
+        // Apply boundary constraints after snapping
         if new_origin.y < px(0.) {
             new_origin.y = px(0.);
         }
@@ -268,22 +379,9 @@ impl Tiles {
             new_origin.x = min_left;
         }
 
-        let final_origin = round_point_to_nearest_ten(new_origin, cx);
-        // Only push to history if bounds have changed
-        if final_origin != previous_bounds.origin {
-            item.bounds.origin = final_origin;
-
-            // Only push if not during history operations
-            if !self.history.ignore {
-                self.history.push(TileChange {
-                    tile_id: item.panel.view().entity_id(),
-                    old_bounds: Some(previous_bounds),
-                    new_bounds: Some(item.bounds),
-                    old_order: None,
-                    new_order: None,
-                    version: 0,
-                });
-            }
+        // Update position without grid rounding (smooth dragging)
+        if new_origin != previous_bounds.origin {
+            self.panels[item_idx].bounds.origin = new_origin;
         }
 
         cx.notify();
@@ -934,18 +1032,22 @@ impl Tiles {
         {
             let mut changes_to_push = vec![];
 
-            // Handle dragging
+            // Handle dragging - apply grid alignment on mouse up
             if let Some(dragging_id) = self.dragging_id {
-                if let Some(item) = self.panel(&dragging_id) {
+                if let Some(idx) = self.panels.iter().position(|p| p.id == dragging_id) {
                     let initial_bounds = self.dragging_initial_bounds;
-                    let current_bounds = item.bounds;
-                    if initial_bounds.origin != current_bounds.origin
-                        || initial_bounds.size != current_bounds.size
-                    {
+                    let current_bounds = self.panels[idx].bounds;
+
+                    // Apply grid alignment to final position
+                    let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, cx);
+
+                    if initial_bounds.origin != aligned_origin || initial_bounds.size != current_bounds.size {
+                        self.panels[idx].bounds.origin = aligned_origin;
+
                         changes_to_push.push(TileChange {
-                            tile_id: item.panel.view().entity_id(),
+                            tile_id: self.panels[idx].panel.view().entity_id(),
                             old_bounds: Some(initial_bounds),
-                            new_bounds: Some(current_bounds),
+                            new_bounds: Some(self.panels[idx].bounds),
                             old_order: None,
                             new_order: None,
                             version: 0,
