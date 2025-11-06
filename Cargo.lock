@@ -94,7 +94,7 @@ checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
 
 [[package]]
 name = "app_assets"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2818,7 +2818,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2886,7 +2886,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-macros"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3185,7 +3185,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello_world"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -3635,7 +3635,7 @@ dependencies = [
 
 [[package]]
 name = "input"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -4369,7 +4369,7 @@ dependencies = [
 
 [[package]]
 name = "modal_overlay"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -5956,7 +5956,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest_client"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6893,7 +6893,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "story"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "autocorrect",
@@ -8808,7 +8808,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "window_title"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "anyhow",
  "gpui",
