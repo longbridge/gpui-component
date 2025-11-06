@@ -59,7 +59,7 @@ impl Focusable for CollapsibleStory {
 
 impl Render for CollapsibleStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let items = vec![
+        let items = [
             ["TSLA.US", "$423.00", "+30.25%"],
             ["NVDA.US", "$312.00", "+12.12%"],
             ["AAPL.US", "$145.00", "-8.50%"],
