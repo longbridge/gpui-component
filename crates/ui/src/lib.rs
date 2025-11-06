@@ -26,6 +26,7 @@ pub mod button;
 pub mod chart;
 pub mod checkbox;
 pub mod clipboard;
+pub mod collapsible;
 pub mod color_picker;
 pub mod description_list;
 pub mod divider;
