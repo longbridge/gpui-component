@@ -1183,9 +1183,7 @@ where
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
     fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
         let mut extra_rows_needed = 0;
-
-        // +1px for the bottom border of the table row
-        let row_height = self.options.size.table_row_height() + px(1.);
+        let row_height = self.options.size.table_row_height();
         let total_height = self
             .vertical_scroll_handle
             .0
