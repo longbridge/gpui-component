@@ -537,13 +537,6 @@ impl RenderOnce for Button {
                     (on_hover)(hovered, window, cx);
                 })
             })
-            .when(self.disabled, |this| {
-                let disabled_style = style.disabled(self.outline, cx);
-                this.bg(disabled_style.bg)
-                    .text_color(disabled_style.fg)
-                    .border_color(disabled_style.border)
-                    .shadow_none()
-            })
             .child({
                 h_flex()
                     .id("label")
