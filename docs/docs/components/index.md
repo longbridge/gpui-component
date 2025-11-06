@@ -17,13 +17,13 @@ collapsed: false
 - [Collapsible](collapsible) - Expandable/collapsible content
 - [Icon](icon) - Icon display component
 - [Image](image) - Image display with fallbacks
-- [Indicator](indicator) - Loading and status indicators
 - [Kbd](kbd) - Keyboard shortcut display
 - [Label](label) - Text labels for form elements
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options
 - [Skeleton](skeleton) - Loading placeholders
 - [Slider](slider) - Value selection from a range
+- [Spinner](spinner) - Loading and status spinners
 - [Switch](switch) - Toggle on/off control
 - [Tag](tag) - Labels and categories
 - [Toggle](toggle) - Toggle button states
