@@ -473,10 +473,13 @@ impl RenderOnce for Modal {
                                 )
                             })
                             .children(self.show_close.then(|| {
+                                let top = (paddings.top - px(10.)).max(px(8.));
+                                let right = (paddings.right - px(10.)).max(px(8.));
+
                                 Button::new("close")
                                     .absolute()
-                                    .top(paddings.top - px(3.))
-                                    .right(paddings.right - px(3.))
+                                    .top(top)
+                                    .right(right)
                                     .small()
                                     .ghost()
                                     .icon(IconName::Close)
