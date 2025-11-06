@@ -310,8 +310,9 @@ impl StoryTiles {
         window: &mut Window,
         cx: &mut App,
     ) -> DockItem {
+        const PANELS: usize = 4;
         // Create 12 panels with alternating ButtonStory and IconStory
-        let panels = (0..12)
+        let panels = (0..PANELS)
             .map(|i| {
                 let story = if i % 2 == 0 {
                     Arc::new(StoryContainer::panel::<ButtonStory>(window, cx))
@@ -336,7 +337,7 @@ impl StoryTiles {
         let start_y = px(20.);
         let cols = 4;
 
-        let bounds = (0..12)
+        let bounds = (0..PANELS)
             .map(|i| {
                 let row = i / cols;
                 let col = i % cols;

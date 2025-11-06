@@ -2,6 +2,7 @@ use std::{
     any::Any,
     fmt::{Debug, Formatter},
     sync::Arc,
+    time::Instant,
 };
 
 use crate::{
@@ -142,6 +143,7 @@ pub struct Tiles {
     scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
     scrollbar_show: Option<ScrollbarShow>,
+    last_notify_time: Option<Instant>,
 }
 
 impl Panel for Tiles {
@@ -197,6 +199,7 @@ impl Tiles {
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
+            last_notify_time: None,
         }
     }
 
@@ -267,91 +270,80 @@ impl Tiles {
         };
 
         // Spatial filtering: only check nearby panels
-        let margin = snap_threshold * 2.0;
         let search_bounds = Bounds {
             origin: Point {
-                x: dragging_bounds.left() - margin,
-                y: dragging_bounds.top() - margin,
+                x: dragging_bounds.left() - snap_threshold,
+                y: dragging_bounds.top() - snap_threshold,
             },
             size: Size {
-                width: dragging_bounds.size.width + margin * 2.0,
-                height: dragging_bounds.size.height + margin * 2.0,
+                width: dragging_bounds.size.width + snap_threshold * 2.0,
+                height: dragging_bounds.size.height + snap_threshold * 2.0,
             },
         };
 
         let mut snap_x: Option<Pixels> = None;
         let mut snap_y: Option<Pixels> = None;
+        let mut min_x_dist = snap_threshold;
+        let mut min_y_dist = snap_threshold;
+
+        // Pre-calculate dragging bounds edges to avoid repeated method calls
+        let drag_left = dragging_bounds.left();
+        let drag_right = dragging_bounds.right();
+        let drag_top = dragging_bounds.top();
+        let drag_bottom = dragging_bounds.bottom();
+        let drag_width = dragging_bounds.size.width;
+        let drag_height = dragging_bounds.size.height;
 
         for (idx, other) in self.panels.iter().enumerate() {
             if idx == item_idx {
                 continue;
             }
 
+            // Pre-calculate other bounds edges
+            let other_left = other.bounds.left();
+            let other_right = other.bounds.right();
+            let other_top = other.bounds.top();
+            let other_bottom = other.bounds.bottom();
+
             // Skip panels that are far away
-            if other.bounds.right() < search_bounds.left()
-                || other.bounds.left() > search_bounds.right()
-                || other.bounds.bottom() < search_bounds.top()
-                || other.bounds.top() > search_bounds.bottom()
+            if other_right < search_bounds.left()
+                || other_left > search_bounds.right()
+                || other_bottom < search_bounds.top()
+                || other_top > search_bounds.bottom()
             {
                 continue;
             }
 
-            // Horizontal snapping (X axis)
+            // Horizontal snapping (X axis) - find closest snap point
             if snap_x.is_none() {
-                // Left to Left
-                let diff = (dragging_bounds.left() - other.bounds.left()).abs();
-                if diff < snap_threshold {
-                    snap_x = Some(other.bounds.left());
-                }
-                // Left to Right
-                if snap_x.is_none() {
-                    let diff = (dragging_bounds.left() - other.bounds.right()).abs();
-                    if diff < snap_threshold {
-                        snap_x = Some(other.bounds.right());
-                    }
-                }
-                // Right to Left
-                if snap_x.is_none() {
-                    let diff = (dragging_bounds.right() - other.bounds.left()).abs();
-                    if diff < snap_threshold {
-                        snap_x = Some(other.bounds.left() - dragging_bounds.size.width);
-                    }
-                }
-                // Right to Right
-                if snap_x.is_none() {
-                    let diff = (dragging_bounds.right() - other.bounds.right()).abs();
-                    if diff < snap_threshold {
-                        snap_x = Some(other.bounds.right() - dragging_bounds.size.width);
+                let candidates = [
+                    ((drag_left - other_left).abs(), other_left),
+                    ((drag_left - other_right).abs(), other_right),
+                    ((drag_right - other_left).abs(), other_left - drag_width),
+                    ((drag_right - other_right).abs(), other_right - drag_width),
+                ];
+
+                for (dist, snap_pos) in candidates {
+                    if dist < min_x_dist {
+                        min_x_dist = dist;
+                        snap_x = Some(snap_pos);
                     }
                 }
             }
 
-            // Vertical snapping (Y axis)
+            // Vertical snapping (Y axis) - find closest snap point
             if snap_y.is_none() {
-                // Top to Top
-                let diff = (dragging_bounds.top() - other.bounds.top()).abs();
-                if diff < snap_threshold {
-                    snap_y = Some(other.bounds.top());
-                }
-                // Top to Bottom
-                if snap_y.is_none() {
-                    let diff = (dragging_bounds.top() - other.bounds.bottom()).abs();
-                    if diff < snap_threshold {
-                        snap_y = Some(other.bounds.bottom());
-                    }
-                }
-                // Bottom to Top
-                if snap_y.is_none() {
-                    let diff = (dragging_bounds.bottom() - other.bounds.top()).abs();
-                    if diff < snap_threshold {
-                        snap_y = Some(other.bounds.top() - dragging_bounds.size.height);
-                    }
-                }
-                // Bottom to Bottom
-                if snap_y.is_none() {
-                    let diff = (dragging_bounds.bottom() - other.bounds.bottom()).abs();
-                    if diff < snap_threshold {
-                        snap_y = Some(other.bounds.bottom() - dragging_bounds.size.height);
+                let candidates = [
+                    ((drag_top - other_top).abs(), other_top),
+                    ((drag_top - other_bottom).abs(), other_bottom),
+                    ((drag_bottom - other_top).abs(), other_top - drag_height),
+                    ((drag_bottom - other_bottom).abs(), other_bottom - drag_height),
+                ];
+
+                for (dist, snap_pos) in candidates {
+                    if dist < min_y_dist {
+                        min_y_dist = dist;
+                        snap_y = Some(snap_pos);
                     }
                 }
             }
@@ -383,20 +375,20 @@ impl Tiles {
         if new_origin != previous_bounds.origin {
             self.panels[item_idx].bounds.origin = new_origin;
 
-            // Only push if not during history operations
-            if !self.history.ignore {
-                self.history.push(TileChange {
-                    tile_id: self.panels[item_idx].panel.view().entity_id(),
-                    old_bounds: Some(previous_bounds),
-                    new_bounds: Some(self.panels[item_idx].bounds),
-                    old_order: None,
-                    new_order: None,
-                    version: 0,
-                });
-            }
+            // Note: History is pushed in on_mouse_up to avoid performance overhead
+            // during high-frequency drag events
         }
 
-        cx.notify();
+        // Debounce cx.notify() to avoid excessive re-renders
+        let now = Instant::now();
+        let should_notify = self
+            .last_notify_time
+            .map_or(true, |last| now.duration_since(last).as_millis() >= 16); // ~60 FPS
+
+        if should_notify {
+            self.last_notify_time = Some(now);
+            cx.notify();
+        }
     }
 
     fn resize(
@@ -1053,7 +1045,9 @@ impl Tiles {
                     // Apply grid alignment to final position
                     let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, cx);
 
-                    if initial_bounds.origin != aligned_origin || initial_bounds.size != current_bounds.size {
+                    if initial_bounds.origin != aligned_origin
+                        || initial_bounds.size != current_bounds.size
+                    {
                         self.panels[idx].bounds.origin = aligned_origin;
 
                         changes_to_push.push(TileChange {
