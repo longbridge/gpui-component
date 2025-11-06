@@ -1005,7 +1005,7 @@ where
         let row_height = self.options.size.table_row_height();
 
         if row_ix < rows_count {
-            let is_last_row = row_ix + 1 == rows_count + extra_rows_count;
+            let is_last_row = row_ix + 1 == rows_count;
             let table_is_filled = extra_rows_count == 0;
             let need_render_border = if is_last_row {
                 if is_selected {
