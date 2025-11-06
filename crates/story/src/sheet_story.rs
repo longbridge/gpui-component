@@ -9,13 +9,13 @@ use gpui::{
 use raw_window_handle::HasWindowHandle;
 
 use gpui_component::{
-    ActiveTheme as _, ContextModal as _, Icon, IconName, IndexPath, Placement,
+    ActiveTheme as _, Icon, IconName, IndexPath, Placement, WindowExt as _,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
     h_flex,
     input::{Input, InputState},
-    list::{ListDelegate, ListItem, ListState},
+    list::{List, ListDelegate, ListItem, ListState},
     v_flex,
     webview::WebView,
     wry,
@@ -25,7 +25,7 @@ use crate::TestAction;
 use crate::{Story, section};
 
 pub struct ListItemDeletegate {
-    story: WeakEntity<DrawerStory>,
+    story: WeakEntity<SheetStory>,
     confirmed_index: Option<usize>,
     selected_index: Option<usize>,
     items: Vec<Arc<String>>,
@@ -115,7 +115,7 @@ impl ListDelegate for ListItemDeletegate {
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         _ = self.story.update(cx, |this, cx| {
-            this.close_drawer(window, cx);
+            this.close_sheet(window, cx);
         });
     }
 
@@ -144,28 +144,25 @@ impl ListDelegate for ListItemDeletegate {
     }
 }
 
-pub struct DrawerStory {
+pub struct SheetStory {
     focus_handle: FocusHandle,
-    drawer_placement: Option<Placement>,
+    placement: Option<Placement>,
     selected_value: Option<SharedString>,
     list: Entity<ListState<ListItemDeletegate>>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
-    modal_overlay: bool,
-    model_show_close: bool,
-    model_padding: bool,
-    model_keyboard: bool,
+    overlay: bool,
     overlay_closable: bool,
 }
 
-impl Story for DrawerStory {
+impl Story for SheetStory {
     fn title() -> &'static str {
-        "Drawer"
+        "Sheet"
     }
 
     fn description() -> &'static str {
-        "Drawer for open a popup in the edge of the window"
+        "Sheet for open a popup in the edge of the window"
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -173,7 +170,7 @@ impl Story for DrawerStory {
     }
 }
 
-impl DrawerStory {
+impl SheetStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -243,13 +240,8 @@ impl DrawerStory {
             matches: items.clone(),
         };
         let list = cx.new(|cx| {
-            let mut list = ListState::new(delegate, window, cx);
+            let mut list = ListState::new(delegate, window, cx).searchable(true);
             list.focus(window, cx);
-            if let Some(query_input) = list.query_input() {
-                query_input.update(cx, |input, cx| {
-                    input.set_placeholder("Pickup your country...", window, cx);
-                })
-            }
             list
         });
 
@@ -261,26 +253,18 @@ impl DrawerStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            drawer_placement: None,
+            placement: None,
             selected_value: None,
             list,
             input1,
             input2,
             date,
-            modal_overlay: true,
-            model_show_close: true,
-            model_padding: true,
-            model_keyboard: true,
+            overlay: true,
             overlay_closable: true,
         }
     }
 
-    fn open_drawer_at(
-        &mut self,
-        placement: Placement,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn open_sheet_at(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
         let list = self.list.clone();
 
         let list_h = match placement {
@@ -288,15 +272,15 @@ impl DrawerStory {
             Placement::Top | Placement::Bottom => px(160.),
         };
 
-        let overlay = self.modal_overlay;
+        let overlay = self.overlay;
         let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
-        window.open_drawer_at(placement, cx, move |this, _, cx| {
+        window.open_sheet_at(placement, cx, move |this, _, cx| {
             this.overlay(overlay)
                 .overlay_closable(overlay_closable)
                 .size(px(400.))
-                .title("Drawer Title")
+                .title("Sheet Title")
                 .gap_4()
                 .child(Input::new(&input1))
                 .child(DatePicker::new(&date).placeholder("Date of Birth"))
@@ -304,18 +288,17 @@ impl DrawerStory {
                     Button::new("send-notification")
                         .child("Test Notification")
                         .on_click(|_, window, cx| {
-                            window.push_notification("Hello this is message from Drawer.", cx)
+                            window.push_notification("Hello this is message from Sheet.", cx)
                         }),
                 )
                 .child(
-                    div()
+                    List::new(&list)
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
                         .size_full()
                         .flex_1()
-                        .h(list_h)
-                        .child(list.clone()),
+                        .h(list_h),
                 )
                 .footer(
                     h_flex()
@@ -323,22 +306,22 @@ impl DrawerStory {
                         .items_center()
                         .child(Button::new("confirm").primary().label("Confirm").on_click(
                             |_, window, cx| {
-                                window.close_drawer(cx);
+                                window.close_sheet(cx);
                             },
                         ))
                         .child(
                             Button::new("cancel")
                                 .label("Cancel")
                                 .on_click(|_, window, cx| {
-                                    window.close_drawer(cx);
+                                    window.close_sheet(cx);
                                 }),
                         ),
                 )
         });
     }
 
-    fn close_drawer(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.drawer_placement = None;
+    fn close_sheet(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.placement = None;
         cx.notify();
     }
 
@@ -352,16 +335,16 @@ impl DrawerStory {
     }
 }
 
-impl Focusable for DrawerStory {
+impl Focusable for SheetStory {
     fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for DrawerStory {
+impl Render for SheetStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .id("drawer-story")
+            .id("sheet-story")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_test_action))
             .size_full()
@@ -376,9 +359,9 @@ impl Render for DrawerStory {
                             .child(
                                 Checkbox::new("overlay")
                                     .label("Overlay")
-                                    .checked(self.modal_overlay)
+                                    .checked(self.overlay)
                                     .on_click(cx.listener(|view, _, _, cx| {
-                                        view.modal_overlay = !view.modal_overlay;
+                                        view.overlay = !view.overlay;
                                         cx.notify();
                                     })),
                             )
@@ -390,67 +373,40 @@ impl Render for DrawerStory {
                                         view.overlay_closable = !view.overlay_closable;
                                         cx.notify();
                                     })),
-                            )
-                            .child(
-                                Checkbox::new("show-close")
-                                    .label("Close Button")
-                                    .checked(self.model_show_close)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.model_show_close = !view.model_show_close;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("padding")
-                                    .label("Inner Padding")
-                                    .checked(self.model_padding)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.model_padding = !view.model_padding;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("keyboard")
-                                    .label("Keyboard")
-                                    .checked(self.model_keyboard)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.model_keyboard = !view.model_keyboard;
-                                        cx.notify();
-                                    })),
                             ),
                     )
                     .child(
-                        section("Normal Drawer")
+                        section("Normal Sheet")
                             .child(
-                                Button::new("show-drawer-left")
+                                Button::new("show-sheet-left")
                                     .outline()
-                                    .label("Left Drawer...")
+                                    .label("Left Sheet...")
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.open_drawer_at(Placement::Left, window, cx)
+                                        this.open_sheet_at(Placement::Left, window, cx)
                                     })),
                             )
                             .child(
-                                Button::new("show-drawer-top")
+                                Button::new("show-sheet-top")
                                     .outline()
-                                    .label("Top Drawer...")
+                                    .label("Top Sheet...")
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.open_drawer_at(Placement::Top, window, cx)
+                                        this.open_sheet_at(Placement::Top, window, cx)
                                     })),
                             )
                             .child(
-                                Button::new("show-drawer-right")
+                                Button::new("show-sheet-right")
                                     .outline()
-                                    .label("Right Drawer...")
+                                    .label("Right Sheet...")
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.open_drawer_at(Placement::Right, window, cx)
+                                        this.open_sheet_at(Placement::Right, window, cx)
                                     })),
                             )
                             .child(
-                                Button::new("show-drawer-bottom")
+                                Button::new("show-sheet-bottom")
                                     .outline()
-                                    .label("Bottom Drawer...")
+                                    .label("Bottom Sheet...")
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.open_drawer_at(Placement::Bottom, window, cx)
+                                        this.open_sheet_at(Placement::Bottom, window, cx)
                                     })),
                             ),
                     )
@@ -474,7 +430,7 @@ impl Render for DrawerStory {
                             ),
                     )
                     .child(
-                        section("WebView in Drawer").child(
+                        section("WebView in Sheet").child(
                             Button::new("webview")
                                 .outline()
                                 .label("Open WebView")
@@ -491,12 +447,12 @@ impl Render for DrawerStory {
                                     webview.update(cx, |webview, _| {
                                         webview.load_url("https://github.com/explore");
                                     });
-                                    window.open_drawer(cx, move |drawer, window, cx| {
+                                    window.open_sheet(cx, move |sheet, window, cx| {
                                         let height =
                                             window.window_bounds().get_bounds().size.height;
                                         let webview_bounds = webview.read(cx).bounds();
 
-                                        drawer.title("WebView Title").p_0().child(
+                                        sheet.title("WebView Title").p_0().child(
                                             div()
                                                 .h(height - webview_bounds.origin.y)
                                                 .child(webview.clone()),

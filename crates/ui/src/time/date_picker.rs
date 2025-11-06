@@ -20,27 +20,30 @@ use crate::{
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
 
+const CONTEXT: &'static str = "DatePicker";
 pub(crate) fn init(cx: &mut App) {
-    let context = Some("DatePicker");
     cx.bind_keys([
-        KeyBinding::new("enter", Confirm { secondary: false }, context),
-        KeyBinding::new("escape", Cancel, context),
-        KeyBinding::new("delete", Delete, context),
-        KeyBinding::new("backspace", Delete, context),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("delete", Delete, Some(CONTEXT)),
+        KeyBinding::new("backspace", Delete, Some(CONTEXT)),
     ])
 }
 
+/// Events emitted by the DatePicker.
 #[derive(Clone)]
 pub enum DatePickerEvent {
     Change(Date),
 }
 
+/// Preset value for DateRangePreset.
 #[derive(Clone)]
 pub enum DateRangePresetValue {
     Single(NaiveDate),
     Range(NaiveDate, NaiveDate),
 }
 
+/// Preset for date range selection.
 #[derive(Clone)]
 pub struct DateRangePreset {
     label: SharedString,
@@ -48,11 +51,11 @@ pub struct DateRangePreset {
 }
 
 impl DateRangePreset {
-    /// Creates a new DateRangePreset with single date.
-    pub fn single(label: impl Into<SharedString>, single: NaiveDate) -> Self {
+    /// Creates a new DateRangePreset with a date.
+    pub fn single(label: impl Into<SharedString>, date: NaiveDate) -> Self {
         DateRangePreset {
             label: label.into(),
-            value: DateRangePresetValue::Single(single),
+            value: DateRangePresetValue::Single(date),
         }
     }
     /// Creates a new DateRangePreset with a range of dates.
@@ -152,6 +155,12 @@ impl DatePickerState {
         self.update_date(date.into(), false, window, cx);
     }
 
+    /// Set the disabled match for the calendar.
+    pub fn disabled_matcher(mut self, disabled: impl Into<Matcher>) -> Self {
+        self.disabled_matcher = Some(Rc::new(disabled.into()));
+        self
+    }
+
     fn update_date(&mut self, date: Date, emit: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.date = date;
         self.calendar.update(cx, |view, cx| {
@@ -162,12 +171,6 @@ impl DatePickerState {
             cx.emit(DatePickerEvent::Change(date));
         }
         cx.notify();
-    }
-
-    /// Set the disabled match for the calendar.
-    pub fn disabled_matcher(mut self, disabled: impl Into<Matcher>) -> Self {
-        self.disabled_matcher = Some(Rc::new(disabled.into()));
-        self
     }
 
     /// Set the disabled matcher of the date picker.
@@ -251,6 +254,7 @@ impl DatePickerState {
     }
 }
 
+/// A DatePicker element.
 #[derive(IntoElement)]
 pub struct DatePicker {
     id: ElementId,
@@ -297,11 +301,12 @@ impl Render for DatePickerState {
 }
 
 impl DatePicker {
+    /// Create a new DatePicker with the given [`DatePickerState`].
     pub fn new(state: &Entity<DatePickerState>) -> Self {
         Self {
             id: ("date-picker", state.entity_id()).into(),
             state: state.clone(),
-            cleanable: true,
+            cleanable: false,
             placeholder: None,
             size: Size::default(),
             style: StyleRefinement::default(),
@@ -318,9 +323,9 @@ impl DatePicker {
         self
     }
 
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.cleanable = true;
+    /// Set whether to show the clear button when the input field is not empty, default is false.
+    pub fn cleanable(mut self, cleanable: bool) -> Self {
+        self.cleanable = cleanable;
         self
     }
 
@@ -364,7 +369,7 @@ impl RenderOnce for DatePicker {
 
         div()
             .id(self.id.clone())
-            .key_context("DatePicker")
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle(cx).tab_stop(true))
             .on_action(window.listener_for(&self.state, DatePickerState::on_enter))
             .on_action(window.listener_for(&self.state, DatePickerState::on_delete))

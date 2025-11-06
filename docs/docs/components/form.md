@@ -53,7 +53,7 @@ h_form()
 
 ```rust
 v_form()
-    .column(2) // Two-column layout
+    .columns(2) // Two-column layout
     .child(
         form_field()
             .label("First Name")
@@ -293,7 +293,7 @@ v_form()
 
 ```rust
 v_form()
-    .column(3) // Three-column grid
+    .columns(3) // Three-column grid
     .child(form_field().label("First").child(input1))
     .child(form_field().label("Second").child(input2))
     .child(form_field().label("Third").child(input3))
@@ -309,7 +309,7 @@ v_form()
 
 ```rust
 v_form()
-    .column(4)
+    .columns(4)
     .child(form_field().label("A").child(input_a))
     .child(form_field().label("B").child(input_b))
     .child(
@@ -325,7 +325,7 @@ v_form()
 
 ```rust
 v_form()
-    .column(if is_mobile { 1 } else { 2 })
+    .columns(if is_mobile { 1 } else { 2 })
     .child(form_field().label("Name").child(name_input))
     .child(form_field().label("Email").child(email_input))
     .child(
@@ -335,43 +335,6 @@ v_form()
             .child(bio_input)
     )
 ```
-
-## API Reference
-
-### Form
-
-| Method                  | Description                           |
-| ----------------------- | ------------------------------------- |
-| `vertical()`            | Create vertical layout form           |
-| `horizontal()`          | Create horizontal layout form         |
-| `layout(Axis)`          | Set form layout direction             |
-| `label_width(Pixels)`   | Set label width (horizontal layout)   |
-| `label_text_size(Rems)` | Set label text size                   |
-| `gap(Pixels)`           | Set gap between fields                |
-| `column(u16)`           | Set number of columns for grid layout |
-| `child(FormField)`      | Add form field                        |
-| `children(iter)`        | Add multiple form fields              |
-| `large()`               | Set large size                        |
-| `small()`               | Set small size                        |
-
-### FormField
-
-| Method                | Description                      |
-| --------------------- | -------------------------------- |
-| `label(str)`          | Set field label                  |
-| `label_fn(fn)`        | Set dynamic label using function |
-| `description(str)`    | Set field description            |
-| `description_fn(fn)`  | Set dynamic description          |
-| `required(bool)`      | Mark field as required           |
-| `visible(bool)`       | Set field visibility             |
-| `no_label_indent()`   | Disable label indentation        |
-| `items_start()`       | Align items to start             |
-| `items_center()`      | Align items to center            |
-| `items_end()`         | Align items to end               |
-| `col_span(u16)`       | Set column span                  |
-| `col_start(i16)`      | Set starting column              |
-| `col_end(i16)`        | Set ending column                |
-| `track_focus(handle)` | Track focus for field            |
 
 ## Examples
 

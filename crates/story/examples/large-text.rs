@@ -1,6 +1,6 @@
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, ContextModal, Selectable, Sizable,
+    ActiveTheme, Selectable, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{self, Input, InputEvent, InputState, TabSize},

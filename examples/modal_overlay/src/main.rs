@@ -13,7 +13,7 @@ impl HelloWorld {
     }
 
     fn show_drawer(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        window.open_drawer(cx, move |drawer, _, _| {
+        window.open_sheet(cx, move |drawer, _, _| {
             drawer.title("Test Drawer").child("Hello from Drawer!")
         });
     }
@@ -73,7 +73,7 @@ impl Render for HelloWorld {
                     ),
             )
             .children(Root::render_modal_layer(window, cx))
-            .children(Root::render_drawer_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
     }
 }
 

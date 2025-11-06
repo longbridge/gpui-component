@@ -7,6 +7,7 @@ use gpui_component::{
         PanelState, PanelView, register_panel,
     },
     input::{Input, InputState},
+    scroll::ScrollbarShow,
 };
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
@@ -239,6 +240,17 @@ impl StoryTiles {
         Ok(())
     }
 
+    fn set_scrollbar_show(dock_area: &mut DockArea, cx: &mut App) {
+        match dock_area.items() {
+            DockItem::Tiles { view, .. } => {
+                view.update(cx, |this, cx| {
+                    this.set_scrollbar_show(Some(ScrollbarShow::Always), cx);
+                });
+            }
+            _ => {}
+        }
+    }
+
     fn load_tiles(
         dock_area: Entity<DockArea>,
         window: &mut Window,
@@ -273,7 +285,7 @@ impl StoryTiles {
 
         dock_area.update(cx, |dock_area, cx| {
             dock_area.load(state, window, cx).context("load layout")?;
-
+            Self::set_scrollbar_show(dock_area, cx);
             Ok::<(), anyhow::Error>(())
         })
     }
@@ -284,11 +296,12 @@ impl StoryTiles {
         cx: &mut Context<Self>,
     ) {
         let dock_item = Self::init_default_layout(&dock_area, window, cx);
-        _ = dock_area.update(cx, |view, cx| {
-            view.set_version(TILES_DOCK_AREA.version, window, cx);
-            view.set_center(dock_item, window, cx);
+        _ = dock_area.update(cx, |dock_area, cx| {
+            dock_area.set_version(TILES_DOCK_AREA.version, window, cx);
+            dock_area.set_center(dock_item, window, cx);
 
-            Self::save_tiles(&view.dump(cx)).unwrap();
+            Self::set_scrollbar_show(dock_area, cx);
+            Self::save_tiles(&dock_area.dump(cx)).unwrap();
         });
     }
 
@@ -392,7 +405,7 @@ pub fn open_new(
 
 impl Render for StoryTiles {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let sheet_layer = Root::render_sheet_layer(window, cx);
         let modal_layer = Root::render_modal_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
@@ -406,7 +419,7 @@ impl Render for StoryTiles {
             .text_color(cx.theme().foreground)
             .child(TitleBar::new().child(div().flex().items_center().child("Story Tiles")))
             .child(self.dock_area.clone())
-            .children(drawer_layer)
+            .children(sheet_layer)
             .children(modal_layer)
             .children(notification_layer)
     }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::{h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
@@ -8,6 +8,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window,
 };
 
+/// Tab variants.
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
 pub enum TabVariant {
     #[default]
@@ -378,6 +379,7 @@ impl TabVariant {
     }
 }
 
+/// A Tab element for the [`super::TabBar`].
 #[derive(IntoElement)]
 pub struct Tab {
     id: ElementId,
@@ -391,7 +393,7 @@ pub struct Tab {
     size: Size,
     pub(super) disabled: bool,
     pub(super) selected: bool,
-    on_click: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 
 impl From<&'static str> for Tab {
@@ -416,13 +418,13 @@ impl From<SharedString> for Tab {
 
 impl From<Icon> for Tab {
     fn from(icon: Icon) -> Self {
-        Self::icon(icon)
+        Self::default().icon(icon)
     }
 }
 
 impl From<IconName> for Tab {
     fn from(icon_name: IconName) -> Self {
-        Self::icon(Icon::new(icon_name))
+        Self::default().icon(Icon::new(icon_name))
     }
 }
 
@@ -453,21 +455,9 @@ impl Tab {
         this
     }
 
-    /// Create an empty tab.
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
-    /// Create a Icon tab.
-    pub fn icon(icon: impl Into<Icon>) -> Self {
-        let mut this = Self::default();
-        this.icon = Some(icon.into());
-        this
-    }
-
-    /// Set id to the tab.
-    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = id.into();
+    /// Set icon for the tab.
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
 
@@ -502,18 +492,18 @@ impl Tab {
     }
 
     /// Set the left side of the tab
-    pub fn prefix(mut self, prefix: impl Into<AnyElement>) -> Self {
-        self.prefix = Some(prefix.into());
+    pub fn prefix(mut self, prefix: impl IntoElement) -> Self {
+        self.prefix = Some(prefix.into_any_element());
         self
     }
 
     /// Set the right side of the tab
-    pub fn suffix(mut self, suffix: impl Into<AnyElement>) -> Self {
-        self.suffix = Some(suffix.into());
+    pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
+        self.suffix = Some(suffix.into_any_element());
         self
     }
 
-    /// Set disabled state to the tab
+    /// Set disabled state to the tab, default false.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -524,7 +514,13 @@ impl Tab {
         mut self,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_click = Some(Arc::new(on_click));
+        self.on_click = Some(Rc::new(on_click));
+        self
+    }
+
+    /// Set id to the tab.
+    pub(super) fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
         self
     }
 }

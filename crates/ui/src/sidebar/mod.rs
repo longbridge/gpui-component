@@ -22,7 +22,7 @@ pub use menu::*;
 const DEFAULT_WIDTH: Pixels = px(255.);
 const COLLAPSED_WIDTH: Pixels = px(48.);
 
-/// A sidebar
+/// A Sidebar element that can contain collapsible child elements.
 #[derive(IntoElement)]
 pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
     content: Vec<E>,
@@ -39,6 +39,7 @@ pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
 }
 
 impl<E: Collapsible + IntoElement> Sidebar<E> {
+    /// Create a new Sidebar on the given [`Side`].
     pub fn new(side: Side) -> Self {
         Self {
             content: vec![],
@@ -52,10 +53,12 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
         }
     }
 
+    /// Create a new Sidebar on the left side.
     pub fn left() -> Self {
         Self::new(Side::Left)
     }
 
+    /// Create a new Sidebar on the right side.
     pub fn right() -> Self {
         Self::new(Side::Right)
     }
@@ -109,7 +112,7 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
     }
 }
 
-/// Sidebar collapse button with Icon.
+/// Toggle button to collapse/expand the [`Sidebar`].
 #[derive(IntoElement)]
 pub struct SidebarToggleButton {
     btn: Button,
@@ -128,24 +131,29 @@ impl SidebarToggleButton {
         }
     }
 
+    /// Create a new SidebarToggleButton on the left side.
     pub fn left() -> Self {
         Self::new(Side::Left)
     }
 
+    /// Create a new SidebarToggleButton on the right side.
     pub fn right() -> Self {
         Self::new(Side::Right)
     }
 
+    /// Set the side of the toggle button.
     pub fn side(mut self, side: Side) -> Self {
         self.side = side;
         self
     }
 
+    /// Set the collapsed state of the toggle button.
     pub fn collapsed(mut self, collapsed: bool) -> Self {
         self.collapsed = collapsed;
         self
     }
 
+    /// Add a click handler to the toggle button.
     pub fn on_click(
         mut self,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,

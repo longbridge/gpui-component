@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, ContextModal as _, Icon, IconName,
+    ActiveTheme, Icon, IconName, WindowExt as _,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},

@@ -64,19 +64,23 @@ impl ButtonGroup {
         self
     }
 
-    /// With the multiple selection mode.
+    /// With the multiple selection mode, default is false (single selection).
     pub fn multiple(mut self, multiple: bool) -> Self {
         self.multiple = multiple;
         self
     }
 
     /// With the compact mode for the ButtonGroup.
+    ///
+    /// See also: [`Button::compact()`]
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
     }
 
     /// With the outline mode for the ButtonGroup.
+    ///
+    /// See also: [`Button::outline()`]
     pub fn outline(mut self) -> Self {
         self.outline = true;
         self

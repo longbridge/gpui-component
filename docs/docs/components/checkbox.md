@@ -26,6 +26,8 @@ Checkbox::new("my-checkbox")
     })
 ```
 
+The `on_click` callback is triggered when the user toggles the checkbox, receiving the **new checked state**.
+
 ### Controlled Checkbox
 
 ```rust

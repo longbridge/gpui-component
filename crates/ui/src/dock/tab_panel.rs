@@ -706,7 +706,7 @@ impl TabPanel {
                 }
 
                 Some(
-                    Tab::empty()
+                    Tab::default()
                         .map(|this| {
                             if let Some(tab_name) = panel.tab_name(cx) {
                                 this.child(tab_name)

@@ -9,15 +9,14 @@ mod calendar_story;
 mod chart_story;
 mod checkbox_story;
 mod clipboard_story;
+mod collapsible_story;
 mod color_picker_story;
 mod date_picker_story;
 mod description_list_story;
-mod drawer_story;
 mod form_story;
 mod group_box_story;
 mod icon_story;
 mod image_story;
-mod indicator_story;
 mod input_story;
 mod kbd_story;
 mod label_story;
@@ -33,9 +32,11 @@ mod radio_story;
 mod resizable_story;
 mod scrollable_story;
 mod select_story;
+mod sheet_story;
 mod sidebar_story;
 mod skeleton_story;
 mod slider_story;
+mod spinner_story;
 mod switch_story;
 mod table_story;
 mod tabs_story;
@@ -68,15 +69,14 @@ pub use calendar_story::CalendarStory;
 pub use chart_story::ChartStory;
 pub use checkbox_story::CheckboxStory;
 pub use clipboard_story::ClipboardStory;
+pub use collapsible_story::CollapsibleStory;
 pub use color_picker_story::ColorPickerStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
-pub use drawer_story::DrawerStory;
 pub use form_story::FormStory;
 pub use group_box_story::GroupBoxStory;
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
-pub use indicator_story::IndicatorStory;
 pub use input_story::InputStory;
 pub use kbd_story::KbdStory;
 pub use label_story::LabelStory;
@@ -93,9 +93,11 @@ pub use resizable_story::ResizableStory;
 pub use scrollable_story::ScrollableStory;
 pub use select_story::SelectStory;
 use serde::{Deserialize, Serialize};
+pub use sheet_story::SheetStory;
 pub use sidebar_story::SidebarStory;
 pub use skeleton_story::SkeletonStory;
 pub use slider_story::SliderStory;
+pub use spinner_story::SpinnerStory;
 pub use switch_story::SwitchStory;
 pub use table_story::TableStory;
 pub use tabs_story::TabsStory;
@@ -110,7 +112,7 @@ pub use webview_story::WebViewStory;
 pub use welcome_story::WelcomeStory;
 
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, Root, TitleBar,
+    ActiveTheme, IconName, Root, TitleBar, WindowExt,
     button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::GroupBox,
@@ -260,7 +262,7 @@ impl StoryRoot {
 
 impl Render for StoryRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let sheet_layer = Root::render_sheet_layer(window, cx);
         let modal_layer = Root::render_modal_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
@@ -272,7 +274,7 @@ impl Render for StoryRoot {
                     .child(self.title_bar.clone())
                     .child(div().flex_1().overflow_hidden().child(self.view.clone())),
             )
-            .children(drawer_layer)
+            .children(sheet_layer)
             .children(modal_layer)
             .children(notification_layer)
     }

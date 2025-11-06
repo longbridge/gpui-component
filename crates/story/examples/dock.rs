@@ -506,7 +506,7 @@ pub fn open_new(
 
 impl Render for StoryWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let sheet_layer = Root::render_sheet_layer(window, cx);
         let modal_layer = Root::render_modal_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
@@ -521,7 +521,7 @@ impl Render for StoryWorkspace {
             .flex_col()
             .child(self.title_bar.clone())
             .child(self.dock_area.clone())
-            .children(drawer_layer)
+            .children(sheet_layer)
             .children(modal_layer)
             .children(notification_layer)
     }

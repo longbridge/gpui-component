@@ -11,7 +11,7 @@ Modal component for creating dialogs, confirmations, and alerts. Supports overla
 
 ```rust
 use gpui_component::modal::ModalButtonProps;
-use gpui_component::ContextModal;
+use gpui_component::WindowExt;
 ```
 
 ## Usage

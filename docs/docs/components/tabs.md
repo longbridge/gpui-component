@@ -113,9 +113,9 @@ TabBar::new("tabs").large()
 use gpui_component::{Icon, IconName};
 
 TabBar::new("icon-tabs")
-    .child(Tab::icon(IconName::User).with_variant(TabVariant::Tab))
-    .child(Tab::icon(IconName::Settings).with_variant(TabVariant::Tab))
-    .child(Tab::icon(IconName::Mail).with_variant(TabVariant::Tab))
+    .child(Tab::default().icon(IconName::User).with_variant(TabVariant::Tab))
+    .child(Tab::default().icon(IconName::Settings).with_variant(TabVariant::Tab))
+    .child(Tab::default().icon(IconName::Mail).with_variant(TabVariant::Tab))
 ```
 
 ### Tabs with Prefix and Suffix
@@ -178,9 +178,14 @@ impl Render for TabsView {
 
 ### Tabs with Menu
 
+Use `menu` option to enable a dropdown menu for tab selection when there are many tabs,
+this is default `false`.
+
+If enable, the will have a dropdown button at the end of the tab bar to show all tabs in a menu.
+
 ```rust
 TabBar::new("tabs-with-menu")
-    .with_menu(true)
+    .menu(true)
     .selected_index(0)
     .child(Tab::new("Account"))
     .child(Tab::new("Profile"))

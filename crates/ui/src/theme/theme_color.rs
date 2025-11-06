@@ -6,6 +6,7 @@ use gpui::Hsla;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Theme colors used throughout the UI components.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 pub struct ThemeColor {
     /// Used for accents such as hover background on MenuItem, ListItem, etc.
@@ -199,25 +200,39 @@ pub struct ThemeColor {
     /// This is only works on Linux, other platforms we can't change the window border color.
     pub window_border: Hsla,
 
+    /// The base red color.
     pub red: Hsla,
+    /// The base red light color.
     pub red_light: Hsla,
+    /// The base green color.
     pub green: Hsla,
+    /// The base green light color.
     pub green_light: Hsla,
+    /// The base blue color.
     pub blue: Hsla,
+    /// The base blue light color.
     pub blue_light: Hsla,
+    /// The base yellow color.
     pub yellow: Hsla,
+    /// The base yellow light color.
     pub yellow_light: Hsla,
+    /// The base magenta color.
     pub magenta: Hsla,
+    /// The base magenta light color.
     pub magenta_light: Hsla,
+    /// The base cyan color.
     pub cyan: Hsla,
+    /// The base cyan light color.
     pub cyan_light: Hsla,
 }
 
 impl ThemeColor {
+    /// Get the default light theme colors.
     pub fn light() -> Arc<Self> {
         DEFAULT_THEME_COLORS[&ThemeMode::Light].0.clone()
     }
 
+    /// Get the default dark theme colors.
     pub fn dark() -> Arc<Self> {
         DEFAULT_THEME_COLORS[&ThemeMode::Dark].0.clone()
     }

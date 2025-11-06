@@ -2,7 +2,7 @@ use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    App, AppContext, Context, Edges, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
+    App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString, Styled,
     Subscription, Task, Timer, Window, actions, div, prelude::FluentBuilder as _, px,
 };
@@ -332,6 +332,8 @@ pub struct ListStory {
     focus_handle: FocusHandle,
     company_list: Entity<ListState<CompanyListDelegate>>,
     selected_company: Option<Rc<Company>>,
+    selectable: bool,
+    searchable: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -367,7 +369,7 @@ impl ListStory {
         };
         delegate.extend_more(100);
 
-        let company_list = cx.new(|cx| ListState::new(delegate, window, cx));
+        let company_list = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
 
         let _subscriptions =
             vec![
@@ -408,6 +410,8 @@ impl ListStory {
 
         Self {
             focus_handle: cx.focus_handle(),
+            searchable: true,
+            selectable: true,
             company_list,
             selected_company: None,
             _subscriptions,
@@ -419,6 +423,20 @@ impl ListStory {
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);
         }
+    }
+
+    fn toggle_selectable(&mut self, selectable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.selectable = selectable;
+        self.company_list.update(cx, |list, cx| {
+            list.set_selectable(self.selectable, cx);
+        })
+    }
+
+    fn toggle_searchable(&mut self, searchable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.searchable = searchable;
+        self.company_list.update(cx, |list, cx| {
+            list.set_searchable(self.searchable, cx);
+        })
     }
 }
 
@@ -523,6 +541,22 @@ impl Render for ListStory {
                             })),
                     )
                     .child(
+                        Checkbox::new("selectable")
+                            .label("Selectable")
+                            .checked(self.selectable)
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_selectable(*check, window, cx)
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("searchable")
+                            .label("Searchable")
+                            .checked(self.searchable)
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_searchable(*check, window, cx)
+                            })),
+                    )
+                    .child(
                         Checkbox::new("loading")
                             .label("Loading")
                             .checked(self.company_list.read(cx).delegate().loading)
@@ -535,13 +569,13 @@ impl Render for ListStory {
                     ),
             )
             .child(
-                div()
+                List::new(&self.company_list)
+                    .p(px(8.))
                     .flex_1()
                     .w_full()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius)
-                    .child(List::new(&self.company_list).paddings(Edges::all(px(8.)))),
+                    .rounded(cx.theme().radius),
             )
     }
 }

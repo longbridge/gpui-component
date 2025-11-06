@@ -28,6 +28,7 @@ pub fn init(cx: &mut App) {
 
 /// An menu item in a popup menu.
 pub enum PopupMenuItem {
+    /// A menu separator item.
     Separator,
     /// A non-interactive label item.
     Label(SharedString),
@@ -345,8 +346,8 @@ impl PopupMenu {
     /// Set the menu to be scrollable to show vertical scrollbar.
     ///
     /// NOTE: If this is true, the sub-menus will cannot be support.
-    pub fn scrollable(mut self) -> Self {
-        self.scrollable = true;
+    pub fn scrollable(mut self, scrollable: bool) -> Self {
+        self.scrollable = scrollable;
         self
     }
 

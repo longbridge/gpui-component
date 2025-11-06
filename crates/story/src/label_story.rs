@@ -97,7 +97,7 @@ impl Render for LabelStory {
             .child(
                 h_flex()
                     .gap_x_3()
-                    .child(Input::new(&self.highlights_input).cleanable().w_1_3())
+                    .child(Input::new(&self.highlights_input).w_1_3())
                     .child(
                         Checkbox::new("prefix")
                             .label("Prefix")

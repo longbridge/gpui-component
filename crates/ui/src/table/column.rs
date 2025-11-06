@@ -8,15 +8,31 @@ use crate::ActiveTheme as _;
 /// Represents a column in a table, used for initializing table columns.
 #[derive(Debug, Clone)]
 pub struct Column {
+    /// The unique key of the column.
+    ///
+    /// This is used to identify the column in the table and your data source.
+    ///
+    /// In most cases, it should match the field name in your data source.
     pub key: SharedString,
+    /// The display name of the column.
     pub name: SharedString,
+    /// The text alignment of the column.
     pub align: TextAlign,
+    /// The sorting behavior of the column, if any.
+    ///
+    /// If `None`, the column is not sortable.
     pub sort: Option<ColumnSort>,
+    /// The padding of the column.
     pub paddings: Option<Edges<Pixels>>,
+    /// The width of the column.
     pub width: Pixels,
+    /// Whether the column is fixed, the fixed column will pin at the left side when scrolling horizontally.
     pub fixed: Option<ColumnFixed>,
+    /// Whether the column is resizable.
     pub resizable: bool,
+    /// Whether the column is movable.
     pub movable: bool,
+    /// Whether the column is selectable, if true this column's cells can be selected in column selection mode.
     pub selectable: bool,
 }
 
@@ -89,6 +105,7 @@ impl Column {
         self
     }
 
+    /// Set the padding of the column to 0px.
     pub fn p_0(mut self) -> Self {
         self.paddings = Some(Edges::all(px(0.)));
         self
@@ -164,6 +181,7 @@ pub(crate) struct DragColumn {
     pub(crate) col_ix: usize,
 }
 
+/// The sorting behavior of a column.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum ColumnSort {
     /// No sorting.

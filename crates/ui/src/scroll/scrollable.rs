@@ -33,21 +33,20 @@ where
     }
 
     /// Set only a vertical scrollbar.
-    pub fn vertical(mut self) -> Self {
-        self.set_axis(ScrollbarAxis::Vertical);
-        self
+    pub fn vertical(self) -> Self {
+        self.axis(ScrollbarAxis::Vertical)
     }
 
     /// Set only a horizontal scrollbar.
     /// In current implementation, this is not supported yet.
-    pub fn horizontal(mut self) -> Self {
-        self.set_axis(ScrollbarAxis::Horizontal);
-        self
+    pub fn horizontal(self) -> Self {
+        self.axis(ScrollbarAxis::Horizontal)
     }
 
     /// Set the axis of the scroll view.
-    pub fn set_axis(&mut self, axis: impl Into<ScrollbarAxis>) {
+    pub fn axis(mut self, axis: impl Into<ScrollbarAxis>) -> Self {
         self.axis = axis.into();
+        self
     }
 
     fn with_element_state<R>(
@@ -68,6 +67,7 @@ where
     }
 }
 
+#[doc(hidden)]
 pub struct ScrollViewState {
     state: ScrollbarState,
     handle: ScrollHandle,

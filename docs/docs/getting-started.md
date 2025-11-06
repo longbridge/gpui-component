@@ -157,6 +157,12 @@ Button::new("btn").outline()
 
 ## Icons
 
+:::info
+Icons are not bundled with GPUI Component to keep the library lightweight.
+
+Continue read [Icons & Assets](./assets.md) to learn how to add icons to your project.
+:::
+
 GPUI Component has an `Icon` element, but does not include SVG files by default.
 
 The examples use [Lucide](https://lucide.dev) icons. You can use any icons you like by naming the SVG files as defined in `IconName`. Add the icons you need to your project.

@@ -12,18 +12,18 @@ use crate::{
     button::{Button, ButtonVariants as _},
     h_flex,
     modal::overlay_color,
-    root::ContextModal as _,
     title_bar::TITLE_BAR_HEIGHT,
-    v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _,
+    v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
 };
 
-const CONTEXT: &str = "Drawer";
+const CONTEXT: &str = "Sheet";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
+/// Sheet component that slides in from the side of the window.
 #[derive(IntoElement)]
-pub struct Drawer {
+pub struct Sheet {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) placement: Placement,
     pub(crate) size: DefiniteLength,
@@ -37,7 +37,8 @@ pub struct Drawer {
     overlay_closable: bool,
 }
 
-impl Drawer {
+impl Sheet {
+    /// Creates a new Sheet.
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
@@ -54,51 +55,51 @@ impl Drawer {
         }
     }
 
-    /// Sets the title of the drawer.
+    /// Sets the title of the sheet.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = Some(title.into_any_element());
         self
     }
 
-    /// Set the footer of the drawer.
+    /// Set the footer of the sheet.
     pub fn footer(mut self, footer: impl IntoElement) -> Self {
         self.footer = Some(footer.into_any_element());
         self
     }
 
-    /// Sets the size of the drawer, default is 350px.
+    /// Sets the size of the sheet, default is 350px.
     pub fn size(mut self, size: impl Into<DefiniteLength>) -> Self {
         self.size = size.into();
         self
     }
 
-    /// Sets the margin top of the drawer, default is 0px.
+    /// Sets the margin top of the sheet, default is 0px.
     ///
-    /// This is used to let Drawer be placed below a Windows Title, you can give the height of the title bar.
+    /// This is used to let Sheet be placed below a Windows Title, you can give the height of the title bar.
     pub fn margin_top(mut self, top: Pixels) -> Self {
         self.margin_top = top;
         self
     }
 
-    /// Sets whether the drawer is resizable, default is `true`.
+    /// Sets whether the sheet is resizable, default is `true`.
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
         self
     }
 
-    /// Set whether the drawer should have an overlay, default is `true`.
+    /// Set whether the sheet should have an overlay, default is `true`.
     pub fn overlay(mut self, overlay: bool) -> Self {
         self.overlay = overlay;
         self
     }
 
-    /// Set whether the drawer should be closable by clicking the overlay, default is `true`.
+    /// Set whether the sheet should be closable by clicking the overlay, default is `true`.
     pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
         self.overlay_closable = overlay_closable;
         self
     }
 
-    /// Listen to the close event of the drawer.
+    /// Listen to the close event of the sheet.
     pub fn on_close(
         mut self,
         on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -108,19 +109,19 @@ impl Drawer {
     }
 }
 
-impl EventEmitter<DismissEvent> for Drawer {}
-impl ParentElement for Drawer {
+impl EventEmitter<DismissEvent> for Sheet {}
+impl ParentElement for Sheet {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.content.extend(elements);
     }
 }
-impl Styled for Drawer {
+impl Styled for Sheet {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         self.content.style()
     }
 }
 
-impl RenderOnce for Drawer {
+impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
         let titlebar_height = self.margin_top;
@@ -152,14 +153,14 @@ impl RenderOnce for Drawer {
 
                                 if self.overlay_closable && event.button == MouseButton::Left {
                                     on_close(&ClickEvent::default(), window, cx);
-                                    window.close_drawer(cx);
+                                    window.close_sheet(cx);
                                 }
                             }
                         })
                     })
                     .child(
                         v_flex()
-                            .id("drawer")
+                            .id("sheet")
                             .tab_group()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
@@ -169,7 +170,7 @@ impl RenderOnce for Drawer {
                                     cx.propagate();
 
                                     on_close(&ClickEvent::default(), window, cx);
-                                    window.close_drawer(cx);
+                                    window.close_sheet(cx);
                                 }
                             })
                             .absolute()
@@ -178,7 +179,7 @@ impl RenderOnce for Drawer {
                             .border_color(cx.theme().border)
                             .shadow_xl()
                             .map(|this| {
-                                // Set the size of the drawer.
+                                // Set the size of the sheet.
                                 if placement.is_horizontal() {
                                     this.h_full().w(self.size)
                                 } else {
@@ -210,7 +211,7 @@ impl RenderOnce for Drawer {
                                             .icon(IconName::Close)
                                             .on_click(move |_, window, cx| {
                                                 on_close(&ClickEvent::default(), window, cx);
-                                                window.close_drawer(cx);
+                                                window.close_sheet(cx);
                                             }),
                                     ),
                             )

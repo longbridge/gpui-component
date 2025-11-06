@@ -25,17 +25,12 @@ Clipboard::new("my-clipboard")
     })
 ```
 
-### With Dynamic Content
+### Using Dynamic Values
 
-```rust
-Clipboard::new("clipboard")
-    .content(|_, _| Label::new("Copy this text"))
-    .value("Hello, World!")
-```
+The `value_fn` method allows you to provide a closure that generates the content to be copied at the time of the copy action.
 
-### Using Value Function
-
-For dynamic values that should be computed when the copy action occurs:
+- This is useful when the content to be copied depends on the current state of the application.
+- And in some cases, it may have a larger overhead to compute, so you only want to do it when the user actually clicks the copy button.
 
 ```rust
 let state = some_state.clone();
@@ -53,14 +48,14 @@ Clipboard::new("dynamic-clipboard")
 ```rust
 use gpui_component::label::Label;
 
-Clipboard::new("custom-clipboard")
-    .content(|_, _|
-        h_flex()
-            .gap_2()
-            .child(Label::new("Share URL"))
-            .child(Icon::new(IconName::Share))
-    )
-    .value("https://example.com")
+ h_flex()
+     .gap_2()
+     .child(Label::new("Share URL"))
+     .child(Icon::new(IconName::Share))
+     .child(
+        Clipboard::new("custom-clipboard")
+        .value("https://example.com")
+     )
 ```
 
 ### In Input Fields
@@ -101,12 +96,16 @@ Clipboard::new("simple")
 ### With User Feedback
 
 ```rust
-Clipboard::new("feedback")
-    .content(|_, _| Label::new("API Key"))
-    .value("sk-1234567890abcdef")
-    .on_copied(|_, window, cx| {
-        window.push_notification("API key copied to clipboard", cx)
-    })
+h_flex()
+    .gap_2()
+    .child(Label::new("Your API Key:"))
+    .child(
+        Clipboard::new("feedback")
+            .value("sk-1234567890abcdef")
+            .on_copied(|_, window, cx| {
+                window.push_notification("API key copied to clipboard", cx)
+            })
+    )
 ```
 
 ### Form Field Integration
@@ -149,7 +148,6 @@ let app_state = cx.new(|_| AppState {
 });
 
 Clipboard::new("current-url")
-    .content(|_, _| Label::new("Share current page"))
     .value_fn({
         let state = app_state.clone();
         move |_, cx| {

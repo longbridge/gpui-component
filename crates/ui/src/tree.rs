@@ -197,6 +197,7 @@ impl TreeState {
         }
     }
 
+    /// Set the tree items.
     pub fn items(mut self, items: impl Into<Vec<TreeItem>>) -> Self {
         let items = items.into();
         self.entries.clear();
@@ -206,6 +207,7 @@ impl TreeState {
         self
     }
 
+    /// Set the tree items.
     pub fn set_items(&mut self, items: impl Into<Vec<TreeItem>>, cx: &mut Context<Self>) {
         let items = items.into();
         self.entries.clear();

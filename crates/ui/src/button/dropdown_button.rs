@@ -29,6 +29,7 @@ pub struct DropdownButton {
 }
 
 impl DropdownButton {
+    /// Create a new DropdownButton.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -45,11 +46,13 @@ impl DropdownButton {
         }
     }
 
+    /// Set the left button of the dropdown button.
     pub fn button(mut self, button: Button) -> Self {
         self.button = Some(button);
         self
     }
 
+    /// Set the dropdown menu of the button.
     pub fn dropdown_menu(
         mut self,
         menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
@@ -58,6 +61,7 @@ impl DropdownButton {
         self
     }
 
+    /// Set the dropdown menu of the button with anchor corner.
     pub fn dropdown_menu_with_anchor(
         mut self,
         anchor: impl Into<Corner>,
@@ -68,16 +72,23 @@ impl DropdownButton {
         self
     }
 
+    /// Set the rounded style of the button.
     pub fn rounded(mut self, rounded: impl Into<ButtonRounded>) -> Self {
         self.rounded = rounded.into();
         self
     }
 
+    /// Set the button to compact style.
+    ///
+    /// See also: [`Button::compact`]
     pub fn compact(mut self) -> Self {
         self.compact = Some(true);
         self
     }
 
+    /// Set the button to outline style.
+    ///
+    /// See also: [`Button::outline`]
     pub fn outline(mut self) -> Self {
         self.outline = Some(true);
         self

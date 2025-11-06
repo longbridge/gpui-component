@@ -1085,7 +1085,7 @@ impl Element for TextElement {
 
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
-            self.layout_indent_guides(state, &last_layout, &text_style, window);
+            self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
 
         PrepaintState {
             bounds,

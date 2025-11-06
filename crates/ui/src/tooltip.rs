@@ -10,6 +10,8 @@ enum TooltipContext {
     Element(Box<dyn Fn(&mut Window, &mut App) -> AnyElement>),
 }
 
+/// A Tooltip element that can display text or custom content,
+/// with optional key binding information.
 pub struct Tooltip {
     style: StyleRefinement,
     content: TooltipContext,

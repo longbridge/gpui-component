@@ -6,6 +6,7 @@ use gpui::{
 };
 use std::rc::Rc;
 
+/// Menu for the [`super::Sidebar`]
 #[derive(IntoElement)]
 pub struct SidebarMenu {
     collapsed: bool,
@@ -13,6 +14,7 @@ pub struct SidebarMenu {
 }
 
 impl SidebarMenu {
+    /// Create a new SidebarMenu
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
@@ -20,11 +22,15 @@ impl SidebarMenu {
         }
     }
 
+    /// Add a [`SidebarMenuItem`] child menu item to the sidebar menu.
+    ///
+    /// See also [`SidebarMenu::children`].
     pub fn child(mut self, child: impl Into<SidebarMenuItem>) -> Self {
         self.items.push(child.into());
         self
     }
 
+    /// Add multiple [`SidebarMenuItem`] child menu items to the sidebar menu.
     pub fn children(
         mut self,
         children: impl IntoIterator<Item = impl Into<SidebarMenuItem>>,
@@ -33,6 +39,7 @@ impl SidebarMenu {
         self
     }
 }
+
 impl Collapsible for SidebarMenu {
     fn is_collapsed(&self) -> bool {
         self.collapsed
@@ -43,6 +50,7 @@ impl Collapsible for SidebarMenu {
         self
     }
 }
+
 impl RenderOnce for SidebarMenu {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         v_flex().gap_2().children(
@@ -54,7 +62,7 @@ impl RenderOnce for SidebarMenu {
     }
 }
 
-/// A sidebar menu item
+/// Menu item for the [`SidebarMenu`]
 #[derive(IntoElement)]
 pub struct SidebarMenuItem {
     id: ElementId,
@@ -68,7 +76,7 @@ pub struct SidebarMenuItem {
 }
 
 impl SidebarMenuItem {
-    /// Create a new SidebarMenuItem with a label
+    /// Create a new [`SidebarMenuItem`] with a label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             id: ElementId::Integer(0),
@@ -85,12 +93,6 @@ impl SidebarMenuItem {
     /// Set the icon for the menu item
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.icon = Some(icon.into());
-        self
-    }
-
-    /// Set id to the menu item.
-    fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = id.into();
         self
     }
 
@@ -123,6 +125,12 @@ impl SidebarMenuItem {
     /// Set the suffix for the menu item.
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
+    /// Set id to the menu item.
+    fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
         self
     }
 

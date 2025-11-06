@@ -14,15 +14,16 @@ collapsed: false
 - [Badge](badge) - Count badges and indicators
 - [Button](button) - Interactive buttons with multiple variants
 - [Checkbox](checkbox) - Binary selection control
+- [Collapsible](collapsible) - Expandable/collapsible content
 - [Icon](icon) - Icon display component
 - [Image](image) - Image display with fallbacks
-- [Indicator](indicator) - Loading and status indicators
 - [Kbd](kbd) - Keyboard shortcut display
 - [Label](label) - Text labels for form elements
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options
 - [Skeleton](skeleton) - Loading placeholders
 - [Slider](slider) - Value selection from a range
+- [Spinner](spinner) - Loading and status spinners
 - [Switch](switch) - Toggle on/off control
 - [Tag](tag) - Labels and categories
 - [Toggle](toggle) - Toggle button states
@@ -42,13 +43,13 @@ collapsed: false
 ### Layout Components
 
 - [DescriptionList](description-list) - Key-value pair display
-- [Drawer](drawer) - Slide-in panel from edges
 - [GroupBox](group-box) - Grouped content with borders
 - [Modal](modal) - Dialog and modal windows
 - [Notification](notification) - Toast notifications
 - [Popover](popover) - Floating content display
 - [Resizable](resizable) - Resizable panels and containers
 - [Scrollable](scrollable) - Scrollable containers
+- [Sheet](sheet) - Slide-in panel from edges
 - [Sidebar](sidebar) - Navigation sidebar
 
 ### Advanced Components

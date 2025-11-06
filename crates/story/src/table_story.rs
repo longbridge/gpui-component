@@ -16,10 +16,10 @@ use gpui_component::{
     button::Button,
     checkbox::Checkbox,
     h_flex,
-    indicator::Indicator,
     input::{Input, InputEvent, InputState},
     label::Label,
     menu::{DropdownMenu, PopupMenu},
+    spinner::Spinner,
     table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent, TableState},
     v_flex,
 };
@@ -942,10 +942,7 @@ impl Render for TableStory {
                                 )
                                 .when(delegate.loading, |this| {
                                     this.child(
-                                        h_flex()
-                                            .gap_1()
-                                            .child(Indicator::new())
-                                            .child("Loading..."),
+                                        h_flex().gap_1().child(Spinner::new()).child("Loading..."),
                                     )
                                 }),
                         )
