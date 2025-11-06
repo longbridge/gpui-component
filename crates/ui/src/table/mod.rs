@@ -1006,7 +1006,7 @@ where
 
         if row_ix < rows_count {
             let is_last_row = row_ix + 1 == rows_count;
-            let need_render_border = !is_last_row || !is_filled;
+            let need_render_border = is_selected || !is_last_row || !is_filled;
 
             let mut tr = self.delegate.render_tr(row_ix, window, cx);
             let style = tr.style().clone();
