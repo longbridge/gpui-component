@@ -57,6 +57,8 @@ const config: UserConfig = {
       message:
         "GPUI Component is an open source project under the Apache-2.0 License, developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.",
       copyright: `
+      <a href="https://gpui.rs">GPUI</a>
+      |
       <a href="/gpui-component/contributors">Contributors</a>
       |
       <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>

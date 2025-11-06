@@ -274,7 +274,7 @@ Button::new("large-menu")
     .label("Many Options")
     .dropdown_menu(|menu, window, cx| {
         let mut menu = menu
-            .scrollable()
+            .scrollable(true)
             .max_h(px(300.))
             .label("Select an option");
 
@@ -296,7 +296,7 @@ Control menu dimensions:
 menu.min_w(px(200.))      // Minimum width
     .max_w(px(400.))      // Maximum width
     .max_h(px(300.))      // Maximum height
-    .scrollable()         // Enable scrolling when content exceeds max height
+    .scrollable(true)         // Enable scrolling when content exceeds max height
 ```
 
 ### Action Context

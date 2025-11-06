@@ -1,7 +1,7 @@
 use gpui::{
     px, relative, App, Axis, BorderStyle, Bounds, ContentMask, Corners, Edges, Element, ElementId,
-    EntityId, GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels,
-    Point, Position, ScrollHandle, ScrollWheelEvent, Style, Window,
+    GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point,
+    Position, ScrollHandle, ScrollWheelEvent, Style, Window,
 };
 
 use crate::AxisExt;
@@ -12,7 +12,6 @@ use crate::AxisExt;
 /// You can use this `scroll_handle` to control what you want to scroll.
 /// This is only can handle once axis scrolling.
 pub struct ScrollableMask {
-    view_id: EntityId,
     axis: Axis,
     scroll_handle: ScrollHandle,
     debug: Option<Hsla>,
@@ -20,9 +19,8 @@ pub struct ScrollableMask {
 
 impl ScrollableMask {
     /// Create a new scrollable mask element.
-    pub fn new(view_id: EntityId, axis: Axis, scroll_handle: &ScrollHandle) -> Self {
+    pub fn new(axis: Axis, scroll_handle: &ScrollHandle) -> Self {
         Self {
-            view_id,
             scroll_handle: scroll_handle.clone(),
             axis,
             debug: None,
@@ -106,6 +104,7 @@ impl Element for ScrollableMask {
         window: &mut Window,
         _: &mut App,
     ) {
+        let is_horizontal = self.axis.is_horizontal();
         let line_height = window.line_height();
         let bounds = hitbox.bounds;
 
@@ -122,43 +121,38 @@ impl Element for ScrollableMask {
             }
 
             window.on_mouse_event({
-                let view_id = self.view_id;
-                let is_horizontal = self.axis.is_horizontal();
+                let view_id = window.current_view();
                 let scroll_handle = self.scroll_handle.clone();
-                let hitbox = hitbox.clone();
-                let mouse_position = window.mouse_position();
-                let last_offset = scroll_handle.offset();
 
-                move |event: &ScrollWheelEvent, phase, window, cx| {
-                    if bounds.contains(&mouse_position)
-                        && phase.bubble()
-                        && hitbox.is_hovered(window)
-                    {
-                        let mut offset = scroll_handle.offset();
-                        let mut delta = event.delta.pixel_delta(line_height);
+                move |event: &ScrollWheelEvent, phase, _, cx| {
+                    if !(bounds.contains(&event.position) && phase.bubble()) {
+                        return;
+                    }
 
-                        // Limit for only one way scrolling at same time.
-                        // When use MacBook touchpad we may get both x and y delta,
-                        // only allows the one that more to scroll.
-                        if !delta.x.is_zero() && !delta.y.is_zero() {
-                            if delta.x.abs() > delta.y.abs() {
-                                delta.y = px(0.);
-                            } else {
-                                delta.x = px(0.);
-                            }
-                        }
+                    let mut offset = scroll_handle.offset();
+                    let mut delta = event.delta.pixel_delta(line_height);
 
-                        if is_horizontal {
-                            offset.x += delta.x;
+                    // Limit for only one way scrolling at same time.
+                    // When use MacBook touchpad we may get both x and y delta,
+                    // only allows the one that more to scroll.
+                    if !delta.x.is_zero() && !delta.y.is_zero() {
+                        if delta.x.abs() > delta.y.abs() {
+                            delta.y = px(0.);
                         } else {
-                            offset.y += delta.y;
+                            delta.x = px(0.);
                         }
+                    }
 
-                        if last_offset != offset {
-                            scroll_handle.set_offset(offset);
-                            cx.notify(view_id);
-                            cx.stop_propagation();
-                        }
+                    if is_horizontal {
+                        offset.x += delta.x;
+                    } else {
+                        offset.y += delta.y;
+                    }
+
+                    if offset != scroll_handle.offset() {
+                        scroll_handle.set_offset(offset);
+                        cx.notify(view_id);
+                        cx.stop_propagation();
                     }
                 }
             });

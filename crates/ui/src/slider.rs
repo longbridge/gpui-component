@@ -9,7 +9,7 @@ use gpui::{
 };
 
 #[derive(Clone)]
-pub struct DragThumb((EntityId, bool));
+struct DragThumb((EntityId, bool));
 
 impl Render for DragThumb {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -17,6 +17,7 @@ impl Render for DragThumb {
     }
 }
 
+/// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
     Change(SliderValue),
 }
@@ -77,16 +78,19 @@ impl SliderValue {
         }
     }
 
+    /// Check if the value is a single value.
     #[inline]
     pub fn is_single(&self) -> bool {
         matches!(self, SliderValue::Single(_))
     }
 
+    /// Check if the value is a range of values.
     #[inline]
     pub fn is_range(&self) -> bool {
         matches!(self, SliderValue::Range(_, _))
     }
 
+    /// Get the start value.
     pub fn start(&self) -> f32 {
         match self {
             SliderValue::Single(value) => *value,
@@ -94,6 +98,7 @@ impl SliderValue {
         }
     }
 
+    /// Get the end value.
     pub fn end(&self) -> f32 {
         match self {
             SliderValue::Single(value) => *value,
@@ -131,6 +136,7 @@ pub struct SliderState {
 }
 
 impl SliderState {
+    /// Create a new [`SliderState`].
     pub fn new() -> Self {
         Self {
             min: 0.0,

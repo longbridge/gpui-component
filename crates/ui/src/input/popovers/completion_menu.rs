@@ -20,7 +20,7 @@ use crate::{
         InputState, RopeExt,
     },
     label::Label,
-    list::{List, ListDelegate, ListEvent},
+    list::{List, ListDelegate, ListEvent, ListState},
     ActiveTheme, IndexPath, Selectable,
 };
 
@@ -137,12 +137,7 @@ impl ListDelegate for ContextMenuDelegate {
         self.items.len()
     }
 
-    fn render_item(
-        &self,
-        ix: crate::IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: crate::IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
         Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
     }
@@ -151,13 +146,13 @@ impl ListDelegate for ContextMenuDelegate {
         &mut self,
         ix: Option<crate::IndexPath>,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_ix = ix.map(|i| i.row).unwrap_or(0);
         cx.notify();
     }
 
-    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<List<Self>>) {
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         let Some(item) = self.selected_item() else {
             return;
         };
@@ -172,7 +167,7 @@ impl ListDelegate for ContextMenuDelegate {
 pub struct CompletionMenu {
     offset: usize,
     editor: Entity<InputState>,
-    list: Entity<List<ContextMenuDelegate>>,
+    list: Entity<ListState<ContextMenuDelegate>>,
     open: bool,
     bounds: Bounds<Pixels>,
 
@@ -200,11 +195,7 @@ impl CompletionMenu {
                 selected_ix: 0,
             };
 
-            let list = cx.new(|cx| {
-                List::new(menu, window, cx)
-                    .no_query()
-                    .max_h(MAX_MENU_HEIGHT)
-            });
+            let list = cx.new(|cx| ListState::new(menu, window, cx));
 
             let _subscriptions =
                 vec![
@@ -437,7 +428,7 @@ impl Render for CompletionMenu {
                     editor_popover("completion-menu", cx)
                         .max_w(max_width)
                         .min_w(px(120.))
-                        .child(self.list.clone())
+                        .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
                         .child(
                             canvas(
                                 move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),

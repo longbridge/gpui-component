@@ -11,7 +11,7 @@
             <a href="docs/components"><Blocks /> Components</a>
         </div>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
+    <div class="features">
         <div class="feature-card">
             <h3>
                 <div class="icon bg-green-500 dark:bg-green-700">
@@ -107,21 +107,22 @@ import {
 @reference "./.vitepress/theme/style.css";
 
 .banner {
-    @apply mb-8 py-12 xl:py-30 text-center;
+    @apply -mt-20 py-12 xl:py-30 text-center border border-b-0 border-dashed border-(--border);
+
     h1 {
-        @apply text-3xl xl:text-5xl font-bold mb-2 text-[var(--primary)];
+        @apply mt-20 text-3xl xl:text-5xl font-bold mb-2 text-(--primary);
     }
     .banner-description {
-        @apply text-lg xl:text-2xl text-[var(--muted-foreground)] mt-2 xl:mt-4;
+        @apply text-lg xl:text-2xl text-(--muted-foreground) mt-2 xl:mt-4;
     }
     .actions {
         @apply mt-4 flex gap-4 justify-center text-sm;
         a {
             @apply flex items-center h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 no-underline
-            bg-[var(--secondary)] hover:bg-[var(--secondary)]/70 text-[var(--secondary-foreground)];
+            bg-(--secondary) hover:bg-(--secondary)/70 text-(--secondary-foreground);
 
             &.btn-primary {
-                @apply bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)];
+                @apply bg-(--primary) hover:bg-(--primary)/90 text-(--primary-foreground);
             }
 
             .lucide {
@@ -130,11 +131,17 @@ import {
         }
     }
 }
+
+.features {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-12 border-b border-r border-dashed border-(--border);
+}
+
 .feature-card {
-    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-[var(--border)] rounded-lg;
+    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-b-0 border-(--border) border-dashed;
+    @apply border-r-0 last:border-r-0 md:last:border-b-0 lg:last:border-b-0;
 
     h3 {
-        @apply m-0 p-0 text-lg text-[var(--primary)] flex gap-3 items-center;
+        @apply m-0 p-0 text-lg text-(--primary) flex gap-3 items-center;
 
         .icon {
             @apply flex h-9 w-9 items-center justify-center rounded-md text-white;

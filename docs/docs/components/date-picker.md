@@ -94,7 +94,7 @@ DatePicker::new(&date_picker)
 
 ```rust
 DatePicker::new(&date_picker)
-    .cleanable() // Shows clear button when date is selected
+    .cleanable(true) // Show clear button when date is selected
 ```
 
 ### Different Sizes
@@ -360,91 +360,6 @@ DatePicker::new(&date_picker)
     .presets(quarterly_presets)
 ```
 
-## API Reference
-
-### DatePickerState
-
-| Method                       | Description                                 |
-| ---------------------------- | ------------------------------------------- |
-| `new(window, cx)`            | Create a single date picker state           |
-| `range(window, cx)`          | Create a date range picker state            |
-| `date_format(format)`        | Set display format (default: "%Y/%m/%d")    |
-| `number_of_months(count)`    | Set calendar months to display (default: 1) |
-| `disabled_matcher(matcher)`  | Set date disabling rules                    |
-| `date()`                     | Get current selected date                   |
-| `set_date(date, window, cx)` | Set selected date programmatically          |
-| `focus_handle(cx)`           | Get focus handle                            |
-
-### DatePicker
-
-| Method                    | Description                             |
-| ------------------------- | --------------------------------------- |
-| `new(state)`              | Create date picker with state entity    |
-| `placeholder(text)`       | Set placeholder text                    |
-| `cleanable()`             | Show clear button when date selected    |
-| `presets(presets)`        | Set quick selection presets             |
-| `number_of_months(count)` | Set months to display (overrides state) |
-| `appearance(bool)`        | Enable/disable default styling          |
-| `disabled(bool)`          | Set disabled state                      |
-| `large()`                 | Large size                              |
-| `small()`                 | Small size                              |
-
-### DateRangePreset
-
-| Method                     | Description               |
-| -------------------------- | ------------------------- |
-| `single(label, date)`      | Create single date preset |
-| `range(label, start, end)` | Create date range preset  |
-
-### Date
-
-| Variant                                       | Description           |
-| --------------------------------------------- | --------------------- |
-| `Single(Option<NaiveDate>)`                   | Single date selection |
-| `Range(Option<NaiveDate>, Option<NaiveDate>)` | Date range selection  |
-
-| Method               | Description                               |
-| -------------------- | ----------------------------------------- |
-| `format(format_str)` | Format date(s) using chrono format string |
-| `is_some()`          | Check if date is selected                 |
-| `is_complete()`      | Check if selection is complete            |
-
-### Matcher
-
-| Variant                     | Description                                      |
-| --------------------------- | ------------------------------------------------ |
-| `DayOfWeek(Vec<u32>)`       | Disable specific weekdays (0=Sunday, 6=Saturday) |
-| `Interval(IntervalMatcher)` | Disable dates outside interval                   |
-| `Range(RangeMatcher)`       | Disable dates within range                       |
-| `Custom(fn)`                | Custom disable function                          |
-
-| Method                    | Description             |
-| ------------------------- | ----------------------- |
-| `interval(before, after)` | Create interval matcher |
-| `range(from, to)`         | Create range matcher    |
-| `custom(fn)`              | Create custom matcher   |
-
-### DatePickerEvent
-
-| Event          | Description            |
-| -------------- | ---------------------- |
-| `Change(Date)` | Date selection changed |
-
-## Format Strings
-
-Common date format patterns using chrono format specifiers:
-
-| Format              | Example Output            |
-| ------------------- | ------------------------- |
-| `%Y-%m-%d`          | 2023-12-25                |
-| `%m/%d/%Y`          | 12/25/2023                |
-| `%d/%m/%Y`          | 25/12/2023                |
-| `%B %d, %Y`         | December 25, 2023         |
-| `%b %d, %Y`         | Dec 25, 2023              |
-| `%d %b %Y`          | 25 Dec 2023               |
-| `%A, %B %d, %Y`     | Monday, December 25, 2023 |
-| `%Y 年 %m 月 %d 日` | 2023 年 12 月 25 日       |
-
 ## Examples
 
 ### Event Date Picker
@@ -462,7 +377,7 @@ let event_date = cx.new(|cx| {
 
 DatePicker::new(&event_date)
     .placeholder("Choose event date")
-    .cleanable()
+    .cleanable(true)
 ```
 
 ### Booking System Date Range

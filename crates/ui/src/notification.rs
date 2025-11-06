@@ -109,9 +109,7 @@ impl From<(NotificationType, SharedString)> for Notification {
 struct DefaultIdType;
 
 impl Notification {
-    /// Create a new notification with the given content.
-    ///
-    /// default width is 320px.
+    /// Create a new notification.
     pub fn new() -> Self {
         let id: SharedString = uuid::Uuid::new_v4().to_string().into();
         let id = (TypeId::of::<DefaultIdType>(), id.into());
@@ -131,29 +129,34 @@ impl Notification {
         }
     }
 
+    /// Set the message of the notification, default is None.
     pub fn message(mut self, message: impl Into<SharedString>) -> Self {
         self.message = Some(message.into());
         self
     }
 
+    /// Create an info notification with the given message.
     pub fn info(message: impl Into<SharedString>) -> Self {
         Self::new()
             .message(message)
             .with_type(NotificationType::Info)
     }
 
+    /// Create a success notification with the given message.
     pub fn success(message: impl Into<SharedString>) -> Self {
         Self::new()
             .message(message)
             .with_type(NotificationType::Success)
     }
 
+    /// Create a warning notification with the given message.
     pub fn warning(message: impl Into<SharedString>) -> Self {
         Self::new()
             .message(message)
             .with_type(NotificationType::Warning)
     }
 
+    /// Create an error notification with the given message.
     pub fn error(message: impl Into<SharedString>) -> Self {
         Self::new()
             .message(message)

@@ -22,6 +22,7 @@ pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
+/// A drawer component that slides in from the side of the window.
 #[derive(IntoElement)]
 pub struct Drawer {
     pub(crate) focus_handle: FocusHandle,
@@ -38,6 +39,7 @@ pub struct Drawer {
 }
 
 impl Drawer {
+    /// Creates a new drawer.
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
@@ -144,12 +146,16 @@ impl RenderOnce for Drawer {
                     .w(size.width)
                     .h(size.height - titlebar_height)
                     .bg(overlay_color(self.overlay, cx))
-                    .when(self.overlay_closable, |this| {
-                        this.on_mouse_down(MouseButton::Left, {
+                    .when(self.overlay, |this| {
+                        this.on_any_mouse_down({
                             let on_close = self.on_close.clone();
-                            move |_, window, cx| {
-                                on_close(&ClickEvent::default(), window, cx);
-                                window.close_drawer(cx);
+                            move |event, window, cx| {
+                                cx.stop_propagation();
+
+                                if self.overlay_closable && event.button == MouseButton::Left {
+                                    on_close(&ClickEvent::default(), window, cx);
+                                    window.close_drawer(cx);
+                                }
                             }
                         })
                     })

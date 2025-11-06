@@ -13,6 +13,9 @@ use gpui::{
 
 use crate::PixelsExt;
 
+/// A webview based on wry WebView.
+///
+/// [experimental]
 pub struct WebView {
     focus_handle: FocusHandle,
     webview: Rc<wry::WebView>,
@@ -27,6 +30,7 @@ impl Drop for WebView {
 }
 
 impl WebView {
+    /// Create a new WebView from a wry WebView.
     pub fn new(webview: wry::WebView, _: &mut Window, cx: &mut App) -> Self {
         let _ = webview.set_bounds(Rect::default());
 
@@ -38,21 +42,25 @@ impl WebView {
         }
     }
 
+    /// Show the webview.
     pub fn show(&mut self) {
         let _ = self.webview.set_visible(true);
         self.visible = true;
     }
 
+    /// Hide the webview.
     pub fn hide(&mut self) {
         _ = self.webview.focus_parent();
         _ = self.webview.set_visible(false);
         self.visible = false;
     }
 
+    /// Get whether the webview is visible.
     pub fn visible(&self) -> bool {
         self.visible
     }
 
+    /// Get the current bounds of the webview.
     pub fn bounds(&self) -> Bounds<Pixels> {
         self.bounds
     }
@@ -62,6 +70,7 @@ impl WebView {
         Ok(self.webview.evaluate_script("history.back();")?)
     }
 
+    /// Load a URL in the webview.
     pub fn load_url(&mut self, url: &str) {
         self.webview.load_url(url).unwrap();
     }

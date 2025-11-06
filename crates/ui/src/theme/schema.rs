@@ -20,7 +20,7 @@ pub struct ThemeSet {
     pub author: Option<SharedString>,
     /// The URL of the theme.
     pub url: Option<SharedString>,
-
+    /// The theme list of the theme set.
     #[serde(rename = "themes")]
     pub themes: Vec<ThemeConfig>,
 }

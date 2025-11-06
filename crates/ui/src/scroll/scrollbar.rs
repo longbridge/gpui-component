@@ -16,25 +16,6 @@ use gpui::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Scrollbar show mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default, JsonSchema)]
-pub enum ScrollbarShow {
-    #[default]
-    Scrolling,
-    Hover,
-    Always,
-}
-
-impl ScrollbarShow {
-    fn is_hover(&self) -> bool {
-        matches!(self, Self::Hover)
-    }
-
-    fn is_always(&self) -> bool {
-        matches!(self, Self::Always)
-    }
-}
-
 /// The width of the scrollbar (THUMB_ACTIVE_INSET * 2 + THUMB_ACTIVE_WIDTH)
 const WIDTH: Pixels = px(2. * 2. + 8.);
 const MIN_THUMB_SIZE: f32 = 48.;
@@ -50,12 +31,39 @@ const THUMB_ACTIVE_INSET: Pixels = px(2.);
 const FADE_OUT_DURATION: f32 = 3.0;
 const FADE_OUT_DELAY: f32 = 2.0;
 
+/// Scrollbar show mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default, JsonSchema)]
+pub enum ScrollbarShow {
+    /// Show scrollbar when scrolling, will fade out after idle.
+    #[default]
+    Scrolling,
+    /// Show scrollbar on hover.
+    Hover,
+    /// Always show scrollbar.
+    Always,
+}
+
+impl ScrollbarShow {
+    fn is_hover(&self) -> bool {
+        matches!(self, Self::Hover)
+    }
+
+    fn is_always(&self) -> bool {
+        matches!(self, Self::Always)
+    }
+}
+
+/// A trait for scroll handles that can get and set offset.
 pub trait ScrollHandleOffsetable {
+    /// Get the current offset of the scroll handle.
     fn offset(&self) -> Point<Pixels>;
+    /// Set the offset of the scroll handle.
     fn set_offset(&self, offset: Point<Pixels>);
     /// The full size of the content, including padding.
     fn content_size(&self) -> Size<Pixels>;
+    /// Called when start dragging the scrollbar thumb.
     fn start_drag(&self) {}
+    /// Called when end dragging the scrollbar thumb.
     fn end_drag(&self) {}
 }
 
@@ -110,9 +118,11 @@ impl ScrollHandleOffsetable for ListState {
     }
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
 
+#[doc(hidden)]
 #[derive(Debug, Clone, Copy)]
 pub struct ScrollbarStateInner {
     hovered_axis: Option<Axis>,
@@ -232,10 +242,14 @@ impl ScrollbarStateInner {
     }
 }
 
+/// Scrollbar axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScrollbarAxis {
+    /// Vertical scrollbar.
     Vertical,
+    /// Horizontal scrollbar.
     Horizontal,
+    /// Show both vertical and horizontal scrollbars.
     Both,
 }
 
@@ -250,25 +264,30 @@ impl From<Axis> for ScrollbarAxis {
 
 impl ScrollbarAxis {
     /// Return true if the scrollbar axis is vertical.
+    #[inline]
     pub fn is_vertical(&self) -> bool {
         matches!(self, Self::Vertical)
     }
 
     /// Return true if the scrollbar axis is horizontal.
+    #[inline]
     pub fn is_horizontal(&self) -> bool {
         matches!(self, Self::Horizontal)
     }
 
     /// Return true if the scrollbar axis is both vertical and horizontal.
+    #[inline]
     pub fn is_both(&self) -> bool {
         matches!(self, Self::Both)
     }
 
+    /// Return true if the scrollbar has vertical axis.
     #[inline]
     pub fn has_vertical(&self) -> bool {
         matches!(self, Self::Vertical | Self::Both)
     }
 
+    /// Return true if the scrollbar has horizontal axis.
     #[inline]
     pub fn has_horizontal(&self) -> bool {
         matches!(self, Self::Horizontal | Self::Both)
@@ -289,7 +308,8 @@ impl ScrollbarAxis {
 /// Scrollbar control for scroll-area or a uniform-list.
 pub struct Scrollbar {
     axis: ScrollbarAxis,
-    scroll_handle: Rc<Box<dyn ScrollHandleOffsetable>>,
+    scrollbar_show: Option<ScrollbarShow>,
+    scroll_handle: Rc<dyn ScrollHandleOffsetable>,
     state: ScrollbarState,
     scroll_size: Option<Size<Pixels>>,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
@@ -308,15 +328,11 @@ impl Scrollbar {
         Self {
             state: state.clone(),
             axis: axis.into(),
-            scroll_handle: Rc::new(Box::new(scroll_handle.clone())),
+            scrollbar_show: None,
+            scroll_handle: Rc::new(scroll_handle.clone()),
             max_fps: 120,
             scroll_size: None,
         }
-    }
-
-    // Get the width of the scrollbar.
-    pub(crate) const fn width() -> Pixels {
-        WIDTH
     }
 
     /// Create with vertical and horizontal scrollbar.
@@ -351,6 +367,12 @@ impl Scrollbar {
         Self::new(ScrollbarAxis::Vertical, state, scroll_handle)
     }
 
+    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
+    pub fn scrollbar_show(mut self, scrollbar_show: ScrollbarShow) -> Self {
+        self.scrollbar_show = Some(scrollbar_show);
+        self
+    }
+
     /// Set a special scroll size of the content area, default is None.
     ///
     /// Default will sync the `content_size` from `scroll_handle`.
@@ -373,6 +395,11 @@ impl Scrollbar {
     pub(crate) fn max_fps(mut self, max_fps: usize) -> Self {
         self.max_fps = max_fps.clamp(30, 120);
         self
+    }
+
+    // Get the width of the scrollbar.
+    pub(crate) const fn width() -> Pixels {
+        WIDTH
     }
 
     fn style_for_active(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
@@ -408,8 +435,9 @@ impl Scrollbar {
         )
     }
 
-    fn style_for_normal(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let (width, inset, radius) = match cx.theme().scrollbar_show {
+    fn style_for_normal(&self, cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
+        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
+        let (width, inset, radius) = match scrollbar_show {
             ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
         };
@@ -424,8 +452,9 @@ impl Scrollbar {
         )
     }
 
-    fn style_for_idle(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let (width, inset, radius) = match cx.theme().scrollbar_show {
+    fn style_for_idle(&self, cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
+        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
+        let (width, inset, radius) = match scrollbar_show {
             ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
         };
@@ -449,11 +478,13 @@ impl IntoElement for Scrollbar {
     }
 }
 
+#[doc(hidden)]
 pub struct PrepaintState {
     hitbox: Hitbox,
     states: Vec<AxisPrepaintState>,
 }
 
+#[doc(hidden)]
 pub struct AxisPrepaintState {
     axis: Axis,
     bar_hitbox: Hitbox,
@@ -577,9 +608,10 @@ impl Element for Scrollbar {
                 },
             };
 
+            let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
             let state = self.state.clone();
-            let is_always_to_show = cx.theme().scrollbar_show.is_always();
-            let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
+            let is_always_to_show = scrollbar_show.is_always();
+            let is_hover_to_show = scrollbar_show.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
             let is_offset_changed = state.get().last_scroll_offset != self.scroll_handle.offset();
@@ -594,7 +626,7 @@ impl Element for Scrollbar {
                         Self::style_for_hovered_bar(cx)
                     }
                 } else if is_offset_changed {
-                    Self::style_for_normal(cx)
+                    self.style_for_normal(cx)
                 } else if is_always_to_show {
                     if is_hovered_on_thumb {
                         Self::style_for_hovered_thumb(cx)
@@ -602,7 +634,7 @@ impl Element for Scrollbar {
                         Self::style_for_hovered_bar(cx)
                     }
                 } else {
-                    let mut idle_state = Self::style_for_idle(cx);
+                    let mut idle_state = self.style_for_idle(cx);
                     // Delay 2s to fade out the scrollbar thumb (in 1s)
                     if let Some(last_time) = state.get().last_scroll_time {
                         let elapsed = Instant::now().duration_since(last_time).as_secs_f32();
@@ -705,11 +737,11 @@ impl Element for Scrollbar {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
         let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible =
-            self.state.get().is_scrollbar_visible() || cx.theme().scrollbar_show.is_always();
-        let is_hover_to_show = cx.theme().scrollbar_show.is_hover();
+        let is_visible = self.state.get().is_scrollbar_visible() || scrollbar_show.is_always();
+        let is_hover_to_show = scrollbar_show.is_hover();
 
         // Update last_scroll_time when offset is changed.
         if self.scroll_handle.offset() != self.state.get().last_scroll_offset {

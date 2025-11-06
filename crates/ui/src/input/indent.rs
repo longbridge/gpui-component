@@ -1,6 +1,6 @@
 use gpui::{
-    point, px, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString,
-    TextRun, TextStyle, Window,
+    point, px, Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels,
+    SharedString, TextRun, TextStyle, Window,
 };
 use ropey::RopeSlice;
 
@@ -104,6 +104,7 @@ impl TextElement {
     pub(super) fn layout_indent_guides(
         &self,
         state: &InputState,
+        bounds: &Bounds<Pixels>,
         last_layout: &LastLayout,
         text_style: &TextStyle,
         window: &mut Window,
@@ -119,8 +120,7 @@ impl TextElement {
         let line_height = last_layout.line_height;
         let visible_range = last_layout.visible_range.clone();
         let mut builder = PathBuilder::stroke(px(1.));
-        let mut offset_y =
-            last_layout.visible_top + state.scroll_handle.offset().y + (line_height * 2 - px(3.5));
+        let mut offset_y = last_layout.visible_top;
         let mut last_indents = vec![];
         for ix in visible_range {
             let line = state.text.slice_line(ix);
@@ -154,6 +154,7 @@ impl TextElement {
             last_indents = current_indents;
         }
 
+        builder.translate(bounds.origin);
         let path = builder.build().unwrap();
         Some(path)
     }

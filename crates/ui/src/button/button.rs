@@ -136,9 +136,10 @@ impl ButtonCustomVariant {
 }
 
 /// The veriant of the Button.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonVariant {
     Primary,
+    #[default]
     Secondary,
     Danger,
     Info,
@@ -148,12 +149,6 @@ pub enum ButtonVariant {
     Link,
     Text,
     Custom(ButtonCustomVariant),
-}
-
-impl Default for ButtonVariant {
-    fn default() -> Self {
-        Self::Secondary
-    }
 }
 
 impl ButtonVariant {
@@ -289,6 +284,7 @@ impl Button {
         self
     }
 
+    /// Set the tooltip of the button with action to show keybinding.
     pub fn tooltip_with_action(
         mut self,
         tooltip: impl Into<SharedString>,
@@ -332,6 +328,9 @@ impl Button {
         self
     }
 
+    /// Set the loading icon of the button, it will be used when loading is true.
+    ///
+    /// Default is a spinner icon.
     pub fn loading_icon(mut self, icon: impl Into<Icon>) -> Self {
         self.loading_icon = Some(icon.into());
         self

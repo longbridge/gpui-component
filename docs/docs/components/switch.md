@@ -55,22 +55,6 @@ Switch::new("notifications")
     })
 ```
 
-### Label Positioning
-
-```rust
-use gpui_component::Side;
-
-// Label on the right (default)
-Switch::new("switch1")
-    .label("Right label")
-    .label_side(Side::Right)
-
-// Label on the left
-Switch::new("switch2")
-    .label("Left label")
-    .label_side(Side::Left)
-```
-
 ### Different Sizes
 
 ```rust

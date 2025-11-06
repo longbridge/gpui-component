@@ -58,12 +58,14 @@ impl Avatar {
         self
     }
 }
+
 impl Sizable for Avatar {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
+
 impl Styled for Avatar {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style

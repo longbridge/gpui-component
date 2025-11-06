@@ -6,6 +6,7 @@ use smallvec::SmallVec;
 
 use crate::{v_flex, ActiveTheme, StyledExt as _};
 
+/// The variant of the GroupBox.
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]
 pub enum GroupBoxVariant {
     #[default]
@@ -28,6 +29,7 @@ pub struct GroupBox {
 }
 
 impl GroupBox {
+    /// Create a new GroupBox.
     pub fn new() -> Self {
         Self {
             id: None,
@@ -41,7 +43,7 @@ impl GroupBox {
     }
 
     /// Set the variant of the group box.
-    pub fn variant(mut self, variant: GroupBoxVariant) -> Self {
+    pub fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
         self.variant = variant;
         self
     }

@@ -3,6 +3,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// A HistoryItem represents a single change in the history.
+/// It must implement Clone and PartialEq to be used in the History.
 pub trait HistoryItem: Clone + PartialEq {
     fn version(&self) -> usize;
     fn set_version(&mut self, version: usize);
@@ -25,7 +27,7 @@ pub struct History<I: HistoryItem> {
     last_changed_at: Instant,
     version: usize,
     pub(crate) ignore: bool,
-    max_undo: usize,
+    max_undos: usize,
     group_interval: Option<Duration>,
     grouping: bool,
     unique: bool,
@@ -42,7 +44,7 @@ where
             ignore: false,
             last_changed_at: Instant::now(),
             version: 0,
-            max_undo: 1000,
+            max_undos: 1000,
             group_interval: None,
             grouping: false,
             unique: false,
@@ -50,8 +52,8 @@ where
     }
 
     /// Set the maximum number of undo steps to keep, defaults to 1000.
-    pub fn max_undo(mut self, max_undo: usize) -> Self {
-        self.max_undo = max_undo;
+    pub fn max_undos(mut self, max_undos: usize) -> Self {
+        self.max_undos = max_undos;
         self
     }
 
@@ -94,10 +96,11 @@ where
         self.version
     }
 
+    /// Push a new change to the history.
     pub fn push(&mut self, item: I) {
         let version = self.inc_version();
 
-        if self.undos.len() >= self.max_undo {
+        if self.undos.len() >= self.max_undos {
             self.undos.remove(0);
         }
 
@@ -127,6 +130,7 @@ where
         self.redos.clear();
     }
 
+    /// Undo the last change and return the changes that were undone.
     pub fn undo(&mut self) -> Option<Vec<I>> {
         if let Some(first_change) = self.undos.pop() {
             let mut changes = vec![first_change.clone()];
@@ -149,6 +153,7 @@ where
         }
     }
 
+    /// Redo the last undone change and return the changes that were redone.
     pub fn redo(&mut self) -> Option<Vec<I>> {
         if let Some(first_change) = self.redos.pop() {
             let mut changes = vec![first_change.clone()];
@@ -207,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_history() {
-        let mut history: History<TabIndex> = History::new().max_undo(100);
+        let mut history: History<TabIndex> = History::new().max_undos(100);
         history.push(0.into());
         history.push(3.into());
         history.push(2.into());
@@ -250,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_unique_history() {
-        let mut history: History<TabIndex> = History::new().max_undo(100).unique();
+        let mut history: History<TabIndex> = History::new().max_undos(100).unique();
 
         // Push some items
         history.push(0.into());

@@ -282,6 +282,8 @@ impl ThemeEditor {
 ### Brand Color Selector
 
 ```rust
+use gpui_component::{Sizable as _};
+
 let brand_colors = vec![
     Hsla::parse_hex("#FF6B6B").unwrap(), // Brand Red
     Hsla::parse_hex("#4ECDC4").unwrap(), // Brand Teal
@@ -293,17 +295,17 @@ let brand_colors = vec![
 ColorPicker::new(&color_picker)
     .featured_colors(brand_colors)
     .label("Brand Color")
-    .size(Size::Large)
+    .large()
 ```
 
 ### Toolbar Color Picker
 
 ```rust
-use gpui_component::IconName;
+use gpui_component::{Sizable as _, IconName);
 
 ColorPicker::new(&text_color_picker)
     .icon(IconName::Type)
-    .size(Size::Small)
+    .small()
     .anchor(Corner::BottomLeft)
 ```
 

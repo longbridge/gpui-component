@@ -6,6 +6,7 @@ use gpui::{
     Hsla, IntoElement, ParentElement, RenderOnce, Styled as _, Transformation, Window,
 };
 
+/// A cycling loading indicator.
 #[derive(IntoElement)]
 pub struct Indicator {
     size: Size,
@@ -15,6 +16,7 @@ pub struct Indicator {
 }
 
 impl Indicator {
+    /// Create a new loading indicator.
     pub fn new() -> Self {
         Self {
             size: Size::Medium,
@@ -24,11 +26,17 @@ impl Indicator {
         }
     }
 
+    /// Set specified icon for the indicator.
+    ///
+    /// Default is [`IconName::Loader`].
+    ///
+    /// Please ensure the icon used is suitable for a loading indicator.
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.icon = icon.into();
         self
     }
 
+    /// Set the icon color.
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
         self

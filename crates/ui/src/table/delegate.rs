@@ -8,14 +8,16 @@ use gpui::{
 use crate::{
     h_flex,
     menu::PopupMenu,
-    table::{loading::Loading, Column, ColumnSort, Table},
+    table::{loading::Loading, Column, ColumnSort, TableState},
     ActiveTheme as _, Icon, IconName, Size,
 };
 
+/// A delegate trait for providing data and rendering for a table.
 #[allow(unused)]
 pub trait TableDelegate: Sized + 'static {
     /// Return the number of columns in the table.
     fn columns_count(&self, cx: &App) -> usize;
+
     /// Return the number of rows in the table.
     fn rows_count(&self, cx: &App) -> usize;
 
@@ -30,34 +32,30 @@ pub trait TableDelegate: Sized + 'static {
         col_ix: usize,
         sort: ColumnSort,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableState<Self>>,
     ) {
     }
 
     /// Render the header cell at the given column index, default to the column name.
-    fn render_th(
-        &self,
-        col_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
+    fn render_th(&self, col_ix: usize, window: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .size_full()
             .child(self.column(col_ix, cx).name.clone())
     }
 
     /// Render the row at the given row and column.
-    fn render_tr(
-        &self,
-        row_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> Stateful<Div> {
+    fn render_tr(&self, row_ix: usize, window: &mut Window, cx: &mut App) -> Stateful<Div> {
         h_flex().id(("row", row_ix))
     }
 
     /// Render the context menu for the row at the given row index.
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn context_menu(
+        &self,
+        row_ix: usize,
+        menu: PopupMenu,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> PopupMenu {
         menu
     }
 
@@ -67,7 +65,7 @@ pub trait TableDelegate: Sized + 'static {
         row_ix: usize,
         col_ix: usize,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut App,
     ) -> impl IntoElement;
 
     /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
@@ -76,12 +74,12 @@ pub trait TableDelegate: Sized + 'static {
         col_ix: usize,
         to_ix: usize,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableState<Self>>,
     ) {
     }
 
     /// Return a Element to show when table is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .size_full()
             .justify_center()
@@ -98,12 +96,7 @@ pub trait TableDelegate: Sized + 'static {
     /// Return a Element to show when table is loading, default is built-in Skeleton loading view.
     ///
     /// The size is the size of the Table.
-    fn render_loading(
-        &self,
-        size: Size,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
+    fn render_loading(&self, size: Size, window: &mut Window, cx: &mut App) -> impl IntoElement {
         Loading::new().size(size)
     }
 
@@ -129,14 +122,10 @@ pub trait TableDelegate: Sized + 'static {
     ///
     /// This is always called when the table is near the bottom,
     /// so you must check if there is more data to load or lock the loading state.
-    fn load_more(&mut self, window: &mut Window, cx: &mut Context<Table<Self>>) {}
+    fn load_more(&mut self, window: &mut Window, cx: &mut Context<TableState<Self>>) {}
 
     /// Render the last empty column, default to empty.
-    fn render_last_empty_col(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
+    fn render_last_empty_col(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex().w_3().h_full().flex_shrink_0()
     }
 
@@ -150,7 +139,7 @@ pub trait TableDelegate: Sized + 'static {
         &mut self,
         visible_range: Range<usize>,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableState<Self>>,
     ) {
     }
 
@@ -164,7 +153,7 @@ pub trait TableDelegate: Sized + 'static {
         &mut self,
         visible_range: Range<usize>,
         window: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut Context<TableState<Self>>,
     ) {
     }
 }

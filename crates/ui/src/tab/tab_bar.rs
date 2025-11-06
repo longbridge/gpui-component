@@ -11,6 +11,7 @@ use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
 use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
 
+/// A TabBar element that contains multiple [`Tab`] items.
 #[derive(IntoElement)]
 pub struct TabBar {
     base: Stateful<Div>,
@@ -79,13 +80,13 @@ impl TabBar {
         self
     }
 
-    /// Enable or disable the popup menu for the TabBar
-    pub fn with_menu(mut self, menu: bool) -> Self {
+    /// Set whether to show the menu button when tabs overflow, default is false.
+    pub fn menu(mut self, menu: bool) -> Self {
         self.menu = menu;
         self
     }
 
-    /// Track the scroll of the TabBar
+    /// Track the scroll of the TabBar.
     pub fn track_scroll(mut self, scroll_handle: &ScrollHandle) -> Self {
         self.scroll_handle = Some(scroll_handle.clone());
         self
@@ -104,7 +105,6 @@ impl TabBar {
     }
 
     /// Add children of the TabBar, all children will inherit the variant.
-    ///
     pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Tab>>) -> Self {
         self.children.extend(children.into_iter().map(Into::into));
         self
@@ -122,7 +122,7 @@ impl TabBar {
         self
     }
 
-    /// Set the last empty space element of the TabBar
+    /// Set the last empty space element of the TabBar.
     pub fn last_empty_space(mut self, last_empty_space: impl IntoElement) -> Self {
         self.last_empty_space = last_empty_space.into_any_element();
         self
@@ -273,7 +273,7 @@ impl RenderOnce for TabBar {
                         .ghost()
                         .icon(IconName::ChevronDown)
                         .dropdown_menu(move |mut this, _, _| {
-                            this = this.scrollable();
+                            this = this.scrollable(true);
                             for (ix, (label, disabled)) in item_labels.iter().enumerate() {
                                 this = this.item(
                                     PopupMenuItem::new(label.clone().unwrap_or_default())

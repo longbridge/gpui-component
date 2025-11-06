@@ -10,14 +10,14 @@ A comprehensive data table component designed for handling large datasets with h
 ## Import
 
 ```rust
-use gpui_component::table::{Table, TableDelegate, Column, ColumnSort, ColumnFixed, TableEvent};
+use gpui_component::table::{Table, TableState, TableDelegate, Column, ColumnSort, ColumnFixed, TableEvent};
 ```
 
 ## Usage
 
 ### Basic Table
 
-To create a table, you need to implement the `TableDelegate` trait and provide column definitions:
+To create a table, you need to implement the `TableDelegate` trait and provide column definitions, and use `TableState` to manage the table state.
 
 ```rust
 use std::ops::Range;
@@ -66,7 +66,7 @@ impl TableDelegate for MyTableDelegate {
         &self.columns[col_ix]
     }
 
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut App) -> impl IntoElement {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -82,7 +82,7 @@ impl TableDelegate for MyTableDelegate {
 
 // Create the table
 let delegate = MyTableDelegate::new();
-let table = cx.new(|cx| Table::new(delegate, window, cx));
+let state = cx.new(|cx| TableState::new(delegate, window, cx));
 ```
 
 ### Column Configuration
@@ -143,7 +143,7 @@ impl TableDelegate for LargeDataDelegate {
     }
 
     // Only visible rows are rendered
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
         // This is only called for visible rows
         // Efficiently render cell content
         let row = &self.data[row_ix];
@@ -151,7 +151,7 @@ impl TableDelegate for LargeDataDelegate {
     }
 
     // Track visible range for optimizations
-    fn visible_rows_changed(&mut self, visible_range: Range<usize>, _: &mut Window, _: &mut Context<Table<Self>>) {
+    fn visible_rows_changed(&mut self, visible_range: Range<usize>, _: &mut Window, _: &mut Context<TableState<Self>>) {
         // Only update data for visible rows if needed
         // This is called when user scrolls
     }
@@ -164,7 +164,7 @@ Implement sorting in your delegate:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn perform_sort(&mut self, col_ix: usize, sort: ColumnSort, _: &mut Window, _: &mut Context<Table<Self>>) {
+    fn perform_sort(&mut self, col_ix: usize, sort: ColumnSort, _: &mut Window, _: &mut Context<TableState<Self>>) {
         let col = &self.columns[col_ix];
 
         match col.key.as_ref() {
@@ -197,20 +197,20 @@ Handle row selection and interaction:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn render_tr(&self, row_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> gpui::Stateful<gpui::Div> {
+    fn render_tr(&self, row_ix: usize, _: &mut Window, cx: &mut App) -> Stateful<Div> {
         div()
             .id(row_ix)
-            .on_click(cx.listener(move |_, ev, _, _| {
+            .on_click(move |ev, _, _| {
                 if ev.modifiers().secondary() {
                     println!("Right-clicked row {}", row_ix);
                 } else {
                     println!("Selected row {}", row_ix);
                 }
-            }))
+            })
     }
 
     // Context menu for right-click
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &Window, _: &App) -> PopupMenu {
+    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &mut Window, _: &mut App) -> PopupMenu {
         let row = &self.data[row_ix];
         menu.menu(format!("Edit {}", row.name), Box::new(EditRowAction(row_ix)))
             .menu("Delete", Box::new(DeleteRowAction(row_ix)))
@@ -220,7 +220,7 @@ impl TableDelegate for MyTableDelegate {
 }
 
 // Handle table events
-cx.subscribe_in(&table, window, |view, table, event, _, cx| {
+cx.subscribe_in(&state, window, |view, table, event, _, cx| {
     match event {
         TableEvent::SelectRow(row_ix) => {
             println!("Row {} selected", row_ix);
@@ -243,7 +243,7 @@ Create rich cell content with custom rendering:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -316,8 +316,8 @@ Enable dynamic column management:
 
 ```rust
 // Configure table features
-let table = cx.new(|cx| {
-    Table::new(delegate, window, cx)
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
         .col_resizable(true)  // Allow column resizing
         .col_movable(true)    // Allow column reordering
         .sortable(true)       // Enable sorting
@@ -326,7 +326,7 @@ let table = cx.new(|cx| {
 });
 
 // Listen for column changes
-cx.subscribe_in(&table, window, |view, table, event, _, cx| {
+cx.subscribe_in(&state, window, |view, table, event, _, cx| {
     match event {
         TableEvent::ColumnWidthsChanged(widths) => {
             // Save column widths to user preferences
@@ -355,7 +355,7 @@ impl TableDelegate for MyTableDelegate {
         50 // Load more when 50 rows from bottom
     }
 
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
         if self.loading {
             return; // Prevent multiple loads
         }
@@ -388,17 +388,15 @@ impl TableDelegate for MyTableDelegate {
 Customize table appearance:
 
 ```rust
-let table = cx.new(|cx| {
-    Table::new(delegate, window, cx)
-        .stripe(true)           // Alternating row colors
-        .border(true)           // Border around table
-        .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
 });
 
-// Set table size
-table.update(cx, |table, cx| {
-    table.set_size(Size::Small, cx);
-});
+// In render
+Table::new(&state)
+    .stripe(true)           // Alternating row colors
+    .bordered(true)           // Border around table
+    .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
 ```
 
 ## Examples
@@ -415,7 +413,7 @@ struct StockData {
 }
 
 impl TableDelegate for StockTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<Table<Self>>) -> impl IntoElement {
+    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let stock = &self.stocks[row_ix];
         let col = &self.columns[col_ix];
 

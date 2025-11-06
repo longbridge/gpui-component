@@ -6,8 +6,8 @@ use std::{
 
 use fake::Fake;
 use gpui::{
-    Action, AnyElement, App, AppContext, ClickEvent, Context, Entity, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    Action, AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
     StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Timer, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -20,7 +20,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     label::Label,
     menu::{DropdownMenu, PopupMenu},
-    table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent},
+    table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableEvent, TableState},
     v_flex,
 };
 use serde::{Deserialize, Serialize};
@@ -274,7 +274,7 @@ impl StockTableDelegate {
         self.full_loading = false;
     }
 
-    fn render_percent(&self, col: &Column, val: f64, cx: &mut Context<Table<Self>>) -> AnyElement {
+    fn render_percent(&self, col: &Column, val: f64, cx: &mut App) -> AnyElement {
         let right_num = ((val - val.floor()) * 1000.).floor() as i32;
 
         div()
@@ -298,12 +298,7 @@ impl StockTableDelegate {
             .into_any_element()
     }
 
-    fn render_value_cell(
-        &self,
-        col: &Column,
-        val: f64,
-        cx: &mut Context<Table<Self>>,
-    ) -> AnyElement {
+    fn render_value_cell(&self, col: &Column, val: f64, cx: &mut App) -> AnyElement {
         let this = div()
             .h_full()
             .table_cell_size(self.size)
@@ -342,12 +337,7 @@ impl TableDelegate for StockTableDelegate {
         &self.columns[col_ix]
     }
 
-    fn render_th(
-        &self,
-        col_ix: usize,
-        _: &mut Window,
-        _: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
+    fn render_th(&self, col_ix: usize, _: &mut Window, _: &mut App) -> impl IntoElement {
         let col = self.columns.get(col_ix).unwrap();
 
         div()
@@ -364,8 +354,8 @@ impl TableDelegate for StockTableDelegate {
         &self,
         row_ix: usize,
         menu: PopupMenu,
-        _window: &Window,
-        _cx: &App,
+        _window: &mut Window,
+        _cx: &mut App,
     ) -> PopupMenu {
         menu.menu(
             format!("Selected Row: {}", row_ix),
@@ -378,20 +368,13 @@ impl TableDelegate for StockTableDelegate {
         .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
     }
 
-    fn render_tr(
-        &self,
-        row_ix: usize,
-        _: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> gpui::Stateful<gpui::Div> {
-        div()
-            .id(row_ix)
-            .on_click(cx.listener(|_, ev: &ClickEvent, _, _| {
-                println!(
-                    "You have clicked row with secondary: {}",
-                    ev.modifiers().secondary()
-                )
-            }))
+    fn render_tr(&self, row_ix: usize, _: &mut Window, _: &mut App) -> Stateful<Div> {
+        div().id(row_ix).on_click(|ev: &ClickEvent, _, _| {
+            println!(
+                "You have clicked row with secondary: {}",
+                ev.modifiers().secondary()
+            )
+        })
     }
 
     /// NOTE: Performance metrics
@@ -407,7 +390,7 @@ impl TableDelegate for StockTableDelegate {
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        cx: &mut Context<Table<Self>>,
+        cx: &mut App,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
         let col = self.columns.get(col_ix).unwrap();
@@ -505,7 +488,7 @@ impl TableDelegate for StockTableDelegate {
         col_ix: usize,
         to_ix: usize,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableState<Self>>,
     ) {
         let col = self.columns.remove(col_ix);
         self.columns.insert(to_ix, col);
@@ -516,7 +499,7 @@ impl TableDelegate for StockTableDelegate {
         col_ix: usize,
         sort: ColumnSort,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableState<Self>>,
     ) {
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
@@ -552,7 +535,7 @@ impl TableDelegate for StockTableDelegate {
         150
     }
 
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
         self.loading = true;
 
         self._load_task = cx.spawn(async move |view, cx| {
@@ -573,7 +556,7 @@ impl TableDelegate for StockTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableState<Self>>,
     ) {
         self.visible_rows = visible_range;
     }
@@ -582,14 +565,14 @@ impl TableDelegate for StockTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableState<Self>>,
     ) {
         self.visible_cols = visible_range;
     }
 }
 
 pub struct TableStory {
-    table: Entity<Table<StockTableDelegate>>,
+    table: Entity<TableState<StockTableDelegate>>,
     num_stocks_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
@@ -639,7 +622,7 @@ impl TableStory {
         });
 
         let delegate = StockTableDelegate::new(5000);
-        let table = cx.new(|cx| Table::new(delegate, window, cx));
+        let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
         let _subscriptions = vec![
             cx.subscribe_in(&table, window, Self::on_table_event),
@@ -755,19 +738,12 @@ impl TableStory {
 
     fn toggle_stripe(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
-        let stripe = self.stripe;
-        self.table.update(cx, |table, cx| {
-            table.set_stripe(stripe, cx);
-            cx.notify();
-        });
+        cx.notify();
     }
 
     fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
         self.size = a.0;
-        self.table.update(cx, |table, cx| {
-            table.set_size(a.0, cx);
-            table.delegate_mut().size = a.0;
-        });
+        cx.notify();
     }
 
     fn toggle_refresh_data(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
@@ -777,7 +753,7 @@ impl TableStory {
 
     fn on_table_event(
         &mut self,
-        _: &Entity<Table<StockTableDelegate>>,
+        _: &Entity<TableState<StockTableDelegate>>,
         event: &TableEvent,
         _window: &mut Window,
         _cx: &mut Context<Self>,
@@ -983,6 +959,10 @@ impl Render for TableStory {
                         ),
                 ),
             )
-            .child(self.table.clone())
+            .child(
+                Table::new(&self.table)
+                    .with_size(self.size)
+                    .stripe(self.stripe),
+            )
     }
 }

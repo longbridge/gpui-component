@@ -190,22 +190,6 @@ impl MultiStepProcess {
 }
 ```
 
-## API Reference
-
-### Progress
-
-| Method       | Description                                     |
-| ------------ | ----------------------------------------------- |
-| `new()`      | Create a new progress bar with default settings |
-| `value(f32)` | Set the progress value (0.0 to 100.0)           |
-
-### Progress Properties
-
-| Property | Type  | Default | Description                          |
-| -------- | ----- | ------- | ------------------------------------ |
-| `value`  | `f32` | `0.0`   | Progress percentage (0-100)          |
-| `height` | `f32` | `8.0`   | Height of the progress bar in pixels |
-
 ## Examples
 
 ### Task Progress with Status
