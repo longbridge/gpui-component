@@ -994,7 +994,7 @@ where
         left_columns_count: usize,
         col_sizes: Rc<Vec<gpui::Size<Pixels>>>,
         columns_count: usize,
-        extra_rows_count: usize,
+        is_filled: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -1006,18 +1006,7 @@ where
 
         if row_ix < rows_count {
             let is_last_row = row_ix + 1 == rows_count;
-            let table_is_filled = extra_rows_count == 0;
-            let need_render_border = if is_last_row {
-                if is_selected {
-                    true
-                } else if table_is_filled {
-                    false
-                } else {
-                    !self.options.stripe
-                }
-            } else {
-                true
-            };
+            let need_render_border = is_selected || !is_last_row || !is_filled;
 
             let mut tr = self.delegate.render_tr(row_ix, window, cx);
             let style = tr.style().clone();
@@ -1181,19 +1170,9 @@ where
     }
 
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
-    fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
+    fn calculate_extra_rows_needed(&self, total_height: Pixels, actual_height: Pixels, row_height: Pixels) -> usize {
         let mut extra_rows_needed = 0;
-        let row_height = self.options.size.table_row_height();
-        let total_height = self
-            .vertical_scroll_handle
-            .0
-            .borrow()
-            .base_handle
-            .bounds()
-            .size
-            .height;
 
-        let actual_height = row_height * rows_count as f32;
         let remaining_height = total_height - actual_height;
         if remaining_height > px(0.) {
             extra_rows_needed = (remaining_height / row_height).floor() as usize;
@@ -1313,13 +1292,25 @@ where
             .count();
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
-        let extra_rows_count = self.calculate_extra_rows_needed(rows_count);
+
+        let row_height = self.options.size.table_row_height();
+        let total_height = self
+            .vertical_scroll_handle
+            .0
+            .borrow()
+            .base_handle
+            .bounds()
+            .size
+            .height;
+        let actual_height = row_height * rows_count as f32;
+        let extra_rows_count = self.calculate_extra_rows_needed(total_height, actual_height, row_height);
         let render_rows_count = if self.options.stripe {
             rows_count + extra_rows_count
         } else {
             rows_count
         };
         let right_clicked_row = self.right_clicked_row;
+        let is_filled = total_height <= actual_height;
 
         let loading_view = if loading {
             Some(
@@ -1417,7 +1408,7 @@ where
                                                 left_columns_count,
                                                 col_sizes.clone(),
                                                 columns_count,
-                                                extra_rows_count,
+                                                is_filled,
                                                 window,
                                                 cx,
                                             ));
