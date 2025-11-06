@@ -771,7 +771,7 @@ impl InputState {
         self
     }
 
-    /// Set true to show indicator at the input right.
+    /// Set true to show spinner at the input right.
     ///
     /// Only for [`InputMode::SingleLine`] mode.
     pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
