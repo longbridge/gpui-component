@@ -1004,26 +1004,13 @@ where
         let row_height = self.options.size.table_row_height();
 
         if row_ix < rows_count {
-            let is_last_row = row_ix + 1 == rows_count;
-            let need_render_border = if is_last_row {
-                if is_selected {
-                    true
-                } else {
-                    !self.options.stripe
-                }
-            } else {
-                true
-            };
-
             let mut tr = self.delegate.render_tr(row_ix, window, cx);
             let style = tr.style().clone();
 
             tr.h_flex()
                 .w_full()
                 .h(row_height)
-                .when(need_render_border, |this| {
-                    this.border_b_1().border_color(cx.theme().table_row_border)
-                })
+                .border_b_1().border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
                 .refine_style(&style)
                 .hover(|this| {
@@ -1180,7 +1167,14 @@ where
     fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
         let mut extra_rows_needed = 0;
         let row_height = self.options.size.table_row_height();
-        let total_height = self.bounds.size.height;
+        let total_height = self
+            .vertical_scroll_handle
+            .0
+            .borrow()
+            .base_handle
+            .bounds()
+            .size
+            .height;
 
         let actual_height = row_height * rows_count as f32;
         let remaining_height = total_height - actual_height;
@@ -1447,7 +1441,7 @@ where
                     move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
                 },
                 |_, _, _, _| {},
-            ).size_full())
+            ))
             .when(!window.is_inspector_picking(cx), |this| {
                 this.child(
                     div()
