@@ -10,7 +10,6 @@ use crate::{
     Colorize, Theme, ThemeColor, ThemeMode,
 };
 
-const MIN_ACTIVE_OPACITY: f32 = 0.3;
 /// Represents a theme configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -614,9 +613,9 @@ impl ThemeColor {
         // TODO: Apply default fallback colors to highlight.
 
         // Ensure opacity for list_active, table_active
-        self.list_active = self.list_active.alpha(self.list_active.a.min(MIN_ACTIVE_OPACITY));
-        self.table_active = self.table_active.alpha(self.table_active.a.min(MIN_ACTIVE_OPACITY));
-        self.selection = self.selection.alpha(self.selection.a.min(MIN_ACTIVE_OPACITY));
+        self.list_active = self.list_active.alpha(self.list_active.a.min(0.3));
+        self.table_active = self.table_active.alpha(self.table_active.a.min(0.3));
+        self.selection = self.selection.alpha(self.selection.a.min(0.3));
         
     }
 }
