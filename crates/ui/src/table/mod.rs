@@ -1310,7 +1310,7 @@ where
             rows_count
         };
         let right_clicked_row = self.right_clicked_row;
-        let is_filled = total_height <= actual_height;
+        let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
         let loading_view = if loading {
             Some(
