@@ -4,7 +4,7 @@ use gpui::{
     ParentElement as _, Render, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ContextModal, Sizable,
+    Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,

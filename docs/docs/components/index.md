@@ -43,13 +43,13 @@ collapsed: false
 ### Layout Components
 
 - [DescriptionList](description-list) - Key-value pair display
-- [Drawer](drawer) - Slide-in panel from edges
 - [GroupBox](group-box) - Grouped content with borders
 - [Modal](modal) - Dialog and modal windows
 - [Notification](notification) - Toast notifications
 - [Popover](popover) - Floating content display
 - [Resizable](resizable) - Resizable panels and containers
 - [Scrollable](scrollable) - Scrollable containers
+- [Sheet](sheet) - Slide-in panel from edges
 - [Sidebar](sidebar) - Navigation sidebar
 
 ### Advanced Components

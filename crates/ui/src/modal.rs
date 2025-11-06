@@ -12,7 +12,7 @@ use crate::{
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
+    h_flex, v_flex, ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
 };
 
 const CONTEXT: &str = "Modal";
