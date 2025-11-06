@@ -310,37 +310,43 @@ impl StoryTiles {
         window: &mut Window,
         cx: &mut App,
     ) -> DockItem {
-        DockItem::tiles(
-            vec![
+        // Create 12 panels with alternating ButtonStory and IconStory
+        let panels = (0..12)
+            .map(|i| {
+                let story = if i % 2 == 0 {
+                    Arc::new(StoryContainer::panel::<ButtonStory>(window, cx))
+                } else {
+                    Arc::new(StoryContainer::panel::<IconStory>(window, cx))
+                };
                 DockItem::tab(
-                    ContainerPanel::new(
-                        Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
-                        window,
-                        cx,
-                    ),
+                    ContainerPanel::new(story, window, cx),
                     dock_area,
                     window,
                     cx,
-                ),
-                DockItem::tab(
-                    ContainerPanel::new(
-                        Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
-                        window,
-                        cx,
-                    ),
-                    dock_area,
-                    window,
-                    cx,
-                ),
-            ],
-            vec![
-                Bounds::new(point(px(10.), px(10.)), size(px(610.), px(190.))),
-                Bounds::new(point(px(120.), px(10.)), size(px(650.), px(300.))),
-            ],
-            dock_area,
-            window,
-            cx,
-        )
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // Create 12 bounds arranged in a 4x3 grid
+        // Panel size: 380x280, Gap: 20px, Starting position: (20, 20)
+        let panel_width = px(380.);
+        let panel_height = px(280.);
+        let gap = px(20.);
+        let start_x = px(20.);
+        let start_y = px(20.);
+        let cols = 4;
+
+        let bounds = (0..12)
+            .map(|i| {
+                let row = i / cols;
+                let col = i % cols;
+                let x = start_x + (panel_width + gap) * col as f32;
+                let y = start_y + (panel_height + gap) * row as f32;
+                Bounds::new(point(x, y), size(panel_width, panel_height))
+            })
+            .collect::<Vec<_>>();
+
+        DockItem::tiles(panels, bounds, dock_area, window, cx)
     }
 
     pub fn new_local(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
