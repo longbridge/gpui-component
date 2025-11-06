@@ -14,6 +14,7 @@ collapsed: false
 - [Badge](badge) - Count badges and indicators
 - [Button](button) - Interactive buttons with multiple variants
 - [Checkbox](checkbox) - Binary selection control
+- [Collapsible](collapsible) - Expandable/collapsible content
 - [Icon](icon) - Icon display component
 - [Image](image) - Image display with fallbacks
 - [Indicator](indicator) - Loading and status indicators
