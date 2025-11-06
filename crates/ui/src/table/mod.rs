@@ -1002,9 +1002,10 @@ where
         let is_stripe_row = self.options.stripe && row_ix % 2 != 0;
         let is_selected = self.selected_row == Some(row_ix);
         let view = cx.entity().clone();
+        let row_height = self.options.size.table_row_height();
 
         if row_ix < rows_count {
-            let is_last_row = row_ix == rows_count - 1;
+            let is_last_row = row_ix + 1 == rows_count;
             let table_is_filled = extra_rows_count == 0;
             let need_render_border = if is_last_row {
                 if is_selected {
@@ -1023,7 +1024,7 @@ where
 
             tr.h_flex()
                 .w_full()
-                .h(self.options.size.table_row_height())
+                .h(row_height)
                 .when(need_render_border, |this| {
                     this.border_b_1().border_color(cx.theme().table_row_border)
                 })
@@ -1166,8 +1167,8 @@ where
                 .render_tr(row_ix, window, cx)
                 .h_flex()
                 .w_full()
-                .h_full()
-                .border_t_1()
+                .h(row_height)
+                .border_b_1()
                 .border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
                 .children((0..columns_count).map(|col_ix| {
@@ -1182,7 +1183,6 @@ where
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
     fn calculate_extra_rows_needed(&self, rows_count: usize) -> usize {
         let mut extra_rows_needed = 0;
-
         let row_height = self.options.size.table_row_height();
         let total_height = self
             .vertical_scroll_handle
@@ -1195,9 +1195,8 @@ where
 
         let actual_height = row_height * rows_count as f32;
         let remaining_height = total_height - actual_height;
-
         if remaining_height > px(0.) {
-            extra_rows_needed = (remaining_height / row_height).ceil() as usize;
+            extra_rows_needed = (remaining_height / row_height).floor() as usize;
         }
 
         extra_rows_needed
