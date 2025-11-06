@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
+    h_flex, spinner::Spinner, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
     FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
@@ -562,7 +562,7 @@ impl RenderOnce for Button {
                     })
                     .when(self.loading, |this| {
                         this.child(
-                            Indicator::new()
+                            Spinner::new()
                                 .with_size(self.size)
                                 .when_some(self.loading_icon, |this, icon| this.icon(icon)),
                         )

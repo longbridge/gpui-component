@@ -1,23 +1,23 @@
 use gpui::{
-    px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Window, px,
 };
-use gpui_component::{indicator::Indicator, v_flex, ActiveTheme as _, IconName, Sizable};
+use gpui_component::{ActiveTheme as _, IconName, Sizable, spinner::Spinner, v_flex};
 
 use crate::section;
 
-pub struct IndicatorStory {
+pub struct SpinnerStory {
     focus_handle: gpui::FocusHandle,
     value: f32,
 }
 
-impl super::Story for IndicatorStory {
+impl super::Story for SpinnerStory {
     fn title() -> &'static str {
-        "Indicator"
+        "Spinner"
     }
 
     fn description() -> &'static str {
-        "Displays an indicator showing the completion progress of a task."
+        "Displays an spinner showing the completion progress of a task."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -25,7 +25,7 @@ impl super::Story for IndicatorStory {
     }
 }
 
-impl IndicatorStory {
+impl SpinnerStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -42,39 +42,40 @@ impl IndicatorStory {
     }
 }
 
-impl Focusable for IndicatorStory {
+impl Focusable for SpinnerStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for IndicatorStory {
+impl Render for SpinnerStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .items_center()
-            .gap_y_3()
-            .child(section("Indicator").gap_x_2().child(Indicator::new()))
+            .size_full()
+            .gap_6()
+            .child(section("Spinner").gap_x_2().child(Spinner::new()))
             .child(
-                section("Indicator with color")
+                section("Spinner with color")
                     .gap_x_2()
-                    .child(Indicator::new().color(cx.theme().blue))
-                    .child(Indicator::new().color(cx.theme().green)),
+                    .child(Spinner::new().color(cx.theme().blue))
+                    .child(Spinner::new().color(cx.theme().green)),
             )
             .child(
-                section("Indicator with size")
+                section("Spinner with size")
                     .gap_x_2()
-                    .child(Indicator::new().with_size(px(64.)))
-                    .child(Indicator::new().large())
-                    .child(Indicator::new())
-                    .child(Indicator::new().small())
-                    .child(Indicator::new().xsmall()),
+                    .child(Spinner::new().with_size(px(64.)))
+                    .child(Spinner::new().large())
+                    .child(Spinner::new())
+                    .child(Spinner::new().small())
+                    .child(Spinner::new().xsmall()),
             )
             .child(
-                section("Indicator with Icon")
+                section("Spinner with Icon")
                     .gap_x_2()
-                    .child(Indicator::new().icon(IconName::LoaderCircle))
+                    .child(Spinner::new().icon(IconName::LoaderCircle))
                     .child(
-                        Indicator::new()
+                        Spinner::new()
                             .icon(IconName::LoaderCircle)
                             .large()
                             .color(cx.theme().cyan),
