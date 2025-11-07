@@ -1166,7 +1166,7 @@ impl InputState {
             self.replace_text_in_range_silent(None, &new_line_text, window, cx);
             self.pause_blink_cursor(cx);
         } else {
-            // Single line input, just emit the event (e.g.: In a modal dialog to confirm).
+            // Single line input, just emit the event (e.g.: In a dialog to confirm).
             cx.propagate();
         }
 

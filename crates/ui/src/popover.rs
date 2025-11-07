@@ -418,8 +418,8 @@ impl<M: ManagedView> Element for Popover<M> {
                             .subscribe(
                                 &new_content_view,
                                 cx,
-                                move |modal, _: &DismissEvent, window, cx| {
-                                    if modal.focus_handle(cx).contains_focused(window, cx) {
+                                move |dialog, _: &DismissEvent, window, cx| {
+                                    if dialog.focus_handle(cx).contains_focused(window, cx) {
                                         if let Some(previous_focus_handle) =
                                             previous_focus_handle.as_ref()
                                         {

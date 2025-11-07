@@ -36,7 +36,7 @@
       "default": null
     },
     "radius.lg": {
-      "description": "The border radius for large elements like Modals and Notifications, default is 8.",
+      "description": "The border radius for large elements like Dialogs and Notifications, default is 8.",
       "type": ["number", "null"],
       "default": null
     },

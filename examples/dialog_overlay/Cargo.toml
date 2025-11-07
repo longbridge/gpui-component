@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
-name = "modal_overlay"
-description = "An example of using gpui-component to create a modal with overlay."
+name = "dialog_overlay"
+description = "An example of using gpui-component to create a Dialog with overlay."
 publish = false
 version = "0.4.0-preview1"
 

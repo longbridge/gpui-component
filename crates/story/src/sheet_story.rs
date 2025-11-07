@@ -247,7 +247,7 @@ impl SheetStory {
 
         let input1 = cx.new(|cx| InputState::new(window, cx).placeholder("Your Name"));
         let input2 = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("For test focus back on modal close.")
+            InputState::new(window, cx).placeholder("For test focus back on dialog close.")
         });
         let date = cx.new(|cx| DatePickerState::new(window, cx));
 
@@ -424,7 +424,7 @@ impl Render for SheetStory {
                                     })
                                     .tooltip(
                                         "This button for test dispatch action, \
-                                        to make sure when Modal close,\
+                                        to make sure when Dialog close,\
                                         \nthis still can handle the action.",
                                     ),
                             ),

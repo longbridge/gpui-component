@@ -10,8 +10,8 @@ use gpui::{
 use crate::{
     actions::Cancel,
     button::{Button, ButtonVariants as _},
+    dialog::overlay_color,
     h_flex,
-    modal::overlay_color,
     title_bar::TITLE_BAR_HEIGHT,
     v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
 };

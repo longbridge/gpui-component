@@ -13,6 +13,7 @@ mod collapsible_story;
 mod color_picker_story;
 mod date_picker_story;
 mod description_list_story;
+mod dialog_story;
 mod form_story;
 mod group_box_story;
 mod icon_story;
@@ -22,7 +23,6 @@ mod kbd_story;
 mod label_story;
 mod list_story;
 mod menu_story;
-mod modal_story;
 mod notification_story;
 mod number_input_story;
 mod otp_input_story;
@@ -73,6 +73,7 @@ pub use collapsible_story::CollapsibleStory;
 pub use color_picker_story::ColorPickerStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
+pub use dialog_story::DialogStory;
 pub use form_story::FormStory;
 pub use group_box_story::GroupBoxStory;
 pub use icon_story::IconStory;
@@ -82,7 +83,6 @@ pub use kbd_story::KbdStory;
 pub use label_story::LabelStory;
 pub use list_story::ListStory;
 pub use menu_story::MenuStory;
-pub use modal_story::ModalStory;
 pub use notification_story::NotificationStory;
 pub use number_input_story::NumberInputStory;
 pub use otp_input_story::OtpInputStory;
@@ -263,7 +263,7 @@ impl StoryRoot {
 impl Render for StoryRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
-        let modal_layer = Root::render_modal_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
@@ -275,7 +275,7 @@ impl Render for StoryRoot {
                     .child(div().flex_1().overflow_hidden().child(self.view.clone())),
             )
             .children(sheet_layer)
-            .children(modal_layer)
+            .children(dialog_layer)
             .children(notification_layer)
     }
 }
@@ -666,7 +666,7 @@ impl StoryState {
             "ImageStory" => story!(ImageStory),
             "InputStory" => story!(InputStory),
             "ListStory" => story!(ListStory),
-            "ModalStory" => story!(ModalStory),
+            "DialogStory" => story!(DialogStory),
             "PopoverStory" => story!(PopoverStory),
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
