@@ -15,7 +15,7 @@ use crate::{
     h_flex, v_flex, ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
 };
 
-const CONTEXT: &str = "Modal";
+const CONTEXT: &str = "Dialog";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("escape", Cancel, Some(CONTEXT)),
@@ -27,15 +27,15 @@ type RenderButtonFn = Box<dyn FnOnce(&mut Window, &mut App) -> AnyElement>;
 type FooterFn =
     Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<AnyElement>>;
 
-/// Modal button props.
-pub struct ModalButtonProps {
+/// Dialog button props.
+pub struct DialogButtonProps {
     ok_text: Option<SharedString>,
     ok_variant: ButtonVariant,
     cancel_text: Option<SharedString>,
     cancel_variant: ButtonVariant,
 }
 
-impl Default for ModalButtonProps {
+impl Default for DialogButtonProps {
     fn default() -> Self {
         Self {
             ok_text: None,
@@ -46,7 +46,7 @@ impl Default for ModalButtonProps {
     }
 }
 
-impl ModalButtonProps {
+impl DialogButtonProps {
     /// Sets the text of the OK button. Default is `OK`.
     pub fn ok_text(mut self, ok_text: impl Into<SharedString>) -> Self {
         self.ok_text = Some(ok_text.into());
@@ -74,7 +74,7 @@ impl ModalButtonProps {
 
 /// A modal to display content in a dialog box.
 #[derive(IntoElement)]
-pub struct Modal {
+pub struct Dialog {
     style: StyleRefinement,
     title: Option<AnyElement>,
     footer: Option<FooterFn>,
@@ -86,8 +86,8 @@ pub struct Modal {
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     on_ok: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>>,
     on_cancel: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>,
-    button_props: ModalButtonProps,
-    show_close: bool,
+    button_props: DialogButtonProps,
+    close_button: bool,
     overlay: bool,
     overlay_closable: bool,
     keyboard: bool,
@@ -106,7 +106,7 @@ pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
     cx.theme().overlay
 }
 
-impl Modal {
+impl Dialog {
     /// Create a new modal.
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
@@ -125,8 +125,8 @@ impl Modal {
             on_close: Rc::new(|_, _, _| {}),
             on_ok: None,
             on_cancel: Rc::new(|_, _, _| true),
-            button_props: ModalButtonProps::default(),
-            show_close: true,
+            button_props: DialogButtonProps::default(),
+            close_button: true,
             overlay_closable: true,
         }
     }
@@ -165,7 +165,7 @@ impl Modal {
     pub fn confirm(self) -> Self {
         self.footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
             .overlay_closable(false)
-            .show_close(false)
+            .close_button(false)
     }
 
     /// Set to as a alter modal, with OK button.
@@ -174,11 +174,11 @@ impl Modal {
     pub fn alert(self) -> Self {
         self.footer(|ok, _, window, cx| vec![ok(window, cx)])
             .overlay_closable(false)
-            .show_close(false)
+            .close_button(false)
     }
 
     /// Set the button props of the modal.
-    pub fn button_props(mut self, button_props: ModalButtonProps) -> Self {
+    pub fn button_props(mut self, button_props: DialogButtonProps) -> Self {
         self.button_props = button_props;
         self
     }
@@ -217,8 +217,8 @@ impl Modal {
     }
 
     /// Sets the false to hide close icon, default: true
-    pub fn show_close(mut self, show_close: bool) -> Self {
-        self.show_close = show_close;
+    pub fn close_button(mut self, close_button: bool) -> Self {
+        self.close_button = close_button;
         self
     }
 
@@ -265,19 +265,19 @@ impl Modal {
     }
 }
 
-impl ParentElement for Modal {
+impl ParentElement for Dialog {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.content.extend(elements);
     }
 }
 
-impl Styled for Modal {
+impl Styled for Dialog {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for Modal {
+impl RenderOnce for Dialog {
     fn render(self, window: &mut Window, cx: &mut App) -> impl gpui::IntoElement {
         let layer_ix = self.layer_ix;
         let on_close = self.on_close.clone();
@@ -290,7 +290,7 @@ impl RenderOnce for Modal {
             let ok_text = self
                 .button_props
                 .ok_text
-                .unwrap_or_else(|| t!("Modal.ok").into());
+                .unwrap_or_else(|| t!("Dialog.ok").into());
             let ok_variant = self.button_props.ok_variant;
             move |_, _| {
                 Button::new("ok")
@@ -308,7 +308,7 @@ impl RenderOnce for Modal {
                             }
 
                             on_close(&ClickEvent::default(), window, cx);
-                            window.close_modal(cx);
+                            window.close_dialog(cx);
                         }
                     })
                     .into_any_element()
@@ -320,7 +320,7 @@ impl RenderOnce for Modal {
             let cancel_text = self
                 .button_props
                 .cancel_text
-                .unwrap_or_else(|| t!("Modal.cancel").into());
+                .unwrap_or_else(|| t!("Dialog.cancel").into());
             let cancel_variant = self.button_props.cancel_variant;
             move |_, _| {
                 Button::new("cancel")
@@ -335,7 +335,7 @@ impl RenderOnce for Modal {
                             }
 
                             on_close(&ClickEvent::default(), window, cx);
-                            window.close_modal(cx);
+                            window.close_dialog(cx);
                         }
                     })
                     .into_any_element()
@@ -390,7 +390,7 @@ impl RenderOnce for Modal {
                     })
                     .when(self.overlay, |this| {
                         // Only the last modal owns the `mouse down - close modal` event.
-                        if (self.layer_ix + 1) != Root::read(window, cx).active_modals.len() {
+                        if (self.layer_ix + 1) != Root::read(window, cx).active_dialogs.len() {
                             return this;
                         }
 
@@ -403,7 +403,7 @@ impl RenderOnce for Modal {
                                 if self.overlay_closable && event.button == MouseButton::Left {
                                     on_cancel(&ClickEvent::default(), window, cx);
                                     on_close(&ClickEvent::default(), window, cx);
-                                    window.close_modal(cx);
+                                    window.close_dialog(cx);
                                 }
                             }
                         })
@@ -431,11 +431,11 @@ impl RenderOnce for Modal {
                                     move |_: &Cancel, window, cx| {
                                         // FIXME:
                                         //
-                                        // Here some Modal have no focus_handle, so it will not work will Escape key.
-                                        // But by now, we `cx.close_modal()` going to close the last active model, so the Escape is unexpected to work.
+                                        // Here some Dialog have no focus_handle, so it will not work will Escape key.
+                                        // But by now, we `cx.close_dialog()` going to close the last active model, so the Escape is unexpected to work.
                                         on_cancel(&ClickEvent::default(), window, cx);
                                         on_close(&ClickEvent::default(), window, cx);
-                                        window.close_modal(cx);
+                                        window.close_dialog(cx);
                                     }
                                 })
                                 .on_action({
@@ -446,10 +446,10 @@ impl RenderOnce for Modal {
                                         if let Some(on_ok) = &on_ok {
                                             if on_ok(&ClickEvent::default(), window, cx) {
                                                 on_close(&ClickEvent::default(), window, cx);
-                                                window.close_modal(cx);
+                                                window.close_dialog(cx);
                                             }
                                         } else if has_footer {
-                                            window.close_modal(cx);
+                                            window.close_dialog(cx);
                                         }
                                     }
                                 })
@@ -472,7 +472,7 @@ impl RenderOnce for Modal {
                                         .child(title),
                                 )
                             })
-                            .children(self.show_close.then(|| {
+                            .children(self.close_button.then(|| {
                                 let top = (paddings.top - px(10.)).max(px(8.));
                                 let right = (paddings.right - px(10.)).max(px(8.));
 
@@ -489,7 +489,7 @@ impl RenderOnce for Modal {
                                         move |_, window, cx| {
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
-                                            window.close_modal(cx);
+                                            window.close_dialog(cx);
                                         }
                                     })
                             }))

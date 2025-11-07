@@ -7,7 +7,7 @@ pub struct HelloWorld;
 
 impl HelloWorld {
     fn show_modal(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        window.open_modal(cx, move |modal, _, _| {
+        window.open_dialog(cx, move |modal, _, _| {
             modal.title("Test Modal").child("Hello from Modal!")
         });
     }
@@ -72,7 +72,7 @@ impl Render for HelloWorld {
                             }),
                     ),
             )
-            .children(Root::render_modal_layer(window, cx))
+            .children(Root::render_dialog_layer(window, cx))
             .children(Root::render_sheet_layer(window, cx))
     }
 }

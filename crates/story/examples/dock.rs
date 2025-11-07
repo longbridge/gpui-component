@@ -10,8 +10,8 @@ use gpui_component::{
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 use story::{
-    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, FormStory,
-    IconStory, ImageStory, InputStory, LabelStory, ListStory, ModalStory, NotificationStory, Open,
+    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DialogStory,
+    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SelectStory, SidebarStory,
     StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
@@ -347,7 +347,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SelectStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<LabelStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<DialogStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
@@ -435,7 +435,7 @@ impl StoryWorkspace {
             1 => Arc::new(StoryContainer::panel::<InputStory>(window, cx)),
             2 => Arc::new(StoryContainer::panel::<SelectStory>(window, cx)),
             3 => Arc::new(StoryContainer::panel::<LabelStory>(window, cx)),
-            4 => Arc::new(StoryContainer::panel::<ModalStory>(window, cx)),
+            4 => Arc::new(StoryContainer::panel::<DialogStory>(window, cx)),
             5 => Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
             6 => Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
             7 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
@@ -507,7 +507,7 @@ pub fn open_new(
 impl Render for StoryWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
-        let modal_layer = Root::render_modal_layer(window, cx);
+        let modal_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
         div()

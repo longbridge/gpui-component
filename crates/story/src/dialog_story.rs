@@ -8,9 +8,9 @@ use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
+    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputState},
-    modal::ModalButtonProps,
     select::{Select, SelectState},
     text::TextView,
     v_flex,
@@ -18,26 +18,26 @@ use gpui_component::{
 
 use crate::{TestAction, section};
 
-pub struct ModalStory {
+pub struct DialogStory {
     focus_handle: FocusHandle,
     selected_value: Option<SharedString>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
     select: Entity<SelectState<Vec<String>>>,
-    modal_overlay: bool,
-    model_show_close: bool,
-    model_keyboard: bool,
+    dialog_overlay: bool,
+    close_button: bool,
+    keyboard: bool,
     overlay_closable: bool,
 }
 
-impl super::Story for ModalStory {
+impl super::Story for DialogStory {
     fn title() -> &'static str {
-        "Modal"
+        "Dialog"
     }
 
     fn description() -> &'static str {
-        "A modal dialog"
+        "A dialog dialog"
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -45,7 +45,7 @@ impl super::Story for ModalStory {
     }
 }
 
-impl ModalStory {
+impl DialogStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -53,7 +53,7 @@ impl ModalStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input1 = cx.new(|cx| InputState::new(window, cx).placeholder("Your Name"));
         let input2 = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("For test focus back on modal close.")
+            InputState::new(window, cx).placeholder("For test focus back on dialog close.")
         });
         let date = cx.new(|cx| DatePickerState::new(window, cx));
         let select = cx.new(|cx| {
@@ -76,34 +76,34 @@ impl ModalStory {
             input2,
             date,
             select,
-            modal_overlay: true,
-            model_show_close: true,
-            model_keyboard: true,
+            dialog_overlay: true,
+            close_button: true,
+            keyboard: true,
             overlay_closable: true,
         }
     }
 
-    fn show_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let overlay = self.modal_overlay;
-        let modal_show_close = self.model_show_close;
+    fn show_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let overlay = self.dialog_overlay;
+        let dialog_close_button = self.close_button;
         let overlay_closable = self.overlay_closable;
         let input1 = self.input1.clone();
         let date = self.date.clone();
         let select = self.select.clone();
         let view = cx.entity().clone();
-        let keyboard = self.model_keyboard;
+        let keyboard = self.keyboard;
 
-        window.open_modal(cx, move |modal, _, _| {
-            modal
-                .title("Form Modal")
+        window.open_dialog(cx, move |dialog, _, _| {
+            dialog
+                .title("Form Dialog")
                 .overlay(overlay)
                 .keyboard(keyboard)
-                .show_close(modal_show_close)
+                .close_button(dialog_close_button)
                 .overlay_closable(overlay_closable)
                 .child(
                     v_flex()
                         .gap_3()
-                        .child("This is a modal dialog.")
+                        .child("This is a dialog dialog.")
                         .child("You can put anything here.")
                         .child(Input::new(&input1))
                         .child(Select::new(&select))
@@ -120,7 +120,7 @@ impl ModalStory {
                                 let input1 = input1.clone();
                                 let date = date.clone();
                                 move |_, window, cx| {
-                                    window.close_modal(cx);
+                                    window.close_dialog(cx);
 
                                     view.update(cx, |view, cx| {
                                         view.selected_value = Some(
@@ -134,24 +134,24 @@ impl ModalStory {
                                     });
                                 }
                             }),
-                            Button::new("new-modal").label("Open Other Modal").on_click(
-                                move |_, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
-                                        modal
-                                            .title("Other Modal")
-                                            .child("This is another modal.")
+                            Button::new("new-dialog")
+                                .label("Open Other Dialog")
+                                .on_click(move |_, window, cx| {
+                                    window.open_dialog(cx, move |dialog, _, _| {
+                                        dialog
+                                            .title("Other Dialog")
+                                            .child("This is another dialog.")
                                             .min_h(px(100.))
                                             .overlay(overlay)
                                             .keyboard(keyboard)
-                                            .show_close(modal_show_close)
+                                            .close_button(dialog_close_button)
                                             .overlay_closable(overlay_closable)
                                     });
-                                },
-                            ),
+                                }),
                             Button::new("cancel")
                                 .label("Cancel")
                                 .on_click(move |_, window, cx| {
-                                    window.close_modal(cx);
+                                    window.close_dialog(cx);
                                 }),
                         ]
                     }
@@ -171,19 +171,19 @@ impl ModalStory {
     }
 }
 
-impl Focusable for ModalStory {
+impl Focusable for DialogStory {
     fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for ModalStory {
+impl Render for DialogStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let modal_overlay = self.modal_overlay;
+        let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
 
         div()
-            .id("modal-story")
+            .id("dialog-story")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_test_action))
             .size_full()
@@ -195,11 +195,11 @@ impl Render for ModalStory {
                             .items_center()
                             .gap_3()
                             .child(
-                                Checkbox::new("modal-overlay")
-                                    .label("Modal Overlay")
-                                    .checked(self.modal_overlay)
+                                Checkbox::new("dialog-overlay")
+                                    .label("Dialog Overlay")
+                                    .checked(self.dialog_overlay)
                                     .on_click(cx.listener(|view, _, _, cx| {
-                                        view.modal_overlay = !view.modal_overlay;
+                                        view.dialog_overlay = !view.dialog_overlay;
                                         cx.notify();
                                     })),
                             )
@@ -213,31 +213,31 @@ impl Render for ModalStory {
                                     })),
                             )
                             .child(
-                                Checkbox::new("modal-show-close")
+                                Checkbox::new("dialog-show-close")
                                     .label("Model Close Button")
-                                    .checked(self.model_show_close)
+                                    .checked(self.close_button)
                                     .on_click(cx.listener(|view, _, _, cx| {
-                                        view.model_show_close = !view.model_show_close;
+                                        view.close_button = !view.close_button;
                                         cx.notify();
                                     })),
                             )
                             .child(
-                                Checkbox::new("modal-keyboard")
+                                Checkbox::new("dialog-keyboard")
                                     .label("Keyboard")
-                                    .checked(self.model_keyboard)
+                                    .checked(self.keyboard)
                                     .on_click(cx.listener(|view, _, _, cx| {
-                                        view.model_keyboard = !view.model_keyboard;
+                                        view.keyboard = !view.keyboard;
                                         cx.notify();
                                     })),
                             ),
                     )
                     .child(
-                        section("Normal Modal").child(
-                            Button::new("show-modal")
+                        section("Normal Dialog").child(
+                            Button::new("show-dialog")
                                 .outline()
-                                .label("Open Modal")
+                                .label("Open Dialog")
                                 .on_click(
-                                    cx.listener(|this, _, window, cx| this.show_modal(window, cx)),
+                                    cx.listener(|this, _, window, cx| this.show_dialog(window, cx)),
                                 ),
                         ),
                     )
@@ -255,21 +255,21 @@ impl Render for ModalStory {
                                     })
                                     .tooltip(
                                         "This button for test dispatch action, \
-                                        to make sure when Modal close,\
+                                        to make sure when Dialog close,\
                                         \nthis still can handle the action.",
                                     ),
                             ),
                     )
                     .child(
-                        section("Confirm Modal").child(
-                            Button::new("confirm-modal0")
+                        section("Confirm Dialog").child(
+                            Button::new("confirm-dialog0")
                                 .outline()
-                                .label("Open Confirm Modal")
+                                .label("Open Confirm Dialog")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
-                                        modal
+                                    window.open_dialog(cx, move |dialog, _, _| {
+                                        dialog
                                             .confirm()
-                                            .overlay(modal_overlay)
+                                            .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)
                                             .child("Are you sure to submit?")
                                             .on_ok(|_, window, cx| {
@@ -289,16 +289,16 @@ impl Render for ModalStory {
                         ),
                     )
                     .child(
-                        section("Confirm Modal with custom buttons").child(
-                            Button::new("confirm-modal1")
+                        section("Confirm Dialog with custom buttons").child(
+                            Button::new("confirm-dialog1")
                                 .outline()
                                 .label("Custom Buttons")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, cx| {
-                                        modal
+                                    window.open_dialog(cx, move |dialog, _, cx| {
+                                        dialog
                                             .rounded_lg()
                                             .confirm()
-                                            .overlay(modal_overlay)
+                                            .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)
                                             .child(
                                                 h_flex().gap_3()
@@ -306,7 +306,7 @@ impl Render for ModalStory {
                                                     .child("Update successful, we need to restart the application.")
                                             )
                                             .button_props(
-                                                ModalButtonProps::default()
+                                                DialogButtonProps::default()
                                                     .cancel_text("Later")
                                                     .cancel_variant(ButtonVariant::Secondary)
                                                     .ok_text("Restart Now")
@@ -331,15 +331,15 @@ impl Render for ModalStory {
                         ),
                     )
                     .child(
-                        section("Alert Modal").child(
-                            Button::new("alert-modal")
+                        section("Alert Dialog").child(
+                            Button::new("alert-dialog")
                                 .outline()
                                 .label("Alert")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
-                                        modal
+                                    window.open_dialog(cx, move |dialog, _, _| {
+                                        dialog
                                             .confirm()
-                                            .overlay(modal_overlay)
+                                            .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)
                                             .child("You are successfully logged in.")
                                             .alert()
@@ -352,17 +352,17 @@ impl Render for ModalStory {
                         ),
                     )
                     .child(
-                        section("Scrollable Modal").child(
-                            Button::new("scrollable-modal")
+                        section("Scrollable Dialog").child(
+                            Button::new("scrollable-dialog")
                                 .outline()
-                                .label("Scrollable Modal")
+                                .label("Scrollable Dialog")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, window, cx| {
-                                        modal
+                                    window.open_dialog(cx, move |dialog, window, cx| {
+                                        dialog
                                             .h(px(450.))
-                                            .overlay(modal_overlay)
+                                            .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)
-                                            .title("Modal with scrollbar")
+                                            .title("Dialog with scrollbar")
                                             .child(TextView::markdown(
                                                 "markdown1",
                                                 include_str!("../../../README.md"),
@@ -375,32 +375,32 @@ impl Render for ModalStory {
                     )
                     .child(
                         section("Custom Paddings").child(
-                            Button::new("custom-modal-paddings")
+                            Button::new("custom-dialog-paddings")
                                 .outline()
                                 .label("Custom Paddings")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, _| {
-                                        modal
+                                    window.open_dialog(cx, move |dialog, _, _| {
+                                        dialog
                                             .p_3()
-                                            .title("Custom Modal Title")
-                                            .child("This is a custom modal content, we can use paddings to control the layout and spacing within the modal.")
+                                            .title("Custom Dialog Title")
+                                            .child("This is a custom dialog content, we can use paddings to control the layout and spacing within the dialog.")
                                     });
                                 })),
                         ),
                     )
                     .child(
                         section("Custom Style").child(
-                            Button::new("custom-modal-style")
+                            Button::new("custom-dialog-style")
                                 .outline()
-                                .label("Custom Modal Style")
+                                .label("Custom Dialog Style")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_modal(cx, move |modal, _, cx| {
-                                        modal
+                                    window.open_dialog(cx, move |dialog, _, cx| {
+                                        dialog
                                             .rounded_lg()
                                             .bg(cx.theme().cyan)
                                             .text_color(cx.theme().info_foreground)
-                                            .title("Custom Modal Title")
-                                            .child("This is a custom modal content.")
+                                            .title("Custom Dialog Title")
+                                            .child("This is a custom dialog content.")
                                     });
                                 })),
                         ),
