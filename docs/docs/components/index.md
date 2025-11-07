@@ -44,7 +44,7 @@ collapsed: false
 
 - [DescriptionList](description-list) - Key-value pair display
 - [GroupBox](group-box) - Grouped content with borders
-- [Modal](modal) - Dialog and modal windows
+- [Dialog](dialog) - Dialog and modal windows
 - [Notification](notification) - Toast notifications
 - [Popover](popover) - Floating content display
 - [Resizable](resizable) - Resizable panels and containers
