@@ -9,7 +9,7 @@ use gpui_component::{
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
     divider::Divider,
-    form::{form_field, v_form},
+    form::{field, v_form},
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
@@ -189,7 +189,7 @@ impl Render for FormStory {
                     .columns(self.columns)
                     .label_width(px(if is_multi_column { 100. } else { 140. }))
                     .child(
-                        form_field().label_fn(|_, _| "Name").child(
+                        field().label_fn(|_, _| "Name").child(
                             h_flex()
                                 .gap_2()
                                 .border_1()
@@ -210,13 +210,13 @@ impl Render for FormStory {
                         ),
                     )
                     .child(
-                        form_field()
+                        field()
                             .label("Email")
                             .child(Input::new(&self.email_input))
                             .required(true),
                     )
                     .child(
-                        form_field()
+                        field()
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
                             .child(Input::new(&self.bio_input))
@@ -225,21 +225,21 @@ impl Render for FormStory {
                             }),
                     )
                     .child(
-                        form_field()
-                            .no_label_indent()
+                        field()
+                            .label_indent(false)
                             .when(is_multi_column, |this| this.col_span(2))
                             .child("This is a full width form field."),
                     )
                     .child(
-                        form_field()
+                        field()
                             .label("Please select your birthday")
                             .description("Select your birthday, we will send you a gift.")
                             .child(DatePicker::new(&self.date)),
                     )
                     .child(
-                        form_field()
+                        field()
                             .when(is_horizontal && is_multi_column, |this| {
-                                this.no_label_indent()
+                                this.label_indent(false)
                             })
                             .when(is_multi_column, |this| this.col_start(1))
                             .child(
@@ -253,9 +253,9 @@ impl Render for FormStory {
                             ),
                     )
                     .child(
-                        form_field()
+                        field()
                             .when(is_horizontal && is_multi_column, |this| {
-                                this.no_label_indent()
+                                this.label_indent(false)
                             })
                             .child(
                                 ColorPicker::new(&self.color_state)
@@ -264,9 +264,9 @@ impl Render for FormStory {
                             ),
                     )
                     .child(
-                        form_field()
+                        field()
                             .when(is_horizontal && is_multi_column, |this| {
-                                this.no_label_indent()
+                                this.label_indent(false)
                             })
                             .child(
                                 Checkbox::new("use-vertical-layout")
