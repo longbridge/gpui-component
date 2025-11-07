@@ -45,7 +45,7 @@ pub struct ThemeConfig {
     /// The border radius for general elements, default is 6.
     #[serde(rename = "radius")]
     pub radius: Option<usize>,
-    /// The border radius for large elements like Modals and Notifications, default is 8.
+    /// The border radius for large elements like Dialogs and Notifications, default is 8.
     #[serde(rename = "radius.lg")]
     pub radius_lg: Option<usize>,
     /// Set shadows in the theme, for example the Input and Button, default is true.

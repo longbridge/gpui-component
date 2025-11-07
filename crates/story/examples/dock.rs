@@ -138,11 +138,11 @@ impl StoryWorkspace {
                                     Box::new(TogglePanelVisible(SharedString::from("Sidebar"))),
                                 )
                                 .menu_with_check(
-                                    "Modal",
+                                    "Dialog",
                                     !invisible_panels
                                         .read(cx)
-                                        .contains(&SharedString::from("Modal")),
-                                    Box::new(TogglePanelVisible(SharedString::from("Modal"))),
+                                        .contains(&SharedString::from("Dialog")),
+                                    Box::new(TogglePanelVisible(SharedString::from("Dialog"))),
                                 )
                                 .menu_with_check(
                                     "Accordion",
@@ -507,7 +507,7 @@ pub fn open_new(
 impl Render for StoryWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
-        let modal_layer = Root::render_dialog_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
@@ -522,7 +522,7 @@ impl Render for StoryWorkspace {
             .child(self.title_bar.clone())
             .child(self.dock_area.clone())
             .children(sheet_layer)
-            .children(modal_layer)
+            .children(dialog_layer)
             .children(notification_layer)
     }
 }

@@ -263,7 +263,7 @@ impl StoryRoot {
 impl Render for StoryRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
-        let modal_layer = Root::render_dialog_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
@@ -275,7 +275,7 @@ impl Render for StoryRoot {
                     .child(div().flex_1().overflow_hidden().child(self.view.clone())),
             )
             .children(sheet_layer)
-            .children(modal_layer)
+            .children(dialog_layer)
             .children(notification_layer)
     }
 }

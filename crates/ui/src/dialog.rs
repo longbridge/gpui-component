@@ -92,7 +92,7 @@ pub struct Dialog {
     overlay_closable: bool,
     keyboard: bool,
 
-    /// This will be change when open the modal, the focus handle is create when open the modal.
+    /// This will be change when open the dialog, the focus handle is create when open the dialog.
     pub(crate) focus_handle: FocusHandle,
     pub(crate) layer_ix: usize,
     pub(crate) overlay_visible: bool,
@@ -107,7 +107,7 @@ pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
 }
 
 impl Dialog {
-    /// Create a new modal.
+    /// Create a new dialog.
     pub fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
@@ -131,13 +131,13 @@ impl Dialog {
         }
     }
 
-    /// Sets the title of the modal.
+    /// Sets the title of the dialog.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = Some(title.into_any_element());
         self
     }
 
-    /// Set the footer of the modal.
+    /// Set the footer of the dialog.
     ///
     /// The `footer` is a function that takes two `RenderButtonFn` and a `WindowContext` and returns a list of `AnyElement`.
     ///
@@ -159,7 +159,7 @@ impl Dialog {
         self
     }
 
-    /// Set to use confirm modal, with OK and Cancel buttons.
+    /// Set to use confirm dialog, with OK and Cancel buttons.
     ///
     /// See also [`Self::alert`]
     pub fn confirm(self) -> Self {
@@ -168,7 +168,7 @@ impl Dialog {
             .close_button(false)
     }
 
-    /// Set to as a alter modal, with OK button.
+    /// Set to as a alter dialog, with OK button.
     ///
     /// See also [`Self::confirm`]
     pub fn alert(self) -> Self {
@@ -177,13 +177,13 @@ impl Dialog {
             .close_button(false)
     }
 
-    /// Set the button props of the modal.
+    /// Set the button props of the dialog.
     pub fn button_props(mut self, button_props: DialogButtonProps) -> Self {
         self.button_props = button_props;
         self
     }
 
-    /// Sets the callback for when the modal is closed.
+    /// Sets the callback for when the dialog is closed.
     ///
     /// Called after [`Self::on_ok`] or [`Self::on_cancel`] callback.
     pub fn on_close(
@@ -194,9 +194,9 @@ impl Dialog {
         self
     }
 
-    /// Sets the callback for when the modal is has been confirmed.
+    /// Sets the callback for when the dialog is has been confirmed.
     ///
-    /// The callback should return `true` to close the modal, if return `false` the modal will not be closed.
+    /// The callback should return `true` to close the dialog, if return `false` the dialog will not be closed.
     pub fn on_ok(
         mut self,
         on_ok: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
@@ -205,9 +205,9 @@ impl Dialog {
         self
     }
 
-    /// Sets the callback for when the modal is has been canceled.
+    /// Sets the callback for when the dialog is has been canceled.
     ///
-    /// The callback should return `true` to close the modal, if return `false` the modal will not be closed.
+    /// The callback should return `true` to close the dialog, if return `false` the dialog will not be closed.
     pub fn on_cancel(
         mut self,
         on_cancel: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
@@ -222,39 +222,39 @@ impl Dialog {
         self
     }
 
-    /// Set the top offset of the modal, defaults to None, will use the 1/10 of the viewport height.
+    /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
     pub fn margin_top(mut self, margin_top: Pixels) -> Self {
         self.margin_top = Some(margin_top);
         self
     }
 
-    /// Sets the width of the modal, defaults to 480px.
+    /// Sets the width of the dialog, defaults to 480px.
     pub fn width(mut self, width: Pixels) -> Self {
         self.width = width;
         self
     }
 
-    /// Set the maximum width of the modal, defaults to `None`.
+    /// Set the maximum width of the dialog, defaults to `None`.
     pub fn max_w(mut self, max_width: Pixels) -> Self {
         self.max_width = Some(max_width);
         self
     }
 
-    /// Set the overlay of the modal, defaults to `true`.
+    /// Set the overlay of the dialog, defaults to `true`.
     pub fn overlay(mut self, overlay: bool) -> Self {
         self.overlay = overlay;
         self
     }
 
-    /// Set the overlay closable of the modal, defaults to `true`.
+    /// Set the overlay closable of the dialog, defaults to `true`.
     ///
-    /// When the overlay is clicked, the modal will be closed.
+    /// When the overlay is clicked, the dialog will be closed.
     pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
         self.overlay_closable = overlay_closable;
         self
     }
 
-    /// Set whether to support keyboard esc to close the modal, defaults to `true`.
+    /// Set whether to support keyboard esc to close the dialog, defaults to `true`.
     pub fn keyboard(mut self, keyboard: bool) -> Self {
         self.keyboard = keyboard;
         self
@@ -381,7 +381,7 @@ impl RenderOnce for Dialog {
             .snap_to_window()
             .child(
                 div()
-                    .id("modal")
+                    .id("dialog")
                     .occlude()
                     .w(view_size.width)
                     .h(view_size.height)
@@ -389,7 +389,7 @@ impl RenderOnce for Dialog {
                         this.bg(overlay_color(self.overlay, cx))
                     })
                     .when(self.overlay, |this| {
-                        // Only the last modal owns the `mouse down - close modal` event.
+                        // Only the last dialog owns the `mouse down - close dialog` event.
                         if (self.layer_ix + 1) != Root::read(window, cx).active_dialogs.len() {
                             return this;
                         }

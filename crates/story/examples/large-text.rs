@@ -53,7 +53,7 @@ impl Example {
         let editor = self.editor.clone();
         let input_state = self.go_to_line_state.clone();
 
-        window.open_dialog(cx, move |modal, window, cx| {
+        window.open_dialog(cx, move |dialog, window, cx| {
             input_state.update(cx, |state, cx| {
                 let position = editor.read(cx).cursor_position();
                 state.set_placeholder(
@@ -64,7 +64,7 @@ impl Example {
                 state.focus(window, cx);
             });
 
-            modal
+            dialog
                 .title("Go to line")
                 .child(Input::new(&input_state))
                 .confirm()

@@ -112,7 +112,6 @@ window.open_dialog(cx, |dialog, _, _| {
 ```rust
 window.open_dialog(cx, |dialog, _, _| {
     dialog
-        .confirm()
         .alert()
         .child("Operation completed successfully!")
         .on_close(|_, window, cx| {
@@ -181,7 +180,7 @@ window.open_dialog(cx, |dialog, _, _| {
         .overlay(true)              // Show overlay (default: true)
         .overlay_closable(true)     // Click overlay to close (default: true)
         .keyboard(true)             // ESC to close (default: true)
-        .close_button(false)           // Show close button (default: true)
+        .close_button(false)        // Show close button (default: true)
         .child("Dialog content")
 })
 ```
@@ -235,8 +234,10 @@ window.open_dialog(cx, |dialog, _, _| {
 
 ### Close Dialog Programmatically
 
+The `close_dialog` method can be used to close the active dialog from anywhere within the window context.
+
 ```rust
-// From inside dialog
+// Close top level active dialog.
 window.close_dialog(cx);
 
 // Close and perform action
