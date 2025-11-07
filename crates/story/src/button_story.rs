@@ -613,6 +613,38 @@ impl Render for ButtonStory {
                 ),
             )
             .child(
+                section("Button Group (Vertical)").child(
+                    ButtonGroup::new("button-group-vertical")
+                        .outline()
+                        .vertical(true)
+                        .disabled(disabled)
+                        .child(
+                            Button::new("button-one")
+                                .label("One")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-two")
+                                .label("Two")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-three")
+                                .label("Three")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        ),
+                ),
+            )
+            .child(
                 section("Toggle Button Group")
                     .sub_title(
                         Checkbox::new("multiple-button")
