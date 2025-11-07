@@ -1,5 +1,5 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, Corners, Edges, ElementId, InteractiveElement,
+    div, prelude::FluentBuilder as _, App, Axis, Corners, Edges, ElementId, InteractiveElement,
     IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window,
 };
@@ -18,7 +18,7 @@ pub struct ButtonGroup {
     children: Vec<Button>,
     pub(super) multiple: bool,
     pub(super) disabled: bool,
-    pub(super) vertical: bool,
+    pub(super) layout: Axis,
 
     // The button props
     pub(super) compact: bool,
@@ -49,7 +49,7 @@ impl ButtonGroup {
             outline: false,
             multiple: false,
             disabled: false,
-            vertical: false,
+            layout: Axis::Horizontal,
             on_click: None,
         }
     }
@@ -72,9 +72,9 @@ impl ButtonGroup {
         self
     }
 
-    /// Change the group direction to be vertical, default is false (horizontal)
-    pub fn vertical(mut self, vertical: bool) -> Self {
-        self.vertical = vertical;
+    /// Set the layout of the button group. Default is `Axis::Horizontal`.
+    pub fn layout(mut self, layout: Axis) -> Self {
+        self.layout = layout;
         self
     }
 
@@ -158,11 +158,13 @@ impl RenderOnce for ButtonGroup {
             }
         }
 
+        let vertical = self.layout == Axis::Vertical;
+
         div()
             .id(self.id)
             .flex()
-            .when(self.vertical, |this| this.flex_col().justify_center())
-            .when(!self.vertical, |this| this.items_center())
+            .when(vertical, |this| this.flex_col().justify_center())
+            .when(!vertical, |this| this.items_center())
             .refine_style(&self.style)
             .children(
                 self.children
@@ -177,8 +179,8 @@ impl RenderOnce for ButtonGroup {
                             child
                                 .border_corners(Corners {
                                     top_left: true,
-                                    top_right: self.vertical,
-                                    bottom_left: !self.vertical,
+                                    top_right: vertical,
+                                    bottom_left: !vertical,
                                     bottom_right: false,
                                 })
                                 .border_edges(Edges {
@@ -191,15 +193,15 @@ impl RenderOnce for ButtonGroup {
                             // Last
                             child
                                 .border_edges(Edges {
-                                    left: self.vertical,
-                                    top: !self.vertical,
+                                    left: vertical,
+                                    top: !vertical,
                                     right: true,
                                     bottom: true,
                                 })
                                 .border_corners(Corners {
                                     top_left: false,
-                                    top_right: !self.vertical,
-                                    bottom_left: self.vertical,
+                                    top_right: !vertical,
+                                    bottom_left: vertical,
                                     bottom_right: true,
                                 })
                         } else {
@@ -207,8 +209,8 @@ impl RenderOnce for ButtonGroup {
                             child
                                 .border_corners(Corners::all(false))
                                 .border_edges(Edges {
-                                    left: self.vertical,
-                                    top: !self.vertical,
+                                    left: vertical,
+                                    top: !vertical,
                                     right: true,
                                     bottom: true,
                                 })
