@@ -1,5 +1,5 @@
 use gpui::{
-    Action, App, AppContext as _, ClickEvent, Context, Corner, Entity, Focusable,
+    Action, App, AppContext as _, Axis, ClickEvent, Context, Corner, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
     prelude::FluentBuilder, px,
 };
@@ -616,7 +616,7 @@ impl Render for ButtonStory {
                 section("Button Group (Vertical)").child(
                     ButtonGroup::new("button-group-vertical")
                         .outline()
-                        .vertical(true)
+                        .layout(Axis::Vertical)
                         .disabled(disabled)
                         .child(
                             Button::new("button-one")
