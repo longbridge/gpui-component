@@ -171,6 +171,8 @@ fn render_item(
 
 The list automatically includes a search input by default. Implement `perform_search` to handle queries:
 
+And you should use `searchable(true)` when creating the `ListState` to show search input.
+
 ```rust
 impl ListDelegate for MyListDelegate {
     fn perform_search(
@@ -190,8 +192,8 @@ impl ListDelegate for MyListDelegate {
     }
 }
 
-// Create list without search input
-let state = cx.new(|cx| ListState::new(delegate, window, cx).no_query());
+let state = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
+List::new(&state)
 ```
 
 ### List with Loading State

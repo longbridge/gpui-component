@@ -771,7 +771,7 @@ impl InputState {
         self
     }
 
-    /// Set true to show indicator at the input right.
+    /// Set true to show spinner at the input right.
     ///
     /// Only for [`InputMode::SingleLine`] mode.
     pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
@@ -1060,6 +1060,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.selected_range.is_empty() {
+            self.replace_text_in_range(None, "", window, cx);
+            self.pause_blink_cursor(cx);
+            return;
+        }
+
         let mut offset = self.start_of_line();
         if offset == self.cursor() {
             offset = offset.saturating_sub(1);
@@ -1070,7 +1076,6 @@ impl InputState {
             window,
             cx,
         );
-
         self.pause_blink_cursor(cx);
     }
 
@@ -1080,6 +1085,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.selected_range.is_empty() {
+            self.replace_text_in_range(None, "", window, cx);
+            self.pause_blink_cursor(cx);
+            return;
+        }
+
         let mut offset = self.end_of_line();
         if offset == self.cursor() {
             offset = (offset + 1).clamp(0, self.text.len());
@@ -1099,6 +1110,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.selected_range.is_empty() {
+            self.replace_text_in_range(None, "", window, cx);
+            self.pause_blink_cursor(cx);
+            return;
+        }
+
         let offset = self.previous_start_of_word();
         self.replace_text_in_range_silent(
             Some(self.range_to_utf16(&(offset..self.cursor()))),
@@ -1115,6 +1132,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.selected_range.is_empty() {
+            self.replace_text_in_range(None, "", window, cx);
+            self.pause_blink_cursor(cx);
+            return;
+        }
+
         let offset = self.next_end_of_word();
         self.replace_text_in_range_silent(
             Some(self.range_to_utf16(&(self.cursor()..offset))),
@@ -1143,7 +1166,7 @@ impl InputState {
             self.replace_text_in_range_silent(None, &new_line_text, window, cx);
             self.pause_blink_cursor(cx);
         } else {
-            // Single line input, just emit the event (e.g.: In a modal dialog to confirm).
+            // Single line input, just emit the event (e.g.: In a dialog to confirm).
             cx.propagate();
         }
 

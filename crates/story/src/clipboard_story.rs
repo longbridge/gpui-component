@@ -4,8 +4,9 @@ use gpui::{
 };
 
 use gpui_component::{
-    ContextModal,
+    WindowExt,
     clipboard::Clipboard,
+    h_flex,
     input::{Input, InputState},
     label::Label,
     v_flex,
@@ -60,17 +61,24 @@ impl Render for ClipboardStory {
             .gap_6()
             .child(
                 section("Clipboard").max_w_md().child(
-                    Clipboard::new("clipboard1")
-                        .content(|_, _| Label::new("A clipboard button"))
-                        .value_fn({
-                            let view = cx.entity().clone();
-                            move |_, cx| {
-                                SharedString::from(format!("masked :{}", view.read(cx).masked))
-                            }
-                        })
-                        .on_copied(|value, window, cx| {
-                            window.push_notification(format!("Copied value: {}", value), cx)
-                        }),
+                    h_flex()
+                        .gap_2()
+                        .child(Label::new("A clipboard button"))
+                        .child(
+                            Clipboard::new("clipboard1")
+                                .value_fn({
+                                    let view = cx.entity().clone();
+                                    move |_, cx| {
+                                        SharedString::from(format!(
+                                            "masked :{}",
+                                            view.read(cx).masked
+                                        ))
+                                    }
+                                })
+                                .on_copied(|value, window, cx| {
+                                    window.push_notification(format!("Copied value: {}", value), cx)
+                                }),
+                        ),
                 ),
             )
             .child(

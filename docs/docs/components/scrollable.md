@@ -296,7 +296,7 @@ For advanced scroll control over specific areas:
 ```rust
 use gpui_component::scroll::ScrollableMask;
 
-ScrollableMask::new(view_id, Axis::Vertical, &scroll_handle)
+ScrollableMask::new(Axis::Vertical, &scroll_handle)
     .debug() // Show debug borders
 ```
 

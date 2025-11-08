@@ -4,11 +4,12 @@ use gpui::{
 };
 
 use gpui_component::{
+    IconName, Selectable as _, Sizable, Size,
     button::{Button, ButtonGroup, ButtonVariants},
     checkbox::Checkbox,
     h_flex,
     tab::{Tab, TabBar},
-    v_flex, IconName, Selectable as _, Sizable, Size,
+    v_flex,
 };
 
 use crate::section;
@@ -122,7 +123,7 @@ impl Render for TabsStory {
                     TabBar::new("tabs")
                         .w_full()
                         .with_size(self.size)
-                        .with_menu(self.menu)
+                        .menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -170,7 +171,7 @@ impl Render for TabsStory {
                         .w_full()
                         .underline()
                         .with_size(self.size)
-                        .with_menu(self.menu)
+                        .menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -191,7 +192,7 @@ impl Render for TabsStory {
                         .w_full()
                         .pill()
                         .with_size(self.size)
-                        .with_menu(self.menu)
+                        .menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -212,7 +213,7 @@ impl Render for TabsStory {
                         .w_full()
                         .outline()
                         .with_size(self.size)
-                        .with_menu(self.menu)
+                        .menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -233,7 +234,7 @@ impl Render for TabsStory {
                         .w_full()
                         .segmented()
                         .with_size(self.size)
-                        .with_menu(self.menu)
+                        .menu(self.menu)
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);

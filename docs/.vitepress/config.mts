@@ -57,7 +57,6 @@ const config: UserConfig = {
       message:
         "GPUI Component is an open source project under the Apache-2.0 License, developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.",
       copyright: `
-      <div>
       <a href="https://gpui.rs">GPUI</a>
       |
       <a href="/gpui-component/contributors">Contributors</a>
@@ -67,7 +66,6 @@ const config: UserConfig = {
       <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">Report Bug</a>
       |
       <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">Discussion</a>
-      </div>
       `,
     },
     // https://vitepress.dev/reference/default-theme-config

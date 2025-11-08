@@ -32,10 +32,10 @@ fn main() {
 
 ## Overlays
 
-We have modals, drawers, notifications, we need placement for them to show, so [Root] provides methods to render these overlays:
+We have dialogs, sheets, notifications, we need placement for them to show, so [Root] provides methods to render these overlays:
 
-- [Root::render_modal_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_modal_layer) - Render the current opened modals.
-- [Root::render_drawer_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_drawer_layer) - Render the current opened drawers.
+- [Root::render_dialog_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_dialog_layer) - Render the current opened modals.
+- [Root::render_sheet_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_sheet_layer) - Render the current opened drawers.
 - [Root::render_notification_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_notification_layer) - Render the notification list.
 
 We can put these layers in the `render` method your first level view (Root > YourFirstView):
@@ -48,15 +48,15 @@ impl Render for MyApp {
         div()
             .size_full()
             .child("My App Content")
-            .children(Root::render_modal_layer(cx))
-            .children(Root::render_drawer_layer(cx))
+            .children(Root::render_dialog_layer(cx))
+            .children(Root::render_sheet_layer(cx))
             .children(Root::render_notification_layer(cx))
     }
 }
 ```
 
 :::tip
-Here the example we used `children` method, it because if there is no opened modals/drawers/notifications, these methods will return `None`, so GPUI will not render anything.
+Here the example we used `children` method, it because if there is no opened dialogs, sheets, notifications, these methods will return `None`, so GPUI will not render anything.
 :::
 
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html

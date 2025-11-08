@@ -17,10 +17,13 @@ pub enum ToggleVariant {
 }
 
 pub trait ToggleVariants: Sized {
+    /// Set the variant of the toggle.
     fn with_variant(self, variant: ToggleVariant) -> Self;
+    /// Set the variant to ghost.
     fn ghost(self) -> Self {
         self.with_variant(ToggleVariant::Ghost)
     }
+    /// Set the variant to outline.
     fn outline(self) -> Self {
         self.with_variant(ToggleVariant::Outline)
     }
@@ -28,51 +31,56 @@ pub trait ToggleVariants: Sized {
 
 #[derive(IntoElement)]
 pub struct Toggle {
+    id: ElementId,
     style: StyleRefinement,
     checked: bool,
     size: Size,
     variant: ToggleVariant,
     disabled: bool,
     children: SmallVec<[AnyElement; 1]>,
-}
-
-#[derive(IntoElement)]
-pub struct InteractiveToggle {
-    id: ElementId,
-    toggle: Toggle,
-    on_change: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
 impl Toggle {
-    fn new() -> Self {
+    /// Create a new Toggle element.
+    pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
+            id: id.into(),
             style: StyleRefinement::default(),
             checked: false,
             size: Size::default(),
             variant: ToggleVariant::default(),
             disabled: false,
             children: smallvec![],
+            on_click: None,
         }
     }
 
-    pub fn label(label: impl Into<SharedString>) -> Self {
-        Self::new().child(label.into())
+    /// Add a label to the toggle.
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        let label: SharedString = label.into();
+        self.children.push(label.into_any_element());
+        self
     }
 
-    pub fn icon(icon: impl Into<Icon>) -> Self {
-        Self::new().child(icon.into())
+    /// Add icon to the toggle.
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        let icon: Icon = icon.into();
+        self.children.push(icon.into());
+        self
     }
 
-    pub fn id(self, id: impl Into<ElementId>) -> InteractiveToggle {
-        InteractiveToggle {
-            id: id.into(),
-            toggle: self,
-            on_change: None,
-        }
-    }
-
+    /// Set the checked state of the toggle, default: false
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked = checked;
+        self
+    }
+
+    /// Set the callback to be called when the toggle is clicked.
+    ///
+    /// The `&bool` parameter represents the new checked state of the toggle.
+    pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Box::new(handler));
         self
     }
 }
@@ -81,6 +89,12 @@ impl ToggleVariants for Toggle {
     fn with_variant(mut self, variant: ToggleVariant) -> Self {
         self.variant = variant;
         self
+    }
+}
+
+impl ParentElement for Toggle {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
@@ -104,12 +118,6 @@ impl Styled for Toggle {
     }
 }
 
-impl ParentElement for Toggle {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
-    }
-}
-
 impl RenderOnce for Toggle {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
@@ -117,6 +125,7 @@ impl RenderOnce for Toggle {
         let hoverable = !disabled && !checked;
 
         div()
+            .id(self.id)
             .flex()
             .flex_row()
             .items_center()
@@ -146,67 +155,15 @@ impl RenderOnce for Toggle {
             })
             .refine_style(&self.style)
             .children(self.children)
-    }
-}
-
-impl InteractiveToggle {
-    /// Sets the callback to be invoked when the toggle is clicked.
-    ///
-    /// The first argument is a boolean indicating whether the toggle is checked.
-    pub fn on_change(mut self, on_change: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
-        self.on_change = Some(Box::new(on_change));
-        self
-    }
-
-    pub fn checked(mut self, checked: bool) -> Self {
-        self.toggle.checked = checked;
-        self
-    }
-}
-
-impl Sizable for InteractiveToggle {
-    fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.toggle = self.toggle.with_size(size);
-        self
-    }
-}
-
-impl ToggleVariants for InteractiveToggle {
-    fn with_variant(mut self, variant: ToggleVariant) -> Self {
-        self.toggle.variant = variant;
-        self
-    }
-}
-
-impl Disableable for InteractiveToggle {
-    fn disabled(mut self, disabled: bool) -> Self {
-        self.toggle.disabled = disabled;
-        self
-    }
-}
-
-impl ParentElement for InteractiveToggle {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.toggle.extend(elements);
-    }
-}
-
-impl RenderOnce for InteractiveToggle {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let checked = self.toggle.checked;
-        let disabled = self.toggle.disabled;
-
-        div()
-            .id(self.id)
-            .child(self.toggle)
             .when(!disabled, |this| {
-                this.when_some(self.on_change, |this, on_change| {
-                    this.on_click(move |_, window, cx| on_change(&!checked, window, cx))
+                this.when_some(self.on_click, |this, on_click| {
+                    this.on_click(move |_, window, cx| on_click(&!checked, window, cx))
                 })
             })
     }
 }
 
+/// A group of toggles.
 #[derive(IntoElement)]
 pub struct ToggleGroup {
     id: ElementId,
@@ -215,10 +172,11 @@ pub struct ToggleGroup {
     variant: ToggleVariant,
     disabled: bool,
     items: Vec<Toggle>,
-    on_change: Option<Rc<dyn Fn(&Vec<bool>, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&Vec<bool>, &mut Window, &mut App) + 'static>>,
 }
 
 impl ToggleGroup {
+    /// Create a new ToggleGroup element.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -227,7 +185,7 @@ impl ToggleGroup {
             variant: ToggleVariant::default(),
             disabled: false,
             items: Vec::new(),
-            on_change: None,
+            on_click: None,
         }
     }
 
@@ -245,12 +203,12 @@ impl ToggleGroup {
 
     /// Set the callback to be called when the toggle group changes.
     ///
-    /// The `&Vec<bool>` parameter represents the check state of each [`Toggle`] in the group.
-    pub fn on_change(
+    /// The `&Vec<bool>` parameter represents the new check state of each [`Toggle`] in the group.
+    pub fn on_click(
         mut self,
-        on_change: impl Fn(&Vec<bool>, &mut Window, &mut App) + 'static,
+        on_click: impl Fn(&Vec<bool>, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_change = Some(Rc::new(on_change));
+        self.on_click = Some(Rc::new(on_click));
         self
     }
 }
@@ -300,21 +258,20 @@ impl RenderOnce for ToggleGroup {
                 |(ix, item)| {
                     let state = state.clone();
                     item.disabled(disabled)
-                        .id(ix)
                         .with_size(self.size)
                         .with_variant(self.variant)
-                        .on_change(move |_, _, _| {
+                        .on_click(move |_, _, _| {
                             state.set(Some(ix));
                         })
                 }
             }))
             .when(!disabled, |this| {
-                this.when_some(self.on_change, |this, on_change| {
+                this.when_some(self.on_click, |this, on_click| {
                     this.on_click(move |_, window, cx| {
                         if let Some(ix) = state.get() {
                             let mut checks = checks.clone();
                             checks[ix] = !checks[ix];
-                            on_change(&checks, window, cx);
+                            on_click(&checks, window, cx);
                         }
                     })
                 })

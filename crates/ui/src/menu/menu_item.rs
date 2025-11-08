@@ -19,7 +19,8 @@ pub(crate) struct MenuItemElement {
 }
 
 impl MenuItemElement {
-    pub fn new(id: impl Into<ElementId>, group_name: impl Into<SharedString>) -> Self {
+    /// Create a new MenuItem with the given ID and group name.
+    pub(crate) fn new(id: impl Into<ElementId>, group_name: impl Into<SharedString>) -> Self {
         let id: ElementId = id.into();
         Self {
             id: id.clone(),
@@ -34,17 +35,19 @@ impl MenuItemElement {
     }
 
     /// Set ListItem as the selected item style.
-    pub fn selected(mut self, selected: bool) -> Self {
+    pub(crate) fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    /// Set the disabled state of the MenuItem.
+    pub(crate) fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
-    pub fn on_click(
+    /// Set a handler for when the MenuItem is clicked.
+    pub(crate) fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {

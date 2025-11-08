@@ -36,6 +36,7 @@ impl ActiveTheme for App {
     }
 }
 
+/// The global theme configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
@@ -48,7 +49,7 @@ pub struct Theme {
     pub font_size: Pixels,
     /// Radius for the general elements.
     pub radius: Pixels,
-    /// Radius for the large elements, e.g.: Modal, Notification border radius.
+    /// Radius for the large elements, e.g.: Dialog, Notification border radius.
     pub radius_lg: Pixels,
     pub shadow: bool,
     pub transparent: Hsla,
@@ -112,22 +113,6 @@ impl Theme {
         }
     }
 
-    // /// Sets the theme to default light.
-    // pub fn set_default_light(&mut self) {
-    //     self.light_theme = ThemeColor::light();
-    //     self.colors = ThemeColor::light();
-    //     self.light_highlight_theme = Arc::new(HighlightTheme::default_light());
-    //     self.highlight_theme = self.light_highlight_theme.clone();
-    // }
-
-    // /// Sets the theme to default dark.
-    // pub fn set_default_dark(&mut self) {
-    //     self.dark_theme = ThemeColor::dark();
-    //     self.colors = ThemeColor::dark();
-    //     self.dark_highlight_theme = Arc::new(HighlightTheme::default_dark());
-    //     self.highlight_theme = self.dark_highlight_theme.clone();
-    // }
-
     /// Sync the theme with the system appearance
     pub fn sync_system_appearance(window: Option<&mut Window>, cx: &mut App) {
         // Better use window.appearance() for avoid error on Linux.
@@ -149,6 +134,7 @@ impl Theme {
         };
     }
 
+    /// Change the theme mode.
     pub fn change(mode: impl Into<ThemeMode>, window: Option<&mut Window>, cx: &mut App) {
         let mode = mode.into();
         if !cx.has_global::<Theme>() {

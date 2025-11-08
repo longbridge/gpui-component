@@ -20,7 +20,7 @@ pub struct ThemeSet {
     pub author: Option<SharedString>,
     /// The URL of the theme.
     pub url: Option<SharedString>,
-
+    /// The theme list of the theme set.
     #[serde(rename = "themes")]
     pub themes: Vec<ThemeConfig>,
 }
@@ -45,7 +45,7 @@ pub struct ThemeConfig {
     /// The border radius for general elements, default is 6.
     #[serde(rename = "radius")]
     pub radius: Option<usize>,
-    /// The border radius for large elements like Modals and Notifications, default is 8.
+    /// The border radius for large elements like Dialogs and Notifications, default is 8.
     #[serde(rename = "radius.lg")]
     pub radius_lg: Option<usize>,
     /// Set shadows in the theme, for example the Input and Button, default is true.
@@ -613,9 +613,9 @@ impl ThemeColor {
         // TODO: Apply default fallback colors to highlight.
 
         // Ensure opacity for list_active, table_active
-        self.list_active = self.list_active.alpha(0.2);
-        self.table_active = self.table_active.alpha(0.2);
-        self.selection = self.selection.alpha(0.3);
+        self.list_active = self.list_active.alpha(self.list_active.a.min(0.2));
+        self.table_active = self.table_active.alpha(self.table_active.a.min(0.2));
+        self.selection = self.selection.alpha(self.selection.a.min(0.3));
     }
 }
 

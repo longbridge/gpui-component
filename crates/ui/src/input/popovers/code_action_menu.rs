@@ -164,7 +164,7 @@ impl CodeActionMenu {
                 selected_ix: 0,
             };
 
-            let list = cx.new(|cx| ListState::new(menu, window, cx).no_query());
+            let list = cx.new(|cx| ListState::new(menu, window, cx));
 
             let _subscriptions =
                 vec![

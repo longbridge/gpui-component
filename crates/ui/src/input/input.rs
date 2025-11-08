@@ -6,10 +6,10 @@ use gpui::{
 };
 
 use crate::button::{Button, ButtonVariants as _};
-use crate::indicator::Indicator;
 use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
+use crate::spinner::Spinner;
 use crate::{h_flex, Selectable, StyledExt};
 use crate::{v_flex, ActiveTheme};
 use crate::{IconName, Size};
@@ -115,9 +115,9 @@ impl Input {
         self
     }
 
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.cleanable = true;
+    /// Set whether to show the clear button when the input field is not empty, default is false.
+    pub fn cleanable(mut self, cleanable: bool) -> Self {
+        self.cleanable = cleanable;
         self
     }
 
@@ -406,7 +406,7 @@ impl RenderOnce for Input {
                         .when(self.appearance, |this| this.bg(bg))
                         .items_center()
                         .when(state.loading, |this| {
-                            this.child(Indicator::new().color(cx.theme().muted_foreground))
+                            this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
                         .when(self.mask_toggle, |this| {
                             this.child(Self::render_toggle_mask_button(self.state.clone()))

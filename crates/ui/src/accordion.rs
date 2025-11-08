@@ -8,7 +8,7 @@ use gpui::{
 
 use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
 
-/// An AccordionGroup is a container for multiple Accordion elements.
+/// Accordion element.
 #[derive(IntoElement)]
 pub struct Accordion {
     id: ElementId,
@@ -21,6 +21,7 @@ pub struct Accordion {
 }
 
 impl Accordion {
+    /// Create a new Accordion with the given ID.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -33,21 +34,25 @@ impl Accordion {
         }
     }
 
+    /// Set whether multiple accordion items can be opened simultaneously, default: false
     pub fn multiple(mut self, multiple: bool) -> Self {
         self.multiple = multiple;
         self
     }
 
+    /// Set whether the accordion items have borders, default: true
     pub fn bordered(mut self, bordered: bool) -> Self {
         self.bordered = bordered;
         self
     }
 
+    /// Set whether the accordion is disabled, default: false
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
+    /// Adds an AccordionItem to the Accordion.
     pub fn item<F>(mut self, child: F) -> Self
     where
         F: FnOnce(AccordionItem) -> AccordionItem,
@@ -135,7 +140,7 @@ pub struct AccordionItem {
     index: usize,
     icon: Option<Icon>,
     title: AnyElement,
-    content: AnyElement,
+    children: Vec<AnyElement>,
     open: bool,
     size: Size,
     bordered: bool,
@@ -144,12 +149,13 @@ pub struct AccordionItem {
 }
 
 impl AccordionItem {
+    /// Create a new AccordionItem.
     pub fn new() -> Self {
         Self {
             index: 0,
             icon: None,
             title: SharedString::default().into_any_element(),
-            content: SharedString::default().into_any_element(),
+            children: Vec::new(),
             open: false,
             disabled: false,
             on_toggle_click: None,
@@ -158,23 +164,15 @@ impl AccordionItem {
         }
     }
 
-    fn index(mut self, index: usize) -> Self {
-        self.index = index;
-        self
-    }
-
+    /// Set the icon for the accordion item.
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.icon = Some(icon.into());
         self
     }
 
+    /// Set the title for the accordion item.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = title.into_any_element();
-        self
-    }
-
-    pub fn content(mut self, content: impl IntoElement) -> Self {
-        self.content = content.into_any_element();
         self
     }
 
@@ -193,12 +191,23 @@ impl AccordionItem {
         self
     }
 
+    fn index(mut self, index: usize) -> Self {
+        self.index = index;
+        self
+    }
+
     fn on_toggle_click(
         mut self,
         on_toggle_click: impl Fn(&bool, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_toggle_click = Some(Arc::new(on_toggle_click));
         self
+    }
+}
+
+impl ParentElement for AccordionItem {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
@@ -294,7 +303,7 @@ impl RenderOnce for AccordionItem {
                                 Size::Large => this.p_4(),
                                 _ => this.p_3(),
                             })
-                            .child(self.content),
+                            .children(self.children),
                     )
                 }),
         )

@@ -7,7 +7,7 @@ use std::{
 use crate::{
     h_flex,
     history::{History, HistoryItem},
-    scroll::{Scrollbar, ScrollbarState},
+    scroll::{Scrollbar, ScrollbarShow, ScrollbarState},
     v_flex, ActiveTheme, Icon, IconName,
 };
 
@@ -15,10 +15,11 @@ use super::{
     DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
 };
 use gpui::{
-    actions, canvas, div, px, size, AnyElement, App, AppContext, Bounds, Context, DismissEvent,
-    DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render,
-    ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    actions, canvas, div, prelude::FluentBuilder, px, size, AnyElement, App, AppContext, Bounds,
+    Context, DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
+    Window,
 };
 
 actions!(tiles, [Undo, Redo]);
@@ -140,6 +141,7 @@ pub struct Tiles {
     history: History<TileChange>,
     scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
+    scrollbar_show: Option<ScrollbarShow>,
 }
 
 impl Panel for Tiles {
@@ -189,12 +191,23 @@ impl Tiles {
             dragging_initial_mouse: Point::default(),
             dragging_initial_bounds: Bounds::default(),
             resizing_id: None,
+            scrollbar_show: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
         }
+    }
+
+    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
+    pub fn set_scrollbar_show(
+        &mut self,
+        scrollbar_show: Option<ScrollbarShow>,
+        cx: &mut Context<Self>,
+    ) {
+        self.scrollbar_show = scrollbar_show;
+        cx.notify();
     }
 
     pub fn panels(&self) -> &[TileItem] {
@@ -1058,7 +1071,10 @@ impl Render for Tiles {
                     .bottom_0()
                     .child(
                         Scrollbar::both(&self.scroll_state, &self.scroll_handle)
-                            .scroll_size(scroll_size),
+                            .scroll_size(scroll_size)
+                            .when_some(self.scrollbar_show, |this, scrollbar_show| {
+                                this.scrollbar_show(scrollbar_show)
+                            }),
                     ),
             )
             .size_full()

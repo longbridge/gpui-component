@@ -8,13 +8,13 @@ members = [
     "examples/hello_world",
     "examples/input",
     "examples/window_title",
-    "examples/modal_overlay",
+    "examples/dialog_overlay",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 gpui-component = { path = "crates/ui" }
-gpui-component-macros = { path = "crates/macros", version = "0.4.0-preview0" }
+gpui-component-macros = { path = "crates/macros", version = "0.4.0-preview1" }
 story = { path = "crates/story" }
 
 gpui = "0.2.2"

@@ -1,8 +1,8 @@
 use crate::{
-    drawer::Drawer,
+    dialog::Dialog,
     input::InputState,
-    modal::Modal,
     notification::{Notification, NotificationList},
+    sheet::Sheet,
     window_border, ActiveTheme, Placement,
 };
 use gpui::{
@@ -14,46 +14,45 @@ use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
-const CONTENT: &str = "Root";
-
+const CONTEXT: &str = "Root";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("tab", Tab, Some(CONTENT)),
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTENT)),
+        KeyBinding::new("tab", Tab, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
     ]);
 }
 
-/// Extension trait for [`WindowContext`] and [`ViewContext`] to add drawer functionality.
-pub trait ContextModal: Sized {
-    /// Opens a Drawer at right placement.
-    fn open_drawer<F>(&mut self, cx: &mut App, build: F)
+/// Extension trait for [`Window`] to add dialog, sheet .. functionality.
+pub trait WindowExt: Sized {
+    /// Opens a Sheet at right placement.
+    fn open_sheet<F>(&mut self, cx: &mut App, build: F)
     where
-        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static;
+        F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static;
 
-    /// Opens a Drawer at the given placement.
-    fn open_drawer_at<F>(&mut self, placement: Placement, cx: &mut App, build: F)
+    /// Opens a Sheet at the given placement.
+    fn open_sheet_at<F>(&mut self, placement: Placement, cx: &mut App, build: F)
     where
-        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static;
+        F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static;
 
-    /// Return true, if there is an active Drawer.
-    fn has_active_drawer(&mut self, cx: &mut App) -> bool;
+    /// Return true, if there is an active Sheet.
+    fn has_active_sheet(&mut self, cx: &mut App) -> bool;
 
-    /// Closes the active Drawer.
-    fn close_drawer(&mut self, cx: &mut App);
+    /// Closes the active Sheet.
+    fn close_sheet(&mut self, cx: &mut App);
 
-    /// Opens a Modal.
-    fn open_modal<F>(&mut self, cx: &mut App, build: F)
+    /// Opens a Dialog.
+    fn open_dialog<F>(&mut self, cx: &mut App, build: F)
     where
-        F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static;
+        F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static;
 
-    /// Return true, if there is an active Modal.
-    fn has_active_modal(&mut self, cx: &mut App) -> bool;
+    /// Return true, if there is an active Dialog.
+    fn has_active_dialog(&mut self, cx: &mut App) -> bool;
 
-    /// Closes the last active Modal.
-    fn close_modal(&mut self, cx: &mut App);
+    /// Closes the last active Dialog.
+    fn close_dialog(&mut self, cx: &mut App);
 
-    /// Closes all active Modals.
-    fn close_all_modals(&mut self, cx: &mut App);
+    /// Closes all active Dialogs.
+    fn close_all_dialogs(&mut self, cx: &mut App);
 
     /// Pushes a notification to the notification list.
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App);
@@ -73,27 +72,27 @@ pub trait ContextModal: Sized {
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
 }
 
-impl ContextModal for Window {
-    fn open_drawer<F>(&mut self, cx: &mut App, build: F)
+impl WindowExt for Window {
+    fn open_sheet<F>(&mut self, cx: &mut App, build: F)
     where
-        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
+        F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
-        self.open_drawer_at(Placement::Right, cx, build)
+        self.open_sheet_at(Placement::Right, cx, build)
     }
 
-    fn open_drawer_at<F>(&mut self, placement: Placement, cx: &mut App, build: F)
+    fn open_sheet_at<F>(&mut self, placement: Placement, cx: &mut App, build: F)
     where
-        F: Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static,
+        F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
         Root::update(self, cx, move |root, window, cx| {
-            if root.active_drawer.is_none() {
+            if root.active_sheet.is_none() {
                 root.previous_focus_handle = window.focused(cx);
             }
 
             let focus_handle = cx.focus_handle();
             focus_handle.focus(window);
 
-            root.active_drawer = Some(ActiveDrawer {
+            root.active_sheet = Some(ActiveSheet {
                 focus_handle,
                 placement,
                 builder: Rc::new(build),
@@ -102,34 +101,34 @@ impl ContextModal for Window {
         })
     }
 
-    fn has_active_drawer(&mut self, cx: &mut App) -> bool {
-        Root::read(self, cx).active_drawer.is_some()
+    fn has_active_sheet(&mut self, cx: &mut App) -> bool {
+        Root::read(self, cx).active_sheet.is_some()
     }
 
-    fn close_drawer(&mut self, cx: &mut App) {
+    fn close_sheet(&mut self, cx: &mut App) {
         Root::update(self, cx, |root, window, cx| {
             root.focused_input = None;
-            root.active_drawer = None;
+            root.active_sheet = None;
             root.focus_back(window, cx);
             cx.notify();
         })
     }
 
-    fn open_modal<F>(&mut self, cx: &mut App, build: F)
+    fn open_dialog<F>(&mut self, cx: &mut App, build: F)
     where
-        F: Fn(Modal, &mut Window, &mut App) -> Modal + 'static,
+        F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
         Root::update(self, cx, move |root, window, cx| {
-            // Only save focus handle if there are no active modals.
-            // This is used to restore focus when all modals are closed.
-            if root.active_modals.len() == 0 {
+            // Only save focus handle if there are no active dialogs.
+            // This is used to restore focus when all dialogs are closed.
+            if root.active_dialogs.len() == 0 {
                 root.previous_focus_handle = window.focused(cx);
             }
 
             let focus_handle = cx.focus_handle();
             focus_handle.focus(window);
 
-            root.active_modals.push(ActiveModal {
+            root.active_dialogs.push(ActiveDialog {
                 focus_handle,
                 builder: Rc::new(build),
             });
@@ -137,30 +136,30 @@ impl ContextModal for Window {
         })
     }
 
-    fn has_active_modal(&mut self, cx: &mut App) -> bool {
-        Root::read(self, cx).active_modals.len() > 0
+    fn has_active_dialog(&mut self, cx: &mut App) -> bool {
+        Root::read(self, cx).active_dialogs.len() > 0
     }
 
-    fn close_modal(&mut self, cx: &mut App) {
+    fn close_dialog(&mut self, cx: &mut App) {
         Root::update(self, cx, move |root, window, cx| {
             root.focused_input = None;
-            root.active_modals.pop();
+            root.active_dialogs.pop();
 
-            if let Some(top_modal) = root.active_modals.last() {
-                // Focus the next modal.
-                top_modal.focus_handle.focus(window);
+            if let Some(top_dialog) = root.active_dialogs.last() {
+                // Focus the next dialog.
+                top_dialog.focus_handle.focus(window);
             } else {
-                // Restore focus if there are no more modals.
+                // Restore focus if there are no more dialogs.
                 root.focus_back(window, cx);
             }
             cx.notify();
         })
     }
 
-    fn close_all_modals(&mut self, cx: &mut App) {
+    fn close_all_dialogs(&mut self, cx: &mut App) {
         Root::update(self, cx, |root, window, cx| {
             root.focused_input = None;
-            root.active_modals.clear();
+            root.active_dialogs.clear();
             root.focus_back(window, cx);
             cx.notify();
         })
@@ -209,41 +208,41 @@ impl ContextModal for Window {
 
 /// Root is a view for the App window for as the top level view (Must be the first view in the window).
 ///
-/// It is used to manage the Drawer, Modal, and Notification.
+/// It is used to manage the Sheet, Dialog, and Notification.
 pub struct Root {
     /// Used to store the focus handle of the previous view.
-    /// When the Modal, Drawer closes, we will focus back to the previous view.
+    /// When the Dialog, Sheet closes, we will focus back to the previous view.
     previous_focus_handle: Option<FocusHandle>,
-    active_drawer: Option<ActiveDrawer>,
-    pub(crate) active_modals: Vec<ActiveModal>,
+    active_sheet: Option<ActiveSheet>,
+    pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
-    drawer_size: Option<DefiniteLength>,
+    sheet_size: Option<DefiniteLength>,
     view: AnyView,
 }
 
 #[derive(Clone)]
-struct ActiveDrawer {
+struct ActiveSheet {
     focus_handle: FocusHandle,
     placement: Placement,
-    builder: Rc<dyn Fn(Drawer, &mut Window, &mut App) -> Drawer + 'static>,
+    builder: Rc<dyn Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static>,
 }
 
 #[derive(Clone)]
-pub(crate) struct ActiveModal {
+pub(crate) struct ActiveDialog {
     focus_handle: FocusHandle,
-    builder: Rc<dyn Fn(Modal, &mut Window, &mut App) -> Modal + 'static>,
+    builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
 }
 
 impl Root {
     pub fn new(view: AnyView, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             previous_focus_handle: None,
-            active_drawer: None,
-            active_modals: Vec::new(),
+            active_sheet: None,
+            active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
-            drawer_size: None,
+            sheet_size: None,
             view,
         }
     }
@@ -281,11 +280,11 @@ impl Root {
     ) -> Option<impl IntoElement> {
         let root = window.root::<Root>()??;
 
-        let active_drawer_placement = root.read(cx).active_drawer.clone().map(|d| d.placement);
+        let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
 
-        let (mt, mr) = match active_drawer_placement {
-            Some(Placement::Right) => (None, root.read(cx).drawer_size),
-            Some(Placement::Top) => (root.read(cx).drawer_size, None),
+        let (mt, mr) = match active_sheet_placement {
+            Some(Placement::Right) => (None, root.read(cx).sheet_size),
+            Some(Placement::Top) => (root.read(cx).sheet_size, None),
             _ => (None, None),
         };
 
@@ -300,22 +299,22 @@ impl Root {
         )
     }
 
-    /// Render the Drawer layer.
-    pub fn render_drawer_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+    /// Render the Sheet layer.
+    pub fn render_sheet_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
         let root = window.root::<Root>()??;
 
-        if let Some(active_drawer) = root.read(cx).active_drawer.clone() {
-            let mut drawer = Drawer::new(window, cx);
-            drawer = (active_drawer.builder)(drawer, window, cx);
-            drawer.focus_handle = active_drawer.focus_handle.clone();
-            drawer.placement = active_drawer.placement;
+        if let Some(active_sheet) = root.read(cx).active_sheet.clone() {
+            let mut sheet = Sheet::new(window, cx);
+            sheet = (active_sheet.builder)(sheet, window, cx);
+            sheet.focus_handle = active_sheet.focus_handle.clone();
+            sheet.placement = active_sheet.placement;
 
-            let drawer_size = drawer.size;
+            let size = sheet.size;
 
             return Some(
-                div().relative().child(drawer).child(
+                div().relative().child(sheet).child(
                     canvas(
-                        move |_, _, cx| root.update(cx, |r, _| r.drawer_size = Some(drawer_size)),
+                        move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
                         |_, _, _, _| {},
                     )
                     .absolute()
@@ -327,49 +326,49 @@ impl Root {
         None
     }
 
-    /// Render the Modal layer.
-    pub fn render_modal_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+    /// Render the Dialog layer.
+    pub fn render_dialog_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
         let root = window.root::<Root>()??;
 
-        let active_modals = root.read(cx).active_modals.clone();
+        let active_dialogs = root.read(cx).active_dialogs.clone();
 
-        if active_modals.is_empty() {
+        if active_dialogs.is_empty() {
             return None;
         }
 
         let mut show_overlay_ix = None;
 
-        let mut modals = active_modals
+        let mut dialogs = active_dialogs
             .iter()
             .enumerate()
-            .map(|(i, active_modal)| {
-                let mut modal = Modal::new(window, cx);
+            .map(|(i, active_dialog)| {
+                let mut dialog = Dialog::new(window, cx);
 
-                modal = (active_modal.builder)(modal, window, cx);
+                dialog = (active_dialog.builder)(dialog, window, cx);
 
-                // Give the modal the focus handle, because `modal` is a temporary value, is not possible to
-                // keep the focus handle in the modal.
+                // Give the dialog the focus handle, because `dialog` is a temporary value, is not possible to
+                // keep the focus handle in the dialog.
                 //
-                // So we keep the focus handle in the `active_modal`, this is owned by the `Root`.
-                modal.focus_handle = active_modal.focus_handle.clone();
+                // So we keep the focus handle in the `active_dialog`, this is owned by the `Root`.
+                dialog.focus_handle = active_dialog.focus_handle.clone();
 
-                modal.layer_ix = i;
-                // Find the modal which one needs to show overlay.
-                if modal.has_overlay() {
+                dialog.layer_ix = i;
+                // Find the dialog which one needs to show overlay.
+                if dialog.has_overlay() {
                     show_overlay_ix = Some(i);
                 }
 
-                modal
+                dialog
             })
             .collect::<Vec<_>>();
 
         if let Some(ix) = show_overlay_ix {
-            if let Some(modal) = modals.get_mut(ix) {
-                modal.overlay_visible = true;
+            if let Some(dialog) = dialogs.get_mut(ix) {
+                dialog.overlay_visible = true;
             }
         }
 
-        Some(div().children(modals))
+        Some(div().children(dialogs))
     }
 
     /// Return the root view of the Root.
@@ -394,7 +393,7 @@ impl Render for Root {
         window_border().child(
             div()
                 .id("root")
-                .key_context(CONTENT)
+                .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_tab))
                 .on_action(cx.listener(Self::on_action_tab_prev))
                 .relative()

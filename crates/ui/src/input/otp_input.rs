@@ -18,6 +18,7 @@ pub struct OtpState {
 }
 
 impl OtpState {
+    /// Create a new [`OtpState`] with the specified length.
     pub fn new(length: usize, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
@@ -84,6 +85,7 @@ impl OtpState {
         cx.notify();
     }
 
+    /// Focus the OTP Input.
     pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
         self.focus_handle.focus(window);
     }

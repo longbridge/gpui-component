@@ -12,8 +12,8 @@ Add dependencies to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = "0.2.0"
-gpui-component = "0.2.0"
+gpui = "0.2"
+gpui-component = "0.4.0-preview1"
 ```
 
 ## Quick Start
@@ -157,6 +157,12 @@ Button::new("btn").outline()
 
 ## Icons
 
+:::info
+Icons are not bundled with GPUI Component to keep the library lightweight.
+
+Continue read [Icons & Assets](./assets.md) to learn how to add icons to your project.
+:::
+
 GPUI Component has an `Icon` element, but does not include SVG files by default.
 
 The examples use [Lucide](https://lucide.dev) icons. You can use any icons you like by naming the SVG files as defined in `IconName`. Add the icons you need to your project.
@@ -174,7 +180,7 @@ Explore the component documentation to learn more about each component:
 
 - [Button](./components/button) - Interactive button component
 - [Input](./components/input) - Text input with validation
-- [Modal](./components/modal) - Dialog and modal windows
+- [Dialog](./components/dialog) - Dialog and modal windows
 - [Table](./components/table) - High-performance data tables
 - [More components...](./components/index)
 

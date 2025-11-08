@@ -10,7 +10,7 @@ A comprehensive form component that provides structured layout for form fields w
 ## Import
 
 ```rust
-use gpui_component::form::{form_field, v_form, h_form, Form, FormField};
+use gpui_component::form::{field, v_form, h_form, Form, Field};
 ```
 
 ## Usage
@@ -20,12 +20,12 @@ use gpui_component::form::{form_field, v_form, h_form, Form, FormField};
 ```rust
 v_form()
     .child(
-        form_field()
+        field()
             .label("Name")
             .child(Input::new(&name_input))
     )
     .child(
-        form_field()
+        field()
             .label("Email")
             .child(Input::new(&email_input))
             .required(true)
@@ -38,12 +38,12 @@ v_form()
 h_form()
     .label_width(px(120.))
     .child(
-        form_field()
+        field()
             .label("First Name")
             .child(Input::new(&first_name))
     )
     .child(
-        form_field()
+        field()
             .label("Last Name")
             .child(Input::new(&last_name))
     )
@@ -53,19 +53,19 @@ h_form()
 
 ```rust
 v_form()
-    .column(2) // Two-column layout
+    .columns(2) // Two-column layout
     .child(
-        form_field()
+        field()
             .label("First Name")
             .child(Input::new(&first_name))
     )
     .child(
-        form_field()
+        field()
             .label("Last Name")
             .child(Input::new(&last_name))
     )
     .child(
-        form_field()
+        field()
             .label("Bio")
             .col_span(2) // Span across both columns
             .child(Input::new(&bio_input))
@@ -79,8 +79,8 @@ v_form()
 ```rust
 v_form()
     .gap(px(12.))
-    .child(form_field().label("Name").child(input))
-    .child(form_field().label("Email").child(email_input))
+    .child(field().label("Name").child(input))
+    .child(field().label("Email").child(email_input))
 ```
 
 ### Horizontal Layout
@@ -88,8 +88,8 @@ v_form()
 ```rust
 h_form()
     .label_width(px(100.))
-    .child(form_field().label("Name").child(input))
-    .child(form_field().label("Email").child(email_input))
+    .child(field().label("Name").child(input))
+    .child(field().label("Email").child(email_input))
 ```
 
 ### Custom Sizing
@@ -98,11 +98,11 @@ h_form()
 v_form()
     .large() // Large form size
     .label_text_size(rems(1.2))
-    .child(form_field().label("Title").child(input))
+    .child(field().label("Title").child(input))
 
 v_form()
     .small() // Small form size
-    .child(form_field().label("Code").child(input))
+    .child(field().label("Code").child(input))
 ```
 
 ## Form Validation
@@ -110,7 +110,7 @@ v_form()
 ### Required Fields
 
 ```rust
-form_field()
+field()
     .label("Email")
     .required(true) // Shows asterisk (*) next to label
     .child(Input::new(&email_input))
@@ -119,7 +119,7 @@ form_field()
 ### Field Descriptions
 
 ```rust
-form_field()
+field()
     .label("Password")
     .description("Must be at least 8 characters long")
     .child(Input::new(&password_input))
@@ -128,7 +128,7 @@ form_field()
 ### Dynamic Descriptions
 
 ```rust
-form_field()
+field()
     .label("Bio")
     .description_fn(|_, _| {
         div().child("Use at most 100 words to describe yourself.")
@@ -139,7 +139,7 @@ form_field()
 ### Field Visibility
 
 ```rust
-form_field()
+field()
     .label("Admin Settings")
     .visible(user.is_admin()) // Conditionally show field
     .child(Switch::new("admin-mode"))
@@ -173,11 +173,11 @@ impl FormView {
 
 // Form with submit button
 v_form()
-    .child(form_field().label("Name").child(Input::new(&self.name_input)))
-    .child(form_field().label("Email").child(Input::new(&self.email_input)))
+    .child(field().label("Name").child(Input::new(&self.name_input)))
+    .child(field().label("Email").child(Input::new(&self.email_input)))
     .child(
-        form_field()
-            .no_label_indent()
+        field()
+            .label_indent(false)
             .child(
                 Button::new("submit")
                     .primary()
@@ -191,11 +191,11 @@ v_form()
 
 ```rust
 v_form()
-    .child(form_field().label("Title").child(Input::new(&title)))
-    .child(form_field().label("Content").child(Input::new(&content)))
+    .child(field().label("Title").child(Input::new(&title)))
+    .child(field().label("Content").child(Input::new(&content)))
     .child(
-        form_field()
-            .no_label_indent()
+        field()
+            .label_indent(false)
             .child(
                 h_flex()
                     .gap_2()
@@ -213,7 +213,7 @@ v_form()
 ```rust
 v_form()
     .child(
-        form_field()
+        field()
             .label("Name")
             .child(
                 h_flex()
@@ -223,7 +223,7 @@ v_form()
             )
     )
     .child(
-        form_field()
+        field()
             .label("Address")
             .items_start() // Align to start for multi-line content
             .child(
@@ -243,16 +243,16 @@ v_form()
 ### Custom Field Components
 
 ```rust
-form_field()
+field()
     .label("Theme Color")
     .child(ColorPicker::new(&color_state).small())
 
-form_field()
+field()
     .label("Birth Date")
     .description("We'll send you a birthday gift!")
     .child(DatePicker::new(&date_state))
 
-form_field()
+field()
     .label("Notifications")
     .child(
         v_flex()
@@ -268,18 +268,18 @@ form_field()
 ```rust
 v_form()
     .child(
-        form_field()
+        field()
             .label("Account Type")
             .child(Select::new(&account_type))
     )
     .child(
-        form_field()
+        field()
             .label("Company Name")
             .visible(is_business_account) // Show only for business accounts
             .child(Input::new(&company_name))
     )
     .child(
-        form_field()
+        field()
             .label("Tax ID")
             .visible(is_business_account)
             .required(is_business_account)
@@ -293,12 +293,12 @@ v_form()
 
 ```rust
 v_form()
-    .column(3) // Three-column grid
-    .child(form_field().label("First").child(input1))
-    .child(form_field().label("Second").child(input2))
-    .child(form_field().label("Third").child(input3))
+    .columns(3) // Three-column grid
+    .child(field().label("First").child(input1))
+    .child(field().label("Second").child(input2))
+    .child(field().label("Third").child(input3))
     .child(
-        form_field()
+        field()
             .label("Full Width")
             .col_span(3) // Spans all three columns
             .child(Input::new(&full_width))
@@ -309,11 +309,11 @@ v_form()
 
 ```rust
 v_form()
-    .column(4)
-    .child(form_field().label("A").child(input_a))
-    .child(form_field().label("B").child(input_b))
+    .columns(4)
+    .child(field().label("A").child(input_a))
+    .child(field().label("B").child(input_b))
     .child(
-        form_field()
+        field()
             .label("Positioned")
             .col_start(1) // Start at column 1
             .col_span(2)  // Span 2 columns
@@ -325,53 +325,16 @@ v_form()
 
 ```rust
 v_form()
-    .column(if is_mobile { 1 } else { 2 })
-    .child(form_field().label("Name").child(name_input))
-    .child(form_field().label("Email").child(email_input))
+    .columns(if is_mobile { 1 } else { 2 })
+    .child(field().label("Name").child(name_input))
+    .child(field().label("Email").child(email_input))
     .child(
-        form_field()
+        field()
             .label("Bio")
             .when(!is_mobile, |field| field.col_span(2))
             .child(bio_input)
     )
 ```
-
-## API Reference
-
-### Form
-
-| Method                  | Description                           |
-| ----------------------- | ------------------------------------- |
-| `vertical()`            | Create vertical layout form           |
-| `horizontal()`          | Create horizontal layout form         |
-| `layout(Axis)`          | Set form layout direction             |
-| `label_width(Pixels)`   | Set label width (horizontal layout)   |
-| `label_text_size(Rems)` | Set label text size                   |
-| `gap(Pixels)`           | Set gap between fields                |
-| `column(u16)`           | Set number of columns for grid layout |
-| `child(FormField)`      | Add form field                        |
-| `children(iter)`        | Add multiple form fields              |
-| `large()`               | Set large size                        |
-| `small()`               | Set small size                        |
-
-### FormField
-
-| Method                | Description                      |
-| --------------------- | -------------------------------- |
-| `label(str)`          | Set field label                  |
-| `label_fn(fn)`        | Set dynamic label using function |
-| `description(str)`    | Set field description            |
-| `description_fn(fn)`  | Set dynamic description          |
-| `required(bool)`      | Mark field as required           |
-| `visible(bool)`       | Set field visibility             |
-| `no_label_indent()`   | Disable label indentation        |
-| `items_start()`       | Align items to start             |
-| `items_center()`      | Align items to center            |
-| `items_end()`         | Align items to end               |
-| `col_span(u16)`       | Set column span                  |
-| `col_start(i16)`      | Set starting column              |
-| `col_end(i16)`        | Set ending column                |
-| `track_focus(handle)` | Track focus for field            |
 
 ## Examples
 
@@ -392,9 +355,9 @@ impl Render for RegistrationForm {
         v_form()
             .large()
             .child(
-                form_field()
+                field()
                     .label("Personal Information")
-                    .no_label_indent()
+                    .label_indent(false)
                     .child(
                         h_flex()
                             .gap_3()
@@ -413,27 +376,27 @@ impl Render for RegistrationForm {
                     )
             )
             .child(
-                form_field()
+                field()
                     .label("Email")
                     .required(true)
                     .child(Input::new(&self.email))
             )
             .child(
-                form_field()
+                field()
                     .label("Password")
                     .required(true)
                     .description("Must be at least 8 characters")
                     .child(Input::new(&self.password))
             )
             .child(
-                form_field()
+                field()
                     .label("Confirm Password")
                     .required(true)
                     .child(Input::new(&self.confirm_password))
             )
             .child(
-                form_field()
-                    .no_label_indent()
+                field()
+                    .label_indent(false)
                     .child(
                         Checkbox::new("terms")
                             .label("I agree to the Terms of Service")
@@ -445,8 +408,8 @@ impl Render for RegistrationForm {
                     )
             )
             .child(
-                form_field()
-                    .no_label_indent()
+                field()
+                    .label_indent(false)
                     .child(
                         Button::new("register")
                             .primary()
@@ -465,54 +428,54 @@ impl Render for RegistrationForm {
 v_form()
     .column(2)
     .child(
-        form_field()
+        field()
             .label("Profile")
-            .no_label_indent()
+            .label_indent(false)
             .col_span(2)
             .child(Divider::horizontal())
     )
     .child(
-        form_field()
+        field()
             .label("Display Name")
             .child(Input::new(&display_name))
     )
     .child(
-        form_field()
+        field()
             .label("Email")
             .child(Input::new(&email))
     )
     .child(
-        form_field()
+        field()
             .label("Bio")
             .col_span(2)
             .items_start()
             .child(Input::new(&bio))
     )
     .child(
-        form_field()
+        field()
             .label("Preferences")
-            .no_label_indent()
+            .label_indent(false)
             .col_span(2)
             .child(Divider::horizontal())
     )
     .child(
-        form_field()
+        field()
             .label("Theme")
             .child(Select::new(&theme_state))
     )
     .child(
-        form_field()
+        field()
             .label("Language")
             .child(Select::new(&language_state))
     )
     .child(
-        form_field()
-            .no_label_indent()
+        field()
+            .label_indent(false)
             .child(Switch::new("notifications").label("Enable notifications"))
     )
     .child(
-        form_field()
-            .no_label_indent()
+        field()
+            .label_indent(false)
             .child(Switch::new("marketing").label("Marketing emails"))
     )
 ```
@@ -522,7 +485,7 @@ v_form()
 ```rust
 v_form()
     .child(
-        form_field()
+        field()
             .label("Contact Information")
             .child(
                 h_flex()
@@ -540,18 +503,18 @@ v_form()
             )
     )
     .child(
-        form_field()
+        field()
             .label("Email")
             .required(true)
             .child(Input::new(&email_input))
     )
     .child(
-        form_field()
+        field()
             .label("Subject")
             .child(Select::new(&subject_state))
     )
     .child(
-        form_field()
+        field()
             .label("Message")
             .required(true)
             .items_start()
@@ -559,8 +522,8 @@ v_form()
             .child(Input::new(&message_input))
     )
     .child(
-        form_field()
-            .no_label_indent()
+        field()
+            .label_indent(false)
             .child(
                 h_flex()
                     .gap_2()

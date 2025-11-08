@@ -1,5 +1,5 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, Corners, Edges, ElementId, InteractiveElement,
+    div, prelude::FluentBuilder as _, App, Axis, Corners, Edges, ElementId, InteractiveElement,
     IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window,
 };
@@ -18,6 +18,7 @@ pub struct ButtonGroup {
     children: Vec<Button>,
     pub(super) multiple: bool,
     pub(super) disabled: bool,
+    pub(super) layout: Axis,
 
     // The button props
     pub(super) compact: bool,
@@ -48,6 +49,7 @@ impl ButtonGroup {
             outline: false,
             multiple: false,
             disabled: false,
+            layout: Axis::Horizontal,
             on_click: None,
         }
     }
@@ -64,19 +66,29 @@ impl ButtonGroup {
         self
     }
 
-    /// With the multiple selection mode.
+    /// With the multiple selection mode, default is false (single selection).
     pub fn multiple(mut self, multiple: bool) -> Self {
         self.multiple = multiple;
         self
     }
 
+    /// Set the layout of the button group. Default is `Axis::Horizontal`.
+    pub fn layout(mut self, layout: Axis) -> Self {
+        self.layout = layout;
+        self
+    }
+
     /// With the compact mode for the ButtonGroup.
+    ///
+    /// See also: [`Button::compact()`]
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
     }
 
     /// With the outline mode for the ButtonGroup.
+    ///
+    /// See also: [`Button::outline()`]
     pub fn outline(mut self) -> Self {
         self.outline = true;
         self
@@ -146,10 +158,13 @@ impl RenderOnce for ButtonGroup {
             }
         }
 
+        let vertical = self.layout == Axis::Vertical;
+
         div()
             .id(self.id)
             .flex()
-            .items_center()
+            .when(vertical, |this| this.flex_col().justify_center())
+            .when(!vertical, |this| this.items_center())
             .refine_style(&self.style)
             .children(
                 self.children
@@ -164,8 +179,8 @@ impl RenderOnce for ButtonGroup {
                             child
                                 .border_corners(Corners {
                                     top_left: true,
-                                    top_right: false,
-                                    bottom_left: true,
+                                    top_right: vertical,
+                                    bottom_left: !vertical,
                                     bottom_right: false,
                                 })
                                 .border_edges(Edges {
@@ -178,15 +193,15 @@ impl RenderOnce for ButtonGroup {
                             // Last
                             child
                                 .border_edges(Edges {
-                                    left: false,
-                                    top: true,
+                                    left: vertical,
+                                    top: !vertical,
                                     right: true,
                                     bottom: true,
                                 })
                                 .border_corners(Corners {
                                     top_left: false,
-                                    top_right: true,
-                                    bottom_left: false,
+                                    top_right: !vertical,
+                                    bottom_left: vertical,
                                     bottom_right: true,
                                 })
                         } else {
@@ -194,8 +209,8 @@ impl RenderOnce for ButtonGroup {
                             child
                                 .border_corners(Corners::all(false))
                                 .border_edges(Edges {
-                                    left: false,
-                                    top: true,
+                                    left: vertical,
+                                    top: !vertical,
                                     right: true,
                                     bottom: true,
                                 })

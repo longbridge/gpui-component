@@ -10,7 +10,7 @@ use std::{
 use autocorrect::ignorer::Ignorer;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, Sizable,
+    ActiveTheme, IconName, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
@@ -656,7 +656,7 @@ impl Example {
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
-        let tree_state = cx.new(|cx| TreeState::new(cx).items(vec![]));
+        let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
         let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
@@ -692,7 +692,7 @@ impl Example {
         let editor = self.editor.clone();
         let input_state = self.go_to_line_state.clone();
 
-        window.open_modal(cx, move |modal, window, cx| {
+        window.open_dialog(cx, move |dialog, window, cx| {
             input_state.update(cx, |state, cx| {
                 let cursor_pos = editor.read(cx).cursor_position();
                 state.set_placeholder(
@@ -703,7 +703,7 @@ impl Example {
                 state.focus(window, cx);
             });
 
-            modal
+            dialog
                 .title("Go to line")
                 .child(Input::new(&input_state))
                 .confirm()
@@ -1041,7 +1041,7 @@ fn main() {
 
         story::create_new_window_with_size(
             "Editor",
-            Some(size(px(1200.), px(960.))),
+            Some(size(px(1200.), px(750.))),
             |window, cx| cx.new(|cx| Example::new(window, cx)),
             cx,
         );

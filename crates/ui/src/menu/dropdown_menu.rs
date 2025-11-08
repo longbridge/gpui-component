@@ -22,7 +22,7 @@ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement +
         let id = self.interactivity().element_id.clone();
 
         Popover::new(SharedString::from(format!("dropdown-menu:{:?}", id)))
-            .no_style()
+            .appearance(false)
             .trigger(self)
             .trigger_style(style)
             .anchor(anchor.into())

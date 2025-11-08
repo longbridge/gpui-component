@@ -29,6 +29,7 @@ pub struct Radio {
 }
 
 impl Radio {
+    /// Create a new Radio element with the given id.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -45,16 +46,19 @@ impl Radio {
         }
     }
 
+    /// Set the label of the Radio element.
     pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());
         self
     }
 
+    /// Set the checked state of the Radio element, default is `false`.
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked = checked;
         self
     }
 
+    /// Set the disabled state of the Radio element, default is `false`.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -72,6 +76,9 @@ impl Radio {
         self
     }
 
+    /// Add on_click handler when the Radio is clicked.
+    ///
+    /// The `&bool` parameter is the **new checked state**.
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Rc::new(handler));
         self
@@ -102,11 +109,13 @@ impl Styled for Radio {
         &mut self.style
     }
 }
+
 impl InteractiveElement for Radio {
     fn interactivity(&mut self) -> &mut gpui::Interactivity {
         self.base.interactivity()
     }
 }
+
 impl StatefulInteractiveElement for Radio {}
 
 impl ParentElement for Radio {
@@ -232,7 +241,7 @@ pub struct RadioGroup {
     layout: Axis,
     selected_index: Option<usize>,
     disabled: bool,
-    on_change: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
 }
 
 impl RadioGroup {
@@ -240,7 +249,7 @@ impl RadioGroup {
         Self {
             id: id.into(),
             style: StyleRefinement::default().flex_1(),
-            on_change: None,
+            on_click: None,
             layout: Axis::Vertical,
             selected_index: None,
             disabled: false,
@@ -264,9 +273,11 @@ impl RadioGroup {
         self
     }
 
-    /// Listen to the change event.
-    pub fn on_change(mut self, handler: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
-        self.on_change = Some(Rc::new(handler));
+    // Add on_click handler when selected index changes.
+    //
+    // The `&usize` parameter is the selected index.
+    pub fn on_click(mut self, handler: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Rc::new(handler));
         self
     }
 
@@ -321,7 +332,7 @@ impl From<String> for Radio {
 
 impl RenderOnce for RadioGroup {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let on_change = self.on_change;
+        let on_click = self.on_click;
         let disabled = self.disabled;
         let selected_ix = self.selected_index;
 
@@ -341,10 +352,10 @@ impl RenderOnce for RadioGroup {
 
                     radio.id = ix.into();
                     radio.disabled(disabled).checked(checked).when_some(
-                        on_change.clone(),
-                        |this, on_change| {
+                        on_click.clone(),
+                        |this, on_click| {
                             this.on_click(move |_, window, cx| {
-                                on_change(&ix, window, cx);
+                                on_click(&ix, window, cx);
                             })
                         },
                     )

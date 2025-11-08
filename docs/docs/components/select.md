@@ -65,13 +65,15 @@ Select::new(&state)
 
 ### Searchable
 
+Use `searchable(true)` to enable search functionality within the dropdown.
+
 ```rust
 let fruits = SearchableVec::new(vec![
     "Apple", "Orange", "Banana", "Grape", "Pineapple",
 ]);
 
 let state = cx.new(|cx| {
-    SelectState::new(fruits, None, window, cx)
+    SelectState::new(fruits, None, window, cx).searchable(true)
 });
 
 Select::new(&state)
@@ -163,7 +165,7 @@ Select::new(&state).disabled(true)
 
 ```rust
 Select::new(&state)
-    .cleanable() // Shows clear button when item is selected
+    .cleanable(true) // Show clear button when item is selected
 ```
 
 ### Custom Appearance
@@ -255,7 +257,6 @@ let state = cx.new(|cx| {
 Select::new(&state)
     .placeholder("Select language...")
     .title_prefix("Language: ")
-    .cleanable()
 ```
 
 ### Country/Region Selector

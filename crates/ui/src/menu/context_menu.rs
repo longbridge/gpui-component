@@ -9,7 +9,9 @@ use gpui::{
 
 use crate::menu::PopupMenu;
 
+/// A extension trait for adding a context menu to an element.
 pub trait ContextMenuExt: ParentElement + Sized {
+    /// Add a context menu to the element.
     fn context_menu(
         self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
@@ -29,6 +31,7 @@ pub struct ContextMenu {
 }
 
 impl ContextMenu {
+    /// Create a new context menu with the given ID.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -37,6 +40,7 @@ impl ContextMenu {
         }
     }
 
+    /// Build the context menu using the given builder function.
     #[must_use]
     pub fn menu<F>(mut self, builder: F) -> Self
     where

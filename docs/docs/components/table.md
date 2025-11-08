@@ -395,7 +395,7 @@ let state = cx.new(|cx| {
 // In render
 Table::new(&state)
     .stripe(true)           // Alternating row colors
-    .border(true)           // Border around table
+    .bordered(true)           // Border around table
     .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
 ```
 

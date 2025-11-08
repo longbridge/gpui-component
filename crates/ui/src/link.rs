@@ -17,6 +17,7 @@ pub struct Link {
 }
 
 impl Link {
+    /// Create a new Link element.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
@@ -28,11 +29,16 @@ impl Link {
         }
     }
 
+    /// Set the href of the link.
     pub fn href(mut self, href: impl Into<SharedString>) -> Self {
         self.href = Some(href.into());
         self
     }
 
+    /// Set the click handler of the link.
+    ///
+    /// If this set, the handler will be called when the link is clicked.
+    /// Otherwise, the link will only open the href if set.
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
@@ -41,6 +47,7 @@ impl Link {
         self
     }
 
+    /// Set the disabled state, default false.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self

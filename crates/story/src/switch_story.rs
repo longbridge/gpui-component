@@ -1,10 +1,10 @@
 use gpui::{
-    px, App, AppContext, Context, Div, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window,
+    App, AppContext, Context, Div, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, SharedString, Styled, Window, px,
 };
 
 use gpui_component::{
-    h_flex, label::Label, switch::Switch, v_flex, ActiveTheme, Disableable as _, Side, Sizable,
+    ActiveTheme, Disableable as _, Sizable, h_flex, label::Label, switch::Switch, v_flex,
 };
 
 use crate::section;
@@ -86,14 +86,14 @@ impl Render for SwitchStory {
                             ),
                         )
                         .child(
-                            Switch::new("switch1")
-                                .checked(self.switch1)
-                                .label_side(Side::Left)
-                                .label("Subscribe")
-                                .on_click(cx.listener(move |view, checked, _, cx| {
-                                    view.switch1 = *checked;
-                                    cx.notify();
-                                })),
+                            h_flex().gap_2().child("Subscribe").child(
+                                Switch::new("switch1")
+                                    .checked(self.switch1)
+                                    .on_click(cx.listener(move |view, checked, _, cx| {
+                                        view.switch1 = *checked;
+                                        cx.notify();
+                                    })),
+                            ),
                         ),
                 )
                 .child(

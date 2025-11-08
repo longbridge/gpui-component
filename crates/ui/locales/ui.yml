@@ -138,7 +138,7 @@ Dock:
     zh-CN: 展开
     zh-HK: 展開
     it: Espandi
-Modal:
+Dialog:
   ok:
     en: OK
     zh-CN: 确定

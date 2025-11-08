@@ -66,7 +66,7 @@ pub(super) fn render_markdown(
                         .text_size(px(11.)),
                 ),
         )
-        .selectable()
+        .selectable(true)
 }
 
 pub(super) fn editor_popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {

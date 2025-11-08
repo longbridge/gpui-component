@@ -4,7 +4,7 @@ use gpui::{
     SharedString, Styled as _, Window,
 };
 
-/// A sidebar group
+/// A group of items in the [`super::Sidebar`].
 #[derive(IntoElement)]
 pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
     base: Div,
@@ -14,6 +14,7 @@ pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
 }
 
 impl<E: Collapsible + IntoElement> SidebarGroup<E> {
+    /// Create a new [`SidebarGroup`] with the given label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             base: div().gap_2().flex_col(),
@@ -23,16 +24,21 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
         }
     }
 
+    /// Add a child to the sidebar group, the child should implement [`Collapsible`] + [`IntoElement`].
     pub fn child(mut self, child: E) -> Self {
         self.children.push(child);
         self
     }
 
+    /// Add multiple children to the sidebar group.
+    ///
+    /// See also [`SidebarGroup::child`].
     pub fn children(mut self, children: impl IntoIterator<Item = E>) -> Self {
         self.children.extend(children);
         self
     }
 }
+
 impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
     fn is_collapsed(&self) -> bool {
         self.collapsed
@@ -43,6 +49,7 @@ impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
         self
     }
 }
+
 impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()

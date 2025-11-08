@@ -18,23 +18,25 @@ use gpui_component::button::{Toggle, ToggleGroup};
 ### Basic Toggle
 
 ```rust
-Toggle::label("Toggle me")
-    .id("basic-toggle")
+Toggle::new("toggle1").
+    .label("Toggle me")
     .checked(false)
-    .on_change(|checked, _, _| {
+    .on_click(|checked, _, _| {
         println!("Toggle is now: {}", checked);
     })
 ```
+
+Here, we can use `on_click` to handle toggle state changes. The callback receives the **new checked state** as a `bool`.
 
 ### Icon Toggle
 
 ```rust
 use gpui_component::IconName;
 
-Toggle::icon(IconName::Eye)
-    .id("visibility-toggle")
+Toggle::new("toggle2")
+    .icon(IconName::Eye)
     .checked(true)
-    .on_change(|checked, _, _| {
+    .on_click(|checked, _, _| {
         println!("Visibility: {}", if *checked { "shown" } else { "hidden" });
     })
 ```
@@ -48,10 +50,10 @@ struct MyView {
 
 impl Render for MyView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Toggle::label("Active")
-            .id("active-toggle")
+        Toggle::new("active")
+            .label("Active")
             .checked(self.is_active)
-            .on_change(cx.listener(|view, checked, _, cx| {
+            .on_click(cx.listener(|view, checked, _, cx| {
                 view.is_active = *checked;
                 cx.notify();
             }))
@@ -63,36 +65,37 @@ impl Render for MyView {
 
 ```rust
 // Ghost toggle (default)
-Toggle::label("Ghost")
-    .id("ghost-toggle")
+Toggle::new("ghost-toggle")
     .ghost()
+    .label("Ghost")
 
 // Outline toggle
-Toggle::label("Outline")
-    .id("outline-toggle")
+Toggle::new("outline-toggle")
     .outline()
+    .label("Outline")
 ```
 
 ### Different Sizes
 
 ```rust
 // Extra small
-Toggle::icon(IconName::Star)
-    .id("xs-toggle")
+Toggle::new("xs-toggle")
+    .icon(IconName::Star)
     .xsmall()
 
 // Small
-Toggle::label("Small")
-    .id("small-toggle")
+Toggle::new("small-toggle")
+    .label("Small")
     .small()
 
 // Medium (default)
-Toggle::label("Medium")
-    .id("medium-toggle")
+Toggle::new("medium-toggle")
+    .label("Medium")
+
 
 // Large
-Toggle::label("Large")
-    .id("large-toggle")
+Toggle::new("large-toggle")
+    .label("Large")
     .large()
 ```
 
@@ -100,14 +103,14 @@ Toggle::label("Large")
 
 ```rust
 // Disabled unchecked
-Toggle::label("Disabled")
-    .id("disabled-toggle")
+Toggle::new("disabled-toggle")
+    .label("Disabled")
     .disabled(true)
     .checked(false)
 
 // Disabled checked
-Toggle::label("Selected (Disabled)")
-    .id("disabled-checked-toggle")
+Toggle::new("disabled-checked-toggle")
+    .label("Selected (Disabled)")
     .disabled(true)
     .checked(true)
 ```
@@ -144,14 +147,16 @@ Toggle buttons can be grouped together using `ToggleGroup` for related options:
 
 ```rust
 ToggleGroup::new("filter-group")
-    .child(Toggle::icon(IconName::Bell))
-    .child(Toggle::icon(IconName::Bot))
-    .child(Toggle::icon(IconName::Inbox))
-    .child(Toggle::label("Other"))
-    .on_change(|checkeds, _, _| {
+    .child(Toggle::new(0).icon(IconName::Bell))
+    .child(Toggle::new(1).icon(IconName::Bot))
+    .child(Toggle::new(2).icon(IconName::Inbox))
+    .child(Toggle::new(3).label("Other"))
+    .on_click(|checkeds, _, _| {
         println!("Selected toggles: {:?}", checkeds);
     })
 ```
+
+The `on_click` callback receives a `Vec<bool>` representing the **new checked state** of each toggle in the group.
 
 ### Toggle Group with Controlled State
 
@@ -166,11 +171,11 @@ struct FilterView {
 impl Render for FilterView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         ToggleGroup::new("filters")
-            .child(Toggle::icon(IconName::Bell).checked(self.notifications))
-            .child(Toggle::icon(IconName::Bot).checked(self.bots))
-            .child(Toggle::icon(IconName::Inbox).checked(self.inbox))
-            .child(Toggle::label("Other").checked(self.other))
-            .on_change(cx.listener(|view, checkeds, _, cx| {
+            .child(Toggle::new(0).icon(IconName::Bell).checked(self.notifications))
+            .child(Toggle::new(1).icon(IconName::Bot).checked(self.bots))
+            .child(Toggle::new(2).icon(IconName::Inbox).checked(self.inbox))
+            .child(Toggle::new(3).label("Other").checked(self.other))
+            .on_click(cx.listener(|view, checkeds, _, cx| {
                 view.notifications = checkeds[0];
                 view.bots = checkeds[1];
                 view.inbox = checkeds[2];
@@ -188,16 +193,16 @@ impl Render for FilterView {
 ToggleGroup::new("compact-filters")
     .outline()
     .small()
-    .child(Toggle::icon(IconName::Filter))
-    .child(Toggle::icon(IconName::Sort))
-    .child(Toggle::icon(IconName::Search))
+    .child(Toggle::new(0).icon(IconName::Filter))
+    .child(Toggle::new(1).icon(IconName::Sort))
+    .child(Toggle::new(2).icon(IconName::Search))
 
 // Ghost variant (default), extra small
 ToggleGroup::new("mini-toolbar")
     .xsmall()
-    .child(Toggle::icon(IconName::Bold))
-    .child(Toggle::icon(IconName::Italic))
-    .child(Toggle::icon(IconName::Underline))
+    .child(Toggle::new(0).icon(IconName::Bold))
+    .child(Toggle::new(1).icon(IconName::Italic))
+    .child(Toggle::new(2).icon(IconName::Underline))
 ```
 
 ## Event Handling
@@ -205,9 +210,9 @@ ToggleGroup::new("mini-toolbar")
 ### Individual Toggle Events
 
 ```rust
-Toggle::label("Subscribe")
-    .id("subscribe-toggle")
-    .on_change(|checked, window, cx| {
+Toggle::new("subscribe-toggle")
+    .label("Subscribe")
+    .on_click(|checked, window, cx| {
         if *checked {
             // Handle subscription logic
             println!("Subscribed!");
@@ -217,72 +222,6 @@ Toggle::label("Subscribe")
         }
     })
 ```
-
-### Toggle Group Events
-
-The `on_change` callback for `ToggleGroup` receives a `Vec<bool>` representing the state of each toggle:
-
-```rust
-ToggleGroup::new("options")
-    .child(Toggle::label("Option 1"))
-    .child(Toggle::label("Option 2"))
-    .child(Toggle::label("Option 3"))
-    .on_change(|states, _, _| {
-        for (i, checked) in states.iter().enumerate() {
-            if *checked {
-                println!("Option {} is selected", i + 1);
-            }
-        }
-    })
-```
-
-## API Reference
-
-### Toggle
-
-| Method           | Description                                                 |
-| ---------------- | ----------------------------------------------------------- |
-| `label(str)`     | Create toggle with text label                               |
-| `icon(icon)`     | Create toggle with icon                                     |
-| `id(id)`         | Set element ID and make interactive                         |
-| `checked(bool)`  | Set checked/selected state                                  |
-| `disabled(bool)` | Set disabled state                                          |
-| `on_change(fn)`  | Callback when clicked, receives `&bool` (new checked state) |
-
-### Toggle Variants
-
-| Method      | Description                                      |
-| ----------- | ------------------------------------------------ |
-| `ghost()`   | Ghost variant (default) - transparent background |
-| `outline()` | Outline variant - visible border                 |
-
-### Toggle Sizing
-
-Implements `Sizable` trait:
-
-- `xsmall()` - Extra small toggle (20x20px)
-- `small()` - Small toggle (24x24px)
-- `medium()` - Medium toggle (32x32px, default)
-- `large()` - Large toggle (36x36px)
-- `with_size(size)` - Set explicit size
-
-### ToggleGroup
-
-| Method           | Description                                             |
-| ---------------- | ------------------------------------------------------- |
-| `new(id)`        | Create a new toggle group with ID                       |
-| `child(toggle)`  | Add a toggle to the group                               |
-| `children(iter)` | Add multiple toggles to the group                       |
-| `on_change(fn)`  | Callback when any toggle changes, receives `&Vec<bool>` |
-| `disabled(bool)` | Disable all toggles in the group                        |
-
-### ToggleGroup Styling
-
-Implements `Sizable`, `ToggleVariants`, and `Disableable` traits:
-
-- Size methods apply to all child toggles
-- Variant methods apply to all child toggles
-- `disabled(bool)` affects the entire group
 
 ## Examples
 
@@ -305,11 +244,11 @@ h_flex()
     .child(
         ToggleGroup::new("formatting")
             .small()
-            .child(Toggle::icon(IconName::Bold).checked(self.bold))
-            .child(Toggle::icon(IconName::Italic).checked(self.italic))
-            .child(Toggle::icon(IconName::Underline).checked(self.underline))
-            .child(Toggle::icon(IconName::Strikethrough).checked(self.strikethrough))
-            .on_change(cx.listener(|view, states, _, cx| {
+            .child(Toggle::new(0).icon(IconName::Bold).checked(self.bold))
+            .child(Toggle::new(1).icon(IconName::Italic).checked(self.italic))
+            .child(Toggle::new(2).icon(IconName::Underline).checked(self.underline))
+            .child(Toggle::new(3).icon(IconName::Strikethrough).checked(self.strikethrough))
+            .on_click(cx.listener(|view, states, _, cx| {
                 view.bold = states[0];
                 view.italic = states[1];
                 view.underline = states[2];
@@ -336,10 +275,10 @@ v_flex()
     .child(
         ToggleGroup::new("status-filters")
             .outline()
-            .child(Toggle::label("Completed").checked(self.show_completed))
-            .child(Toggle::label("Pending").checked(self.show_pending))
-            .child(Toggle::label("Cancelled").checked(self.show_cancelled))
-            .on_change(cx.listener(|view, states, _, cx| {
+            .child(Toggle::new(0).label("Completed").checked(self.show_completed))
+            .child(Toggle::new(1).label("Pending").checked(self.show_pending))
+            .child(Toggle::new(2).label("Cancelled").checked(self.show_cancelled))
+            .on_click(cx.listener(|view, states, _, cx| {
                 view.show_completed = states[0];
                 view.show_pending = states[1];
                 view.show_cancelled = states[2];
@@ -347,10 +286,10 @@ v_flex()
             }))
     )
     .child(
-        Toggle::label("Show urgent only")
-            .id("urgent-filter")
+        Toggle::new("urgent-filter")
+            .label("Show urgent only")
             .checked(self.show_urgent)
-            .on_change(cx.listener(|view, checked, _, cx| {
+            .on_click(cx.listener(|view, checked, _, cx| {
                 view.show_urgent = *checked;
                 cx.notify();
             }))
@@ -382,10 +321,10 @@ v_flex()
                     )
             )
             .child(
-                Toggle::icon(IconName::Mail)
-                    .id("email-notifications")
+                Toggle::new("email-notifications")
+                    .icon(IconName::Mail)
                     .checked(self.email_notifications)
-                    .on_change(cx.listener(|view, checked, _, cx| {
+                    .on_click(cx.listener(|view, checked, _, cx| {
                         view.email_notifications = *checked;
                         cx.notify();
                     }))
@@ -397,10 +336,10 @@ v_flex()
             .justify_between()
             .child(Label::new("Push notifications"))
             .child(
-                Toggle::icon(IconName::Bell)
-                    .id("push-notifications")
+                Toggle::new("push-notifications")
+                    .icon(IconName::Bell)
                     .checked(self.push_notifications)
-                    .on_change(cx.listener(|view, checked, _, cx| {
+                    .on_click(cx.listener(|view, checked, _, cx| {
                         view.push_notifications = *checked;
                         cx.notify();
                     }))
@@ -431,11 +370,12 @@ v_flex()
                     .into_iter()
                     .enumerate()
                     .map(|(i, category)| {
-                        Toggle::label(category)
+                        Toggle::new(i)
+                            .label(category)
                             .checked(self.selected_categories.get(i).copied().unwrap_or(false))
                     })
             )
-            .on_change(cx.listener(|view, states, _, cx| {
+            .on_click(cx.listener(|view, states, _, cx| {
                 view.selected_categories = states.clone();
                 cx.notify();
             }))

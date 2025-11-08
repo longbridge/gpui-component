@@ -5,6 +5,7 @@ use gpui::{
     Transformation, Window,
 };
 
+/// The name of an icon in the asset bundle.
 #[derive(IntoElement, Clone)]
 pub enum IconName {
     ALargeSmall,

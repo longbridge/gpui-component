@@ -472,8 +472,8 @@ impl TextView {
     }
 
     /// Set the text view to be selectable, default is false.
-    pub fn selectable(mut self) -> Self {
-        self.selectable = true;
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
         self
     }
 
@@ -489,8 +489,8 @@ impl TextView {
     ///
     /// The TextView will expand to fit all content, no scrollbar.
     /// This mode is suitable for small content, such as a few lines of text, a label, etc.
-    pub fn scrollable(mut self) -> Self {
-        self.scrollable = true;
+    pub fn scrollable(mut self, scrollable: bool) -> Self {
+        self.scrollable = scrollable;
         self
     }
 

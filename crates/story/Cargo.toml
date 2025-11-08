@@ -2,7 +2,7 @@
 name = "story"
 edition = "2024"
 publish = false
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 
 [dependencies]
 anyhow.workspace = true

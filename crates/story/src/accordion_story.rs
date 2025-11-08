@@ -1,14 +1,15 @@
 use gpui::{
-    prelude::FluentBuilder as _, App, AppContext, Context, Entity, FocusHandle, Focusable,
-    IntoElement, ParentElement as _, Render, Styled as _, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
+    Render, Styled as _, Window, prelude::FluentBuilder as _,
 };
 use gpui_component::{
+    IconName, Selectable, Sizable, Size,
     accordion::Accordion,
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
     switch::Switch,
-    v_flex, IconName, Selectable, Sizable, Size,
+    v_flex,
 };
 
 use crate::section;
@@ -168,13 +169,13 @@ impl Render for AccordionStory {
                             this.open(self.open_ixs.contains(&0))
                                 .when(self.show_icon, |this| this.icon(IconName::Info))
                                 .title("Is it accessible?")
-                                .content("Yes. It adheres to the WAI-ARIA design pattern.")
+                                .child("Yes. It adheres to the WAI-ARIA design pattern.")
                         })
                         .item(|this| {
                             this.open(self.open_ixs.contains(&1))
                             .when(self.show_icon, |this| this.icon(IconName::Inbox))
                             .title("Is it styled with complex elements?")
-                            .content(
+                            .child(
                                 v_flex()
                                     .gap_4()
                                     .child(
@@ -194,7 +195,7 @@ impl Render for AccordionStory {
                             this.open(self.open_ixs.contains(&2))
                                 .when(self.show_icon, |this| this.icon(IconName::Moon))
                                 .title("This is third accordion")
-                                .content(
+                                .child(
                                     "This is the third accordion content. \
                                 It can be any view, like a text view or a button.",
                                 )

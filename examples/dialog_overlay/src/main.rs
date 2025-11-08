@@ -6,14 +6,14 @@ actions!(class_menu, [Open, Delete, Export, Info]);
 pub struct HelloWorld;
 
 impl HelloWorld {
-    fn show_modal(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        window.open_modal(cx, move |modal, _, _| {
-            modal.title("Test Modal").child("Hello from Modal!")
+    fn show_dialog(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        window.open_dialog(cx, move |dialog, _, _| {
+            dialog.title("Test dialog").child("Hello from dialog!")
         });
     }
 
     fn show_drawer(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        window.open_drawer(cx, move |drawer, _, _| {
+        window.open_sheet(cx, move |drawer, _, _| {
             drawer.title("Test Drawer").child("Hello from Drawer!")
         });
     }
@@ -24,7 +24,7 @@ impl Render for HelloWorld {
         div()
             .bg(gpui::white())
             .size_full()
-            .child(TitleBar::new().child("Modal & Drawer"))
+            .child(TitleBar::new().child("dialog & Drawer"))
             .child(
                 div()
                     .p_8()
@@ -37,8 +37,8 @@ impl Render for HelloWorld {
                             .child(
                                 Button::new("btn1")
                                     .outline()
-                                    .label("Open Modal")
-                                    .on_click(cx.listener(Self::show_modal)),
+                                    .label("Open dialog")
+                                    .on_click(cx.listener(Self::show_dialog)),
                             )
                             .child(
                                 Button::new("btn2")
@@ -72,8 +72,8 @@ impl Render for HelloWorld {
                             }),
                     ),
             )
-            .children(Root::render_modal_layer(window, cx))
-            .children(Root::render_drawer_layer(window, cx))
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
     }
 }
 

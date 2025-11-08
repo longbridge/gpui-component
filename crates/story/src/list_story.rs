@@ -2,7 +2,7 @@ use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    App, AppContext, Context, Edges, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
+    App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString, Styled,
     Subscription, Task, Timer, Window, actions, div, prelude::FluentBuilder as _, px,
 };
@@ -163,6 +163,7 @@ struct CompanyListDelegate {
     query: SharedString,
     loading: bool,
     eof: bool,
+    lazy_load: bool,
 }
 
 impl CompanyListDelegate {
@@ -311,8 +312,10 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
-        // TODO: The load more here will broken the scroll position,
-        // because the extends will creates some new industries to make some new sections.
+        if !self.lazy_load {
+            return;
+        }
+
         cx.spawn_in(window, async move |view, window| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
@@ -332,6 +335,8 @@ pub struct ListStory {
     focus_handle: FocusHandle,
     company_list: Entity<ListState<CompanyListDelegate>>,
     selected_company: Option<Rc<Company>>,
+    selectable: bool,
+    searchable: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -364,10 +369,11 @@ impl ListStory {
             query: "".into(),
             loading: false,
             eof: false,
+            lazy_load: false,
         };
         delegate.extend_more(100);
 
-        let company_list = cx.new(|cx| ListState::new(delegate, window, cx));
+        let company_list = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
 
         let _subscriptions =
             vec![
@@ -408,6 +414,8 @@ impl ListStory {
 
         Self {
             focus_handle: cx.focus_handle(),
+            searchable: true,
+            selectable: true,
             company_list,
             selected_company: None,
             _subscriptions,
@@ -419,6 +427,20 @@ impl ListStory {
         if let Some(company) = picker.delegate().selected_company() {
             self.selected_company = Some(company);
         }
+    }
+
+    fn toggle_selectable(&mut self, selectable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.selectable = selectable;
+        self.company_list.update(cx, |list, cx| {
+            list.set_selectable(self.selectable, cx);
+        })
+    }
+
+    fn toggle_searchable(&mut self, searchable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.searchable = searchable;
+        self.company_list.update(cx, |list, cx| {
+            list.set_searchable(self.searchable, cx);
+        })
     }
 }
 
@@ -446,6 +468,8 @@ impl Focusable for ListStory {
 
 impl Render for ListStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let lazy_load = self.company_list.read(cx).delegate().lazy_load;
+
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
@@ -523,6 +547,22 @@ impl Render for ListStory {
                             })),
                     )
                     .child(
+                        Checkbox::new("selectable")
+                            .label("Selectable")
+                            .checked(self.selectable)
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_selectable(*check, window, cx)
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("searchable")
+                            .label("Searchable")
+                            .checked(self.searchable)
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_searchable(*check, window, cx)
+                            })),
+                    )
+                    .child(
                         Checkbox::new("loading")
                             .label("Loading")
                             .checked(self.company_list.read(cx).delegate().loading)
@@ -532,16 +572,27 @@ impl Render for ListStory {
                                     cx.notify();
                                 })
                             })),
+                    )
+                    .child(
+                        Checkbox::new("lazy_load")
+                            .label("Lazy Load")
+                            .checked(lazy_load)
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                this.company_list.update(cx, |this, cx| {
+                                    this.delegate_mut().lazy_load = *check;
+                                    cx.notify();
+                                })
+                            })),
                     ),
             )
             .child(
-                div()
+                List::new(&self.company_list)
+                    .p(px(8.))
                     .flex_1()
                     .w_full()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius)
-                    .child(List::new(&self.company_list).paddings(Edges::all(px(8.)))),
+                    .rounded(cx.theme().radius),
             )
     }
 }

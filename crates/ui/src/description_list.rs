@@ -16,7 +16,7 @@ pub struct DescriptionList {
     columns: usize,
 }
 
-/// Description item.
+/// Item for the [`DescriptionList`].
 pub enum DescriptionItem {
     Item {
         label: DescriptionText,
@@ -26,6 +26,7 @@ pub enum DescriptionItem {
     Divider,
 }
 
+/// Text for the label or value in the [`DescriptionList`].
 #[derive(IntoElement)]
 pub enum DescriptionText {
     String(SharedString),
@@ -174,7 +175,7 @@ impl DescriptionList {
     }
 
     /// Add a [`DescriptionItem::Item`] to the list.
-    pub fn child(
+    pub fn item(
         mut self,
         label: impl Into<DescriptionText>,
         value: impl Into<DescriptionText>,
@@ -185,6 +186,12 @@ impl DescriptionList {
             value: value.into(),
             span,
         });
+        self
+    }
+
+    /// Add a child to the list.
+    pub fn child(mut self, child: impl Into<DescriptionItem>) -> Self {
+        self.items.push(child.into());
         self
     }
 

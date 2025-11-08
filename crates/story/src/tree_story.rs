@@ -83,7 +83,7 @@ impl TreeStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let tree_state = cx.new(|cx| TreeState::new(cx).items(vec![]));
+        let tree_state = cx.new(|cx| TreeState::new(cx));
 
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
@@ -141,6 +141,7 @@ impl Render for TreeStory {
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
             .gap_5()
+            .size_full()
             .child(
                 section("File tree")
                     .sub_title("Press `space` to select, `enter` to rename.")

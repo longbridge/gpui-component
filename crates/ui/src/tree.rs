@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
     div, prelude::FluentBuilder as _, uniform_list, App, Context, ElementId, Entity, FocusHandle,
@@ -181,6 +181,7 @@ pub struct TreeState {
     scrollbar_state: ScrollbarState,
     scroll_handle: UniformListScrollHandle,
     selected_ix: Option<usize>,
+    render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
 }
 
 impl TreeState {
@@ -192,9 +193,11 @@ impl TreeState {
             scrollbar_state: ScrollbarState::default(),
             scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
+            render_item: Rc::new(|_, _, _, _, _| ListItem::new(0)),
         }
     }
 
+    /// Set the tree items.
     pub fn items(mut self, items: impl Into<Vec<TreeItem>>) -> Self {
         let items = items.into();
         self.entries.clear();
@@ -204,6 +207,7 @@ impl TreeState {
         self
     }
 
+    /// Set the tree items.
     pub fn set_items(&mut self, items: impl Into<Vec<TreeItem>>, cx: &mut Context<Self>) {
         let items = items.into();
         self.entries.clear();
@@ -332,11 +336,69 @@ impl TreeState {
             .scroll_to_item(selected_ix, gpui::ScrollStrategy::Bottom);
         cx.notify();
     }
+
+    fn on_entry_click(&mut self, ix: usize, _: &mut Window, cx: &mut Context<Self>) {
+        self.selected_ix = Some(ix);
+        self.toggle_expand(ix);
+        cx.notify();
+    }
 }
 
 impl Render for TreeState {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let render_item = self.render_item.clone();
+
         div()
+            .id("tree-state")
+            .size_full()
+            .relative()
+            .child(
+                uniform_list("entries", self.entries.len(), {
+                    cx.processor(move |state, visible_range: Range<usize>, window, cx| {
+                        let mut items = Vec::with_capacity(visible_range.len());
+                        for ix in visible_range {
+                            let entry = &state.entries[ix];
+                            let selected = Some(ix) == state.selected_ix;
+                            let item = (render_item)(ix, entry, selected, window, cx);
+
+                            let el = div()
+                                .id(ix)
+                                .child(item.disabled(entry.item().is_disabled()).selected(selected))
+                                .when(!entry.item().is_disabled(), |this| {
+                                    this.on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener({
+                                            move |this, _, window, cx| {
+                                                this.on_entry_click(ix, window, cx);
+                                            }
+                                        }),
+                                    )
+                                });
+
+                            items.push(el)
+                        }
+
+                        items
+                    })
+                })
+                .flex_grow()
+                .size_full()
+                .track_scroll(self.scroll_handle.clone())
+                .with_sizing_behavior(ListSizingBehavior::Auto)
+                .into_any_element(),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .right_0()
+                    .bottom_0()
+                    .w(Scrollbar::width())
+                    .child(Scrollbar::vertical(
+                        &self.scrollbar_state,
+                        &self.scroll_handle,
+                    )),
+            )
     }
 }
 
@@ -363,14 +425,6 @@ impl Tree {
             }),
         }
     }
-
-    fn on_entry_click(state: &Entity<TreeState>, ix: usize, _: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.selected_ix = Some(ix);
-            state.toggle_expand(ix);
-            cx.notify();
-        })
-    }
 }
 
 impl Styled for Tree {
@@ -381,69 +435,23 @@ impl Styled for Tree {
 
 impl RenderOnce for Tree {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tree_state = self.state.read(cx);
-        let render_item = self.render_item.clone();
+        let focus_handle = self.state.read(cx).focus_handle.clone();
+
+        self.state
+            .update(cx, |state, _| state.render_item = self.render_item);
 
         div()
             .id(self.id)
             .key_context(CONTEXT)
-            .track_focus(&tree_state.focus_handle)
+            .track_focus(&focus_handle)
             .on_action(window.listener_for(&self.state, TreeState::on_action_confirm))
             .on_action(window.listener_for(&self.state, TreeState::on_action_left))
             .on_action(window.listener_for(&self.state, TreeState::on_action_right))
             .on_action(window.listener_for(&self.state, TreeState::on_action_up))
             .on_action(window.listener_for(&self.state, TreeState::on_action_down))
             .size_full()
-            .child(
-                uniform_list("entries", tree_state.entries.len(), {
-                    let selected_ix = tree_state.selected_ix;
-                    let entries = tree_state.entries.clone();
-                    let state = self.state.clone();
-                    move |visible_range, window, cx| {
-                        let mut items = Vec::with_capacity(visible_range.len());
-                        for ix in visible_range {
-                            let entry = &entries[ix];
-                            let selected = Some(ix) == selected_ix;
-                            let item = (render_item)(ix, entry, selected, window, cx);
-
-                            let el = div()
-                                .id(ix)
-                                .child(item.disabled(entry.item().is_disabled()).selected(selected))
-                                .when(!entry.item().is_disabled(), |this| {
-                                    this.on_mouse_down(MouseButton::Left, {
-                                        let state = state.clone();
-                                        move |_, window, cx| {
-                                            Self::on_entry_click(&state, ix, window, cx);
-                                        }
-                                    })
-                                });
-
-                            items.push(el)
-                        }
-
-                        items
-                    }
-                })
-                .flex_grow()
-                .size_full()
-                .track_scroll(tree_state.scroll_handle.clone())
-                .with_sizing_behavior(ListSizingBehavior::Auto)
-                .into_any_element(),
-            )
+            .child(self.state)
             .refine_style(&self.style)
-            .relative()
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .right_0()
-                    .bottom_0()
-                    .w(Scrollbar::width())
-                    .child(Scrollbar::vertical(
-                        &tree_state.scrollbar_state,
-                        &tree_state.scroll_handle,
-                    )),
-            )
     }
 }
 
