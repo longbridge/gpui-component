@@ -53,21 +53,21 @@ impl TextElement {
         });
     }
 
-    /// Returns the:
+    /// Calculate scroll offset to keep cursor in view.
     ///
-    /// - cursor bounds
-    /// - scroll offset
-    /// - current row index (No only the visible lines, but all lines)
-    ///
-    /// This method also will update for track scroll to cursor.
-    fn layout_cursor(
+    /// Returns the scroll offset to apply.
+    fn calculate_scroll_offset(
         &self,
         last_layout: &LastLayout,
-        bounds: &mut Bounds<Pixels>,
-        _: &mut Window,
+        bounds: &Bounds<Pixels>,
         cx: &mut App,
-    ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
+    ) -> Point<Pixels> {
         let state = self.state.read(cx);
+
+        // Check for deferred scroll offset first
+        if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
+            return deferred_scroll_offset;
+        }
 
         let line_height = last_layout.line_height;
         let visible_range = &last_layout.visible_range;
@@ -90,9 +90,7 @@ impl TextElement {
             cursor = state.text.offset_to_char_index(cursor);
         }
 
-        let mut current_row = None;
         let mut scroll_offset = state.scroll_handle.offset();
-        let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
         let top_bottom_margin = if state.mode.is_auto_grow() {
@@ -111,7 +109,6 @@ impl TextElement {
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
         for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
-            let row = ix;
             let line_origin = point(px(0.), offset_y);
 
             // break loop if all cursor positions are found
@@ -128,7 +125,6 @@ impl TextElement {
                 if cursor_pos.is_none() {
                     let offset = cursor.saturating_sub(prev_lines_offset);
                     if let Some(pos) = line.position_for_index(offset, line_height) {
-                        current_row = Some(row);
                         cursor_pos = Some(line_origin + pos);
                     }
                 }
@@ -154,7 +150,6 @@ impl TextElement {
                 // Just increase the offset_y and prev_lines_offset.
                 // This will let the scroll_offset to track the cursor position correctly.
                 if prev_lines_offset >= cursor && cursor_pos.is_none() {
-                    current_row = Some(row);
                     cursor_pos = Some(line_origin);
                 }
                 if prev_lines_offset >= selected_range.start && cursor_start.is_none() {
@@ -174,7 +169,11 @@ impl TextElement {
             (cursor_pos, cursor_start, cursor_end)
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
-            if selection_changed && !is_selected_all {
+            let should_adjust_scroll = (selection_changed || state.scroll_to_cursor_pending)
+                && !is_selected_all
+                && state.deferred_scroll_offset.is_none();
+
+            if should_adjust_scroll {
                 scroll_offset.x = if scroll_offset.x + cursor_pos.x
                     > (bounds.size.width - line_number_width - RIGHT_MARGIN)
                 {
@@ -182,7 +181,7 @@ impl TextElement {
                     bounds.size.width - line_number_width - RIGHT_MARGIN - cursor_pos.x
                 } else if scroll_offset.x + cursor_pos.x < px(0.) {
                     // cursor is out of left
-                    scroll_offset.x - cursor_pos.x
+                    -cursor_pos.x
                 } else {
                     scroll_offset.x
                 };
@@ -220,25 +219,100 @@ impl TextElement {
                     }
                 }
             }
+        }
 
-            // cursor bounds
+        scroll_offset
+    }
+
+    /// Calculate cursor bounds and current row.
+    ///
+    /// This should be called after scroll offset has been applied to bounds.
+    ///
+    /// Returns:
+    /// - cursor bounds
+    /// - current row index (not only the visible lines, but all lines)
+    fn layout_cursor_bounds(
+        &self,
+        last_layout: &LastLayout,
+        bounds: &Bounds<Pixels>,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> (Option<Bounds<Pixels>>, Option<usize>) {
+        let state = self.state.read(cx);
+
+        let line_height = last_layout.line_height;
+        let visible_range = &last_layout.visible_range;
+        let lines = &last_layout.lines;
+        let text_wrapper = &state.text_wrapper;
+        let line_number_width = last_layout.line_number_width;
+
+        let mut cursor = state.cursor();
+        if state.masked {
+            // Because masked use `*`, 1 char with 1 byte.
+            cursor = state.text.offset_to_char_index(cursor);
+        }
+
+        let mut current_row = None;
+        let mut cursor_bounds = None;
+        let mut cursor_pos = None;
+
+        let mut prev_lines_offset = 0;
+        let mut offset_y = px(0.);
+        for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
+            let row = ix;
+            let line_origin = point(px(0.), offset_y);
+
+            // break loop if cursor position is found
+            if cursor_pos.is_some() {
+                break;
+            }
+
+            let in_visible_range = ix >= visible_range.start;
+            if let Some(line) = in_visible_range
+                .then(|| lines.get(ix.saturating_sub(visible_range.start)))
+                .flatten()
+            {
+                // If in visible range lines
+                if cursor_pos.is_none() {
+                    let offset = cursor.saturating_sub(prev_lines_offset);
+                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                        current_row = Some(row);
+                        cursor_pos = Some(line_origin + pos);
+                    }
+                }
+
+                offset_y += line.size(line_height).height;
+                // +1 for the last `\n`
+                prev_lines_offset += line.len() + 1;
+            } else {
+                // If not in the visible range.
+
+                // Just increase the offset_y and prev_lines_offset.
+                // This will let the scroll_offset to track the cursor position correctly.
+                if prev_lines_offset >= cursor && cursor_pos.is_none() {
+                    current_row = Some(row);
+                    cursor_pos = Some(line_origin);
+                }
+
+                offset_y += wrap_line.height(line_height);
+                // +1 for the last `\n`
+                prev_lines_offset += wrap_line.len() + 1;
+            }
+        }
+
+        if let Some(cursor_pos) = cursor_pos {
+            // cursor bounds - now using bounds that already has scroll offset applied
             let cursor_height = line_height;
             cursor_bounds = Some(Bounds::new(
                 point(
-                    bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x,
+                    bounds.left() + cursor_pos.x + line_number_width,
                     bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
                 ),
                 size(CURSOR_WIDTH, cursor_height),
             ));
         }
 
-        if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
-            scroll_offset = deferred_scroll_offset;
-        }
-
-        bounds.origin = bounds.origin + scroll_offset;
-
-        (cursor_bounds, scroll_offset, current_row)
+        (cursor_bounds, current_row)
     }
 
     /// Layout the match range to a Path.
@@ -952,25 +1026,32 @@ impl Element for TextElement {
         );
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
-        if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
-            let longest_row = state.text_wrapper.longest_row.row;
-            let longtest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
-            longest_line_width = window
-                .text_system()
-                .shape_line(
-                    longtest_line.clone(),
-                    font_size,
-                    &[TextRun {
-                        len: longtest_line.len(),
-                        font: style.font(),
-                        color: gpui::black(),
-                        background_color: None,
-                        underline: None,
-                        strikethrough: None,
-                    }],
-                    wrap_width,
-                )
-                .width;
+        if !lines.is_empty() {
+            longest_line_width = if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
+                let longest_row = state.text_wrapper.longest_row.row;
+                let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
+
+                window
+                    .text_system()
+                    .shape_line(
+                        longest_line.clone(),
+                        font_size,
+                        &[TextRun {
+                            len: longest_line.len(),
+                            font: style.font(),
+                            color: gpui::black(),
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        }],
+                        wrap_width,
+                    )
+                    .width
+            } else if (state.mode.is_multi_line() && !state.soft_wrap) || state.mode.is_single_line() {
+                lines[0].size(line_height).width
+            } else {
+                longest_line_width
+            };
         }
         last_layout.lines = Rc::new(lines);
 
@@ -1026,8 +1107,14 @@ impl Element for TextElement {
 
         // Calculate the scroll offset to keep the cursor in view
 
-        let (cursor_bounds, cursor_scroll_offset, current_row) =
-            self.layout_cursor(&last_layout, &mut bounds, window, cx);
+        // Calculate scroll offset first, before cursor bounds, to avoid caret jumping
+        let cursor_scroll_offset = self.calculate_scroll_offset(&last_layout, &bounds, cx);
+
+        // Apply scroll offset to bounds for consistent positioning
+        bounds.origin = bounds.origin + cursor_scroll_offset;
+
+        let (cursor_bounds, current_row) =
+            self.layout_cursor_bounds(&last_layout, &bounds, window, cx);
         last_layout.cursor_bounds = cursor_bounds;
 
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
@@ -1237,8 +1324,7 @@ impl Element for TextElement {
 
         // Paint blinking cursor
         if focused && show_cursor {
-            if let Some(mut cursor_bounds) = prepaint.cursor_bounds.take() {
-                cursor_bounds.origin.y += prepaint.cursor_scroll_offset.y;
+            if let Some(cursor_bounds) = prepaint.cursor_bounds.take() {
                 window.paint_quad(fill(cursor_bounds, cx.theme().caret));
             }
         }
@@ -1294,7 +1380,7 @@ impl Element for TextElement {
             state.scroll_size = prepaint.scroll_size;
             state.update_scroll_offset(Some(prepaint.cursor_scroll_offset), cx);
             state.deferred_scroll_offset = None;
-
+            state.scroll_to_cursor_pending = false;
             cx.notify();
         });
 

@@ -292,8 +292,8 @@ pub struct InputState {
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
-    /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
+    pub(super) scroll_to_cursor_pending: bool,
     pub(super) scroll_state: ScrollbarState,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
@@ -398,6 +398,7 @@ impl InputState {
             scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             deferred_scroll_offset: None,
+            scroll_to_cursor_pending: false,
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
@@ -1348,20 +1349,30 @@ impl InputState {
             row_offset_y += wrap_line.height(line_height);
         }
 
+        let bounds_width = bounds.size.width - last_layout.line_number_width;
+
         if let Some(line) = last_layout
             .lines
             .get(row.saturating_sub(last_layout.visible_range.start))
         {
-            // Check to scroll horizontally
             if let Some(pos) = line.position_for_index(point.column, line_height) {
-                let bounds_width = bounds.size.width - last_layout.line_number_width;
                 let col_offset_x = pos.x;
                 if col_offset_x - RIGHT_MARGIN < -scroll_offset.x {
-                    // If the position is out of the visible area, scroll to make it visible
                     scroll_offset.x = -col_offset_x + RIGHT_MARGIN;
                 } else if col_offset_x + RIGHT_MARGIN > -scroll_offset.x + bounds_width {
                     scroll_offset.x = -(col_offset_x - bounds_width + RIGHT_MARGIN);
                 }
+            }
+        } else if self.mode.is_single_line() && row < self.text_wrapper.lines.len() {
+            let char_count = if row == self.text_wrapper.longest_row.row {
+                self.text_wrapper.longest_row.len
+            } else {
+                self.text.slice_line(row).to_string().len()
+            };
+            let estimated_width: Pixels = (char_count as f32 * line_height * 0.6).into();
+
+            if estimated_width > bounds_width {
+                scroll_offset.x = -(estimated_width - bounds_width + RIGHT_MARGIN);
             }
         }
 
@@ -1423,7 +1434,7 @@ impl InputState {
             }
 
             self.replace_text_in_range_silent(None, &new_text, window, cx);
-            self.scroll_to(self.cursor(), cx);
+            self.scroll_to_cursor_pending = true;
         }
     }
 
