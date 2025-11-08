@@ -263,6 +263,7 @@ pub struct Slider {
     axis: Axis,
     style: StyleRefinement,
     disabled: bool,
+    display_tooltip: bool,
 }
 
 impl Slider {
@@ -273,12 +274,19 @@ impl Slider {
             state: state.clone(),
             style: StyleRefinement::default(),
             disabled: false,
+            display_tooltip: true,
         }
     }
 
     /// As a horizontal slider.
     pub fn horizontal(mut self) -> Self {
         self.axis = Axis::Horizontal;
+        self
+    }
+
+    /// Set whether to display the tooltip on the thumb, default: true
+    pub fn display_tooltip(mut self, display_tooltip: bool) -> Self {
+        self.display_tooltip = display_tooltip;
         self
     }
 
@@ -368,12 +376,14 @@ impl Slider {
                     }
                 },
             ))
-            .tooltip(move |window, cx| {
-                Tooltip::new(format!(
-                    "{}",
-                    if is_start { value.start() } else { value.end() }
-                ))
-                .build(window, cx)
+            .when(self.display_tooltip, |this| {
+                this.tooltip(move |window, cx| {
+                    Tooltip::new(format!(
+                        "{}",
+                        if is_start { value.start() } else { value.end() }
+                    ))
+                    .build(window, cx)
+                })
             })
     }
 }
