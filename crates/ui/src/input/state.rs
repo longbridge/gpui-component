@@ -1220,7 +1220,7 @@ impl InputState {
 
         // Double click to select word
         if event.button == MouseButton::Left && event.click_count == 2 {
-            self.select_word(offset, window, cx);
+            self.select_word_for_double_click(offset, window, cx);
             return;
         }
 
@@ -1610,81 +1610,48 @@ impl InputState {
     /// Select the word at the given offset.
     ///
     /// The offset is the UTF-8 offset.
-    fn select_word(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        const CHINESE_BLOCKS: &[(u32, u32)] = &[
-            (0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0x20000, 0x2A6DF),
-            (0x2A700, 0x2B73F), (0x2B740, 0x2B81F), (0x2B820, 0x2CEAF),
-            (0x2CEB0, 0x2EBEF), (0x30000, 0x3134F), (0x2E80, 0x2EFF),
-            (0x2F00, 0x2FDF), (0xF900, 0xFAFF), (0x2F800, 0x2FA1F),
-        ];
-
-        #[inline]
-        fn is_chinese(c: char) -> bool {
-            let code = c as u32;
-            CHINESE_BLOCKS.iter().any(|&(s, e)| code >= s && code <= e)
+    ///
+    /// FIXME: When click on a non-word character, the word is not selected.
+    fn select_word(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+        #[inline(always)]
+        fn is_word(c: char) -> bool {
+            c.is_alphanumeric() || matches!(c, '_')
         }
 
-        #[inline]
-        fn char_kind(c: char) -> u8 {
-            if c.is_alphanumeric() || c == '_' {
-                0 // word
-            } else if c.is_whitespace() {
-                1 // space
-            } else if c.is_control(){
-                2 // \r\n etc
-            } else if is_chinese(c){
-                3 // chinese
-            } else {
-                4 // symbol and others
-            }
-        }
-        
-        let line = self.text.byte_to_line_idx(offset, ropey::LineType::LF);
-        let line_start = self.text.line_start_offset(line);
-        let line_end = self.text.line_end_offset(line);
-        let is_line_end = offset == line_end;
-        if line_start == line_end {
-            return;
-        }
-        let fixed_offset = if is_line_end {
-            line_end - 1
-        } else {
-            offset
-        };
-        let offset =  self.text.clip_offset(fixed_offset, Bias::Left);
-        let click_char = match self.text.get_char(offset) {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-        let click_kind = char_kind(click_char);
         let mut start = offset;
         let mut end = start;
+        let prev_text = self
+            .text_for_range(self.range_to_utf16(&(0..start)), &mut None, window, cx)
+            .unwrap_or_default();
+        let next_text = self
+            .text_for_range(
+                self.range_to_utf16(&(end..self.text.len())),
+                &mut None,
+                window,
+                cx,
+            )
+            .unwrap_or_default();
 
-        while start > line_start {
-            let prev_offset = self.text.clip_offset(start - 1, Bias::Left);
-            let c =  match self.text.get_char(prev_offset) {
-                Ok(c) => c,
-                Err(_) => break,
-            };
-            let cur_kind = char_kind(c);
-            if cur_kind != click_kind || cur_kind == 2 {
+        let prev_chars = prev_text.chars().rev();
+        let next_chars = next_text.chars();
+
+        let pre_chars_count = prev_chars.clone().count();
+        for (ix, c) in prev_chars.enumerate() {
+            if !is_word(c) {
                 break;
             }
-            start = prev_offset;
+
+            if ix < pre_chars_count {
+                start = start.saturating_sub(c.len_utf8());
+            }
         }
 
-        while end < line_end {
-            let prev_offset =  self.text.clip_offset(end, Bias::Left);
-            let next_offset = self.text.clip_offset(end + 1, Bias::Right);
-            let c =  match self.text.get_char(prev_offset) {
-                Ok(c) => c,
-                Err(_) => break,
-            };
-            let cur_kind = char_kind(c);
-            if cur_kind != click_kind || cur_kind == 2 {
+        for (_, c) in next_chars.enumerate() {
+            if !is_word(c) {
                 break;
             }
-            end = next_offset;
+
+            end += c.len_utf8();
         }
 
         if start == end {

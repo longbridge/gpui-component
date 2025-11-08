@@ -16,6 +16,7 @@ mod rope_ext;
 mod search;
 mod state;
 mod text_wrapper;
+mod selection;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
