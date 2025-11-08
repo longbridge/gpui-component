@@ -123,6 +123,11 @@ impl SliderValue {
     }
 }
 
+pub enum SliderScale {
+    Linear,
+    Logarithmic,
+}
+
 /// State of the [`Slider`].
 pub struct SliderState {
     min: f32,
@@ -133,6 +138,7 @@ pub struct SliderState {
     percentage: Range<f32>,
     /// The bounds of the slider after rendered.
     bounds: Bounds<Pixels>,
+    scale: SliderScale,
 }
 
 impl SliderState {
@@ -145,11 +151,18 @@ impl SliderState {
             value: SliderValue::default(),
             percentage: (0.0..0.0),
             bounds: Bounds::default(),
+            scale: SliderScale::Linear,
         }
     }
 
     /// Set the minimum value of the slider, default: 0.0
     pub fn min(mut self, min: f32) -> Self {
+        if matches!(self.scale, SliderScale::Logarithmic) {
+            assert!(
+                min > 0.0,
+                "minimum value must be greater than 0 for logarithmic scale"
+            );
+        }
         self.min = min;
         self.update_thumb_pos();
         self
@@ -157,6 +170,12 @@ impl SliderState {
 
     /// Set the maximum value of the slider, default: 100.0
     pub fn max(mut self, max: f32) -> Self {
+        if matches!(self.scale, SliderScale::Logarithmic) {
+            assert!(
+                max > self.min,
+                "maximum value must be greater than minimum value for logarithmic scale"
+            );
+        }
         self.max = max;
         self.update_thumb_pos();
         self
@@ -165,6 +184,23 @@ impl SliderState {
     /// Set the step value of the slider, default: 1.0
     pub fn step(mut self, step: f32) -> Self {
         self.step = step;
+        self
+    }
+
+    /// Set the scale of the slider, default: Linear
+    pub fn scale(mut self, scale: SliderScale) -> Self {
+        if matches!(scale, SliderScale::Logarithmic) {
+            assert!(
+                self.min > 0.0,
+                "minimum value must be greater than 0 for logarithmic scale"
+            );
+            assert!(
+                self.max > self.min,
+                "maximum value must be greater than minimum value for logarithmic scale"
+            );
+        }
+        self.scale = scale;
+        self.update_thumb_pos();
         self
     }
 
@@ -192,16 +228,42 @@ impl SliderState {
         self.value
     }
 
+    /// converts a value between 0.0 and 1.0 to a value between the minimum and maximum value, depending on the chosen scale
+    fn percentage_to_value(&self, percentage: f32) -> f32 {
+        match self.scale {
+            SliderScale::Linear => self.min + (self.max - self.min) * percentage,
+            SliderScale::Logarithmic => {
+                // when percentage is 0, this simplifies to (max/min)^0 * min = 1 * min = min
+                // when percentage is 1, this simplifies to (max/min)^1 * min = (max*min)/min = max
+                // we clamp just to make sure we don't have issue with floating point precision
+                let base = self.max / self.min;
+                (base.powf(percentage) * self.min).clamp(self.min, self.max)
+            }
+        }
+    }
+
+    /// converts a value between the minimum and maximum value to a value between 0.0 and 1.0, depending on the chosen scale
+    fn value_to_percentage(&self, value: f32) -> f32 {
+        match self.scale {
+            SliderScale::Linear => (value - self.min) / (self.max - self.min),
+            SliderScale::Logarithmic => {
+                let base = self.max / self.min;
+                (value / self.min).log(base).clamp(0.0, 1.0)
+            }
+        }
+    }
+
     fn update_thumb_pos(&mut self) {
         match self.value {
             SliderValue::Single(value) => {
-                let percentage = value.clamp(self.min, self.max) / self.max;
+                let percentage = self.value_to_percentage(value.clamp(self.min, self.max));
                 self.percentage = 0.0..percentage;
             }
             SliderValue::Range(start, end) => {
                 let clamped_start = start.clamp(self.min, self.max);
                 let clamped_end = end.clamp(self.min, self.max);
-                self.percentage = (clamped_start / self.max)..(clamped_end / self.max);
+                self.percentage =
+                    self.value_to_percentage(clamped_start)..self.value_to_percentage(clamped_end);
             }
         }
     }
@@ -216,8 +278,6 @@ impl SliderState {
         cx: &mut Context<Self>,
     ) {
         let bounds = self.bounds;
-        let min = self.min;
-        let max = self.max;
         let step = self.step;
 
         let inner_pos = if axis.is_horizontal() {
@@ -234,7 +294,7 @@ impl SliderState {
             percentage.clamp(self.percentage.start, 1.0)
         };
 
-        let value = min + (max - min) * percentage;
+        let value = self.percentage_to_value(percentage);
         let value = (value / step).round() * step;
 
         if is_start {
