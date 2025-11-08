@@ -155,7 +155,7 @@ mod tests {
         assert_eq!(CharType::from_char('a'), CharType::Alnum);
         assert_eq!(CharType::from_char('Z'), CharType::Alnum);
         assert_eq!(CharType::from_char('0'), CharType::Alnum);
-        assert_eq!(CharType::from_char('_'), CharType::Alnum);
+        assert_eq!(CharType::from_char('_'), CharType::Connector);
         assert_eq!(CharType::from_char('.'), CharType::Punctuation);
         assert_eq!(CharType::from_char(','), CharType::Punctuation);
         assert_eq!(CharType::from_char(';'), CharType::Punctuation);
