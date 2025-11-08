@@ -7,7 +7,8 @@ use crate::{input::InputState, RopeExt as _};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CharType {
-    Alnum,       // A-Z, a-z, 0-9, _
+    Alnum,       // A-Z, a-z, 0-9
+    Connector,   // _
     Punctuation, // . , ; : ( ) [ ] { } ...
     Space,       // ' '
     Whitespace,  // '\t', '\n', '\r', '\u{00A0}' etc.
@@ -18,7 +19,8 @@ impl CharType {
     /// Determine the CharType from a given character.
     fn from_char(c: char) -> Self {
         match c {
-            c if c.is_ascii_alphanumeric() || c == '_' => CharType::Alnum,
+            c if c.is_ascii_alphanumeric() => CharType::Alnum,
+            '_' => CharType::Connector,
             c if c.is_ascii_punctuation() => CharType::Punctuation,
             ' ' => CharType::Space,
             c if c.is_whitespace() => CharType::Whitespace,
@@ -30,6 +32,9 @@ impl CharType {
     fn is_connectable(self, other: CharType) -> bool {
         match (self, other) {
             (CharType::Alnum, CharType::Alnum) => true,
+            (CharType::Connector, CharType::Connector) => true,
+            (CharType::Connector, CharType::Alnum) => true,
+            (CharType::Alnum, CharType::Connector) => true,
             (CharType::Punctuation, CharType::Punctuation) => true,
             (CharType::Space, CharType::Space) => true,
             _ => false,
@@ -173,6 +178,7 @@ mod tests {
             r#"test text:
 abcde中文🎉 test
 hello()
+test_connector ____
 Rope"#,
         );
         // We must use the correct offsets, because the given offsets from double-click are always correct.
@@ -188,7 +194,10 @@ Rope"#,
             (2, 7, Some("()")),
             (2, 5, Some("()")),
             (2, 0, Some("hello")),
-            (3, 4, Some("Rope")),
+            (3, 0, Some("test_connector")),
+            (3, 4, Some("test_connector")),
+            (3, 15, Some("____")),
+            (4, 4, Some("Rope")),
         ];
         for (line, column, expected) in tests {
             let line_start_offset = rope.line_start_offset(line);
