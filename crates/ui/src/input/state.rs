@@ -1369,7 +1369,7 @@ impl InputState {
             } else {
                 self.text.slice_line(row).to_string().len()
             };
-            let estimated_width: Pixels = (char_count as f32 * line_height * 0.6).into();
+            let estimated_width = char_count as f32 * line_height * 0.6;
 
             if estimated_width > bounds_width {
                 scroll_offset.x = -(estimated_width - bounds_width + RIGHT_MARGIN);
