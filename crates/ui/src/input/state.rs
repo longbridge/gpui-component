@@ -1612,6 +1612,7 @@ impl InputState {
     /// The offset is the UTF-8 offset.
     ///
     /// FIXME: When click on a non-word character, the word is not selected.
+    #[allow(unused)]
     fn select_word(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
         #[inline(always)]
         fn is_word(c: char) -> bool {
