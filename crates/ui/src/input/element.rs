@@ -121,7 +121,6 @@ impl TextElement {
                 .then(|| lines.get(ix.saturating_sub(visible_range.start)))
                 .flatten()
             {
-                // If in visible range lines
                 if cursor_pos.is_none() {
                     let offset = cursor.saturating_sub(prev_lines_offset);
                     if let Some(pos) = line.position_for_index(offset, line_height) {
@@ -142,11 +141,8 @@ impl TextElement {
                 }
 
                 offset_y += line.size(line_height).height;
-                // +1 for the last `\n`
-                prev_lines_offset += line.len() + 1;
+                prev_lines_offset += line.len() + 1; // +1 for the last `\n`
             } else {
-                // If not in the visible range.
-
                 // Just increase the offset_y and prev_lines_offset.
                 // This will let the scroll_offset to track the cursor position correctly.
                 if prev_lines_offset >= cursor && cursor_pos.is_none() {
@@ -160,8 +156,7 @@ impl TextElement {
                 }
 
                 offset_y += wrap_line.height(line_height);
-                // +1 for the last `\n`
-                prev_lines_offset += wrap_line.len() + 1;
+                prev_lines_offset += wrap_line.len() + 1; // +1 for the last `\n`
             }
         }
 
