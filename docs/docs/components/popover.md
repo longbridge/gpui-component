@@ -21,13 +21,11 @@ use gpui_component::popover::{Popover, PopoverContent};
 Popover::new("basic-popover")
     .trigger(Button::new("trigger").label("Click me").outline())
     .content(|window, cx| {
-        cx.new(|cx| {
-            PopoverContent::new(window, cx, |_, _| {
-                div()
-                    .p_4()
-                    .child("Hello, this is a popover!")
-                    .into_any()
-            })
+        PopoverContent::build(window, cx, |_, _| {
+            div()
+                .p_4()
+                .child("Hello, this is a popover!")
+                .into_any()
         })
     })
 ```
@@ -41,14 +39,12 @@ Popover::new("positioned-popover")
     .anchor(Corner::TopRight)
     .trigger(Button::new("top-right").label("Top Right").outline())
     .content(|window, cx| {
-        cx.new(|cx| {
-            PopoverContent::new(window, cx, |_, _| {
-                div()
-                    .p_4()
-                    .w_64()
-                    .child("This popover appears at the top right")
-                    .into_any()
-            })
+        PopoverContent::build(window, cx, |_, _| {
+            div()
+                .p_4()
+                .w_64()
+                .child("This popover appears at the top right")
+                .into_any()
         })
     })
 ```

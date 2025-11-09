@@ -1,9 +1,9 @@
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds, Context,
-    Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter, FocusHandle,
-    Focusable, GlobalElementId, Hitbox, InteractiveElement as _, IntoElement, KeyBinding, LayoutId,
-    ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render, Style,
-    StyleRefinement, Styled, Window,
+    anchored, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, AppContext, Bounds,
+    Context, Corner, DismissEvent, DispatchPhase, Element, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement as _, IntoElement,
+    KeyBinding, LayoutId, ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
+    Render, RenderOnce, Style, StyleRefinement, Styled, Window,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -15,45 +15,60 @@ pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
 }
 
+enum PopoverContent<M: ManagedView> {
+    Element(AnyElement),
+    View(Entity<M>),
+}
+
+impl<M> RenderOnce for PopoverContent<M>
+where
+    M: ManagedView,
+{
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        match self {
+            PopoverContent::Element(element) => element.into_any_element(),
+            PopoverContent::View(view) => view.into_any_element(),
+        }
+    }
+}
+
 /// The content of the popover.
-pub struct PopoverContent {
+struct PopoverContentContainer {
     style: StyleRefinement,
     focus_handle: FocusHandle,
     content: Rc<dyn Fn(&mut Window, &mut Context<Self>) -> AnyElement>,
 }
 
-impl PopoverContent {
-    pub fn new<B>(_: &mut Window, cx: &mut App, content: B) -> Self
+impl PopoverContentContainer {
+    /// Create a new PopoverContent.
+    fn new<B, E>(_: &mut Window, cx: &mut App, content: B) -> Self
     where
-        B: Fn(&mut Window, &mut Context<Self>) -> AnyElement + 'static,
+        E: IntoElement,
+        B: Fn(&mut Window, &mut Context<Self>) -> E + 'static,
     {
         let focus_handle = cx.focus_handle();
 
         Self {
             style: StyleRefinement::default(),
             focus_handle,
-            content: Rc::new(content),
+            content: Rc::new(move |window, cx| content(window, cx).into_any_element()),
         }
     }
-}
-impl EventEmitter<DismissEvent> for PopoverContent {}
 
-impl Focusable for PopoverContent {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
+    /// Build a new PopoverContent.
+    fn build<B, E>(window: &mut Window, cx: &mut App, content: B) -> Entity<Self>
+    where
+        E: IntoElement,
+        B: Fn(&mut Window, &mut Context<Self>) -> E + 'static,
+    {
+        cx.new(|cx| Self::new(window, cx, content))
     }
 }
+impl EventEmitter<DismissEvent> for PopoverContentContainer {}
 
-impl Styled for PopoverContent {
-    fn style(&mut self) -> &mut StyleRefinement {
-        &mut self.style
-    }
-}
-
-impl Render for PopoverContent {
+impl Render for PopoverContentContainer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .p_2()
             .refine_style(&self.style)
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
@@ -68,6 +83,7 @@ impl Render for PopoverContent {
 /// A popover element that can be triggered by a button or any other element.
 pub struct Popover<M: ManagedView> {
     id: ElementId,
+    style: StyleRefinement,
     anchor: Corner,
     trigger: Option<Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>>,
     content: Option<Rc<dyn Fn(&mut Window, &mut App) -> Entity<M> + 'static>>,
@@ -86,6 +102,7 @@ where
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
+            style: StyleRefinement::default(),
             anchor: Corner::TopLeft,
             trigger: None,
             trigger_style: None,
@@ -120,19 +137,17 @@ where
     }
 
     /// Set the style for the trigger element.
-    pub fn trigger_style(mut self, style: StyleRefinement) -> Self {
-        self.trigger_style = Some(style);
+    pub fn trigger_style(mut self, style: &StyleRefinement) -> Self {
+        self.trigger_style = Some(style.clone());
         self
     }
 
     /// Set the content of the popover.
-    ///
-    /// The `content` is a closure that returns an `AnyElement`.
-    pub fn content<C>(mut self, content: C) -> Self
-    where
-        C: Fn(&mut Window, &mut App) -> Entity<M> + 'static,
-    {
-        self.content = Some(Rc::new(content));
+    pub fn content(mut self, content: impl Into<PopoverContent<M>>) -> Self {
+        let content: PopoverContent<M> = content.into();
+        self.content = Some(Rc::new(move |window, cx| mathch content {
+            PopoverContent::render(content, window, cx).into_entity(window, cx)
+        }));
         self
     }
 
@@ -179,6 +194,15 @@ where
                 (result, Some(element_state))
             },
         )
+    }
+}
+
+impl<M> Styled for Popover<M>
+where
+    M: ManagedView,
+{
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -256,6 +280,8 @@ impl<M: ManagedView> Element for Popover<M> {
             }
         }
 
+        let popover_style = self.style.clone();
+
         self.with_element_state(
             id.unwrap(),
             window,
@@ -285,7 +311,7 @@ impl<M: ManagedView> Element for Popover<M> {
                                     .size_full()
                                     .occlude()
                                     .tab_group()
-                                    .when(appearance, |this| this.popover_style(cx))
+                                    .when(appearance, |this| this.popover_style(cx).p_4())
                                     .map(|this| match anchor {
                                         Corner::TopLeft | Corner::TopRight => this.top_1(),
                                         Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
@@ -298,7 +324,8 @@ impl<M: ManagedView> Element for Popover<M> {
                                             *content_view_mut.borrow_mut() = None;
                                             window.refresh();
                                         })
-                                    }),
+                                    })
+                                    .refine_style(&popover_style),
                             ),
                         )
                         .with_priority(1)
