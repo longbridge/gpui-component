@@ -251,7 +251,14 @@ impl SliderState {
     /// converts a value between the minimum and maximum value to a value between 0.0 and 1.0, depending on the chosen scale
     fn value_to_percentage(&self, value: f32) -> f32 {
         match self.scale {
-            SliderScale::Linear => (value - self.min) / (self.max - self.min),
+            SliderScale::Linear => {
+                let range = self.max - self.min;
+                if range <= 0.0 {
+                    0.0
+                } else {
+                    (value - self.min) / range
+                }
+            }
             SliderScale::Logarithmic => {
                 let base = self.max / self.min;
                 (value / self.min).log(base).clamp(0.0, 1.0)
