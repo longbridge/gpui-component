@@ -17,6 +17,15 @@ impl Render for DragThumb {
     }
 }
 
+#[derive(Clone)]
+struct DragSlider(EntityId);
+
+impl Render for DragSlider {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
 /// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
     Change(SliderValue),
@@ -387,6 +396,7 @@ impl Styled for Slider {
 impl RenderOnce for Slider {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
         let axis = self.axis;
+        let entity_id = self.state.entity_id();
         let state = self.state.read(cx);
         let is_range = state.value().is_range();
         let bar_size = state.bounds.size.along(axis);
@@ -440,6 +450,7 @@ impl RenderOnce for Slider {
             .text_color(cx.theme().foreground)
             .child(
                 h_flex()
+                    .id("slider-bar-container")
                     .when(!self.disabled, |this| {
                         this.on_mouse_down(
                             MouseButton::Left,
@@ -463,6 +474,31 @@ impl RenderOnce for Slider {
                                 },
                             ),
                         )
+                    })
+                    .when(!self.disabled && !is_range, |this| {
+                        this.on_drag(DragSlider(entity_id), |drag, _, _, cx| {
+                            cx.stop_propagation();
+                            cx.new(|_| drag.clone())
+                        })
+                        .on_drag_move(window.listener_for(
+                            &self.state,
+                            move |view, e: &DragMoveEvent<DragSlider>, window, cx| match e.drag(cx)
+                            {
+                                DragSlider(id) => {
+                                    if *id != entity_id {
+                                        return;
+                                    }
+
+                                    view.update_value_by_position(
+                                        axis,
+                                        e.event.position,
+                                        false,
+                                        window,
+                                        cx,
+                                    )
+                                }
+                            },
+                        ))
                     })
                     .when(axis.is_horizontal(), |this| {
                         this.items_center().h_6().w_full()
