@@ -219,6 +219,7 @@ pub struct Root {
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
     view: AnyView,
+    is_resizable: bool,
 }
 
 #[derive(Clone)]
@@ -244,7 +245,18 @@ impl Root {
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
             view,
+            is_resizable: true,
         }
+    }
+
+    pub fn set_resizable(&mut self, enabled: bool) -> &mut Self {
+        self.is_resizable = enabled;
+        self
+    }
+
+    pub fn with_resizable(mut self, enabled: bool) -> Self {
+        self.is_resizable = enabled;
+        self
     }
 
     pub fn update<F, R>(window: &mut Window, cx: &mut App, f: F) -> R
@@ -390,7 +402,9 @@ impl Render for Root {
         let base_font_size = cx.theme().font_size;
         window.set_rem_size(base_font_size);
 
-        window_border().child(
+        window_border()
+        .with_resizable(self.is_resizable)
+        .child(
             div()
                 .id("root")
                 .key_context(CONTEXT)
