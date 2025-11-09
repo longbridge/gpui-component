@@ -123,7 +123,9 @@ impl SliderValue {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliderScale {
+    #[default]
     Linear,
     Logarithmic,
 }
