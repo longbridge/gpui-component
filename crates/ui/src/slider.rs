@@ -164,6 +164,10 @@ impl SliderState {
                 min > 0.0,
                 "minimum value must be greater than 0 for logarithmic scale"
             );
+            assert!(
+                min < self.max,
+                "minimum value must be less than maximum value for logarithmic scale"
+            );
         }
         self.min = min;
         self.update_thumb_pos();
