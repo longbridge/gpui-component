@@ -243,32 +243,13 @@ impl Tiles {
         }
     }
 
-    fn update_position(
-        &mut self,
-        mouse_position: Point<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
-        let Some(dragging_id) = self.dragging_id else {
-            return;
-        };
-
-        let Some(item_idx) = self.panels.iter().position(|p| p.id == dragging_id) else {
-            return;
-        };
-
-        let previous_bounds = self.panels[item_idx].bounds;
-        let adjusted_position = mouse_position - self.bounds.origin;
-        let delta = adjusted_position - self.dragging_initial_mouse;
-        let mut new_origin = self.dragging_initial_bounds.origin + delta;
-
-        // Apply magnetic snap before boundary checks
-        let snap_threshold = cx.theme().tile_grid_size;
-        let dragging_bounds = Bounds {
-            origin: new_origin,
-            size: self.dragging_initial_bounds.size,
-        };
-
+    /// Calculate magnetic snap position for the dragging panel
+    fn calculate_magnetic_snap(
+        &self,
+        dragging_bounds: Bounds<Pixels>,
+        item_idx: usize,
+        snap_threshold: Pixels,
+    ) -> (Option<Pixels>, Option<Pixels>) {
         // Spatial filtering: only check nearby panels
         let search_bounds = Bounds {
             origin: Point {
@@ -354,32 +335,27 @@ impl Tiles {
             }
         }
 
-        // Apply snapping
-        if let Some(x) = snap_x {
-            new_origin.x = x;
-        }
-        if let Some(y) = snap_y {
-            new_origin.y = y;
+        (snap_x, snap_y)
+    }
+
+    /// Apply boundary constraints to the panel origin
+    fn apply_boundary_constraints(&self, mut origin: Point<Pixels>) -> Point<Pixels> {
+        // Top boundary
+        if origin.y < px(0.) {
+            origin.y = px(0.);
         }
 
-        // Apply boundary constraints after snapping
-        if new_origin.y < px(0.) {
-            new_origin.y = px(0.);
-        }
+        // Left boundary (allow partial off-screen but keep 64px visible)
         let min_left = -self.dragging_initial_bounds.size.width + px(64.);
-        if new_origin.x < min_left {
-            new_origin.x = min_left;
+        if origin.x < min_left {
+            origin.x = min_left;
         }
 
-        // Update position without grid rounding (smooth dragging)
-        if new_origin != previous_bounds.origin {
-            self.panels[item_idx].bounds.origin = new_origin;
+        origin
+    }
 
-            // Note: History is pushed in on_mouse_up to avoid performance overhead
-            // during high-frequency drag events
-        }
-
-        // Debounce cx.notify() to avoid excessive re-renders
+    /// Debounced notify to avoid excessive re-renders
+    fn debounced_notify(&mut self, cx: &mut Context<'_, Self>) {
         let now = Instant::now();
         let should_notify = self
             .last_notify_time
@@ -389,6 +365,56 @@ impl Tiles {
             self.last_notify_time = Some(now);
             cx.notify();
         }
+    }
+
+    fn update_position(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        _: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some(dragging_id) = self.dragging_id else {
+            return;
+        };
+
+        let Some(item_idx) = self.panels.iter().position(|p| p.id == dragging_id) else {
+            return;
+        };
+
+        let previous_bounds = self.panels[item_idx].bounds;
+        let adjusted_position = mouse_position - self.bounds.origin;
+        let delta = adjusted_position - self.dragging_initial_mouse;
+        let mut new_origin = self.dragging_initial_bounds.origin + delta;
+
+        // Apply magnetic snap before boundary checks
+        let snap_threshold = cx.theme().tile_grid_size;
+        let dragging_bounds = Bounds {
+            origin: new_origin,
+            size: self.dragging_initial_bounds.size,
+        };
+
+        let (snap_x, snap_y) = self.calculate_magnetic_snap(dragging_bounds, item_idx, snap_threshold);
+
+        // Apply snapping
+        if let Some(x) = snap_x {
+            new_origin.x = x;
+        }
+        if let Some(y) = snap_y {
+            new_origin.y = y;
+        }
+
+        // Apply boundary constraints after snapping
+        new_origin = self.apply_boundary_constraints(new_origin);
+
+        // Update position without grid rounding (smooth dragging)
+        if new_origin != previous_bounds.origin {
+            self.panels[item_idx].bounds.origin = new_origin;
+
+            // Note: History is pushed in on_mouse_up to avoid performance overhead
+            // during high-frequency drag events
+        }
+
+        self.debounced_notify(cx);
     }
 
     fn resize(
