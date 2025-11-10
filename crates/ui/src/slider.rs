@@ -126,8 +126,32 @@ impl SliderValue {
 /// The scale mode of the slider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliderScale {
+    /// Linear scale where values change uniformly across the slider range.
+    /// This is the default mode.
     #[default]
     Linear,
+    /// Logarithmic scale where the distance between values increases exponentially.
+    ///
+    /// This is useful for parameters that have a large range of values where smaller
+    /// changes are more significant at lower values. Common examples include:
+    ///
+    /// - Volume controls (human hearing perception is logarithmic)
+    /// - Frequency controls (musical notes follow a logarithmic scale)
+    /// - Zoom levels
+    /// - Any parameter where you want finer control at lower values
+    ///
+    /// # For example
+    ///
+    /// ```rust
+    /// let slider = SliderState::new()
+    ///     .min(1.0)    // Must be > 0 for logarithmic scale
+    ///     .max(1000.0)
+    ///     .scale(SliderScale::Logarithmic);
+    /// ```
+    ///
+    /// - Moving the slider 1/3 of the way will yield ~10
+    /// - Moving it 2/3 of the way will yield ~100
+    /// - The full range covers 3 orders of magnitude evenly
     Logarithmic,
 }
 
