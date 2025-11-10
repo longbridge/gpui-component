@@ -295,13 +295,9 @@ impl Tiles {
             // Horizontal snapping (X axis) - find closest snap point
             if snap_x.is_none() {
                 let candidates = [
-                    // 110 - 212 -> 102, 212
                     ((drag_left - other_left).abs(), other_left),
-                    // 110 - 312 -> 202, 312
                     ((drag_left - other_right).abs(), other_right),
-                    // 210 - 212 -> 2, 112
                     ((drag_right - other_left).abs(), other_left - drag_width),
-                    // 210 - 312 -> 102, 212
                     ((drag_right - other_right).abs(), other_right - drag_width),
                 ];
 
