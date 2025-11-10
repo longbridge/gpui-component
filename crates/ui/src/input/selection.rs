@@ -115,10 +115,10 @@ mod tests {
         assert_eq!(CharType::from('['), CharType::Other);
         assert_eq!(CharType::from('{'), CharType::Other);
         assert_eq!(CharType::from(' '), CharType::Whitespace);
-        assert_eq!(CharType::from('\n'), CharType::Whitespace);
-        assert_eq!(CharType::from('\r'), CharType::Whitespace);
         assert_eq!(CharType::from('\t'), CharType::Whitespace);
         assert_eq!(CharType::from('\u{00A0}'), CharType::Whitespace);
+        assert_eq!(CharType::from('\n'), CharType::Newline);
+        assert_eq!(CharType::from('\r'), CharType::Newline);
         assert_eq!(CharType::from('汉'), CharType::Other);
         assert_eq!(CharType::from('é'), CharType::Other);
     }
