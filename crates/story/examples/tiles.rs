@@ -311,7 +311,6 @@ impl StoryTiles {
         cx: &mut App,
     ) -> DockItem {
         const PANELS: usize = 4;
-        // Create 12 panels with alternating ButtonStory and IconStory
         let panels = (0..PANELS)
             .map(|i| {
                 let story = if i % 2 == 0 {
