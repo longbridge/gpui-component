@@ -1,8 +1,8 @@
 use gpui::{
-    anchored, canvas, deferred, div, prelude::FluentBuilder as _, AnyElement, App, Bounds, Context,
-    Corner, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, Render, RenderOnce,
-    StyleRefinement, Styled, Subscription, Window,
+    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
+    Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
+    Render, RenderOnce, StyleRefinement, Styled, Subscription, Window,
 };
 use std::rc::Rc;
 
@@ -100,15 +100,6 @@ impl Popover {
         self
     }
 
-    fn resolved_corner(anchor: Corner, bounds: Bounds<Pixels>) -> Point<Pixels> {
-        bounds.corner(match anchor {
-            Corner::TopLeft => Corner::BottomLeft,
-            Corner::TopRight => Corner::BottomRight,
-            Corner::BottomLeft => Corner::TopLeft,
-            Corner::BottomRight => Corner::TopRight,
-        })
-    }
-
     /// Bind the focus handle to track focus inside the popover.
     ///
     /// If popover is opened, the focus will be moved to the focus handle.
@@ -117,22 +108,17 @@ impl Popover {
         self
     }
 
-    // fn with_element_state<R>(
-    //     &mut self,
-    //     id: &GlobalElementId,
-    //     window: &mut Window,
-    //     cx: &mut App,
-    //     f: impl FnOnce(&mut Self, &mut PopoverElementState<M>, &mut Window, &mut App) -> R,
-    // ) -> R {
-    //     window.with_optional_element_state::<PopoverElementState<M>, _>(
-    //         Some(id),
-    //         |element_state, window| {
-    //             let mut element_state = element_state.unwrap().unwrap_or_default();
-    //             let result = f(self, &mut element_state, window, cx);
-    //             (result, Some(element_state))
-    //         },
-    //     )
-    // }
+    fn resolved_corner(anchor: Corner, bounds: Bounds<Pixels>) -> Point<Pixels> {
+        bounds.corner(match anchor {
+            Corner::TopLeft => Corner::BottomLeft,
+            Corner::TopRight => Corner::BottomRight,
+            Corner::BottomLeft => Corner::TopLeft,
+            Corner::BottomRight => Corner::TopRight,
+        }) + Point {
+            x: px(0.),
+            y: -bounds.size.height,
+        }
+    }
 }
 
 impl ParentElement for Popover {
@@ -291,7 +277,7 @@ impl RenderOnce for Popover {
         el.child(
             deferred(
                 anchored()
-                    // .snap_to_window_with_margin(px(8.))
+                    .snap_to_window_with_margin(px(8.))
                     .anchor(self.anchor)
                     .when_some(trigger_bounds, |this, trigger_bounds| {
                         this.position(Self::resolved_corner(self.anchor, trigger_bounds))
