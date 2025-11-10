@@ -647,6 +647,11 @@ where
             .map(|item| item.value().clone());
     }
 
+    pub fn delegate<'a>(&self, cx: &'a App) -> &'a D {
+        let list_state = self.list.read(cx);
+        &list_state.delegate().delegate
+    }
+
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // When the select and dropdown menu are both not focused, close the dropdown menu.
         if self.list.read(cx).is_focused(window, cx) || self.focus_handle.is_focused(window) {
