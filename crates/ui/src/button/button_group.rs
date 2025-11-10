@@ -219,8 +219,10 @@ impl RenderOnce for ButtonGroup {
                         .when_some(self.variant, |this, variant| this.with_variant(variant))
                         .when(self.compact, |this| this.compact())
                         .when(self.outline, |this| this.outline())
-                        .on_click(move |_, _, _| {
-                            state.set(Some(child_index));
+                        .when(self.on_click.is_some(), |this| {
+                            this.on_click(move |_, _, _| {
+                                state.set(Some(child_index));
+                            })
                         });
 
                         child
