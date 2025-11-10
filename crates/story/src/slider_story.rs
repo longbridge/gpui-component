@@ -112,10 +112,10 @@ impl SliderStory {
 
         let slider_logarithmic = cx.new(|_| {
             SliderState::new()
-                .min(0.25)
-                .max(4.0)
-                .default_value(1.0)
-                .step(0.05)
+                .min(1.0) // min must be greater than 0 for log scale
+                .max(1000.0)
+                .default_value(10.0)
+                .step(1.0)
                 .scale(SliderScale::Logarithmic)
         });
 

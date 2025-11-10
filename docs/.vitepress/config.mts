@@ -112,6 +112,7 @@ const config: UserConfig = {
     },
   },
   markdown: {
+    math: true,
     defaultHighlightLang: "rs",
     theme: {
       light: lightTheme,
