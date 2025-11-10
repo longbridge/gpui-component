@@ -123,11 +123,24 @@ impl SliderValue {
     }
 }
 
+/// The scale mode of the slider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliderScale {
     #[default]
     Linear,
     Logarithmic,
+}
+
+impl SliderScale {
+    #[inline]
+    pub fn is_linear(&self) -> bool {
+        matches!(self, SliderScale::Linear)
+    }
+
+    #[inline]
+    pub fn is_logarithmic(&self) -> bool {
+        matches!(self, SliderScale::Logarithmic)
+    }
 }
 
 /// State of the [`Slider`].
@@ -159,14 +172,14 @@ impl SliderState {
 
     /// Set the minimum value of the slider, default: 0.0
     pub fn min(mut self, min: f32) -> Self {
-        if matches!(self.scale, SliderScale::Logarithmic) {
+        if self.scale.is_logarithmic() {
             assert!(
                 min > 0.0,
-                "minimum value must be greater than 0 for logarithmic scale"
+                "`min` must be greater than 0 for SliderScale::Logarithmic"
             );
             assert!(
                 min < self.max,
-                "minimum value must be less than maximum value for logarithmic scale"
+                "`min` must be less than `max` for Logarithmic scale"
             );
         }
         self.min = min;
@@ -176,10 +189,10 @@ impl SliderState {
 
     /// Set the maximum value of the slider, default: 100.0
     pub fn max(mut self, max: f32) -> Self {
-        if matches!(self.scale, SliderScale::Logarithmic) {
+        if self.scale.is_logarithmic() {
             assert!(
                 max > self.min,
-                "maximum value must be greater than minimum value for logarithmic scale"
+                "`max` must be greater than `min` for Logarithmic scale"
             );
         }
         self.max = max;
@@ -198,11 +211,11 @@ impl SliderState {
         if matches!(scale, SliderScale::Logarithmic) {
             assert!(
                 self.min > 0.0,
-                "minimum value must be greater than 0 for logarithmic scale"
+                "`min` must be greater than 0 for Logarithmic scale"
             );
             assert!(
                 self.max > self.min,
-                "maximum value must be greater than minimum value for logarithmic scale"
+                "`max` must be greater than `min` for Logarithmic scale"
             );
         }
         self.scale = scale;
@@ -234,7 +247,8 @@ impl SliderState {
         self.value
     }
 
-    /// converts a value between 0.0 and 1.0 to a value between the minimum and maximum value, depending on the chosen scale
+    /// Converts a value between 0.0 and 1.0 to a value between the minimum and maximum value,
+    /// depending on the chosen scale.
     fn percentage_to_value(&self, percentage: f32) -> f32 {
         match self.scale {
             SliderScale::Linear => self.min + (self.max - self.min) * percentage,
@@ -248,7 +262,8 @@ impl SliderState {
         }
     }
 
-    /// converts a value between the minimum and maximum value to a value between 0.0 and 1.0, depending on the chosen scale
+    /// Converts a value between the minimum and maximum value to a value between 0.0 and 1.0,
+    /// depending on the chosen scale.
     fn value_to_percentage(&self, value: f32) -> f32 {
         match self.scale {
             SliderScale::Linear => {
