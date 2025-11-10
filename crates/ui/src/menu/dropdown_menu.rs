@@ -8,7 +8,7 @@ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement +
     fn dropdown_menu(
         self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> Popover<PopupMenu> {
+    ) -> Popover {
         self.dropdown_menu_with_anchor(Corner::TopLeft, f)
     }
 
@@ -17,7 +17,7 @@ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement +
         mut self,
         anchor: impl Into<Corner>,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> Popover<PopupMenu> {
+    ) -> Popover {
         let style = self.style().clone();
         let id = self.interactivity().element_id.clone();
 
@@ -26,7 +26,7 @@ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement +
             .trigger(self)
             .trigger_style(style)
             .anchor(anchor.into())
-            .content(move |window, cx| {
+            .content(move |_, window, cx| {
                 PopupMenu::build(window, cx, |menu, window, cx| f(menu, window, cx))
             })
     }

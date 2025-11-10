@@ -9,7 +9,7 @@ use gpui_component::{
     divider::Divider,
     h_flex,
     input::{Input, InputState},
-    popover::{Popover, PopoverContent},
+    popover::Popover,
     v_flex,
 };
 use serde::Deserialize;
@@ -180,21 +180,22 @@ impl Render for PopoverStory {
                             Popover::new("info-top-left")
                                 .max_w(px(600.))
                                 .trigger(Button::new("info-top-left").outline().label("Top Left"))
-                                .content(|window, cx| {
-                                    PopoverContent::build(window, cx, |_, _| {
-                                        v_flex()
-                                            .gap_4()
-                                            .child("Hello, this is a Popover.")
-                                            .w(px(400.))
-                                            .child(Divider::horizontal())
-                                            .child(
-                                                Button::new("info1")
-                                                    .primary()
-                                                    .label("Ok")
-                                                    .w(px(80.))
-                                                    .small(),
-                                            )
-                                    })
+                                .content(|_, _, cx| {
+                                    v_flex()
+                                        .gap_4()
+                                        .child("Hello, this is a Popover.")
+                                        .w(px(400.))
+                                        .child(Divider::horizontal())
+                                        .child(
+                                            Button::new("info1")
+                                                .primary()
+                                                .label("Ok")
+                                                .w(px(80.))
+                                                .small()
+                                                .on_click(cx.listener(|_, _, _, cx| {
+                                                    cx.emit(DismissEvent);
+                                                }))
+                                        )
                                 }),
                         ),
                     )
@@ -202,21 +203,22 @@ impl Render for PopoverStory {
                         Popover::new("info-top-right")
                             .anchor(Corner::TopRight)
                             .trigger(Button::new("info-top-right").outline().label("Top Right"))
-                            .content(|window, cx| {
-                                PopoverContent::build(window, cx, |_, _| {
-                                    v_flex()
-                                        .gap_4()
-                                        .w_96()
-                                        .child("Hello, this is a Popover on the Top Right.")
-                                        .child(Divider::horizontal())
-                                        .child(
-                                            Button::new("info1")
-                                                .primary()
-                                                .label("Ok")
-                                                .w(px(80.))
-                                                .small(),
-                                        )
-                                })
+                            .content(|_, _, cx| {
+                                v_flex()
+                                    .gap_4()
+                                    .w_96()
+                                    .child("Hello, this is a Popover on the Top Right.")
+                                    .child(Divider::horizontal())
+                                    .child(
+                                        Button::new("info1")
+                                            .primary()
+                                            .label("Ok")
+                                            .w(px(80.))
+                                            .small()
+                                            .on_click(cx.listener(|_, _, _, cx| {
+                                                cx.emit(DismissEvent);
+                                            }))
+                                    )
                             }),
                     ),
             )
@@ -235,7 +237,8 @@ impl Render for PopoverStory {
                                         .label("Popup with Form")
                                         .w(px(300.)),
                                 )
-                                .content(move |_, _| form.clone()),
+                                .track_focus(&form.focus_handle(cx))
+                                .child(form.clone()),
                         )
                         .child(
                             Popover::new("info-bottom-right")
@@ -247,44 +250,46 @@ impl Render for PopoverStory {
                                         .label("Mouse Right Click")
                                         .w(px(300.)),
                                 )
-                                .content(|window, cx| {
-                                    PopoverContent::build(window, cx, |_, cx| {
-                                        v_flex()
-                                            .gap_2()
-                                            .child("Hello, this is a Popover on the Bottom Right.")
-                                            .child(Divider::horizontal())
-                                            .child(
-                                                h_flex()
-                                                    .gap_2()
-                                                    .justify_end()
-                                                    .child(
-                                                        Button::new("info1")
-                                                            .primary()
-                                                            .label("Ok")
-                                                            .w(px(80.))
-                                                            .small()
-                                                            .on_click(cx.listener(
-                                                                |_, _, window, cx| {
-                                                                    window.push_notification(
-                                                                        "You have clicked Ok.",
-                                                                        cx,
-                                                                    );
-                                                                    cx.emit(DismissEvent);
-                                                                },
-                                                            )),
-                                                    )
-                                                    .child(
-                                                        Button::new("close")
-                                                            .label("Cancel")
-                                                            .small()
-                                                            .on_click(cx.listener(
-                                                                |_, _, _, cx| {
-                                                                    cx.emit(DismissEvent);
-                                                                },
-                                                            )),
-                                                    ),
-                                            )
-                                    })
+                                .content(|_, _, cx| {
+                                    v_flex()
+                                        .gap_2()
+                                        .child("Hello, this is a Popover on the Bottom Right.")
+                                        .child(Divider::horizontal())
+                                        .child(
+                                            h_flex()
+                                                .gap_2()
+                                                .justify_end()
+                                                .child(
+                                                    Button::new("info1")
+                                                        .primary()
+                                                        .label("Ok")
+                                                        .w(px(80.))
+                                                        .small()
+                                                        .on_click(cx.listener(
+                                                            |_, _, window, cx| {
+                                                                window.push_notification(
+                                                                    "You have clicked Ok via DismissEvent.",
+                                                                    cx,
+                                                                );
+                                                                cx.emit(DismissEvent);
+                                                            },
+                                                        )),
+                                                )
+                                                .child(
+                                                    Button::new("close")
+                                                        .label("Cancel")
+                                                        .small()
+                                                        .on_click(cx.listener(
+                                                            |state, _, window, cx| {
+                                                                window.push_notification(
+                                                                    "You have clicked Cancel.",
+                                                                    cx,
+                                                                );
+                                                                state.dismiss(window, cx);
+                                                            },
+                                                        )),
+                                                ),
+                                        )
                                 }),
                         ),
                 ),
