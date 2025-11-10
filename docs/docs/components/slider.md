@@ -155,47 +155,38 @@ Slider::new(&slider_state)
     .rounded(px(4.))
 ```
 
-## API Reference
+### Scale
 
-### SliderState
+There have 2 types of scale for the slider:
 
-| Method                                  | Description                                   |
-| --------------------------------------- | --------------------------------------------- |
-| `new()`                                 | Create a new slider state with default values |
-| `min(f32)`                              | Set minimum value (default: 0.0)              |
-| `max(f32)`                              | Set maximum value (default: 100.0)            |
-| `step(f32)`                             | Set step interval (default: 1.0)              |
-| `default_value(impl Into<SliderValue>)` | Set initial value                             |
-| `set_value(impl Into<SliderValue>)`     | Update slider value                           |
-| `value()`                               | Get current slider value                      |
+- `Linear` (default)
+- `Logarithmic`
 
-### Slider
+The logarithmic scale is useful when the range of values is large and you want to give more precision to smaller values.
 
-| Method                      | Description                          |
-| --------------------------- | ------------------------------------ |
-| `new(&Entity<SliderState>)` | Create a new slider bound to state   |
-| `horizontal()`              | Set horizontal orientation (default) |
-| `vertical()`                | Set vertical orientation             |
-| `disabled(bool)`            | Set disabled state                   |
+```rust
+let log_slider = cx.new(|_| {
+    SliderState::new()
+        .min(1.0) // min must be greater than 0 for log scale
+        .max(1000.0)
+        .default_value(10.0)
+        .step(1.0)
+        .scale(SliderScale::Logarithmic)
+});
+```
 
-### SliderValue
+In this case:
 
-The slider supports two types of values:
+:::info
+$$ v = min \times (max/min)^p $$
 
-| Variant           | Description                       |
-| ----------------- | --------------------------------- |
-| `Single(f32)`     | A single numeric value            |
-| `Range(f32, f32)` | A range with start and end values |
+The value `v` is calculated using the formula above, where `p` is the slider percentage (0 to 1).
+:::
 
-#### Methods
-
-| Method            | Description                                     |
-| ----------------- | ----------------------------------------------- |
-| `start()`         | Get the start value (for both single and range) |
-| `end()`           | Get the end value (for both single and range)   |
-| `is_single()`     | Check if value is single                        |
-| `is_range()`      | Check if value is range                         |
-| `clamp(min, max)` | Clamp value to range                            |
+- If slider at 25%, value will be approximately `5.62`.
+- If slider at 50%, value will be approximately `31.62`.
+- If slider at 75%, value will be approximately `177.83`.
+- If slider at 100%, value will be `1000.0`.
 
 #### Conversions
 
