@@ -328,7 +328,6 @@ impl StoryTiles {
             })
             .collect::<Vec<_>>();
 
-        // Create 12 bounds arranged in a 4x3 grid
         // Panel size: 380x280, Gap: 20px, Starting position: (20, 20)
         let panel_width = px(380.);
         let panel_height = px(280.);

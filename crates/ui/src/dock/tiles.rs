@@ -2,7 +2,6 @@ use std::{
     any::Any,
     fmt::{Debug, Formatter},
     sync::Arc,
-    time::Instant,
 };
 
 use crate::{
@@ -143,7 +142,6 @@ pub struct Tiles {
     scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
     scrollbar_show: Option<ScrollbarShow>,
-    last_notify_time: Option<Instant>,
 }
 
 impl Panel for Tiles {
@@ -199,7 +197,6 @@ impl Tiles {
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
             scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
-            last_notify_time: None,
         }
     }
 
@@ -250,7 +247,7 @@ impl Tiles {
         item_idx: usize,
         snap_threshold: Pixels,
     ) -> (Option<Pixels>, Option<Pixels>) {
-        // Spatial filtering: only check nearby panels
+        // only check nearby panels
         let search_bounds = Bounds {
             origin: Point {
                 x: dragging_bounds.left() - snap_threshold,
@@ -298,9 +295,13 @@ impl Tiles {
             // Horizontal snapping (X axis) - find closest snap point
             if snap_x.is_none() {
                 let candidates = [
+                    // 110 - 212 -> 102, 212
                     ((drag_left - other_left).abs(), other_left),
+                    // 110 - 312 -> 202, 312
                     ((drag_left - other_right).abs(), other_right),
+                    // 210 - 212 -> 2, 112
                     ((drag_right - other_left).abs(), other_left - drag_width),
+                    // 210 - 312 -> 102, 212
                     ((drag_right - other_right).abs(), other_right - drag_width),
                 ];
 
@@ -318,7 +319,10 @@ impl Tiles {
                     ((drag_top - other_top).abs(), other_top),
                     ((drag_top - other_bottom).abs(), other_bottom),
                     ((drag_bottom - other_top).abs(), other_top - drag_height),
-                    ((drag_bottom - other_bottom).abs(), other_bottom - drag_height),
+                    (
+                        (drag_bottom - other_bottom).abs(),
+                        other_bottom - drag_height,
+                    ),
                 ];
 
                 for (dist, snap_pos) in candidates {
@@ -354,25 +358,7 @@ impl Tiles {
         origin
     }
 
-    /// Debounced notify to avoid excessive re-renders
-    fn debounced_notify(&mut self, cx: &mut Context<'_, Self>) {
-        let now = Instant::now();
-        let should_notify = self
-            .last_notify_time
-            .map_or(true, |last| now.duration_since(last).as_millis() >= 16); // ~60 FPS
-
-        if should_notify {
-            self.last_notify_time = Some(now);
-            cx.notify();
-        }
-    }
-
-    fn update_position(
-        &mut self,
-        mouse_position: Point<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
+    fn update_position(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(dragging_id) = self.dragging_id else {
             return;
         };
@@ -393,7 +379,8 @@ impl Tiles {
             size: self.dragging_initial_bounds.size,
         };
 
-        let (snap_x, snap_y) = self.calculate_magnetic_snap(dragging_bounds, item_idx, snap_threshold);
+        let (snap_x, snap_y) =
+            self.calculate_magnetic_snap(dragging_bounds, item_idx, snap_threshold);
 
         // Apply snapping
         if let Some(x) = snap_x {
@@ -409,12 +396,22 @@ impl Tiles {
         // Update position without grid rounding (smooth dragging)
         if new_origin != previous_bounds.origin {
             self.panels[item_idx].bounds.origin = new_origin;
+            let item = &self.panels[item_idx];
+            let bounds = item.bounds;
+            let entity_id = item.panel.view().entity_id();
 
-            // Note: History is pushed in on_mouse_up to avoid performance overhead
-            // during high-frequency drag events
+            if !self.history.ignore {
+                self.history.push(TileChange {
+                    tile_id: entity_id,
+                    old_bounds: Some(previous_bounds),
+                    new_bounds: Some(bounds),
+                    old_order: None,
+                    new_order: None,
+                    version: 0,
+                });
+            }
+            cx.notify();
         }
-
-        self.debounced_notify(cx);
     }
 
     fn resize(
@@ -996,16 +993,16 @@ impl Tiles {
                 cx.new(|_| drag.clone())
             })
             .on_drag_move(
-                cx.listener(move |this, e: &DragMoveEvent<DragMoving>, window, cx| {
-                    match e.drag(cx) {
+                cx.listener(
+                    move |this, e: &DragMoveEvent<DragMoving>, _, cx| match e.drag(cx) {
                         DragMoving(id) => {
                             if *id != entity_id {
                                 return;
                             }
-                            this.update_position(e.event.position, window, cx);
+                            this.update_position(e.event.position, cx);
                         }
-                    }
-                }),
+                    },
+                ),
             )
             .into_any_element()
     }
