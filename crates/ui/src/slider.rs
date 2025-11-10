@@ -230,9 +230,9 @@ impl SliderState {
         self
     }
 
-    /// Set the scale of the slider, default: Linear
+    /// Set the scale of the slider, default: [`SliderScale::Linear`].
     pub fn scale(mut self, scale: SliderScale) -> Self {
-        if matches!(scale, SliderScale::Logarithmic) {
+        if scale.is_logarithmic() {
             assert!(
                 self.min > 0.0,
                 "`min` must be greater than 0 for Logarithmic scale"
