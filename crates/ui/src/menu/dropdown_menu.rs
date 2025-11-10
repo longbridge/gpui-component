@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    Context, Corner, ElementId, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Context, Corner, DismissEvent, ElementId, Focusable, InteractiveElement, IntoElement,
     RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
@@ -26,7 +26,7 @@ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement +
         let style = self.style().clone();
         let id = self.interactivity().element_id.clone();
 
-        DropdownMenuPopover::new(id.unwrap_or(0.into()), style, anchor, self, f)
+        DropdownMenuPopover::new(id.unwrap_or(0.into()), anchor, self, f).trigger_style(style)
     }
 }
 
@@ -47,14 +47,13 @@ where
 {
     fn new(
         id: ElementId,
-        style: StyleRefinement,
         anchor: impl Into<Corner>,
         trigger: T,
         builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         Self {
             id: SharedString::from(format!("dropdown-menu:{:?}", id)).into(),
-            style,
+            style: StyleRefinement::default(),
             anchor: anchor.into(),
             trigger,
             builder: Rc::new(builder),
@@ -64,6 +63,12 @@ where
     /// Set the anchor corner for the dropdown menu popover.
     pub fn anchor(mut self, anchor: impl Into<Corner>) -> Self {
         self.anchor = anchor.into();
+        self
+    }
+
+    /// Set the style refinement for the dropdown menu trigger.
+    fn trigger_style(mut self, style: StyleRefinement) -> Self {
+        self.style = style;
         self
     }
 }
@@ -84,6 +89,19 @@ where
             .trigger_style(self.style)
             .anchor(self.anchor)
             .track_focus(&state.focus_handle(cx))
-            .child(state)
+            .content(move |window, cx| {
+                let popover_state = cx.entity();
+
+                // Listen for dismiss events from the PopupMenu to close the popover.
+                window
+                    .subscribe(&state, cx, move |_, _: &DismissEvent, window, cx| {
+                        popover_state.update(cx, |state, cx| {
+                            state.dismiss(window, cx);
+                        });
+                    })
+                    .detach();
+
+                state.clone()
+            })
     }
 }
