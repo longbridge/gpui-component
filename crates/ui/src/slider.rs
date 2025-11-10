@@ -190,7 +190,7 @@ impl SliderState {
             value: SliderValue::default(),
             percentage: (0.0..0.0),
             bounds: Bounds::default(),
-            scale: SliderScale::Linear,
+            scale: SliderScale::default(),
         }
     }
 
