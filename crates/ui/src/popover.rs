@@ -1,8 +1,8 @@
 use gpui::{
-    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
-    Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    Render, RenderOnce, StyleRefinement, Styled, Subscription, Window,
+    anchored, canvas, deferred, div, prelude::FluentBuilder as _, AnyElement, App, Bounds, Context,
+    Corner, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point, Render, RenderOnce,
+    StyleRefinement, Styled, Subscription, Window,
 };
 use std::rc::Rc;
 
@@ -21,12 +21,7 @@ pub struct Popover {
     anchor: Corner,
     tracked_focus_handle: Option<FocusHandle>,
     trigger: Option<Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>>,
-    content: Option<
-        Rc<
-            dyn Fn(&mut PopoverState, &mut Window, &mut Context<PopoverState>) -> AnyElement
-                + 'static,
-        >,
-    >,
+    content: Option<Rc<dyn Fn(&mut Window, &mut Context<PopoverState>) -> AnyElement + 'static>>,
     children: Vec<AnyElement>,
     /// Style for trigger element.
     /// This is used for hotfix the trigger element style to support w_full.
@@ -86,10 +81,10 @@ impl Popover {
     pub fn content<F, E>(mut self, content: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&mut PopoverState, &mut Window, &mut Context<PopoverState>) -> E + 'static,
+        F: Fn(&mut Window, &mut Context<PopoverState>) -> E + 'static,
     {
-        self.content = Some(Rc::new(move |state, window, cx| {
-            content(state, window, cx).into_any_element()
+        self.content = Some(Rc::new(move |window, cx| {
+            content(window, cx).into_any_element()
         }));
         self
     }
@@ -154,7 +149,7 @@ impl Styled for Popover {
 
 pub struct PopoverState {
     focus_handle: FocusHandle,
-    tracked_focus_handle: Option<FocusHandle>,
+    pub(crate) tracked_focus_handle: Option<FocusHandle>,
     trigger_bounds: Option<Bounds<Pixels>>,
     previous_focus: Option<FocusHandle>,
     open: bool,
@@ -213,8 +208,10 @@ impl PopoverState {
             if let Some(previous_focus) = self.previous_focus.take() {
                 window.focus(&previous_focus);
             }
+            self._dismiss_subscription = None;
         }
         cx.notify();
+        window.refresh();
     }
 
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -294,7 +291,7 @@ impl RenderOnce for Popover {
         el.child(
             deferred(
                 anchored()
-                    .snap_to_window_with_margin(px(8.))
+                    // .snap_to_window_with_margin(px(8.))
                     .anchor(self.anchor)
                     .when_some(trigger_bounds, |this, trigger_bounds| {
                         this.position(Self::resolved_corner(self.anchor, trigger_bounds))
@@ -314,9 +311,7 @@ impl RenderOnce for Popover {
                                 Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
                             })
                             .when_some(self.content, |this, content| {
-                                this.child(
-                                    state.update(cx, |state, cx| (content)(state, window, cx)),
-                                )
+                                this.child(state.update(cx, |_, cx| (content)(window, cx)))
                             })
                             .children(self.children)
                             .when(self.appearance, |this| {
