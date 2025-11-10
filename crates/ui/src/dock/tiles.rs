@@ -247,7 +247,7 @@ impl Tiles {
         item_idx: usize,
         snap_threshold: Pixels,
     ) -> (Option<Pixels>, Option<Pixels>) {
-        // only check nearby panels
+        // Only check nearby panels
         let search_bounds = Bounds {
             origin: Point {
                 x: dragging_bounds.left() - snap_threshold,
@@ -1055,7 +1055,7 @@ impl Tiles {
         {
             let mut changes_to_push = vec![];
 
-            // Handle dragging - apply grid alignment on mouse up
+            // Handle dragging
             if let Some(dragging_id) = self.dragging_id {
                 if let Some(idx) = self.panels.iter().position(|p| p.id == dragging_id) {
                     let initial_bounds = self.dragging_initial_bounds;
