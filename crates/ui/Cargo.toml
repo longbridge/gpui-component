@@ -18,6 +18,8 @@ doctest = false
 decimal = ["dep:rust_decimal"]
 inspector = ["gpui/inspector"]
 webview = ["dep:wry"]
+devtools = ["wry/devtools"]
+
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
     "dep:tree-sitter-bash",
