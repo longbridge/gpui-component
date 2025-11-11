@@ -244,7 +244,7 @@ impl Tiles {
     fn calculate_magnetic_snap(
         &self,
         dragging_bounds: Bounds<Pixels>,
-        item_idx: usize,
+        item_ix: usize,
         snap_threshold: Pixels,
     ) -> (Option<Pixels>, Option<Pixels>) {
         // Only check nearby panels
@@ -272,8 +272,8 @@ impl Tiles {
         let drag_width = dragging_bounds.size.width;
         let drag_height = dragging_bounds.size.height;
 
-        for (idx, other) in self.panels.iter().enumerate() {
-            if idx == item_idx {
+        for (ix, other) in self.panels.iter().enumerate() {
+            if ix == item_ix {
                 continue;
             }
 
@@ -359,11 +359,11 @@ impl Tiles {
             return;
         };
 
-        let Some(item_idx) = self.panels.iter().position(|p| p.id == dragging_id) else {
+        let Some(item_ix) = self.panels.iter().position(|p| p.id == dragging_id) else {
             return;
         };
 
-        let previous_bounds = self.panels[item_idx].bounds;
+        let previous_bounds = self.panels[item_ix].bounds;
         let adjusted_position = mouse_position - self.bounds.origin;
         let delta = adjusted_position - self.dragging_initial_mouse;
         let mut new_origin = self.dragging_initial_bounds.origin + delta;
@@ -376,7 +376,7 @@ impl Tiles {
         };
 
         let (snap_x, snap_y) =
-            self.calculate_magnetic_snap(dragging_bounds, item_idx, snap_threshold);
+            self.calculate_magnetic_snap(dragging_bounds, item_ix, snap_threshold);
 
         // Apply snapping
         if let Some(x) = snap_x {
@@ -391,8 +391,8 @@ impl Tiles {
 
         // Update position without grid rounding (smooth dragging)
         if new_origin != previous_bounds.origin {
-            self.panels[item_idx].bounds.origin = new_origin;
-            let item = &self.panels[item_idx];
+            self.panels[item_ix].bounds.origin = new_origin;
+            let item = &self.panels[item_ix];
             let bounds = item.bounds;
             let entity_id = item.panel.view().entity_id();
 
