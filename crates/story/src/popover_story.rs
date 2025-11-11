@@ -180,7 +180,7 @@ impl Render for PopoverStory {
                             Popover::new("info-top-left")
                                 .max_w(px(600.))
                                 .trigger(Button::new("info-top-left").outline().label("Top Left"))
-                                .content(|_, cx| {
+                                .content(|_, _, cx| {
                                     v_flex()
                                         .gap_4()
                                         .child("Hello, this is a Popover.")
@@ -203,7 +203,7 @@ impl Render for PopoverStory {
                         Popover::new("info-top-right")
                             .anchor(Corner::TopRight)
                             .trigger(Button::new("info-top-right").outline().label("Top Right"))
-                            .content(|_, cx| {
+                            .content(|_, _, cx| {
                                 v_flex()
                                     .gap_4()
                                     .w_96()
@@ -250,7 +250,7 @@ impl Render for PopoverStory {
                                         .label("Mouse Right Click")
                                         .w(px(300.)),
                                 )
-                                .content(|_, cx| {
+                                .content(|_, _, cx| {
                                     v_flex()
                                         .gap_4()
                                         .child("Hello, this is a Popover on the Bottom Right.")

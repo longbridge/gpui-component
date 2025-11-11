@@ -21,7 +21,12 @@ pub struct Popover {
     anchor: Corner,
     tracked_focus_handle: Option<FocusHandle>,
     trigger: Option<Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>>,
-    content: Option<Rc<dyn Fn(&mut Window, &mut Context<PopoverState>) -> AnyElement + 'static>>,
+    content: Option<
+        Rc<
+            dyn Fn(&mut PopoverState, &mut Window, &mut Context<PopoverState>) -> AnyElement
+                + 'static,
+        >,
+    >,
     children: Vec<AnyElement>,
     /// Style for trigger element.
     /// This is used for hotfix the trigger element style to support w_full.
@@ -81,10 +86,10 @@ impl Popover {
     pub fn content<F, E>(mut self, content: F) -> Self
     where
         E: IntoElement,
-        F: Fn(&mut Window, &mut Context<PopoverState>) -> E + 'static,
+        F: Fn(&mut PopoverState, &mut Window, &mut Context<PopoverState>) -> E + 'static,
     {
-        self.content = Some(Rc::new(move |window, cx| {
-            content(window, cx).into_any_element()
+        self.content = Some(Rc::new(move |state, window, cx| {
+            content(state, window, cx).into_any_element()
         }));
         self
     }
@@ -297,7 +302,9 @@ impl RenderOnce for Popover {
                                 Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
                             })
                             .when_some(self.content, |this, content| {
-                                this.child(state.update(cx, |_, cx| (content)(window, cx)))
+                                this.child(
+                                    state.update(cx, |state, cx| (content)(state, window, cx)),
+                                )
                             })
                             .children(self.children)
                             .when(self.appearance, |this| {
