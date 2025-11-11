@@ -27,9 +27,7 @@ pub struct ReqwestClient {
 
 impl ReqwestClient {
     fn builder() -> reqwest::ClientBuilder {
-        reqwest::Client::builder()
-            .use_rustls_tls()
-            .connect_timeout(Duration::from_secs(10))
+        reqwest::Client::builder().connect_timeout(Duration::from_secs(10))
     }
 
     pub fn new() -> Self {

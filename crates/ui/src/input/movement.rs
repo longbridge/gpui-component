@@ -76,7 +76,7 @@ impl InputState {
 
             // If in visible range, prefer to use position to get column.
             if let Some(line) = last_layout.line(next_point.row) {
-                if let Some(x) = line.closest_index_for_position(
+                if let Some(x) = line.index_for_position(
                     Point {
                         x: preferred_x,
                         y: next_display_point.local_row * last_layout.line_height,

@@ -1525,7 +1525,7 @@ impl InputState {
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                index = line_layout.closest_index_for_x(pos.x);
+                index = line_layout.index_for_x(pos.x);
                 break;
             }
 
