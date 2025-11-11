@@ -94,7 +94,9 @@ impl ResizableState {
         cx: &mut Context<Self>,
     ) {
         let size = bounds.size.along(self.axis);
-        if self.sizes[panel_ix].as_f32() == 0.0 {
+        // this check is only necessary to stop the very first panel from resizing on its own
+        // it needs to be passed when the panel is freshly created so we get the initial size, but its also fine when it sometimes passes later
+        if self.sizes[panel_ix].as_f32() == PANEL_MIN_SIZE.as_f32() {
             self.sizes[panel_ix] = size;
             self.panels[panel_ix].size = Some(size);
         }
