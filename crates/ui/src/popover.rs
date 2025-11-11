@@ -310,7 +310,7 @@ impl RenderOnce for Popover {
             .id(self.id)
             .child((trigger)(open, window, cx))
             .when(!open, |this| {
-                // We only handle opening the popover on trigger click.
+                // We only handle open on trigger click.
                 // Because mouse down out of the Popover will close it.
                 this.on_mouse_down(self.mouse_button, {
                     let state = state.clone();
