@@ -318,7 +318,7 @@ impl RenderOnce for Popover {
                 move |_, window, cx| {
                     state.update(cx, |state, cx| {
                         // We force set open to false to toggle it correctly.
-                        // Becuase if the mouse down out will toggle open first.
+                        // Because if the mouse down out will toggle open first.
                         state.open = open;
                         state.toggle_open(window, cx);
                     });
