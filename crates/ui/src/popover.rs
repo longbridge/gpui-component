@@ -300,7 +300,7 @@ impl RenderOnce for Popover {
         });
 
         let open = state.read(cx).open;
-        let focus_handle = state.focus_handle(cx);
+        let focus_handle = &state.read(cx).focus_handle;
         let trigger_bounds = state.read(cx).trigger_bounds;
 
         let Some(trigger) = self.trigger else {
