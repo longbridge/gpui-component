@@ -44,12 +44,14 @@ pub fn init(cx: &mut App) {
 }
 
 struct Form {
+    parent: Entity<PopoverStory>,
     input1: Entity<InputState>,
 }
 
 impl Form {
-    fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
+    fn new(parent: Entity<PopoverStory>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
+            parent,
             input1: cx.new(|cx| InputState::new(window, cx)),
         })
     }
@@ -65,6 +67,7 @@ impl EventEmitter<DismissEvent> for Form {}
 
 impl Render for Form {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let parent = self.parent.clone();
         v_flex()
             .gap_2()
             .p_3()
@@ -76,7 +79,12 @@ impl Render for Form {
                 Button::new("submit")
                     .label("Submit")
                     .primary()
-                    .on_click(cx.listener(|_, _, _, cx| cx.emit(DismissEvent))),
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        parent.update(cx, |this, cx| {
+                            this.form_open = false;
+                            cx.notify();
+                        })
+                    })),
             )
     }
 }
@@ -109,7 +117,7 @@ impl PopoverStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let form = Form::new(window, cx);
+        let form = Form::new(cx.entity(), window, cx);
 
         cx.focus_self(window);
 
@@ -248,6 +256,18 @@ impl Render for PopoverStory {
                         .text_sm()
                         .shadow_2xl()
                         .child("A styled Popover with custom background and text color."),
+                ),
+            )
+            .child(
+                section("Default Open").child(
+                    Popover::new("default-open-popover")
+                        .default_open(true)
+                        .trigger(
+                            Button::new("default-open-btn")
+                                .label("Default Open")
+                                .outline(),
+                        )
+                        .child("This popover is open by default when first rendered."),
                 ),
             )
             .child(

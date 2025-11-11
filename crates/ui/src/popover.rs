@@ -19,6 +19,7 @@ pub struct Popover {
     id: ElementId,
     style: StyleRefinement,
     anchor: Corner,
+    default_open: bool,
     open: Option<bool>,
     tracked_focus_handle: Option<FocusHandle>,
     trigger: Option<Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>>,
@@ -51,6 +52,7 @@ impl Popover {
             children: vec![],
             mouse_button: MouseButton::Left,
             appearance: true,
+            default_open: false,
             open: None,
             on_open_change: None,
         }
@@ -77,6 +79,16 @@ impl Popover {
             let selected = trigger.is_selected();
             trigger.selected(selected || is_open).into_any_element()
         }));
+        self
+    }
+
+    /// Set the default open state of the popover, default is `false`.
+    ///
+    /// This is only used to initialize the open state of the popover.
+    ///
+    /// And please note that if you use the `open` method, this value will be ignored.
+    pub fn default_open(mut self, open: bool) -> Self {
+        self.default_open = open;
         self
     }
 
@@ -177,13 +189,13 @@ pub struct PopoverState {
 }
 
 impl PopoverState {
-    pub fn new(cx: &mut App) -> Self {
+    pub fn new(default_open: bool, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
             trigger_bounds: None,
             previous_focus: None,
-            open: false,
+            open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
         }
@@ -264,23 +276,23 @@ impl EventEmitter<DismissEvent> for PopoverState {}
 
 impl RenderOnce for Popover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| PopoverState::new(cx));
+        let force_open = self.open;
+        let default_open = self.default_open;
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
+            PopoverState::new(default_open, cx)
+        });
         if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone() {
             state.update(cx, |state, _| {
                 state.tracked_focus_handle = Some(tracked_focus_handle);
                 state.on_open_change = self.on_open_change.clone();
+
+                if let Some(force_open) = force_open {
+                    state.open = force_open;
+                }
             })
         }
 
         let open = state.read(cx).open;
-        if let Some(forced_open) = self.open {
-            if open != forced_open {
-                state.update(cx, |state, _| {
-                    state.open = forced_open;
-                });
-            }
-        }
-
         let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
 

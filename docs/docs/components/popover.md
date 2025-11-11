@@ -117,6 +117,49 @@ Popover::new("custom-popover")
     .child("Fully custom styled popover")
 ```
 
+### Control Open State
+
+There have `open` and `on_open_change` methods to control the open state of the popover programmatically.
+
+This is useful when you want to synchronize the popover's open state with other UI elements or application state.
+
+:::tip
+When you use `open` to control the popover's open state, that means you have take full control of it,
+so you need to update the state in `on_open_change` callback to keep the popover working correctly.
+:::
+
+```rust
+use gpui_component::popover::Popover;
+
+struct MyView {
+    popover_open: bool,
+}
+
+Popover::new("controlled-popover")
+    .open(self.open)
+    .on_open_change(cx.listener(|this, open: &bool, _, cx| {
+        this.popover_open = *open;
+        cx.notify();
+    }))
+    .trigger(Button::new("control-btn").label("Control Popover").outline())
+    .child("This popover's open state is controlled programmatically.")
+```
+
+### Default Open
+
+The `default_open` method allows you to set the initial open state of the popover when it is first rendered.
+
+Please note that if you use the `open` method to control the popover's open state, the `default_open` setting will be ignored.
+
+```rust
+use gpui_component::popover::Popover;
+
+Popover::new("default-open-popover")
+    .default_open(true)
+    .trigger(Button::new("default-open-btn").label("Default Open").outline())
+    .child("This popover is open by default when first rendered.")
+```
+
 [Button]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.Button.html
 [Selectable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Selectable.html
 [Render]: https://docs.rs/gpui/latest/gpui/trait.Render.html
