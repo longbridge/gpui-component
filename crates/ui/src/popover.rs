@@ -147,10 +147,11 @@ impl Popover {
         self
     }
 
-    /// Bind the focus handle to track focus inside the popover.
+    /// Bind the focus handle to receive focus when the popover is opened.
+    /// If you not set this, a new focus handle will be created for the popover to receive focus.
     ///
     /// If popover is opened, the focus will be moved to the focus handle.
-    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+    pub fn first_focus(mut self, handle: &FocusHandle) -> Self {
         self.tracked_focus_handle = Some(handle.clone());
         self
     }
