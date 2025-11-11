@@ -23,9 +23,9 @@ TabBar::new("tabs")
     .on_click(|selected_index, _, _| {
         println!("Tab {} selected", selected_index);
     })
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile"))
-    .child(Tab::new("Settings"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Settings"))
 ```
 
 ### Tab Variants
@@ -35,9 +35,9 @@ TabBar::new("tabs")
 ```rust
 TabBar::new("default-tabs")
     .selected_index(0)
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile"))
-    .child(Tab::new("Documents"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Documents"))
 ```
 
 #### Underline Tabs
@@ -46,9 +46,9 @@ TabBar::new("default-tabs")
 TabBar::new("underline-tabs")
     .underline()
     .selected_index(0)
-    .child("Account")
-    .child("Profile")
-    .child("Documents")
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Documents"))
 ```
 
 #### Pill Tabs
@@ -57,9 +57,9 @@ TabBar::new("underline-tabs")
 TabBar::new("pill-tabs")
     .pill()
     .selected_index(0)
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile"))
-    .child(Tab::new("Documents"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Documents"))
 ```
 
 #### Outline Tabs
@@ -68,9 +68,9 @@ TabBar::new("pill-tabs")
 TabBar::new("outline-tabs")
     .outline()
     .selected_index(0)
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile"))
-    .child(Tab::new("Documents"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Documents"))
 ```
 
 #### Segmented Tabs
@@ -92,19 +92,19 @@ TabBar::new("segmented-tabs")
 ```rust
 // Extra Small
 TabBar::new("tabs").xsmall()
-    .child(Tab::new("Small"))
+    .child(Tab::new().label("Small"))
 
 // Small
 TabBar::new("tabs").small()
-    .child(Tab::new("Small"))
+    .child(Tab::new().label("Small"))
 
 // Medium (default)
 TabBar::new("tabs")
-    .child(Tab::new("Medium"))
+    .child(Tab::new().label("Medium"))
 
 // Large
 TabBar::new("tabs").large()
-    .child(Tab::new("Large"))
+    .child(Tab::new().label("Large"))
 ```
 
 ### Tabs with Icons
@@ -137,18 +137,18 @@ TabBar::new("tabs-with-controls")
             .child(Button::new("inbox").ghost().xsmall().icon(IconName::Inbox))
             .child(Button::new("more").ghost().xsmall().icon(IconName::Ellipsis))
     )
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile"))
-    .child(Tab::new("Settings"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Settings"))
 ```
 
 ### Disabled Tabs
 
 ```rust
 TabBar::new("tabs-with-disabled")
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile").disabled(true))
-    .child(Tab::new("Settings"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile").disabled(true))
+    .child(Tab::new().label("Settings"))
 ```
 
 ### Dynamic Tabs
@@ -170,7 +170,7 @@ impl Render for TabsView {
             .children(
                 self.tabs
                     .iter()
-                    .map(|tab_name| Tab::new(tab_name.clone()))
+                    .map(|tab_name| Tab::new().label(tab_name.clone()))
             )
     }
 }
@@ -187,11 +187,11 @@ If enable, the will have a dropdown button at the end of the tab bar to show all
 TabBar::new("tabs-with-menu")
     .menu(true)
     .selected_index(0)
-    .child(Tab::new("Account"))
-    .child(Tab::new("Profile"))
-    .child(Tab::new("Documents"))
-    .child(Tab::new("Mail"))
-    .child(Tab::new("Settings"))
+    .child(Tab::new().label("Account"))
+    .child(Tab::new().label("Profile"))
+    .child(Tab::new().label("Documents"))
+    .child(Tab::new().label("Mail"))
+    .child(Tab::new().label("Settings"))
 ```
 
 ### Scrollable Tabs
@@ -207,11 +207,11 @@ impl Render for ScrollableTabsView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         TabBar::new("scrollable-tabs")
             .track_scroll(&self.scroll_handle)
-            .child(Tab::new("Very Long Tab Name 1"))
-            .child(Tab::new("Very Long Tab Name 2"))
-            .child(Tab::new("Very Long Tab Name 3"))
-            .child(Tab::new("Very Long Tab Name 4"))
-            .child(Tab::new("Very Long Tab Name 5"))
+            .child(Tab::new().label("Very Long Tab Name 1"))
+            .child(Tab::new().label("Very Long Tab Name 2"))
+            .child(Tab::new().label("Very Long Tab Name 3"))
+            .child(Tab::new().label("Very Long Tab Name 4"))
+            .child(Tab::new().label("Very Long Tab Name 5"))
     }
 }
 ```
@@ -221,7 +221,7 @@ impl Render for ScrollableTabsView {
 ```rust
 TabBar::new("custom-tabs")
     .child(
-        Tab::new("Custom Tab")
+        Tab::new().label("Custom Tab")
             .id("custom-id")
             .prefix(IconName::Star)
             .suffix(IconName::X)
@@ -352,9 +352,9 @@ impl Render for TabsWithContent {
                         view.active_tab = *index;
                         cx.notify();
                     }))
-                    .child(Tab::new("Account"))
-                    .child(Tab::new("Profile"))
-                    .child(Tab::new("Settings"))
+                    .child(Tab::new().label("Account"))
+                    .child(Tab::new().label("Profile"))
+                    .child(Tab::new().label("Settings"))
             )
             .child(
                 div()
@@ -401,7 +401,7 @@ impl Render for CloseableTabsView {
                     .iter()
                     .enumerate()
                     .map(|(index, tab_name)| {
-                        Tab::new(tab_name.clone())
+                        Tab::new().label(tab_name.clone())
                             .suffix(
                                 Button::new(format!("close-{}", index))
                                     .icon(IconName::X)
