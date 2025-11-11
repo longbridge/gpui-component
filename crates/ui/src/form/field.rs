@@ -290,8 +290,6 @@ impl RenderOnce for Field {
                                     this.text_size(size)
                                 })
                                 .font_medium()
-                                .flex()
-                                .flex_row()
                                 .gap_1()
                                 .items_center()
                                 .when_some(self.label, |this, builder| {
