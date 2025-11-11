@@ -60,6 +60,7 @@ impl RenderOnce for Progress {
         div()
             .w_full()
             .relative()
+            .rounded_full()
             .refine_style(&self.style)
             .bg(color.opacity(0.2))
             .child(
@@ -72,7 +73,7 @@ impl RenderOnce for Progress {
                     .bg(color)
                     .map(|this| match self.value {
                         v if v >= 100. => this.refine_style(&inner_style),
-                        _ => this.refine_style(&inner_style).rounded_l_none(),
+                        _ => this.refine_style(&inner_style).rounded_r_none(),
                     }),
             )
     }
