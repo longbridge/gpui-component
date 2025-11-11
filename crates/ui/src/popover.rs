@@ -35,6 +35,7 @@ pub struct Popover {
     trigger_style: Option<StyleRefinement>,
     mouse_button: MouseButton,
     appearance: bool,
+    overlay_closable: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
@@ -52,6 +53,7 @@ impl Popover {
             children: vec![],
             mouse_button: MouseButton::Left,
             appearance: true,
+            overlay_closable: true,
             default_open: false,
             open: None,
             on_open_change: None,
@@ -118,6 +120,12 @@ impl Popover {
     /// Set the style for the trigger element.
     pub fn trigger_style(mut self, style: StyleRefinement) -> Self {
         self.trigger_style = Some(style);
+        self
+    }
+
+    /// Set whether clicking outside the popover will dismiss it, default is `true`.
+    pub fn overlay_closable(mut self, closable: bool) -> Self {
+        self.overlay_closable = closable;
         self
     }
 
@@ -373,23 +381,16 @@ impl RenderOnce for Popover {
                                 )
                             })
                             .children(self.children)
-                            .when(self.appearance, |this| {
-                                let state = state.clone();
-                                this.on_mouse_down_out(move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.toggle_open(window, cx);
-                                    });
-                                    cx.notify(parent_view_id);
+                            .when(self.overlay_closable, |this| {
+                                this.on_mouse_down_out({
+                                    let state = state.clone();
+                                    move |_, window, cx| {
+                                        state.update(cx, |state, cx| {
+                                            state.dismiss(window, cx);
+                                        });
+                                        cx.notify(parent_view_id);
+                                    }
                                 })
-                            })
-                            .on_mouse_down_out({
-                                let state = state.clone();
-                                move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.dismiss(window, cx);
-                                    });
-                                    cx.notify(parent_view_id);
-                                }
                             })
                             .refine_style(&self.style),
                     ),
