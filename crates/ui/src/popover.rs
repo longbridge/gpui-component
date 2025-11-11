@@ -19,6 +19,7 @@ pub struct Popover {
     id: ElementId,
     style: StyleRefinement,
     anchor: Corner,
+    open: Option<bool>,
     tracked_focus_handle: Option<FocusHandle>,
     trigger: Option<Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>>,
     content: Option<
@@ -33,6 +34,7 @@ pub struct Popover {
     trigger_style: Option<StyleRefinement>,
     mouse_button: MouseButton,
     appearance: bool,
+    on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
 impl Popover {
@@ -49,6 +51,8 @@ impl Popover {
             children: vec![],
             mouse_button: MouseButton::Left,
             appearance: true,
+            open: None,
+            on_open_change: None,
         }
     }
 
@@ -73,6 +77,29 @@ impl Popover {
             let selected = trigger.is_selected();
             trigger.selected(selected || is_open).into_any_element()
         }));
+        self
+    }
+
+    /// Force set the open state of the popover.
+    ///
+    /// If this is set, the popover will be controlled by this value.
+    ///
+    /// NOTE: You must be used in conjunction with `on_open_change` to handle state changes.
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = Some(open);
+        self
+    }
+
+    /// Add a callback to be called when the open state changes.
+    ///
+    /// The first `&bool` parameter is the **new open state**.
+    ///
+    /// This is useful when using the `open` method to control the popover state.
+    pub fn on_open_change<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&bool, &mut Window, &mut App) + 'static,
+    {
+        self.on_open_change = Some(Rc::new(callback));
         self
     }
 
@@ -144,6 +171,7 @@ pub struct PopoverState {
     trigger_bounds: Option<Bounds<Pixels>>,
     previous_focus: Option<FocusHandle>,
     open: bool,
+    on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
     _dismiss_subscription: Option<Subscription>,
 }
@@ -156,6 +184,7 @@ impl PopoverState {
             trigger_bounds: None,
             previous_focus: None,
             open: false,
+            on_open_change: None,
             _dismiss_subscription: None,
         }
     }
@@ -201,6 +230,11 @@ impl PopoverState {
             }
             self._dismiss_subscription = None;
         }
+
+        if let Some(callback) = self.on_open_change.as_ref() {
+            callback(&self.open, window, cx);
+        }
+
         cx.notify();
         window.refresh();
     }
@@ -234,10 +268,19 @@ impl RenderOnce for Popover {
         if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone() {
             state.update(cx, |state, _| {
                 state.tracked_focus_handle = Some(tracked_focus_handle);
+                state.on_open_change = self.on_open_change.clone();
             })
         }
 
         let open = state.read(cx).open;
+        if let Some(forced_open) = self.open {
+            if open != forced_open {
+                state.update(cx, |state, _| {
+                    state.open = forced_open;
+                });
+            }
+        }
+
         let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
 

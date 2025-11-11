@@ -70,6 +70,7 @@ impl Render for Form {
             .p_3()
             .size_full()
             .child("This is a form container.")
+            .child("Click submit to dismiss the popover.")
             .child(Input::new(&self.input1))
             .child(
                 Button::new("submit")
@@ -83,6 +84,7 @@ impl Render for Form {
 pub struct PopoverStory {
     focus_handle: FocusHandle,
     form: Entity<Form>,
+    form_open: bool,
     checked: bool,
     message: String,
 }
@@ -114,6 +116,7 @@ impl PopoverStory {
         Self {
             form,
             checked: true,
+            form_open: false,
             focus_handle: cx.focus_handle(),
             message: "".to_string(),
         }
@@ -195,6 +198,12 @@ impl Render for PopoverStory {
                         .text_sm()
                         .trigger(Button::new("pop").outline().label("Popup Form"))
                         .track_focus(&form.focus_handle(cx))
+                        .open(self.form_open)
+                        .on_open_change(cx.listener(move |this, open, _, cx| {
+                            println!("Popover form open changed: {}", open);
+                            this.form_open = *open;
+                            cx.notify();
+                        }))
                         .child(form.clone()),
                 ),
             )
