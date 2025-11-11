@@ -398,21 +398,19 @@ pub struct Tab {
 
 impl From<&'static str> for Tab {
     fn from(label: &'static str) -> Self {
-        let label = SharedString::from(label);
-        Self::new(label)
+        Self::new().label(label)
     }
 }
 
 impl From<String> for Tab {
     fn from(label: String) -> Self {
-        let label = SharedString::from(label);
-        Self::new(label)
+        Self::new().label(label)
     }
 }
 
 impl From<SharedString> for Tab {
     fn from(label: SharedString) -> Self {
-        Self::new(label)
+        Self::new().label(label)
     }
 }
 
@@ -449,10 +447,14 @@ impl Default for Tab {
 
 impl Tab {
     /// Create a new tab with a label.
-    pub fn new(label: impl Into<SharedString>) -> Self {
-        let mut this = Self::default();
-        this.label = Some(label.into());
-        this
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set label for the tab.
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
+        self
     }
 
     /// Set icon for the tab.
