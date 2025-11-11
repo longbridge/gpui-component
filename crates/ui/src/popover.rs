@@ -278,19 +278,20 @@ impl RenderOnce for Popover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let force_open = self.open;
         let default_open = self.default_open;
+        let tracked_focus_handle = self.tracked_focus_handle.clone();
         let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
             PopoverState::new(default_open, cx)
         });
-        if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone() {
-            state.update(cx, |state, _| {
-                state.tracked_focus_handle = Some(tracked_focus_handle);
-                state.on_open_change = self.on_open_change.clone();
 
-                if let Some(force_open) = force_open {
-                    state.open = force_open;
-                }
-            })
-        }
+        state.update(cx, |state, _| {
+            if let Some(tracked_focus_handle) = tracked_focus_handle {
+                state.tracked_focus_handle = Some(tracked_focus_handle);
+            }
+            state.on_open_change = self.on_open_change.clone();
+            if let Some(force_open) = force_open {
+                state.open = force_open;
+            }
+        });
 
         let open = state.read(cx).open;
         let focus_handle = state.read(cx).focus_handle.clone();
