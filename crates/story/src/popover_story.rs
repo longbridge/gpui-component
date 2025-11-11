@@ -66,8 +66,8 @@ impl EventEmitter<DismissEvent> for Form {}
 impl Render for Form {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_4()
-            .p_4()
+            .gap_2()
+            .p_3()
             .size_full()
             .child("This is a form container.")
             .child(Input::new(&self.input1))
@@ -177,7 +177,7 @@ impl Render for PopoverStory {
                     Popover::new("popover-0")
                         .max_w(px(600.))
                         .trigger(Button::new("btn").outline().label("Popover"))
-                        .gap_3()
+                        .gap_2()
                         .text_sm()
                         .w(px(400.))
                         .child("Hello, this is a Popover.")
@@ -192,6 +192,7 @@ impl Render for PopoverStory {
                 section("Popover with Form").child(
                     Popover::new("info-bottom-left")
                         .p_0()
+                        .text_sm()
                         .trigger(Button::new("pop").outline().label("Popup Form"))
                         .track_focus(&form.focus_handle(cx))
                         .child(form.clone()),
@@ -205,23 +206,21 @@ impl Render for PopoverStory {
                         .max_w(px(600.))
                         .content(|_, _, cx| {
                             v_flex()
-                                .gap_4()
+                                .gap_2()
                                 .child("Hello, this is a Popover on the Bottom Right.")
                                 .child(Divider::horizontal())
                                 .child(
-                                    h_flex().gap_2().justify_end().child(
-                                        Button::new("info1")
-                                            .primary()
-                                            .label("Dismiss")
-                                            .w(px(80.))
-                                            .on_click(cx.listener(|_, _, window, cx| {
-                                                window.push_notification(
-                                                    "You have clicked dismiss via DismissEvent.",
-                                                    cx,
-                                                );
-                                                cx.emit(DismissEvent);
-                                            })),
-                                    ),
+                                    Button::new("info1")
+                                        .primary()
+                                        .label("Dismiss")
+                                        .w(px(80.))
+                                        .on_click(cx.listener(|_, _, window, cx| {
+                                            window.push_notification(
+                                                "You have clicked dismiss via DismissEvent.",
+                                                cx,
+                                            );
+                                            cx.emit(DismissEvent);
+                                        })),
                                 )
                         }),
                 ),
@@ -236,7 +235,6 @@ impl Render for PopoverStory {
                         .bg(cx.theme().primary)
                         .text_color(cx.theme().primary_foreground)
                         .max_w(px(600.))
-                        .gap_4()
                         .rounded_sm()
                         .text_sm()
                         .shadow_2xl()
@@ -253,12 +251,10 @@ impl Render for PopoverStory {
                                 .items_center()
                                 .justify_between()
                                 .child(
-                                    v_flex().gap_4().child(
-                                        Popover::new("anchor0")
-                                            .max_w(px(600.))
-                                            .trigger(Button::new("btn").outline().label("TopLeft"))
-                                            .child("This is a Popover on the Top Left."),
-                                    ),
+                                    Popover::new("anchor0")
+                                        .max_w(px(600.))
+                                        .trigger(Button::new("btn").outline().label("TopLeft"))
+                                        .child("This is a Popover on the Top Left."),
                                 )
                                 .child(
                                     Popover::new("anchor1")

@@ -296,7 +296,7 @@ impl RenderOnce for Popover {
                             .size_full()
                             .occlude()
                             .tab_group()
-                            .when(self.appearance, |this| this.popover_style(cx).p_4())
+                            .when(self.appearance, |this| this.popover_style(cx).p_3())
                             .map(|this| match self.anchor {
                                 Corner::TopLeft | Corner::TopRight => this.top_1(),
                                 Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
