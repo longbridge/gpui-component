@@ -309,14 +309,18 @@ impl RenderOnce for Popover {
         let el = div()
             .id(self.id)
             .child((trigger)(open, window, cx))
-            .on_mouse_down(self.mouse_button, {
-                let state = state.clone();
-                move |_, window, cx| {
-                    state.update(cx, |state, cx| {
-                        state.toggle_open(window, cx);
-                    });
-                    cx.notify(parent_view_id);
-                }
+            .when(!open, |this| {
+                // We only handle opening the popover on trigger click.
+                // Because mouse down out of the Popover will close it.
+                this.on_mouse_down(self.mouse_button, {
+                    let state = state.clone();
+                    move |_, window, cx| {
+                        state.update(cx, |state, cx| {
+                            state.toggle_open(window, cx);
+                        });
+                        cx.notify(parent_view_id);
+                    }
+                })
             })
             .child(
                 canvas(
@@ -366,28 +370,28 @@ impl RenderOnce for Popover {
                                 )
                             })
                             .children(self.children)
+                            .when(self.appearance, |this| {
+                                let state = state.clone();
+                                this.on_mouse_down_out(move |_, window, cx| {
+                                    state.update(cx, |state, cx| {
+                                        state.toggle_open(window, cx);
+                                    });
+                                    cx.notify(parent_view_id);
+                                })
+                            })
+                            .on_mouse_down_out({
+                                let state = state.clone();
+                                move |_, window, cx| {
+                                    state.update(cx, |state, cx| {
+                                        state.dismiss(window, cx);
+                                    });
+                                    cx.notify(parent_view_id);
+                                }
+                            })
                             .refine_style(&self.style),
                     ),
             )
             .with_priority(1),
         )
-        .when(self.appearance, |this| {
-            let state = state.clone();
-            this.on_mouse_down_out(move |_, window, cx| {
-                state.update(cx, |state, cx| {
-                    state.toggle_open(window, cx);
-                });
-                cx.notify(parent_view_id);
-            })
-        })
-        .on_mouse_down_out({
-            let state = state.clone();
-            move |_, window, cx| {
-                state.update(cx, |state, cx| {
-                    state.dismiss(window, cx);
-                });
-                cx.notify(parent_view_id);
-            }
-        })
     }
 }
