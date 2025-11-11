@@ -229,13 +229,16 @@ impl PopoverState {
         if self.open {
             let state = cx.entity();
             self.previous_focus = window.focused(cx);
-            let focus_handle =
-                if let Some(tracked_focus_handle) = self.tracked_focus_handle.as_ref() {
-                    tracked_focus_handle
-                } else {
-                    &self.focus_handle
-                };
-            focus_handle.focus(window);
+            let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
+            {
+                tracked_focus_handle
+            } else {
+                self.focus_handle.clone()
+            };
+
+            cx.defer_in(window, move |_, window, _| {
+                focus_handle.focus(window);
+            });
 
             self._dismiss_subscription =
                 Some(
