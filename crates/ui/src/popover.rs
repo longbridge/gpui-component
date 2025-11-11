@@ -256,9 +256,7 @@ impl PopoverState {
         if let Some(callback) = self.on_open_change.as_ref() {
             callback(&self.open, window, cx);
         }
-
         cx.notify();
-        window.refresh();
     }
 
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -300,7 +298,7 @@ impl RenderOnce for Popover {
         });
 
         let open = state.read(cx).open;
-        let focus_handle = &state.read(cx).focus_handle;
+        let focus_handle = state.focus_handle(cx);
         let trigger_bounds = state.read(cx).trigger_bounds;
 
         let Some(trigger) = self.trigger else {
