@@ -228,7 +228,13 @@ impl PopoverState {
         if self.open {
             let state = cx.entity();
             self.previous_focus = window.focused(cx);
-            self.focus_handle(cx).focus(window);
+            let focus_handle =
+                if let Some(tracked_focus_handle) = self.tracked_focus_handle.as_ref() {
+                    tracked_focus_handle
+                } else {
+                    &self.focus_handle
+                };
+            focus_handle.focus(window);
 
             self._dismiss_subscription =
                 Some(
@@ -261,11 +267,7 @@ impl PopoverState {
 
 impl Focusable for PopoverState {
     fn focus_handle(&self, _: &App) -> FocusHandle {
-        if let Some(tracked_focus_handle) = &self.tracked_focus_handle {
-            tracked_focus_handle.clone()
-        } else {
-            self.focus_handle.clone()
-        }
+        self.focus_handle.clone()
     }
 }
 
@@ -297,7 +299,7 @@ impl RenderOnce for Popover {
         });
 
         let open = state.read(cx).open;
-        let focus_handle = state.read(cx).focus_handle.clone();
+        let focus_handle = state.focus_handle(cx);
         let trigger_bounds = state.read(cx).trigger_bounds;
 
         let Some(trigger) = self.trigger else {
