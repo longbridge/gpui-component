@@ -6,7 +6,7 @@ use gpui::{
 };
 use std::rc::Rc;
 
-use crate::{actions::Cancel, Selectable, StyledExt as _};
+use crate::{actions::Cancel, v_flex, Selectable, StyledExt as _};
 
 const CONTEXT: &str = "Popover";
 pub(crate) fn init(cx: &mut App) {
@@ -288,7 +288,7 @@ impl RenderOnce for Popover {
                         this.position(Self::resolved_corner(self.anchor, trigger_bounds))
                     })
                     .child(
-                        div()
+                        v_flex()
                             .id("content")
                             .key_context(CONTEXT)
                             .track_focus(&focus_handle)

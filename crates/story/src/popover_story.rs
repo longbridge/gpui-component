@@ -14,6 +14,8 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
+use crate::section;
+
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = popover_story, no_json)]
 struct Info(usize);
@@ -171,6 +173,20 @@ impl Render for PopoverStory {
             .size_full()
             .min_h(px(400.))
             .gap_6()
+            .child(
+                section("Basic Popover").child(
+                    Popover::new("popover-0")
+                        .max_w(px(600.))
+                        .trigger(Button::new("btn").outline().label("Popover"))
+                        .gap_4()
+                        .w(px(400.))
+                        .child("Hello, this is a Popover.")
+                        .child(Divider::horizontal())
+                        .child(
+                            "You can put any content here, including text, buttons, forms, and more.",
+                        )
+                )
+            )
             .child(
                 h_flex()
                     .items_center()
