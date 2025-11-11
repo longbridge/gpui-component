@@ -121,7 +121,10 @@ impl Popover {
         self
     }
 
-    /// Set the content of the popover.
+    /// Set the content builder for content of the Popover.
+    ///
+    /// This callback will called every time on render the popover.
+    /// So, you should avoid creating new elements or entities in the content closure.
     pub fn content<F, E>(mut self, content: F) -> Self
     where
         E: IntoElement,
@@ -144,7 +147,8 @@ impl Popover {
         self
     }
 
-    /// Bind the focus handle to track focus inside the popover.
+    /// Bind the focus handle to receive focus when the popover is opened.
+    /// If you not set this, a new focus handle will be created for the popover to
     ///
     /// If popover is opened, the focus will be moved to the focus handle.
     pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
@@ -225,7 +229,16 @@ impl PopoverState {
         if self.open {
             let state = cx.entity();
             self.previous_focus = window.focused(cx);
-            self.focus_handle(cx).focus(window);
+            let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
+            {
+                tracked_focus_handle
+            } else {
+                self.focus_handle.clone()
+            };
+
+            cx.defer_in(window, move |_, window, _| {
+                focus_handle.focus(window);
+            });
 
             self._dismiss_subscription =
                 Some(
@@ -246,9 +259,7 @@ impl PopoverState {
         if let Some(callback) = self.on_open_change.as_ref() {
             callback(&self.open, window, cx);
         }
-
         cx.notify();
-        window.refresh();
     }
 
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -258,11 +269,7 @@ impl PopoverState {
 
 impl Focusable for PopoverState {
     fn focus_handle(&self, _: &App) -> FocusHandle {
-        if let Some(tracked_focus_handle) = &self.tracked_focus_handle {
-            tracked_focus_handle.clone()
-        } else {
-            self.focus_handle.clone()
-        }
+        self.focus_handle.clone()
     }
 }
 
@@ -294,7 +301,7 @@ impl RenderOnce for Popover {
         });
 
         let open = state.read(cx).open;
-        let focus_handle = state.read(cx).focus_handle.clone();
+        let focus_handle = state.focus_handle(cx);
         let trigger_bounds = state.read(cx).trigger_bounds;
 
         let Some(trigger) = self.trigger else {
@@ -310,6 +317,9 @@ impl RenderOnce for Popover {
                 let state = state.clone();
                 move |_, window, cx| {
                     state.update(cx, |state, cx| {
+                        // We force set open to false to toggle it correctly.
+                        // Because if the mouse down out will toggle open first.
+                        state.open = open;
                         state.toggle_open(window, cx);
                     });
                     cx.notify(parent_view_id);

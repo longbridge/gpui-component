@@ -59,6 +59,40 @@ Popover::new("form-popover")
     .child(view.clone())
 ```
 
+### Add content by `content` method
+
+The `content` method allows you to create more complex popover content using a closure. This is useful when
+you need to build dynamic content or need access to the popover's context.
+
+This method will let us to have `&mut PopoverState`, `&mut Window` and `&mut Context<PopoverState>` parameters in the
+closure is to allow you to interact with the popover's state and the overall application context if needed.
+
+:::warning
+This `content` callback will called every time on render the popover.
+So, you should avoid creating new elements or entities in the content closure
+or other heavy operations that may impact performance.
+:::
+
+And `content` will works with `child`, `children` methods together.
+
+```rust
+use gpui::ParentElement as _;
+use gpui_component::popover::Popover;
+
+Popover::new("complex-popover")
+    .anchor(Corner::BottomLeft)
+    .trigger(Button::new("complex").label("Complex Content").outline())
+    .content(|_, _, _| {
+        div()
+            .child("This popover has complex content.")
+            .child(
+                Button::new("action-btn")
+                    .label("Perform Action")
+                    .outline()
+            )
+    })
+```
+
 ### Right-Click Popover
 
 Sometimes you may want to show a popover on right-click, for example, to create a special your ownen context menu. The `mouse_button` method allows you to specify which mouse button triggers the popover.
