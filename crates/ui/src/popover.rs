@@ -121,7 +121,10 @@ impl Popover {
         self
     }
 
-    /// Set the content of the popover.
+    /// Set the content builder for content of the Popover.
+    ///
+    /// This callback will called every time on render the popover.
+    /// So, you should avoid creating new elements or entities in the content closure.
     pub fn content<F, E>(mut self, content: F) -> Self
     where
         E: IntoElement,
@@ -363,28 +366,28 @@ impl RenderOnce for Popover {
                                 )
                             })
                             .children(self.children)
-                            .when(self.appearance, |this| {
-                                let state = state.clone();
-                                this.on_mouse_down_out(move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.toggle_open(window, cx);
-                                    });
-                                    cx.notify(parent_view_id);
-                                })
-                            })
-                            .on_mouse_down_out({
-                                let state = state.clone();
-                                move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.dismiss(window, cx);
-                                    });
-                                    cx.notify(parent_view_id);
-                                }
-                            })
                             .refine_style(&self.style),
                     ),
             )
             .with_priority(1),
         )
+        .when(self.appearance, |this| {
+            let state = state.clone();
+            this.on_mouse_down_out(move |_, window, cx| {
+                state.update(cx, |state, cx| {
+                    state.toggle_open(window, cx);
+                });
+                cx.notify(parent_view_id);
+            })
+        })
+        .on_mouse_down_out({
+            let state = state.clone();
+            move |_, window, cx| {
+                state.update(cx, |state, cx| {
+                    state.dismiss(window, cx);
+                });
+                cx.notify(parent_view_id);
+            }
+        })
     }
 }
