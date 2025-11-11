@@ -312,18 +312,17 @@ impl RenderOnce for Popover {
         let el = div()
             .id(self.id)
             .child((trigger)(open, window, cx))
-            .when(!open, |this| {
-                // We only handle open on trigger click.
-                // Because mouse down out of the Popover will close it.
-                this.on_mouse_down(self.mouse_button, {
-                    let state = state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.toggle_open(window, cx);
-                        });
-                        cx.notify(parent_view_id);
-                    }
-                })
+            .on_mouse_down(self.mouse_button, {
+                let state = state.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        // We force set open to false to toggle it correctly.
+                        // Becuase if the mouse down out will toggle open first.
+                        state.open = open;
+                        state.toggle_open(window, cx);
+                    });
+                    cx.notify(parent_view_id);
+                }
             })
             .child(
                 canvas(
