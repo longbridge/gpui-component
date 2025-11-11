@@ -205,7 +205,7 @@ impl Render for PopoverStory {
                         .p_0()
                         .text_sm()
                         .trigger(Button::new("pop").outline().label("Popup Form"))
-                        .first_focus(&form.focus_handle(cx))
+                        .track_focus(&form.focus_handle(cx))
                         .open(self.form_open)
                         .on_open_change(cx.listener(move |this, open, _, cx| {
                             println!("Popover form open changed: {}", open);
