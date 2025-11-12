@@ -1170,7 +1170,12 @@ where
     }
 
     /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
-    fn calculate_extra_rows_needed(&self, total_height: Pixels, actual_height: Pixels, row_height: Pixels) -> usize {
+    fn calculate_extra_rows_needed(
+        &self,
+        total_height: Pixels,
+        actual_height: Pixels,
+        row_height: Pixels,
+    ) -> usize {
         let mut extra_rows_needed = 0;
 
         let remaining_height = total_height - actual_height;
@@ -1303,7 +1308,8 @@ where
             .size
             .height;
         let actual_height = row_height * rows_count as f32;
-        let extra_rows_count = self.calculate_extra_rows_needed(total_height, actual_height, row_height);
+        let extra_rows_count =
+            self.calculate_extra_rows_needed(total_height, actual_height, row_height);
         let render_rows_count = if self.options.stripe {
             rows_count + extra_rows_count
         } else {

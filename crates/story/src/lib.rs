@@ -117,7 +117,7 @@ use gpui_component::{
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::GroupBox,
     h_flex,
-    menu::{ContextMenuExt, PopupMenu},
+    menu::PopupMenu,
     notification::Notification,
     scroll::ScrollbarShow,
     v_flex,
@@ -435,8 +435,6 @@ impl RenderOnce for StorySection {
             .child(self.base.children(self.children))
     }
 }
-
-impl ContextMenuExt for StorySection {}
 
 pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
