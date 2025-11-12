@@ -6,9 +6,10 @@ use anyhow::Result;
 use gpui::{
     actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
     ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+    InteractiveElement as _, IntoElement, IsZero, KeyBinding, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
+    ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection,
+    Window,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -1291,15 +1292,27 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.stop_propagation();
-
         let line_height = self
             .last_layout
             .as_ref()
             .map(|layout| layout.line_height)
             .unwrap_or(window.line_height());
         let delta = event.delta.pixel_delta(line_height);
-        self.update_scroll_offset(Some(self.scroll_handle.offset() + delta), cx);
+
+        // In single-line mode, if this is a pure vertical scroll, don't block
+        // the event so parent containers can handle page scrolling
+        if self.mode.is_single_line() && delta.x.is_zero() && !delta.y.is_zero() {
+            return;
+        }
+
+        let old_offset = self.scroll_handle.offset();
+        self.update_scroll_offset(Some(old_offset + delta), cx);
+
+        // Only stop propagation if the offset actually changed
+        if self.scroll_handle.offset() != old_offset {
+            cx.stop_propagation();
+        }
+
         self.diagnostic_popover = None;
     }
 
