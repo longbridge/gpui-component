@@ -311,6 +311,9 @@ impl RenderOnce for Popover {
 
         let el = div()
             .id(self.id)
+            .track_focus(&focus_handle)
+            .key_context(CONTEXT)
+            .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
             .child((trigger)(open, window, cx))
             .on_mouse_down(self.mouse_button, {
                 let state = state.clone();
@@ -355,9 +358,6 @@ impl RenderOnce for Popover {
                     .child(
                         v_flex()
                             .id("content")
-                            .key_context(CONTEXT)
-                            .track_focus(&focus_handle)
-                            .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
                             .size_full()
                             .occlude()
                             .tab_group()
