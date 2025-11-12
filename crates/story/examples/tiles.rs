@@ -411,7 +411,6 @@ pub fn open_new(
 impl Render for StoryTiles {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .font_family(".SystemUIFont")
             .relative()
             .size_full()
             .flex()
