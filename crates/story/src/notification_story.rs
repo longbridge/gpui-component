@@ -147,7 +147,7 @@ impl Render for NotificationStory {
                                     .title("Uh oh! Something went wrong.")
                                     .message("There was a problem with your request.")
                                     .autohide(false)
-                                    .action(|_, cx| {
+                                    .action(|_, _, cx| {
                                         Button::new("try-again").primary().label("Retry").on_click(
                                             cx.listener(|this, _, window, cx| {
                                                 println!("You have clicked the try again action.");
@@ -171,7 +171,7 @@ impl Render for NotificationStory {
                         .label("Show Custom Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification(
-                                Notification::new().content(|window, cx| {
+                                Notification::new().content(|_, window, cx| {
                                     TextView::markdown(
                                         "notification-markdown",
                                         NOTIFICATION_MARKDOWN,
