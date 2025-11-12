@@ -29,10 +29,9 @@ impl<E: ParentElement + Styled> ContextMenuExt for E {}
 pub struct ContextMenu<E: ParentElement + Styled + Sized> {
     id: ElementId,
     element: Option<E>,
-    menu:
-        Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
+    menu: Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
     // This is not in use, just for style refinement forwarding.
-    _ingore_style: StyleRefinement,
+    _ignore_style: StyleRefinement,
     anchor: Corner,
 }
 
@@ -44,7 +43,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
             element: Some(element),
             menu: None,
             anchor: Corner::TopLeft,
-            _ingore_style: StyleRefinement::default(),
+            _ignore_style: StyleRefinement::default(),
         }
     }
 
@@ -89,7 +88,7 @@ impl<E: ParentElement + Styled> Styled for ContextMenu<E> {
         if let Some(element) = &mut self.element {
             element.style()
         } else {
-            &mut self._ingore_style
+            &mut self._ignore_style
         }
     }
 }
