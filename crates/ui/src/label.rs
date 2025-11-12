@@ -181,7 +181,7 @@ impl Label {
             ));
         }
 
-        Some(highlights)
+        Some(gpui::combine_highlights(vec![], highlights).collect())
     }
 }
 
