@@ -193,7 +193,6 @@ pub struct PopoverState {
     focus_handle: FocusHandle,
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
     trigger_bounds: Option<Bounds<Pixels>>,
-    previous_focus: Option<FocusHandle>,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
@@ -206,7 +205,6 @@ impl PopoverState {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
             trigger_bounds: None,
-            previous_focus: None,
             open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
@@ -236,7 +234,6 @@ impl PopoverState {
         self.open = !self.open;
         if self.open {
             let state = cx.entity();
-            self.previous_focus = window.focused(cx);
             let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
             {
                 tracked_focus_handle
@@ -255,9 +252,6 @@ impl PopoverState {
                     }),
                 );
         } else {
-            if let Some(previous_focus) = self.previous_focus.take() {
-                window.focus(&previous_focus);
-            }
             self._dismiss_subscription = None;
         }
 
