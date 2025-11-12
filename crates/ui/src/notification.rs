@@ -110,6 +110,8 @@ struct DefaultIdType;
 
 impl Notification {
     /// Create a new notification.
+    ///
+    /// The default id is a random UUID.
     pub fn new() -> Self {
         let id: SharedString = uuid::Uuid::new_v4().to_string().into();
         let id = (TypeId::of::<DefaultIdType>(), id.into());

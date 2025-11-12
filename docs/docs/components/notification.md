@@ -155,7 +155,7 @@ let markdown_content = r#"
 "#;
 
 Notification::new()
-    .content(|window, cx| {
+    .content(|_, window, cx| {
         TextView::markdown(
             "custom-content",
             markdown_content,
@@ -167,6 +167,14 @@ Notification::new()
 ```
 
 ### Unique Notifications
+
+When you need to manage notifications manually, such as for long-running processes or persistent alerts, you can use unique IDs to push and remove notifications as needed.
+
+In this case, you can create a special `struct` in local scope, and use `id` methods with this struct to identify the notification.
+
+Then you can push the notification when needed, and later remove it using the same ID.
+
+Like this:
 
 ```rust
 // Using type-based ID for uniqueness
@@ -185,69 +193,12 @@ Notification::warning("Task failed to complete")
     .title("Task Failed")
 ```
 
-### Manual Notification Management
+Then remove the notification with `window.remove_notification::<UpdateNotification>`, like this:
 
 ```rust
-// Show persistent notification
-struct PersistentNotification;
-
-window.push_notification(
-    Notification::new()
-        .id::<PersistentNotification>()
-        .message("Background process running...")
-        .autohide(false),
-    cx,
-);
-
 // Later, dismiss the notification
-window.remove_notification::<PersistentNotification>(cx);
+window.remove_notification::<UpdateNotification>(cx);
 ```
-
-## API Reference
-
-### Notification Methods
-
-| Method                | Description                                              |
-| --------------------- | -------------------------------------------------------- |
-| `new()`               | Create a new notification with default settings          |
-| `info(message)`       | Create an info notification with blue styling            |
-| `success(message)`    | Create a success notification with green styling         |
-| `warning(message)`    | Create a warning notification with yellow/orange styling |
-| `error(message)`      | Create an error notification with red styling            |
-| `message(text)`       | Set the notification message content                     |
-| `title(text)`         | Set the notification title (appears above message)       |
-| `with_type(type)`     | Set the notification type for styling and icon           |
-| `icon(icon)`          | Set a custom icon (overrides type default icon)          |
-| `autohide(bool)`      | Control auto-dismiss behavior (default: true)            |
-| `id<T>()`             | Set unique type-based ID for notification                |
-| `id1<T>(key)`         | Set unique type + element ID for notification            |
-| `on_click(callback)`  | Set click handler for the notification                   |
-| `action(builder)`     | Add an action button to the notification                 |
-| `content(builder)`    | Set custom content instead of title/message              |
-| `dismiss(window, cx)` | Manually dismiss the notification                        |
-
-### NotificationType Variants
-
-| Type      | Description            | Default Icon  | Theme Color   |
-| --------- | ---------------------- | ------------- | ------------- |
-| `Info`    | Informational messages | Info          | Blue          |
-| `Success` | Success confirmations  | CircleCheck   | Green         |
-| `Warning` | Warning messages       | TriangleAlert | Yellow/Orange |
-| `Error`   | Error messages         | CircleX       | Red           |
-
-### Window Extensions
-
-| Method                                       | Description                 |
-| -------------------------------------------- | --------------------------- |
-| `window.push_notification(notification, cx)` | Show a notification         |
-| `window.remove_notification::<T>(cx)`        | Remove notification by type |
-
-### Auto-hide Behavior
-
-- **Default timeout**: 5 seconds
-- **Auto-hide enabled**: Notification dismisses automatically
-- **Auto-hide disabled**: Notification persists until manually closed
-- **Hover interaction**: Auto-hide pauses while hovering over notification area
 
 ## Examples
 
@@ -257,7 +208,7 @@ window.remove_notification::<PersistentNotification>(cx);
 Notification::error("Please correct the following errors before submitting.")
     .title("Validation Failed")
     .autohide(false)
-    .action(|_, cx| {
+    .action(|_, _, cx| {
         Button::new("review")
             .outline()
             .label("Review Form")
