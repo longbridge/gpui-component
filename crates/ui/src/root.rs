@@ -3,12 +3,12 @@ use crate::{
     input::InputState,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    window_border, ActiveTheme, Placement, TITLE_BAR_HEIGHT,
+    window_border, ActiveTheme, Placement, StyledExt, TITLE_BAR_HEIGHT,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
     DefiniteLength, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, Styled, Window,
+    ParentElement as _, Render, StyleRefinement, Styled, Window,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -210,6 +210,7 @@ impl WindowExt for Window {
 ///
 /// It is used to manage the Sheet, Dialog, and Notification.
 pub struct Root {
+    style: StyleRefinement,
     /// Used to store the focus handle of the previous view.
     /// When the Dialog, Sheet closes, we will focus back to the previous view.
     previous_focus_handle: Option<FocusHandle>,
@@ -237,6 +238,7 @@ pub(crate) struct ActiveDialog {
 impl Root {
     pub fn new(view: AnyView, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            style: StyleRefinement::default(),
             previous_focus_handle: None,
             active_sheet: None,
             active_dialogs: Vec::new(),
@@ -396,11 +398,12 @@ impl Render for Root {
                 .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_tab))
                 .on_action(cx.listener(Self::on_action_tab_prev))
-                .relative()
-                .size_full()
                 .font_family(".SystemUIFont")
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
+                .refine_style(&self.style)
+                .relative()
+                .size_full()
                 .child(self.view.clone())
                 .children(self.render_sheet_layer(window, cx))
                 .children(self.render_dialog_layer(window, cx))
