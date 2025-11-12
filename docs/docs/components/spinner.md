@@ -1,93 +1,93 @@
 ---
-title: Indicator
-description: Displays an animated loading indicator showing the completion progress of a task.
+title: Spinner
+description: Displays an animated loading showing the completion progress of a task.
 ---
 
-# Indicator
+# Spinner
 
-A versatile indicator component that displays an animated loading spinner. Perfect for showing loading states, progress indicators, and other visual feedback during asynchronous operations. Features customizable icons, colors, sizes, and rotation animations.
+Spinner element displays an animated loading. Perfect for showing loading states, progress spinners, and other visual feedback during asynchronous operations. Features customizable icons, colors, sizes, and rotation animations.
 
 ## Import
 
 ```rust
-use gpui_component::indicator::Indicator;
+use gpui_component::spinner::Spinner;
 ```
 
 ## Usage
 
-### Basic Indicator
+### Basic
 
 ```rust
 // Default loader icon
-Indicator::new()
+Spinner::new()
 ```
 
-### Indicator with Custom Color
+### Spinner with Custom Color
 
 ```rust
 use gpui_component::ActiveTheme;
 
-// Blue indicator
-Indicator::new()
+// Blue spinner
+Spinner::new()
     .color(cx.theme().blue)
 
-// Green indicator for success states
-Indicator::new()
+// Green spinner for success states
+Spinner::new()
     .color(cx.theme().green)
 
 // Custom color
-Indicator::new()
+Spinner::new()
     .color(cx.theme().cyan)
 ```
 
-### Indicator Sizes
+### Spinner Sizes
 
 ```rust
-// Extra small indicator
-Indicator::new().xsmall()
+// Extra small spinner
+Spinner::new().xsmall()
 
-// Small indicator
-Indicator::new().small()
+// Small spinner
+Spinner::new().small()
 
-// Medium indicator (default)
-Indicator::new()
+// Medium spinner (default)
+Spinner::new()
 
-// Large indicator
-Indicator::new().large()
+// Large spinner
+Spinner::new().large()
 
 // Custom size
-Indicator::new().with_size(px(64.))
+Spinner::new().with_size(px(64.))
 ```
 
-### Indicator with Custom Icon
+### Spinner with Custom Icon
 
 ```rust
 use gpui_component::IconName;
 
 // Loading circle icon
-Indicator::new()
+Spinner::new()
     .icon(IconName::LoaderCircle)
 
 // Large loading circle with custom color
-Indicator::new()
+Spinner::new()
     .icon(IconName::LoaderCircle)
     .large()
     .color(cx.theme().cyan)
 
 // Different loading icons
-Indicator::new()
+Spinner::new()
     .icon(IconName::Loader)
     .color(cx.theme().primary)
 ```
 
 ## Available Icons
 
-The Indicator component supports various loading and progress icons:
+The Spinner component supports various loading and progress icons:
 
 ### Loading Icons
 
 - `Loader` (default) - Rotating line spinner
-- `LoaderCircle` - Circular loading indicator
+- `LoaderCircle` - Circular loading spinner
 
 ### Other Compatible Icons
 
@@ -95,7 +95,7 @@ The Indicator component supports various loading and progress icons:
 
 ## Animation
 
-The Indicator component features a built-in rotation animation:
+The Spinner component features a built-in rotation animation:
 
 - **Duration**: 0.8 seconds (configurable via speed parameter)
 - **Easing**: Ease-in-out transition
@@ -112,40 +112,20 @@ The Indicator component features a built-in rotation animation:
 | Large       | `.large()`          | ~24px              |
 | Custom      | `.with_size(px(n))` | n px               |
 
-## API Reference
-
-### Indicator
-
-| Method         | Description                                     |
-| -------------- | ----------------------------------------------- |
-| `new()`        | Create a new indicator with default loader icon |
-| `icon(icon)`   | Set custom icon (accepts `IconName` or `Icon`)  |
-| `color(color)` | Set indicator color (accepts `Hsla`)            |
-
-### Size Methods (from Sizable trait)
-
-| Method            | Description                     |
-| ----------------- | ------------------------------- |
-| `xsmall()`        | Extra small indicator size      |
-| `small()`         | Small indicator size            |
-| `medium()`        | Medium indicator size (default) |
-| `large()`         | Large indicator size            |
-| `with_size(size)` | Custom size in pixels           |
-
 ## Examples
 
 ### Loading States
 
 ```rust
 // Simple loading spinner
-Indicator::new()
+Spinner::new()
 
 // Loading with custom color
-Indicator::new()
+Spinner::new()
     .color(cx.theme().blue)
 
-// Large loading indicator
-Indicator::new()
+// Large loading spinner
+Spinner::new()
     .large()
     .color(cx.theme().primary)
 ```
@@ -154,36 +134,36 @@ Indicator::new()
 
 ```rust
 // Default loader (line spinner)
-Indicator::new()
+Spinner::new()
     .color(cx.theme().muted_foreground)
 
 // Circle loader
-Indicator::new()
+Spinner::new()
     .icon(IconName::LoaderCircle)
     .color(cx.theme().blue)
 
 // Large circle loader with custom color
-Indicator::new()
+Spinner::new()
     .icon(IconName::LoaderCircle)
     .large()
     .color(cx.theme().green)
 ```
 
-### Status Indicators
+### Status Spinners
 
 ```rust
 // Loading state
-Indicator::new()
+Spinner::new()
     .small()
     .color(cx.theme().muted_foreground)
 
 // Processing state
-Indicator::new()
+Spinner::new()
     .icon(IconName::LoaderCircle)
     .color(cx.theme().blue)
 
 // Success processing (still animating)
-Indicator::new()
+Spinner::new()
     .icon(IconName::LoaderCircle)
     .color(cx.theme().green)
 ```
@@ -192,26 +172,26 @@ Indicator::new()
 
 ```rust
 // Extra small for inline text
-Indicator::new()
+Spinner::new()
     .xsmall()
     .color(cx.theme().muted_foreground)
 
 // Small for buttons
-Indicator::new()
+Spinner::new()
     .small()
     .color(cx.theme().primary_foreground)
 
 // Medium for general use (default)
-Indicator::new()
+Spinner::new()
     .color(cx.theme().primary)
 
 // Large for prominent loading states
-Indicator::new()
+Spinner::new()
     .large()
     .color(cx.theme().blue)
 
 // Custom size for specific requirements
-Indicator::new()
+Spinner::new()
     .with_size(px(32.))
     .color(cx.theme().orange)
 ```
@@ -223,7 +203,7 @@ Indicator::new()
 Button::new("submit-btn")
     .loading(true)
     .icon(
-        Indicator::new()
+        Spinner::new()
             .small()
             .color(cx.theme().primary_foreground)
     )
@@ -236,7 +216,7 @@ div()
     .gap_2()
     .child("Processing...")
     .child(
-        Indicator::new()
+        Spinner::new()
             .small()
             .color(cx.theme().muted_foreground)
     )
@@ -249,7 +229,7 @@ div()
     .h_full()
     .w_full()
     .child(
-        Indicator::new()
+        Spinner::new()
             .large()
             .color(cx.theme().primary)
     )
@@ -258,19 +238,19 @@ div()
 ## Performance Considerations
 
 - The animation uses CSS transforms for optimal performance
-- Multiple indicators on the same page share the same animation timing
+- Multiple spinners on the same page share the same animation timing
 - The component is lightweight and suitable for frequent updates
-- Consider using smaller sizes for better performance with many indicators
+- Consider using smaller sizes for better performance with many spinners
 
 ## Common Patterns
 
 ### Conditional Loading
 
 ```rust
-// Show indicator only when loading
+// Show spinner only when loading
 .when(is_loading, |this| {
     this.child(
-        Indicator::new()
+        Spinner::new()
             .small()
             .color(cx.theme().muted_foreground)
     )
@@ -280,12 +260,12 @@ div()
 ### Loading with Text
 
 ```rust
-// Loading text with indicator
+// Loading text with spinner
 h_flex()
     .items_center()
     .gap_2()
     .child(
-        Indicator::new()
+        Spinner::new()
             .small()
             .color(cx.theme().primary)
     )
@@ -295,7 +275,7 @@ h_flex()
 ### Overlay Loading
 
 ```rust
-// Full overlay with indicator
+// Full overlay with spinner
 div()
     .absolute()
     .inset_0()
@@ -308,7 +288,7 @@ div()
             .items_center()
             .gap_3()
             .child(
-                Indicator::new()
+                Spinner::new()
                     .large()
                     .color(cx.theme().primary)
             )

@@ -685,7 +685,7 @@ where
     }
 
     fn enter(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
-        // Propagate the event to the parent view, for example to the Modal to support ENTER to confirm.
+        // Propagate the event to the parent view, for example to the Dialog to support ENTER to confirm.
         cx.propagate();
 
         if !self.open {

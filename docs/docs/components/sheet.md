@@ -1,26 +1,26 @@
 ---
-title: Drawer
+title: Sheet
 description: A sliding panel that appears from the edges of the screen for displaying content.
 ---
 
-# Drawer
+# Sheet
 
-A Drawer (also known as a sidebar or slide-out panel) is a navigation component that slides in from the edges of the screen. It provides additional space for content without taking up the main view, and can be used for navigation menus, forms, or any supplementary content.
+A Sheet (also known as a sidebar or slide-out panel) is a navigation component that slides in from the edges of the screen. It provides additional space for content without taking up the main view, and can be used for navigation menus, forms, or any supplementary content.
 
 ## Import
 
 ```rust
-use gpui_component::ContextModal;
+use gpui_component::WindowExt;
 use gpui_component::Placement;
 ```
 
 ## Usage
 
-### Setup application root view for display of drawers
+### Setup application root view for display of sheets
 
-You need to set up your application's root view to render the drawer layer. This is typically done in your main application struct's render method.
+You need to set up your application's root view to render the sheet layer. This is typically done in your main application struct's render method.
 
-The [Root::render_drawer_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_drawer_layer) function handles rendering any active modals on top of your app content.
+The [Root::render_sheet_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_sheet_layer) function handles rendering any active modals on top of your app content.
 
 ```rust
 use gpui_component::TitleBar;
@@ -31,7 +31,7 @@ struct MyApp {
 
 impl Render for MyApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let sheet_layer = Root::render_sheet_layer(window, cx);
 
         div()
             .size_full()
@@ -41,65 +41,65 @@ impl Render for MyApp {
                     .child(TitleBar::new())
                     .child(div().flex_1().overflow_hidden().child(self.view.clone())),
             )
-            // Render the drawer layer on top of the app content
-            .children(drawer_layer)
+            // Render the sheet layer on top of the app content
+            .children(sheet_layer)
     }
 }
 ```
 
-### Basic Drawer
+### Basic Sheet
 
 ```rust
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
         .title("Navigation")
-        .child("Drawer content goes here")
+        .child("Sheet content goes here")
 })
 ```
 
-### Drawer with Placement
+### Sheet with Placement
 
 ```rust
-// Left drawer (default)
-window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
-    drawer.title("Left Drawer")
+// Left sheet (default)
+window.open_sheet_at(Placement::Left, cx, |sheet, _, _| {
+    sheet.title("Left Sheet")
 })
 
-// Right drawer
-window.open_drawer_at(Placement::Right, cx, |drawer, _, _| {
-    drawer.title("Right Drawer")
+// Right sheet
+window.open_sheet_at(Placement::Right, cx, |sheet, _, _| {
+    sheet.title("Right Sheet")
 })
 
-// Top drawer
-window.open_drawer_at(Placement::Top, cx, |drawer, _, _| {
-    drawer.title("Top Drawer")
+// Top sheet
+window.open_sheet_at(Placement::Top, cx, |sheet, _, _| {
+    sheet.title("Top Sheet")
 })
 
-// Bottom drawer
-window.open_drawer_at(Placement::Bottom, cx, |drawer, _, _| {
-    drawer.title("Bottom Drawer")
+// Bottom sheet
+window.open_sheet_at(Placement::Bottom, cx, |sheet, _, _| {
+    sheet.title("Bottom Sheet")
 })
 ```
 
-### Drawer with Custom Size
+### Sheet with Custom Size
 
 ```rust
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
-        .title("Wide Drawer")
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
+        .title("Wide Sheet")
         .size(px(500.))  // Custom width for left/right, height for top/bottom
-        .child("This drawer is 500px wide")
+        .child("This sheet is 500px wide")
 })
 ```
 
-### Drawer with Form Content
+### Sheet with Form Content
 
 ```rust
 let input = cx.new(|cx| InputState::new(window, cx));
 let date = cx.new(|cx| DatePickerState::new(window, cx));
 
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
         .title("User Profile")
         .child(
             v_flex()
@@ -120,54 +120,54 @@ window.open_drawer(cx, |drawer, _, _| {
 ### Overlay Options
 
 ```rust
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
         .title("Settings")
         .overlay(true)              // Show overlay background (default: true)
         .overlay_closable(true)     // Click overlay to close (default: true)
-        .child("Drawer settings content")
+        .child("Sheet settings content")
 })
 
 // No overlay
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
         .title("Side Panel")
         .overlay(false)             // No overlay background
-        .child("This drawer has no overlay")
+        .child("This sheet has no overlay")
 })
 ```
 
-### Resizable Drawer
+### Resizable Sheet
 
 ```rust
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
         .title("Resizable Panel")
         .resizable(true)            // Allow user to resize (default: true)
         .size(px(300.))
-        .child("You can resize this drawer by dragging the edge")
+        .child("You can resize this sheet by dragging the edge")
 })
 ```
 
 ### Custom Margin and Positioning
 
 ```rust
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
         .title("Below Title Bar")
         .margin_top(px(32.))        // Space for window title bar
-        .child("This drawer appears below the title bar")
+        .child("This sheet appears below the title bar")
 })
 ```
 
-### Drawer with List
+### Sheet with List
 
 ```rust
 let delegate = ListDelegate::new(items);
 let list = cx.new(|cx| List::new(delegate, window, cx));
 
-window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
-    drawer
+window.open_sheet_at(Placement::Left, cx, |sheet, _, _| {
+    sheet
         .title("File Explorer")
         .size(px(400.))
         .child(
@@ -184,21 +184,21 @@ window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
 ### Close Event Handling
 
 ```rust
-window.open_drawer(cx, |drawer, _, _| {
-    drawer
-        .title("Drawer with Handler")
-        .child("This drawer has a custom close handler")
+window.open_sheet(cx, |sheet, _, _| {
+    sheet
+        .title("Sheet with Handler")
+        .child("This sheet has a custom close handler")
         .on_close(|_, window, cx| {
-            window.push_notification("Drawer was closed", cx);
+            window.push_notification("Sheet was closed", cx);
         })
 })
 ```
 
-### Navigation Drawer
+### Navigation Sheet
 
 ```rust
-window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
-    drawer
+window.open_sheet_at(Placement::Left, cx, |sheet, _, _| {
+    sheet
         .title("Navigation")
         .size(px(280.))
         .child(
@@ -215,48 +215,48 @@ window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
 ### Custom Styling
 
 ```rust
-window.open_drawer(cx, |drawer, _, cx| {
-    drawer
-        .title("Styled Drawer")
+window.open_sheet(cx, |sheet, _, cx| {
+    sheet
+        .title("Styled Sheet")
         .bg(cx.theme().accent)
         .text_color(cx.theme().accent_foreground)
         .border_color(cx.theme().primary)
-        .child("Custom styled drawer content")
+        .child("Custom styled sheet content")
 })
 ```
 
 ### Programmatic Close
 
 ```rust
-// Close drawer from inside
+// Close sheet from inside
 Button::new("close")
-    .label("Close Drawer")
+    .label("Close Sheet")
     .on_click(|_, window, cx| {
-        window.close_drawer(cx);
+        window.close_sheet(cx);
     })
 
-// Close drawer from outside
-window.close_drawer(cx);
+// Close sheet from outside
+window.close_sheet(cx);
 ```
 
 ## API Reference
 
 ### Window Extensions
 
-| Method                              | Description                                |
-| ----------------------------------- | ------------------------------------------ |
-| `open_drawer(cx, fn)`               | Open drawer with default placement (Right) |
-| `open_drawer_at(placement, cx, fn)` | Open drawer at specific placement          |
-| `close_drawer(cx)`                  | Close current drawer                       |
+| Method                             | Description                               |
+| ---------------------------------- | ----------------------------------------- |
+| `open_sheet(cx, fn)`               | Open sheet with default placement (Right) |
+| `open_sheet_at(placement, cx, fn)` | Open sheet at specific placement          |
+| `close_sheet(cx)`                  | Close current sheet                       |
 
-### Drawer Builder
+### Sheet Builder
 
 | Method                   | Description                             |
 | ------------------------ | --------------------------------------- |
-| `title(str)`             | Set drawer title                        |
-| `child(el)`              | Add content to drawer body              |
+| `title(str)`             | Set sheet title                         |
+| `child(el)`              | Add content to sheet body               |
 | `footer(el)`             | Set footer content                      |
-| `size(px)`               | Set drawer size (width or height)       |
+| `size(px)`               | Set sheet size (width or height)        |
 | `margin_top(px)`         | Set top margin (for title bars)         |
 | `resizable(bool)`        | Allow resizing (default: true)          |
 | `overlay(bool)`          | Show overlay background (default: true) |
@@ -287,8 +287,8 @@ window.close_drawer(cx);
 ### Settings Panel
 
 ```rust
-window.open_drawer_at(Placement::Right, cx, |drawer, _, _| {
-    drawer
+window.open_sheet_at(Placement::Right, cx, |sheet, _, _| {
+    sheet
         .title("Settings")
         .size(px(350.))
         .child(
@@ -313,8 +313,8 @@ window.open_drawer_at(Placement::Right, cx, |drawer, _, _| {
 ### File Browser
 
 ```rust
-window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
-    drawer
+window.open_sheet_at(Placement::Left, cx, |sheet, _, _| {
+    sheet
         .title("Files")
         .size(px(300.))
         .child(
@@ -340,8 +340,8 @@ window.open_drawer_at(Placement::Left, cx, |drawer, _, _| {
 ### Help Panel
 
 ```rust
-window.open_drawer_at(Placement::Bottom, cx, |drawer, _, _| {
-    drawer
+window.open_sheet_at(Placement::Bottom, cx, |sheet, _, _| {
+    sheet
         .title("Help & Documentation")
         .size(px(200.))
         .child(
@@ -359,9 +359,9 @@ window.open_drawer_at(Placement::Bottom, cx, |drawer, _, _| {
 ## Best Practices
 
 1. **Appropriate Placement**: Use left/right for navigation, top/bottom for temporary content
-2. **Consistent Sizing**: Maintain consistent drawer sizes across your application
+2. **Consistent Sizing**: Maintain consistent sheet sizes across your application
 3. **Clear Headers**: Always provide descriptive titles
 4. **Close Options**: Provide multiple ways to close (ESC, overlay click, close button)
-5. **Content Organization**: Use proper spacing and grouping for drawer content
-6. **Responsive Design**: Consider drawer behavior on smaller screens
-7. **Performance**: Lazy load drawer content when possible for better performance
+5. **Content Organization**: Use proper spacing and grouping for sheet content
+6. **Responsive Design**: Consider sheet behavior on smaller screens
+7. **Performance**: Lazy load sheet content when possible for better performance

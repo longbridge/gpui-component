@@ -46,7 +46,7 @@
             "children": [],
             "info": {
               "panel": {
-                "story_klass": "ModalStory"
+                "story_klass": "DialogStory"
               }
             }
           },

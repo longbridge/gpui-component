@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ContextModal,
+    WindowExt,
     clipboard::Clipboard,
     h_flex,
     input::{Input, InputState},

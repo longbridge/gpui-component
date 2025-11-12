@@ -42,6 +42,6 @@ We use Rust programming language to build the `gpui-component` library. Make sur
 To install the `gpui-component` library, you can use Cargo, the Rust package manager. Add the following line to your `Cargo.toml` file under the `[dependencies]` section:
 
 ```toml
-gpui-component = "0.2.0"
-gpui = "0.2.0"
+gpui = "0.2"
+gpui-component = "0.4.0-preview1"
 ```

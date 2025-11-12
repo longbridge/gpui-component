@@ -320,6 +320,6 @@ GroupBox::new()
 ## Related Components
 
 - **Form**: Use GroupBox within forms to organize sections
-- **Modal**: GroupBox works well within modal dialogs for organizing content
+- **Dialog**: GroupBox works well within dialogs for organizing content
 - **Accordion**: For collapsible grouped content, consider using Accordion instead
 - **Card**: For elevated content containers with more visual weight

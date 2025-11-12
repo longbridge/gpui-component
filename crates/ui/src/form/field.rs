@@ -1,126 +1,32 @@
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 use gpui::{
     div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, Axis, Div, Element,
-    ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems,
-    RenderOnce, SharedString, Styled, Window,
+    ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems, RenderOnce,
+    SharedString, Styled, Window,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, Sizable, Size, StyledExt};
-
-/// Create a new form with a vertical layout.
-pub fn v_form() -> Form {
-    Form::vertical()
-}
-
-/// Create a new form with a horizontal layout.
-pub fn h_form() -> Form {
-    Form::horizontal()
-}
-
-/// Create a new form field.
-pub fn form_field() -> FormField {
-    FormField::new()
-}
-
-/// A form element that contains multiple form fields.
-#[derive(IntoElement)]
-pub struct Form {
-    fields: Vec<FormField>,
-    props: FieldProps,
-}
+use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, Size, StyledExt};
 
 #[derive(Clone, Copy)]
-struct FieldProps {
-    size: Size,
-    label_width: Option<Pixels>,
-    label_text_size: Option<Rems>,
-    layout: Axis,
-    /// Field gap
-    gap: Option<Pixels>,
-    columns: usize,
+pub(super) struct FieldProps {
+    pub(super) size: Size,
+    pub(super) layout: Axis,
+    pub(super) columns: usize,
+
+    pub(super) label_width: Option<Pixels>,
+    pub(super) label_text_size: Option<Rems>,
 }
 
 impl Default for FieldProps {
     fn default() -> Self {
         Self {
-            label_width: Some(px(140.)),
-            label_text_size: None,
             layout: Axis::Vertical,
             size: Size::default(),
-            gap: None,
             columns: 1,
+            label_width: Some(px(140.)),
+            label_text_size: None,
         }
-    }
-}
-
-impl Form {
-    fn new() -> Self {
-        Self {
-            props: FieldProps::default(),
-            fields: Vec::new(),
-        }
-    }
-
-    /// Creates a new form with a horizontal layout.
-    pub fn horizontal() -> Self {
-        Self::new().layout(Axis::Horizontal)
-    }
-
-    /// Creates a new form with a vertical layout.
-    pub fn vertical() -> Self {
-        Self::new().layout(Axis::Vertical)
-    }
-
-    /// Set the layout for the form, default is `Axis::Vertical`.
-    pub fn layout(mut self, layout: Axis) -> Self {
-        self.props.layout = layout;
-        self
-    }
-
-    /// Set the width of the labels in the form. Default is `px(100.)`.
-    pub fn label_width(mut self, width: Pixels) -> Self {
-        self.props.label_width = Some(width);
-        self
-    }
-
-    /// Set the text size of the labels in the form. Default is `None`.
-    pub fn label_text_size(mut self, size: Rems) -> Self {
-        self.props.label_text_size = Some(size);
-        self
-    }
-
-    /// Set the gap between the form fields.
-    pub fn gap(mut self, gap: Pixels) -> Self {
-        self.props.gap = Some(gap);
-        self
-    }
-
-    /// Add a child to the form.
-    pub fn child(mut self, field: impl Into<FormField>) -> Self {
-        self.fields.push(field.into());
-        self
-    }
-
-    /// Add multiple children to the form.
-    pub fn children(mut self, fields: impl IntoIterator<Item = FormField>) -> Self {
-        self.fields.extend(fields);
-        self
-    }
-
-    /// Set the column count for the form.
-    ///
-    /// Default is 1.
-    pub fn columns(mut self, columns: usize) -> Self {
-        self.props.columns = columns;
-        self
-    }
-}
-
-impl Sizable for Form {
-    fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.props.size = size.into();
-        self
     }
 }
 
@@ -170,38 +76,35 @@ impl From<SharedString> for FieldBuilder {
     }
 }
 
+/// Form field element.
 #[derive(IntoElement)]
-pub struct FormField {
+pub struct Field {
     id: ElementId,
-    form: Weak<Form>,
+    props: FieldProps,
     label: Option<FieldBuilder>,
-    no_label_indent: bool,
-    focus_handle: Option<FocusHandle>,
+    label_indent: bool,
     description: Option<FieldBuilder>,
     /// Used to render the actual form field, e.g.: Input, Switch...
-    child: Div,
+    children: Vec<AnyElement>,
     visible: bool,
     required: bool,
     /// Alignment of the form field.
     align_items: Option<AlignItems>,
-    props: FieldProps,
     col_span: u16,
     col_start: Option<i16>,
     col_end: Option<i16>,
 }
 
-impl FormField {
+impl Field {
     pub fn new() -> Self {
         Self {
             id: 0.into(),
-            form: Weak::new(),
             label: None,
             description: None,
-            child: div(),
+            children: Vec::new(),
             visible: true,
             required: false,
-            no_label_indent: false,
-            focus_handle: None,
+            label_indent: true,
             align_items: None,
             props: FieldProps::default(),
             col_span: 1,
@@ -216,13 +119,13 @@ impl FormField {
         self
     }
 
-    /// Sets not indent with the label width (in Horizontal layout).
+    /// Sets indent with the label width (in Horizontal layout), default is `true`.
     ///
     /// Sometimes you want to align the input form left (Default is align after the label width in Horizontal layout).
     ///
     /// This is only work when the `label` is not set.
-    pub fn no_label_indent(mut self) -> Self {
-        self.no_label_indent = true;
+    pub fn label_indent(mut self, indent: bool) -> Self {
+        self.label_indent = indent;
         self
     }
 
@@ -268,23 +171,10 @@ impl FormField {
         self
     }
 
-    /// Set the focus handle for the form field.
-    ///
-    /// If not set, the form field will not be focusable.
-    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
-        self.focus_handle = Some(focus_handle.clone());
-        self
-    }
-
-    pub fn parent(mut self, form: &Rc<Form>) -> Self {
-        self.form = Rc::downgrade(form);
-        self
-    }
-
     /// Set the properties for the form field.
     ///
     /// This is internal API for sync props from From.
-    fn props(mut self, ix: usize, props: FieldProps) -> Self {
+    pub(super) fn props(mut self, ix: usize, props: FieldProps) -> Self {
         self.id = ix.into();
         self.props = props;
         self
@@ -328,13 +218,14 @@ impl FormField {
         self
     }
 }
-impl ParentElement for FormField {
+
+impl ParentElement for Field {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.child.extend(elements);
+        self.children.extend(elements);
     }
 }
 
-impl RenderOnce for FormField {
+impl RenderOnce for Field {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let layout = self.props.layout;
 
@@ -343,7 +234,7 @@ impl RenderOnce for FormField {
         } else {
             self.props.label_width
         };
-        let has_label = !self.no_label_indent;
+        let has_label = self.label_indent;
 
         #[inline]
         fn wrap_div(layout: Axis) -> Div {
@@ -359,13 +250,10 @@ impl RenderOnce for FormField {
             div().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
         }
 
-        let gap = match self.props.gap {
-            Some(v) => v,
-            None => match self.props.size {
-                Size::Large => px(8.),
-                Size::XSmall | Size::Small => px(4.),
-                _ => px(4.),
-            },
+        let gap = match self.props.size {
+            Size::Large => px(8.),
+            Size::XSmall | Size::Small => px(4.),
+            _ => px(4.),
         };
         let inner_gap = if layout.is_horizontal() {
             gap
@@ -402,8 +290,6 @@ impl RenderOnce for FormField {
                                     this.text_size(size)
                                 })
                                 .font_medium()
-                                .flex()
-                                .flex_row()
                                 .gap_1()
                                 .items_center()
                                 .when_some(self.label, |this, builder| {
@@ -429,7 +315,7 @@ impl RenderOnce for FormField {
                             .w_full()
                             .flex_1()
                             .overflow_x_hidden()
-                            .child(self.child),
+                            .children(self.children),
                     ),
             )
             .child(
@@ -450,30 +336,6 @@ impl RenderOnce for FormField {
                                 .child(builder.render(window, cx)),
                         )
                     }),
-            )
-    }
-}
-impl RenderOnce for Form {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let props = self.props;
-
-        let gap = match props.size {
-            Size::XSmall | Size::Small => px(6.),
-            Size::Large => px(12.),
-            _ => px(8.),
-        };
-
-        v_flex()
-            .w_full()
-            .gap_x(gap * 3.)
-            .gap_y(gap)
-            .grid()
-            .grid_cols(props.columns as u16)
-            .children(
-                self.fields
-                    .into_iter()
-                    .enumerate()
-                    .map(|(ix, field)| field.props(ix, props)),
             )
     }
 }

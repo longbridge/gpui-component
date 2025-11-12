@@ -1,13 +1,14 @@
 use gpui::{
-    hsla, px, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement,
-    Render, SharedString, Styled, Subscription, Window,
+    App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
+    SharedString, Styled, Subscription, Window, hsla, px,
 };
 use gpui_component::{
+    ActiveTheme, Colorize as _, StyledExt, WindowExt,
     checkbox::Checkbox,
     clipboard::Clipboard,
     h_flex,
-    slider::{Slider, SliderEvent, SliderState},
-    v_flex, ActiveTheme, Colorize as _, ContextModal, StyledExt,
+    slider::{Slider, SliderEvent, SliderScale, SliderState},
+    v_flex,
 };
 
 use crate::section;
@@ -22,6 +23,7 @@ pub struct SliderStory {
     slider_hsl: [Entity<SliderState>; 4],
     slider_hsl_value: Hsla,
     slider4: Entity<SliderState>,
+    slider_logarithmic: Entity<SliderState>,
     disabled: bool,
     _subscritions: Vec<Subscription>,
 }
@@ -108,6 +110,15 @@ impl SliderStory {
                 .step(1.)
         });
 
+        let slider_logarithmic = cx.new(|_| {
+            SliderState::new()
+                .min(0.25)
+                .max(4.0)
+                .default_value(1.0)
+                .step(0.05)
+                .scale(SliderScale::Logarithmic)
+        });
+
         let mut _subscritions = vec![
             cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
@@ -156,6 +167,7 @@ impl SliderStory {
             slider4,
             slider_hsl,
             slider_hsl_value: gpui::red(),
+            slider_logarithmic,
             disabled: false,
             _subscritions,
         }
@@ -315,6 +327,20 @@ impl Render for SliderStory {
                                     .child(format!("{:.0}", self.slider_hsl_value.a * 100.)),
                             ),
                     ),
+            )
+            .child(
+                section("Logarithmic Slider")
+                    .max_w_md()
+                    .v_flex()
+                    .child(
+                        Slider::new(&self.slider_logarithmic)
+                            .horizontal()
+                            .disabled(self.disabled),
+                    )
+                    .child(format!(
+                        "Playback Speed: {:.2}",
+                        self.slider_logarithmic.read(cx).value().start()
+                    )),
             )
     }
 }

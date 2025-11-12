@@ -9,15 +9,16 @@ homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
 publish = true
 readme = "../../README.md"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 
 [lib]
 doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui/inspector"]
+inspector = ["gpui/inspector", "wry/devtools"]
 webview = ["dep:wry"]
+
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
     "dep:tree-sitter-bash",

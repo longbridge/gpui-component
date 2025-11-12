@@ -12,8 +12,8 @@ Add dependencies to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = "0.2.0"
-gpui-component = "0.2.0"
+gpui = "0.2"
+gpui-component = "0.4.0-preview1"
 ```
 
 ## Quick Start
@@ -180,7 +180,7 @@ Explore the component documentation to learn more about each component:
 
 - [Button](./components/button) - Interactive button component
 - [Input](./components/input) - Text input with validation
-- [Modal](./components/modal) - Dialog and modal windows
+- [Dialog](./components/dialog) - Dialog and modal windows
 - [Table](./components/table) - High-performance data tables
 - [More components...](./components/index)
 

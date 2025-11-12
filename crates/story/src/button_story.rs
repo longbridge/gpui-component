@@ -1,5 +1,5 @@
 use gpui::{
-    Action, App, AppContext as _, ClickEvent, Context, Corner, Entity, Focusable,
+    Action, App, AppContext as _, Axis, ClickEvent, Context, Corner, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement as _, Render, Styled as _, Window,
     prelude::FluentBuilder, px,
 };
@@ -585,6 +585,38 @@ impl Render for ButtonStory {
                 section("Button Group").child(
                     ButtonGroup::new("button-group")
                         .outline()
+                        .disabled(disabled)
+                        .child(
+                            Button::new("button-one")
+                                .label("One")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-two")
+                                .label("Two")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        )
+                        .child(
+                            Button::new("button-three")
+                                .label("Three")
+                                .disabled(disabled)
+                                .selected(selected)
+                                .when(compact, |this| this.compact())
+                                .on_click(Self::on_click),
+                        ),
+                ),
+            )
+            .child(
+                section("Button Group (Vertical)").child(
+                    ButtonGroup::new("button-group-vertical")
+                        .outline()
+                        .layout(Axis::Vertical)
                         .disabled(disabled)
                         .child(
                             Button::new("button-one")

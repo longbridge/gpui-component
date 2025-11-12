@@ -4,6 +4,7 @@
     "@tailwindcss/vite": "^4.1.15",
     "lucide-react": "^0.546.0",
     "lucide-vue-next": "^0.546.0",
+    "markdown-it-mathjax3": "^4",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.15"
   },

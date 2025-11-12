@@ -771,7 +771,7 @@ impl InputState {
         self
     }
 
-    /// Set true to show indicator at the input right.
+    /// Set true to show spinner at the input right.
     ///
     /// Only for [`InputMode::SingleLine`] mode.
     pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
@@ -1166,7 +1166,7 @@ impl InputState {
             self.replace_text_in_range_silent(None, &new_line_text, window, cx);
             self.pause_blink_cursor(cx);
         } else {
-            // Single line input, just emit the event (e.g.: In a modal dialog to confirm).
+            // Single line input, just emit the event (e.g.: In a dialog to confirm).
             cx.propagate();
         }
 
@@ -1604,62 +1604,6 @@ impl InputState {
         if self.selected_range.is_empty() {
             self.update_preferred_column();
         }
-        cx.notify()
-    }
-
-    /// Select the word at the given offset.
-    ///
-    /// The offset is the UTF-8 offset.
-    ///
-    /// FIXME: When click on a non-word character, the word is not selected.
-    fn select_word(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
-        #[inline(always)]
-        fn is_word(c: char) -> bool {
-            c.is_alphanumeric() || matches!(c, '_')
-        }
-
-        let mut start = offset;
-        let mut end = start;
-        let prev_text = self
-            .text_for_range(self.range_to_utf16(&(0..start)), &mut None, window, cx)
-            .unwrap_or_default();
-        let next_text = self
-            .text_for_range(
-                self.range_to_utf16(&(end..self.text.len())),
-                &mut None,
-                window,
-                cx,
-            )
-            .unwrap_or_default();
-
-        let prev_chars = prev_text.chars().rev();
-        let next_chars = next_text.chars();
-
-        let pre_chars_count = prev_chars.clone().count();
-        for (ix, c) in prev_chars.enumerate() {
-            if !is_word(c) {
-                break;
-            }
-
-            if ix < pre_chars_count {
-                start = start.saturating_sub(c.len_utf8());
-            }
-        }
-
-        for (_, c) in next_chars.enumerate() {
-            if !is_word(c) {
-                break;
-            }
-
-            end += c.len_utf8();
-        }
-
-        if start == end {
-            return;
-        }
-
-        self.selected_range = (start..end).into();
-        self.selected_word_range = Some(self.selected_range);
         cx.notify()
     }
 

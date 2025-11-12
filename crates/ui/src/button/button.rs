@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
+    h_flex, spinner::Spinner, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
     FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
@@ -430,6 +430,14 @@ impl RenderOnce for Button {
             .clone();
         let is_focused = focus_handle.is_focused(window);
 
+        let rounding = match self.rounded {
+            ButtonRounded::Small => cx.theme().radius * 0.5,
+            ButtonRounded::Medium => cx.theme().radius,
+            ButtonRounded::Large => cx.theme().radius * 2.0,
+            ButtonRounded::Size(px) => px,
+            ButtonRounded::None => Pixels::ZERO,
+        };
+
         self.base
             .when(!self.disabled, |this| {
                 this.track_focus(
@@ -467,26 +475,10 @@ impl RenderOnce for Button {
                     }
                 }
             })
-            .when(
-                self.border_corners.top_left && self.border_corners.bottom_left,
-                |this| match self.rounded {
-                    ButtonRounded::Small => this.rounded_l(cx.theme().radius * 0.5),
-                    ButtonRounded::Medium => this.rounded_l(cx.theme().radius),
-                    ButtonRounded::Large => this.rounded_l(cx.theme().radius * 2.0),
-                    ButtonRounded::Size(px) => this.rounded_l(px),
-                    ButtonRounded::None => this.rounded_none(),
-                },
-            )
-            .when(
-                self.border_corners.top_right && self.border_corners.bottom_right,
-                |this| match self.rounded {
-                    ButtonRounded::Small => this.rounded_r(cx.theme().radius * 0.5),
-                    ButtonRounded::Medium => this.rounded_r(cx.theme().radius),
-                    ButtonRounded::Large => this.rounded_r(cx.theme().radius * 2.0),
-                    ButtonRounded::Size(px) => this.rounded_r(px),
-                    ButtonRounded::None => this.rounded_none(),
-                },
-            )
+            .when(self.border_corners.top_left, |this| this.rounded_tl(rounding))
+            .when(self.border_corners.top_right, |this| this.rounded_tr(rounding))
+            .when(self.border_corners.bottom_left, |this| this.rounded_bl(rounding))
+            .when(self.border_corners.bottom_right, |this| this.rounded_br(rounding))
             .when(self.border_edges.left, |this| this.border_l_1())
             .when(self.border_edges.right, |this| this.border_r_1())
             .when(self.border_edges.top, |this| this.border_t_1())
@@ -537,13 +529,6 @@ impl RenderOnce for Button {
                     (on_hover)(hovered, window, cx);
                 })
             })
-            .when(self.disabled, |this| {
-                let disabled_style = style.disabled(self.outline, cx);
-                this.bg(disabled_style.bg)
-                    .text_color(disabled_style.fg)
-                    .border_color(disabled_style.border)
-                    .shadow_none()
-            })
             .child({
                 h_flex()
                     .id("label")
@@ -562,7 +547,7 @@ impl RenderOnce for Button {
                     })
                     .when(self.loading, |this| {
                         this.child(
-                            Indicator::new()
+                            Spinner::new()
                                 .with_size(self.size)
                                 .when_some(self.loading_icon, |this, icon| this.icon(icon)),
                         )

@@ -25,7 +25,7 @@
         "link.active.foreground": "#00FF00",
         "link.foreground": "#00FF00",
         "link.hover.foreground": "#00FF00",
-        "list.active.background": "#00190066",
+        "list.active.background": "#00FF0011",
         "list.active.border": "#00FF00",
         "list.even.background": "#00190066",
         "muted.background": "#001900",

@@ -16,7 +16,7 @@
         "ring": "#D0A215",
         "selection.background": "#D0A21577",
         "input.border": "#E6E4D9",
-        "list.active.background": "#D0A21577",
+        "list.active.background": "#D0A21520",
         "list.active.border": "#D0A215",
         "list.background": "#FFFCF0",
         "list.even.background": "#F2F0E5",

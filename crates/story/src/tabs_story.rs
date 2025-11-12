@@ -144,14 +144,14 @@ impl Render for TabsStory {
                                         .icon(IconName::ArrowRight),
                                 ),
                         )
-                        .child(Tab::new("Account"))
-                        .child(Tab::new("Profile").disabled(true))
-                        .child(Tab::new("Documents"))
-                        .child(Tab::new("Mail"))
-                        .child(Tab::new("Appearance"))
-                        .child(Tab::new("Settings"))
-                        .child(Tab::new("About"))
-                        .child(Tab::new("License"))
+                        .child(Tab::new().label("Account"))
+                        .child(Tab::new().label("Profile").disabled(true))
+                        .child(Tab::new().label("Documents"))
+                        .child(Tab::new().label("Mail"))
+                        .child(Tab::new().label("Appearance"))
+                        .child(Tab::new().label("Settings"))
+                        .child(Tab::new().label("About"))
+                        .child(Tab::new().label("License"))
                         .suffix(
                             h_flex()
                                 .mx_1()
@@ -197,14 +197,14 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("Account"))
-                        .child(Tab::new("Profile").disabled(true))
-                        .child(Tab::new("Documents & Files"))
-                        .child(Tab::new("Mail"))
-                        .child(Tab::new("Appearance"))
-                        .child(Tab::new("Settings"))
-                        .child(Tab::new("About"))
-                        .child(Tab::new("License")),
+                        .child(Tab::new().label("Account"))
+                        .child(Tab::new().label("Profile").disabled(true))
+                        .child(Tab::new().label("Documents & Files"))
+                        .child(Tab::new().label("Mail"))
+                        .child(Tab::new().label("Appearance"))
+                        .child(Tab::new().label("Settings"))
+                        .child(Tab::new().label("About"))
+                        .child(Tab::new().label("License")),
                 ),
             )
             .child(
@@ -218,14 +218,14 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
-                        .child(Tab::new("Account"))
-                        .child(Tab::new("Profile").disabled(true))
-                        .child(Tab::new("Documents & Files"))
-                        .child(Tab::new("Mail"))
-                        .child(Tab::new("Appearance"))
-                        .child(Tab::new("Settings"))
-                        .child(Tab::new("About"))
-                        .child(Tab::new("License")),
+                        .child(Tab::new().label("Account"))
+                        .child(Tab::new().label("Profile").disabled(true))
+                        .child(Tab::new().label("Documents & Files"))
+                        .child(Tab::new().label("Mail"))
+                        .child(Tab::new().label("Appearance"))
+                        .child(Tab::new().label("Settings"))
+                        .child(Tab::new().label("About"))
+                        .child(Tab::new().label("License")),
                 ),
             )
             .child(

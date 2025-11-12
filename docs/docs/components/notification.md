@@ -11,7 +11,7 @@ A toast notification system for displaying temporary messages to users. Notifica
 
 ```rust
 use gpui_component::notification::{Notification, NotificationType};
-use gpui_component::ContextModal;
+use gpui_component::WindowExt;
 ```
 
 ## Usage

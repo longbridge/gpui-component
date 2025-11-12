@@ -20,7 +20,7 @@
         "link.foreground": "#5A6599",
         "link.hover.foreground": "#5A6599",
         "list.hover.background": "#d5d5d5",
-        "list.active.background": "#60606022",
+        "list.active.background": "#5A659922",
         "list.active.border": "#5A6599",
         "list.even.background": "#F0F0F0",
         "muted.background": "#e5e5e5",

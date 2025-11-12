@@ -240,53 +240,174 @@ impl Tiles {
         }
     }
 
-    fn update_position(
-        &mut self,
-        mouse_position: Point<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
+    /// Calculate magnetic snap position for the dragging panel
+    fn calculate_magnetic_snap(
+        &self,
+        dragging_bounds: Bounds<Pixels>,
+        item_ix: usize,
+        snap_threshold: Pixels,
+    ) -> (Option<Pixels>, Option<Pixels>) {
+        // Only check nearby panels
+        let search_bounds = Bounds {
+            origin: Point {
+                x: dragging_bounds.left() - snap_threshold,
+                y: dragging_bounds.top() - snap_threshold,
+            },
+            size: Size {
+                width: dragging_bounds.size.width + snap_threshold * 2.0,
+                height: dragging_bounds.size.height + snap_threshold * 2.0,
+            },
+        };
+
+        let mut snap_x: Option<Pixels> = None;
+        let mut snap_y: Option<Pixels> = None;
+        let mut min_x_dist = snap_threshold;
+        let mut min_y_dist = snap_threshold;
+
+        // Pre-calculate dragging bounds edges to avoid repeated method calls
+        let drag_left = dragging_bounds.left();
+        let drag_right = dragging_bounds.right();
+        let drag_top = dragging_bounds.top();
+        let drag_bottom = dragging_bounds.bottom();
+        let drag_width = dragging_bounds.size.width;
+        let drag_height = dragging_bounds.size.height;
+
+        for (ix, other) in self.panels.iter().enumerate() {
+            if ix == item_ix {
+                continue;
+            }
+
+            // Pre-calculate other bounds edges
+            let other_left = other.bounds.left();
+            let other_right = other.bounds.right();
+            let other_top = other.bounds.top();
+            let other_bottom = other.bounds.bottom();
+
+            // Skip panels that are far away
+            if other_right < search_bounds.left()
+                || other_left > search_bounds.right()
+                || other_bottom < search_bounds.top()
+                || other_top > search_bounds.bottom()
+            {
+                continue;
+            }
+
+            // Horizontal snapping (X axis) - find closest snap point
+            if snap_x.is_none() {
+                let candidates = [
+                    ((drag_left - other_left).abs(), other_left),
+                    ((drag_left - other_right).abs(), other_right),
+                    ((drag_right - other_left).abs(), other_left - drag_width),
+                    ((drag_right - other_right).abs(), other_right - drag_width),
+                ];
+
+                for (dist, snap_pos) in candidates {
+                    if dist < min_x_dist {
+                        min_x_dist = dist;
+                        snap_x = Some(snap_pos);
+                    }
+                }
+            }
+
+            // Vertical snapping (Y axis) - find closest snap point
+            if snap_y.is_none() {
+                let candidates = [
+                    ((drag_top - other_top).abs(), other_top),
+                    ((drag_top - other_bottom).abs(), other_bottom),
+                    ((drag_bottom - other_top).abs(), other_top - drag_height),
+                    (
+                        (drag_bottom - other_bottom).abs(),
+                        other_bottom - drag_height,
+                    ),
+                ];
+
+                for (dist, snap_pos) in candidates {
+                    if dist < min_y_dist {
+                        min_y_dist = dist;
+                        snap_y = Some(snap_pos);
+                    }
+                }
+            }
+
+            // Early exit if both axes are snapped
+            if snap_x.is_some() && snap_y.is_some() {
+                break;
+            }
+        }
+
+        (snap_x, snap_y)
+    }
+
+    /// Apply boundary constraints to the panel origin
+    fn apply_boundary_constraints(&self, mut origin: Point<Pixels>) -> Point<Pixels> {
+        // Top boundary
+        if origin.y < px(0.) {
+            origin.y = px(0.);
+        }
+
+        // Left boundary (allow partial off-screen but keep 64px visible)
+        let min_left = -self.dragging_initial_bounds.size.width + px(64.);
+        if origin.x < min_left {
+            origin.x = min_left;
+        }
+
+        origin
+    }
+
+    fn update_position(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(dragging_id) = self.dragging_id else {
             return;
         };
 
-        let Some(item) = self.panels.iter_mut().find(|p| p.id == dragging_id) else {
+        let Some(item_ix) = self.panels.iter().position(|p| p.id == dragging_id) else {
             return;
         };
 
-        let previous_bounds = item.bounds;
+        let previous_bounds = self.panels[item_ix].bounds;
         let adjusted_position = mouse_position - self.bounds.origin;
         let delta = adjusted_position - self.dragging_initial_mouse;
         let mut new_origin = self.dragging_initial_bounds.origin + delta;
 
-        // Avoid out of bounds
-        if new_origin.y < px(0.) {
-            new_origin.y = px(0.);
+        // Apply magnetic snap before boundary checks
+        let snap_threshold = cx.theme().tile_grid_size;
+        let dragging_bounds = Bounds {
+            origin: new_origin,
+            size: self.dragging_initial_bounds.size,
+        };
+
+        let (snap_x, snap_y) =
+            self.calculate_magnetic_snap(dragging_bounds, item_ix, snap_threshold);
+
+        // Apply snapping
+        if let Some(x) = snap_x {
+            new_origin.x = x;
         }
-        let min_left = -self.dragging_initial_bounds.size.width + px(64.);
-        if new_origin.x < min_left {
-            new_origin.x = min_left;
+        if let Some(y) = snap_y {
+            new_origin.y = y;
         }
 
-        let final_origin = round_point_to_nearest_ten(new_origin, cx);
-        // Only push to history if bounds have changed
-        if final_origin != previous_bounds.origin {
-            item.bounds.origin = final_origin;
+        // Apply boundary constraints after snapping
+        new_origin = self.apply_boundary_constraints(new_origin);
 
-            // Only push if not during history operations
+        // Update position without grid rounding (smooth dragging)
+        if new_origin != previous_bounds.origin {
+            self.panels[item_ix].bounds.origin = new_origin;
+            let item = &self.panels[item_ix];
+            let bounds = item.bounds;
+            let entity_id = item.panel.view().entity_id();
+
             if !self.history.ignore {
                 self.history.push(TileChange {
-                    tile_id: item.panel.view().entity_id(),
+                    tile_id: entity_id,
                     old_bounds: Some(previous_bounds),
-                    new_bounds: Some(item.bounds),
+                    new_bounds: Some(bounds),
                     old_order: None,
                     new_order: None,
                     version: 0,
                 });
             }
+            cx.notify();
         }
-
-        cx.notify();
     }
 
     fn resize(
@@ -868,16 +989,16 @@ impl Tiles {
                 cx.new(|_| drag.clone())
             })
             .on_drag_move(
-                cx.listener(move |this, e: &DragMoveEvent<DragMoving>, window, cx| {
-                    match e.drag(cx) {
+                cx.listener(
+                    move |this, e: &DragMoveEvent<DragMoving>, _, cx| match e.drag(cx) {
                         DragMoving(id) => {
                             if *id != entity_id {
                                 return;
                             }
-                            this.update_position(e.event.position, window, cx);
+                            this.update_position(e.event.position, cx);
                         }
-                    }
-                }),
+                    },
+                ),
             )
             .into_any_element()
     }
@@ -936,16 +1057,22 @@ impl Tiles {
 
             // Handle dragging
             if let Some(dragging_id) = self.dragging_id {
-                if let Some(item) = self.panel(&dragging_id) {
+                if let Some(idx) = self.panels.iter().position(|p| p.id == dragging_id) {
                     let initial_bounds = self.dragging_initial_bounds;
-                    let current_bounds = item.bounds;
-                    if initial_bounds.origin != current_bounds.origin
+                    let current_bounds = self.panels[idx].bounds;
+
+                    // Apply grid alignment to final position
+                    let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, cx);
+
+                    if initial_bounds.origin != aligned_origin
                         || initial_bounds.size != current_bounds.size
                     {
+                        self.panels[idx].bounds.origin = aligned_origin;
+
                         changes_to_push.push(TileChange {
-                            tile_id: item.panel.view().entity_id(),
+                            tile_id: self.panels[idx].panel.view().entity_id(),
                             old_bounds: Some(initial_bounds),
-                            new_bounds: Some(current_bounds),
+                            new_bounds: Some(self.panels[idx].bounds),
                             old_order: None,
                             new_order: None,
                             version: 0,

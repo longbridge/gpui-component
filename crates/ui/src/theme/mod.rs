@@ -49,7 +49,7 @@ pub struct Theme {
     pub font_size: Pixels,
     /// Radius for the general elements.
     pub radius: Pixels,
-    /// Radius for the large elements, e.g.: Modal, Notification border radius.
+    /// Radius for the large elements, e.g.: Dialog, Notification border radius.
     pub radius_lg: Pixels,
     pub shadow: bool,
     pub transparent: Hsla,

@@ -163,6 +163,7 @@ struct CompanyListDelegate {
     query: SharedString,
     loading: bool,
     eof: bool,
+    lazy_load: bool,
 }
 
 impl CompanyListDelegate {
@@ -311,8 +312,10 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
-        // TODO: The load more here will broken the scroll position,
-        // because the extends will creates some new industries to make some new sections.
+        if !self.lazy_load {
+            return;
+        }
+
         cx.spawn_in(window, async move |view, window| {
             // Simulate network request, delay 1s to load data.
             Timer::after(Duration::from_secs(1)).await;
@@ -366,6 +369,7 @@ impl ListStory {
             query: "".into(),
             loading: false,
             eof: false,
+            lazy_load: false,
         };
         delegate.extend_more(100);
 
@@ -464,6 +468,8 @@ impl Focusable for ListStory {
 
 impl Render for ListStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let lazy_load = self.company_list.read(cx).delegate().lazy_load;
+
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
@@ -563,6 +569,17 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, check: &bool, _, cx| {
                                 this.company_list.update(cx, |this, cx| {
                                     this.delegate_mut().loading = *check;
+                                    cx.notify();
+                                })
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("lazy_load")
+                            .label("Lazy Load")
+                            .checked(lazy_load)
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                this.company_list.update(cx, |this, cx| {
+                                    this.delegate_mut().lazy_load = *check;
                                     cx.notify();
                                 })
                             })),
