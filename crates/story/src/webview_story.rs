@@ -44,6 +44,9 @@ impl WebViewStory {
 
         let webview = cx.new(|cx| {
             let builder = wry::WebViewBuilder::new();
+            #[cfg(any(debug_assertions, feature = "inspector"))]
+            let builder = builder.with_devtools(true);
+
             #[cfg(not(any(
                 target_os = "windows",
                 target_os = "macos",
