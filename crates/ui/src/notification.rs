@@ -230,6 +230,9 @@ impl Notification {
 
     /// Dismiss the notification.
     pub fn dismiss(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if self.closing {
+            return;
+        }
         self.closing = true;
         cx.notify();
 
@@ -266,6 +269,9 @@ impl Styled for Notification {
 }
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content = self.content_builder.clone().map(|builder| builder(self, window, cx));
+        let action = self.action_builder.clone().map(|builder| builder(self, window, cx).small().mr_3p5());
+
         let closing = self.closing;
         let icon = match self.type_ {
             None => self.icon.clone(),
@@ -302,12 +308,12 @@ impl Render for Notification {
                     .when_some(self.message.clone(), |this, message| {
                         this.child(div().text_sm().child(message))
                     })
-                    .when_some(self.content_builder.clone(), |this, child_builder| {
-                        this.child(child_builder(self, window, cx))
+                    .when_some(content, |this, content| {
+                        this.child(content)
                     }),
             )
-            .when_some(self.action_builder.clone(), |this, action_builder| {
-                this.child(action_builder(self, window, cx).small().mr_3p5())
+            .when_some(action, |this, action| {
+                this.child(action)
             })
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(cx.listener(move |view, event, window, cx| {
