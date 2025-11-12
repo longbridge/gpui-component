@@ -387,6 +387,12 @@ impl Root {
     }
 }
 
+impl Styled for Root {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let base_font_size = cx.theme().font_size;
