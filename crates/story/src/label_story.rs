@@ -113,6 +113,8 @@ impl Render for LabelStory {
                     v_flex()
                         .gap_y_4()
                         .child(Label::new("This is a label").highlights(ht.clone()))
+                        // This case for test match CJK with ASCII, it was has a crash bug before.
+                        // Try to input "AA" to see the highlights effect.
                         .child(Label::new("AAA中文BB").highlights(ht.clone())),
                 ),
             )
