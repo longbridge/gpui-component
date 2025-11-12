@@ -227,15 +227,14 @@ impl ResizableState {
 
     /// when the container size changes, the panels should take up the same percentage as they did before
     fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
-        let container_size = self.bounds.size.along(self.axis);
+        let container_size = self.bounds.size.along(self.axis).max(px(1.)); // at least 1px so we don't divide by zero
         let total_size = self.total_size();
 
         for i in 0..self.panels.len() {
             let size = self.sizes[i];
             let fractional_size = size / total_size;
-            let new_size = (container_size * fractional_size)
-                .min(self.panel_size_range(i).end)
-                .max(self.panel_size_range(i).start);
+            let new_size = container_size * fractional_size;
+
             self.sizes[i] = new_size;
             self.panels[i].size = Some(new_size);
         }
