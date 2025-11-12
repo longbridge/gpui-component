@@ -92,7 +92,7 @@ impl Render for NotificationStory {
                     )
                     .child(
                         Button::new("show-notify-error")
-                            .outline()
+                            .danger()
                             .label("Error")
                             .on_click(cx.listener(|_, _, window, cx| {
                                 window.push_notification(
