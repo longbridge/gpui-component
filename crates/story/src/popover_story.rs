@@ -9,6 +9,7 @@ use gpui_component::{
     divider::Divider,
     h_flex,
     input::{Input, InputState},
+    list::{List, ListDelegate, ListItem, ListState},
     popover::Popover,
     v_flex,
 };
@@ -63,6 +64,48 @@ impl Focusable for Form {
     }
 }
 
+struct DropdownListDelegate {
+    parent: Entity<PopoverStory>,
+}
+impl ListDelegate for DropdownListDelegate {
+    type Item = ListItem;
+
+    fn items_count(&self, _: usize, _: &App) -> usize {
+        10
+    }
+
+    fn render_item(
+        &self,
+        ix: gpui_component::IndexPath,
+        _: &mut Window,
+        _: &mut App,
+    ) -> Option<Self::Item> {
+        Some(ListItem::new(ix).child(format!("Item {}", ix.row)))
+    }
+
+    fn set_selected_index(
+        &mut self,
+        _: Option<gpui_component::IndexPath>,
+        _: &mut Window,
+        _: &mut Context<gpui_component::list::ListState<Self>>,
+    ) {
+    }
+
+    fn confirm(&mut self, _: bool, _: &mut Window, cx: &mut Context<ListState<Self>>) {
+        self.parent.update(cx, |this, cx| {
+            this.list_popover_open = false;
+            cx.notify();
+        })
+    }
+
+    fn cancel(&mut self, _: &mut Window, cx: &mut Context<ListState<Self>>) {
+        self.parent.update(cx, |this, cx| {
+            this.list_popover_open = false;
+            cx.notify();
+        })
+    }
+}
+
 impl EventEmitter<DismissEvent> for Form {}
 
 impl Render for Form {
@@ -81,7 +124,7 @@ impl Render for Form {
                     .primary()
                     .on_click(cx.listener(move |_, _, _, cx| {
                         parent.update(cx, |this, cx| {
-                            this.form_open = false;
+                            this.form_popover_open = false;
                             cx.notify();
                         })
                     })),
@@ -92,7 +135,9 @@ impl Render for Form {
 pub struct PopoverStory {
     focus_handle: FocusHandle,
     form: Entity<Form>,
-    form_open: bool,
+    list: Entity<ListState<DropdownListDelegate>>,
+    form_popover_open: bool,
+    list_popover_open: bool,
     checked: bool,
     message: String,
 }
@@ -118,13 +163,18 @@ impl PopoverStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let form = Form::new(cx.entity(), window, cx);
+        let parent = cx.entity();
+        let list = cx
+            .new(|cx| ListState::new(DropdownListDelegate { parent }, window, cx).searchable(true));
 
         cx.focus_self(window);
 
         Self {
             form,
+            list,
             checked: true,
-            form_open: false,
+            form_popover_open: false,
+            list_popover_open: false,
             focus_handle: cx.focus_handle(),
             message: "".to_string(),
         }
@@ -201,18 +251,35 @@ impl Render for PopoverStory {
             )
             .child(
                 section("Popover with Form").child(
-                    Popover::new("info-bottom-left")
+                    Popover::new("popover-form")
                         .p_0()
                         .text_sm()
                         .trigger(Button::new("pop").outline().label("Popup Form"))
                         .track_focus(&form.focus_handle(cx))
-                        .open(self.form_open)
+                        .open(self.form_popover_open)
                         .on_open_change(cx.listener(move |this, open, _, cx| {
                             println!("Popover form open changed: {}", open);
-                            this.form_open = *open;
+                            this.form_popover_open = *open;
                             cx.notify();
                         }))
                         .child(form.clone()),
+                ),
+            )
+            .child(
+                section("Popover with List").child(
+                    Popover::new("popover-list")
+                        .p_0()
+                        .text_sm()
+                        .open(self.list_popover_open)
+                        .on_open_change(cx.listener(move |this, open, _, cx| {
+                            this.list_popover_open = *open;
+                            cx.notify();
+                        }))
+                        .trigger(Button::new("pop").outline().label("Popup List"))
+                        .track_focus(&self.list.focus_handle(cx))
+                        .child(List::new(&self.list))
+                        .w_64()
+                        .h(px(200.)),
                 ),
             )
             .child(
