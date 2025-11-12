@@ -16,9 +16,8 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui/inspector"]
+inspector = ["gpui/inspector", "wry/devtools"]
 webview = ["dep:wry"]
-devtools = ["wry/devtools"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
