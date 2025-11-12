@@ -3,7 +3,7 @@ edition = "2021"
 name = "window_title"
 description = "An example of using gpui-component to create a window with a custom title bar."
 publish = false
-version = "0.4.0-preview1"
+version = "0.4.0-preview2"
 
 [dependencies]
 anyhow.workspace = true
