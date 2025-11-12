@@ -300,7 +300,7 @@ impl RenderOnce for Popover {
         });
 
         let open = state.read(cx).open;
-        let focus_handle = state.focus_handle(cx);
+        let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
 
         let Some(trigger) = self.trigger else {
@@ -311,9 +311,6 @@ impl RenderOnce for Popover {
 
         let el = div()
             .id(self.id)
-            .track_focus(&focus_handle)
-            .key_context(CONTEXT)
-            .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
             .child((trigger)(open, window, cx))
             .on_mouse_down(self.mouse_button, {
                 let state = state.clone();
@@ -358,6 +355,9 @@ impl RenderOnce for Popover {
                     .child(
                         v_flex()
                             .id("content")
+                            .track_focus(&focus_handle)
+                            .key_context(CONTEXT)
+                            .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
                             .size_full()
                             .occlude()
                             .tab_group()
