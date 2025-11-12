@@ -4,9 +4,10 @@ use std::{
 };
 
 use gpui::{
-    canvas, div, prelude::FluentBuilder, AnyElement, App, AppContext, Axis, Bounds, Context,
-    Element, ElementId, Empty, Entity, EventEmitter, InteractiveElement as _, IntoElement, IsZero,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window,
+    canvas, div, prelude::FluentBuilder, Along, AnyElement, App, AppContext, Axis, Bounds, Context,
+    Element, ElementId, Empty, Entity, EventEmitter, InteractiveElement as _, IntoElement,
+    IsZero as _, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, RenderOnce, Style,
+    Styled, Window,
 };
 
 use crate::{h_flex, resizable::PANEL_MIN_SIZE, v_flex, AxisExt};
@@ -157,7 +158,18 @@ impl RenderOnce for ResizablePanelGroup {
                 canvas(
                     {
                         let state = state.clone();
-                        move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+                        move |bounds, _, cx| {
+                            state.update(cx, |state, cx| {
+                                let size_changed = state.bounds.size.along(self.axis)
+                                    != bounds.size.along(self.axis);
+
+                                state.bounds = bounds;
+
+                                if size_changed {
+                                    state.adjust_to_container_size(cx);
+                                }
+                            })
+                        }
                     },
                     |_, _, _, _| {},
                 )
@@ -269,7 +281,7 @@ impl RenderOnce for ResizablePanel {
                 .flex_basis(initial_size)
             })
             .map(|this| match panel_state.size {
-                Some(size) => this.flex_basis(size),
+                Some(size) => this.flex_basis(size.min(size_range.end).max(size_range.start)),
                 None => this,
             })
             .child({
