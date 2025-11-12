@@ -113,7 +113,7 @@ impl Render for LabelStory {
                     v_flex()
                         .gap_y_4()
                         .child(Label::new("This is a label").highlights(ht.clone()))
-                        .child(Label::new("这是一个标签").highlights(ht.clone())),
+                        .child(Label::new("AAA中文BB").highlights(ht.clone())),
                 ),
             )
             .child(
