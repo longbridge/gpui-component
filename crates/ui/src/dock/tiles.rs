@@ -272,6 +272,28 @@ impl Tiles {
         let drag_width = dragging_bounds.size.width;
         let drag_height = dragging_bounds.size.height;
 
+        // Check for edge snapping first (top and left boundaries)
+        let edge_snap_pos = px(0.);
+
+        // Snap to top edge
+        let top_dist = drag_top.abs();
+        if top_dist < snap_threshold {
+            snap_y = Some(edge_snap_pos);
+            min_y_dist = top_dist;
+        }
+
+        // Snap to left edge
+        let left_dist = drag_left.abs();
+        if left_dist < snap_threshold {
+            snap_x = Some(edge_snap_pos);
+            min_x_dist = left_dist;
+        }
+
+        // If both edges are snapped, return early
+        if snap_x.is_some() && snap_y.is_some() {
+            return (snap_x, snap_y);
+        }
+
         for (ix, other) in self.panels.iter().enumerate() {
             if ix == item_ix {
                 continue;
@@ -1165,6 +1187,7 @@ impl Render for Tiles {
                     .track_scroll(&self.scroll_handle)
                     .size_full()
                     .top(-px(1.))
+                    .left(-px(1.))
                     .overflow_scroll()
                     .children(
                         panels
