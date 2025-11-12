@@ -6,7 +6,8 @@ use std::{
 use gpui::{
     canvas, div, prelude::FluentBuilder, Along, AnyElement, App, AppContext, Axis, Bounds, Context,
     Element, ElementId, Empty, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window,
+    IsZero as _, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, RenderOnce, Style,
+    Styled, Window,
 };
 
 use crate::{h_flex, resizable::PANEL_MIN_SIZE, v_flex, AxisExt};
@@ -271,9 +272,13 @@ impl RenderOnce for ResizablePanel {
             // 3. initial_size is Some and size is Some, use `size`.
             .when(self.initial_size.is_none(), |this| this.flex_shrink())
             .when_some(self.initial_size, |this, initial_size| {
-                // We always set the panel to flex_none, to prevent unwanted movement
-                this.flex_none()
-                    .flex_basis(initial_size.min(size_range.end).max(size_range.start))
+                // The `self.size` is None, that mean the initial size for the panel,
+                // so we need set `flex_shrink_0` To let it keep the initial size.
+                this.when(
+                    panel_state.size.is_none() && !initial_size.is_zero(),
+                    |this| this.flex_none(),
+                )
+                .flex_basis(initial_size)
             })
             .map(|this| match panel_state.size {
                 Some(size) => this.flex_basis(size.min(size_range.end).max(size_range.start)),
