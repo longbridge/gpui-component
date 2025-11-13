@@ -6,19 +6,18 @@ use crate::{
     window_border, ActiveTheme, Placement, StyledExt, TITLE_BAR_HEIGHT,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
-    DefiniteLength, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, StyleRefinement, Styled, Window,
+    actions, canvas, div, prelude::FluentBuilder as _, Action, AnyView, App, AppContext, Context,
+    DefiniteLength, Div, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, Stateful, StyleRefinement, Styled, Window,
 };
 use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
-const CONTEXT: &str = "Root";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
+        KeyBinding::new("tab", Tab, None),
+        KeyBinding::new("shift-tab", TabPrev, None),
     ]);
 }
 
@@ -220,6 +219,7 @@ pub struct Root {
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
     view: AnyView,
+    actions: Vec<Box<dyn Fn(Stateful<Div>, &mut Window, &mut Context<Self>) -> Stateful<Div>>>,
 }
 
 #[derive(Clone)]
@@ -236,7 +236,8 @@ pub(crate) struct ActiveDialog {
 }
 
 impl Root {
-    pub fn new(view: AnyView, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// Create a new Root view with the given child view.
+    pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             style: StyleRefinement::default(),
             previous_focus_handle: None,
@@ -245,10 +246,12 @@ impl Root {
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
-            view,
+            view: view.into(),
+            actions: Vec::new(),
         }
     }
 
+    /// Get a mutable reference to the Root view from the window, and update it.
     pub fn update<F, R>(window: &mut Window, cx: &mut App, f: F) -> R
     where
         F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) -> R,
@@ -261,12 +264,151 @@ impl Root {
         root.update(cx, |root, cx| f(root, window, cx))
     }
 
+    /// Get a reference to the Root view from the window.
     pub fn read<'a>(window: &'a Window, cx: &'a App) -> &'a Self {
         &window
             .root::<Root>()
             .expect("The window root view should be of type `ui::Root`.")
             .unwrap()
             .read(cx)
+    }
+
+    /// Add a handle on Root is ready.
+    ///
+    /// This method should be called before you create the window and insert `Root` into it.
+    pub fn on_ready<F>(cx: &mut App, f: F)
+    where
+        F: Fn(&mut Self, Option<&mut Window>, &mut Context<Self>) + 'static,
+    {
+        cx.observe_new(move |root: &mut Root, window, cx| {
+            f(root, window, cx);
+        })
+        .detach();
+    }
+
+    /// Return the first child view in the Root.
+    ///
+    /// We can use [`downcast`](https://docs.rs/gpui/latest/gpui/struct.AnyView.html#method.downcast) method to get `Entity<T>`.
+    ///
+    /// ```ignore
+    /// let my_view = Root::read(window, cx).view().downcast::<MyView>().unwrap();
+    /// ```
+    pub fn view(&self) -> &AnyView {
+        &self.view
+    }
+
+    /// Register an window level [`Action`] handler.
+    ///
+    /// This method allows you to register a [`Action`] handler for the window root,
+    /// then then actions send from entire of children views in the window will be captured and handled here.
+    ///
+    /// The `T` type parameter is the your **first child view** type added in the `Root`,
+    /// we will downcast the root view to this type before call your handler.
+    ///
+    /// # Example
+    ///
+    /// You have a simple `HelloWorld` as the first child view in the `Root`, and you want to handle an action `MyAction` in it.
+    ///
+    /// ```ignore
+    /// actions!(hello, [ToggleSearch]);
+    ///
+    /// struct HelloWorld;
+    /// impl Render for HelloWorld {
+    ///     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    ///         div().child("Hello, World!")
+    ///     }
+    /// }
+    ///
+    /// app.run(move |cx| {
+    ///     gpui_component::init(cx);
+    ///
+    ///     // You can register your action handler here.
+    ///     cx.observe_new(|root: &mut Root, _, cx| {
+    ///         root.register_action(|this: &mut HelloWorld, _:& ToggleSearch, window, cx| {
+    ///             // Handle your action here.
+    ///             println!("ToggleSearch action received in HelloWorld view.");
+    ///         });
+    ///     }).detach();
+    ///
+    ///     cx.spawn(async move |cx| {
+    ///         cx.open_window(WindowOptions::default(), |window, cx| {
+    ///             let view = cx.new(|_| HelloWorld);
+    ///             // This first level on the window, should be a Root.
+    ///             cx.new(|cx| Root::new(view, window, cx))
+    ///         })?;
+    ///
+    ///         Ok::<_, anyhow::Error>(())
+    ///     })
+    ///     .detach();
+    /// });
+    /// ```
+    ///
+    /// # Tips
+    ///
+    /// With [`cx.observe_new`](https://docs.rs/gpui/latest/gpui/struct.App.html#method.observe_new),
+    /// we can register action handler when the `Root` is created.
+    ///
+    /// This is useful to let us to place the action listener beside the view and action implement definition.
+    ///
+    /// ## For example
+    ///
+    /// We have a `list.rs` and `main.rs`.
+    ///
+    /// If we want to handle an action `SelectNextItem` in the `ListView`, we can register the action handler in the `list.rs` file:
+    ///
+    /// ```ignore
+    /// pub(super) fn init(cx: &mut App) {
+    ///     cx.observe_new(|root: &mut Root, _, cx| {
+    ///         // Register action handler for SelectNextItem action.
+    ///         root.register_action(|this: &mut HelloWorld, _: &SelectNextItem, window, cx| {
+    ///             // Handle your action here.
+    ///         })
+    ///     }).detach();
+    /// }
+    /// ```
+    ///
+    /// Then in the `main.rs`, we just create the window and insert the `Root` view as usual.
+    ///
+    /// ```ignore
+    /// app.run(move |cx| {
+    ///     gpui_component::init(cx);
+    ///     list::init(cx);
+    ///
+    ///     // Create the window with Root view.
+    /// });
+    ///
+    /// # Panics
+    ///
+    /// Please ensure the `T` type parameter is the same as the first child view type in the [`Root`],
+    /// otherwise it will panic when downcasting the view.cast Root view to target type: `T`.
+    #[track_caller]
+    pub fn register_action<T, A, F>(&mut self, f: F) -> &mut Self
+    where
+        A: Action,
+        T: 'static,
+        F: Fn(&mut T, &A, &mut Window, &mut Context<T>) + 'static,
+    {
+        let f = Rc::new(f);
+        self.actions.push(Box::new(move |div, _, _| {
+            let f = f.clone();
+            div.on_action(move |action, window, cx| {
+                cx.propagate();
+
+                let view = Root::read(window, cx)
+                    .view()
+                    .clone()
+                    .downcast::<T>()
+                    .expect(&format!(
+                        "faild to downcast Root view to target type: {}.",
+                        std::any::type_name::<T>()
+                    ));
+
+                view.update(cx, |view, cx| {
+                    (f)(view, action, window, cx);
+                })
+            })
+        }));
+        self
     }
 
     fn focus_back(&mut self, window: &mut Window, _: &mut App) {
@@ -373,11 +515,6 @@ impl Root {
         Some(div().children(dialogs))
     }
 
-    /// Return the root view of the Root.
-    pub fn view(&self) -> &AnyView {
-        &self.view
-    }
-
     fn on_action_tab(&mut self, _: &Tab, window: &mut Window, _: &mut Context<Self>) {
         window.focus_next();
     }
@@ -401,9 +538,14 @@ impl Render for Root {
         window_border().child(
             div()
                 .id("root")
-                .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_tab))
                 .on_action(cx.listener(Self::on_action_tab_prev))
+                .map(|mut this| {
+                    for action in self.actions.iter() {
+                        this = (action)(this, window, cx);
+                    }
+                    this
+                })
                 .font_family(".SystemUIFont")
                 .refine_style(&self.style)
                 .bg(cx.theme().background)

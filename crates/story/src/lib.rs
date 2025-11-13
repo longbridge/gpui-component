@@ -224,7 +224,7 @@ pub fn create_new_window_with_size<F, E>(
                 let view = crate_view_fn(window, cx);
                 let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
-                cx.new(|cx| Root::new(root.into(), window, cx).text_base())
+                cx.new(|cx| Root::new(root, window, cx).text_base())
             })
             .expect("failed to open window");
 
@@ -316,6 +316,16 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &Quit, cx: &mut App| {
         cx.quit();
     });
+
+    cx.observe_new(|root: &mut Root, _, _| {
+        root.register_action(|_: &mut StoryRoot, _: &ToggleSearch, window, cx| {
+            window.push_notification("You have toggled search", cx);
+        })
+        .register_action(|_: &mut StoryRoot, _: &Open, window, cx| {
+            window.push_notification("You have opened a file", cx);
+        });
+    })
+    .detach();
 
     register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
         let story_state = match info {
@@ -586,24 +596,6 @@ impl StoryContainer {
             .id::<Info>();
         window.push_notification(note, cx);
     }
-
-    fn on_action_toggle_search(
-        &mut self,
-        _: &ToggleSearch,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        cx.propagate();
-        if window.has_focused_input(cx) {
-            return;
-        }
-
-        struct Search;
-        let note = Notification::new()
-            .message(format!("You have toggled search on: {}", self.name))
-            .id::<Search>();
-        window.push_notification(note, cx);
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -767,7 +759,6 @@ impl Render for StoryContainer {
             .overflow_y_scroll()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_panel_info))
-            .on_action(cx.listener(Self::on_action_toggle_search))
             .when_some(self.story.clone(), |this, story| {
                 this.child(
                     v_flex()

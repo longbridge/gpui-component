@@ -379,7 +379,7 @@ impl StoryTiles {
 
             let window = cx.open_window(options, |window, cx| {
                 let tiles_view = cx.new(|cx| Self::new(window, cx));
-                cx.new(|cx| Root::new(tiles_view.into(), window, cx))
+                cx.new(|cx| Root::new(tiles_view, window, cx))
             })?;
 
             window

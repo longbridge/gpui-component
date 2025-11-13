@@ -90,7 +90,7 @@ fn main() {
                 |window, cx| {
                     let view = cx.new(|_| HelloWorld);
                     // This first level on the window, should be a Root.
-                    cx.new(|cx| Root::new(view.into(), window, cx))
+                    cx.new(|cx| Root::new(view, window, cx))
                 },
             )?;
 
