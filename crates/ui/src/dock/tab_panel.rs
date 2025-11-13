@@ -256,6 +256,7 @@ impl TabPanel {
             return;
         }
 
+        panel.on_added_to(cx.entity().downgrade(), window, cx);
         self.panels.push(panel);
         // set the active panel to the new panel
         if active {
@@ -304,6 +305,7 @@ impl TabPanel {
             return;
         }
 
+        panel.on_added_to(cx.entity().downgrade(), window, cx);
         self.panels.insert(ix, panel);
         self.set_active_ix(ix, window, cx);
         cx.emit(PanelEvent::LayoutChanged);
@@ -329,6 +331,7 @@ impl TabPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        panel.on_removed(window, cx);
         let panel_view = panel.view();
         self.panels.retain(|p| p.view() != panel_view);
         if self.active_ix >= self.panels.len() {

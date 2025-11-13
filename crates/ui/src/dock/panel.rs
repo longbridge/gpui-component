@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{button::Button, menu::PopupMenu};
+use crate::{button::Button, dock::TabPanel, menu::PopupMenu};
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Entity, EntityId, EventEmitter, FocusHandle,
     Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
@@ -118,6 +118,12 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// Only current Panel will touch this method.
     fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut App) {}
 
+    /// When this Panel is added to a TabPanel, this will be called.
+    fn on_added_to(&mut self, tab_panel: WeakEntity<TabPanel>, window: &mut Window, cx: &mut App) {}
+
+    /// When this Panel is removed from a TabPanel, this will be called.
+    fn on_removed(&mut self, window: &mut Window, cx: &mut App) {}
+
     /// The addition dropdown menu of the panel, default is `None`.
     fn dropdown_menu(&self, this: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
         this
@@ -153,6 +159,8 @@ pub trait PanelView: 'static + Send + Sync {
     fn visible(&self, cx: &App) -> bool;
     fn set_active(&self, active: bool, window: &mut Window, cx: &mut App);
     fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App);
+    fn on_added_to(&self, tab_panel: WeakEntity<TabPanel>, window: &mut Window, cx: &mut App);
+    fn on_removed(&self, window: &mut Window, cx: &mut App);
     fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu;
     fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>>;
     fn view(&self) -> AnyView;
@@ -208,6 +216,14 @@ impl<T: Panel> PanelView for Entity<T> {
         self.update(cx, |this, cx| {
             this.set_zoomed(zoomed, window, cx);
         })
+    }
+
+    fn on_added_to(&self, tab_panel: WeakEntity<TabPanel>, window: &mut Window, cx: &mut App) {
+        self.update(cx, |this, cx| this.on_added_to(tab_panel, window, cx));
+    }
+
+    fn on_removed(&self, window: &mut Window, cx: &mut App) {
+        self.update(cx, |this, cx| this.on_removed(window, cx));
     }
 
     fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
