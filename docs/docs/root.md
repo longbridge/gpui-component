@@ -53,7 +53,7 @@ Window
 
 ## Setup base styles
 
-You can setup window level base styles by using `Styled` fluent method on [Root], then all child views will inherit these styles.
+You can setup window level base styles by using [Styled] fluent method on [Root], then all child views will inherit these styles.
 
 ```rs
 Root::new(view.into(), window, cx)
@@ -64,7 +64,7 @@ Root::new(view.into(), window, cx)
 
 ## Register actions
 
-You can register window level [`Action`] by using [register_action] method on [Root],
+You can register window level [Action] by using [register_action] method on [Root],
 then then actions send from entire of children views in the window will be captured and handled here.
 
 For example, your app layout structure is like this:
@@ -162,6 +162,7 @@ app.run(move |cx| {
 
     // Create the window with Root view.
 });
+```
 
 :::warning
 Please ensure the `T` type parameter is the same as the first child view type in the [`Root`],
@@ -170,4 +171,5 @@ otherwise it will panic when downcasting the view.cast Root view to target type:
 
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html
 [register_action]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html#method.register_action
-```
+[Action]: https://docs.rs/gpui/latest/gpui/trait.Action.html
+[Styled]: https://docs.rs/gpui/latest/gpui/trait.Styled.html
