@@ -380,7 +380,7 @@ impl Root {
     /// # Panics
     ///
     /// Please ensure the `T` type parameter is the same as the first child view type in the [`Root`],
-    /// otherwise it will panic when downcasting the view.cast Root view to target type: `T`.
+    /// otherwise it will panic at app startup.
     #[track_caller]
     pub fn register_action<T, A, F>(&mut self, f: F) -> &mut Self
     where
@@ -388,20 +388,17 @@ impl Root {
         T: 'static,
         F: Fn(&mut T, &A, &mut Window, &mut Context<T>) + 'static,
     {
+        let view = self.view().clone().downcast::<T>().expect(&format!(
+            "The T must be the first child view type in the Root, but found {}.",
+            std::any::type_name::<T>()
+        ));
+
         let f = Rc::new(f);
         self.actions.push(Box::new(move |div, _, _| {
             let f = f.clone();
+            let view = view.clone();
             div.on_action(move |action, window, cx| {
                 cx.propagate();
-
-                let view = Root::read(window, cx)
-                    .view()
-                    .clone()
-                    .downcast::<T>()
-                    .expect(&format!(
-                        "faild to downcast Root view to target type: {}.",
-                        std::any::type_name::<T>()
-                    ));
 
                 view.update(cx, |view, cx| {
                     (f)(view, action, window, cx);
