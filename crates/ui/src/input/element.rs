@@ -952,16 +952,16 @@ impl Element for TextElement {
         );
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
-        if state.mode.is_multi_line() && !state.soft_wrap && lines.len() > 1 {
+        if state.mode.is_single_line() || !state.soft_wrap || lines.len() > 1 {
             let longest_row = state.text_wrapper.longest_row.row;
-            let longtest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
+            let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
                 .text_system()
                 .shape_line(
-                    longtest_line.clone(),
+                    longest_line.clone(),
                     font_size,
                     &[TextRun {
-                        len: longtest_line.len(),
+                        len: longest_line.len(),
                         font: style.font(),
                         color: gpui::black(),
                         background_color: None,
