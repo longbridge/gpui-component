@@ -101,6 +101,12 @@ impl Panel for TabPanel {
             return false;
         }
 
+        // 1. When is the final panel in the dock, it will not able to close.
+        // 2. When is in the Tiles, it will always able to close (by active panel state).
+        if !self.draggable(cx) && !self.in_tiles {
+            return false;
+        }
+
         self.active_panel(cx)
             .map(|panel| panel.closable(cx))
             .unwrap_or(false)
@@ -1111,6 +1117,9 @@ impl TabPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.closable(cx) {
+            return;
+        }
         if let Some(panel) = self.active_panel(cx) {
             self.remove_panel(panel, window, cx);
         }
@@ -1154,19 +1163,13 @@ impl Render for TabPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let focus_handle = self.focus_handle(cx);
         let active_panel = self.active_panel(cx);
-        let mut state = TabState {
+        let state = TabState {
             closable: self.closable(cx),
             draggable: self.draggable(cx),
             droppable: self.droppable(cx),
             zoomable: self.zoomable(cx),
             active_panel,
         };
-
-        // 1. When is the final panel in the dock, it will not able to close.
-        // 2. When is in the Tiles, it will always able to close (by active panel state).
-        if !state.draggable && !self.in_tiles {
-            state.closable = false;
-        }
 
         self.bind_actions(cx)
             .id("tab-panel")

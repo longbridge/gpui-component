@@ -1291,15 +1291,21 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.stop_propagation();
-
         let line_height = self
             .last_layout
             .as_ref()
             .map(|layout| layout.line_height)
             .unwrap_or(window.line_height());
         let delta = event.delta.pixel_delta(line_height);
-        self.update_scroll_offset(Some(self.scroll_handle.offset() + delta), cx);
+
+        let old_offset = self.scroll_handle.offset();
+        self.update_scroll_offset(Some(old_offset + delta), cx);
+
+        // Only stop propagation if the offset actually changed
+        if self.scroll_handle.offset() != old_offset {
+            cx.stop_propagation();
+        }
+
         self.diagnostic_popover = None;
     }
 
