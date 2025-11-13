@@ -23,14 +23,26 @@ pub fn window_border() -> WindowBorder {
 /// Window border use to render a custom window border and shadow for Linux.
 #[derive(IntoElement, Default)]
 pub struct WindowBorder {
+    is_resizable: bool,
     children: Vec<AnyElement>,
 }
 
 impl WindowBorder {
     pub fn new() -> Self {
         Self {
+            is_resizable: true,
             ..Default::default()
         }
+    }
+
+    pub fn set_resizable(&mut self, resizable: bool) -> &mut Self {
+        self.is_resizable = resizable;
+        self
+    }
+
+    pub fn with_resizable(mut self, resizable: bool) -> Self {
+        self.is_resizable = resizable;
+        self
     }
 }
 
@@ -87,6 +99,9 @@ impl RenderOnce for WindowBorder {
                                 )
                             },
                             move |_bounds, hitbox, window, _| {
+                                if !self.is_resizable {
+                                    return;
+                                }
                                 let mouse = window.mouse_position();
                                 let size = window.window_bounds().get_bounds().size;
                                 let Some(edge) = resize_edge(mouse, SHADOW_SIZE, size) else {
@@ -125,6 +140,9 @@ impl RenderOnce for WindowBorder {
                     .when(!tiling.left, |div| div.pl(SHADOW_SIZE))
                     .when(!tiling.right, |div| div.pr(SHADOW_SIZE))
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
+                        if !self.is_resizable {
+                            return;
+                        }
                         let size = window.window_bounds().get_bounds().size;
                         let pos = window.mouse_position();
 
