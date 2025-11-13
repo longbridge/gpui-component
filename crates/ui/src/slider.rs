@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{h_flex, tooltip::Tooltip, ActiveTheme, AxisExt, StyledExt};
+use crate::{h_flex, ActiveTheme, AxisExt, StyledExt};
 use gpui::{
     canvas, div, prelude::FluentBuilder as _, px, Along, App, AppContext as _, Axis, Background,
     Bounds, Context, Corners, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla,
@@ -428,9 +428,7 @@ impl Slider {
         window: &mut Window,
         cx: &mut App,
     ) -> impl gpui::IntoElement {
-        let state = self.state.read(cx);
         let entity_id = self.state.entity_id();
-        let value = state.value;
         let axis = self.axis;
         let id = ("slider-thumb", is_start as u32);
 
@@ -491,13 +489,6 @@ impl Slider {
                     }
                 },
             ))
-            .tooltip(move |window, cx| {
-                Tooltip::new(format!(
-                    "{}",
-                    if is_start { value.start() } else { value.end() }
-                ))
-                .build(window, cx)
-            })
     }
 }
 
