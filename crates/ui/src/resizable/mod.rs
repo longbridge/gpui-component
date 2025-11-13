@@ -66,23 +66,55 @@ impl ResizableState {
             ..Default::default()
         };
 
+        let size = size.unwrap_or(PANEL_MIN_SIZE);
+
+        // we make sure that the size always sums up to the container size by reducing the size of all other panels first
+        let total_size = self.bounds.size.along(self.axis).max(px(1.));
+        let total_leftover_size = (total_size - size).max(px(1.));
+
+        for (i, panel) in self.panels.iter_mut().enumerate() {
+            let fractional_size = self.sizes[i] / total_size;
+            self.sizes[i] = fractional_size * total_leftover_size;
+            panel.size = Some(self.sizes[i]);
+        }
+
         if let Some(ix) = ix {
             self.panels.insert(ix, panel_state);
-            self.sizes.insert(ix, size.unwrap_or(PANEL_MIN_SIZE));
+            self.sizes.insert(ix, size);
         } else {
             self.panels.push(panel_state);
-            self.sizes.push(size.unwrap_or(PANEL_MIN_SIZE));
+            self.sizes.push(size);
         };
+
         cx.notify();
     }
 
-    pub(crate) fn sync_panels_count(&mut self, axis: Axis, panels_count: usize) {
+    pub(crate) fn sync_panels_count(
+        &mut self,
+        axis: Axis,
+        panels_count: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let mut modified = self.axis != axis;
         self.axis = axis;
+
         if panels_count > self.panels.len() {
             let diff = panels_count - self.panels.len();
             self.panels
                 .extend(vec![ResizablePanelState::default(); diff]);
             self.sizes.extend(vec![PANEL_MIN_SIZE; diff]);
+            modified = true;
+        }
+
+        if panels_count < self.panels.len() {
+            self.panels.truncate(panels_count);
+            self.sizes.truncate(panels_count);
+            modified = true;
+        }
+
+        if modified {
+            // we need to make sure the total size is in line with the container size
+            self.adjust_to_container_size(cx);
         }
     }
 
@@ -114,7 +146,9 @@ impl ResizableState {
                 self.resizing_panel_ix = Some(resizing_panel_ix - 1);
             }
         }
-        cx.notify();
+
+        // resize leftover panels proportionally
+        self.adjust_to_container_size(cx);
     }
 
     pub(crate) fn replace_panel(
@@ -127,7 +161,9 @@ impl ResizableState {
 
         self.panels[panel_ix] = panel;
         self.sizes[panel_ix] = old_size;
-        cx.notify();
+
+        // resize panels proportionally
+        self.adjust_to_container_size(cx);
     }
 
     pub(crate) fn clear(&mut self) {
@@ -135,8 +171,8 @@ impl ResizableState {
         self.sizes.clear();
     }
 
-    pub(crate) fn total_size(&self) -> Pixels {
-        self.sizes.iter().map(|s| s.as_f32()).sum::<f32>().into()
+    pub(crate) fn container_size(&self) -> Pixels {
+        self.bounds.size.along(self.axis)
     }
 
     pub(crate) fn done_resizing(&mut self, cx: &mut Context<Self>) {
@@ -168,7 +204,7 @@ impl ResizableState {
         if ix >= old_sizes.len() - 1 {
             return;
         }
-        let container_size = self.bounds.size.along(self.axis);
+        let container_size = self.container_size();
         self.sync_real_panel_sizes(cx);
 
         let move_changed = size - old_sizes[ix];
@@ -229,8 +265,8 @@ impl ResizableState {
     /// When the container size changes, the panels should take up the same percentage as they did before.
     fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
         // At least 1px so we don't divide by zero.
-        let container_size = self.bounds.size.along(self.axis).max(px(1.));
-        let total_size = self.total_size();
+        let container_size = self.container_size().max(px(1.));
+        let total_size = px(self.sizes.iter().map(|s| s.as_f32()).sum::<f32>());
 
         for i in 0..self.panels.len() {
             let size = self.sizes[i];
@@ -241,7 +277,13 @@ impl ResizableState {
             self.panels[i].size = Some(new_size);
         }
 
-        cx.notify();
+        // not sure why, but we need to defer here in order for StackPanel to be properly notified
+        let entity = cx.entity().clone();
+        cx.defer(move |cx| {
+            entity.update(cx, |_, cx| {
+                cx.notify();
+            });
+        });
     }
 }
 

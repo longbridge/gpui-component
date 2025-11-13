@@ -136,8 +136,8 @@ impl RenderOnce for ResizablePanelGroup {
 
         // Sync panels to the state
         let panels_count = self.children.len();
-        state.update(cx, |state, _| {
-            state.sync_panels_count(self.axis, panels_count);
+        state.update(cx, |state, cx| {
+            state.sync_panels_count(self.axis, panels_count, cx);
         });
 
         container
