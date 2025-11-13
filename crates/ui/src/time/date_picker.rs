@@ -483,6 +483,7 @@ impl RenderOnce for DatePicker {
                                                 .number_of_months(self.number_of_months)
                                                 .border_0()
                                                 .rounded_none()
+                                                .p_0()
                                                 .with_size(self.size),
                                         ),
                                 ),
