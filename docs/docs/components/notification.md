@@ -16,6 +16,38 @@ use gpui_component::WindowExt;
 
 ## Usage
 
+### Setup application root view for display of notifications
+
+You need to set up your application's root view to render the notification layer. This is typically done in your main application struct's render method.
+
+The [Root::render_notification_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_notification_layer) function handles rendering any active modals on top of your app content.
+
+```rust
+use gpui_component::TitleBar;
+
+struct MyApp {
+    view: AnyView,
+}
+
+impl Render for MyApp {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let notification_layer = Root::render_notification_layer(window, cx);
+
+
+        div()
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(TitleBar::new())
+                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+            )
+            // Render the notification layer on top of the app content
+            .children(notification_layer)
+    }
+}
+```
+
 ### Basic Notification
 
 ```rust

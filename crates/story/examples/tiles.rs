@@ -409,7 +409,11 @@ pub fn open_new(
 }
 
 impl Render for StoryTiles {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let sheet_layer = Root::render_sheet_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
+
         div()
             .font_family(".SystemUIFont")
             .relative()
@@ -420,6 +424,9 @@ impl Render for StoryTiles {
             .text_color(cx.theme().foreground)
             .child(TitleBar::new().child(div().flex().items_center().child("Story Tiles")))
             .child(self.dock_area.clone())
+            .children(sheet_layer)
+            .children(dialog_layer)
+            .children(notification_layer)
     }
 }
 

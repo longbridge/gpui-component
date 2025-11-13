@@ -3,7 +3,7 @@ use crate::{
     input::InputState,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    window_border, ActiveTheme, Placement, TITLE_BAR_HEIGHT,
+    window_border, ActiveTheme, Placement,
 };
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
@@ -274,64 +274,64 @@ impl Root {
     }
 
     // Render Notification layer.
-    fn render_notification_layer(
-        &mut self,
-        _: &mut Window,
-        _: &mut Context<Self>,
+    pub fn render_notification_layer(
+        window: &mut Window,
+        cx: &mut App,
     ) -> Option<impl IntoElement> {
-        let active_sheet_placement = self.active_sheet.clone().map(|d| d.placement);
+        let root = window.root::<Root>()??;
+
+        let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
 
         let (mt, mr) = match active_sheet_placement {
-            Some(Placement::Right) => (None, self.sheet_size),
-            Some(Placement::Top) => (self.sheet_size, None),
+            Some(Placement::Right) => (None, root.read(cx).sheet_size),
+            Some(Placement::Top) => (root.read(cx).sheet_size, None),
             _ => (None, None),
         };
 
         Some(
             div()
                 .absolute()
-                .top(TITLE_BAR_HEIGHT)
+                .top_0()
                 .right_0()
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
-                .child(self.notification.clone()),
+                .child(root.read(cx).notification.clone()),
         )
     }
 
     /// Render the Sheet layer.
-    fn render_sheet_layer(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        let active_sheet = self.active_sheet.clone()?;
-        let root = cx.entity();
-        let mut sheet = Sheet::new(window, cx);
-        sheet = (active_sheet.builder)(sheet, window, cx);
-        sheet.focus_handle = active_sheet.focus_handle.clone();
-        sheet.placement = active_sheet.placement;
+    pub fn render_sheet_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+        let root = window.root::<Root>()??;
 
-        let size = sheet.size;
+        if let Some(active_sheet) = root.read(cx).active_sheet.clone() {
+            let mut sheet = Sheet::new(window, cx);
+            sheet = (active_sheet.builder)(sheet, window, cx);
+            sheet.focus_handle = active_sheet.focus_handle.clone();
+            sheet.placement = active_sheet.placement;
 
-        Some(
-            div().relative().child(sheet).child(
-                canvas(
-                    move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full(),
-            ),
-        )
+            let size = sheet.size;
+
+            return Some(
+                div().relative().child(sheet).child(
+                    canvas(
+                        move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .size_full(),
+                ),
+            );
+        }
+
+        None
     }
 
     /// Render the Dialog layer.
-    fn render_dialog_layer(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        let active_dialogs = self.active_dialogs.clone();
+    pub fn render_dialog_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+        let root = window.root::<Root>()??;
+
+        let active_dialogs = root.read(cx).active_dialogs.clone();
+
         if active_dialogs.is_empty() {
             return None;
         }
@@ -401,10 +401,7 @@ impl Render for Root {
                 .font_family(".SystemUIFont")
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
-                .child(self.view.clone())
-                .children(self.render_sheet_layer(window, cx))
-                .children(self.render_dialog_layer(window, cx))
-                .children(self.render_notification_layer(window, cx)),
+                .child(self.view.clone()),
         )
     }
 }
