@@ -30,19 +30,4 @@ fn main() {
 }
 ```
 
-## Setup base styles
-
-You can setup window level base styles by using `Styled` fluent method on [Root], then all child views will inherit these styles.
-
-```rs
-Root::new(view.into(), window, cx)
-    // This default is `.SystemUIFont` it will use system UI font.
-    .font_family("Your Special Font")
-    .text_sm()
-```
-
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html
-
-```
-
-```
