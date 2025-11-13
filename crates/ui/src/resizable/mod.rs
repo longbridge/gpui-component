@@ -94,8 +94,13 @@ impl ResizableState {
         cx: &mut Context<Self>,
     ) {
         let size = bounds.size.along(self.axis);
-        self.sizes[panel_ix] = size;
-        self.panels[panel_ix].size = Some(size);
+        // This check is only necessary to stop the very first panel from resizing on its own
+        // it needs to be passed when the panel is freshly created so we get the initial size,
+        // but its also fine when it sometimes passes later.
+        if self.sizes[panel_ix].as_f32() == PANEL_MIN_SIZE.as_f32() {
+            self.sizes[panel_ix] = size;
+            self.panels[panel_ix].size = Some(size);
+        }
         self.panels[panel_ix].bounds = bounds;
         self.panels[panel_ix].size_range = size_range;
         cx.notify();
@@ -149,7 +154,7 @@ impl ResizableState {
 
     fn sync_real_panel_sizes(&mut self, _: &App) {
         for (i, panel) in self.panels.iter().enumerate() {
-            self.sizes[i] = panel.bounds.size.along(self.axis).floor();
+            self.sizes[i] = panel.bounds.size.along(self.axis);
         }
     }
 
@@ -163,7 +168,6 @@ impl ResizableState {
         if ix >= old_sizes.len() - 1 {
             return;
         }
-        let size = size.floor();
         let container_size = self.bounds.size.along(self.axis);
         self.sync_real_panel_sizes(cx);
 
@@ -193,7 +197,6 @@ impl ResizableState {
             }
         } else {
             let mut changed = new_size - size;
-            new_sizes[ix + 1] += old_sizes[ix] - new_size;
             new_sizes[ix] = new_size;
 
             while changed > px(0.) && ix > 0 {
@@ -204,6 +207,8 @@ impl ResizableState {
                 changed -= to_reduce;
                 new_sizes[ix] -= to_reduce;
             }
+
+            new_sizes[main_ix + 1] += old_sizes[main_ix] - size - changed;
         }
 
         // If total size exceeds container size, adjust the main panel
@@ -217,8 +222,25 @@ impl ResizableState {
             let size = new_sizes[i];
             self.panels[i].size = Some(size);
         }
-
         self.sizes = new_sizes;
+        cx.notify();
+    }
+
+    /// When the container size changes, the panels should take up the same percentage as they did before.
+    fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
+        // At least 1px so we don't divide by zero.
+        let container_size = self.bounds.size.along(self.axis).max(px(1.));
+        let total_size = self.total_size();
+
+        for i in 0..self.panels.len() {
+            let size = self.sizes[i];
+            let fractional_size = size / total_size;
+            let new_size = container_size * fractional_size;
+
+            self.sizes[i] = new_size;
+            self.panels[i].size = Some(new_size);
+        }
+
         cx.notify();
     }
 }

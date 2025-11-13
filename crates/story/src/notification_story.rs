@@ -6,6 +6,7 @@ use gpui::{
 use gpui_component::{
     WindowExt as _,
     button::{Button, ButtonVariants},
+    h_flex,
     notification::{Notification, NotificationType},
     text::TextView,
     v_flex,
@@ -91,7 +92,7 @@ impl Render for NotificationStory {
                     )
                     .child(
                         Button::new("show-notify-error")
-                            .outline()
+                            .danger()
                             .label("Error")
                             .on_click(cx.listener(|_, _, window, cx| {
                                 window.push_notification(
@@ -122,16 +123,60 @@ impl Render for NotificationStory {
                             .warning()
                             .label("Warning")
                             .on_click(cx.listener(|_, _, window, cx| {
-                                struct WarningNotification;
                                 window.push_notification(
-                                    Notification::warning(
+                                    (
+                                        NotificationType::Warning,
                                         "The network is not stable, please check your connection.",
-                                    )
-                                    .id1::<WarningNotification>("test"),
+                                    ),
                                     cx,
                                 )
                             })),
                     ),
+            )
+            .child(
+                section("Unique Notification").child(
+                    Button::new("show-notify-unique")
+                        .outline()
+                        .label("Unique Notification")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.push_notification(
+                                Notification::info("This is a unique notification.")
+                                    .id::<NotificationStory>()
+                                    .message("This is a unique notification."),
+                                cx,
+                            )
+                        })),
+                ),
+            )
+            .child(
+                section("Unique with Key").child(
+                    h_flex()
+                        .gap_3()
+                        .child(
+                            Button::new("show-notify-unique-key0")
+                                .outline()
+                                .label("A Notification")
+                                .on_click(cx.listener(|_, _, window, cx| {
+                                    window.push_notification(
+                                        Notification::info("This is A unique notification.")
+                                            .id1::<NotificationStory>(1),
+                                        cx,
+                                    )
+                                })),
+                        )
+                        .child(
+                            Button::new("show-notify-unique-key1")
+                                .outline()
+                                .label("B Notification")
+                                .on_click(cx.listener(|_, _, window, cx| {
+                                    window.push_notification(
+                                        Notification::info("This is B unique notification.")
+                                            .id1::<NotificationStory>(2),
+                                        cx,
+                                    )
+                                })),
+                        ),
+                ),
             )
             .child(
                 section("With title and action").child(
@@ -147,7 +192,7 @@ impl Render for NotificationStory {
                                     .title("Uh oh! Something went wrong.")
                                     .message("There was a problem with your request.")
                                     .autohide(false)
-                                    .action(|_, cx| {
+                                    .action(|_, _, cx| {
                                         Button::new("try-again").primary().label("Retry").on_click(
                                             cx.listener(|this, _, window, cx| {
                                                 println!("You have clicked the try again action.");
@@ -171,7 +216,7 @@ impl Render for NotificationStory {
                         .label("Show Custom Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification(
-                                Notification::new().content(|window, cx| {
+                                Notification::new().content(|_, window, cx| {
                                     TextView::markdown(
                                         "notification-markdown",
                                         NOTIFICATION_MARKDOWN,

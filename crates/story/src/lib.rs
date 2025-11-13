@@ -117,7 +117,7 @@ use gpui_component::{
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::GroupBox,
     h_flex,
-    menu::{ContextMenuExt, PopupMenu},
+    menu::PopupMenu,
     notification::Notification,
     scroll::ScrollbarShow,
     v_flex,
@@ -224,7 +224,7 @@ pub fn create_new_window_with_size<F, E>(
                 let view = crate_view_fn(window, cx);
                 let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
-                cx.new(|cx| Root::new(root.into(), window, cx))
+                cx.new(|cx| Root::new(root.into(), window, cx).text_base())
             })
             .expect("failed to open window");
 
@@ -261,22 +261,13 @@ impl StoryRoot {
 }
 
 impl Render for StoryRoot {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sheet_layer = Root::render_sheet_layer(window, cx);
-        let dialog_layer = Root::render_dialog_layer(window, cx);
-        let notification_layer = Root::render_notification_layer(window, cx);
-
-        div()
-            .size_full()
-            .child(
-                v_flex()
-                    .size_full()
-                    .child(self.title_bar.clone())
-                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
-            )
-            .children(sheet_layer)
-            .children(dialog_layer)
-            .children(notification_layer)
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(
+            v_flex()
+                .size_full()
+                .child(self.title_bar.clone())
+                .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+        )
     }
 }
 
@@ -435,8 +426,6 @@ impl RenderOnce for StorySection {
             .child(self.base.children(self.children))
     }
 }
-
-impl ContextMenuExt for StorySection {}
 
 pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {

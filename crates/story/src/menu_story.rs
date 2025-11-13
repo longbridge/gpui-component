@@ -3,7 +3,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName,
+    ActiveTheme as _, IconName, StyledExt,
     button::Button,
     h_flex,
     menu::{ContextMenuExt, DropdownMenu as _, PopupMenuItem},
@@ -206,31 +206,85 @@ impl Render for MenuStory {
             )
             .child(
                 section("Context Menu")
-                    .child("Right click to open ContextMenu")
-                    .min_h_20()
-                    .context_menu({
-                        move |this, window, cx| {
-                            this.external_link_icon(false)
-                                .link("About", "https://github.com/longbridge/gpui-component")
-                                .separator()
-                                .menu("Cut", Box::new(Cut))
-                                .menu("Copy", Box::new(Copy))
-                                .menu("Paste", Box::new(Paste))
-                                .separator()
-                                .label("This is a label")
-                                .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
-                                .separator()
-                                .submenu("Settings", window, cx, move |menu, _, _| {
-                                    menu.menu("Info 0", Box::new(Info(0)))
+                    .v_flex()
+                    .gap_4()
+                    .child(
+                        v_flex()
+                            .w_full()
+                            .p_4()
+                            .items_center()
+                            .justify_center()
+                            .min_h_20()
+                            .rounded_lg()
+                            .border_2()
+                            .border_dashed()
+                            .border_color(cx.theme().border)
+                            .child("Right click to open ContextMenu")
+                            .context_menu({
+                                move |this, window, cx| {
+                                    this.external_link_icon(false)
+                                        .link(
+                                            "About",
+                                            "https://github.com/longbridge/gpui-component",
+                                        )
                                         .separator()
-                                        .menu("Item 1", Box::new(Info(1)))
-                                        .menu("Item 2", Box::new(Info(2)))
-                                })
-                                .separator()
-                                .menu("Search All", Box::new(SearchAll))
-                                .separator()
-                        }
-                    }),
+                                        .menu("Cut", Box::new(Cut))
+                                        .menu("Copy", Box::new(Copy))
+                                        .menu("Paste", Box::new(Paste))
+                                        .separator()
+                                        .label("This is a label")
+                                        .menu_with_check(
+                                            "Toggle Check",
+                                            checked,
+                                            Box::new(ToggleCheck),
+                                        )
+                                        .separator()
+                                        .submenu("Settings", window, cx, move |menu, _, _| {
+                                            menu.menu("Info 0", Box::new(Info(0)))
+                                                .separator()
+                                                .menu("Item 1", Box::new(Info(1)))
+                                                .menu("Item 2", Box::new(Info(2)))
+                                        })
+                                        .separator()
+                                        .menu("Search All", Box::new(SearchAll))
+                                        .separator()
+                                }
+                            })
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(
+                                        "You can right click anywhere in \
+                                         this area to open the context menu.",
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("other")
+                            .flex()
+                            .w_full()
+                            .p_4()
+                            .items_center()
+                            .justify_center()
+                            .min_h_20()
+                            .rounded_lg()
+                            .border_2()
+                            .border_dashed()
+                            .border_color(cx.theme().border)
+                            .child("Here is another area with context menu.")
+                            .context_menu({
+                                move |this, _, _| {
+                                    this.link(
+                                        "About",
+                                        "https://github.com/longbridge/gpui-component",
+                                    )
+                                    .separator()
+                                    .menu("Item 1", Box::new(Info(1)))
+                                }
+                            }),
+                    ),
             )
             .child(
                 section("Menu with scrollbar")

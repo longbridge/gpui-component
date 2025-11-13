@@ -13,7 +13,7 @@ Add dependencies to your `Cargo.toml`:
 ```toml
 [dependencies]
 gpui = "0.2"
-gpui-component = "0.4.0-preview1"
+gpui-component = "0.4.0-preview2"
 ```
 
 ## Quick Start

@@ -193,7 +193,6 @@ pub struct PopoverState {
     focus_handle: FocusHandle,
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
     trigger_bounds: Option<Bounds<Pixels>>,
-    previous_focus: Option<FocusHandle>,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
@@ -206,7 +205,6 @@ impl PopoverState {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
             trigger_bounds: None,
-            previous_focus: None,
             open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
@@ -236,17 +234,13 @@ impl PopoverState {
         self.open = !self.open;
         if self.open {
             let state = cx.entity();
-            self.previous_focus = window.focused(cx);
             let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
             {
                 tracked_focus_handle
             } else {
                 self.focus_handle.clone()
             };
-
-            cx.defer_in(window, move |_, window, _| {
-                focus_handle.focus(window);
-            });
+            focus_handle.focus(window);
 
             self._dismiss_subscription =
                 Some(
@@ -258,9 +252,6 @@ impl PopoverState {
                     }),
                 );
         } else {
-            if let Some(previous_focus) = self.previous_focus.take() {
-                window.focus(&previous_focus);
-            }
             self._dismiss_subscription = None;
         }
 
@@ -309,7 +300,7 @@ impl RenderOnce for Popover {
         });
 
         let open = state.read(cx).open;
-        let focus_handle = state.focus_handle(cx);
+        let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
 
         let Some(trigger) = self.trigger else {
@@ -364,8 +355,8 @@ impl RenderOnce for Popover {
                     .child(
                         v_flex()
                             .id("content")
-                            .key_context(CONTEXT)
                             .track_focus(&focus_handle)
+                            .key_context(CONTEXT)
                             .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
                             .size_full()
                             .occlude()

@@ -43,5 +43,5 @@ To install the `gpui-component` library, you can use Cargo, the Rust package man
 
 ```toml
 gpui = "0.2"
-gpui-component = "0.4.0-preview1"
+gpui-component = "0.4.0-preview2"
 ```

@@ -3,7 +3,7 @@ edition = "2021"
 name = "app_assets"
 description = "Example to load icons or images from assets folder."
 publish = false
-version = "0.4.0-preview1"
+version = "0.4.0-preview2"
 
 [dependencies]
 anyhow.workspace = true
