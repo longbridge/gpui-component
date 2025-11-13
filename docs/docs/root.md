@@ -67,6 +67,22 @@ Root::new(view.into(), window, cx)
 You can register window level [`Action`] by using [register_action] method on [Root],
 then then actions send from entire of children views in the window will be captured and handled here.
 
+For example, your app layout structure is like this:
+
+```
+Window
+  └─ Root
+      ├─ Dialog, Sheet
+      └─ Your Root View
+```
+
+The `Dialog` or `Sheet` is the children of the `Root` view bulit-in design in GPUI Component, it at same level with your root view.
+
+By GPUI's actions propagation mechanism, when you send an action from `Dialog` or `Sheet`, the action will be propagated to the `Root` view,
+so you can't reiceve the action in your `Your Root View` directly.
+
+To handle the actions, you should register the action handler in the `Root` view by using [register_action] method.
+
 ```rs
 register_action(|this: &mut T, action: &YourAction, window: &mut Window, cx: &mut Context<Root>| {
     // Handle your action here.
