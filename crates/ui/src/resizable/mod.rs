@@ -1,6 +1,8 @@
 use std::ops::Range;
 
-use gpui::{px, Along, App, Axis, Bounds, Context, ElementId, EventEmitter, Pixels, Window};
+use gpui::{
+    px, Along, App, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window,
+};
 
 use crate::PixelsExt;
 
@@ -264,8 +266,11 @@ impl ResizableState {
 
     /// When the container size changes, the panels should take up the same percentage as they did before.
     fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
-        // At least 1px so we don't divide by zero.
-        let container_size = self.container_size().max(px(1.));
+        if self.bounds.size.along(self.axis).is_zero() {
+            return;
+        }
+
+        let container_size = self.container_size();
         let total_size = px(self.sizes.iter().map(|s| s.as_f32()).sum::<f32>());
 
         for i in 0..self.panels.len() {
