@@ -20,7 +20,7 @@ impl HelloWorld {
 }
 
 impl Render for HelloWorld {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .bg(gpui::white())
             .size_full()
@@ -72,6 +72,8 @@ impl Render for HelloWorld {
                             }),
                     ),
             )
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
     }
 }
 

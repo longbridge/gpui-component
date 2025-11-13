@@ -79,7 +79,7 @@ fn main() {
 
             cx.open_window(window_options, |window, cx| {
                 let view = cx.new(|_| Example);
-                cx.new(|cx| Root::new(view.into(), window, cx).text_sm())
+                cx.new(|cx| Root::new(view.into(), window, cx))
             })?;
 
             Ok::<_, anyhow::Error>(())
