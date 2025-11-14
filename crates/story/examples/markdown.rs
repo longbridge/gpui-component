@@ -6,7 +6,7 @@ use gpui_component::{
     text::TextView,
 };
 use gpui_component_assets::Assets;
-use gpui_component_story::{Assets, Open};
+use gpui_component_story::Open;
 
 pub struct Example {
     input_state: Entity<InputState>,

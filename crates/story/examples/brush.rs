@@ -11,7 +11,6 @@ use gpui_component::{
     v_flex,
 };
 use gpui_component_assets::Assets;
-use gpui_component_story::Assets;
 
 pub struct BrushStory {
     focus_handle: gpui::FocusHandle,

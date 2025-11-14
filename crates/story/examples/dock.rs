@@ -9,8 +9,8 @@ use gpui_component::{
 
 use gpui_component_assets::Assets;
 use gpui_component_story::{
-    AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DialogStory,
-    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
+    AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
+    IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SelectStory, SidebarStory,
     StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
 };

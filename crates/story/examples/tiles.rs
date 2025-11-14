@@ -10,7 +10,7 @@ use gpui_component::{
     scroll::ScrollbarShow,
 };
 use gpui_component_assets::Assets;
-use gpui_component_story::{Assets, ButtonStory, IconStory, StoryContainer};
+use gpui_component_story::{ButtonStory, IconStory, StoryContainer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 

@@ -24,7 +24,7 @@ use gpui_component::{
     v_flex,
 };
 use gpui_component_assets::Assets;
-use gpui_component_story::{Assets, Open};
+use gpui_component_story::Open;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
