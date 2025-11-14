@@ -281,8 +281,6 @@ impl ResizableState {
             self.sizes[i] = new_size;
             self.panels[i].size = Some(new_size);
         }
-
-        // Not sure why, but we need to defer here in order for StackPanel to be properly notified.
         cx.notify();
     }
 }
