@@ -13,9 +13,9 @@ use gpui::{point, px, App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point
 
 use crate::PixelsExt;
 
-pub use axis::{Axis, AxisText, AXIS_GAP};
+pub use axis::{AxisText, PlotAxis, AXIS_GAP};
 pub use grid::Grid;
-pub use label::Label;
+pub use label::PlotLabel;
 
 pub trait Plot: IntoElement {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App);
