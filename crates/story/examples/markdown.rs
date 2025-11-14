@@ -5,7 +5,7 @@ use gpui_component::{
     resizable::{h_resizable, resizable_panel},
     text::TextView,
 };
-use story::{Assets, Open};
+use gpui_component_story::{Assets, Open};
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -115,9 +115,9 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Markdown Editor", Example::view, cx);
+        gpui_component_story::create_new_window("Markdown Editor", Example::view, cx);
     });
 }

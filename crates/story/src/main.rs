@@ -6,7 +6,7 @@ use gpui_component::{
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
-use story::*;
+use gpui_component_story::*;
 
 pub struct Gallery {
     stories: Vec<(&'static str, Vec<Entity<StoryContainer>>)>,
@@ -297,10 +297,10 @@ fn main() {
     let name = std::env::args().nth(1);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window(
+        gpui_component_story::create_new_window(
             "GPUI Component",
             move |window, cx| Gallery::view(name.as_deref(), window, cx),
             cx,

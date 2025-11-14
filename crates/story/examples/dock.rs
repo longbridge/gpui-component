@@ -7,14 +7,14 @@ use gpui_component::{
     menu::DropdownMenu,
 };
 
-use serde::Deserialize;
-use std::{sync::Arc, time::Duration};
-use story::{
+use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DialogStory,
     FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SelectStory, SidebarStory,
     StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
+use serde::Deserialize;
+use std::{sync::Arc, time::Duration};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -38,7 +38,7 @@ const STATE_FILE: &str = "docks.json";
 
 pub fn init(cx: &mut App) {
     cx.on_action(|_action: &Open, _cx: &mut App| {});
-    story::init(cx);
+    gpui_component_story::init(cx);
 
     cx.bind_keys(vec![
         KeyBinding::new("shift-escape", ToggleZoom, None),

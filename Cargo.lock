@@ -2903,6 +2903,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-component-story"
+version = "0.4.0-preview2"
+dependencies = [
+ "anyhow",
+ "autocorrect",
+ "chrono",
+ "color-lsp",
+ "fake",
+ "gpui",
+ "gpui-component",
+ "gtk",
+ "itertools 0.14.0",
+ "lsp-types 0.97.0",
+ "rand 0.8.5",
+ "raw-window-handle",
+ "regex",
+ "reqwest_client",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "smol",
+ "tracing",
+ "tracing-subscriber",
+ "tree-sitter-navi",
+ "unindent",
+]
+
+[[package]]
 name = "gpui-macros"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6890,34 +6918,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "story"
-version = "0.4.0-preview2"
-dependencies = [
- "anyhow",
- "autocorrect",
- "chrono",
- "color-lsp",
- "fake",
- "gpui",
- "gpui-component",
- "gtk",
- "itertools 0.14.0",
- "lsp-types 0.97.0",
- "rand 0.8.5",
- "raw-window-handle",
- "regex",
- "reqwest_client",
- "rust-embed",
- "serde",
- "serde_json",
- "smol",
- "tracing",
- "tracing-subscriber",
- "tree-sitter-navi",
- "unindent",
-]
 
 [[package]]
 name = "str_indices"
