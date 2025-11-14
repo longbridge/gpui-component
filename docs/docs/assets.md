@@ -42,7 +42,7 @@ You may have a specific set of icons that you want to use in your application, o
 
 In this case, you can build your own assets by following these steps.
 
-The [assets](https://github.com/longbridge/gpui-component/tree/main/assets) folder in source code contains all the available icons in SVG format, every file is that GPUI Component support, it matched with the [IconName] enum.
+The [assets](https://github.com/longbridge/gpui-component/tree/main/crates/assets/assets/) folder in source code contains all the available icons in SVG format, every file is that GPUI Component support, it matched with the [IconName] enum.
 
 You can download the SVG files you need from the [assets] folder, or you can use your own SVG files by following the [IconName] naming convention.
 
@@ -135,5 +135,5 @@ impl Render for Example {
 [rust-embed]: https://docs.rs/rust-embed/latest/rust_embed/
 [IconName]: https://docs.rs/gpui_component/latest/gpui_component/icon/enum.IconName.html
 [Icon]: https://docs.rs/gpui_component/latest/gpui_component/icon/struct.Icon.html
-[assets]: https://github.com/longbridge/gpui-component/tree/main/assets
+[assets]: https://github.com/longbridge/gpui-component/tree/main/crates/assets/assets/
 [gpui-component-assets]: https://crates.io/crates/gpui-component-assets
