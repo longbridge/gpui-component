@@ -235,7 +235,8 @@ pub(crate) struct ActiveDialog {
 }
 
 impl Root {
-    pub fn new(view: AnyView, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// Create a new Root view.
+    pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             previous_focus_handle: None,
             active_sheet: None,
@@ -243,7 +244,7 @@ impl Root {
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
-            view,
+            view: view.into(),
         }
     }
 

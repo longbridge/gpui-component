@@ -224,7 +224,7 @@ pub fn create_new_window_with_size<F, E>(
                 let view = crate_view_fn(window, cx);
                 let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
-                cx.new(|cx| Root::new(root.into(), window, cx))
+                cx.new(|cx| Root::new(root, window, cx))
             })
             .expect("failed to open window");
 
