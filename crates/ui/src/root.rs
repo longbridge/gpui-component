@@ -3,22 +3,21 @@ use crate::{
     input::InputState,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    window_border, ActiveTheme, Placement,
+    window_border, ActiveTheme, Placement, StyledExt, TITLE_BAR_HEIGHT,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
-    DefiniteLength, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, Styled, Window,
+    actions, canvas, div, prelude::FluentBuilder as _, Action, AnyView, App, AppContext, Context,
+    DefiniteLength, Div, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Render, Stateful, StyleRefinement, Styled, Window,
 };
 use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
-const CONTEXT: &str = "Root";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("tab", Tab, Some(CONTEXT)),
-        KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
+        KeyBinding::new("tab", Tab, None),
+        KeyBinding::new("shift-tab", TabPrev, None),
     ]);
 }
 
@@ -210,6 +209,7 @@ impl WindowExt for Window {
 ///
 /// It is used to manage the Sheet, Dialog, and Notification.
 pub struct Root {
+    style: StyleRefinement,
     /// Used to store the focus handle of the previous view.
     /// When the Dialog, Sheet closes, we will focus back to the previous view.
     previous_focus_handle: Option<FocusHandle>,
@@ -219,6 +219,7 @@ pub struct Root {
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
     view: AnyView,
+    actions: Vec<Box<dyn Fn(Stateful<Div>, &mut Window, &mut Context<Self>) -> Stateful<Div>>>,
 }
 
 #[derive(Clone)]
@@ -235,18 +236,22 @@ pub(crate) struct ActiveDialog {
 }
 
 impl Root {
-    pub fn new(view: AnyView, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// Create a new Root view with the given child view.
+    pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            style: StyleRefinement::default(),
             previous_focus_handle: None,
             active_sheet: None,
             active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
-            view,
+            view: view.into(),
+            actions: Vec::new(),
         }
     }
 
+    /// Get a mutable reference to the Root view from the window, and update it.
     pub fn update<F, R>(window: &mut Window, cx: &mut App, f: F) -> R
     where
         F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) -> R,
@@ -259,12 +264,148 @@ impl Root {
         root.update(cx, |root, cx| f(root, window, cx))
     }
 
+    /// Get a reference to the Root view from the window.
     pub fn read<'a>(window: &'a Window, cx: &'a App) -> &'a Self {
         &window
             .root::<Root>()
             .expect("The window root view should be of type `ui::Root`.")
             .unwrap()
             .read(cx)
+    }
+
+    /// Add a handle on Root is ready.
+    ///
+    /// This method should be called before you create the window and insert `Root` into it.
+    pub fn on_ready<F>(cx: &mut App, f: F)
+    where
+        F: Fn(&mut Self, Option<&mut Window>, &mut Context<Self>) + 'static,
+    {
+        cx.observe_new(move |root: &mut Root, window, cx| {
+            f(root, window, cx);
+        })
+        .detach();
+    }
+
+    /// Return the first child view in the Root.
+    ///
+    /// We can use [`downcast`](https://docs.rs/gpui/latest/gpui/struct.AnyView.html#method.downcast) method to get `Entity<T>`.
+    ///
+    /// ```ignore
+    /// let my_view = Root::read(window, cx).view().downcast::<MyView>().unwrap();
+    /// ```
+    pub fn view(&self) -> &AnyView {
+        &self.view
+    }
+
+    /// Register an window level [`Action`] handler.
+    ///
+    /// This method allows you to register a [`Action`] handler for the window root,
+    /// then then actions send from entire of children views in the window will be captured and handled here.
+    ///
+    /// The `T` type parameter is the your **first child view** type added in the `Root`,
+    /// we will downcast the root view to this type before call your handler.
+    ///
+    /// # Example
+    ///
+    /// You have a simple `HelloWorld` as the first child view in the `Root`, and you want to handle an action `MyAction` in it.
+    ///
+    /// ```ignore
+    /// actions!(hello, [ToggleSearch]);
+    ///
+    /// struct HelloWorld;
+    /// impl Render for HelloWorld {
+    ///     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    ///         div().child("Hello, World!")
+    ///     }
+    /// }
+    ///
+    /// app.run(move |cx| {
+    ///     gpui_component::init(cx);
+    ///
+    ///     // You can register your action handler here.
+    ///     cx.observe_new(|root: &mut Root, _, cx| {
+    ///         root.register_action(|this: &mut HelloWorld, _:& ToggleSearch, window, cx| {
+    ///             // Handle your action here.
+    ///             println!("ToggleSearch action received in HelloWorld view.");
+    ///         });
+    ///     }).detach();
+    ///
+    ///     cx.spawn(async move |cx| {
+    ///         cx.open_window(WindowOptions::default(), |window, cx| {
+    ///             let view = cx.new(|_| HelloWorld);
+    ///             // This first level on the window, should be a Root.
+    ///             cx.new(|cx| Root::new(view, window, cx))
+    ///         })?;
+    ///
+    ///         Ok::<_, anyhow::Error>(())
+    ///     })
+    ///     .detach();
+    /// });
+    /// ```
+    ///
+    /// # Tips
+    ///
+    /// With [`cx.observe_new`](https://docs.rs/gpui/latest/gpui/struct.App.html#method.observe_new),
+    /// we can register action handler when the `Root` is created.
+    ///
+    /// This is useful to let us to place the action listener beside the view and action implement definition.
+    ///
+    /// ## For example
+    ///
+    /// We have a `list.rs` and `main.rs`.
+    ///
+    /// If we want to handle an action `SelectNextItem` in the `ListView`, we can register the action handler in the `list.rs` file:
+    ///
+    /// ```ignore
+    /// pub(super) fn init(cx: &mut App) {
+    ///     cx.observe_new(|root: &mut Root, _, cx| {
+    ///         // Register action handler for SelectNextItem action.
+    ///         root.register_action(|this: &mut HelloWorld, _: &SelectNextItem, window, cx| {
+    ///             // Handle your action here.
+    ///         })
+    ///     }).detach();
+    /// }
+    /// ```
+    ///
+    /// Then in the `main.rs`, we just create the window and insert the `Root` view as usual.
+    ///
+    /// ```ignore
+    /// app.run(move |cx| {
+    ///     gpui_component::init(cx);
+    ///     list::init(cx);
+    ///
+    ///     // Create the window with Root view.
+    /// });
+    ///
+    /// # Panics
+    ///
+    /// Please ensure the `T` type parameter is the same as the first child view type in the [`Root`],
+    /// otherwise it will panic at app startup.
+    #[track_caller]
+    pub fn register_action<T, A, F>(&mut self, f: F) -> &mut Self
+    where
+        A: Action,
+        T: 'static,
+        F: Fn(&mut T, &A, &mut Window, &mut Context<T>) + 'static,
+    {
+        let view = self.view().clone().downcast::<T>().expect(&format!(
+            "The T must be the first child view type in the Root, but found {}.",
+            std::any::type_name::<T>()
+        ));
+
+        let f = Rc::new(f);
+        self.actions.push(Box::new(move |div, _, _| {
+            let f = f.clone();
+            let view = view.clone();
+            div.on_action(move |action, window, cx| {
+                cx.propagate();
+
+                view.update(cx, |view, cx| {
+                    (f)(view, action, window, cx);
+                })
+            })
+        }));
+        self
     }
 
     fn focus_back(&mut self, window: &mut Window, _: &mut App) {
@@ -274,64 +415,64 @@ impl Root {
     }
 
     // Render Notification layer.
-    pub fn render_notification_layer(
-        window: &mut Window,
-        cx: &mut App,
+    fn render_notification_layer(
+        &mut self,
+        _: &mut Window,
+        _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let root = window.root::<Root>()??;
-
-        let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
+        let active_sheet_placement = self.active_sheet.clone().map(|d| d.placement);
 
         let (mt, mr) = match active_sheet_placement {
-            Some(Placement::Right) => (None, root.read(cx).sheet_size),
-            Some(Placement::Top) => (root.read(cx).sheet_size, None),
+            Some(Placement::Right) => (None, self.sheet_size),
+            Some(Placement::Top) => (self.sheet_size, None),
             _ => (None, None),
         };
 
         Some(
             div()
                 .absolute()
-                .top_0()
+                .top(TITLE_BAR_HEIGHT)
                 .right_0()
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
-                .child(root.read(cx).notification.clone()),
+                .child(self.notification.clone()),
         )
     }
 
     /// Render the Sheet layer.
-    pub fn render_sheet_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = window.root::<Root>()??;
+    fn render_sheet_layer(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        let active_sheet = self.active_sheet.clone()?;
+        let root = cx.entity();
+        let mut sheet = Sheet::new(window, cx);
+        sheet = (active_sheet.builder)(sheet, window, cx);
+        sheet.focus_handle = active_sheet.focus_handle.clone();
+        sheet.placement = active_sheet.placement;
 
-        if let Some(active_sheet) = root.read(cx).active_sheet.clone() {
-            let mut sheet = Sheet::new(window, cx);
-            sheet = (active_sheet.builder)(sheet, window, cx);
-            sheet.focus_handle = active_sheet.focus_handle.clone();
-            sheet.placement = active_sheet.placement;
+        let size = sheet.size;
 
-            let size = sheet.size;
-
-            return Some(
-                div().relative().child(sheet).child(
-                    canvas(
-                        move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .size_full(),
-                ),
-            );
-        }
-
-        None
+        Some(
+            div().relative().child(sheet).child(
+                canvas(
+                    move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            ),
+        )
     }
 
     /// Render the Dialog layer.
-    pub fn render_dialog_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
-        let root = window.root::<Root>()??;
-
-        let active_dialogs = root.read(cx).active_dialogs.clone();
-
+    fn render_dialog_layer(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        let active_dialogs = self.active_dialogs.clone();
         if active_dialogs.is_empty() {
             return None;
         }
@@ -371,17 +512,18 @@ impl Root {
         Some(div().children(dialogs))
     }
 
-    /// Return the root view of the Root.
-    pub fn view(&self) -> &AnyView {
-        &self.view
-    }
-
     fn on_action_tab(&mut self, _: &Tab, window: &mut Window, _: &mut Context<Self>) {
         window.focus_next();
     }
 
     fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, _: &mut Context<Self>) {
         window.focus_prev();
+    }
+}
+
+impl Styled for Root {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -393,15 +535,24 @@ impl Render for Root {
         window_border().child(
             div()
                 .id("root")
-                .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_tab))
                 .on_action(cx.listener(Self::on_action_tab_prev))
-                .relative()
-                .size_full()
+                .map(|mut this| {
+                    for action in self.actions.iter() {
+                        this = (action)(this, window, cx);
+                    }
+                    this
+                })
                 .font_family(".SystemUIFont")
+                .refine_style(&self.style)
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
-                .child(self.view.clone()),
+                .relative()
+                .size_full()
+                .child(self.view.clone())
+                .children(self.render_sheet_layer(window, cx))
+                .children(self.render_dialog_layer(window, cx))
+                .children(self.render_notification_layer(window, cx)),
         )
     }
 }
