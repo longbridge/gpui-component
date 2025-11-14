@@ -56,16 +56,16 @@ impl StackPanel {
     pub fn new(axis: Axis, _: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|_| ResizableState::default());
 
-        // bubble up changes in the resizable state to force a rerender
-        cx.observe(&state, move |_, _, cx| {
-            cx.notify();
-        })
-        .detach();
-
-        // Bubble up the resize event.
-        let _subscriptions = vec![cx.subscribe(&state, |_, _, _: &ResizablePanelEvent, cx| {
-            cx.emit(PanelEvent::LayoutChanged)
-        })];
+        let _subscriptions = vec![
+            // Bubble up the resize event.
+            cx.subscribe(&state, |_, _, _: &ResizablePanelEvent, cx| {
+                cx.emit(PanelEvent::LayoutChanged)
+            }),
+            // Bubble up changes in the resizable state to force a rerender.
+            cx.observe(&state, move |_, _, cx| {
+                cx.notify();
+            }),
+        ];
 
         Self {
             axis,
