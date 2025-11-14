@@ -1,7 +1,7 @@
 use gpui::{fill, point, px, App, Bounds, Hsla, PaintQuad, Pixels, Point, Window};
 
 use crate::plot::{
-    label::{Label, Text, TEXT_GAP, TEXT_HEIGHT},
+    label::{PlotLabel, Text, TEXT_GAP, TEXT_HEIGHT},
     origin_point,
 };
 
@@ -93,7 +93,7 @@ impl<T> Bar<T> {
         self
     }
 
-    fn path(&self, bounds: &Bounds<Pixels>) -> (Vec<PaintQuad>, Label) {
+    fn path(&self, bounds: &Bounds<Pixels>) -> (Vec<PaintQuad>, PlotLabel) {
         let origin = bounds.origin;
         let mut graph = vec![];
         let mut labels = vec![];
@@ -136,7 +136,7 @@ impl<T> Bar<T> {
             }
         }
 
-        (graph, Label::new(labels))
+        (graph, PlotLabel::new(labels))
     }
 
     /// Paint the Bar.

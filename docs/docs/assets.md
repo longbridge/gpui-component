@@ -66,7 +66,7 @@ fn main() {
             cx.open_window(WindowOptions::default(), |window, cx| {
                 let view = cx.new(|_| Example);
                 // The first level on the window must be Root.
-                cx.new(|cx| Root::new(view.into(), window, cx))
+                cx.new(|cx| Root::new(view, window, cx))
             })?;
 
             Ok::<_, anyhow::Error>(())

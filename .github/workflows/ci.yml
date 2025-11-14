@@ -1,6 +1,9 @@
 name: CI
 on:
   pull_request:
+    paths:
+      - "**"
+      - "!docs/**"
   push:
     branches:
       - main

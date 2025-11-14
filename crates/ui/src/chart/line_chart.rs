@@ -8,7 +8,7 @@ use crate::{
     plot::{
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Line,
-        Axis, AxisText, Grid, Plot, StrokeStyle, AXIS_GAP,
+        AxisText, Grid, Plot, PlotAxis, StrokeStyle, AXIS_GAP,
     },
     ActiveTheme, PixelsExt,
 };
@@ -134,7 +134,7 @@ where
             }
         });
 
-        Axis::new()
+        PlotAxis::new()
             .x(height)
             .x_label(x_label)
             .stroke(cx.theme().border)
