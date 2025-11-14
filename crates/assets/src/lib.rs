@@ -14,7 +14,7 @@ use std::borrow::Cow;
 /// let app = Application::new().with_assets(Assets);
 /// ```
 #[derive(RustEmbed)]
-#[folder = "../../assets"]
+#[folder = "assets"]
 #[include = "icons/**/*.svg"]
 pub struct Assets;
 
