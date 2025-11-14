@@ -9,7 +9,7 @@ homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
 publish = true
 readme = "../../README.md"
-version = "0.4.0-preview2"
+version = "0.3.0"
 
 [lib]
 doctest = false
@@ -17,5 +17,5 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
-gpui-component.workspace = true
+gpui-component = { workspace = true, version = "0.3.0" }
 rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
