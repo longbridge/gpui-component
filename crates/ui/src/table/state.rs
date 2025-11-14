@@ -8,16 +8,14 @@ use crate::{
     v_flex, ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds,
-    Context, Div, DragMoveEvent, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Render, ScrollStrategy, SharedString, StatefulInteractiveElement as _, Styled, Task,
+    canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Context, Div,
+    DragMoveEvent, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render,
+    ScrollStrategy, SharedString, StatefulInteractiveElement as _, Styled, Task,
     UniformListScrollHandle, Window,
 };
 
 use super::*;
-
-actions!(table, [SelectPrevColumn, SelectNextColumn]);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SelectionState {
