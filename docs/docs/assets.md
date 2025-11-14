@@ -17,10 +17,10 @@ The [gpui-component-assets] crate provides a default bundled assets implementati
 
 To use the default bundled assets, you need to add the `gpui-component-assets` crate as a dependency in your `Cargo.toml`:
 
-```toml
+```toml-vue
 [dependencies]
-gpui-component = "*"
-gpui-component-assets = "*"
+gpui-component = "{{ VERSION }}"
+gpui-component-assets = "{{ VERSION }}"
 ```
 
 Then we need call the `with_assets` method when creating the GPUI application to register the asset source:

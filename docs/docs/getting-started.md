@@ -10,12 +10,12 @@ order: -2
 
 Add dependencies to your `Cargo.toml`:
 
-```toml
+```toml-vue
 [dependencies]
-gpui = "0.2"
-gpui-component = "0.4.0-preview2"
+gpui = "{{ GPUI_VERSION }}"
+gpui-component = "{{ VERSION }}"
 # Optional, for default bundled assets
-gpui-component-assets = "0.4.0-preview2"
+gpui-component-assets = "{{ VERSION }}"
 ```
 
 :::tip

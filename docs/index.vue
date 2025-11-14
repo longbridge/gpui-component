@@ -10,6 +10,12 @@
             <a href="docs/getting-started" class="btn-primary">Get Started</a>
             <a href="docs/components"><Blocks /> Components</a>
         </div>
+        <div class="version">
+            Version:
+            <a href="https://crates.io/crates/gpui-component" target="_blank">{{
+                VERSION
+            }}</a>
+        </div>
     </div>
     <div class="features">
         <div class="feature-card">
@@ -107,16 +113,16 @@ import {
 @reference "./.vitepress/theme/style.css";
 
 .banner {
-    @apply -mt-20 py-12 xl:py-30 text-center border border-b-0 border-dashed border-(--border);
+    @apply flex flex-col gap-2 lg:gap-4 -mt-20  py-12 xl:py-30 text-center border border-b-0 border-dashed border-(--border);
 
     h1 {
         @apply mt-20 text-3xl xl:text-5xl font-bold mb-2 text-(--primary);
     }
     .banner-description {
-        @apply text-lg xl:text-2xl text-(--muted-foreground) mt-2 xl:mt-4;
+        @apply text-lg xl:text-2xl text-(--muted-foreground);
     }
     .actions {
-        @apply mt-4 flex gap-4 justify-center text-sm;
+        @apply flex justify-center text-sm;
         a {
             @apply flex items-center h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 no-underline
             bg-(--secondary) hover:bg-(--secondary)/70 text-(--secondary-foreground);
@@ -128,6 +134,12 @@ import {
             .lucide {
                 @apply w-4 h-4;
             }
+        }
+    }
+    .version {
+        @apply text-sm text-(--muted-foreground);
+        a {
+            @apply text-(--muted-foreground) no-underline hover:underline;
         }
     }
 }
