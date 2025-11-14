@@ -1,14 +1,15 @@
 use gpui::{
-    div, App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
     ParentElement as _, Render, Styled, Subscription, Window,
 };
 use regex::Regex;
 
 use crate::section;
 use gpui_component::{
+    ActiveTheme, Disableable, IconName, Sizable,
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex, ActiveTheme, Disableable, IconName, Sizable,
+    v_flex,
 };
 
 pub fn init(_: &mut App) {}
@@ -245,11 +246,9 @@ impl Render for NumberInputStory {
             )
             .child(
                 section("Without appearance").max_w_md().child(
-                    div()
-                        .w_full()
-                        .bg(cx.theme().secondary)
-                        .rounded_md()
-                        .child(NumberInput::new(&self.number_input4).appearance(false)),
+                    NumberInput::new(&self.number_input4)
+                        .appearance(false)
+                        .bg(cx.theme().secondary),
                 ),
             )
     }
