@@ -952,7 +952,9 @@ impl Element for TextElement {
         );
 
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
-        if state.mode.is_single_line() || !state.soft_wrap || lines.len() > 1 {
+        // 1. Single line
+        // 2. Multi-line with soft wrap disabled.
+        if state.mode.is_single_line() || !state.soft_wrap {
             let longest_row = state.text_wrapper.longest_row.row;
             let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
