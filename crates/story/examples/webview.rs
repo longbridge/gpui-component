@@ -1,5 +1,5 @@
 use gpui::*;
-use story::{Assets, WebViewStory};
+use gpui_component_story::{Assets, WebViewStory};
 
 pub struct Example {
     root: Entity<WebViewStory>,
@@ -31,9 +31,9 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("WebView Example", Example::view, cx);
+        gpui_component_story::create_new_window("WebView Example", Example::view, cx);
     });
 }
