@@ -122,7 +122,7 @@ import {
         @apply text-lg xl:text-2xl text-(--muted-foreground);
     }
     .actions {
-        @apply flex justify-center text-sm;
+        @apply gap-4 flex justify-center text-sm;
         a {
             @apply flex items-center h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 no-underline
             bg-(--secondary) hover:bg-(--secondary)/70 text-(--secondary-foreground);
