@@ -2896,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-assets"
-version = "0.3.0"
+version = "0.4.0-preview2"
 dependencies = [
  "anyhow",
  "gpui",

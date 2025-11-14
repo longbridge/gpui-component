@@ -18,9 +18,9 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-gpui-component = { path = "crates/ui" }
-gpui-component-macros = { path = "crates/macros" }
-gpui-component-assets = { path = "crates/assets" }
+gpui-component = { path = "crates/ui", version = "0.4.0-preview2" }
+gpui-component-macros = { path = "crates/macros", version = "0.4.0-preview2" }
+gpui-component-assets = { path = "crates/assets", version = "0.4.0-preview2" }
 story = { path = "crates/story" }
 
 gpui = "0.2.2"
