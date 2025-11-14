@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 /// Embed application assets for GPUI Component.
 ///
-/// This assets provides icons svg files for [`gpui_component::IconName`].
+/// This assets provides icons svg files for [IconName](https://docs.rs/gpui-component/latest/gpui_component/enum.IconName.html).
 ///
 /// ```
 /// use gpui::*;
