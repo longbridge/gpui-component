@@ -9,7 +9,7 @@ use crate::{
         label::Text,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::Bar,
-        Axis, AxisText, Grid, Plot, AXIS_GAP,
+        PlotAxis, AxisText, Grid, Plot, AXIS_GAP,
     },
     ActiveTheme, PixelsExt,
 };
@@ -125,7 +125,7 @@ where
             }
         });
 
-        Axis::new()
+        PlotAxis::new()
             .x(height)
             .x_label(x_label)
             .stroke(cx.theme().border)
