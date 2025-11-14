@@ -461,9 +461,9 @@ impl<T: Styled> StyleSized<T> for T {
         match size {
             Size::Large => self.h_11(),
             Size::Medium => self.h_8(),
-            Size::Small => self.h(px(26.)),
+            Size::Small => self.h(px(24.)),
             Size::XSmall => self.h(px(20.)),
-            _ => self.h(px(26.)),
+            _ => self.h(px(24.)),
         }
         .input_text_size(size)
     }

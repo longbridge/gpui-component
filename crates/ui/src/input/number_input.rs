@@ -1,12 +1,11 @@
 use gpui::{
-    actions, prelude::FluentBuilder as _, px, AnyElement, App, Context, Entity, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window,
+    actions, prelude::FluentBuilder as _, AnyElement, App, Context, Corners, Edges, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
-    button::{Button, ButtonVariants as _},
-    h_flex, ActiveTheme, Disableable, IconName, Sizable, Size, StyleSized, StyledExt as _,
+    button::Button, h_flex, ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _,
 };
 
 use super::{Input, InputState};
@@ -75,12 +74,14 @@ impl NumberInput {
 
     fn on_increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
         state.update(cx, |state, cx| {
+            state.focus(window, cx);
             state.on_action_increment(&Increment, window, cx);
         })
     }
 
     fn on_decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
         state.update(cx, |state, cx| {
+            state.focus(window, cx);
             state.on_action_decrement(&Decrement, window, cx);
         })
     }
@@ -142,33 +143,35 @@ impl Styled for NumberInput {
 
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let focused = self.state.focus_handle(cx).is_focused(window);
-
         h_flex()
             .id(("number-input", self.state.entity_id()))
             .key_context(CONTEXT)
             .on_action(window.listener_for(&self.state, InputState::on_action_increment))
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
-            .input_size(self.size)
-            .px(self.size.input_px() / 2.)
-            .when(self.appearance, |this| {
-                this.bg(cx.theme().background)
-                    .border_color(cx.theme().input)
-                    .border_1()
-                    .rounded(cx.theme().radius)
-                    .refine_style(&self.style)
-            })
+            .rounded(cx.theme().radius)
+            .refine_style(&self.style)
             .when(self.disabled, |this| this.bg(cx.theme().muted))
-            .when(focused, |this| this.focused_border(cx))
             .child(
                 Button::new("-")
-                    .ghost()
-                    .with_size(self.size.smaller())
+                    .outline()
+                    .with_size(self.size)
                     .icon(IconName::Minus)
                     .compact()
                     .tab_stop(false)
                     .disabled(self.disabled)
+                    .border_corners(Corners {
+                        top_left: true,
+                        top_right: false,
+                        bottom_right: false,
+                        bottom_left: true,
+                    })
+                    .border_edges(Edges {
+                        top: self.appearance,
+                        right: false,
+                        bottom: self.appearance,
+                        left: self.appearance,
+                    })
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
@@ -178,21 +181,34 @@ impl RenderOnce for NumberInput {
             )
             .child(
                 Input::new(&self.state)
-                    .appearance(false)
+                    .appearance(self.appearance)
+                    .with_size(self.size)
                     .disabled(self.disabled)
-                    .px(px(2.))
                     .gap_0()
+                    .rounded_none()
                     .when_some(self.prefix, |this, prefix| this.prefix(prefix))
                     .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
             )
             .child(
                 Button::new("+")
-                    .ghost()
-                    .with_size(self.size.smaller())
+                    .outline()
+                    .with_size(self.size)
                     .icon(IconName::Plus)
                     .compact()
                     .tab_stop(false)
                     .disabled(self.disabled)
+                    .border_corners(Corners {
+                        top_left: false,
+                        top_right: true,
+                        bottom_right: true,
+                        bottom_left: false,
+                    })
+                    .border_edges(Edges {
+                        top: self.appearance,
+                        right: self.appearance,
+                        bottom: self.appearance,
+                        left: false,
+                    })
                     .on_click({
                         let state = self.state.clone();
                         move |_, window, cx| {
