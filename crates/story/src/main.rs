@@ -6,6 +6,7 @@ use gpui_component::{
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
+use gpui_component_assets::Assets;
 use gpui_component_story::*;
 
 pub struct Gallery {
