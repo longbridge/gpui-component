@@ -72,12 +72,12 @@ impl ResizableState {
 
         // We make sure that the size always sums up to the container size
         // by reducing the size of all other panels first.
-        let total_size = self.bounds.size.along(self.axis).max(px(1.));
-        let total_leftover_size = (total_size - size).max(px(1.));
+        let container_size = self.container_size().max(px(1.));
+        let total_leftover_size = (container_size - size).max(px(1.));
 
         for (i, panel) in self.panels.iter_mut().enumerate() {
-            let fractional_size = self.sizes[i] / total_size;
-            self.sizes[i] = fractional_size * total_leftover_size;
+            let ratio = self.sizes[i] / container_size;
+            self.sizes[i] = total_leftover_size * ratio;
             panel.size = Some(self.sizes[i]);
         }
 
@@ -149,8 +149,6 @@ impl ResizableState {
                 self.resizing_panel_ix = Some(resizing_panel_ix - 1);
             }
         }
-
-        // Resize leftover panels proportionally.
         self.adjust_to_container_size(cx);
     }
 
@@ -164,8 +162,6 @@ impl ResizableState {
 
         self.panels[panel_ix] = panel;
         self.sizes[panel_ix] = old_size;
-
-        // Resize panels proportionally.
         self.adjust_to_container_size(cx);
     }
 
@@ -174,6 +170,7 @@ impl ResizableState {
         self.sizes.clear();
     }
 
+    #[inline]
     pub(crate) fn container_size(&self) -> Pixels {
         self.bounds.size.along(self.axis)
     }
@@ -265,9 +262,11 @@ impl ResizableState {
         cx.notify();
     }
 
+    /// Adjust panel sizes according to the container size.
+    ///
     /// When the container size changes, the panels should take up the same percentage as they did before.
     fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
-        if self.bounds.size.along(self.axis).is_zero() {
+        if self.container_size().is_zero() {
             return;
         }
 
@@ -276,20 +275,15 @@ impl ResizableState {
 
         for i in 0..self.panels.len() {
             let size = self.sizes[i];
-            let fractional_size = size / total_size;
-            let new_size = container_size * fractional_size;
+            let ratio = size / total_size;
+            let new_size = container_size * ratio;
 
             self.sizes[i] = new_size;
             self.panels[i].size = Some(new_size);
         }
 
         // Not sure why, but we need to defer here in order for StackPanel to be properly notified.
-        let entity = cx.entity();
-        cx.defer(move |cx| {
-            entity.update(cx, |_, cx| {
-                cx.notify();
-            });
-        });
+        cx.notify();
     }
 }
 
