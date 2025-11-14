@@ -9,9 +9,9 @@ use gpui_component::{
     input::{Input, InputState},
     scroll::ScrollbarShow,
 };
+use gpui_component_story::{Assets, ButtonStory, IconStory, StoryContainer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
-use story::{Assets, ButtonStory, IconStory, StoryContainer};
 
 actions!(tiles_story, [Quit]);
 
@@ -139,7 +139,7 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_action: &Open, _cx: &mut App| {});
 
     gpui_component::init(cx);
-    story::init(cx);
+    gpui_component_story::init(cx);
 }
 
 pub struct StoryTiles {
@@ -435,7 +435,7 @@ fn main() {
 
     app.run(move |cx| {
         gpui_component::init(cx);
-        story::init(cx);
+        gpui_component_story::init(cx);
         ContainerPanel::init(cx);
 
         cx.on_action(quit);

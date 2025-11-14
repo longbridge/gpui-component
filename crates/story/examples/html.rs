@@ -5,7 +5,7 @@ use gpui_component::{
     resizable::h_resizable,
     text::TextView,
 };
-use story::Assets;
+use gpui_component_story::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -81,9 +81,9 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("HTML Render (native)", Example::view, cx);
+        gpui_component_story::create_new_window("HTML Render (native)", Example::view, cx);
     });
 }
