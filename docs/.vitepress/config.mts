@@ -4,6 +4,7 @@ import { generateSidebar } from "vitepress-sidebar";
 import llmstxt from "vitepress-plugin-llms";
 import tailwindcss from "@tailwindcss/vite";
 import { lightTheme, darkTheme } from "./language";
+import { ViteToml } from "vite-plugin-toml";
 
 /**
  * https://github.com/jooy2/vitepress-sidebar
@@ -46,7 +47,7 @@ const config: UserConfig = {
     ],
   ],
   vite: {
-    plugins: [llmstxt(), tailwindcss()],
+    plugins: [llmstxt(), tailwindcss(), ViteToml()],
   },
   themeConfig: {
     logo: {
