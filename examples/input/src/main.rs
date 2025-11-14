@@ -68,7 +68,7 @@ fn main() {
             cx.open_window(window_options, |window, cx| {
                 let view = cx.new(|cx| Example::new(window, cx));
                 // This first level on the window, should be a Root.
-                cx.new(|cx| Root::new(view.into(), window, cx))
+                cx.new(|cx| Root::new(view, window, cx))
             })?;
 
             Ok::<_, anyhow::Error>(())
