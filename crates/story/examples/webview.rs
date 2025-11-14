@@ -1,5 +1,6 @@
 use gpui::*;
-use gpui_component_story::{Assets, WebViewStory};
+use gpui_component_assets::Assets;
+use gpui_component_story::WebViewStory;
 
 pub struct Example {
     root: Entity<WebViewStory>,

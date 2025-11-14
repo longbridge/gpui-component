@@ -5,7 +5,8 @@ use gpui_component::{
     resizable::{h_resizable, resizable_panel},
     text::TextView,
 };
-use gpui_component_story::{Assets, Open};
+use gpui_component_assets::Assets;
+use gpui_component_story::Open;
 
 pub struct Example {
     input_state: Entity<InputState>,

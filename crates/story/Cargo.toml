@@ -14,6 +14,7 @@ gpui-component = { workspace = true, features = [
   "tree-sitter-languages",
   "webview",
 ] }
+gpui-component-assets.workspace = true
 reqwest_client = { path = "../reqwest_client" }
 
 autocorrect = "2.14.2"
@@ -25,7 +26,6 @@ lsp-types.workspace = true
 rand = "0.8"
 raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
-rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
 serde = "1"
 serde_json = "1"
 smol.workspace = true

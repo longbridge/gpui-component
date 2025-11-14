@@ -1,7 +1,6 @@
 mod accordion_story;
 mod alert_story;
 mod app_menus;
-mod assets;
 mod avatar_story;
 mod badge_story;
 mod button_story;
@@ -51,7 +50,6 @@ mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
 
-pub use assets::Assets;
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
     Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,

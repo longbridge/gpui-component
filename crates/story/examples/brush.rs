@@ -10,7 +10,7 @@ use gpui_component::{
     slider::{Slider, SliderState},
     v_flex,
 };
-use gpui_component_story::Assets;
+use gpui_component_assets::Assets;
 
 pub struct BrushStory {
     focus_handle: gpui::FocusHandle,

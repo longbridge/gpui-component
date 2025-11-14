@@ -6,7 +6,7 @@ use gpui_component::{
     input::{self, Input, InputEvent, InputState, TabSize},
     v_flex,
 };
-use gpui_component_story::Assets;
+use gpui_component_assets::Assets;
 
 pub struct Example {
     editor: Entity<InputState>,
