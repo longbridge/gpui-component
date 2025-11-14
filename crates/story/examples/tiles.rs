@@ -9,6 +9,7 @@ use gpui_component::{
     input::{Input, InputState},
     scroll::ScrollbarShow,
 };
+use gpui_component_assets::Assets;
 use gpui_component_story::{Assets, ButtonStory, IconStory, StoryContainer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};

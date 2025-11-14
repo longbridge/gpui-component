@@ -7,6 +7,7 @@ use gpui_component::{
     menu::DropdownMenu,
 };
 
+use gpui_component_assets::Assets;
 use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, Assets, ButtonStory, CalendarStory, DialogStory,
     FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,

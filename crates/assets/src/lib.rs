@@ -5,7 +5,14 @@ use std::borrow::Cow;
 
 /// Embed application assets for GPUI Component.
 ///
-/// This assets provides icons svg files for [`IconName`].
+/// This assets provides icons svg files for [`gpui_component::IconName`].
+///
+/// ```
+/// use gpui::*;
+/// use gpui_component_assets::Assets;
+///
+/// let app = Application::new().with_assets(Assets);
+/// ```
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../../assets"]
 #[include = "icons/**/*.svg"]
@@ -28,5 +35,3 @@ impl AssetSource for Assets {
             .collect())
     }
 }
-
-pub fn init(cx: &mut App) {}

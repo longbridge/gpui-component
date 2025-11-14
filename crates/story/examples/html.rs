@@ -5,6 +5,7 @@ use gpui_component::{
     resizable::h_resizable,
     text::TextView,
 };
+use gpui_component_assets::Assets;
 use gpui_component_story::Assets;
 
 pub struct Example {

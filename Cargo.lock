@@ -1610,6 +1610,7 @@ dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
+ "gpui-component-assets",
 ]
 
 [[package]]
@@ -2894,6 +2895,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-component-assets"
+version = "0.4.0-preview2"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-component",
+ "rust-embed",
+]
+
+[[package]]
 name = "gpui-component-macros"
 version = "0.4.0-preview2"
 dependencies = [
@@ -2913,6 +2924,7 @@ dependencies = [
  "fake",
  "gpui",
  "gpui-component",
+ "gpui-component-assets",
  "gtk",
  "itertools 0.14.0",
  "lsp-types 0.97.0",
@@ -2920,7 +2932,6 @@ dependencies = [
  "raw-window-handle",
  "regex",
  "reqwest_client",
- "rust-embed",
  "serde",
  "serde_json",
  "smol",
@@ -3677,6 +3688,7 @@ dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
+ "gpui-component-assets",
 ]
 
 [[package]]
@@ -8813,7 +8825,7 @@ dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
- "rust-embed",
+ "gpui-component-assets",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 use gpui::*;
+use gpui_component_assets::Assets;
 use gpui_component_story::{Assets, WebViewStory};
 
 pub struct Example {

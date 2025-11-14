@@ -10,6 +10,7 @@ use gpui_component::{
     slider::{Slider, SliderState},
     v_flex,
 };
+use gpui_component_assets::Assets;
 use gpui_component_story::Assets;
 
 pub struct BrushStory {

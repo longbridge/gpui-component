@@ -6,6 +6,7 @@ use gpui_component::{
     input::{self, Input, InputEvent, InputState, TabSize},
     v_flex,
 };
+use gpui_component_assets::Assets;
 use gpui_component_story::Assets;
 
 pub struct Example {
