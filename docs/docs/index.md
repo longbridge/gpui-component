@@ -27,10 +27,10 @@ GPUI Component is a comprehensive UI component library for building fantastic de
 
 Add `gpui` and `gpui-component` to your `Cargo.toml`:
 
-```toml
+```toml-vue
 [dependencies]
-gpui = "0.2"
-gpui-component = "0.4.0-preview2"
+gpui = "{{ VERSION }}"
+gpui-component = "{{ VERSION }}"
 ```
 
 Then create a simple "Hello, World!" application with a button:

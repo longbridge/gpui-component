@@ -24,9 +24,9 @@ Button::new("ok")
 
 Add the following to your `Cargo.toml`:
 
-```toml
-gpui = "0.2"
-gpui-component = "0.4.0-preview2"
+```toml-vue
+gpui = "{{ GPUI_VERSION }}"
+gpui-component = "{{ VERSION }}"
 ```
 
 :::warning
