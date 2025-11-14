@@ -61,10 +61,6 @@ impl StackPanel {
             cx.subscribe(&state, |_, _, _: &ResizablePanelEvent, cx| {
                 cx.emit(PanelEvent::LayoutChanged)
             }),
-            // Bubble up changes in the resizable state to force a rerender.
-            cx.observe(&state, move |_, _, cx| {
-                cx.notify();
-            }),
         ];
 
         Self {
