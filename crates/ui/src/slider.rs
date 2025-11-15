@@ -656,7 +656,17 @@ impl RenderOnce for Slider {
                             .child({
                                 let state = self.state.clone();
                                 canvas(
-                                    move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds),
+                                    move |bounds, _, cx| {
+                                        state.update(cx, |r, cx| {
+                                            r.bounds = bounds;
+                                            let entity = cx.entity();
+                                            cx.defer(move |cx| {
+                                                entity.update(cx, |_, cx| {
+                                                    cx.notify();
+                                                });
+                                            });
+                                        })
+                                    },
                                     |_, _, _, _| {},
                                 )
                                 .absolute()
