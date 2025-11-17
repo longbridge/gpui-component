@@ -124,7 +124,10 @@ impl TextElement {
         let mut last_indents = vec![];
         for ix in visible_range {
             let line = state.text.slice_line(ix);
-            let line_layout = last_layout.line(ix).expect("line layout should exist");
+            let Some(line_layout) = last_layout.line(ix) else {
+                continue;
+            };
+
             let mut current_indents = vec![];
             if line.len() > 0 {
                 let indent_count = tab_size.indent_count(&line);
