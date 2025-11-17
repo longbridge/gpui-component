@@ -15,9 +15,9 @@ use crate::{
 /// A setting page that can contain multiple setting groups.
 #[derive(IntoElement)]
 pub struct SettingPage {
-    id: ElementId,
-    title: SharedString,
-    description: Option<SharedString>,
+    pub(super) id: ElementId,
+    pub(super) title: SharedString,
+    pub(super) description: Option<SharedString>,
     groups: Vec<SettingGroup>,
     query: SharedString,
 }
