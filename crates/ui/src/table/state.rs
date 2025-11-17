@@ -8,10 +8,10 @@ use crate::{
     v_flex, ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
 };
 use gpui::{
-    canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, Context, Div,
-    DragMoveEvent, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render,
-    ScrollStrategy, SharedString, StatefulInteractiveElement as _, Styled, Task,
+    canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, ClickEvent,
+    Context, Div, DragMoveEvent, EventEmitter, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
+    Render, ScrollStrategy, SharedString, StatefulInteractiveElement as _, Styled, Task,
     UniformListScrollHandle, Window,
 };
 
@@ -303,21 +303,27 @@ where
             .count()
     }
 
-    fn on_row_click(
+    fn on_row_right_click(
         &mut self,
-        ev: &MouseDownEvent,
+        _: &MouseDownEvent,
+        row_ix: usize,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+        self.right_clicked_row = Some(row_ix);
+    }
+
+    fn on_row_left_click(
+        &mut self,
+        e: &ClickEvent,
         row_ix: usize,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if ev.button == MouseButton::Right {
-            self.right_clicked_row = Some(row_ix);
-        } else {
-            self.set_selected_row(row_ix, cx);
+        self.set_selected_row(row_ix, cx);
 
-            if ev.click_count == 2 {
-                cx.emit(TableEvent::DoubleClickedRow(row_ix));
-            }
+        if e.click_count() == 2 {
+            cx.emit(TableEvent::DoubleClickedRow(row_ix));
         }
     }
 
@@ -803,12 +809,9 @@ where
             .child(
                 self.render_cell(col_ix, window, cx)
                     .id(("col-header", col_ix))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, window, cx| {
-                            this.on_col_head_click(col_ix, window, cx);
-                        }),
-                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.on_col_head_click(col_ix, window, cx);
+                    }))
                     .child(
                         h_flex()
                             .size_full()
@@ -1109,17 +1112,14 @@ where
                     )
                 })
                 .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, ev, window, cx| {
-                        this.on_row_click(ev, row_ix, window, cx);
-                    }),
-                )
-                .on_mouse_down(
                     MouseButton::Right,
-                    cx.listener(move |this, ev, window, cx| {
-                        this.on_row_click(ev, row_ix, window, cx);
+                    cx.listener(move |this, e, window, cx| {
+                        this.on_row_right_click(e, row_ix, window, cx);
                     }),
                 )
+                .on_click(cx.listener(move |this, e, window, cx| {
+                    this.on_row_left_click(e, row_ix, window, cx);
+                }))
         } else {
             // Render fake rows to fill the rest table space
             self.delegate
