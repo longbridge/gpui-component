@@ -689,7 +689,6 @@ impl Theme {
 
         self.colors.apply_config(&config, &default_theme.colors);
         self.mode = config.mode;
-        dbg!(&self.font_size);
     }
 }
 
