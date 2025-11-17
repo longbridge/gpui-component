@@ -1,9 +1,11 @@
 mod bool;
 mod number;
+mod string;
 mod unknow;
 
 pub(crate) use bool::*;
 pub(crate) use number::*;
+pub(crate) use string::*;
 pub(crate) use unknow::*;
 
 use std::rc::Rc;

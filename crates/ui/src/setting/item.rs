@@ -10,7 +10,7 @@ use crate::{
     h_flex,
     input::{InputState, NumberInput},
     label::Label,
-    setting::fields::{BoolField, NumberField, SettingFieldRender, UnknownField},
+    setting::fields::{BoolField, NumberField, SettingFieldRender, StringField, UnknownField},
     switch::Switch,
     v_flex, ActiveTheme as _,
 };
@@ -136,7 +136,11 @@ impl SettingItem {
                 SettingFieldType::Switch
             ))),
             t if t == std::any::TypeId::of::<f64>() => Box::new(NumberField {}),
-            _ => Box::new(UnknownField),
+            t if t == std::any::TypeId::of::<SharedString>() => Box::new(StringField {}),
+            _ => unimplemented!(
+                "Unsupported setting field type: {}",
+                field.deref().type_name()
+            ),
         };
 
         renderer.render(id, label, description, field, window, cx)
