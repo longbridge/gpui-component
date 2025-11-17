@@ -388,8 +388,7 @@ impl Root {
 
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let base_font_size = cx.theme().font_size;
-        window.set_rem_size(base_font_size);
+        window.set_rem_size(cx.theme().font_size);
 
         window_border().child(
             div()
