@@ -1,18 +1,19 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Global, IntoElement, ParentElement,
-    Render, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Global, IntoElement, Render, Window,
 };
 
-use gpui_component::{
-    setting::{SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage, Settings},
-    switch::Switch,
+use gpui_component::setting::{
+    SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage, Settings,
 };
 
 #[derive(Default)]
 struct AppSettings {
     dark_mode: bool,
+    auto_switch_theme: bool,
+    font_family: String,
+    font_size: f64,
     notifications_enabled: bool,
     auto_update: bool,
 }
@@ -31,9 +32,6 @@ impl AppSettings {
 
 pub struct SettingsStory {
     focus_handle: FocusHandle,
-    switch1: bool,
-    switch2: bool,
-    switch3: bool,
 }
 
 impl super::Story for SettingsStory {
@@ -60,15 +58,12 @@ impl SettingsStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            switch1: true,
-            switch2: false,
-            switch3: true,
         }
     }
 
-    fn setting_pages(&self, cx: &mut Context<Self>) -> Vec<SettingPage> {
-        vec![
-            SettingPage::new("Appearance").group(SettingGroup::new("Theme").items(vec![
+    fn setting_pages(&self, _: &mut Context<Self>) -> Vec<SettingPage> {
+        vec![SettingPage::new("Appearance").groups(vec![
+            SettingGroup::new("Theme").items(vec![
                 SettingItem::Item {
                     id: "dark-mode",
                     label: "Dark Mode".into(),
@@ -84,8 +79,68 @@ impl SettingsStory {
                         },
                     }),
                 },
-            ])),
-        ]
+                SettingItem::Item {
+                    id: "auto-switch-theme",
+                    label: "Auto Switch Theme".into(),
+                    description: Some(
+                        "Automatically switch theme based on system appearance.".into(),
+                    ),
+                    field_type: SettingFieldType::Checkbox,
+                    field: Rc::new(SettingField {
+                        value: |cx: &App| AppSettings::global(cx).auto_switch_theme,
+                        set_value: |val: bool, cx: &mut App| {
+                            AppSettings::global_mut(cx).auto_switch_theme = val;
+                        },
+                        reset_value: |cx: &mut App| {
+                            AppSettings::global_mut(cx).auto_switch_theme = false;
+                        },
+                    }),
+                },
+            ]),
+            SettingGroup::new("Font").items(vec![
+                SettingItem::Item {
+                    id: "font-family",
+                    label: "Font Family".into(),
+                    description: Some("Select the font family for the application.".into()),
+                    field_type: SettingFieldType::Dropdown {
+                        options: vec![
+                            ("Arial".into(), "Arial".into()),
+                            ("Helvetica".into(), "Helvetica".into()),
+                            ("Times New Roman".into(), "Times New Roman".into()),
+                            ("Courier New".into(), "Courier New".into()),
+                        ],
+                    },
+                    field: Rc::new(SettingField {
+                        value: |cx: &App| AppSettings::global(cx).font_family.clone(),
+                        set_value: |val: String, cx: &mut App| {
+                            AppSettings::global_mut(cx).font_family = val;
+                        },
+                        reset_value: |cx: &mut App| {
+                            AppSettings::global_mut(cx).font_family = "Arial".into();
+                        },
+                    }),
+                },
+                SettingItem::Item {
+                    id: "font-size",
+                    label: "Font Size".into(),
+                    description: Some("Adjust the font size for better readability.".into()),
+                    field_type: SettingFieldType::NumberInput {
+                        min: 10.0,
+                        max: 100.0,
+                        step: 5.0,
+                    },
+                    field: Rc::new(SettingField {
+                        value: |cx: &App| AppSettings::global(cx).font_size,
+                        set_value: |val: f64, cx: &mut App| {
+                            AppSettings::global_mut(cx).font_size = val;
+                        },
+                        reset_value: |cx: &mut App| {
+                            AppSettings::global_mut(cx).font_size = 14.0;
+                        },
+                    }),
+                },
+            ]),
+        ])]
     }
 }
 

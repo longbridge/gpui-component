@@ -1,3 +1,4 @@
+mod fields;
 mod group;
 mod item;
 mod page;
@@ -68,7 +69,7 @@ impl Settings {
         cx: &mut App,
     ) -> impl IntoElement {
         for (ix, page) in pages.into_iter().enumerate() {
-            if Some(ix) == selected_ix.page_ix {
+            if selected_ix.is_page(ix) {
                 return page.render(ix, &self.query, window, cx).into_any_element();
             }
         }
@@ -117,13 +118,11 @@ impl Settings {
         let mut items = Vec::new();
         pages.iter().enumerate().for_each(|(page_ix, page)| {
             items.push(
-                TreeItem::new(format!("page-{}", page_ix), page.title.clone())
+                TreeItem::new(SelectIndex::page_id(page_ix), page.title.clone())
                     .expanded(true)
-                    .children(
-                        page.groups.iter().enumerate().map(|(ix, group)| {
-                            TreeItem::new(format!("{}", ix), group.title.clone())
-                        }),
-                    ),
+                    .children(page.groups.iter().enumerate().map(|(ix, group)| {
+                        TreeItem::new(SelectIndex::group_id(ix), group.title.clone())
+                    })),
             )
         });
 
@@ -137,10 +136,34 @@ struct SettingsState {
     selected_ix: SelectIndex,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct SelectIndex {
-    page_ix: Option<usize>,
-    group_ix: Option<usize>,
+    page_ix: Option<SharedString>,
+    group_ix: Option<SharedString>,
+}
+
+impl SelectIndex {
+    fn page_id(ix: usize) -> SharedString {
+        SharedString::from(format!("page-{}", ix))
+    }
+
+    fn group_id(ix: usize) -> SharedString {
+        SharedString::from(format!("{}", ix))
+    }
+
+    fn is_page(&self, page_ix: usize) -> bool {
+        self.page_ix
+            .as_ref()
+            .map(|ix| ix == &Self::page_id(page_ix))
+            .unwrap_or(false)
+    }
+
+    fn is_group(&self, group_ix: usize) -> bool {
+        self.group_ix
+            .as_ref()
+            .map(|ix| ix == &Self::group_id(group_ix))
+            .unwrap_or(false)
+    }
 }
 
 impl HistoryItem for ElementId {
@@ -167,9 +190,11 @@ impl RenderOnce for Settings {
         let tree_state = state.read(cx).tree_state.clone();
         let items = self.build_items(&filted_pages);
         tree_state.update(cx, |tree_state, cx| {
+            let selected_ix = tree_state.selected_index();
             tree_state.set_items(items, cx);
+            tree_state.set_selected_index(selected_ix, cx);
         });
-        let selected_ix = state.read(cx).selected_ix;
+        let selected_ix = state.read(cx).selected_ix.clone();
 
         h_resizable(self.id.clone())
             .child(
@@ -183,11 +208,17 @@ impl RenderOnce for Settings {
                                 .pl(px(16.) * entry.depth() + px(12.))
                                 .child(entry.item().label.clone())
                                 .on_click({
-                                    let page_id = entry.item().id.clone();
+                                    let item_id = entry.item().id.clone();
+                                    let depth = entry.depth();
                                     let state = state.clone();
                                     move |_, _, cx| {
                                         state.update(cx, |state, cx| {
-                                            // state.selected_page_id = Some(page_id.clone());
+                                            if depth == 0 {
+                                                state.selected_ix.page_ix = Some(item_id.clone());
+                                                state.selected_ix.group_ix = None;
+                                            } else if depth == 1 {
+                                                state.selected_ix.group_ix = Some(item_id.clone());
+                                            }
                                             cx.notify();
                                         });
                                     }

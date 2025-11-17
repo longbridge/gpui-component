@@ -1,20 +1,41 @@
-use std::{any::Any, rc::Rc};
+use std::{any::Any, ops::Deref, rc::Rc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, Empty,
+    div, prelude::FluentBuilder as _, AnyElement, App, AppContext, ClickEvent, ElementId, Empty,
     InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window,
 };
 
-use crate::{checkbox::Checkbox, h_flex, label::Label, switch::Switch, v_flex, ActiveTheme as _};
+use crate::{
+    checkbox::Checkbox,
+    h_flex,
+    input::{InputState, NumberInput},
+    label::Label,
+    setting::fields::{BoolField, NumberField, SettingFieldRender, UnknownField},
+    switch::Switch,
+    v_flex, ActiveTheme as _,
+};
 
 /// The type of setting field to render.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum SettingFieldType {
+    /// As switch toggle, required `bool` value.
     Switch,
+    /// As checkbox, required `bool` value.
     Checkbox,
-    NumberInput,
+    /// As a number input, required `f64` value.
+    NumberInput {
+        /// The minimum value for the number input.
+        min: f64,
+        /// The maximum value for the number input.
+        max: f64,
+        /// The step value for the number input.
+        step: f64,
+    },
     Input,
-    Dropdown,
+    Dropdown {
+        /// The options for the dropdown as (value, label) pairs.
+        options: Vec<(SharedString, SharedString)>,
+    },
 }
 
 /// A setting field that can get and set a value of type T in the App.
@@ -108,40 +129,17 @@ impl SettingItem {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        let type_name = field.type_name();
-        match field.type_id() {
-            t if t == std::any::TypeId::of::<bool>() => {
-                let checked = (field
-                    .as_any()
-                    .downcast_ref::<SettingField<bool>>()
-                    .unwrap()
-                    .value)(cx);
-                let set_value = field
-                    .as_any()
-                    .downcast_ref::<SettingField<bool>>()
-                    .unwrap()
-                    .set_value;
+        let type_id = field.deref().type_id();
+        let renderer: Box<dyn SettingFieldRender> = match type_id {
+            t if t == std::any::TypeId::of::<bool>() => Box::new(BoolField::new(matches!(
+                field_type,
+                SettingFieldType::Switch
+            ))),
+            t if t == std::any::TypeId::of::<f64>() => Box::new(NumberField {}),
+            _ => Box::new(UnknownField),
+        };
 
-                if matches!(field_type, SettingFieldType::Checkbox) {
-                    return Checkbox::new("check")
-                        .checked(checked)
-                        .on_click(move |checked: &bool, _, cx: &mut App| {
-                            set_value(*checked, cx);
-                        })
-                        .into_any_element();
-                } else {
-                    Switch::new("check")
-                        .checked(checked)
-                        .on_click(move |checked: &bool, _, cx: &mut App| {
-                            set_value(*checked, cx);
-                        })
-                        .into_any_element()
-                }
-            }
-            _ => div()
-                .child(Label::new(format!("Unsupported field type: {}", type_name)))
-                .into_any_element(),
-        }
+        renderer.render(id, label, description, field, window, cx)
     }
 
     pub(super) fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -156,23 +154,21 @@ impl SettingItem {
                 .id(id)
                 .gap_4()
                 .justify_between()
-                .child(
-                    v_flex()
-                        .gap_1()
-                        .child(h_flex().justify_between().items_center().child(
-                            v_flex().child(Label::new(label.clone())).when_some(
-                                description.clone(),
-                                |this, description| {
-                                    this.child(
-                                        Label::new(description)
-                                            .text_sm()
-                                            .text_color(cx.theme().muted_foreground),
-                                    )
-                                },
-                            ),
-                        )),
-                )
-                .child(Self::render_field(
+                .child(v_flex().flex_1().gap_1().child(
+                    h_flex().justify_between().items_center().child(
+                        v_flex().child(Label::new(label.clone())).when_some(
+                            description.clone(),
+                            |this, description| {
+                                this.child(
+                                    Label::new(description)
+                                        .text_sm()
+                                        .text_color(cx.theme().muted_foreground),
+                                )
+                            },
+                        ),
+                    ),
+                ))
+                .child(div().max_w_1_3().child(Self::render_field(
                     id,
                     label,
                     description,
@@ -180,7 +176,7 @@ impl SettingItem {
                     field,
                     window,
                     cx,
-                )),
+                ))),
             SettingItem::Element { id, element } => div().id(id).child((element)(window, cx)),
         }
     }

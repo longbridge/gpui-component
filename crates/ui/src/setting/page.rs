@@ -9,7 +9,7 @@ use crate::{
     h_flex,
     label::Label,
     setting::SettingGroup,
-    v_flex, ActiveTheme, IconName,
+    v_flex, ActiveTheme, IconName, Sizable,
 };
 
 /// A setting page that can contain multiple setting groups.
@@ -47,6 +47,12 @@ impl SettingPage {
         self
     }
 
+    /// Add multiple setting groups to the page.
+    pub fn groups(mut self, groups: impl IntoIterator<Item = SettingGroup>) -> Self {
+        self.groups.extend(groups);
+        self
+    }
+
     pub fn render(
         &self,
         ix: usize,
@@ -62,20 +68,25 @@ impl SettingPage {
 
         v_flex()
             .id(ix)
+            .p_4()
             .size_full()
             .gap_5()
             .child(
                 v_flex()
                     .gap_4()
-                    .child(h_flex().child(self.title.clone()).justify_between().child(
-                        Button::new("reset").ghost().icon(IconName::Undo2).on_click(
-                            move |event, window, cx| {
-                                on_resets.iter().for_each(|callback| {
-                                    callback(event, window, cx);
-                                });
-                            },
+                    .child(
+                        h_flex().child(self.title.clone()).justify_between().child(
+                            Button::new("reset")
+                                .small()
+                                .ghost()
+                                .icon(IconName::Undo2)
+                                .on_click(move |event, window, cx| {
+                                    on_resets.iter().for_each(|callback| {
+                                        callback(event, window, cx);
+                                    });
+                                }),
                         ),
-                    ))
+                    )
                     .when_some(self.description.clone(), |this, description| {
                         this.child(
                             Label::new(description)

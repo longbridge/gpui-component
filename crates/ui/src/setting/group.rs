@@ -97,20 +97,7 @@ impl SettingGroup {
         v_flex()
             .id(ix)
             .gap_4()
-            .child(
-                h_flex()
-                    .justify_between()
-                    .child(Label::new(self.title.clone()))
-                    .when(is_resettable, |this| {
-                        this.child(
-                            Button::new("reset").icon(IconName::Undo2).small().ghost(), // .on_click(move |event, window, cx| {
-                                                                                        //     for on_reset in &on_resets {
-                                                                                        //         on_reset(&event, window, cx);
-                                                                                        //     }
-                                                                                        // }),
-                        )
-                    }),
-            )
+            .child(Label::new(self.title.clone()))
             .when_some(self.description.clone(), |this, description| {
                 this.child(
                     Label::new(description)
