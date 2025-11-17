@@ -139,7 +139,6 @@ impl Render for MouseContextMenu {
                 .child(
                     div()
                         .font_family(cx.theme().font_family.clone())
-                        .text_size(px(14.))
                         .cursor_default()
                         .child(self.menu.clone()),
                 ),
