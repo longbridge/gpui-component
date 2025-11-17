@@ -29,12 +29,6 @@ gpui = "{{ GPUI_VERSION }}"
 gpui-component = "{{ VERSION }}"
 ```
 
-:::warning
-We are currently working on the refactoring of some APIs.
-
-Currently, the documentation is updated to match the `main` branch's changes, so you can try depending on the `main` branch until the next release (v0.4.0).
-:::
-
 ## Hello World
 
 The following `src/main.rs` is a simple "Hello, World!" application:
