@@ -414,7 +414,7 @@ impl Render for SearchPanel {
             .on_action(cx.listener(Self::on_action_next))
             .on_action(cx.listener(Self::on_action_escape))
             .on_action(cx.listener(Self::on_action_tab))
-            .font_family(".SystemUIFont")
+            .font_family(cx.theme().font_family.clone())
             .items_center()
             .py_2()
             .px_3()

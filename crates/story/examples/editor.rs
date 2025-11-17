@@ -1003,8 +1003,8 @@ impl Render for Example {
                                     .bordered(false)
                                     .p_0()
                                     .h_full()
-                                    .font_family("Monaco")
-                                    .text_size(px(12.))
+                                    .font_family(cx.theme().mono_font_family.clone())
+                                    .text_size(cx.theme().mono_font_size)
                                     .focus_bordered(false)
                                     .into_any_element(),
                             ),

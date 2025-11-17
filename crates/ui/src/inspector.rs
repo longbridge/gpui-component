@@ -434,8 +434,8 @@ impl Render for DivInspector {
                             v_flex()
                                 .flex_1()
                                 .gap_y_1()
-                                .font_family("Monaco")
-                                .text_size(px(12.))
+                                .font_family(cx.theme().mono_font_family.clone())
+                                .text_size(cx.theme().mono_font_size)
                                 .child(Input::new(&self.rust_state.state).h_full())
                                 .when_some(self.rust_state.error.clone(), |this, err| {
                                     this.child(Alert::error("rust-error", err).text_xs())
@@ -462,8 +462,8 @@ impl Render for DivInspector {
                             v_flex()
                                 .flex_1()
                                 .gap_y_1()
-                                .font_family("Monaco")
-                                .text_size(px(12.))
+                                .font_family(cx.theme().mono_font_family.clone())
+                                .text_size(cx.theme().mono_font_size)
                                 .child(Input::new(&self.json_state.state).h_full())
                                 .when_some(self.json_state.error.clone(), |this, err| {
                                     this.child(Alert::error("json-error", err).text_xs())
@@ -487,7 +487,7 @@ fn render_inspector(
 
     v_flex()
         .id("inspector")
-        .font_family(".SystemUIFont")
+        .font_family(cx.theme().font_family.clone())
         .size_full()
         .bg(cx.theme().background)
         .border_l_1()

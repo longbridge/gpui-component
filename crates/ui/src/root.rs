@@ -399,7 +399,7 @@ impl Render for Root {
                 .on_action(cx.listener(Self::on_action_tab_prev))
                 .relative()
                 .size_full()
-                .font_family(".SystemUIFont")
+                .font_family(cx.theme().font_family.clone())
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
                 .child(self.view.clone()),

@@ -416,7 +416,7 @@ impl Render for StoryTiles {
         let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
-            .font_family(".SystemUIFont")
+            .font_family(cx.theme().font_family.clone())
             .relative()
             .size_full()
             .flex()
