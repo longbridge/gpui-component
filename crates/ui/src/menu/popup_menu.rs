@@ -970,26 +970,17 @@ impl PopupMenu {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let icon_placeholder = if has_icon { Some(Icon::empty()) } else { None };
-
         if !has_icon {
             return None;
         }
 
-        let icon = h_flex()
-            .w_3p5()
-            .h_3p5()
-            .justify_center()
-            .text_sm()
-            .map(|this| {
-                if let Some(icon) = icon {
-                    this.child(icon.clone().xsmall())
-                } else {
-                    this.children(icon_placeholder.clone())
-                }
-            });
+        let icon = if let Some(icon) = icon {
+            icon.clone()
+        } else {
+            Icon::empty()
+        };
 
-        Some(icon)
+        Some(icon.xsmall())
     }
 
     #[inline]
@@ -1070,7 +1061,7 @@ impl PopupMenu {
                     .items_center()
                     .gap_x_1()
                     .children(Self::render_icon(has_icon, None, window, cx))
-                    .child(label.clone()),
+                    .child(div().flex_1().child(label.clone())),
             ),
             PopupMenuItem::ElementItem {
                 render,
