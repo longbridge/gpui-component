@@ -1,5 +1,6 @@
 use gpui::*;
 use gpui_component::{
+    ActiveTheme as _,
     highlighter::Language,
     input::{Input, InputEvent, InputState, TabSize},
     resizable::{h_resizable, resizable_panel},
@@ -83,8 +84,8 @@ impl Render for Example {
                             div()
                                 .id("source")
                                 .size_full()
-                                .font_family("Monaco")
-                                .text_size(px(12.))
+                                .font_family(cx.theme().mono_font_family.clone())
+                                .text_size(cx.theme().mono_font_size)
                                 .child(
                                     Input::new(&self.input_state)
                                         .h_full()

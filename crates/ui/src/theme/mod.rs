@@ -45,8 +45,20 @@ pub struct Theme {
     pub dark_theme: Rc<ThemeConfig>,
 
     pub mode: ThemeMode,
+    /// The font family for the application, default is `.SystemUIFont`.
     pub font_family: SharedString,
+    /// The base font size for the application, default is 16px.
     pub font_size: Pixels,
+    /// The monospace font family for the application.
+    ///
+    /// Defaults to:
+    ///
+    /// - macOS: `Menlo`
+    /// - Windows: `Consolas`
+    /// - Linux: `DejaVu Sans Mono`
+    pub mono_font_family: SharedString,
+    /// The monospace font size for the application, default is 13px.
+    pub mono_font_size: Pixels,
     /// Radius for the general elements.
     pub radius: Pixels,
     /// Radius for the large elements, e.g.: Dialog, Notification border radius.
@@ -172,14 +184,17 @@ impl From<&ThemeColor> for Theme {
         Theme {
             mode: ThemeMode::default(),
             transparent: Hsla::transparent_black(),
+            font_family: ".SystemUIFont".into(),
             font_size: px(16.),
-            font_family: if cfg!(target_os = "macos") {
-                ".SystemUIFont".into()
+            mono_font_family: if cfg!(target_os = "macos") {
+                // https://en.wikipedia.org/wiki/Menlo_(typeface)
+                "Menlo".into()
             } else if cfg!(target_os = "windows") {
-                "Segoe UI".into()
+                "Consolas".into()
             } else {
-                "FreeMono".into()
+                "DejaVu Sans Mono".into()
             },
+            mono_font_size: px(13.),
             radius: px(6.),
             radius_lg: px(8.),
             shadow: true,

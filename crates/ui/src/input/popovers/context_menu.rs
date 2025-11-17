@@ -8,6 +8,7 @@ use rust_i18n::t;
 use crate::{
     input::{self, popovers::ContextMenu, InputState},
     menu::PopupMenu,
+    ActiveTheme as _,
 };
 
 /// Context menu for mouse right clicks.
@@ -125,7 +126,7 @@ impl MouseContextMenu {
 }
 
 impl Render for MouseContextMenu {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.open {
             return div().into_any_element();
         }
@@ -137,8 +138,7 @@ impl Render for MouseContextMenu {
                 .position(self.mouse_position)
                 .child(
                     div()
-                        .font_family(".SystemUIFont")
-                        .text_size(px(14.))
+                        .font_family(cx.theme().font_family.clone())
                         .cursor_default()
                         .child(self.menu.clone()),
                 ),

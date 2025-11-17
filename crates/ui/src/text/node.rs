@@ -371,8 +371,8 @@ impl CodeBlock {
                     .p_3()
                     .rounded(cx.theme().radius)
                     .bg(cx.theme().secondary.opacity(0.85))
-                    .font_family("Menlo, Monaco, Consolas, monospace")
-                    .text_size(rems(0.875))
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .text_size(cx.theme().mono_font_size)
                     .relative()
                     .refine_style(&style.code_block)
                     .child(Inline::new(
