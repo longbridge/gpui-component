@@ -1,14 +1,26 @@
 use gpui::{
-    div, AnyElement, AppContext as _, Entity, IntoElement, ParentElement as _, SharedString, Styled,
+    div, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, Styled, Window,
 };
 
 use crate::{
-    input::{InputEvent, InputState, NumberInput},
-    setting::{fields::SettingFieldRender, SettingField},
+    input::{Input, InputEvent, InputState},
+    setting::{
+        fields::{get_value, set_value, SettingFieldRender},
+        AnySettingField,
+    },
 };
 
-pub(crate) struct StringField<T: Into<SharedString>> {
-    pub _marker: std::marker::PhantomData<T>,
+pub(crate) struct StringField<T> {
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> StringField<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            _marker: std::marker::PhantomData,
+        }
+    }
 }
 
 struct State {
@@ -16,26 +28,21 @@ struct State {
     _subscription: gpui::Subscription,
 }
 
-impl<T: Into<SharedString>> SettingFieldRender for StringField<T> {
+impl<T> SettingFieldRender for StringField<T>
+where
+    T: Into<SharedString> + From<SharedString> + Clone + 'static,
+{
     fn render(
         &self,
         id: &'static str,
-        _label: gpui::SharedString,
-        _description: Option<gpui::SharedString>,
-        field: std::rc::Rc<dyn crate::setting::AnySettingField>,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
+        _label: SharedString,
+        _description: Option<SharedString>,
+        field: std::rc::Rc<dyn AnySettingField>,
+        window: &mut Window,
+        cx: &mut App,
     ) -> AnyElement {
-        let value = (field
-            .as_any()
-            .downcast_ref::<SettingField<T>>()
-            .unwrap()
-            .value)(cx);
-        let set_value = field
-            .as_any()
-            .downcast_ref::<SettingField<T>>()
-            .unwrap()
-            .set_value;
+        let value = get_value::<T>(&field, cx);
+        let set_value = set_value::<T>(&field, cx);
 
         let state = window
             .use_keyed_state(id, cx, |window, cx| {
@@ -43,8 +50,8 @@ impl<T: Into<SharedString>> SettingFieldRender for StringField<T> {
                 let subscription = cx.subscribe(&state, {
                     move |_, state, event: &InputEvent, cx| match event {
                         InputEvent::Change => {
-                            let value = state.read(cx).value().to_string();
-                            set_value(value, cx);
+                            let value = state.read(cx).value();
+                            set_value(value.into(), cx);
                         }
                         _ => return,
                     }
@@ -57,9 +64,12 @@ impl<T: Into<SharedString>> SettingFieldRender for StringField<T> {
             })
             .read(cx);
 
+        // TODO: Support width from field options.
+
         div()
-            .w_32()
-            .child(NumberInput::new(&state.input))
+            .id(id)
+            .w_64()
+            .child(Input::new(&state.input))
             .into_any_element()
     }
 }

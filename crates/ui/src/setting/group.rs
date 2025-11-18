@@ -4,9 +4,11 @@ use gpui::{
     prelude::FluentBuilder as _, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, RenderOnce, SharedString, Styled, Window,
 };
+use itertools::Group;
 
 use crate::{
     button::{Button, ButtonVariants},
+    group_box::GroupBox,
     h_flex,
     label::Label,
     setting::SettingItem,
@@ -81,12 +83,12 @@ impl SettingGroup {
 
     pub(crate) fn render(
         &self,
-        ix: usize,
+        _ix: usize,
         query: &str,
         window: &mut Window,
         cx: &mut App,
     ) -> impl gpui::IntoElement {
-        let is_resettable = self.is_resettable();
+        // let is_resettable = self.is_resettable();
         // let on_resets = self
         //     .items
         //     .iter()
@@ -94,17 +96,17 @@ impl SettingGroup {
         //     .map(|item| item.on_reset.clone())
         //     .collect::<Vec<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>>();
 
-        v_flex()
-            .id(ix)
-            .gap_4()
-            .child(Label::new(self.title.clone()))
-            .when_some(self.description.clone(), |this, description| {
-                this.child(
-                    Label::new(description)
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground),
-                )
-            })
+        GroupBox::new()
+            .title(v_flex().gap_1().child(self.title.clone()).when_some(
+                self.description.clone(),
+                |this, description| {
+                    this.child(
+                        Label::new(description)
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground),
+                    )
+                },
+            ))
             .children(self.items.iter().filter_map(|item| {
                 if item.is_match(&query) {
                     Some(item.clone().render(window, cx))

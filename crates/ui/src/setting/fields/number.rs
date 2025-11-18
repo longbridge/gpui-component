@@ -1,11 +1,14 @@
-use gpui::{div, AnyElement, AppContext as _, Entity, IntoElement, ParentElement as _, Styled};
+use gpui::{
+    div, AnyElement, AppContext as _, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, Styled,
+};
 
 use crate::{
     input::{InputEvent, InputState, NumberInput},
-    setting::{fields::SettingFieldRender, SettingField},
+    setting::fields::{get_value, set_value, SettingFieldRender},
 };
 
-pub(crate) struct NumberField {}
+pub(crate) struct NumberField;
 
 struct State {
     input: Entity<InputState>,
@@ -22,16 +25,8 @@ impl SettingFieldRender for NumberField {
         window: &mut gpui::Window,
         cx: &mut gpui::App,
     ) -> AnyElement {
-        let value = (field
-            .as_any()
-            .downcast_ref::<SettingField<f64>>()
-            .unwrap()
-            .value)(cx);
-        let set_value = field
-            .as_any()
-            .downcast_ref::<SettingField<f64>>()
-            .unwrap()
-            .set_value;
+        let value = get_value::<f64>(&field, cx);
+        let set_value = set_value::<f64>(&field, cx);
 
         let state = window
             .use_keyed_state(id, cx, |window, cx| {
@@ -56,6 +51,7 @@ impl SettingFieldRender for NumberField {
             .read(cx);
 
         div()
+            .id(id)
             .w_32()
             .child(NumberInput::new(&state.input))
             .into_any_element()

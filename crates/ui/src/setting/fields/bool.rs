@@ -1,10 +1,9 @@
-use gpui::{div, AnyElement, App, IntoElement, ParentElement as _};
-
 use crate::{
     checkbox::Checkbox,
-    setting::{fields::SettingFieldRender, SettingField},
+    setting::fields::{get_value, set_value, SettingFieldRender},
     switch::Switch,
 };
+use gpui::{AnyElement, App, IntoElement};
 
 pub(crate) struct BoolField {
     use_switch: bool,
@@ -26,16 +25,8 @@ impl SettingFieldRender for BoolField {
         _: &mut gpui::Window,
         cx: &mut gpui::App,
     ) -> AnyElement {
-        let checked = (field
-            .as_any()
-            .downcast_ref::<SettingField<bool>>()
-            .unwrap()
-            .value)(cx);
-        let set_value = field
-            .as_any()
-            .downcast_ref::<SettingField<bool>>()
-            .unwrap()
-            .set_value;
+        let checked = get_value::<bool>(&field, cx);
+        let set_value = set_value::<bool>(&field, cx);
 
         if self.use_switch {
             Switch::new("check")

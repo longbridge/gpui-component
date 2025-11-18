@@ -11,9 +11,7 @@ use crate::{
     history::{History, HistoryItem},
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
-    sidebar::{Sidebar, SidebarGroup, SidebarMenu, SidebarMenuItem},
     tree::{tree, TreeItem, TreeState},
-    v_flex, Collapsible,
 };
 use gpui::{
     div, px, App, AppContext as _, ElementId, Entity, IntoElement, ParentElement as _, RenderOnce,

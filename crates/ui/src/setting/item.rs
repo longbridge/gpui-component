@@ -1,22 +1,22 @@
-use std::{any::Any, ops::Deref, rc::Rc};
-
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, AppContext, ClickEvent, ElementId, Empty,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window,
+    div, prelude::FluentBuilder as _, AnyElement, App, InteractiveElement as _, IntoElement,
+    ParentElement, SharedString, Styled, Window,
+};
+use std::{
+    any::{Any, TypeId},
+    ops::Deref,
+    rc::Rc,
 };
 
 use crate::{
-    checkbox::Checkbox,
     h_flex,
-    input::{InputState, NumberInput},
     label::Label,
-    setting::fields::{BoolField, NumberField, SettingFieldRender, StringField, UnknownField},
-    switch::Switch,
+    setting::fields::{BoolField, DropdownField, NumberField, SettingFieldRender, StringField},
     v_flex, ActiveTheme as _,
 };
 
 /// The type of setting field to render.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SettingFieldType {
     /// As switch toggle, required `bool` value.
     Switch,
@@ -36,6 +36,40 @@ pub enum SettingFieldType {
         /// The options for the dropdown as (value, label) pairs.
         options: Vec<(SharedString, SharedString)>,
     },
+}
+
+impl SettingFieldType {
+    #[inline]
+    pub fn is_switch(&self) -> bool {
+        matches!(self, SettingFieldType::Switch)
+    }
+
+    #[inline]
+    pub fn is_checkbox(&self) -> bool {
+        matches!(self, SettingFieldType::Checkbox)
+    }
+
+    #[inline]
+    pub fn is_number_input(&self) -> bool {
+        matches!(self, SettingFieldType::NumberInput { .. })
+    }
+
+    #[inline]
+    pub fn is_input(&self) -> bool {
+        matches!(self, SettingFieldType::Input)
+    }
+
+    #[inline]
+    pub fn is_dropdown(&self) -> bool {
+        matches!(self, SettingFieldType::Dropdown { .. })
+    }
+
+    pub(super) fn dropdown_options(&self) -> Option<&Vec<(SharedString, SharedString)>> {
+        match self {
+            SettingFieldType::Dropdown { options } => Some(options),
+            _ => None,
+        }
+    }
 }
 
 /// A setting field that can get and set a value of type T in the App.
@@ -131,15 +165,26 @@ impl SettingItem {
     ) -> impl IntoElement {
         let type_id = field.deref().type_id();
         let renderer: Box<dyn SettingFieldRender> = match type_id {
-            t if t == std::any::TypeId::of::<bool>() => Box::new(BoolField::new(matches!(
-                field_type,
-                SettingFieldType::Switch
-            ))),
-            t if t == std::any::TypeId::of::<f64>() => Box::new(NumberField {}),
-            t if t == std::any::TypeId::of::<SharedString>() => Box::new(StringField {}),
+            t if t == std::any::TypeId::of::<bool>() => {
+                Box::new(BoolField::new(field_type.is_switch()))
+            }
+            t if t == TypeId::of::<f64>() && field_type.is_number_input() => Box::new(NumberField),
+            t if t == TypeId::of::<SharedString>() && field_type.is_input() => {
+                Box::new(StringField::<SharedString>::new())
+            }
+            t if t == TypeId::of::<String>() && field_type.is_input() => {
+                Box::new(StringField::<String>::new())
+            }
+            t if t == TypeId::of::<SharedString>() && field_type.is_dropdown() => Box::new(
+                DropdownField::<SharedString>::new(field_type.dropdown_options()),
+            ),
+            t if t == TypeId::of::<String>() && field_type.is_dropdown() => {
+                Box::new(DropdownField::<String>::new(field_type.dropdown_options()))
+            }
             _ => unimplemented!(
-                "Unsupported setting field type: {}",
-                field.deref().type_name()
+                "Unsupported setting type: {} and field_type: {:?}",
+                field.deref().type_name(),
+                field_type
             ),
         };
 
@@ -172,7 +217,7 @@ impl SettingItem {
                         ),
                     ),
                 ))
-                .child(div().max_w_1_3().child(Self::render_field(
+                .child(div().max_w_2_5().child(Self::render_field(
                     id,
                     label,
                     description,

@@ -8,7 +8,6 @@ use gpui_component::setting::{
     SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage, Settings,
 };
 
-#[derive(Default)]
 struct AppSettings {
     dark_mode: bool,
     auto_switch_theme: bool,
@@ -16,6 +15,19 @@ struct AppSettings {
     font_size: f64,
     notifications_enabled: bool,
     auto_update: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            dark_mode: false,
+            auto_switch_theme: false,
+            font_family: "Arial".into(),
+            font_size: 14.0,
+            notifications_enabled: true,
+            auto_update: true,
+        }
+    }
 }
 
 impl Global for AppSettings {}
@@ -75,7 +87,8 @@ impl SettingsStory {
                             AppSettings::global_mut(cx).dark_mode = val;
                         },
                         reset_value: |cx: &mut App| {
-                            AppSettings::global_mut(cx).dark_mode = false;
+                            AppSettings::global_mut(cx).dark_mode =
+                                AppSettings::default().dark_mode;
                         },
                     }),
                 },
@@ -92,7 +105,8 @@ impl SettingsStory {
                             AppSettings::global_mut(cx).auto_switch_theme = val;
                         },
                         reset_value: |cx: &mut App| {
-                            AppSettings::global_mut(cx).auto_switch_theme = false;
+                            AppSettings::global_mut(cx).auto_switch_theme =
+                                AppSettings::default().auto_switch_theme;
                         },
                     }),
                 },
@@ -116,7 +130,8 @@ impl SettingsStory {
                             AppSettings::global_mut(cx).font_family = val;
                         },
                         reset_value: |cx: &mut App| {
-                            AppSettings::global_mut(cx).font_family = "Arial".into();
+                            AppSettings::global_mut(cx).font_family =
+                                AppSettings::default().font_family;
                         },
                     }),
                 },
@@ -135,7 +150,8 @@ impl SettingsStory {
                             AppSettings::global_mut(cx).font_size = val;
                         },
                         reset_value: |cx: &mut App| {
-                            AppSettings::global_mut(cx).font_size = 14.0;
+                            AppSettings::global_mut(cx).font_size =
+                                AppSettings::default().font_size;
                         },
                     }),
                 },
