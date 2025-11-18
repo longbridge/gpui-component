@@ -6,9 +6,9 @@ use crate::{
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
-    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window,
+    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton,
+    ParentElement, Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -417,6 +417,7 @@ impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let style: ButtonVariant = self.variant;
         let clickable = self.clickable();
+        let is_disabled = self.disabled;
         let hoverable = self.hoverable();
         let normal_style = style.normal(self.outline, cx);
         let icon_size = match self.size {
@@ -475,10 +476,18 @@ impl RenderOnce for Button {
                     }
                 }
             })
-            .when(self.border_corners.top_left, |this| this.rounded_tl(rounding))
-            .when(self.border_corners.top_right, |this| this.rounded_tr(rounding))
-            .when(self.border_corners.bottom_left, |this| this.rounded_bl(rounding))
-            .when(self.border_corners.bottom_right, |this| this.rounded_br(rounding))
+            .when(self.border_corners.top_left, |this| {
+                this.rounded_tl(rounding)
+            })
+            .when(self.border_corners.top_right, |this| {
+                this.rounded_tr(rounding)
+            })
+            .when(self.border_corners.bottom_left, |this| {
+                this.rounded_bl(rounding)
+            })
+            .when(self.border_corners.bottom_right, |this| {
+                this.rounded_br(rounding)
+            })
             .when(self.border_edges.left, |this| this.border_l_1())
             .when(self.border_edges.right, |this| this.border_r_1())
             .when(self.border_edges.top, |this| this.border_t_1())
@@ -515,12 +524,26 @@ impl RenderOnce for Button {
                     .shadow_none()
             })
             .refine_style(&self.style)
-            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                // Stop handle any click event when disabled.
+                // To avoid handle dropdown menu open when button is disabled.
+                if is_disabled {
+                    cx.stop_propagation();
+                    return;
+                }
+
                 // Avoid focus on mouse down.
                 window.prevent_default();
             })
-            .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
+            .when_some(self.on_click, |this, on_click| {
                 this.on_click(move |event, window, cx| {
+                    // Stop handle any click event when disabled.
+                    // To avoid handle dropdown menu open when button is disabled.
+                    if !clickable {
+                        cx.stop_propagation();
+                        return;
+                    }
+
                     (on_click)(event, window, cx);
                 })
             })
