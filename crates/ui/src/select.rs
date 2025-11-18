@@ -41,6 +41,10 @@ pub trait SelectItem: Clone {
     fn display_title(&self) -> Option<AnyElement> {
         None
     }
+    /// Render the item for the select dropdown menu, default is to render the title.
+    fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.title().into_element()
+    }
     /// Get the value of the item.
     fn value(&self) -> &Self::Value;
     /// Check if the item matches the query for search, default is to match the title.
@@ -184,7 +188,7 @@ where
         );
     }
 
-    fn render_item(&self, ix: IndexPath, _: &mut Window, cx: &mut App) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item> {
         let selected = self
             .selected_index
             .map_or(false, |selected_index| selected_index == ix);
@@ -194,16 +198,10 @@ where
             .map_or(Size::Medium, |state| state.read(cx).options.size);
 
         if let Some(item) = self.delegate.item(ix) {
-            let content = item.display_title().unwrap_or_else(|| {
-                div()
-                    .whitespace_nowrap()
-                    .child(item.title().to_string())
-                    .into_any_element()
-            });
             let list_item = SelectListItem::new(ix.row)
                 .selected(selected)
                 .with_size(size)
-                .child(content);
+                .child(div().whitespace_nowrap().child(item.render(window, cx)));
             Some(list_item)
         } else {
             None
