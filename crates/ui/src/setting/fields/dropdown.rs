@@ -54,17 +54,10 @@ where
 
         div()
             .id(id)
-            .w_64()
             .child(
                 Button::new("btn")
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .justify_between()
-                            .gap_4()
-                            .child(old_label)
-                            .child(IconName::ChevronDown),
-                    )
+                    .label(old_label)
+                    .dropdown_caret(true)
                     .outline()
                     .dropdown_menu(move |menu, _, _| {
                         let menu = options.iter().fold(menu, |menu, (value, label)| {
