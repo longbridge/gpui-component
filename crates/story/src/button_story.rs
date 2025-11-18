@@ -466,17 +466,6 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-4-danger")
-                            .danger()
-                            .outline()
-                            .label("Danger Button")
-                            .disabled(disabled)
-                            .selected(selected)
-                            .loading(loading)
-                            .when(compact, |this| this.compact())
-                            .on_click(Self::on_click),
-                    )
-                    .child(
                         Button::new("button-outline-5-ghost")
                             .ghost()
                             .dropdown_caret(true)
