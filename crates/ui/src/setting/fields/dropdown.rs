@@ -5,12 +5,14 @@ use gpui::{
 
 use crate::{
     button::{Button, DropdownButton},
+    h_flex,
     input::{Input, InputEvent, InputState},
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField, SettingFieldType,
     },
+    IconName,
 };
 
 pub(crate) struct DropdownField<T> {
@@ -54,8 +56,15 @@ where
             .id(id)
             .w_64()
             .child(
-                DropdownButton::new("btn")
-                    .label(old_label)
+                Button::new("btn")
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_between()
+                            .gap_4()
+                            .child(old_label)
+                            .child(IconName::ChevronDown),
+                    )
                     .outline()
                     .dropdown_menu(move |menu, _, _| {
                         let menu = options.iter().fold(menu, |menu, (value, label)| {
