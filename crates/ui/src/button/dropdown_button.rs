@@ -6,7 +6,7 @@ use gpui::{
 
 use crate::{
     menu::{DropdownMenu, PopupMenu},
-    Disableable, IconName, Selectable, Sizable, Size, StyledExt as _,
+    Disableable, Selectable, Sizable, Size, StyledExt as _,
 };
 
 use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
@@ -178,7 +178,7 @@ impl RenderOnce for DropdownButton {
                 .when_some(self.menu, |this, menu| {
                     this.child(
                         Button::new("popup")
-                            .icon(IconName::ChevronDown)
+                            .dropdown_caret(true)
                             .rounded(self.rounded)
                             .border_edges(Edges {
                                 left: rounded,

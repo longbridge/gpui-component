@@ -416,6 +416,7 @@ impl Styled for StorySection {
 impl RenderOnce for StorySection {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         GroupBox::new()
+            .id(self.title.clone())
             .outline()
             .title(
                 h_flex()

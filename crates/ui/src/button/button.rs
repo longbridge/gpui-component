@@ -189,7 +189,7 @@ pub struct Button {
     outline: bool,
     border_corners: Corners<bool>,
     border_edges: Edges<bool>,
-    dropdown_icon: bool,
+    dropdown_caret: bool,
     size: Size,
     compact: bool,
     tooltip: Option<(
@@ -238,7 +238,7 @@ impl Button {
             outline: false,
             children: Vec::new(),
             loading_icon: None,
-            dropdown_icon: false,
+            dropdown_caret: false,
             tab_index: 0,
             tab_stop: true,
         }
@@ -354,9 +354,9 @@ impl Button {
         self
     }
 
-    /// Set to show right dropdown icon when has dropdown menu.
-    pub(crate) fn dropdown_icon(mut self, dropdown_icon: bool) -> Self {
-        self.dropdown_icon = dropdown_icon;
+    /// Set to show a dropdown caret icon at the end of the button.
+    pub fn dropdown_caret(mut self, dropdown_caret: bool) -> Self {
+        self.dropdown_caret = dropdown_caret;
         self
     }
 
@@ -587,15 +587,8 @@ impl RenderOnce for Button {
                         this.child(div().flex_none().line_height(relative(1.)).child(label))
                     })
                     .children(self.children)
-                    .when(self.dropdown_icon, |this| {
-                        this.child(
-                            Icon::new(if self.selected {
-                                IconName::ChevronUp
-                            } else {
-                                IconName::ChevronDown
-                            })
-                            .with_size(icon_size),
-                        )
+                    .when(self.dropdown_caret, |this| {
+                        this.child(Icon::new(IconName::ChevronDown).with_size(icon_size))
                     })
             })
             .when(self.loading && !self.disabled, |this| {
