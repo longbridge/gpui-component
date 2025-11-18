@@ -3,6 +3,7 @@ mod group;
 mod item;
 mod page;
 
+pub use fields::NumberFieldOptions;
 pub use group::*;
 pub use item::*;
 pub use page::*;

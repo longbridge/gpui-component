@@ -11,7 +11,9 @@ use std::{
 use crate::{
     h_flex,
     label::Label,
-    setting::fields::{BoolField, DropdownField, NumberField, SettingFieldRender, StringField},
+    setting::fields::{
+        BoolField, DropdownField, NumberField, NumberFieldOptions, SettingFieldRender, StringField,
+    },
     v_flex, ActiveTheme as _,
 };
 
@@ -24,12 +26,7 @@ pub enum SettingFieldType {
     Checkbox,
     /// As a number input, required `f64` value.
     NumberInput {
-        /// The minimum value for the number input.
-        min: f64,
-        /// The maximum value for the number input.
-        max: f64,
-        /// The step value for the number input.
-        step: f64,
+        options: NumberFieldOptions,
     },
     Input,
     Dropdown {
@@ -64,9 +61,18 @@ impl SettingFieldType {
         matches!(self, SettingFieldType::Dropdown { .. })
     }
 
+    #[inline]
     pub(super) fn dropdown_options(&self) -> Option<&Vec<(SharedString, SharedString)>> {
         match self {
             SettingFieldType::Dropdown { options } => Some(options),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn number_input_options(&self) -> Option<&NumberFieldOptions> {
+        match self {
+            SettingFieldType::NumberInput { options } => Some(options),
             _ => None,
         }
     }
@@ -189,7 +195,9 @@ impl SettingItem {
             t if t == std::any::TypeId::of::<bool>() => {
                 Box::new(BoolField::new(field_type.is_switch()))
             }
-            t if t == TypeId::of::<f64>() && field_type.is_number_input() => Box::new(NumberField),
+            t if t == TypeId::of::<f64>() && field_type.is_number_input() => {
+                Box::new(NumberField::new(field_type.number_input_options()))
+            }
             t if t == TypeId::of::<SharedString>() && field_type.is_input() => {
                 Box::new(StringField::<SharedString>::new())
             }

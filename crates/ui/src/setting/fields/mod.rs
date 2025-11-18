@@ -8,6 +8,8 @@ pub(crate) use dropdown::*;
 pub(crate) use number::*;
 pub(crate) use string::*;
 
+pub use number::NumberFieldOptions;
+
 use gpui::{AnyElement, App, SharedString, Window};
 use std::rc::Rc;
 

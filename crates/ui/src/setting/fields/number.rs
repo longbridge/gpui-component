@@ -6,14 +6,44 @@ use gpui::{
 };
 
 use crate::{
-    input::{InputEvent, InputState, NumberInput},
+    input::{InputState, NumberInput, NumberInputEvent},
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
 };
 
-pub(crate) struct NumberField;
+#[derive(Clone, Debug)]
+pub struct NumberFieldOptions {
+    /// The minimum value for the number input, default is `f64::MIN`.
+    pub min: f64,
+    /// The maximum value for the number input, default is `f64::MAX`.
+    pub max: f64,
+    /// The step value for the number input, default is `1.0`.
+    pub step: f64,
+}
+
+impl Default for NumberFieldOptions {
+    fn default() -> Self {
+        Self {
+            min: f64::MIN,
+            max: f64::MAX,
+            step: 1.0,
+        }
+    }
+}
+
+pub(crate) struct NumberField {
+    options: NumberFieldOptions,
+}
+
+impl NumberField {
+    pub(crate) fn new(options: Option<&NumberFieldOptions>) -> Self {
+        Self {
+            options: options.cloned().unwrap_or_default(),
+        }
+    }
+}
 
 struct State {
     input: Entity<InputState>,
@@ -32,21 +62,30 @@ impl SettingFieldRender for NumberField {
     ) -> AnyElement {
         let value = get_value::<f64>(&field, cx);
         let set_value = set_value::<f64>(&field, cx);
+        let options = self.options.clone();
 
         let state = window
             .use_keyed_state(id, cx, |window, cx| {
                 let input =
                     cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
-                let _subscription = cx.subscribe(&input, {
-                    move |_, input, event: &InputEvent, cx| match event {
-                        InputEvent::Change => {
-                            let value = input.read(cx).value();
-                            dbg!(&value);
+                let _subscription = cx.subscribe_in(&input, window, {
+                    move |_, input, event: &NumberInputEvent, window, cx| match event {
+                        NumberInputEvent::Step(action) => input.update(cx, |input, cx| {
+                            let value = input.value();
                             if let Ok(value) = value.parse::<f64>() {
-                                set_value(value, cx);
+                                let new_value = if *action == crate::input::StepAction::Increment {
+                                    (value + options.step).min(options.max)
+                                } else {
+                                    (value - options.step).max(options.min)
+                                };
+                                set_value(new_value, cx);
+                                input.set_value(
+                                    SharedString::from(new_value.to_string()),
+                                    window,
+                                    cx,
+                                );
                             }
-                        }
-                        _ => {}
+                        }),
                     }
                 });
 

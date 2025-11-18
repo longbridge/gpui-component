@@ -7,7 +7,10 @@ use gpui::{
 
 use gpui_component::{
     group_box::GroupBoxVariant,
-    setting::{SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage, Settings},
+    setting::{
+        NumberFieldOptions, SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage,
+        Settings,
+    },
 };
 
 struct AppSettings {
@@ -168,9 +171,11 @@ impl SettingsStory {
                     label: "Font Size".into(),
                     description: Some("Adjust the font size for better readability.".into()),
                     field_type: SettingFieldType::NumberInput {
-                        min: 10.0,
-                        max: 100.0,
-                        step: 5.0,
+                        options: NumberFieldOptions {
+                            min: 8.0,
+                            max: 72.0,
+                            ..Default::default()
+                        },
                     },
                     field: Rc::new(SettingField::new(
                         |cx: &App| AppSettings::global(cx).font_size,
