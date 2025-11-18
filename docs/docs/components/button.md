@@ -107,6 +107,16 @@ Button::new("btn")
     .label("Like")
 ```
 
+### With a dropdown caret icon
+
+The `.dropdown_caret` method can allows adding a dropdown caret icon to end of the button.
+
+```rust
+Button::new("btn")
+    .label("Options")
+    .dropdown_caret(true)
+```
+
 ### Button States
 
 There have `disabled`, `loading`, `selected` state for buttons to indicate different statuses.
