@@ -10,7 +10,7 @@ The [Button] element with multiple variants, sizes, and states. Supports icons, 
 ## Import
 
 ```rust
-use gpui_component::button::{Button, ButtonGroup, DropdownButton};
+use gpui_component::button::{Button, ButtonGroup};
 ```
 
 ## Usage
@@ -150,28 +150,6 @@ ButtonGroup::new("toggle-group")
     })
 ```
 
-## Dropdown Button
-
-```rust
-use gpui::Corner;
-
-DropdownButton::new("dropdown")
-    .button(Button::new("btn").label("Click Me"))
-    .dropdown_menu(|menu, _, _| {
-        menu.menu("Option 1", Box::new(MyAction))
-            .menu("Option 2", Box::new(MyAction))
-            .separator()
-            .menu("Option 3", Box::new(MyAction))
-    })
-
-// With custom anchor
-DropdownButton::new("dropdown")
-    .button(Button::new("btn").label("Click Me"))
-    .dropdown_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
-        menu.menu("Option 1", Box::new(MyAction))
-    })
-```
-
 ## Custom Variant
 
 ```rust
@@ -193,7 +171,6 @@ Button::new("custom-btn")
 
 - [Button]
 - [ButtonGroup]
-- [DropdownButton]
 - [ButtonCustomVariant]
 
 ## Examples
@@ -222,6 +199,5 @@ Button::new("btn")
 
 [Button]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.Button.html
 [ButtonGroup]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonGroup.html
-[DropdownButton]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.DropdownButton.html
 [ButtonCustomVariant]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonCustomVariant.html
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

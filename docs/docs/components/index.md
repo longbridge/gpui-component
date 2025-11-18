@@ -15,6 +15,7 @@ collapsed: false
 - [Button](button) - Interactive buttons with multiple variants
 - [Checkbox](checkbox) - Binary selection control
 - [Collapsible](collapsible) - Expandable/collapsible content
+- [DropdownButton](dropdown_button) - Button with dropdown menu
 - [Icon](icon) - Icon display component
 - [Image](image) - Image display with fallbacks
 - [Kbd](kbd) - Keyboard shortcut display
