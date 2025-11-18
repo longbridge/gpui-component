@@ -1,3 +1,5 @@
+use std::task::Context;
+
 use gpui::{
     prelude::FluentBuilder as _, App, InteractiveElement as _, IntoElement, ParentElement as _,
     SharedString, Styled, Window,
@@ -6,6 +8,7 @@ use gpui::{
 use crate::{
     button::{Button, ButtonVariants},
     divider::Divider,
+    group_box::GroupBoxVariant,
     h_flex,
     label::Label,
     setting::SettingGroup,
@@ -57,6 +60,7 @@ impl SettingPage {
         &self,
         ix: usize,
         query: &str,
+        group_variant: GroupBoxVariant,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -70,7 +74,7 @@ impl SettingPage {
             .id(ix)
             .p_4()
             .size_full()
-            .gap_5()
+            .gap_6()
             .child(
                 v_flex()
                     .gap_4()
@@ -93,12 +97,17 @@ impl SettingPage {
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground),
                         )
-                    }),
+                    })
+                    .child(Divider::horizontal()),
             )
-            .child(Divider::horizontal())
             .children(self.groups.iter().enumerate().filter_map(|(ix, group)| {
                 if group.is_match(&query) {
-                    Some(group.render(ix, query, window, cx))
+                    Some(
+                        group
+                            .clone()
+                            .with_variant(group_variant)
+                            .render(ix, query, window, cx),
+                    )
                 } else {
                     None
                 }

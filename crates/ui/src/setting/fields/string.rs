@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gpui::{
     div, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, Styled, Window,
@@ -37,7 +39,7 @@ where
         id: &'static str,
         _label: SharedString,
         _description: Option<SharedString>,
-        field: std::rc::Rc<dyn AnySettingField>,
+        field: Rc<dyn AnySettingField>,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -46,20 +48,20 @@ where
 
         let state = window
             .use_keyed_state(id, cx, |window, cx| {
-                let state = cx.new(|cx| InputState::new(window, cx).default_value(value));
-                let subscription = cx.subscribe(&state, {
-                    move |_, state, event: &InputEvent, cx| match event {
+                let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
+                let _subscription = cx.subscribe(&input, {
+                    move |_, input, event: &InputEvent, cx| match event {
                         InputEvent::Change => {
-                            let value = state.read(cx).value();
+                            let value = input.read(cx).value();
                             set_value(value.into(), cx);
                         }
-                        _ => return,
+                        _ => {}
                     }
                 });
 
                 State {
-                    input: state,
-                    _subscription: subscription,
+                    input,
+                    _subscription,
                 }
             })
             .read(cx);

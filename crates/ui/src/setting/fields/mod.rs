@@ -37,10 +37,10 @@ pub(crate) fn get_value<T: Clone + 'static>(field: &Rc<dyn AnySettingField>, cx:
 pub(crate) fn set_value<T: Clone + 'static>(
     field: &Rc<dyn AnySettingField>,
     _cx: &mut App,
-) -> fn(T, &mut App) {
+) -> Rc<dyn Fn(T, &mut App)> {
     let setting_field = field
         .as_any()
         .downcast_ref::<SettingField<T>>()
         .expect("Failed to downcast setting field");
-    setting_field.set_value
+    setting_field.set_value.clone()
 }

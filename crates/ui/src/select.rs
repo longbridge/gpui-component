@@ -35,6 +35,10 @@ pub(crate) fn init(cx: &mut App) {
 pub trait SelectItem: Clone {
     type Value: Clone;
     fn title(&self) -> SharedString;
+    /// Render the item for the select dropdown menu, default is to render the title.
+    fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.title().into_element()
+    }
     /// Customize the display title used to selected item in Select Input.
     ///
     /// If return None, the title will be used.

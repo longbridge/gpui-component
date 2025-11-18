@@ -1,18 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled, Window,
+    prelude::FluentBuilder as _, App, ClickEvent, IntoElement, ParentElement as _, SharedString,
+    Styled, Window,
 };
-use itertools::Group;
 
 use crate::{
-    button::{Button, ButtonVariants},
-    group_box::GroupBox,
-    h_flex,
+    group_box::{GroupBox, GroupBoxVariant},
     label::Label,
     setting::SettingItem,
-    v_flex, ActiveTheme, IconName, Sizable as _,
+    v_flex, ActiveTheme,
 };
 
 /// A setting group that can contain multiple setting items.
@@ -21,6 +18,7 @@ pub struct SettingGroup {
     pub title: SharedString,
     pub description: Option<SharedString>,
     pub items: Vec<SettingItem>,
+    variant: GroupBoxVariant,
 }
 
 impl SettingGroup {
@@ -30,6 +28,7 @@ impl SettingGroup {
             title: title.into(),
             description: None,
             items: Vec::new(),
+            variant: GroupBoxVariant::default(),
         }
     }
 
@@ -42,6 +41,12 @@ impl SettingGroup {
     /// Set the description of the setting group.
     pub fn description(mut self, description: impl Into<SharedString>) -> Self {
         self.description = Some(description.into());
+        self
+    }
+
+    /// Set the variant of the group box.
+    pub(crate) fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
+        self.variant = variant;
         self
     }
 
@@ -82,7 +87,7 @@ impl SettingGroup {
     }
 
     pub(crate) fn render(
-        &self,
+        self,
         _ix: usize,
         query: &str,
         window: &mut Window,
@@ -97,6 +102,7 @@ impl SettingGroup {
         //     .collect::<Vec<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>>();
 
         GroupBox::new()
+            .with_variant(self.variant)
             .title(v_flex().gap_1().child(self.title.clone()).when_some(
                 self.description.clone(),
                 |this, description| {

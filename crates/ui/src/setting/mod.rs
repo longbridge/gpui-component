@@ -8,6 +8,7 @@ pub use item::*;
 pub use page::*;
 
 use crate::{
+    group_box::GroupBoxVariant,
     history::{History, HistoryItem},
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
@@ -35,6 +36,7 @@ pub struct Settings {
     id: ElementId,
     query: SharedString,
     pages: Vec<SettingPage>,
+    group_variant: GroupBoxVariant,
 }
 
 impl Settings {
@@ -44,6 +46,7 @@ impl Settings {
             id: id.into(),
             query: SharedString::default(),
             pages,
+            group_variant: GroupBoxVariant::default(),
         }
     }
 
@@ -59,6 +62,12 @@ impl Settings {
         self
     }
 
+    /// Set the variant for all setting groups.
+    pub fn group_variant(mut self, variant: GroupBoxVariant) -> Self {
+        self.group_variant = variant;
+        self
+    }
+
     fn render_active_page(
         self,
         pages: &Vec<SettingPage>,
@@ -68,7 +77,9 @@ impl Settings {
     ) -> impl IntoElement {
         for (ix, page) in pages.into_iter().enumerate() {
             if selected_ix.is_page(ix) {
-                return page.render(ix, &self.query, window, cx).into_any_element();
+                return page
+                    .render(ix, &self.query, self.group_variant, window, cx)
+                    .into_any_element();
             }
         }
 

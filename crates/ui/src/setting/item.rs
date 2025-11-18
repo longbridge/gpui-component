@@ -74,9 +74,28 @@ impl SettingFieldType {
 
 /// A setting field that can get and set a value of type T in the App.
 pub struct SettingField<T> {
-    pub value: fn(&App) -> T,
-    pub set_value: fn(T, &mut App),
-    pub reset_value: fn(&mut App),
+    /// Function to get the value for this field.
+    pub value: Rc<dyn Fn(&App) -> T>,
+    /// Function to set the value for this field.
+    pub set_value: Rc<dyn Fn(T, &mut App)>,
+    /// Function to reset the value for this field to its default.
+    pub reset_value: Rc<dyn Fn(&mut App)>,
+}
+
+impl<T> SettingField<T> {
+    /// Create a new setting field with the given get and set functions.
+    pub fn new<V, S, R>(value: V, set_value: S, reset_value: R) -> Self
+    where
+        V: Fn(&App) -> T + 'static,
+        S: Fn(T, &mut App) + 'static,
+        R: Fn(&mut App) + 'static,
+    {
+        Self {
+            value: Rc::new(value),
+            set_value: Rc::new(set_value),
+            reset_value: Rc::new(reset_value),
+        }
+    }
 }
 
 pub trait AnySettingField {
@@ -111,7 +130,7 @@ pub enum SettingItem {
         label: SharedString,
         description: Option<SharedString>,
         field_type: SettingFieldType,
-        field: Rc<dyn AnySettingField + Send + Sync>,
+        field: Rc<dyn AnySettingField>,
     },
     Element {
         id: &'static str,

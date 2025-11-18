@@ -1,6 +1,6 @@
 use gpui::{
     div, prelude::FluentBuilder, relative, AnyElement, App, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -13,6 +13,26 @@ pub enum GroupBoxVariant {
     Normal,
     Fill,
     Outline,
+}
+
+impl GroupBoxVariant {
+    /// Create a GroupBoxVariant from a string.
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "fill" => GroupBoxVariant::Fill,
+            "outline" => GroupBoxVariant::Outline,
+            _ => GroupBoxVariant::Normal,
+        }
+    }
+
+    /// Convert the GroupBoxVariant to a string.
+    pub fn as_str(&self) -> &str {
+        match self {
+            GroupBoxVariant::Normal => "normal",
+            GroupBoxVariant::Fill => "fill",
+            GroupBoxVariant::Outline => "outline",
+        }
+    }
 }
 
 /// GroupBox is a styled container element that with
@@ -133,5 +153,31 @@ impl RenderOnce for GroupBox {
                     .refine_style(&self.content_style)
                     .children(self.children),
             )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_group_variant_from_str() {
+        use super::GroupBoxVariant;
+
+        assert_eq!(GroupBoxVariant::from_str("normal"), GroupBoxVariant::Normal);
+        assert_eq!(GroupBoxVariant::from_str("fill"), GroupBoxVariant::Fill);
+        assert_eq!(
+            GroupBoxVariant::from_str("outline"),
+            GroupBoxVariant::Outline
+        );
+        assert_eq!(GroupBoxVariant::from_str("other"), GroupBoxVariant::Normal);
+
+        assert_eq!(GroupBoxVariant::from_str("FILL"), GroupBoxVariant::Fill);
+        assert_eq!(
+            GroupBoxVariant::from_str("OutLine"),
+            GroupBoxVariant::Outline
+        );
+
+        assert_eq!(GroupBoxVariant::Normal.as_str(), "normal");
+        assert_eq!(GroupBoxVariant::Fill.as_str(), "fill");
+        assert_eq!(GroupBoxVariant::Outline.as_str(), "outline");
     }
 }
