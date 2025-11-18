@@ -30,7 +30,19 @@ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement +
     }
 }
 
-impl DropdownMenu for Button {}
+impl DropdownMenu for Button {
+    fn dropdown_menu_with_anchor(
+        mut self,
+        anchor: impl Into<Corner>,
+        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> DropdownMenuPopover<Self> {
+        let style = self.style().clone();
+        let id = self.interactivity().element_id.clone();
+
+        DropdownMenuPopover::new(id.unwrap_or(0.into()), anchor, self.dropdown_icon(true), f)
+            .trigger_style(style)
+    }
+}
 
 #[derive(IntoElement)]
 pub struct DropdownMenuPopover<T: Selectable + IntoElement + 'static> {
