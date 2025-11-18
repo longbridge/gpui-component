@@ -75,26 +75,33 @@ impl SettingFieldType {
 /// A setting field that can get and set a value of type T in the App.
 pub struct SettingField<T> {
     /// Function to get the value for this field.
-    pub value: Rc<dyn Fn(&App) -> T>,
+    pub(crate) value: Rc<dyn Fn(&App) -> T>,
     /// Function to set the value for this field.
-    pub set_value: Rc<dyn Fn(T, &mut App)>,
-    /// Function to reset the value for this field to its default.
-    pub reset_value: Rc<dyn Fn(&mut App)>,
+    pub(crate) set_value: Rc<dyn Fn(T, &mut App)>,
+    pub(crate) default_value: Option<T>,
 }
 
 impl<T> SettingField<T> {
     /// Create a new setting field with the given get and set functions.
-    pub fn new<V, S, R>(value: V, set_value: S, reset_value: R) -> Self
+    pub fn new<V, S>(value: V, set_value: S) -> Self
     where
         V: Fn(&App) -> T + 'static,
         S: Fn(T, &mut App) + 'static,
-        R: Fn(&mut App) + 'static,
     {
         Self {
             value: Rc::new(value),
             set_value: Rc::new(set_value),
-            reset_value: Rc::new(reset_value),
+            default_value: None,
         }
+    }
+
+    /// Set the default value for this setting field, default is None.
+    ///
+    /// If set, this value can be used to reset the setting to its default state.
+    /// If not set, the setting cannot be reset.
+    pub fn default_value(mut self, default_value: T) -> Self {
+        self.default_value = Some(default_value);
+        self
     }
 }
 
@@ -102,7 +109,6 @@ pub trait AnySettingField {
     fn as_any(&self) -> &dyn std::any::Any;
     fn type_name(&self) -> &'static str;
     fn type_id(&self) -> std::any::TypeId;
-    fn reset_value(&self, cx: &mut App);
 }
 
 impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingField<T> {
@@ -116,10 +122,6 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingFi
 
     fn type_id(&self) -> std::any::TypeId {
         std::any::TypeId::of::<T>()
-    }
-
-    fn reset_value(&self, cx: &mut App) {
-        (self.reset_value)(cx);
     }
 }
 

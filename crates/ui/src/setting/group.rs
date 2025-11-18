@@ -1,8 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, App, ClickEvent, IntoElement, ParentElement as _, SharedString,
-    Styled, Window,
+    prelude::FluentBuilder as _, App, ClickEvent, ParentElement as _, SharedString, Styled, Window,
 };
 
 use crate::{

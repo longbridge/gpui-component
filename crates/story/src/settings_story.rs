@@ -81,6 +81,7 @@ impl SettingsStory {
 
     fn setting_pages(&self, cx: &mut Context<Self>) -> Vec<SettingPage> {
         let view = cx.entity();
+        let default_settings = AppSettings::default();
 
         vec![SettingPage::new("General").groups(vec![
             SettingGroup::new("Appearance").items(vec![
@@ -94,11 +95,8 @@ impl SettingsStory {
                         |val: bool, cx: &mut App| {
                             AppSettings::global_mut(cx).dark_mode = val;
                         },
-                        |cx: &mut App| {
-                            AppSettings::global_mut(cx).dark_mode =
-                                AppSettings::default().dark_mode;
-                        },
-                    )),
+
+                    ).default_value(default_settings.dark_mode)),
                 },
                 SettingItem::Item {
                     id: "auto-switch-theme",
@@ -112,11 +110,8 @@ impl SettingsStory {
                         |val: bool, cx: &mut App| {
                             AppSettings::global_mut(cx).auto_switch_theme = val;
                         },
-                        |cx: &mut App| {
-                            AppSettings::global_mut(cx).auto_switch_theme =
-                                AppSettings::default().auto_switch_theme;
-                        },
-                    )),
+
+                    ).default_value(default_settings.auto_switch_theme)),
                 },
                 SettingItem::Item {
                     id: "group-variant",
@@ -144,17 +139,8 @@ impl SettingsStory {
                                     cx.notify();
                                 });
                             }
-                        },
-                        {
-                            let view = view.clone();
-                            move |cx: &mut App| {
-                                view.update(cx, |view, cx| {
-                                    view.group_variant = GroupBoxVariant::Outline;
-                                    cx.notify();
-                                });
-                            }
-                        },
-                    )),
+                        }
+                    ).default_value(GroupBoxVariant::Outline.as_str().to_string().into())),
                 },
             ]),
             SettingGroup::new("Font").items(vec![
@@ -175,11 +161,7 @@ impl SettingsStory {
                         |val: String, cx: &mut App| {
                             AppSettings::global_mut(cx).font_family = val;
                         },
-                        |cx: &mut App| {
-                            AppSettings::global_mut(cx).font_family =
-                                AppSettings::default().font_family;
-                        },
-                    )),
+                    ).default_value(default_settings.font_family)),
                 },
                 SettingItem::Item {
                     id: "font-size",
@@ -195,11 +177,8 @@ impl SettingsStory {
                         |val: f64, cx: &mut App| {
                             AppSettings::global_mut(cx).font_size = val;
                         },
-                        |cx: &mut App| {
-                            AppSettings::global_mut(cx).font_size =
-                                AppSettings::default().font_size;
-                        },
-                    )),
+
+                    ).default_value(default_settings.font_size)),
                 },
             ]),
             SettingGroup::new("Updates").items(vec![
@@ -213,11 +192,7 @@ impl SettingsStory {
                         |val: bool, cx: &mut App| {
                             AppSettings::global_mut(cx).notifications_enabled = val;
                         },
-                        |cx: &mut App| {
-                            AppSettings::global_mut(cx).notifications_enabled =
-                                AppSettings::default().notifications_enabled;
-                        },
-                    )),
+                    ).default_value(default_settings.notifications_enabled)),
                 },
                 SettingItem::Item {
                     id: "auto-update",
@@ -229,11 +204,8 @@ impl SettingsStory {
                         |val: bool, cx: &mut App| {
                             AppSettings::global_mut(cx).auto_update = val;
                         },
-                        |cx: &mut App| {
-                            AppSettings::global_mut(cx).auto_update =
-                                AppSettings::default().auto_update;
-                        },
-                    )),
+
+                    ).default_value(default_settings.auto_update)),
                 },
             ]),
             SettingGroup::new("Other").items(vec![SettingItem::Item {
@@ -247,10 +219,7 @@ impl SettingsStory {
                         println!("cli-path set value: {}", val);
                         AppSettings::global_mut(cx).cli_path = val;
                     },
-                    |cx: &mut App| {
-                        AppSettings::global_mut(cx).cli_path = AppSettings::default().cli_path;
-                    },
-                )),
+                ).default_value(default_settings.cli_path)),
             }]),
         ])]
     }
