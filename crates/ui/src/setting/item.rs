@@ -232,21 +232,23 @@ impl SettingItem {
                 .id(id)
                 .gap_4()
                 .justify_between()
-                .child(v_flex().flex_1().gap_1().child(
-                    h_flex().justify_between().items_center().child(
-                        v_flex().child(Label::new(label.clone())).when_some(
-                            description.clone(),
-                            |this, description| {
-                                this.child(
-                                    Label::new(description)
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                            },
-                        ),
-                    ),
-                ))
-                .child(div().max_w_2_5().child(Self::render_field(
+                .items_start()
+                .flex_wrap()
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .gap_1()
+                        .max_w_3_5()
+                        .child(Label::new(label.clone()))
+                        .when_some(description.clone(), |this, description| {
+                            this.child(
+                                Label::new(description)
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground),
+                            )
+                        }),
+                )
+                .child(div().bg(cx.theme().background).child(Self::render_field(
                     id,
                     label,
                     description,
