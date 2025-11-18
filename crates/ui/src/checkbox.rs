@@ -1,8 +1,8 @@
 use std::{rc::Rc, time::Duration};
 
 use crate::{
-    text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName, Selectable, Sizable,
-    Size, StyledExt as _,
+    icon::IconNamed, text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName,
+    Selectable, Sizable, Size, StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, Animation, AnimationExt, AnyElement,
