@@ -147,13 +147,6 @@ pub enum SettingItem {
 }
 
 impl SettingItem {
-    pub(crate) fn is_default(&self) -> bool {
-        match self {
-            SettingItem::Item { .. } => false,
-            SettingItem::Element { .. } => true,
-        }
-    }
-
     pub(crate) fn is_match(&self, query: &str) -> bool {
         match self {
             SettingItem::Item {

@@ -64,10 +64,6 @@ impl SettingGroup {
         self
     }
 
-    fn is_resettable(&self) -> bool {
-        self.items.iter().any(|item| !item.is_default())
-    }
-
     /// Return true if any of the setting items in the group match the given query.
     pub(super) fn is_match(&self, query: &str) -> bool {
         self.items.iter().any(|item| item.is_match(query))
