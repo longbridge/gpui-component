@@ -845,13 +845,7 @@ where
                             .when(!show_clean, |this| {
                                 let icon = match self.options.icon.clone() {
                                     Some(icon) => icon,
-                                    None => {
-                                        if self.open {
-                                            Icon::new(IconName::ChevronUp)
-                                        } else {
-                                            Icon::new(IconName::ChevronDown)
-                                        }
-                                    }
+                                    None => Icon::new(IconName::ChevronDown),
                                 };
 
                                 this.child(icon.xsmall().text_color(match self.options.disabled {

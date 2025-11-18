@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     h_flex, spinner::Spinner, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
-    FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
+    FocusableExt as _, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
@@ -189,6 +189,7 @@ pub struct Button {
     outline: bool,
     border_corners: Corners<bool>,
     border_edges: Edges<bool>,
+    dropdown_caret: bool,
     size: Size,
     compact: bool,
     tooltip: Option<(
@@ -237,6 +238,7 @@ impl Button {
             outline: false,
             children: Vec::new(),
             loading_icon: None,
+            dropdown_caret: false,
             tab_index: 0,
             tab_stop: true,
         }
@@ -349,6 +351,12 @@ impl Button {
     /// Default is true.
     pub fn tab_stop(mut self, tab_stop: bool) -> Self {
         self.tab_stop = tab_stop;
+        self
+    }
+
+    /// Set to show a dropdown caret icon at the end of the button.
+    pub fn dropdown_caret(mut self, dropdown_caret: bool) -> Self {
+        self.dropdown_caret = dropdown_caret;
         self
     }
 
@@ -579,6 +587,9 @@ impl RenderOnce for Button {
                         this.child(div().flex_none().line_height(relative(1.)).child(label))
                     })
                     .children(self.children)
+                    .when(self.dropdown_caret, |this| {
+                        this.child(Icon::new(IconName::ChevronDown).with_size(icon_size))
+                    })
             })
             .when(self.loading && !self.disabled, |this| {
                 this.bg(normal_style.bg.opacity(0.8))
