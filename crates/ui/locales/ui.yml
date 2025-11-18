@@ -5,186 +5,224 @@ Calendar:
     zh-CN: 日
     zh-HK: 日
     it: Do
+    th: อา
   week.1:
     en: Mo
     zh-CN: 一
     zh-HK: 一
     it: Lu
+    th: จ
   week.2:
     en: Tu
     zh-CN: 二
     zh-HK: 二
     it: Ma
+    th: อ
   week.3:
     en: We
     zh-CN: 三
     zh-HK: 三
     it: Me
+    th: พ
   week.4:
     en: Th
     zh-CN: 四
     zh-HK: 四
     it: Gi
+    th: พฤ
   week.5:
     en: Fr
     zh-CN: 五
     zh-HK: 五
     it: Ve
+    th: ศ
   week.6:
     en: Sa
     zh-CN: 六
     zh-HK: 六
     it: Sa
+    th: ส
   month.January:
     en: January
     zh-CN: 一月
     zh-HK: 一月
     it: Gennaio
+    th: มกราคม
   month.February:
     en: February
     zh-CN: 二月
     zh-HK: 二月
     it: Febbraio
+    th: กุมภาพันธ์
   month.March:
     en: March
     zh-CN: 三月
     zh-HK: 三月
     it: Marzo
+    th: มีนาคม
   month.April:
     en: April
     zh-CN: 四月
     zh-HK: 四月
     it: Aprile
+    th: เมษายน
   month.May:
     en: May
     zh-CN: 五月
     zh-HK: 五月
     it: Maggio
+    th: พฤษภาคม
   month.June:
     en: June
     zh-CN: 六月
     zh-HK: 六月
     it: Giugno
+    th: มิถุนายน
   month.July:
     en: July
     zh-CN: 七月
     zh-HK: 七月
     it: Luglio
+    th: กรกฎาคม
   month.August:
     en: August
     zh-CN: 八月
     zh-HK: 八月
     it: Agosto
+    th: สิงหาคม
   month.September:
     en: September
     zh-CN: 九月
     zh-HK: 九月
     it: Settembre
+    th: กันยายน
   month.October:
     en: October
     zh-CN: 十月
     zh-HK: 十月
     it: Ottobre
+    th: ตุลาคม
   month.November:
     en: November
     zh-CN: 十一月
     zh-HK: 十一月
     it: Novembre
+    th: พฤศจิกายน
   month.December:
     en: December
     zh-CN: 十二月
     zh-HK: 十二月
     it: Dicembre
+    th: ธันวาคม
 DatePicker:
   placeholder:
     en: "Select date"
     zh-CN: 选择日期
     zh-HK: 選擇日期
     it: "Seleziona data"
+    th: "เลือกวันที่"
 Select:
   placeholder:
     en: "Please select"
     zh-CN: "请选择"
     zh-HK: "請選擇"
     it: Seleziona
+    th: "กรุณาเลือก"
 Dock:
   Unnamed:
     en: Unnamed
     zh-CN: 未命名
     zh-HK: 未命名
     it: "Senza nome"
+    th: "ไม่มีชื่อ"
   Close:
     en: Close
     zh-CN: 关闭
     zh-HK: 關閉
     it: Chiudi
+    th: ปิด
   Zoom In:
     en: Zoom In
     zh-CN: 放大
     zh-HK: 放大
     it: Zoom In
+    th: ขยาย
   Zoom Out:
     en: Zoom Out
     zh-CN: 缩小
     zh-HK: 縮小
     it: Zoom Out
+    th: ย่อ
   Collapse:
     en: Collapse
     zh-CN: 隐藏
     zh-HK: 隱藏
     it: Nascondi
+    th: ยุบ
   Expand:
     en: Expand
     zh-CN: 展开
     zh-HK: 展開
     it: Espandi
+    th: ขยาย
 Dialog:
   ok:
     en: OK
     zh-CN: 确定
     zh-HK: 確定
     it: OK
+    th: ตกลง
   cancel:
     en: Cancel
     zh-CN: 取消
     zh-HK: 取消
     it: Annulla
+    th: ยกเลิก
 List:
   search_placeholder:
     en: Search...
     zh-CN: 搜索...
     zh-HK: 搜索...
     it: Ricerca...
+    th: ค้นหา...
 Input:
   Replace:
     en: Replace
     zh-CN: 替换
     zh-HK: 替換
+    th: แทนที่
   Replace All:
     en: Replace All
     zh-CN: 全部替换
     zh-HK: 全部替換
+    th: แทนที่ทั้งหมด
   Cut:
     en: Cut
     zh-CN: 剪切
     zh-HK: 剪切
+    th: ตัด
   Copy:
     en: Copy
     zh-CN: 复制
     zh-HK: 複製
+    th: คัดลอก
   Paste:
     en: Paste
     zh-CN: 粘贴
     zh-HK: 貼上
+    th: วาง
   Select All:
     en: Select All
     zh-CN: 全选
     zh-HK: 全選
+    th: เลือกทั้งหมด
   Go to Definition:
     en: Go to Definition
     zh-CN: 跳转到定义
     zh-HK: 跳轉到定義
+    th: ไปยังคำจำกัดความ
   Show Code Actions:
     en: Show Code Actions
     zh-CN: 显示代码操作
     zh-HK: 顯示代碼操作
+    th: แสดงการกระทำของโค้ด
