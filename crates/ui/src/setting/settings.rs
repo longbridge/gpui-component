@@ -1,13 +1,14 @@
 use crate::{
     group_box::GroupBoxVariant,
+    input::{Input, InputState},
     resizable::{h_resizable, resizable_panel},
     setting::{SettingGroup, SettingPage},
-    sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
-    Sizable, Size,
+    sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
+    IconName, Sizable, Size, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, ElementId, Entity, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, SharedString, Styled as _, Window,
+    div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, ElementId, Entity,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, StyleRefinement, Styled, Window,
 };
 
 /// The settings structure containing multiple pages for app settings.
@@ -131,11 +132,17 @@ impl Settings {
         cx: &mut App,
     ) -> impl IntoElement {
         let selected_index = state.read(cx).selected_index;
+        let search_input = state.read(cx).search_input.clone();
+
         Sidebar::left()
             .width(relative(1.))
             .border_width(px(0.))
             .collapsed(false)
-            .header(SidebarHeader::new().child("Search Input"))
+            .header(
+                div()
+                    .w_full()
+                    .child(Input::new(&search_input).prefix(IconName::Search)),
+            )
             .child(
                 SidebarMenu::new()
                     .p_2()
@@ -199,10 +206,10 @@ impl Sizable for Settings {
 }
 
 pub(super) struct SettingsState {
-    pub(super) query: SharedString,
     pub(super) selected_index: SelectIndex,
     /// If set, defer scrolling to this group index after rendering.
     pub(super) deferred_scroll_group_ix: Option<usize>,
+    pub(super) search_input: Entity<InputState>,
 }
 
 #[derive(Clone, Copy)]
@@ -219,13 +226,17 @@ pub(super) struct SelectIndex {
 
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| SettingsState {
-            query: SharedString::default(),
-            selected_index: SelectIndex::default(),
-            deferred_scroll_group_ix: None,
+        let state = window.use_keyed_state(self.id.clone(), cx, |window, cx| {
+            let search_input = cx.new(|cx| InputState::new(window, cx).default_value(""));
+
+            SettingsState {
+                search_input,
+                selected_index: SelectIndex::default(),
+                deferred_scroll_group_ix: None,
+            }
         });
 
-        let query = state.read(cx).query.clone();
+        let query = state.read(cx).search_input.read(cx).value();
         let filtered_pages = self.filtered_pages(&query);
         let options = RenderOptions {
             size: self.size,

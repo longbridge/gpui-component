@@ -68,7 +68,8 @@ impl SettingPage {
             .flat_map(|group| group.on_resets())
             .collect::<Vec<_>>();
 
-        let query = state.read(cx).query.clone();
+        let search_input = state.read(cx).search_input.clone();
+        let query = search_input.read(cx).value();
         let groups = self
             .groups
             .iter()
