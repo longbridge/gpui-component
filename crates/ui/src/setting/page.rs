@@ -1,6 +1,6 @@
 use gpui::{
-    prelude::FluentBuilder as _, App, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled, Window,
+    list, prelude::FluentBuilder as _, px, App, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 
 use crate::{
@@ -68,11 +68,32 @@ impl SettingPage {
             .flat_map(|group| group.on_resets())
             .collect::<Vec<_>>();
 
+        let query = SharedString::from(query.to_string());
+        let groups = self
+            .groups
+            .iter()
+            .filter(|group| group.is_match(&query))
+            .cloned()
+            .collect::<Vec<_>>();
+        let groups_count = groups.len();
+
+        let list_state = window
+            .use_keyed_state(
+                SharedString::from(format!("list-state:{}", ix)),
+                cx,
+                |_, _| gpui::ListState::new(groups_count, gpui::ListAlignment::Top, px(0.)),
+            )
+            .read(cx);
+
+        if list_state.item_count() != groups_count {
+            list_state.reset(groups_count);
+        }
+
         v_flex()
             .id(ix)
             .p_4()
             .size_full()
-            .gap_6()
+            .overflow_scroll()
             .child(
                 v_flex()
                     .gap_4()
@@ -98,17 +119,19 @@ impl SettingPage {
                     })
                     .child(Divider::horizontal()),
             )
-            .children(self.groups.iter().enumerate().filter_map(|(ix, group)| {
-                if group.is_match(&query) {
-                    Some(
+            .child(
+                list(list_state.clone(), {
+                    let query = query.clone();
+                    move |ix, window, cx| {
+                        let group = groups[ix].clone();
                         group
-                            .clone()
+                            .pt_6()
                             .with_default_variant(group_variant)
-                            .render(ix, query, window, cx),
-                    )
-                } else {
-                    None
-                }
-            }))
+                            .render(ix, &query, window, cx)
+                            .into_any_element()
+                    }
+                })
+                .size_full(),
+            )
     }
 }
