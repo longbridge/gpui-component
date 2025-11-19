@@ -1,5 +1,5 @@
 use gpui::{
-    list, prelude::FluentBuilder as _, px, App, InteractiveElement as _, IntoElement,
+    list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 
@@ -9,7 +9,7 @@ use crate::{
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
-    setting::SettingGroup,
+    setting::{SettingGroup, SettingsState},
     v_flex, ActiveTheme, IconName, Sizable,
 };
 
@@ -54,10 +54,11 @@ impl SettingPage {
         self
     }
 
-    pub fn render(
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn render(
         &self,
         ix: usize,
-        query: &str,
+        state: &Entity<SettingsState>,
         group_variant: GroupBoxVariant,
         window: &mut Window,
         cx: &mut App,
@@ -68,7 +69,7 @@ impl SettingPage {
             .flat_map(|group| group.on_resets())
             .collect::<Vec<_>>();
 
-        let query = SharedString::from(query.to_string());
+        let query = state.read(cx).query.clone();
         let groups = self
             .groups
             .iter()
@@ -83,10 +84,19 @@ impl SettingPage {
                 cx,
                 |_, _| gpui::ListState::new(groups_count, gpui::ListAlignment::Top, px(0.)),
             )
-            .read(cx);
+            .read(cx)
+            .clone();
 
         if list_state.item_count() != groups_count {
             list_state.reset(groups_count);
+        }
+
+        let deferred_scroll_group_ix = state.read(cx).deferred_scroll_group_ix;
+        if let Some(ix) = deferred_scroll_group_ix {
+            state.update(cx, |state, _| {
+                state.deferred_scroll_group_ix = None;
+            });
+            list_state.scroll_to_reveal_item(ix);
         }
 
         v_flex()

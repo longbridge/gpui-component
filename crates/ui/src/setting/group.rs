@@ -37,7 +37,7 @@ impl Styled for SettingGroup {
 }
 
 impl SettingGroup {
-    /// Create a new setting group with the given title.
+    /// Create a new setting group.
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
@@ -48,13 +48,13 @@ impl SettingGroup {
         }
     }
 
-    /// Set the label of the setting group.
+    /// Set the label of the setting group, default is None.
     pub fn title(mut self, title: impl Into<SharedString>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Set the description of the setting group.
+    /// Set the description of the setting group, default is None.
     pub fn description(mut self, description: impl Into<SharedString>) -> Self {
         self.description = Some(description.into());
         self

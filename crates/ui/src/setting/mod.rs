@@ -33,7 +33,6 @@ use gpui::{
 #[derive(IntoElement)]
 pub struct Settings {
     id: ElementId,
-    query: SharedString,
     pages: Vec<SettingPage>,
     group_variant: GroupBoxVariant,
 }
@@ -43,21 +42,20 @@ impl Settings {
     pub fn new(id: impl Into<ElementId>, pages: Vec<SettingPage>) -> Self {
         Self {
             id: id.into(),
-            query: SharedString::default(),
             pages,
             group_variant: GroupBoxVariant::default(),
         }
     }
 
-    /// Set the search query for filtering settings.
-    pub fn query(mut self, query: impl Into<SharedString>) -> Self {
-        self.query = query.into();
+    /// Add a page to the settings.
+    pub fn page(mut self, page: SettingPage) -> Self {
+        self.pages.push(page);
         self
     }
 
     /// Add pages to the settings.
     pub fn pages(mut self, pages: impl IntoIterator<Item = SettingPage>) -> Self {
-        self.pages = pages.into_iter().collect();
+        self.pages.extend(pages);
         self
     }
 
@@ -69,11 +67,7 @@ impl Settings {
         self
     }
 
-    fn filtered_pages(&self) -> Vec<SettingPage> {
-        if self.query.is_empty() {
-            return self.pages.clone();
-        }
-
+    fn filtered_pages(&self, query: &str) -> Vec<SettingPage> {
         self.pages
             .iter()
             .filter_map(|page| {
@@ -85,7 +79,7 @@ impl Settings {
                         group.items = group
                             .items
                             .iter()
-                            .filter(|item| item.is_match(&self.query))
+                            .filter(|item| item.is_match(&query))
                             .cloned()
                             .collect();
                         if group.items.is_empty() {
@@ -118,7 +112,7 @@ impl Settings {
         for (ix, page) in pages.into_iter().enumerate() {
             if selected_index.page_ix == ix {
                 return page
-                    .render(ix, &self.query, self.group_variant, window, cx)
+                    .render(ix, state, self.group_variant, window, cx)
                     .into_any_element();
             }
         }
@@ -179,6 +173,8 @@ impl Settings {
                                                                 page_ix,
                                                                 group_ix: Some(group_ix),
                                                             };
+                                                            state.deferred_scroll_group_ix =
+                                                                Some(group_ix);
                                                             cx.notify();
                                                         })
                                                     }
@@ -193,7 +189,10 @@ impl Settings {
 }
 
 struct SettingsState {
+    query: SharedString,
     selected_index: SelectIndex,
+    /// If set, defer scrolling to this group index after rendering.
+    deferred_scroll_group_ix: Option<usize>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -204,10 +203,13 @@ struct SelectIndex {
 
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let filtered_pages = self.filtered_pages();
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| SettingsState {
+            query: SharedString::default(),
             selected_index: SelectIndex::default(),
+            deferred_scroll_group_ix: None,
         });
+        let query = state.read(cx).query.clone();
+        let filtered_pages = self.filtered_pages(&query);
 
         h_resizable(self.id.clone())
             .child(resizable_panel().size(px(300.)).child(self.render_sidebar(

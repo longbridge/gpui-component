@@ -70,7 +70,7 @@ impl SettingFieldType {
     }
 
     #[inline]
-    pub fn number_input_options(&self) -> Option<&NumberFieldOptions> {
+    pub(super) fn number_input_options(&self) -> Option<&NumberFieldOptions> {
         match self {
             SettingFieldType::NumberInput { options } => Some(options),
             _ => None,
