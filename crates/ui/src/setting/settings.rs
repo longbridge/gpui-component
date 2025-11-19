@@ -4,12 +4,13 @@ use crate::{
     resizable::{h_resizable, resizable_panel},
     setting::{SettingGroup, SettingPage},
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
-    IconName, Sizable, Size, StyledExt,
+    IconName, Sizable, Size,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, ElementId, Entity,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, StyleRefinement, Styled, Window,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, Styled, Window,
 };
+use rust_i18n::t;
 
 /// The settings structure containing multiple pages for app settings.
 ///
@@ -227,7 +228,11 @@ pub(super) struct SelectIndex {
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = window.use_keyed_state(self.id.clone(), cx, |window, cx| {
-            let search_input = cx.new(|cx| InputState::new(window, cx).default_value(""));
+            let search_input = cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder(t!("Settings.search_placeholder"))
+                    .default_value("")
+            });
 
             SettingsState {
                 search_input,
