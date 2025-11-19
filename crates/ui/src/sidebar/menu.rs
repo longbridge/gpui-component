@@ -78,6 +78,7 @@ pub struct SidebarMenuItem {
     collapsed: bool,
     children: Vec<Self>,
     suffix: Option<AnyElement>,
+    disabled: bool,
 }
 
 impl SidebarMenuItem {
@@ -94,6 +95,7 @@ impl SidebarMenuItem {
             click_to_open: false,
             children: Vec::new(),
             suffix: None,
+            disabled: false,
         }
     }
 
@@ -150,6 +152,12 @@ impl SidebarMenuItem {
     /// Set the suffix for the menu item.
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
+    /// Set disabled flat for menu item.
+    pub fn disable(mut self, disable: bool) -> Self {
+        self.disabled = disable;
         self
     }
 
@@ -251,7 +259,25 @@ impl RenderOnce for SidebarMenuItem {
                                 )
                             })
                     })
-                    .on_click({
+                    .when(self.disabled, |this| {
+                        this.opacity(0.6)
+                    })
+                    .when(!self.disabled, |this| {
+                        this.on_click({
+                            let open_state = open_state.clone();
+                            move |ev, window, cx| {
+                                if click_to_open {
+                                    open_state.update(cx, |is_open, cx| {
+                                        *is_open = true;
+                                        cx.notify();
+                                    });
+                                }
+
+                                handler(ev, window, cx)
+                            }
+                        })
+                    })
+                    /* .on_click({
                         let open_state = open_state.clone();
                         move |ev, window, cx| {
                             if click_to_open {
@@ -263,7 +289,7 @@ impl RenderOnce for SidebarMenuItem {
 
                             handler(ev, window, cx)
                         }
-                    }),
+                    }), */
             )
             .when(is_open, |this| {
                 this.child(
