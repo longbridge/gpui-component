@@ -1,5 +1,3 @@
-use std::task::Context;
-
 use gpui::{
     prelude::FluentBuilder as _, App, InteractiveElement as _, IntoElement, ParentElement as _,
     SharedString, Styled, Window,
