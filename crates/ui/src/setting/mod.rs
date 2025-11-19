@@ -10,13 +10,12 @@ pub use page::*;
 
 use crate::{
     group_box::GroupBoxVariant,
-    history::{History, HistoryItem},
     resizable::{h_resizable, resizable_panel},
-    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
 };
 use gpui::{
-    div, px, relative, App, AppContext as _, ElementId, Entity, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Styled as _, Window,
+    div, prelude::FluentBuilder as _, px, relative, App, ElementId, Entity, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
 };
 
 /// The settings structure containing multiple sections for app settings.
@@ -139,9 +138,11 @@ impl Settings {
             .collapsed(false)
             .header(SidebarHeader::new().child("Search Input"))
             .child(
-                SidebarGroup::new("Settings").child(SidebarMenu::new().children(
-                    pages.iter().enumerate().map(|(page_ix, page)| {
-                        let is_page_active = selected_index.page_ix == page_ix;
+                SidebarMenu::new()
+                    .p_2()
+                    .children(pages.iter().enumerate().map(|(page_ix, page)| {
+                        let is_page_active =
+                            selected_index.page_ix == page_ix && selected_index.group_ix.is_none();
                         SidebarMenuItem::new(page.title.clone())
                             .active(is_page_active)
                             .on_click({
@@ -156,32 +157,35 @@ impl Settings {
                                     })
                                 }
                             })
-                            .children(page.groups.iter().enumerate().map(|(group_ix, group)| {
-                                let is_active = selected_index.page_ix == page_ix
-                                    && selected_index.group_ix == Some(group_ix);
-                                SidebarMenuItem::new(group.title.clone())
-                                    .active(is_active)
-                                    .on_click({
-                                        let state = state.clone();
-                                        move |_, _, cx| {
-                                            state.update(cx, |state, cx| {
-                                                state.selected_index = SelectIndex {
-                                                    page_ix,
-                                                    group_ix: Some(group_ix),
-                                                };
-                                                cx.notify();
+                            .when(page.groups.len() > 1, |this| {
+                                this.children(page.groups.iter().enumerate().map(
+                                    |(group_ix, group)| {
+                                        let is_active = selected_index.page_ix == page_ix
+                                            && selected_index.group_ix == Some(group_ix);
+
+                                        SidebarMenuItem::new(group.title.clone())
+                                            .active(is_active)
+                                            .on_click({
+                                                let state = state.clone();
+                                                move |_, _, cx| {
+                                                    state.update(cx, |state, cx| {
+                                                        state.selected_index = SelectIndex {
+                                                            page_ix,
+                                                            group_ix: Some(group_ix),
+                                                        };
+                                                        cx.notify();
+                                                    })
+                                                }
                                             })
-                                        }
-                                    })
-                            }))
-                    }),
-                )),
+                                    },
+                                ))
+                            })
+                    })),
             )
     }
 }
 
 struct SettingsState {
-    history: History<ElementId>,
     selected_index: SelectIndex,
 }
 
@@ -191,20 +195,11 @@ struct SelectIndex {
     group_ix: Option<usize>,
 }
 
-impl HistoryItem for ElementId {
-    fn version(&self) -> usize {
-        0
-    }
-
-    fn set_version(&mut self, _: usize) {}
-}
-
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let filtered_pages = self.filtered_pages();
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| SettingsState {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| SettingsState {
             selected_index: SelectIndex::default(),
-            history: History::new().max_undos(1000),
         });
 
         h_resizable(self.id.clone())

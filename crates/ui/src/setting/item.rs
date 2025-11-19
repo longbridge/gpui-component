@@ -133,16 +133,16 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingFi
 
 #[derive(Clone)]
 pub enum SettingItem {
+    /// A normal setting item with a title, description, and field.
     Item {
-        id: &'static str,
-        label: SharedString,
+        title: SharedString,
         description: Option<SharedString>,
         field_type: SettingFieldType,
         field: Rc<dyn AnySettingField>,
     },
+    /// A full custom element to render.
     Element {
-        id: &'static str,
-        element: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
+        render: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
     },
 }
 
@@ -150,9 +150,9 @@ impl SettingItem {
     pub(crate) fn is_match(&self, query: &str) -> bool {
         match self {
             SettingItem::Item {
-                label, description, ..
+                title, description, ..
             } => {
-                label.to_lowercase().contains(&query.to_lowercase())
+                title.to_lowercase().contains(&query.to_lowercase())
                     || description
                         .as_ref()
                         .map_or(false, |d| d.to_lowercase().contains(&query.to_lowercase()))
@@ -175,8 +175,7 @@ impl SettingItem {
     // }
 
     fn render_field(
-        id: &'static str,
-        label: SharedString,
+        title: SharedString,
         description: Option<SharedString>,
         field_type: SettingFieldType,
         field: Rc<dyn AnySettingField>,
@@ -210,47 +209,44 @@ impl SettingItem {
             ),
         };
 
-        renderer.render(id, label, description, field, window, cx)
+        renderer.render(title, description, field, window, cx)
     }
 
-    pub(super) fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        match self {
-            SettingItem::Item {
-                id,
-                label,
-                description,
-                field_type,
-                field,
-            } => h_flex()
-                .id(id)
-                .gap_4()
-                .justify_between()
-                .items_start()
-                .flex_wrap()
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .gap_1()
-                        .max_w_3_5()
-                        .child(Label::new(label.clone()))
-                        .when_some(description.clone(), |this, description| {
-                            this.child(
-                                Label::new(description)
-                                    .text_sm()
-                                    .text_color(cx.theme().muted_foreground),
-                            )
-                        }),
-                )
-                .child(div().bg(cx.theme().background).child(Self::render_field(
-                    id,
-                    label,
+    pub(super) fn render(self, ix: usize, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("item-{}", ix)))
+            .child(match self {
+                SettingItem::Item {
+                    title,
                     description,
                     field_type,
                     field,
-                    window,
-                    cx,
-                ))),
-            SettingItem::Element { id, element } => div().id(id).child((element)(window, cx)),
-        }
+                } => {
+                    h_flex()
+                        .gap_4()
+                        .justify_between()
+                        .items_start()
+                        .flex_wrap()
+                        .child(
+                            v_flex()
+                                .flex_1()
+                                .gap_1()
+                                .max_w_3_5()
+                                .child(Label::new(title.clone()))
+                                .when_some(description.clone(), |this, description| {
+                                    this.child(
+                                        Label::new(description)
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground),
+                                    )
+                                }),
+                        )
+                        .child(div().id("field").bg(cx.theme().background).child(
+                            Self::render_field(title, description, field_type, field, window, cx),
+                        ))
+                        .into_any_element()
+                }
+                SettingItem::Element { render } => (render)(window, cx).into_any_element(),
+            })
     }
 }

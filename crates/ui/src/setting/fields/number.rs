@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, Styled, Window,
+    div, AnyElement, App, AppContext as _, Entity, IntoElement, ParentElement as _, SharedString,
+    Styled, Window,
 };
 
 use crate::{
@@ -53,7 +53,6 @@ struct State {
 impl SettingFieldRender for NumberField {
     fn render(
         &self,
-        id: &'static str,
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
@@ -65,7 +64,7 @@ impl SettingFieldRender for NumberField {
         let options = self.options.clone();
 
         let state = window
-            .use_keyed_state(id, cx, |window, cx| {
+            .use_keyed_state("number-state", cx, |window, cx| {
                 let input =
                     cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
                 let _subscription = cx.subscribe_in(&input, window, {
@@ -97,7 +96,6 @@ impl SettingFieldRender for NumberField {
             .read(cx);
 
         div()
-            .id(id)
             .w_32()
             .child(NumberInput::new(&state.input))
             .into_any_element()

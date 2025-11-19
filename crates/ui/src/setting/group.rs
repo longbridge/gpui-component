@@ -83,7 +83,7 @@ impl SettingGroup {
 
     pub(crate) fn render(
         self,
-        _ix: usize,
+        group_ix: usize,
         query: &str,
         window: &mut Window,
         cx: &mut App,
@@ -97,6 +97,7 @@ impl SettingGroup {
         //     .collect::<Vec<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>>();
 
         GroupBox::new()
+            .id(SharedString::from(format!("group-{}", group_ix)))
             .with_variant(self.variant)
             .title(v_flex().gap_1().child(self.title.clone()).when_some(
                 self.description.clone(),
@@ -108,9 +109,9 @@ impl SettingGroup {
                     )
                 },
             ))
-            .children(self.items.iter().filter_map(|item| {
+            .children(self.items.iter().enumerate().filter_map(|(item_ix, item)| {
                 if item.is_match(&query) {
-                    Some(item.clone().render(window, cx))
+                    Some(item.clone().render(item_ix, window, cx))
                 } else {
                     None
                 }

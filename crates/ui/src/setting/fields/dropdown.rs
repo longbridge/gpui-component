@@ -1,9 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
-    div, AnyElement, App, Corner, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Window,
-};
+use gpui::{div, AnyElement, App, Corner, IntoElement, ParentElement as _, SharedString, Window};
 
 use crate::{
     button::Button,
@@ -34,7 +31,6 @@ where
 {
     fn render(
         &self,
-        id: &'static str,
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
@@ -52,7 +48,6 @@ where
             .unwrap_or_else(|| old_value.clone().into());
 
         div()
-            .id(id)
             .child(
                 Button::new("btn")
                     .label(old_label)

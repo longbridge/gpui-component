@@ -23,7 +23,6 @@ impl BoolField {
 impl SettingFieldRender for BoolField {
     fn render(
         &self,
-        _id: &'static str,
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,

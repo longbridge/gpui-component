@@ -1,16 +1,18 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Global, IntoElement, Render,
-    SharedString, Window,
+    App, AppContext, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
+    ParentElement as _, Render, SharedString, Styled, Window, img,
 };
 
 use gpui_component::{
+    ActiveTheme as _,
     group_box::GroupBoxVariant,
     setting::{
         NumberFieldOptions, SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage,
         Settings,
     },
+    v_flex,
 };
 
 struct AppSettings {
@@ -86,110 +88,139 @@ impl SettingsStory {
         let view = cx.entity();
         let default_settings = AppSettings::default();
 
-        vec![SettingPage::new("General").groups(vec![
-            SettingGroup::new("Appearance").items(vec![
-                SettingItem::Item {
-                    id: "dark-mode",
-                    label: "Dark Mode".into(),
-                    description: Some("Switch between light and dark themes.".into()),
-                    field_type: SettingFieldType::Switch,
-                    field: Rc::new(SettingField::new(
-                        |cx: &App| AppSettings::global(cx).dark_mode,
-                        |val: bool, cx: &mut App| {
-                            AppSettings::global_mut(cx).dark_mode = val;
+        vec![
+            SettingPage::new("General").groups(vec![
+                SettingGroup::new("Appearance").items(vec![
+                    SettingItem::Item {
+                        title: "Dark Mode".into(),
+                        description: Some("Switch between light and dark themes.".into()),
+                        field_type: SettingFieldType::Switch,
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).dark_mode,
+                                |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).dark_mode = val;
+                                },
+                            )
+                            .default_value(default_settings.dark_mode),
+                        ),
+                    },
+                    SettingItem::Item {
+                        title: "Auto Switch Theme".into(),
+                        description: Some(
+                            "Automatically switch theme based on system appearance.".into(),
+                        ),
+                        field_type: SettingFieldType::Checkbox,
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).auto_switch_theme,
+                                |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).auto_switch_theme = val;
+                                },
+                            )
+                            .default_value(default_settings.auto_switch_theme),
+                        ),
+                    },
+                    SettingItem::Item {
+                        title: "Group Variant".into(),
+                        description: Some("Select the variant for setting groups.".into()),
+                        field_type: SettingFieldType::Dropdown {
+                            options: vec![
+                                (GroupBoxVariant::Normal.as_str().into(), "Normal".into()),
+                                (GroupBoxVariant::Outline.as_str().into(), "Outline".into()),
+                                (GroupBoxVariant::Fill.as_str().into(), "Fill".into()),
+                            ],
                         },
-
-                    ).default_value(default_settings.dark_mode)),
-                },
-                SettingItem::Item {
-                    id: "auto-switch-theme",
-                    label: "Auto Switch Theme".into(),
+                        field: Rc::new(
+                            SettingField::new(
+                                {
+                                    let view = view.clone();
+                                    move |cx: &App| {
+                                        SharedString::from(
+                                            view.read(cx).group_variant.as_str().to_string(),
+                                        )
+                                    }
+                                },
+                                {
+                                    let view = view.clone();
+                                    move |val: SharedString, cx: &mut App| {
+                                        view.update(cx, |view, cx| {
+                                            view.group_variant =
+                                                GroupBoxVariant::from_str(val.as_str());
+                                            cx.notify();
+                                        });
+                                    }
+                                },
+                            )
+                            .default_value(GroupBoxVariant::Outline.as_str().to_string().into()),
+                        ),
+                    },
+                ]),
+                SettingGroup::new("Font").items(vec![
+                    SettingItem::Item {
+                        title: "Font Family".into(),
+                        description: Some("Select the font family for the application.".into()),
+                        field_type: SettingFieldType::Dropdown {
+                            options: vec![
+                                ("Arial".into(), "Arial".into()),
+                                ("Helvetica".into(), "Helvetica".into()),
+                                ("Times New Roman".into(), "Times New Roman".into()),
+                                ("Courier New".into(), "Courier New".into()),
+                            ],
+                        },
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).font_family.clone(),
+                                |val: String, cx: &mut App| {
+                                    AppSettings::global_mut(cx).font_family = val;
+                                },
+                            )
+                            .default_value(default_settings.font_family),
+                        ),
+                    },
+                    SettingItem::Item {
+                        title: "Font Size".into(),
+                        description: Some("Adjust the font size for better readability.".into()),
+                        field_type: SettingFieldType::NumberInput {
+                            options: NumberFieldOptions {
+                                min: 8.0,
+                                max: 72.0,
+                                ..Default::default()
+                            },
+                        },
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).font_size,
+                                |val: f64, cx: &mut App| {
+                                    AppSettings::global_mut(cx).font_size = val;
+                                },
+                            )
+                            .default_value(default_settings.font_size),
+                        ),
+                    },
+                ]),
+                SettingGroup::new("Other").items(vec![SettingItem::Item {
+                    title: "CLI Path".into(),
                     description: Some(
-                        "Automatically switch theme based on system appearance.".into(),
+                        "Set the path to the command-line interface executable.".into(),
                     ),
-                    field_type: SettingFieldType::Checkbox,
-                    field: Rc::new(SettingField::new(
-                        |cx: &App| AppSettings::global(cx).auto_switch_theme,
-                        |val: bool, cx: &mut App| {
-                            AppSettings::global_mut(cx).auto_switch_theme = val;
-                        },
-
-                    ).default_value(default_settings.auto_switch_theme)),
-                },
-                SettingItem::Item {
-                    id: "group-variant",
-                    label: "Group Variant".into(),
-                    description: Some("Select the variant for setting groups.".into()),
-                    field_type: SettingFieldType::Dropdown {
-                        options: vec![
-                            (GroupBoxVariant::Normal.as_str().into(), "Normal".into()),
-                            (GroupBoxVariant::Outline.as_str().into(), "Outline".into()),
-                            (GroupBoxVariant::Fill.as_str().into(), "Fill".into()),
-                        ],
-                    },
-                    field: Rc::new(SettingField::new(
-                        {
-                            let view = view.clone();
-                            move |cx: &App| {
-                                SharedString::from(view.read(cx).group_variant.as_str().to_string())
-                            }
-                        },
-                        {
-                            let view = view.clone();
-                            move |val: SharedString, cx: &mut App| {
-                                view.update(cx, |view, cx| {
-                                    view.group_variant = GroupBoxVariant::from_str(val.as_str());
-                                    cx.notify();
-                                });
-                            }
-                        }
-                    ).default_value(GroupBoxVariant::Outline.as_str().to_string().into())),
-                },
+                    field_type: SettingFieldType::Input,
+                    field: Rc::new(
+                        SettingField::new(
+                            |cx: &App| AppSettings::global(cx).cli_path.clone(),
+                            |val: String, cx: &mut App| {
+                                println!("cli-path set value: {}", val);
+                                AppSettings::global_mut(cx).cli_path = val;
+                            },
+                        )
+                        .default_value(default_settings.cli_path),
+                    ),
+                }]),
             ]),
-            SettingGroup::new("Font").items(vec![
+            SettingPage::new("Software Update").groups(vec![SettingGroup::new("Updates").items(
+                vec![
                 SettingItem::Item {
-                    id: "font-family",
-                    label: "Font Family".into(),
-                    description: Some("Select the font family for the application.".into()),
-                    field_type: SettingFieldType::Dropdown {
-                        options: vec![
-                            ("Arial".into(), "Arial".into()),
-                            ("Helvetica".into(), "Helvetica".into()),
-                            ("Times New Roman".into(), "Times New Roman".into()),
-                            ("Courier New".into(), "Courier New".into()),
-                        ],
-                    },
-                    field: Rc::new(SettingField::new(
-                        |cx: &App| AppSettings::global(cx).font_family.clone(),
-                        |val: String, cx: &mut App| {
-                            AppSettings::global_mut(cx).font_family = val;
-                        },
-                    ).default_value(default_settings.font_family)),
-                },
-                SettingItem::Item {
-                    id: "font-size",
-                    label: "Font Size".into(),
-                    description: Some("Adjust the font size for better readability.".into()),
-                    field_type: SettingFieldType::NumberInput {
-                        options: NumberFieldOptions {
-                            min: 8.0,
-                            max: 72.0,
-                            ..Default::default()
-                        },
-                    },
-                    field: Rc::new(SettingField::new(
-                        |cx: &App| AppSettings::global(cx).font_size,
-                        |val: f64, cx: &mut App| {
-                            AppSettings::global_mut(cx).font_size = val;
-                        },
-
-                    ).default_value(default_settings.font_size)),
-                },
-            ]),
-            SettingGroup::new("Updates").items(vec![
-                SettingItem::Item {
-                    id: "notifications-enabled",
-                    label: "Enable Notifications".into(),
+                    title: "Enable Notifications".into(),
                     description: Some("Receive notifications about updates and news.".into()),
                     field_type: SettingFieldType::Switch,
                     field: Rc::new(SettingField::new(
@@ -200,8 +231,7 @@ impl SettingsStory {
                     ).default_value(default_settings.notifications_enabled)),
                 },
                 SettingItem::Item {
-                    id: "auto-update",
-                    label: "Auto Update".into(),
+                    title: "Auto Update".into(),
                     description: Some("Automatically download and install updates.".into()),
                     field_type: SettingFieldType::Switch,
                     field: Rc::new(SettingField::new(
@@ -212,21 +242,56 @@ impl SettingsStory {
 
                     ).default_value(default_settings.auto_update)),
                 },
-            ]),
-            SettingGroup::new("Other").items(vec![SettingItem::Item {
-                id: "cli-path",
-                label: "CLI Path".into(),
-                description: Some("Set the path to the command-line interface executable.".into()),
-                field_type: SettingFieldType::Input,
-                field: Rc::new(SettingField::new(
-                    |cx: &App| AppSettings::global(cx).cli_path.clone(),
-                    |val: String, cx: &mut App| {
-                        println!("cli-path set value: {}", val);
-                        AppSettings::global_mut(cx).cli_path = val;
+            ],
+            )]),
+            SettingPage::new("About").groups(vec![SettingGroup::new("About").items(vec![
+                    SettingItem::Element {
+                        render: Rc::new(|_, cx| {
+                            let logo_url = format!(
+                                "https://longbridge.github.io/gpui-component/logo{}.svg",
+                                if cx.theme().is_dark() { "-dark" } else { "" }
+                            );
+
+                            v_flex()
+                                .gap_5()
+                                .w_full()
+                                .items_center()
+                                .justify_center()
+                                .child(img(logo_url).size_32())
+                                .child("GPUI Component")
+                                .into_any()
+                        }),
                     },
-                ).default_value(default_settings.cli_path)),
-            }]),
-        ])]
+                    SettingItem::Item {
+                        title: "Enable Notifications".into(),
+                        description: Some("Receive notifications about updates and news.".into()),
+                        field_type: SettingFieldType::Switch,
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).notifications_enabled,
+                                |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).notifications_enabled = val;
+                                },
+                            )
+                            .default_value(default_settings.notifications_enabled),
+                        ),
+                    },
+                    SettingItem::Item {
+                        title: "Auto Update".into(),
+                        description: Some("Automatically download and install updates.".into()),
+                        field_type: SettingFieldType::Switch,
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).auto_update,
+                                |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).auto_update = val;
+                                },
+                            )
+                            .default_value(default_settings.auto_update),
+                        ),
+                    },
+                ])]),
+        ]
     }
 }
 

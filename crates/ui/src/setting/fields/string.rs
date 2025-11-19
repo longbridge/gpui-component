@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, AnyElement, App, AppContext as _, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, Styled, Window,
+    div, AnyElement, App, AppContext as _, Entity, IntoElement, ParentElement as _, SharedString,
+    Styled, Window,
 };
 
 use crate::{
@@ -36,7 +36,6 @@ where
 {
     fn render(
         &self,
-        id: &'static str,
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
@@ -47,7 +46,7 @@ where
         let set_value = set_value::<T>(&field, cx);
 
         let state = window
-            .use_keyed_state(id, cx, |window, cx| {
+            .use_keyed_state("string-state", cx, |window, cx| {
                 let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
                 let _subscription = cx.subscribe(&input, {
                     move |_, input, event: &InputEvent, cx| match event {
@@ -69,7 +68,6 @@ where
         // TODO: Support width from field options.
 
         div()
-            .id(id)
             .w_64()
             .child(Input::new(&state.input))
             .into_any_element()

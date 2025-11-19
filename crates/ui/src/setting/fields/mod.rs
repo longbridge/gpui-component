@@ -19,7 +19,6 @@ pub(crate) trait SettingFieldRender {
     #[allow(unused)]
     fn render(
         &self,
-        id: &'static str,
         label: SharedString,
         description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
