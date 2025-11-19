@@ -73,6 +73,8 @@ pub struct SidebarMenuItem {
     label: SharedString,
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
     active: bool,
+    default_open: bool,
+    click_to_open: bool,
     collapsed: bool,
     children: Vec<Self>,
     suffix: Option<AnyElement>,
@@ -88,6 +90,8 @@ impl SidebarMenuItem {
             handler: Rc::new(|_, _, _| {}),
             active: false,
             collapsed: false,
+            default_open: false,
+            click_to_open: false,
             children: Vec::new(),
             suffix: None,
         }
@@ -120,6 +124,24 @@ impl SidebarMenuItem {
         self
     }
 
+    /// Set the default open state of the Submenu, default is `false`.
+    ///
+    /// This only used on initial render, the internal state will be used afterwards.
+    pub fn default_open(mut self, open: bool) -> Self {
+        self.default_open = open;
+        self
+    }
+
+    /// Set whether clicking the menu item open the submenu.
+    ///
+    /// Default is `false`.
+    ///
+    /// If `false` we only handle open/close via the caret button.
+    pub fn click_to_open(mut self, click_to_open: bool) -> Self {
+        self.click_to_open = click_to_open;
+        self
+    }
+
     pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Self>>) -> Self {
         self.children = children.into_iter().map(Into::into).collect();
         self
@@ -144,7 +166,9 @@ impl SidebarMenuItem {
 
 impl RenderOnce for SidebarMenuItem {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let open_state = window.use_keyed_state(self.id.clone(), cx, |_, _| false);
+        let click_to_open = self.click_to_open;
+        let default_open = self.default_open;
+        let open_state = window.use_keyed_state(self.id.clone(), cx, |_, _| default_open);
 
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
@@ -227,7 +251,19 @@ impl RenderOnce for SidebarMenuItem {
                                 )
                             })
                     })
-                    .on_click(move |ev, window, cx| handler(ev, window, cx)),
+                    .on_click({
+                        let open_state = open_state.clone();
+                        move |ev, window, cx| {
+                            if click_to_open {
+                                open_state.update(cx, |is_open, cx| {
+                                    *is_open = true;
+                                    cx.notify();
+                                });
+                            }
+
+                            handler(ev, window, cx)
+                        }
+                    }),
             )
             .when(is_open, |this| {
                 this.child(

@@ -31,6 +31,7 @@ pub struct SidebarStory {
     active_subitem: Option<SubItem>,
     collapsed: bool,
     side: Side,
+    click_to_open_submenu: bool,
     focus_handle: gpui::FocusHandle,
     checked: bool,
 }
@@ -52,20 +53,32 @@ impl SidebarStory {
             side: Side::Left,
             focus_handle: cx.focus_handle(),
             checked: false,
+            click_to_open_submenu: false,
         }
     }
 
     fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().child(
-            h_flex().gap_2().child(
-                Switch::new("side")
-                    .label("Placement Right")
-                    .checked(self.side.is_right())
-                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                        this.side = if *checked { Side::Right } else { Side::Left };
-                        cx.notify();
-                    })),
-            ),
+        v_flex().gap_3().child(
+            h_flex()
+                .gap_3()
+                .child(
+                    Switch::new("side")
+                        .label("Placement Right")
+                        .checked(self.side.is_right())
+                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                            this.side = if *checked { Side::Right } else { Side::Left };
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Switch::new("click-to-open")
+                        .checked(self.click_to_open_submenu)
+                        .label("Click to open submenu")
+                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                            this.click_to_open_submenu = *checked;
+                            cx.notify();
+                        })),
+                ),
         )
     }
 }
@@ -311,12 +324,14 @@ impl Render for SidebarStory {
                     )
                     .child(
                         SidebarGroup::new("Platform").child(SidebarMenu::new().children(
-                            groups[0].iter().map(|item| {
+                            groups[0].iter().enumerate().map(|(ix, item)| {
                                 let is_active =
                                     self.last_active_item == *item && self.active_subitem == None;
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
                                     .active(is_active)
+                                    .default_open(ix == 0)
+                                    .click_to_open(self.click_to_open_submenu)
                                     .children(item.items().into_iter().enumerate().map(
                                         |(ix, sub_item)| {
                                             SidebarMenuItem::new(sub_item.label())
@@ -348,6 +363,7 @@ impl Render for SidebarStory {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
                                     .active(is_active)
+                                    .click_to_open(self.click_to_open_submenu)
                                     .when(ix == 0, |this| {
                                         this.suffix(
                                             Badge::new().dot().count(1).child(
