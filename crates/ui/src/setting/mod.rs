@@ -61,7 +61,9 @@ impl Settings {
         self
     }
 
-    /// Set the variant for all setting groups.
+    /// Set the default variant for all setting groups.
+    ///
+    /// All setting groups will use this variant unless overridden individually.
     pub fn group_variant(mut self, variant: GroupBoxVariant) -> Self {
         self.group_variant = variant;
         self
@@ -158,27 +160,32 @@ impl Settings {
                                 }
                             })
                             .when(page.groups.len() > 1, |this| {
-                                this.children(page.groups.iter().enumerate().map(
-                                    |(group_ix, group)| {
-                                        let is_active = selected_index.page_ix == page_ix
-                                            && selected_index.group_ix == Some(group_ix);
+                                this.children(
+                                    page.groups
+                                        .iter()
+                                        .filter(|g| g.title.is_some())
+                                        .enumerate()
+                                        .map(|(group_ix, group)| {
+                                            let is_active = selected_index.page_ix == page_ix
+                                                && selected_index.group_ix == Some(group_ix);
+                                            let title = group.title.clone().unwrap_or_default();
 
-                                        SidebarMenuItem::new(group.title.clone())
-                                            .active(is_active)
-                                            .on_click({
-                                                let state = state.clone();
-                                                move |_, _, cx| {
-                                                    state.update(cx, |state, cx| {
-                                                        state.selected_index = SelectIndex {
-                                                            page_ix,
-                                                            group_ix: Some(group_ix),
-                                                        };
-                                                        cx.notify();
-                                                    })
-                                                }
-                                            })
-                                    },
-                                ))
+                                            SidebarMenuItem::new(title).active(is_active).on_click(
+                                                {
+                                                    let state = state.clone();
+                                                    move |_, _, cx| {
+                                                        state.update(cx, |state, cx| {
+                                                            state.selected_index = SelectIndex {
+                                                                page_ix,
+                                                                group_ix: Some(group_ix),
+                                                            };
+                                                            cx.notify();
+                                                        })
+                                                    }
+                                                },
+                                            )
+                                        }),
+                                )
                             })
                     })),
             )

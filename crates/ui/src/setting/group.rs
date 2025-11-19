@@ -1,51 +1,62 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, App, ClickEvent, ParentElement as _, SharedString, Styled, Window,
+    prelude::FluentBuilder as _, App, ClickEvent, ParentElement as _, SharedString,
+    StyleRefinement, Styled, Window,
 };
 
 use crate::{
-    group_box::{GroupBox, GroupBoxVariant},
+    group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants},
     label::Label,
     setting::SettingItem,
-    v_flex, ActiveTheme,
+    v_flex, ActiveTheme, StyledExt,
 };
 
 /// A setting group that can contain multiple setting items.
 #[derive(Clone)]
 pub struct SettingGroup {
-    pub title: SharedString,
-    pub description: Option<SharedString>,
-    pub items: Vec<SettingItem>,
-    variant: GroupBoxVariant,
+    style: StyleRefinement,
+    variant: Option<GroupBoxVariant>,
+
+    pub(super) title: Option<SharedString>,
+    pub(super) description: Option<SharedString>,
+    pub(super) items: Vec<SettingItem>,
+}
+
+impl GroupBoxVariants for SettingGroup {
+    fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
+        self.variant = Some(variant);
+        self
+    }
+}
+
+impl Styled for SettingGroup {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
 }
 
 impl SettingGroup {
     /// Create a new setting group with the given title.
-    pub fn new(title: impl Into<SharedString>) -> Self {
+    pub fn new() -> Self {
         Self {
-            title: title.into(),
+            style: StyleRefinement::default(),
+            title: None,
             description: None,
             items: Vec::new(),
-            variant: GroupBoxVariant::default(),
+            variant: None,
         }
     }
 
     /// Set the label of the setting group.
     pub fn title(mut self, title: impl Into<SharedString>) -> Self {
-        self.title = title.into();
+        self.title = Some(title.into());
         self
     }
 
     /// Set the description of the setting group.
     pub fn description(mut self, description: impl Into<SharedString>) -> Self {
         self.description = Some(description.into());
-        self
-    }
-
-    /// Set the variant of the group box.
-    pub(crate) fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
-        self.variant = variant;
         self
     }
 
@@ -81,6 +92,13 @@ impl SettingGroup {
         //     .collect()
     }
 
+    pub(super) fn with_default_variant(mut self, variant: GroupBoxVariant) -> Self {
+        if self.variant.is_none() {
+            self.variant = Some(variant);
+        }
+        self
+    }
+
     pub(crate) fn render(
         self,
         group_ix: usize,
@@ -98,17 +116,19 @@ impl SettingGroup {
 
         GroupBox::new()
             .id(SharedString::from(format!("group-{}", group_ix)))
-            .with_variant(self.variant)
-            .title(v_flex().gap_1().child(self.title.clone()).when_some(
-                self.description.clone(),
-                |this, description| {
-                    this.child(
-                        Label::new(description)
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground),
-                    )
-                },
-            ))
+            .when_some(self.variant, |this, variant| this.with_variant(variant))
+            .when_some(self.title.clone(), |this, title| {
+                this.title(v_flex().gap_1().child(title).when_some(
+                    self.description.clone(),
+                    |this, description| {
+                        this.child(
+                            Label::new(description)
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground),
+                        )
+                    },
+                ))
+            })
             .children(self.items.iter().enumerate().filter_map(|(item_ix, item)| {
                 if item.is_match(&query) {
                     Some(item.clone().render(item_ix, window, cx))
@@ -116,5 +136,6 @@ impl SettingGroup {
                     None
                 }
             }))
+            .refine_style(&self.style)
     }
 }

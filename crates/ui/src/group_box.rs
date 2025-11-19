@@ -1,6 +1,6 @@
 use gpui::{
     div, prelude::FluentBuilder, relative, AnyElement, App, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce,  StyleRefinement, Styled, Window,
+    IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -13,6 +13,27 @@ pub enum GroupBoxVariant {
     Normal,
     Fill,
     Outline,
+}
+
+/// Trait to add GroupBox variant methods to elements.
+pub trait GroupBoxVariants: Sized {
+    /// Set the variant of the [`GroupBox`].
+    fn with_variant(self, variant: GroupBoxVariant) -> Self;
+    /// Set to use [`GroupBoxVariant::Normal`] to GroupBox.
+    fn normal(mut self) -> Self {
+        self = self.with_variant(GroupBoxVariant::Normal);
+        self
+    }
+    /// Set to use [`GroupBoxVariant::Fill`] to GroupBox.
+    fn fill(mut self) -> Self {
+        self = self.with_variant(GroupBoxVariant::Fill);
+        self
+    }
+    /// Set to use [`GroupBoxVariant::Outline`] to GroupBox.
+    fn outline(mut self) -> Self {
+        self = self.with_variant(GroupBoxVariant::Outline);
+        self
+    }
 }
 
 impl GroupBoxVariant {
@@ -62,26 +83,6 @@ impl GroupBox {
         }
     }
 
-    /// Set the variant of the group box.
-    pub fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
-        self.variant = variant;
-        self
-    }
-
-    /// Set to use Fill variant.
-    pub fn fill(mut self) -> Self {
-        self.variant = GroupBoxVariant::Fill;
-        self
-    }
-
-    /// Set use outline style of the group box.
-    ///
-    /// If true, the group box will have a border around it, and no background color.
-    pub fn outline(mut self) -> Self {
-        self.variant = GroupBoxVariant::Outline;
-        self
-    }
-
     /// Set the id of the group box, default is None.
     pub fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = Some(id.into());
@@ -116,6 +117,13 @@ impl ParentElement for GroupBox {
 impl Styled for GroupBox {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
+    }
+}
+
+impl GroupBoxVariants for GroupBox {
+    fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
+        self.variant = variant;
+        self
     }
 }
 

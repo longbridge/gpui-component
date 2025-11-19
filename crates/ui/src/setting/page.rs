@@ -103,7 +103,7 @@ impl SettingPage {
                     Some(
                         group
                             .clone()
-                            .with_variant(group_variant)
+                            .with_default_variant(group_variant)
                             .render(ix, query, window, cx),
                     )
                 } else {

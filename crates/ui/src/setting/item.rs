@@ -157,7 +157,14 @@ impl SettingItem {
                         .as_ref()
                         .map_or(false, |d| d.to_lowercase().contains(&query.to_lowercase()))
             }
-            SettingItem::Element { .. } => false,
+            SettingItem::Element { .. } => {
+                // We need to show all custom elements when not searching.
+                if query.is_empty() {
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 

@@ -117,7 +117,7 @@ use gpui_component::{
     ActiveTheme, IconName, Root, TitleBar, WindowExt,
     button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
-    group_box::GroupBox,
+    group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
     notification::Notification,

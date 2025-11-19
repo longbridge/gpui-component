@@ -5,7 +5,7 @@ use gpui_component::{
     ActiveTheme, Colorize as _, IconName, Sizable,
     button::Button,
     checkbox::Checkbox,
-    group_box::GroupBox,
+    group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     slider::{Slider, SliderState},
     v_flex,

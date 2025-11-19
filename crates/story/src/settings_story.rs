@@ -2,12 +2,13 @@ use std::rc::Rc;
 
 use gpui::{
     App, AppContext, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window, img,
+    ParentElement as _, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
-    ActiveTheme as _,
-    group_box::GroupBoxVariant,
+    ActiveTheme, Icon, IconName,
+    group_box::{GroupBoxVariant, GroupBoxVariants},
+    label::Label,
     setting::{
         NumberFieldOptions, SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage,
         Settings,
@@ -90,7 +91,7 @@ impl SettingsStory {
 
         vec![
             SettingPage::new("General").groups(vec![
-                SettingGroup::new("Appearance").items(vec![
+                SettingGroup::new().title("Appearance").items(vec![
                     SettingItem::Item {
                         title: "Dark Mode".into(),
                         description: Some("Switch between light and dark themes.".into()),
@@ -156,7 +157,7 @@ impl SettingsStory {
                         ),
                     },
                 ]),
-                SettingGroup::new("Font").items(vec![
+                SettingGroup::new().title("Font").items(vec![
                     SettingItem::Item {
                         title: "Font Family".into(),
                         description: Some("Select the font family for the application.".into()),
@@ -199,69 +200,28 @@ impl SettingsStory {
                         ),
                     },
                 ]),
-                SettingGroup::new("Other").items(vec![SettingItem::Item {
-                    title: "CLI Path".into(),
-                    description: Some(
-                        "Set the path to the command-line interface executable.".into(),
-                    ),
-                    field_type: SettingFieldType::Input,
-                    field: Rc::new(
-                        SettingField::new(
-                            |cx: &App| AppSettings::global(cx).cli_path.clone(),
-                            |val: String, cx: &mut App| {
-                                println!("cli-path set value: {}", val);
-                                AppSettings::global_mut(cx).cli_path = val;
-                            },
-                        )
-                        .default_value(default_settings.cli_path),
-                    ),
-                }]),
+                SettingGroup::new()
+                    .title("Other")
+                    .items(vec![SettingItem::Item {
+                        title: "CLI Path".into(),
+                        description: Some(
+                            "Set the path to the command-line interface executable.".into(),
+                        ),
+                        field_type: SettingFieldType::Input,
+                        field: Rc::new(
+                            SettingField::new(
+                                |cx: &App| AppSettings::global(cx).cli_path.clone(),
+                                |val: String, cx: &mut App| {
+                                    println!("cli-path set value: {}", val);
+                                    AppSettings::global_mut(cx).cli_path = val;
+                                },
+                            )
+                            .default_value(default_settings.cli_path),
+                        ),
+                    }]),
             ]),
-            SettingPage::new("Software Update").groups(vec![SettingGroup::new("Updates").items(
-                vec![
-                SettingItem::Item {
-                    title: "Enable Notifications".into(),
-                    description: Some("Receive notifications about updates and news.".into()),
-                    field_type: SettingFieldType::Switch,
-                    field: Rc::new(SettingField::new(
-                        |cx: &App| AppSettings::global(cx).notifications_enabled,
-                        |val: bool, cx: &mut App| {
-                            AppSettings::global_mut(cx).notifications_enabled = val;
-                        },
-                    ).default_value(default_settings.notifications_enabled)),
-                },
-                SettingItem::Item {
-                    title: "Auto Update".into(),
-                    description: Some("Automatically download and install updates.".into()),
-                    field_type: SettingFieldType::Switch,
-                    field: Rc::new(SettingField::new(
-                        |cx: &App| AppSettings::global(cx).auto_update,
-                        |val: bool, cx: &mut App| {
-                            AppSettings::global_mut(cx).auto_update = val;
-                        },
-
-                    ).default_value(default_settings.auto_update)),
-                },
-            ],
-            )]),
-            SettingPage::new("About").groups(vec![SettingGroup::new("About").items(vec![
-                    SettingItem::Element {
-                        render: Rc::new(|_, cx| {
-                            let logo_url = format!(
-                                "https://longbridge.github.io/gpui-component/logo{}.svg",
-                                if cx.theme().is_dark() { "-dark" } else { "" }
-                            );
-
-                            v_flex()
-                                .gap_5()
-                                .w_full()
-                                .items_center()
-                                .justify_center()
-                                .child(img(logo_url).size_32())
-                                .child("GPUI Component")
-                                .into_any()
-                        }),
-                    },
+            SettingPage::new("Software Update").groups(vec![
+                SettingGroup::new().title("Updates").items(vec![
                     SettingItem::Item {
                         title: "Enable Notifications".into(),
                         description: Some("Receive notifications about updates and news.".into()),
@@ -290,7 +250,30 @@ impl SettingsStory {
                             .default_value(default_settings.auto_update),
                         ),
                     },
-                ])]),
+                ]),
+            ]),
+            SettingPage::new("About").groups(vec![SettingGroup::new().p_5().normal().items(vec![
+                SettingItem::Element {
+                    render: Rc::new(|_, cx| {
+                        v_flex()
+                            .gap_3()
+                            .w_full()
+                            .items_center()
+                            .justify_center()
+                            .child(Icon::new(IconName::GalleryVerticalEnd).size_16())
+                            .child("GPUI Component")
+                            .child(
+                                Label::new(
+                                    "Rust GUI components for building fantastic cross-platform \
+                                    desktop application by using GPUI.",
+                                )
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground),
+                            )
+                            .into_any()
+                    }),
+                },
+            ])]),
         ]
     }
 }
