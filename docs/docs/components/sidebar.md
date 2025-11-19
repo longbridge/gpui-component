@@ -257,84 +257,6 @@ Sidebar::new(Side::Left)
     )
 ```
 
-## API Reference
-
-### Sidebar
-
-| Method              | Description                                         |
-| ------------------- | --------------------------------------------------- |
-| `new(side)`         | Create a sidebar on the specified side (Left/Right) |
-| `left()`            | Create a left-side sidebar                          |
-| `right()`           | Create a right-side sidebar                         |
-| `width(px)`         | Set sidebar width (default: 255px)                  |
-| `border_width(px)`  | Set border width (default: 1px)                     |
-| `collapsible(bool)` | Make sidebar collapsible (default: true)            |
-| `collapsed(bool)`   | Set collapsed state                                 |
-| `header(element)`   | Set header content                                  |
-| `footer(element)`   | Set footer content                                  |
-| `child(element)`    | Add child element (must implement Collapsible)      |
-| `children(iter)`    | Add multiple children                               |
-
-### SidebarHeader
-
-| Method           | Description                 |
-| ---------------- | --------------------------- |
-| `new()`          | Create a new sidebar header |
-| `selected(bool)` | Set selected state          |
-| `child(element)` | Add child element           |
-
-Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `InteractiveElement`, `DropdownMenu`
-
-### SidebarFooter
-
-| Method           | Description                 |
-| ---------------- | --------------------------- |
-| `new()`          | Create a new sidebar footer |
-| `selected(bool)` | Set selected state          |
-| `child(element)` | Add child element           |
-
-Implements: `Selectable`, `Collapsible`, `ParentElement`, `Styled`, `InteractiveElement`, `DropdownMenu`
-
-### SidebarGroup
-
-| Method            | Description                 |
-| ----------------- | --------------------------- |
-| `new(label)`      | Create a group with a label |
-| `child(element)`  | Add child element           |
-| `children(iter)`  | Add multiple children       |
-| `collapsed(bool)` | Set collapsed state         |
-
-### SidebarMenu
-
-| Method            | Description             |
-| ----------------- | ----------------------- |
-| `new()`           | Create a new menu       |
-| `child(item)`     | Add menu item           |
-| `children(iter)`  | Add multiple menu items |
-| `collapsed(bool)` | Set collapsed state     |
-
-### SidebarMenuItem
-
-| Method            | Description                              |
-| ----------------- | ---------------------------------------- |
-| `new(label)`      | Create a menu item with label            |
-| `icon(icon)`      | Set icon                                 |
-| `active(bool)`    | Set active state                         |
-| `on_click(fn)`    | Set click handler                        |
-| `children(iter)`  | Add submenu items                        |
-| `suffix(element)` | Add suffix element (badge, switch, etc.) |
-| `collapsed(bool)` | Set collapsed state                      |
-
-### SidebarToggleButton
-
-| Method            | Description                     |
-| ----------------- | ------------------------------- |
-| `left()`          | Create toggle for left sidebar  |
-| `right()`         | Create toggle for right sidebar |
-| `side(side)`      | Set sidebar side                |
-| `collapsed(bool)` | Set collapsed state             |
-| `on_click(fn)`    | Set click handler               |
-
 ## Theming
 
 The sidebar uses dedicated theme colors:
@@ -348,20 +270,6 @@ cx.theme().sidebar_accent            // Hover/active background
 cx.theme().sidebar_accent_foreground // Hover/active text
 cx.theme().sidebar_primary           // Primary elements
 cx.theme().sidebar_primary_foreground // Primary text
-```
-
-### Custom Theme Colors
-
-```json
-{
-  "sidebar.background": "#fafafa",
-  "sidebar.foreground": "#171717",
-  "sidebar.border": "#e5e5e5",
-  "sidebar.accent.background": "#e5e5e5",
-  "sidebar.accent.foreground": "#171717",
-  "sidebar.primary.background": "#171717",
-  "sidebar.primary.foreground": "#fafafa"
-}
 ```
 
 ## Examples
