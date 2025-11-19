@@ -7,7 +7,7 @@ use crate::{
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, App, ElementId, Entity, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
+    ParentElement as _, Pixels, RenderOnce, SharedString, Styled as _, Window,
 };
 
 /// The settings structure containing multiple pages for app settings.
@@ -28,6 +28,7 @@ pub struct Settings {
     pages: Vec<SettingPage>,
     group_variant: GroupBoxVariant,
     size: Size,
+    sidebar_width: Pixels,
 }
 
 impl Settings {
@@ -38,7 +39,14 @@ impl Settings {
             pages: vec![],
             group_variant: GroupBoxVariant::default(),
             size: Size::default(),
+            sidebar_width: px(250.0),
         }
+    }
+
+    /// Set the width of the sidebar, default is `250px`.
+    pub fn sidebar_width(mut self, width: impl Into<Pixels>) -> Self {
+        self.sidebar_width = width.into();
+        self
     }
 
     /// Add a page to the settings.
@@ -225,12 +233,11 @@ impl RenderOnce for Settings {
         };
 
         h_resizable(self.id.clone())
-            .child(resizable_panel().size(px(300.)).child(self.render_sidebar(
-                &state,
-                &filtered_pages,
-                window,
-                cx,
-            )))
+            .child(
+                resizable_panel()
+                    .size(self.sidebar_width)
+                    .child(self.render_sidebar(&state, &filtered_pages, window, cx)),
+            )
             .child(resizable_panel().child(self.render_active_page(
                 &state,
                 &filtered_pages,
