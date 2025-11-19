@@ -7,7 +7,9 @@ use gpui::{
 
 use gpui_component::{
     ActiveTheme, Icon, IconName,
+    button::Button,
     group_box::{GroupBoxVariant, GroupBoxVariants},
+    h_flex,
     label::Label,
     setting::{
         NumberFieldOptions, SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage,
@@ -200,9 +202,29 @@ impl SettingsStory {
                         ),
                     },
                 ]),
-                SettingGroup::new()
-                    .title("Other")
-                    .items(vec![SettingItem::Item {
+                SettingGroup::new().title("Other").items(vec![
+                    SettingItem::Element {
+                        render: Rc::new(|_, _| {
+                            h_flex()
+                                .w_full()
+                                .justify_between()
+                                .gap_3()
+                                .child("This is a custom element line.")
+                                .child(
+                                    Button::new("action")
+                                        .icon(IconName::Globe)
+                                        .label("Repository...")
+                                        .outline()
+                                        .on_click(|_, _, cx| {
+                                            cx.open_url(
+                                                "https://github.com/longbridge/gpui-component",
+                                            );
+                                        }),
+                                )
+                                .into_any_element()
+                        }),
+                    },
+                    SettingItem::Item {
                         title: "CLI Path".into(),
                         description: Some(
                             "Set the path to the command-line interface executable.".into(),
@@ -218,7 +240,8 @@ impl SettingsStory {
                             )
                             .default_value(default_settings.cli_path),
                         ),
-                    }]),
+                    },
+                ]),
             ]),
             SettingPage::new("Software Update").groups(vec![
                 SettingGroup::new().title("Updates").items(vec![
