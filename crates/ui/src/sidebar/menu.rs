@@ -1,4 +1,7 @@
-use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
+use crate::{
+    button::{Button, ButtonVariants as _},
+    h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
+};
 use gpui::{
     div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
     InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
@@ -137,23 +140,17 @@ impl SidebarMenuItem {
     fn is_submenu(&self) -> bool {
         self.children.len() > 0
     }
-
-    fn is_open(&self) -> bool {
-        if self.is_submenu() {
-            self.active
-        } else {
-            false
-        }
-    }
 }
 
 impl RenderOnce for SidebarMenuItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let open_state = window.use_keyed_state(self.id.clone(), cx, |_, _| false);
+
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
         let is_active = self.active;
-        let is_open = self.is_open();
         let is_submenu = self.is_submenu();
+        let is_open = is_submenu && !is_collapsed && *open_state.read(cx);
 
         div()
             .id(self.id.clone())
@@ -176,7 +173,7 @@ impl RenderOnce for SidebarMenuItem {
                         this.bg(cx.theme().sidebar_accent.opacity(0.8))
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
-                    .when(is_active && !is_submenu, |this| {
+                    .when(is_active, |this| {
                         this.font_medium()
                             .bg(cx.theme().sidebar_accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
@@ -206,15 +203,33 @@ impl RenderOnce for SidebarMenuItem {
                             )
                             .when(is_submenu, |this| {
                                 this.child(
-                                    Icon::new(IconName::ChevronRight)
-                                        .size_4()
-                                        .when(is_open, |this| this.rotate(percentage(90. / 360.))),
+                                    Button::new("caret")
+                                        .xsmall()
+                                        .ghost()
+                                        .icon(
+                                            Icon::new(IconName::ChevronRight)
+                                                .size_4()
+                                                .when(is_open, |this| {
+                                                    this.rotate(percentage(90. / 360.))
+                                                }),
+                                        )
+                                        .on_click({
+                                            let open_state = open_state.clone();
+                                            move |_, _, cx| {
+                                                // Avoid trigger item click, just expand/collapse submenu
+                                                cx.stop_propagation();
+                                                open_state.update(cx, |is_open, cx| {
+                                                    *is_open = !*is_open;
+                                                    cx.notify();
+                                                })
+                                            }
+                                        }),
                                 )
                             })
                     })
                     .on_click(move |ev, window, cx| handler(ev, window, cx)),
             )
-            .when(is_submenu && is_open && !is_collapsed, |this| {
+            .when(is_open, |this| {
                 this.child(
                     v_flex()
                         .id("submenu")

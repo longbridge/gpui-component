@@ -137,6 +137,7 @@ impl Item {
             }
 
             this.last_active_item = item;
+            this.active_subitem = None;
             cx.notify();
         }
     }
@@ -311,9 +312,11 @@ impl Render for SidebarStory {
                     .child(
                         SidebarGroup::new("Platform").child(SidebarMenu::new().children(
                             groups[0].iter().map(|item| {
+                                let is_active =
+                                    self.last_active_item == *item && self.active_subitem == None;
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
-                                    .active(self.active_items.contains_key(item))
+                                    .active(is_active)
                                     .children(item.items().into_iter().enumerate().map(
                                         |(ix, sub_item)| {
                                             SidebarMenuItem::new(sub_item.label())
@@ -340,9 +343,11 @@ impl Render for SidebarStory {
                     .child(
                         SidebarGroup::new("Projects").child(SidebarMenu::new().children(
                             groups[1].iter().enumerate().map(|(ix, item)| {
+                                let is_active =
+                                    self.last_active_item == *item && self.active_subitem == None;
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
-                                    .active(self.last_active_item == *item)
+                                    .active(is_active)
                                     .when(ix == 0, |this| {
                                         this.suffix(
                                             Badge::new().dot().count(1).child(
@@ -351,6 +356,7 @@ impl Render for SidebarStory {
                                         )
                                     })
                                     .when(ix == 1, |this| this.suffix(IconName::Settings2))
+                                    .on_click(cx.listener(item.handler()))
                             }),
                         )),
                     )
