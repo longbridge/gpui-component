@@ -309,6 +309,8 @@ impl Focusable for SettingsStory {
 
 impl Render for SettingsStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Settings::new("app-settings", self.setting_pages(cx)).group_variant(self.group_variant)
+        Settings::new("app-settings")
+            .group_variant(self.group_variant)
+            .pages(self.setting_pages(cx))
     }
 }

@@ -9,7 +9,7 @@ use crate::{
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
-    setting::{SettingGroup, SettingsState},
+    setting::{settings::SettingsState, SettingGroup},
     v_flex, ActiveTheme, IconName, Sizable,
 };
 
