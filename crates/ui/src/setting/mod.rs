@@ -11,13 +11,12 @@ pub use page::*;
 use crate::{
     group_box::GroupBoxVariant,
     history::{History, HistoryItem},
-    list::ListItem,
     resizable::{h_resizable, resizable_panel},
-    tree::{tree, TreeItem, TreeState},
+    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
 };
 use gpui::{
-    div, px, App, AppContext as _, ElementId, Entity, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window,
+    div, px, relative, App, AppContext as _, ElementId, Entity, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, Styled as _, Window,
 };
 
 /// The settings structure containing multiple sections for app settings.
@@ -69,25 +68,7 @@ impl Settings {
         self
     }
 
-    fn render_active_page(
-        self,
-        pages: &Vec<SettingPage>,
-        selected_ix: SelectIndex,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        for (ix, page) in pages.into_iter().enumerate() {
-            if selected_ix.is_page(ix) {
-                return page
-                    .render(ix, &self.query, self.group_variant, window, cx)
-                    .into_any_element();
-            }
-        }
-
-        return div().into_any_element();
-    }
-
-    fn filted_pages(&self) -> Vec<SettingPage> {
+    fn filtered_pages(&self) -> Vec<SettingPage> {
         if self.query.is_empty() {
             return self.pages.clone();
         }
@@ -124,56 +105,90 @@ impl Settings {
             .collect()
     }
 
-    fn build_items(&self, pages: &Vec<SettingPage>) -> Vec<TreeItem> {
-        let mut items = Vec::new();
-        pages.iter().enumerate().for_each(|(page_ix, page)| {
-            items.push(
-                TreeItem::new(SelectIndex::page_id(page_ix), page.title.clone())
-                    .expanded(true)
-                    .children(page.groups.iter().enumerate().map(|(ix, group)| {
-                        TreeItem::new(SelectIndex::group_id(ix), group.title.clone())
-                    })),
-            )
-        });
+    fn render_active_page(
+        &self,
+        state: &Entity<SettingsState>,
+        pages: &Vec<SettingPage>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let selected_index = state.read(cx).selected_index;
 
-        items
+        for (ix, page) in pages.into_iter().enumerate() {
+            if selected_index.page_ix == ix {
+                return page
+                    .render(ix, &self.query, self.group_variant, window, cx)
+                    .into_any_element();
+            }
+        }
+
+        return div().into_any_element();
+    }
+
+    fn render_sidebar(
+        &self,
+        state: &Entity<SettingsState>,
+        pages: &Vec<SettingPage>,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let selected_index = state.read(cx).selected_index;
+        Sidebar::left()
+            .width(relative(1.))
+            .border_width(px(0.))
+            .collapsed(false)
+            .header(SidebarHeader::new().child("Search Input"))
+            .child(
+                SidebarGroup::new("Settings").child(SidebarMenu::new().children(
+                    pages.iter().enumerate().map(|(page_ix, page)| {
+                        let is_page_active = selected_index.page_ix == page_ix;
+                        SidebarMenuItem::new(page.title.clone())
+                            .active(is_page_active)
+                            .on_click({
+                                let state = state.clone();
+                                move |_, _, cx| {
+                                    state.update(cx, |state, cx| {
+                                        state.selected_index = SelectIndex {
+                                            page_ix,
+                                            ..Default::default()
+                                        };
+                                        cx.notify();
+                                    })
+                                }
+                            })
+                            .children(page.groups.iter().enumerate().map(|(group_ix, group)| {
+                                let is_active = selected_index.page_ix == page_ix
+                                    && selected_index.group_ix == Some(group_ix);
+                                SidebarMenuItem::new(group.title.clone())
+                                    .active(is_active)
+                                    .on_click({
+                                        let state = state.clone();
+                                        move |_, _, cx| {
+                                            state.update(cx, |state, cx| {
+                                                state.selected_index = SelectIndex {
+                                                    page_ix,
+                                                    group_ix: Some(group_ix),
+                                                };
+                                                cx.notify();
+                                            })
+                                        }
+                                    })
+                            }))
+                    }),
+                )),
+            )
     }
 }
 
 struct SettingsState {
     history: History<ElementId>,
-    tree_state: Entity<TreeState>,
-    selected_ix: SelectIndex,
+    selected_index: SelectIndex,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 struct SelectIndex {
-    page_ix: Option<SharedString>,
-    group_ix: Option<SharedString>,
-}
-
-impl SelectIndex {
-    fn page_id(ix: usize) -> SharedString {
-        SharedString::from(format!("page-{}", ix))
-    }
-
-    fn group_id(ix: usize) -> SharedString {
-        SharedString::from(format!("{}", ix))
-    }
-
-    fn is_page(&self, page_ix: usize) -> bool {
-        self.page_ix
-            .as_ref()
-            .map(|ix| ix == &Self::page_id(page_ix))
-            .unwrap_or(false)
-    }
-
-    fn is_group(&self, group_ix: usize) -> bool {
-        self.group_ix
-            .as_ref()
-            .map(|ix| ix == &Self::group_id(group_ix))
-            .unwrap_or(false)
-    }
+    page_ix: usize,
+    group_ix: Option<usize>,
 }
 
 impl HistoryItem for ElementId {
@@ -186,59 +201,22 @@ impl HistoryItem for ElementId {
 
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
-            let tree_state = cx.new(|cx| TreeState::new(cx));
-            SettingsState {
-                tree_state,
-                selected_ix: SelectIndex::default(),
-                history: History::new().max_undos(1000),
-            }
+        let filtered_pages = self.filtered_pages();
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| SettingsState {
+            selected_index: SelectIndex::default(),
+            history: History::new().max_undos(1000),
         });
-
-        let filted_pages = self.filted_pages();
-
-        let tree_state = state.read(cx).tree_state.clone();
-        let items = self.build_items(&filted_pages);
-        tree_state.update(cx, |tree_state, cx| {
-            let selected_ix = tree_state.selected_index();
-            tree_state.set_items(items, cx);
-            tree_state.set_selected_index(selected_ix, cx);
-        });
-        let selected_ix = state.read(cx).selected_ix.clone();
 
         h_resizable(self.id.clone())
-            .child(
-                resizable_panel()
-                    .size(px(300.))
-                    .child(div().size_full().p_2().child(tree(
-                        &tree_state,
-                        move |ix, entry, selected, _, _| {
-                            ListItem::new(ix)
-                                .selected(selected)
-                                .pl(px(16.) * entry.depth() + px(12.))
-                                .child(entry.item().label.clone())
-                                .on_click({
-                                    let item_id = entry.item().id.clone();
-                                    let depth = entry.depth();
-                                    let state = state.clone();
-                                    move |_, _, cx| {
-                                        state.update(cx, |state, cx| {
-                                            if depth == 0 {
-                                                state.selected_ix.page_ix = Some(item_id.clone());
-                                                state.selected_ix.group_ix = None;
-                                            } else if depth == 1 {
-                                                state.selected_ix.group_ix = Some(item_id.clone());
-                                            }
-                                            cx.notify();
-                                        });
-                                    }
-                                })
-                        },
-                    ))),
-            )
+            .child(resizable_panel().size(px(300.)).child(self.render_sidebar(
+                &state,
+                &filtered_pages,
+                window,
+                cx,
+            )))
             .child(resizable_panel().child(self.render_active_page(
-                &filted_pages,
-                selected_ix,
+                &state,
+                &filtered_pages,
                 window,
                 cx,
             )))
