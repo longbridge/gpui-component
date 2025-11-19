@@ -11,6 +11,7 @@ use crate::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
+    Sizable, Size,
 };
 
 pub(crate) struct StringField<T> {
@@ -39,6 +40,7 @@ where
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
+        size: Size,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -69,7 +71,7 @@ where
 
         div()
             .w_64()
-            .child(Input::new(&state.input))
+            .child(Input::new(&state.input).with_size(size))
             .into_any_element()
     }
 }

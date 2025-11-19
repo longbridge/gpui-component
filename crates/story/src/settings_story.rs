@@ -6,9 +6,9 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName,
+    ActiveTheme, Icon, IconName, Sizable, Size,
     button::Button,
-    group_box::{GroupBoxVariant, GroupBoxVariants},
+    group_box::GroupBoxVariant,
     h_flex,
     label::Label,
     setting::{
@@ -57,6 +57,7 @@ impl AppSettings {
 pub struct SettingsStory {
     focus_handle: FocusHandle,
     group_variant: GroupBoxVariant,
+    size: Size,
 }
 
 impl super::Story for SettingsStory {
@@ -84,6 +85,7 @@ impl SettingsStory {
         Self {
             focus_handle: cx.focus_handle(),
             group_variant: GroupBoxVariant::Outline,
+            size: Size::default(),
         }
     }
 
@@ -156,6 +158,37 @@ impl SettingsStory {
                                 },
                             )
                             .default_value(GroupBoxVariant::Outline.as_str().to_string().into()),
+                        ),
+                    },
+                    SettingItem::Item {
+                        title: "Group Field Size".into(),
+                        description: Some("Set the field control size in the settings.".into()),
+                        field_type: SettingFieldType::Dropdown {
+                            options: vec![
+                                (Size::Medium.as_str().into(), "Medium".into()),
+                                (Size::Small.as_str().into(), "Small".into()),
+                                (Size::XSmall.as_str().into(), "XSmall".into()),
+                            ],
+                        },
+                        field: Rc::new(
+                            SettingField::new(
+                                {
+                                    let view = view.clone();
+                                    move |cx: &App| {
+                                        SharedString::from(view.read(cx).size.as_str().to_string())
+                                    }
+                                },
+                                {
+                                    let view = view.clone();
+                                    move |val: SharedString, cx: &mut App| {
+                                        view.update(cx, |view, cx| {
+                                            view.size = Size::from_str(val.as_str());
+                                            cx.notify();
+                                        });
+                                    }
+                                },
+                            )
+                            .default_value(Size::default().as_str().to_string().into()),
                         ),
                     },
                 ]),
@@ -275,7 +308,7 @@ impl SettingsStory {
                     },
                 ]),
             ]),
-            SettingPage::new("About").groups(vec![SettingGroup::new().p_5().normal().items(vec![
+            SettingPage::new("About").groups(vec![SettingGroup::new().items(vec![
                 SettingItem::Element {
                     render: Rc::new(|_, cx| {
                         v_flex()
@@ -310,7 +343,8 @@ impl Focusable for SettingsStory {
 impl Render for SettingsStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         Settings::new("app-settings")
-            .group_variant(self.group_variant)
+            .with_size(self.size)
+            .with_group_variant(self.group_variant)
             .pages(self.setting_pages(cx))
     }
 }

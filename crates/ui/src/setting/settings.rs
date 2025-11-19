@@ -3,6 +3,7 @@ use crate::{
     resizable::{h_resizable, resizable_panel},
     setting::{SettingGroup, SettingPage},
     sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    Sizable, Size,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, App, ElementId, Entity, IntoElement,
@@ -26,6 +27,7 @@ pub struct Settings {
     id: ElementId,
     pages: Vec<SettingPage>,
     group_variant: GroupBoxVariant,
+    size: Size,
 }
 
 impl Settings {
@@ -35,6 +37,7 @@ impl Settings {
             id: id.into(),
             pages: vec![],
             group_variant: GroupBoxVariant::default(),
+            size: Size::default(),
         }
     }
 
@@ -53,7 +56,7 @@ impl Settings {
     /// Set the default variant for all setting groups.
     ///
     /// All setting groups will use this variant unless overridden individually.
-    pub fn group_variant(mut self, variant: GroupBoxVariant) -> Self {
+    pub fn with_group_variant(mut self, variant: GroupBoxVariant) -> Self {
         self.group_variant = variant;
         self
     }
@@ -95,6 +98,7 @@ impl Settings {
         &self,
         state: &Entity<SettingsState>,
         pages: &Vec<SettingPage>,
+        options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -103,7 +107,7 @@ impl Settings {
         for (ix, page) in pages.into_iter().enumerate() {
             if selected_index.page_ix == ix {
                 return page
-                    .render(ix, state, self.group_variant, window, cx)
+                    .render(ix, state, &options, window, cx)
                     .into_any_element();
             }
         }
@@ -179,11 +183,24 @@ impl Settings {
     }
 }
 
+impl Sizable for Settings {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 pub(super) struct SettingsState {
     pub(super) query: SharedString,
     pub(super) selected_index: SelectIndex,
     /// If set, defer scrolling to this group index after rendering.
     pub(super) deferred_scroll_group_ix: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RenderOptions {
+    pub(super) size: Size,
+    pub(super) group_variant: GroupBoxVariant,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -199,8 +216,13 @@ impl RenderOnce for Settings {
             selected_index: SelectIndex::default(),
             deferred_scroll_group_ix: None,
         });
+
         let query = state.read(cx).query.clone();
         let filtered_pages = self.filtered_pages(&query);
+        let options = RenderOptions {
+            size: self.size,
+            group_variant: self.group_variant,
+        };
 
         h_resizable(self.id.clone())
             .child(resizable_panel().size(px(300.)).child(self.render_sidebar(
@@ -212,6 +234,7 @@ impl RenderOnce for Settings {
             .child(resizable_panel().child(self.render_active_page(
                 &state,
                 &filtered_pages,
+                &options,
                 window,
                 cx,
             )))

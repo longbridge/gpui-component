@@ -11,10 +11,14 @@ use std::{
 use crate::{
     h_flex,
     label::Label,
-    setting::fields::{
-        BoolField, DropdownField, NumberField, NumberFieldOptions, SettingFieldRender, StringField,
+    setting::{
+        fields::{
+            BoolField, DropdownField, NumberField, NumberFieldOptions, SettingFieldRender,
+            StringField,
+        },
+        RenderOptions,
     },
-    v_flex, ActiveTheme as _,
+    v_flex, ActiveTheme as _, Size,
 };
 
 /// The type of setting field to render.
@@ -186,6 +190,7 @@ impl SettingItem {
         description: Option<SharedString>,
         field_type: SettingFieldType,
         field: Rc<dyn AnySettingField>,
+        size: Size,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -216,10 +221,16 @@ impl SettingItem {
             ),
         };
 
-        renderer.render(title, description, field, window, cx)
+        renderer.render(title, description, field, size, window, cx)
     }
 
-    pub(super) fn render(self, ix: usize, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    pub(super) fn render(
+        self,
+        ix: usize,
+        options: &RenderOptions,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
         div()
             .id(SharedString::from(format!("item-{}", ix)))
             .child(match self {
@@ -249,7 +260,15 @@ impl SettingItem {
                                 }),
                         )
                         .child(div().id("field").bg(cx.theme().background).child(
-                            Self::render_field(title, description, field_type, field, window, cx),
+                            Self::render_field(
+                                title,
+                                description,
+                                field_type,
+                                field,
+                                options.size,
+                                window,
+                                cx,
+                            ),
                         ))
                         .into_any_element()
                 }

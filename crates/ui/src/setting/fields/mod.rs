@@ -13,7 +13,10 @@ pub use number::NumberFieldOptions;
 use gpui::{AnyElement, App, SharedString, Window};
 use std::rc::Rc;
 
-use crate::setting::{AnySettingField, SettingField};
+use crate::{
+    setting::{AnySettingField, SettingField},
+    Size,
+};
 
 pub(crate) trait SettingFieldRender {
     #[allow(unused)]
@@ -22,6 +25,7 @@ pub(crate) trait SettingFieldRender {
         label: SharedString,
         description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
+        size: Size,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement;

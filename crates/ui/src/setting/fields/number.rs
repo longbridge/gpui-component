@@ -11,6 +11,7 @@ use crate::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
+    Sizable, Size,
 };
 
 #[derive(Clone, Debug)]
@@ -56,6 +57,7 @@ impl SettingFieldRender for NumberField {
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
+        size: Size,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -97,7 +99,7 @@ impl SettingFieldRender for NumberField {
 
         div()
             .w_32()
-            .child(NumberInput::new(&state.input))
+            .child(NumberInput::new(&state.input).with_size(size))
             .into_any_element()
     }
 }

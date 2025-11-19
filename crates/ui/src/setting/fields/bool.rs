@@ -7,6 +7,7 @@ use crate::{
         AnySettingField,
     },
     switch::Switch,
+    Sizable, Size,
 };
 use gpui::{AnyElement, App, IntoElement, SharedString, Window};
 
@@ -15,7 +16,7 @@ pub(crate) struct BoolField {
 }
 
 impl BoolField {
-    pub fn new(use_switch: bool) -> Self {
+    pub(crate) fn new(use_switch: bool) -> Self {
         Self { use_switch }
     }
 }
@@ -26,6 +27,7 @@ impl SettingFieldRender for BoolField {
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
+        size: Size,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -35,6 +37,7 @@ impl SettingFieldRender for BoolField {
         if self.use_switch {
             Switch::new("check")
                 .checked(checked)
+                .with_size(size)
                 .on_click(move |checked: &bool, _, cx: &mut App| {
                     set_value(*checked, cx);
                 })
@@ -42,6 +45,7 @@ impl SettingFieldRender for BoolField {
         } else {
             Checkbox::new("check")
                 .checked(checked)
+                .with_size(size)
                 .on_click(move |checked: &bool, _, cx: &mut App| {
                     set_value(*checked, cx);
                 })

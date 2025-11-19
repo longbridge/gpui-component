@@ -9,6 +9,7 @@ use crate::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
+    Sizable, Size,
 };
 
 pub(crate) struct DropdownField<T> {
@@ -34,6 +35,7 @@ where
         _label: SharedString,
         _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
+        size: Size,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -53,6 +55,7 @@ where
                     .label(old_label)
                     .dropdown_caret(true)
                     .outline()
+                    .with_size(size)
                     .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
                         let set_value = set_value.clone();
                         let menu = options.iter().fold(menu, |menu, (value, label)| {

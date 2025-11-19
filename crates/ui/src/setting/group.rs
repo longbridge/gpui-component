@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, App, ClickEvent, ParentElement as _, SharedString,
+    prelude::FluentBuilder as _, App, ClickEvent, IntoElement, ParentElement as _, SharedString,
     StyleRefinement, Styled, Window,
 };
 
 use crate::{
-    group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants},
+    group_box::{GroupBox, GroupBoxVariants},
     label::Label,
-    setting::SettingItem,
+    setting::{RenderOptions, SettingItem},
     v_flex, ActiveTheme, StyledExt,
 };
 
@@ -16,18 +16,10 @@ use crate::{
 #[derive(Clone)]
 pub struct SettingGroup {
     style: StyleRefinement,
-    variant: Option<GroupBoxVariant>,
 
     pub(super) title: Option<SharedString>,
     pub(super) description: Option<SharedString>,
     pub(super) items: Vec<SettingItem>,
-}
-
-impl GroupBoxVariants for SettingGroup {
-    fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
-        self.variant = Some(variant);
-        self
-    }
 }
 
 impl Styled for SettingGroup {
@@ -44,7 +36,6 @@ impl SettingGroup {
             title: None,
             description: None,
             items: Vec::new(),
-            variant: None,
         }
     }
 
@@ -92,20 +83,15 @@ impl SettingGroup {
         //     .collect()
     }
 
-    pub(super) fn with_default_variant(mut self, variant: GroupBoxVariant) -> Self {
-        if self.variant.is_none() {
-            self.variant = Some(variant);
-        }
-        self
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render(
         self,
         group_ix: usize,
         query: &str,
+        options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl gpui::IntoElement {
+    ) -> impl IntoElement {
         // let is_resettable = self.is_resettable();
         // let on_resets = self
         //     .items
@@ -116,7 +102,7 @@ impl SettingGroup {
 
         GroupBox::new()
             .id(SharedString::from(format!("group-{}", group_ix)))
-            .when_some(self.variant, |this, variant| this.with_variant(variant))
+            .with_variant(options.group_variant)
             .when_some(self.title.clone(), |this, title| {
                 this.title(v_flex().gap_1().child(title).when_some(
                     self.description.clone(),
@@ -131,7 +117,7 @@ impl SettingGroup {
             })
             .children(self.items.iter().enumerate().filter_map(|(item_ix, item)| {
                 if item.is_match(&query) {
-                    Some(item.clone().render(item_ix, window, cx))
+                    Some(item.clone().render(item_ix, options, window, cx))
                 } else {
                     None
                 }

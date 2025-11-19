@@ -6,10 +6,9 @@ use gpui::{
 use crate::{
     button::{Button, ButtonVariants},
     divider::Divider,
-    group_box::GroupBoxVariant,
     h_flex,
     label::Label,
-    setting::{settings::SettingsState, SettingGroup},
+    setting::{settings::SettingsState, RenderOptions, SettingGroup},
     v_flex, ActiveTheme, IconName, Sizable,
 };
 
@@ -59,7 +58,7 @@ impl SettingPage {
         &self,
         ix: usize,
         state: &Entity<SettingsState>,
-        group_variant: GroupBoxVariant,
+        options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -132,12 +131,12 @@ impl SettingPage {
             .child(
                 list(list_state.clone(), {
                     let query = query.clone();
+                    let options = *options;
                     move |ix, window, cx| {
                         let group = groups[ix].clone();
                         group
                             .pt_6()
-                            .with_default_variant(group_variant)
-                            .render(ix, &query, window, cx)
+                            .render(ix, &query, &options, window, cx)
                             .into_any_element()
                     }
                 })
