@@ -90,7 +90,7 @@ impl SettingsStory {
         let default_settings = AppSettings::default();
 
         vec![
-            SettingPage::new("General").groups(vec![
+            SettingPage::new("General").default_open(true).groups(vec![
                 SettingGroup::new().title("Appearance").items(vec![
                     SettingItem::new(
                         "Dark Mode",

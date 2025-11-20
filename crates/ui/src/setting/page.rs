@@ -14,6 +14,7 @@ use crate::{
 /// A setting page that can contain multiple setting groups.
 #[derive(Clone)]
 pub struct SettingPage {
+    pub(super) default_open: bool,
     pub(super) title: SharedString,
     pub(super) description: Option<SharedString>,
     pub(super) groups: Vec<SettingGroup>,
@@ -22,6 +23,7 @@ pub struct SettingPage {
 impl SettingPage {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
+            default_open: false,
             title: title.into(),
             description: None,
             groups: Vec::new(),
@@ -40,6 +42,12 @@ impl SettingPage {
         self
     }
 
+    /// Set the default open state of the setting page, default is false.
+    pub fn default_open(mut self, default_open: bool) -> Self {
+        self.default_open = default_open;
+        self
+    }
+
     /// Add a setting group to the page.
     pub fn group(mut self, group: SettingGroup) -> Self {
         self.groups.push(group);
@@ -52,7 +60,6 @@ impl SettingPage {
         self
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn render(
         &self,
         ix: usize,

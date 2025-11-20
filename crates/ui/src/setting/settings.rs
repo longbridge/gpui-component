@@ -151,6 +151,7 @@ impl Settings {
                         let is_page_active =
                             selected_index.page_ix == page_ix && selected_index.group_ix.is_none();
                         SidebarMenuItem::new(page.title.clone())
+                            .default_open(page.default_open)
                             .active(is_page_active)
                             .on_click({
                                 let state = state.clone();
