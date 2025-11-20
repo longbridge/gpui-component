@@ -12,13 +12,64 @@ use gpui_component::{
     h_flex,
     label::Label,
     list::ListItem,
-    tree::{TreeItem, TreeState, tree},
+    tree::{TreeDelegate, TreeEntry, TreeItem, TreeState, tree},
     v_flex,
 };
 
 use crate::{Story, section};
 
 actions!(story, [Rename, SelectItem]);
+
+struct FileTreeDelegate {
+    parent: Entity<TreeStory>,
+}
+
+impl TreeDelegate for FileTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        let item = entry.item();
+        let icon = if !entry.is_folder() {
+            IconName::File
+        } else if entry.is_expanded() {
+            IconName::FolderOpen
+        } else {
+            IconName::Folder
+        };
+
+        ListItem::new(ix)
+            .w_full()
+            .rounded(cx.theme().radius)
+            .px_3()
+            .pl(px(16.) * entry.depth() + px(12.))
+            .child(h_flex().gap_2().child(icon).child(item.label.clone()))
+            .selected(selected)
+            .on_click(window.listener_for(&self.parent, {
+                let item = item.clone();
+                move |this, _, _window, cx| {
+                    this.selected_item = Some(item.clone());
+                    cx.notify();
+                }
+            }))
+    }
+
+    fn context_menu(
+        &self,
+        ix: usize,
+        menu: gpui_component::menu::PopupMenu,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> gpui_component::menu::PopupMenu {
+        menu.label(format!("Selected Index: {}", ix))
+            .separator()
+            .menu("Rename", Box::new(Rename))
+    }
+}
 
 const CONTEXT: &str = "TreeStory";
 pub(crate) fn init(cx: &mut App) {
@@ -29,7 +80,7 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 pub struct TreeStory {
-    tree_state: Entity<TreeState>,
+    tree_state: Entity<TreeState<FileTreeDelegate>>,
     selected_item: Option<TreeItem>,
 }
 
@@ -71,7 +122,7 @@ impl TreeStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
+    fn load_files(state: Entity<TreeState<FileTreeDelegate>>, path: PathBuf, cx: &mut App) {
         cx.spawn(async move |cx| {
             let ignorer = Ignorer::new(&path.to_string_lossy());
             let items = build_file_items(&ignorer, &path, &path);
@@ -83,7 +134,15 @@ impl TreeStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let tree_state = cx.new(|cx| TreeState::new(cx));
+        let parent_entity = cx.entity();
+        let tree_state = cx.new(move |cx| {
+            TreeState::new(
+                FileTreeDelegate {
+                    parent: parent_entity,
+                },
+                cx,
+            )
+        });
 
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
@@ -134,7 +193,6 @@ impl Render for TreeStory {
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let view = cx.entity();
         v_flex()
             .id("tree-story")
             .key_context(CONTEXT)
@@ -144,46 +202,18 @@ impl Render for TreeStory {
             .size_full()
             .child(
                 section("File tree")
-                    .sub_title("Press `space` to select, `enter` to rename.")
+                    .sub_title(
+                        "Press `space` to select, `enter` to rename, right-click for context menu.",
+                    )
                     .v_flex()
                     .max_w_md()
                     .child(
-                        tree(
-                            &self.tree_state,
-                            move |ix, entry, _selected, _window, cx| {
-                                view.update(cx, |_, cx| {
-                                    let item = entry.item();
-                                    let icon = if !entry.is_folder() {
-                                        IconName::File
-                                    } else if entry.is_expanded() {
-                                        IconName::FolderOpen
-                                    } else {
-                                        IconName::Folder
-                                    };
-
-                                    ListItem::new(ix)
-                                        .w_full()
-                                        .rounded(cx.theme().radius)
-                                        .px_3()
-                                        .pl(px(16.) * entry.depth() + px(12.))
-                                        .child(
-                                            h_flex().gap_2().child(icon).child(item.label.clone()),
-                                        )
-                                        .on_click(cx.listener({
-                                            let item = item.clone();
-                                            move |this, _, _window, cx| {
-                                                this.selected_item = Some(item.clone());
-                                                cx.notify();
-                                            }
-                                        }))
-                                })
-                            },
-                        )
-                        .p_1()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .rounded(cx.theme().radius)
-                        .h(px(540.)),
+                        tree(&self.tree_state)
+                            .p_1()
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded(cx.theme().radius)
+                            .h(px(540.)),
                     )
                     .child(
                         h_flex()

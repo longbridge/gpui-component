@@ -24,7 +24,7 @@ use gpui::{actions, Action};
 Context menus appear when right-clicking on an element:
 
 ```rust
-use gpui_component::context_menu::ContextMenuExt;
+use gpui_component::menu::ContextMenuExt;
 
 div()
     .child("Right click me")

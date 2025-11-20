@@ -5,12 +5,12 @@ description: A hierarchical tree view component for displaying and navigating tr
 
 # Tree
 
-A versatile tree component for displaying hierarchical data with expand/collapse functionality, keyboard navigation, and custom item rendering. Perfect for file explorers, navigation menus, or any nested data structure.
+A versatile tree component for displaying hierarchical data with expand/collapse functionality, keyboard navigation, custom item rendering, and built-in context menu support. Perfect for file explorers, navigation menus, or any nested data structure.
 
 ## Import
 
 ```rust
-use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry};
+use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry, TreeDelegate};
 ```
 
 ## Usage
@@ -18,9 +18,31 @@ use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry};
 ### Basic Tree
 
 ```rust
-// Create tree state
+// Create a delegate
+struct BasicTreeDelegate;
+
+impl TreeDelegate for BasicTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        ListItem::new(ix)
+            .selected(selected)
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(entry.item().label.clone())
+            )
+    }
+}
+
+// Create tree state with delegate
 let tree_state = cx.new(|cx| {
-    TreeState::new(cx).items(vec![
+    TreeState::new(BasicTreeDelegate, cx).items(vec![
         TreeItem::new("src", "src")
             .expanded(true)
             .child(TreeItem::new("src/lib.rs", "lib.rs"))
@@ -31,49 +53,85 @@ let tree_state = cx.new(|cx| {
 });
 
 // Render tree
-tree(&tree_state, |ix, entry, selected, window, cx| {
-    ListItem::new(ix)
-        .child(
-            h_flex()
-                .gap_2()
-                .child(entry.item().label.clone())
-        )
-})
+tree(&tree_state)
 ```
 
-### File Tree with Icons
+### File Tree with Icons and Context Menu
 
 ```rust
-use gpui_component::{ListItem, IconName, h_flex};
+use gpui_component::{ListItem, IconName, h_flex, Menu, MenuItem};
 
-tree(&tree_state, |ix, entry, selected, window, cx| {
-    let item = entry.item();
-    let icon = if !entry.is_folder() {
-        IconName::File
-    } else if entry.is_expanded() {
-        IconName::FolderOpen
-    } else {
-        IconName::Folder
-    };
+struct FileTreeDelegate;
 
-    ListItem::new(ix)
-        .selected(selected)
-        .pl(px(16.) * entry.depth() + px(12.)) // Indent based on depth
-        .child(
-            h_flex()
-                .gap_2()
-                .child(icon)
-                .child(item.label.clone())
-        )
-        .on_click(cx.listener(move |_, _, _, _| {
-            // Handle item click
-        }))
-})
+impl TreeDelegate for FileTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        let item = entry.item();
+        let icon = if !entry.is_folder() {
+            IconName::File
+        } else if entry.is_expanded() {
+            IconName::FolderOpen
+        } else {
+            IconName::Folder
+        };
+
+        ListItem::new(ix)
+            .selected(selected)
+            .pl(px(16.) * entry.depth() + px(12.)) // Indent based on depth
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(icon)
+                    .child(item.label.clone())
+            )
+    }
+
+    fn context_menu(
+        &self,
+        ix: usize,
+        menu: gpui_component::menu::PopupMenu,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> gpui_component::menu::PopupMenu {
+        menu.label(format!("Selected Index: {}", ix))
+    }
+}
+
+// Create tree state with the delegate
+let tree_state = cx.new(|cx| {
+    TreeState::new(FileTreeDelegate, cx).items(items)
+});
+
+// Render tree with context menu support
+tree(&tree_state)
 ```
 
 ### Dynamic Tree Loading
 
 ```rust
+struct DynamicTreeDelegate;
+
+impl TreeDelegate for DynamicTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        ListItem::new(ix)
+            .selected(selected)
+            .child(entry.item().label.clone())
+    }
+}
+
 impl MyView {
     fn load_files(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let tree_state = self.tree_state.clone();
@@ -107,17 +165,60 @@ fn build_file_items(path: &Path) -> Vec<TreeItem> {
     }
     items
 }
+
+// Create tree state
+let tree_state = cx.new(|cx| {
+    TreeState::new(DynamicTreeDelegate, cx)
+});
 ```
 
 ### Tree with Selection Handling
 
 ```rust
 struct MyTreeView {
-    tree_state: Entity<TreeState>,
+    tree_state: Entity<TreeState<SelectionTreeDelegate>>,
     selected_item: Option<TreeItem>,
 }
 
+struct SelectionTreeDelegate {
+    view: Entity<MyTreeView>,
+}
+
+impl TreeDelegate for SelectionTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        let item = entry.item();
+        let view = self.view.clone();
+
+        ListItem::new(ix)
+            .selected(selected)
+            .child(item.label.clone())
+            .on_click(cx.listener({
+                let item = item.clone();
+                move |this, _, _, cx| {
+                    view.update(cx, |view, cx| {
+                        view.handle_selection(item.clone(), cx);
+                    });
+                }
+            }))
+    }
+}
+
 impl MyTreeView {
+    fn new(cx: &mut Context<Self>) -> Self {
+        let tree_state = cx.new(|cx| {
+            TreeState::new(SelectionTreeDelegate { view: cx.entity() }, cx)
+        });
+
+        Self { tree_state, selected_item: None }
+    }
+
     fn handle_selection(&mut self, item: TreeItem, cx: &mut Context<Self>) {
         self.selected_item = Some(item.clone());
         println!("Selected: {} ({})", item.label, item.id);
@@ -126,45 +227,7 @@ impl MyTreeView {
 }
 
 // In render method
-tree(&self.tree_state, {
-    let view = cx.entity();
-    move |ix, entry, selected, window, cx| {
-        view.update(cx, |this, cx| {
-            ListItem::new(ix)
-                .selected(selected)
-                .child(entry.item().label.clone())
-                .on_click(cx.listener({
-                    let item = entry.item().clone();
-                    move |this, _, _, cx| {
-                        this.handle_selection(item.clone(), cx);
-                    }
-                }))
-        })
-    }
-})
-```
-
-### Tree with Context Menu
-
-```rust
-tree(&tree_state, |ix, entry, selected, window, cx| {
-    ListItem::new(ix)
-        .selected(selected)
-        .child(entry.item().label.clone())
-        .on_secondary_mouse_down(MouseButton::Right, {
-            let item = entry.item().clone();
-            move |_, _, cx| {
-                cx.show_context_menu(
-                    ContextMenu::build(cx, |menu, cx| {
-                        menu.action("Rename", Rename)
-                            .action("Delete", Delete)
-                            .separator()
-                            .action("Copy Path", CopyPath)
-                    })
-                );
-            }
-        })
-})
+tree(&self.tree_state)
 ```
 
 ### Disabled Items
@@ -201,17 +264,36 @@ tree_state.update(cx, |state, cx| {
 
 ## API Reference
 
-### TreeState
+### TreeDelegate
 
-| Method                         | Description                  |
-| ------------------------------ | ---------------------------- |
-| `new(cx)`                      | Create a new tree state      |
-| `items(items)`                 | Set initial tree items       |
-| `set_items(items, cx)`         | Update tree items and notify |
-| `selected_index()`             | Get currently selected index |
-| `set_selected_index(ix, cx)`   | Set selected index           |
-| `selected_entry()`             | Get currently selected entry |
-| `scroll_to_item(ix, strategy)` | Scroll to specific item      |
+The `TreeDelegate` trait defines how tree items are rendered and provides context menu functionality.
+
+| Method                                         | Description                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| `render_item(ix, entry, selected, window, cx)` | Render a tree item as a `ListItem` (required)                                   |
+| `context_menu(ix, menu, window, cx)`           | Customize context menu for tree item (optional, default returns menu unchanged) |
+
+#### render_item Method Parameters
+
+- `ix: usize`: Item index in flattened tree
+- `entry: &TreeEntry`: Tree entry with item and depth metadata
+- `selected: bool`: Whether item is currently selected
+- `window: &mut Window`: Current window context
+- `cx: &mut App`: Application context
+- Returns: `ListItem` for rendering
+
+### TreeState<D: TreeDelegate>
+
+| Method                         | Description                         |
+| ------------------------------ | ----------------------------------- |
+| `new(delegate, cx)`            | Create new tree state with delegate |
+| `items(items)`                 | Set initial tree items              |
+| `set_items(items, cx)`         | Update tree items and notify        |
+| `selected_index()`             | Get currently selected index        |
+| `set_selected_index(ix, cx)`   | Set selected index                  |
+| `selected_entry()`             | Get currently selected entry        |
+| `delegate()`                   | Get reference to the delegate       |
+| `scroll_to_item(ix, strategy)` | Scroll to specific item             |
 
 ### TreeItem
 
@@ -238,23 +320,9 @@ tree_state.update(cx, |state, cx| {
 
 ### tree() Function
 
-| Parameter     | Description                           |
-| ------------- | ------------------------------------- |
-| `state`       | `Entity<TreeState>` for managing tree |
-| `render_item` | Closure for rendering each item       |
-
-#### Render Item Closure
-
-```rust
-Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem
-```
-
-- `usize`: Item index in flattened tree
-- `&TreeEntry`: Tree entry with item and metadata
-- `bool`: Whether item is currently selected
-- `&mut Window`: Current window context
-- `&mut App`: Application context
-- Returns: `ListItem` for rendering
+| Parameter | Description                                            |
+| --------- | ------------------------------------------------------ |
+| `state`   | `Entity<TreeState<D>>` for managing tree with delegate |
 
 ## Examples
 
@@ -262,11 +330,50 @@ Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem
 
 ```rust
 struct LazyTreeView {
-    tree_state: Entity<TreeState>,
+    tree_state: Entity<TreeState<LazyTreeDelegate>>,
     loaded_paths: HashSet<String>,
 }
 
+struct LazyTreeDelegate {
+    view: Entity<LazyTreeView>,
+}
+
+impl TreeDelegate for LazyTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        let item = entry.item();
+        let view = self.view.clone();
+
+        ListItem::new(ix)
+            .selected(selected)
+            .pl(px(16.) * entry.depth() + px(12.))
+            .child(item.label.clone())
+            .on_click(window.listener_for(&self.view, {
+                let item_id = item.id.clone();
+                move |this, _, _, cx| {
+                    view.update(cx, |view, cx| {
+                        view.load_children(&item_id, cx);
+                    });
+                }
+            }))
+    }
+}
+
 impl LazyTreeView {
+    fn new(cx: &mut Context<Self>) -> Self {
+        let tree_state = cx.new(|cx| {
+            TreeState::new(LazyTreeDelegate { view: cx.entity() }, cx)
+        });
+
+        Self { tree_state, loaded_paths: HashSet::new() }
+    }
+
     fn load_children(&mut self, item_id: &str, cx: &mut Context<Self>) {
         if self.loaded_paths.contains(item_id) {
             return;
@@ -280,8 +387,8 @@ impl LazyTreeView {
             cx.spawn(async move |cx| {
                 let children = load_directory_children(&path).await;
                 tree_state.update(cx, |state, cx| {
-                    // Update specific item with loaded children
-                    state.update_item_children(&item_id, children, cx);
+                    // Update tree with new items - you'd need to implement this logic
+                    state.set_items(children, cx);
                 })
             }).detach();
 
@@ -295,12 +402,42 @@ impl LazyTreeView {
 
 ```rust
 struct SearchableTree {
-    tree_state: Entity<TreeState>,
+    tree_state: Entity<TreeState<SearchableTreeDelegate>>,
     original_items: Vec<TreeItem>,
     search_query: String,
 }
 
+struct SearchableTreeDelegate;
+
+impl TreeDelegate for SearchableTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        ListItem::new(ix)
+            .selected(selected)
+            .pl(px(16.) * entry.depth() + px(12.))
+            .child(entry.item().label.clone())
+    }
+}
+
 impl SearchableTree {
+    fn new(cx: &mut Context<Self>) -> Self {
+        let tree_state = cx.new(|cx| {
+            TreeState::new(SearchableTreeDelegate, cx)
+        });
+
+        Self {
+            tree_state,
+            original_items: Vec::new(),
+            search_query: String::new(),
+        }
+    }
+
     fn filter_tree(&mut self, query: &str, cx: &mut Context<Self>) {
         self.search_query = query.to_string();
 
@@ -341,11 +478,59 @@ fn filter_tree_items(items: &[TreeItem], query: &str) -> Vec<TreeItem> {
 
 ```rust
 struct MultiSelectTree {
-    tree_state: Entity<TreeState>,
+    tree_state: Entity<TreeState<MultiSelectTreeDelegate>>,
     selected_items: HashSet<String>,
 }
 
+struct MultiSelectTreeDelegate {
+    view: Entity<MultiSelectTree>,
+}
+
+impl TreeDelegate for MultiSelectTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        let item = entry.item();
+        let view = self.view.clone();
+        let is_multi_selected = view.read(cx).is_selected(&item.id);
+
+        ListItem::new(ix)
+            .selected(is_multi_selected)
+            .pl(px(16.) * entry.depth() + px(12.))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(checkbox().checked(is_multi_selected))
+                    .child(item.label.clone())
+            )
+            .on_click(window.listener_for(&self.view, {
+                let item_id = item.id.clone();
+                move |this, _, _, cx| {
+                    view.update(cx, |view, cx| {
+                        view.toggle_selection(&item_id, cx);
+                    });
+                }
+            }))
+    }
+}
+
 impl MultiSelectTree {
+    fn new(cx: &mut Context<Self>) -> Self {
+        let tree_state = cx.new(|cx| {
+            TreeState::new(MultiSelectTreeDelegate { view: cx.entity() }, cx)
+        });
+
+        Self {
+            tree_state,
+            selected_items: HashSet::new(),
+        }
+    }
+
     fn toggle_selection(&mut self, item_id: &str, cx: &mut Context<Self>) {
         if self.selected_items.contains(item_id) {
             self.selected_items.remove(item_id);
@@ -361,30 +546,7 @@ impl MultiSelectTree {
 }
 
 // In render method
-tree(&self.tree_state, {
-    let view = cx.entity();
-    move |ix, entry, _selected, window, cx| {
-        view.update(cx, |this, cx| {
-            let item = entry.item();
-            let is_multi_selected = this.is_selected(&item.id);
-
-            ListItem::new(ix)
-                .selected(is_multi_selected)
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .child(checkbox().checked(is_multi_selected))
-                        .child(item.label.clone())
-                )
-                .on_click(cx.listener({
-                    let item_id = item.id.clone();
-                    move |this, _, _, cx| {
-                        this.toggle_selection(&item_id, cx);
-                    }
-                }))
-        })
-    }
-})
+tree(&self.tree_state)
 ```
 
 ## Keyboard Navigation

@@ -10,6 +10,7 @@ use gpui::{
 use crate::{
     actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
     list::ListItem,
+    menu::{ContextMenuExt, PopupMenu},
     scroll::{Scrollbar, ScrollbarState},
     StyledExt,
 };
@@ -28,28 +29,66 @@ pub(crate) fn init(cx: &mut App) {
 ///
 /// # Arguments
 ///
-/// * `state` - The shared state managing the tree items.
-/// * `render_item` - A closure to render each tree item.
+/// * `state` - The shared state managing the tree items with a delegate.
 ///
 /// ```ignore
-/// let state = cx.new(|_| {
-///     TreeState::new().items(vec![
-///         TreeItem::new("src")
-///             .child(TreeItem::new("lib.rs"),
-///         TreeItem::new("Cargo.toml"),
-///         TreeItem::new("README.md"),
+/// struct MyTreeDelegate;
+///
+/// impl TreeDelegate for MyTreeDelegate {
+///     fn render_item(
+///         &self,
+///         ix: usize,
+///         entry: &TreeEntry,
+///         selected: bool,
+///         window: &mut Window,
+///         cx: &mut App,
+///     ) -> ListItem {
+///         ListItem::new(ix)
+///             .selected(selected)
+///             .px(px(16.) * entry.depth())
+///             .child(entry.item().label.clone())
+///     }
+/// }
+///
+/// let state = cx.new(|cx| {
+///     TreeState::new(MyTreeDelegate, cx).items(vec![
+///         TreeItem::new("src", "src")
+///             .expanded(true)
+///             .child(TreeItem::new("src/lib.rs", "lib.rs"))
+///             .child(TreeItem::new("src/main.rs", "main.rs")),
+///         TreeItem::new("Cargo.toml", "Cargo.toml"),
+///         TreeItem::new("README.md", "README.md"),
 ///     ])
 /// });
 ///
-/// tree(&state, |ix, entry, selected, window, cx| {
-///     div().px(px(16.) * entry.depth()).child(item.label.clone())
-/// })
+/// tree(&state)
 /// ```
-pub fn tree<R>(state: &Entity<TreeState>, render_item: R) -> Tree
-where
-    R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
-{
-    Tree::new(state, render_item)
+pub fn tree<D: TreeDelegate>(state: &Entity<TreeState<D>>) -> Tree<D> {
+    Tree::new(state)
+}
+
+/// A delegate trait for providing tree data and rendering.
+pub trait TreeDelegate: Sized + 'static {
+    /// Render the tree item at the given index.
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem;
+
+    /// Render the context menu for the tree item at the given index.
+    fn context_menu(
+        &self,
+        _ix: usize,
+        menu: PopupMenu,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> PopupMenu {
+        menu
+    }
 }
 
 struct TreeItemState {
@@ -175,25 +214,27 @@ impl TreeItem {
 }
 
 /// State for managing tree items.
-pub struct TreeState {
+pub struct TreeState<D: TreeDelegate> {
     focus_handle: FocusHandle,
     entries: Vec<TreeEntry>,
     scrollbar_state: ScrollbarState,
     scroll_handle: UniformListScrollHandle,
     selected_ix: Option<usize>,
-    render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
+    right_clicked_index: Option<usize>,
+    delegate: D,
 }
 
-impl TreeState {
+impl<D: TreeDelegate> TreeState<D> {
     /// Create a new empty tree state.
-    pub fn new(cx: &mut App) -> Self {
+    pub fn new(delegate: D, cx: &mut App) -> Self {
         Self {
             selected_ix: None,
+            right_clicked_index: None,
             focus_handle: cx.focus_handle(),
             scrollbar_state: ScrollbarState::default(),
             scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
-            render_item: Rc::new(|_, _, _, _, _| ListItem::new(0)),
+            delegate,
         }
     }
 
@@ -236,6 +277,11 @@ impl TreeState {
     /// Get the currently selected entry, if any.
     pub fn selected_entry(&self) -> Option<&TreeEntry> {
         self.selected_ix.and_then(|ix| self.entries.get(ix))
+    }
+
+    /// Get the delegate.
+    pub fn delegate(&self) -> &D {
+        &self.delegate
     }
 
     fn add_entry(&mut self, item: TreeItem, depth: usize) {
@@ -344,14 +390,24 @@ impl TreeState {
     }
 }
 
-impl Render for TreeState {
+impl<D: TreeDelegate> Render for TreeState<D> {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let render_item = self.render_item.clone();
-
         div()
             .id("tree-state")
             .size_full()
             .relative()
+            .context_menu({
+                let view = cx.entity().clone();
+                move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
+                    if let Some(ix) = view.read(cx).right_clicked_index {
+                        view.update(cx, |menu, cx| {
+                            menu.delegate().context_menu(ix, this, window, cx)
+                        })
+                    } else {
+                        this
+                    }
+                }
+            })
             .child(
                 uniform_list("entries", self.entries.len(), {
                     cx.processor(move |state, visible_range: Range<usize>, window, cx| {
@@ -359,7 +415,8 @@ impl Render for TreeState {
                         for ix in visible_range {
                             let entry = &state.entries[ix];
                             let selected = Some(ix) == state.selected_ix;
-                            let item = (render_item)(ix, entry, selected, window, cx);
+
+                            let item = state.delegate.render_item(ix, entry, selected, window, cx);
 
                             let el = div()
                                 .id(ix)
@@ -370,6 +427,15 @@ impl Render for TreeState {
                                         cx.listener({
                                             move |this, _, window, cx| {
                                                 this.on_entry_click(ix, window, cx);
+                                            }
+                                        }),
+                                    )
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        cx.listener({
+                                            move |this, _, _window, cx| {
+                                                this.right_clicked_index = Some(ix);
+                                                cx.notify();
                                             }
                                         }),
                                     )
@@ -404,51 +470,41 @@ impl Render for TreeState {
 
 /// A tree view element that displays hierarchical data.
 #[derive(IntoElement)]
-pub struct Tree {
+pub struct Tree<D: TreeDelegate> {
     id: ElementId,
-    state: Entity<TreeState>,
+    state: Entity<TreeState<D>>,
     style: StyleRefinement,
-    render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
 }
 
-impl Tree {
-    pub fn new<R>(state: &Entity<TreeState>, render_item: R) -> Self
-    where
-        R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
-    {
+impl<D: TreeDelegate> Tree<D> {
+    pub fn new(state: &Entity<TreeState<D>>) -> Self {
         Self {
             id: ElementId::Name(format!("tree-{}", state.entity_id()).into()),
             state: state.clone(),
             style: StyleRefinement::default(),
-            render_item: Rc::new(move |ix, item, selected, window, app| {
-                render_item(ix, item, selected, window, app)
-            }),
         }
     }
 }
 
-impl Styled for Tree {
+impl<D: TreeDelegate> Styled for Tree<D> {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for Tree {
+impl<D: TreeDelegate> RenderOnce for Tree<D> {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focus_handle = self.state.read(cx).focus_handle.clone();
-
-        self.state
-            .update(cx, |state, _| state.render_item = self.render_item);
 
         div()
             .id(self.id)
             .key_context(CONTEXT)
             .track_focus(&focus_handle)
-            .on_action(window.listener_for(&self.state, TreeState::on_action_confirm))
-            .on_action(window.listener_for(&self.state, TreeState::on_action_left))
-            .on_action(window.listener_for(&self.state, TreeState::on_action_right))
-            .on_action(window.listener_for(&self.state, TreeState::on_action_up))
-            .on_action(window.listener_for(&self.state, TreeState::on_action_down))
+            .on_action(window.listener_for(&self.state, TreeState::<D>::on_action_confirm))
+            .on_action(window.listener_for(&self.state, TreeState::<D>::on_action_left))
+            .on_action(window.listener_for(&self.state, TreeState::<D>::on_action_right))
+            .on_action(window.listener_for(&self.state, TreeState::<D>::on_action_up))
+            .on_action(window.listener_for(&self.state, TreeState::<D>::on_action_down))
             .size_full()
             .child(self.state)
             .refine_style(&self.style)
@@ -459,8 +515,27 @@ impl RenderOnce for Tree {
 mod tests {
     use indoc::indoc;
 
-    use super::TreeState;
+    use super::{TreeDelegate, TreeItem, TreeState};
+    use crate::list::ListItem;
+    use crate::menu::PopupMenu;
     use gpui::AppContext as _;
+
+    struct TestDelegate;
+
+    impl TreeDelegate for TestDelegate {
+        fn render_item(
+            &self,
+            ix: usize,
+            entry: &TreeEntry,
+            selected: bool,
+            window: &mut Window,
+            cx: &mut App,
+        ) -> ListItem {
+            ListItem::new(ix)
+                .selected(selected)
+                .child(entry.item().label.clone())
+        }
+    }
 
     fn assert_entries(entries: &Vec<super::TreeEntry>, expected: &str) {
         let actual: Vec<String> = entries
@@ -496,7 +571,7 @@ mod tests {
             TreeItem::new("README.md", "README.md"),
         ];
 
-        let state = cx.new(|cx| TreeState::new(cx).items(items));
+        let state = cx.new(|cx| TreeState::new(TestDelegate, cx).items(items));
         state.update(cx, |state, _| {
             assert_entries(
                 &state.entries,
