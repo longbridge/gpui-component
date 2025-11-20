@@ -16,7 +16,7 @@ use crate::{
 /// A setting page that can contain multiple setting groups.
 #[derive(Clone)]
 pub struct SettingPage {
-    resetable: bool,
+    resettable: bool,
     pub(super) default_open: bool,
     pub(super) title: SharedString,
     pub(super) description: Option<SharedString>,
@@ -26,7 +26,7 @@ pub struct SettingPage {
 impl SettingPage {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
-            resetable: true,
+            resettable: true,
             default_open: false,
             title: title.into(),
             description: None,
@@ -52,11 +52,11 @@ impl SettingPage {
         self
     }
 
-    /// Set whether the setting page is resetable, default is true.
+    /// Set whether the setting page is resettable, default is true.
     ///
     /// If true and the items in this page has changed, the reset button will appear.
-    pub fn resetable(mut self, resetable: bool) -> Self {
-        self.resetable = resetable;
+    pub fn resettable(mut self, resettable: bool) -> Self {
+        self.resettable = resettable;
         self
     }
 
@@ -72,8 +72,8 @@ impl SettingPage {
         self
     }
 
-    fn is_resetable(&self, cx: &App) -> bool {
-        self.resetable && self.groups.iter().any(|group| group.is_resetable(cx))
+    fn is_resettable(&self, cx: &App) -> bool {
+        self.resettable && self.groups.iter().any(|group| group.is_resettable(cx))
     }
 
     fn reset_all(&self, window: &mut Window, cx: &mut App) {
@@ -130,7 +130,7 @@ impl SettingPage {
                 v_flex()
                     .gap_3()
                     .child(h_flex().justify_between().child(self.title.clone()).when(
-                        self.is_resetable(cx),
+                        self.is_resettable(cx),
                         |this| {
                             this.child(
                                 Button::new("reset")

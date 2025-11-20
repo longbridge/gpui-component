@@ -21,7 +21,7 @@ struct AppSettings {
     font_size: f64,
     notifications_enabled: bool,
     auto_update: bool,
-    resetable: bool,
+    resettable: bool,
 }
 
 impl Default for AppSettings {
@@ -33,7 +33,7 @@ impl Default for AppSettings {
             font_size: 14.0,
             notifications_enabled: true,
             auto_update: true,
-            resetable: true,
+            resettable: true,
         }
     }
 }
@@ -88,11 +88,11 @@ impl SettingsStory {
     fn setting_pages(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<SettingPage> {
         let view = cx.entity();
         let default_settings = AppSettings::default();
-        let resetable = AppSettings::global(cx).resetable;
+        let resettable = AppSettings::global(cx).resettable;
 
         vec![
             SettingPage::new("General")
-                .resetable(resetable)
+                .resettable(resettable)
                 .default_open(true)
                 .groups(vec![
                     SettingGroup::new().title("Appearance").items(vec![
@@ -125,11 +125,11 @@ impl SettingsStory {
                         )
                         .description("Automatically switch theme based on system settings."),
                         SettingItem::new(
-                            "Resetable",
+                            "resettable",
                             SettingField::switch(
-                                |cx: &App| AppSettings::global(cx).resetable,
+                                |cx: &App| AppSettings::global(cx).resettable,
                                 |checked: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).resetable = checked
+                                    AppSettings::global_mut(cx).resettable = checked
                                 },
                             ),
                         )
@@ -273,7 +273,7 @@ impl SettingsStory {
                     ]),
                 ]),
             SettingPage::new("Software Update")
-                .resetable(resetable)
+                .resettable(resettable)
                 .groups(vec![SettingGroup::new().title("Updates").items(vec![
                     SettingItem::new(
                         "Enable Notifications",
@@ -299,7 +299,7 @@ impl SettingsStory {
                     .description("Automatically download and install updates."),
                 ])]),
             SettingPage::new("About")
-                .resetable(resetable)
+                .resettable(resettable)
                 .group(
                     SettingGroup::new().item(SettingItem::element(|_options, _, cx| {
                         v_flex()

@@ -127,13 +127,13 @@ SettingPage::new("General")
     .groups(vec![...])
 ```
 
-### Resetable
+### resettable
 
 Enable reset functionality for a page:
 
 ```rust
 SettingPage::new("General")
-    .resetable(true)
+    .resettable(true)
     .groups(vec![...])
 ```
 
@@ -378,7 +378,7 @@ Settings::new("app-settings")
     .with_group_variant(GroupBoxVariant::Outline)
     .pages(vec![
         SettingPage::new("General")
-            .resetable(true)
+            .resettable(true)
             .default_open(true)
             .groups(vec![
                 SettingGroup::new()
@@ -428,7 +428,7 @@ Settings::new("app-settings")
                     ]),
             ]),
         SettingPage::new("Software Update")
-            .resetable(true)
+            .resettable(true)
             .group(
                 SettingGroup::new()
                     .title("Updates")

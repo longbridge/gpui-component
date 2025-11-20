@@ -69,8 +69,8 @@ impl SettingGroup {
         self.items.iter().any(|item| item.is_match(query))
     }
 
-    pub(super) fn is_resetable(&self, cx: &App) -> bool {
-        self.items.iter().any(|item| item.is_resetable(cx))
+    pub(super) fn is_resettable(&self, cx: &App) -> bool {
+        self.items.iter().any(|item| item.is_resettable(cx))
     }
 
     pub(crate) fn render(

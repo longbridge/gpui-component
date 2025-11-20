@@ -240,7 +240,7 @@ pub trait AnySettingField {
     fn type_id(&self) -> std::any::TypeId;
     fn field_type(&self) -> &SettingFieldType;
     fn style(&self) -> &StyleRefinement;
-    fn is_resetable(&self, cx: &App) -> bool;
+    fn is_resettable(&self, cx: &App) -> bool;
     fn reset(&self, window: &mut Window, cx: &mut App);
 }
 
@@ -265,7 +265,7 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingFi
         &self.style
     }
 
-    fn is_resetable(&self, cx: &App) -> bool {
+    fn is_resettable(&self, cx: &App) -> bool {
         let Some(default_value) = self.default_value.as_ref() else {
             return false;
         };

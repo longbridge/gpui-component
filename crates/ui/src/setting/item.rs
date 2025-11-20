@@ -98,9 +98,9 @@ impl SettingItem {
         }
     }
 
-    pub(crate) fn is_resetable(&self, cx: &App) -> bool {
+    pub(crate) fn is_resettable(&self, cx: &App) -> bool {
         match self {
-            SettingItem::Item { field, .. } => field.is_resetable(cx),
+            SettingItem::Item { field, .. } => field.is_resettable(cx),
             SettingItem::Element { .. } => false,
         }
     }
