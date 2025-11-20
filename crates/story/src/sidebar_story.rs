@@ -125,6 +125,13 @@ impl Item {
         }
     }
 
+    pub fn is_disabled(&self) -> bool {
+        match self {
+            Self::Travel => true,
+            _ => false,
+        }
+    }
+
     pub fn icon(&self) -> IconName {
         match self {
             Self::Playground => IconName::SquareTerminal,
@@ -193,6 +200,13 @@ impl SubItem {
             Self::Billing => "Billing",
             Self::Limits => "Limits",
             Self::General => "General",
+        }
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        match self {
+            Self::Quantum => true,
+            _ => false,
         }
     }
 
@@ -336,6 +350,7 @@ impl Render for SidebarStory {
                                         |(ix, sub_item)| {
                                             SidebarMenuItem::new(sub_item.label())
                                                 .active(self.active_subitem == Some(sub_item))
+                                                .disable(sub_item.is_disabled())
                                                 .when(ix == 0, |this| {
                                                     this.suffix(
                                                         Switch::new("switch")
@@ -363,6 +378,7 @@ impl Render for SidebarStory {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
                                     .active(is_active)
+                                    .disable(item.is_disabled())
                                     .click_to_open(self.click_to_open_submenu)
                                     .when(ix == 0, |this| {
                                         this.suffix(
