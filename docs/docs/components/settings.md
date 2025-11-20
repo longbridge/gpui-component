@@ -13,7 +13,7 @@ We can search by title and description to filter the settings to display only re
 ## Import
 
 ```rust
-use gpui_component::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
+use gpui_component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
 ```
 
 ## Usage
@@ -43,7 +43,7 @@ Settings
 ### Basic Settings
 
 ```rust
-use gpui_component::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
+use gpui_component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
 
 Settings::new("my-settings")
     .pages(vec![
@@ -448,11 +448,11 @@ Settings::new("app-settings")
     ])
 ```
 
-[Settings]: https://docs.rs/gpui-component/latest/gpui_component/settings/struct.Settings.html
-[SettingPage]: https://docs.rs/gpui-component/latest/gpui_component/settings/struct.SettingPage.html
-[SettingGroup]: https://docs.rs/gpui-component/latest/gpui_component/settings/struct.SettingGroup.html
-[SettingItem]: https://docs.rs/gpui-component/latest/gpui_component/settings/struct.SettingItem.html
-[SettingField]: https://docs.rs/gpui-component/latest/gpui_component/settings/enum.SettingField.html
-[NumberFieldOptions]: https://docs.rs/gpui-component/latest/gpui_component/settings/struct.NumberFieldOptions.html
+[Settings]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.Settings.html
+[SettingPage]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.SettingPage.html
+[SettingGroup]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.SettingGroup.html
+[SettingItem]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.SettingItem.html
+[SettingField]: https://docs.rs/gpui-component/latest/gpui_component/setting/enum.SettingField.html
+[NumberFieldOptions]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.NumberFieldOptions.html
 [GroupBox]: ./group_box.md
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html
