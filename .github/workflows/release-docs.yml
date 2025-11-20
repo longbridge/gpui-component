@@ -1,10 +1,8 @@
 name: Release Docs
 on:
   push:
-    paths:
-      - "docs/**"
-    branches:
-      - main
+    tags:
+      - "v*"
   workflow_dispatch:
 permissions:
   contents: read
