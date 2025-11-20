@@ -6,8 +6,7 @@ use gpui::{
 };
 
 use crate::{
-    button::{Button, ButtonVariants},
-    group_box::GroupBoxVariant,
+    button::Button,
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
@@ -56,11 +55,7 @@ where
             .when(options.layout.is_vertical(), |this| this.w_full())
             .label(old_label)
             .dropdown_caret(true)
-            .map(|this| match options.group_variant {
-                GroupBoxVariant::Fill => this.ghost(),
-                GroupBoxVariant::Outline => this.outline(),
-                _ => this,
-            })
+            .outline()
             .with_size(options.size)
             .refine_style(style)
             .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {

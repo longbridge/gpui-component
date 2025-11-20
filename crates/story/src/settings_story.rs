@@ -1,11 +1,11 @@
 use gpui::{
     App, AppContext, Axis, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window, prelude::FluentBuilder as _, px,
+    ParentElement as _, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size,
-    button::{Button, ButtonVariants as _},
+    button::Button,
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
@@ -216,17 +216,15 @@ impl SettingsStory {
                         h_flex()
                             .w_full()
                             .justify_between()
+                            .flex_wrap()
                             .gap_3()
                             .child("This is a custom element item by use SettingItem::element.")
                             .child(
                                 Button::new("action")
                                     .icon(IconName::Globe)
                                     .label("Repository...")
-                                    .map(|this| match options.group_variant {
-                                        GroupBoxVariant::Fill => this.ghost(),
-                                        GroupBoxVariant::Outline => this.outline(),
-                                        _ => this,
-                                    })
+                                    .outline()
+                                    .with_size(options.size)
                                     .on_click(|_, _, cx| {
                                         cx.open_url("https://github.com/longbridge/gpui-component");
                                     }),
@@ -242,11 +240,14 @@ impl SettingsStory {
                                 AppSettings::global_mut(cx).cli_path = val;
                             },
                         )
-                        .w(px(400.))
                         .default_value(default_settings.cli_path),
                     )
                     .layout(Axis::Vertical)
-                    .description("Path to the CLI executable"),
+                    .description(
+                        "Path to the CLI executable. \n\
+                        This item uses Vertical layout. The title,\
+                        description, and field are all aligned vertically with width 100%.",
+                    ),
                 ]),
             ]),
             SettingPage::new("Software Update").groups(vec![
@@ -301,11 +302,7 @@ impl SettingsStory {
                         "GitHub Repository",
                         SettingField::element(|options, _window, _cx| {
                             Button::new("open-url")
-                                .map(|this| match options.group_variant {
-                                    GroupBoxVariant::Fill => this.ghost(),
-                                    GroupBoxVariant::Outline => this.outline(),
-                                    _ => this,
-                                })
+                                .outline()
                                 .label("Repository...")
                                 .with_size(options.size)
                                 .on_click(|_, _window, cx| {
@@ -318,11 +315,7 @@ impl SettingsStory {
                         "Documentation",
                         SettingField::element(|options, _window, _cx| {
                             Button::new("open-url")
-                                .map(|this| match options.group_variant {
-                                    GroupBoxVariant::Fill => this.ghost(),
-                                    GroupBoxVariant::Outline => this.outline(),
-                                    _ => this,
-                                })
+                                .outline()
                                 .label("Rust Docs...")
                                 .with_size(options.size)
                                 .on_click(|_, _window, cx| {
@@ -340,11 +333,7 @@ impl SettingsStory {
                         "Website",
                         SettingField::element(|options, _window, _cx| {
                             Button::new("open-url")
-                                .map(|this| match options.group_variant {
-                                    GroupBoxVariant::Fill => this.ghost(),
-                                    GroupBoxVariant::Outline => this.outline(),
-                                    _ => this,
-                                })
+                                .outline()
                                 .label("Website...")
                                 .with_size(options.size)
                                 .on_click(|_, _window, cx| {

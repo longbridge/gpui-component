@@ -1,7 +1,5 @@
-use std::rc::Rc;
-
 use gpui::{
-    prelude::FluentBuilder as _, App, ClickEvent, IntoElement, ParentElement as _, SharedString,
+    prelude::FluentBuilder as _, App, IntoElement, ParentElement as _, SharedString,
     StyleRefinement, Styled, Window,
 };
 
@@ -71,19 +69,6 @@ impl SettingGroup {
         self.items.iter().any(|item| item.is_match(query))
     }
 
-    /// Get all on_reset callbacks for non-default items.
-    pub(super) fn on_resets(
-        &self,
-    ) -> Vec<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>> {
-        return vec![];
-        // self.items
-        //     .iter()
-        //     .filter(|item| !item.is_default)
-        //     .map(|item| item.on_reset.clone())
-        //     .collect()
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render(
         self,
         group_ix: usize,

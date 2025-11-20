@@ -72,7 +72,7 @@ where
                 if options.layout.is_horizontal() {
                     this.w_64()
                 } else {
-                    this.flex_1().min_w_64().w_full()
+                    this.w_full()
                 }
             })
             .refine_style(style)

@@ -104,19 +104,6 @@ impl SettingItem {
         }
     }
 
-    // pub(crate) fn on_reset(&self) -> Rc<impl Fn(&mut App)> {
-    //     match self {
-    //         SettingItem::Item { field, .. } => {
-    //             let field = field.clone();
-    //             let reset_value = Rc::new(|cx: &mut App| {
-    //                 field.reset_value(cx);
-    //             });
-    //             reset_value
-    //         }
-    //         SettingItem::Element { .. } => Rc::new(|_: &mut App| {}),
-    //     }
-    // }
-
     fn render_field(
         field: Rc<dyn AnySettingField>,
         options: RenderOptions,
@@ -163,6 +150,7 @@ impl SettingItem {
     ) -> impl IntoElement {
         div()
             .id(SharedString::from(format!("item-{}", ix)))
+            .w_full()
             .child(match self {
                 SettingItem::Item {
                     title,
@@ -170,20 +158,26 @@ impl SettingItem {
                     layout,
                     field,
                 } => div()
+                    .w_full()
+                    .overflow_hidden()
                     .map(|this| {
                         if layout.is_horizontal() {
                             this.h_flex().justify_between().items_start()
                         } else {
-                            this.v_flex().items_start()
+                            this.v_flex()
                         }
                     })
                     .gap_3()
-                    .w_full()
                     .child(
                         v_flex()
-                            .flex_1()
+                            .map(|this| {
+                                if layout.is_horizontal() {
+                                    this.flex_1().max_w_3_5()
+                                } else {
+                                    this.w_full()
+                                }
+                            })
                             .gap_1()
-                            .max_w_3_5()
                             .child(Label::new(title.clone()))
                             .when_some(description.clone(), |this, description| {
                                 this.child(

@@ -4,12 +4,11 @@ use gpui::{
 };
 
 use crate::{
-    button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     label::Label,
     setting::{settings::SettingsState, RenderOptions, SettingGroup},
-    v_flex, ActiveTheme, IconName, Sizable,
+    v_flex, ActiveTheme,
 };
 
 /// A setting page that can contain multiple setting groups.
@@ -62,12 +61,6 @@ impl SettingPage {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        let on_resets = self
-            .groups
-            .iter()
-            .flat_map(|group| group.on_resets())
-            .collect::<Vec<_>>();
-
         let search_input = state.read(cx).search_input.clone();
         let query = search_input.read(cx).value();
         let groups = self
@@ -106,20 +99,8 @@ impl SettingPage {
             .overflow_scroll()
             .child(
                 v_flex()
-                    .gap_4()
-                    .child(
-                        h_flex().child(self.title.clone()).justify_between().child(
-                            Button::new("reset")
-                                .small()
-                                .ghost()
-                                .icon(IconName::Undo2)
-                                .on_click(move |event, window, cx| {
-                                    on_resets.iter().for_each(|callback| {
-                                        callback(event, window, cx);
-                                    });
-                                }),
-                        ),
-                    )
+                    .gap_3()
+                    .child(h_flex().justify_between().child(self.title.clone()))
                     .when_some(self.description.clone(), |this, description| {
                         this.child(
                             Label::new(description)
