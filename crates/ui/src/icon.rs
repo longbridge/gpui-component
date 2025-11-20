@@ -5,6 +5,21 @@ use gpui::{
     Transformation, Window,
 };
 
+/// Types implementing this trait can automatically be converted to [`Icon`].
+///
+/// This allows you to implement a custom version of [`IconName`] that functions as a drop-in
+/// replacement for other UI components.
+pub trait IconNamed {
+    /// Returns the embedded path of the icon.
+    fn path(self) -> SharedString;
+}
+
+impl<T: IconNamed> From<T> for Icon {
+    fn from(value: T) -> Self {
+        Icon::build(value)
+    }
+}
+
 /// The name of an icon in the asset bundle.
 #[derive(IntoElement, Clone)]
 pub enum IconName {
@@ -93,7 +108,14 @@ pub enum IconName {
 }
 
 impl IconName {
-    pub fn path(self) -> SharedString {
+    /// Return the icon as a Entity<Icon>
+    pub fn view(self, cx: &mut App) -> Entity<Icon> {
+        Icon::build(self).view(cx)
+    }
+}
+
+impl IconNamed for IconName {
+    fn path(self) -> SharedString {
         match self {
             Self::ALargeSmall => "icons/a-large-small.svg",
             Self::ArrowDown => "icons/arrow-down.svg",
@@ -180,17 +202,6 @@ impl IconName {
         }
         .into()
     }
-
-    /// Return the icon as a Entity<Icon>
-    pub fn view(self, cx: &mut App) -> Entity<Icon> {
-        Icon::build(self).view(cx)
-    }
-}
-
-impl From<IconName> for Icon {
-    fn from(val: IconName) -> Self {
-        Icon::build(val)
-    }
 }
 
 impl From<IconName> for AnyElement {
@@ -239,16 +250,12 @@ impl Clone for Icon {
     }
 }
 
-pub trait IconNamed {
-    fn path(&self) -> SharedString;
-}
-
 impl Icon {
     pub fn new(icon: impl Into<Icon>) -> Self {
         icon.into()
     }
 
-    fn build(name: IconName) -> Self {
+    fn build(name: impl IconNamed) -> Self {
         Self::default().path(name.path())
     }
 
