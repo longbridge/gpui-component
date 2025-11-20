@@ -424,9 +424,9 @@ impl<T: Styled> StyleSized<T> for T {
     fn input_text_size(self, size: Size) -> Self {
         match size {
             Size::XSmall => self.text_xs(),
-            Size::Small => self.text_sm(),
-            Size::Medium => self.text_base(),
-            Size::Large => self.text_lg(),
+            Size::Small => self.text_xs(),
+            Size::Medium => self.text_sm(),
+            Size::Large => self.text_base(),
             Size::Size(size) => self.text_size(size),
         }
     }
