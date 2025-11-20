@@ -7,6 +7,8 @@ description: Display SVG icons with various sizes, colors, and transformations.
 
 A flexible icon component that renders SVG icons from the built-in icon library. Icons are based on Lucide.dev and support customization of size, color, and rotation. The component requires SVG files to be provided by the user in the assets bundle.
 
+Before you start, please make sure you have read: [Icons & Assets](../assets.md) to understand how use SVG in GPUI & GPUI Component application.
+
 ## Import
 
 ```rust
@@ -136,55 +138,48 @@ The Icon component supports several predefined sizes:
 | Large       | `.large()`            | `size_6()`   | 24px   |
 | Custom      | `.with_size(px(n))`   | -            | n px   |
 
-## SVG Asset Requirements
+## Build you own `IconName`.
 
-**Important:** SVG files must be provided by the user in the assets bundle. The component expects SVG files to be located in the `icons/` directory relative to your assets root.
+You can define your own `IconName` to have more specific icons for your application. We have `IconNamed` trait for you to implement for your.
 
-For example, if you want to use `IconName::Heart`, you need to provide:
+```rust
+use gpui_component::IconNamed;
 
-- `icons/heart.svg` in your assets bundle
+pub enum IconName {
+    Encounters,
+    Monsters,
+    Spells,
+}
 
-The component automatically maps icon names to their corresponding SVG file paths:
+impl IconNamed for IconName {
+    fn path(self) -> gpui::SharedString {
+        match self {
+            IconName::Encounters => "icons/encounters.svg",
+            IconName::Monsters => "icons/monsters.svg",
+            IconName::Spells => "icons/spells.svg",
+        }
+        .into()
+    }
+}
 
-- `IconName::ArrowUp` → `icons/arrow-up.svg`
-- `IconName::GitHub` → `icons/github.svg`
-- `IconName::CircleCheck` → `icons/circle-check.svg`
+// This allows for the following interactions (works with anything that has the `.icon(icon)` method.
+Button::new("my-button").icon(IconName::Spells);
+Icon::new(IconName::Monsters);
+```
 
-## API Reference
+If you want to directly `render` a custom `IconName` you must implement the `RenderOnce` trait and derive `IntoElement` on the `IconName`.
 
-### Icon
+```rust
+impl RenderOnce for IconName {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        Icon::empty().path(self.path())
+    }
+}
 
-| Method                      | Description                                         |
-| --------------------------- | --------------------------------------------------- |
-| `new(icon)`                 | Create a new icon from `IconName` or another `Icon` |
-| `path(path)`                | Set custom SVG file path                            |
-| `view(cx)`                  | Create a view entity for the icon                   |
-| `rotate(radians)`           | Rotate the icon by specified radians                |
-| `transform(transformation)` | Apply custom transformation                         |
-| `empty()`                   | Create an empty icon (for custom paths)             |
-
-### IconName Methods
-
-| Method     | Description                                      |
-| ---------- | ------------------------------------------------ |
-| `path()`   | Get the SVG file path for this icon              |
-| `view(cx)` | Create a view entity directly from the icon name |
-
-### Styling (via `Styled` trait)
-
-| Method              | Description        |
-| ------------------- | ------------------ |
-| `text_color(color)` | Set the icon color |
-
-### Sizing (via `Sizable` trait)
-
-| Method            | Description                         |
-| ----------------- | ----------------------------------- |
-| `xsmall()`        | Set size to extra small (12px)      |
-| `small()`         | Set size to small (14px)            |
-| `medium()`        | Set size to medium (16px) - default |
-| `large()`         | Set size to large (24px)            |
-| `with_size(size)` | Set custom size in pixels           |
+// Now you can use it directly in your element tree:
+div()
+    .child(IconName::Monsters)
+```
 
 ## Examples
 
