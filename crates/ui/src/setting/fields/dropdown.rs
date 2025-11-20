@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use gpui::{div, AnyElement, App, Corner, IntoElement, ParentElement as _, SharedString, Window};
+use gpui::{
+    prelude::FluentBuilder as _, AnyElement, App, Axis, Corner, IntoElement, SharedString,
+    StyleRefinement, Styled, Window,
+};
 
 use crate::{
     button::Button,
@@ -9,7 +12,7 @@ use crate::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
-    Sizable, Size,
+    AxisExt, Sizable, Size, StyledExt,
 };
 
 pub(crate) struct DropdownField<T> {
@@ -32,10 +35,10 @@ where
 {
     fn render(
         &self,
-        _label: SharedString,
-        _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
         size: Size,
+        layout: Axis,
+        style: &StyleRefinement,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -49,32 +52,33 @@ where
             .map(|(_, label)| label.clone())
             .unwrap_or_else(|| old_value.clone().into());
 
-        div()
-            .child(
-                Button::new("btn")
-                    .label(old_label)
-                    .dropdown_caret(true)
-                    .outline()
-                    .with_size(size)
-                    .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
-                        let set_value = set_value.clone();
-                        let menu = options.iter().fold(menu, |menu, (value, label)| {
-                            let old_value: SharedString = old_value.clone().into();
-                            let checked = &old_value == value;
-                            menu.item(PopupMenuItem::new(label.clone()).checked(checked).on_click(
-                                {
-                                    let value = value.clone();
-                                    let set_value = set_value.clone();
-                                    move |_, _, cx| {
-                                        set_value(T::from(value.clone()), cx);
-                                    }
-                                },
-                            ))
-                        });
+        Button::new("btn")
+            .when(layout.is_vertical(), |this| this.w_full())
+            .label(old_label)
+            .dropdown_caret(true)
+            .outline()
+            .with_size(size)
+            .refine_style(style)
+            .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
+                let set_value = set_value.clone();
+                let menu = options.iter().fold(menu, |menu, (value, label)| {
+                    let old_value: SharedString = old_value.clone().into();
+                    let checked = &old_value == value;
+                    menu.item(
+                        PopupMenuItem::new(label.clone())
+                            .checked(checked)
+                            .on_click({
+                                let value = value.clone();
+                                let set_value = set_value.clone();
+                                move |_, _, cx| {
+                                    set_value(T::from(value.clone()), cx);
+                                }
+                            }),
+                    )
+                });
 
-                        menu
-                    }),
-            )
+                menu
+            })
             .into_any_element()
     }
 }

@@ -1,8 +1,6 @@
-use std::rc::Rc;
-
 use gpui::{
-    App, AppContext, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window,
+    App, AppContext, Axis, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
+    ParentElement as _, Render, SharedString, Styled, Window, px,
 };
 
 use gpui_component::{
@@ -11,18 +9,16 @@ use gpui_component::{
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
-    setting::{
-        NumberFieldOptions, SettingField, SettingFieldType, SettingGroup, SettingItem, SettingPage,
-        Settings,
-    },
+    setting::{NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+    text::TextView,
     v_flex,
 };
 
 struct AppSettings {
     dark_mode: bool,
     auto_switch_theme: bool,
-    cli_path: String,
-    font_family: String,
+    cli_path: SharedString,
+    font_family: SharedString,
     font_size: f64,
     notifications_enabled: bool,
     auto_update: bool,
@@ -89,247 +85,257 @@ impl SettingsStory {
         }
     }
 
-    fn setting_pages(&self, cx: &mut Context<Self>) -> Vec<SettingPage> {
+    fn setting_pages(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<SettingPage> {
         let view = cx.entity();
         let default_settings = AppSettings::default();
 
         vec![
             SettingPage::new("General").groups(vec![
                 SettingGroup::new().title("Appearance").items(vec![
-                    SettingItem::Item {
-                        title: "Dark Mode".into(),
-                        description: Some("Switch between light and dark themes.".into()),
-                        field_type: SettingFieldType::Switch,
-                        field: Rc::new(
-                            SettingField::new(
-                                |cx: &App| AppSettings::global(cx).dark_mode,
-                                |val: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).dark_mode = val;
-                                },
-                            )
-                            .default_value(default_settings.dark_mode),
-                        ),
-                    },
-                    SettingItem::Item {
-                        title: "Auto Switch Theme".into(),
-                        description: Some(
-                            "Automatically switch theme based on system appearance.".into(),
-                        ),
-                        field_type: SettingFieldType::Checkbox,
-                        field: Rc::new(
-                            SettingField::new(
-                                |cx: &App| AppSettings::global(cx).auto_switch_theme,
-                                |val: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).auto_switch_theme = val;
-                                },
-                            )
-                            .default_value(default_settings.auto_switch_theme),
-                        ),
-                    },
-                    SettingItem::Item {
-                        title: "Group Variant".into(),
-                        description: Some("Select the variant for setting groups.".into()),
-                        field_type: SettingFieldType::Dropdown {
-                            options: vec![
+                    SettingItem::new(
+                        "Dark Mode",
+                        SettingField::switch(
+                            |cx: &App| AppSettings::global(cx).dark_mode,
+                            |val: bool, cx: &mut App| {
+                                AppSettings::global_mut(cx).dark_mode = val;
+                            },
+                        )
+                        .default_value(default_settings.dark_mode),
+                    )
+                    .description("Switch between light and dark themes."),
+                    SettingItem::new(
+                        "Auto Switch Theme",
+                        SettingField::checkbox(
+                            |cx: &App| AppSettings::global(cx).auto_switch_theme,
+                            |val: bool, cx: &mut App| {
+                                AppSettings::global_mut(cx).auto_switch_theme = val;
+                            },
+                        )
+                        .default_value(default_settings.auto_switch_theme),
+                    )
+                    .description("Automatically switch theme based on system settings."),
+                    SettingItem::new(
+                        "Group Variant",
+                        SettingField::dropdown(
+                            vec![
                                 (GroupBoxVariant::Normal.as_str().into(), "Normal".into()),
                                 (GroupBoxVariant::Outline.as_str().into(), "Outline".into()),
                                 (GroupBoxVariant::Fill.as_str().into(), "Fill".into()),
                             ],
-                        },
-                        field: Rc::new(
-                            SettingField::new(
-                                {
-                                    let view = view.clone();
-                                    move |cx: &App| {
-                                        SharedString::from(
-                                            view.read(cx).group_variant.as_str().to_string(),
-                                        )
-                                    }
-                                },
-                                {
-                                    let view = view.clone();
-                                    move |val: SharedString, cx: &mut App| {
-                                        view.update(cx, |view, cx| {
-                                            view.group_variant =
-                                                GroupBoxVariant::from_str(val.as_str());
-                                            cx.notify();
-                                        });
-                                    }
-                                },
-                            )
-                            .default_value(GroupBoxVariant::Outline.as_str().to_string().into()),
-                        ),
-                    },
-                    SettingItem::Item {
-                        title: "Group Field Size".into(),
-                        description: Some("Set the field control size in the settings.".into()),
-                        field_type: SettingFieldType::Dropdown {
-                            options: vec![
+                            {
+                                let view = view.clone();
+                                move |cx: &App| {
+                                    SharedString::from(
+                                        view.read(cx).group_variant.as_str().to_string(),
+                                    )
+                                }
+                            },
+                            {
+                                let view = view.clone();
+                                move |val: SharedString, cx: &mut App| {
+                                    view.update(cx, |view, cx| {
+                                        view.group_variant =
+                                            GroupBoxVariant::from_str(val.as_str());
+                                        cx.notify();
+                                    });
+                                }
+                            },
+                        )
+                        .default_value(GroupBoxVariant::Outline.as_str().to_string()),
+                    )
+                    .description("Select the variant for setting groups."),
+                    SettingItem::new(
+                        "Group Field Size",
+                        SettingField::dropdown(
+                            vec![
                                 (Size::Medium.as_str().into(), "Medium".into()),
                                 (Size::Small.as_str().into(), "Small".into()),
                                 (Size::XSmall.as_str().into(), "XSmall".into()),
                             ],
-                        },
-                        field: Rc::new(
-                            SettingField::new(
-                                {
-                                    let view = view.clone();
-                                    move |cx: &App| {
-                                        SharedString::from(view.read(cx).size.as_str().to_string())
-                                    }
-                                },
-                                {
-                                    let view = view.clone();
-                                    move |val: SharedString, cx: &mut App| {
-                                        view.update(cx, |view, cx| {
-                                            view.size = Size::from_str(val.as_str());
-                                            cx.notify();
-                                        });
-                                    }
-                                },
-                            )
-                            .default_value(Size::default().as_str().to_string().into()),
-                        ),
-                    },
+                            {
+                                let view = view.clone();
+                                move |cx: &App| {
+                                    SharedString::from(view.read(cx).size.as_str().to_string())
+                                }
+                            },
+                            {
+                                let view = view.clone();
+                                move |val: SharedString, cx: &mut App| {
+                                    view.update(cx, |view, cx| {
+                                        view.size = Size::from_str(val.as_str());
+                                        cx.notify();
+                                    });
+                                }
+                            },
+                        )
+                        .default_value(Size::default().as_str().to_string()),
+                    )
+                    .description("Select the size for the application."),
                 ]),
-                SettingGroup::new().title("Font").items(vec![
-                    SettingItem::Item {
-                        title: "Font Family".into(),
-                        description: Some("Select the font family for the application.".into()),
-                        field_type: SettingFieldType::Dropdown {
-                            options: vec![
-                                ("Arial".into(), "Arial".into()),
-                                ("Helvetica".into(), "Helvetica".into()),
-                                ("Times New Roman".into(), "Times New Roman".into()),
-                                ("Courier New".into(), "Courier New".into()),
-                            ],
-                        },
-                        field: Rc::new(
-                            SettingField::new(
+                SettingGroup::new()
+                    .title("Font")
+                    .item(
+                        SettingItem::new(
+                            "Font Family",
+                            SettingField::dropdown(
+                                vec![
+                                    ("Arial".into(), "Arial".into()),
+                                    ("Helvetica".into(), "Helvetica".into()),
+                                    ("Times New Roman".into(), "Times New Roman".into()),
+                                    ("Courier New".into(), "Courier New".into()),
+                                ],
                                 |cx: &App| AppSettings::global(cx).font_family.clone(),
-                                |val: String, cx: &mut App| {
+                                |val: SharedString, cx: &mut App| {
                                     AppSettings::global_mut(cx).font_family = val;
                                 },
                             )
                             .default_value(default_settings.font_family),
-                        ),
-                    },
-                    SettingItem::Item {
-                        title: "Font Size".into(),
-                        description: Some("Adjust the font size for better readability.".into()),
-                        field_type: SettingFieldType::NumberInput {
-                            options: NumberFieldOptions {
-                                min: 8.0,
-                                max: 72.0,
-                                ..Default::default()
-                            },
-                        },
-                        field: Rc::new(
-                            SettingField::new(
+                        )
+                        .description("Select the font family for the story."),
+                    )
+                    .item(
+                        SettingItem::new(
+                            "Font Size",
+                            SettingField::number_input(
+                                NumberFieldOptions {
+                                    min: 8.0,
+                                    max: 72.0,
+                                    ..Default::default()
+                                },
                                 |cx: &App| AppSettings::global(cx).font_size,
                                 |val: f64, cx: &mut App| {
                                     AppSettings::global_mut(cx).font_size = val;
                                 },
                             )
                             .default_value(default_settings.font_size),
-                        ),
-                    },
-                ]),
+                        )
+                        .description("Adjust the font size for better readability."),
+                    ),
                 SettingGroup::new().title("Other").items(vec![
-                    SettingItem::Element {
-                        render: Rc::new(|_, _| {
-                            h_flex()
-                                .w_full()
-                                .justify_between()
-                                .gap_3()
-                                .child("This is a custom element line.")
-                                .child(
-                                    Button::new("action")
-                                        .icon(IconName::Globe)
-                                        .label("Repository...")
-                                        .outline()
-                                        .on_click(|_, _, cx| {
-                                            cx.open_url(
-                                                "https://github.com/longbridge/gpui-component",
-                                            );
-                                        }),
-                                )
-                                .into_any_element()
-                        }),
-                    },
-                    SettingItem::Item {
-                        title: "CLI Path".into(),
-                        description: Some(
-                            "Set the path to the command-line interface executable.".into(),
-                        ),
-                        field_type: SettingFieldType::Input,
-                        field: Rc::new(
-                            SettingField::new(
-                                |cx: &App| AppSettings::global(cx).cli_path.clone(),
-                                |val: String, cx: &mut App| {
-                                    println!("cli-path set value: {}", val);
-                                    AppSettings::global_mut(cx).cli_path = val;
-                                },
+                    SettingItem::element(|_, _| {
+                        h_flex()
+                            .w_full()
+                            .justify_between()
+                            .gap_3()
+                            .child("This is a custom element line.")
+                            .child(
+                                Button::new("action")
+                                    .icon(IconName::Globe)
+                                    .label("Repository...")
+                                    .outline()
+                                    .on_click(|_, _, cx| {
+                                        cx.open_url("https://github.com/longbridge/gpui-component");
+                                    }),
                             )
-                            .default_value(default_settings.cli_path),
-                        ),
-                    },
+                            .into_any_element()
+                    }),
+                    SettingItem::new(
+                        "CLI Path",
+                        SettingField::input(
+                            |cx: &App| AppSettings::global(cx).cli_path.clone(),
+                            |val: SharedString, cx: &mut App| {
+                                println!("cli-path set value: {}", val);
+                                AppSettings::global_mut(cx).cli_path = val;
+                            },
+                        )
+                        .w(px(400.))
+                        .default_value(default_settings.cli_path),
+                    )
+                    .layout(Axis::Vertical)
+                    .description("Path to the CLI executable"),
                 ]),
             ]),
             SettingPage::new("Software Update").groups(vec![
                 SettingGroup::new().title("Updates").items(vec![
-                    SettingItem::Item {
-                        title: "Enable Notifications".into(),
-                        description: Some("Receive notifications about updates and news.".into()),
-                        field_type: SettingFieldType::Switch,
-                        field: Rc::new(
-                            SettingField::new(
-                                |cx: &App| AppSettings::global(cx).notifications_enabled,
-                                |val: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).notifications_enabled = val;
-                                },
-                            )
-                            .default_value(default_settings.notifications_enabled),
-                        ),
-                    },
-                    SettingItem::Item {
-                        title: "Auto Update".into(),
-                        description: Some("Automatically download and install updates.".into()),
-                        field_type: SettingFieldType::Switch,
-                        field: Rc::new(
-                            SettingField::new(
-                                |cx: &App| AppSettings::global(cx).auto_update,
-                                |val: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).auto_update = val;
-                                },
-                            )
-                            .default_value(default_settings.auto_update),
-                        ),
-                    },
+                    SettingItem::new(
+                        "Enable Notifications",
+                        SettingField::switch(
+                            |cx: &App| AppSettings::global(cx).notifications_enabled,
+                            |val: bool, cx: &mut App| {
+                                AppSettings::global_mut(cx).notifications_enabled = val;
+                            },
+                        )
+                        .default_value(default_settings.notifications_enabled),
+                    )
+                    .description("Receive notifications about updates and news."),
+                    SettingItem::new(
+                        "Auto Update",
+                        SettingField::switch(
+                            |cx: &App| AppSettings::global(cx).auto_update,
+                            |val: bool, cx: &mut App| {
+                                AppSettings::global_mut(cx).auto_update = val;
+                            },
+                        )
+                        .default_value(default_settings.auto_update),
+                    )
+                    .description("Automatically download and install updates."),
                 ]),
             ]),
-            SettingPage::new("About").groups(vec![SettingGroup::new().items(vec![
-                SettingItem::Element {
-                    render: Rc::new(|_, cx| {
-                        v_flex()
-                            .gap_3()
-                            .w_full()
-                            .items_center()
-                            .justify_center()
-                            .child(Icon::new(IconName::GalleryVerticalEnd).size_16())
-                            .child("GPUI Component")
-                            .child(
-                                Label::new(
-                                    "Rust GUI components for building fantastic cross-platform \
+            SettingPage::new("About")
+                .group(SettingGroup::new().item(SettingItem::element(|_, cx| {
+                    v_flex()
+                        .gap_3()
+                        .w_full()
+                        .items_center()
+                        .justify_center()
+                        .child(Icon::new(IconName::GalleryVerticalEnd).size_16())
+                        .child("GPUI Component")
+                        .child(
+                            Label::new(
+                                "Rust GUI components for building fantastic cross-platform \
                                     desktop application by using GPUI.",
-                                )
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground),
                             )
-                            .into_any()
-                    }),
-                },
-            ])]),
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground),
+                        )
+                        .into_any()
+                })))
+                .group(SettingGroup::new().title("Links").items(vec![
+                        SettingItem::new(
+                            "GitHub Repository",
+                            SettingField::element(|size, _window, _cx| {
+                                Button::new("open-url")
+                                    .outline()
+                                    .label("Repository...")
+                                    .with_size(size)
+                                    .on_click(|_, _window, cx| {
+                                        cx.open_url("https://github.com/longbridge/gpui-component");
+                                    })
+                            }),
+                        )
+                        .description("Open the GitHub repository in your default browser."),
+                        SettingItem::new(
+                            "Documentation",
+                            SettingField::element(|size, _window, _cx| {
+                                Button::new("open-url")
+                                    .outline()
+                                    .label("Rust Docs...")
+                                    .with_size(size)
+                                    .on_click(|_, _window, cx| {
+                                        cx.open_url("https://docs.rs/gpui-component");
+                                    })
+                            }),
+                        )
+                        .description(TextView::markdown(
+                            "desc",
+                            "Rust doc for the `gpui-component` crate.",
+                            window,
+                            cx,
+                        )),
+                        SettingItem::new(
+                            "Website",
+                            SettingField::element(|size, _window, _cx| {
+                                Button::new("open-url")
+                                    .outline()
+                                    .label("Website...")
+                                    .with_size(size)
+                                    .on_click(|_, _window, cx| {
+                                        cx.open_url("https://longbridge.github.io/gpui-component/");
+                                    })
+                            }),
+                        )
+                        .description("Official website and documentation for the GPUI Component."),
+                    ])),
         ]
     }
 }
@@ -341,10 +347,10 @@ impl Focusable for SettingsStory {
 }
 
 impl Render for SettingsStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         Settings::new("app-settings")
             .with_size(self.size)
             .with_group_variant(self.group_variant)
-            .pages(self.setting_pages(cx))
+            .pages(self.setting_pages(window, cx))
     }
 }

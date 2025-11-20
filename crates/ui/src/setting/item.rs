@@ -1,147 +1,27 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, InteractiveElement as _, IntoElement,
+    div, prelude::FluentBuilder as _, AnyElement, App, Axis, InteractiveElement as _, IntoElement,
     ParentElement, SharedString, Styled, Window,
 };
-use std::{
-    any::{Any, TypeId},
-    ops::Deref,
-    rc::Rc,
-};
+use std::{any::TypeId, ops::Deref, rc::Rc};
 
 use crate::{
-    h_flex,
     label::Label,
     setting::{
-        fields::{
-            BoolField, DropdownField, NumberField, NumberFieldOptions, SettingFieldRender,
-            StringField,
-        },
-        RenderOptions,
+        fields::{BoolField, DropdownField, NumberField, SettingFieldRender, StringField},
+        AnySettingField, ElementField, RenderOptions,
     },
-    v_flex, ActiveTheme as _, Size,
+    text::Text,
+    v_flex, ActiveTheme as _, AxisExt, Size, StyledExt as _,
 };
 
-/// The type of setting field to render.
-#[derive(Clone, Debug)]
-pub enum SettingFieldType {
-    /// As switch toggle, required `bool` value.
-    Switch,
-    /// As checkbox, required `bool` value.
-    Checkbox,
-    /// As a number input, required `f64` value.
-    NumberInput {
-        options: NumberFieldOptions,
-    },
-    Input,
-    Dropdown {
-        /// The options for the dropdown as (value, label) pairs.
-        options: Vec<(SharedString, SharedString)>,
-    },
-}
-
-impl SettingFieldType {
-    #[inline]
-    pub fn is_switch(&self) -> bool {
-        matches!(self, SettingFieldType::Switch)
-    }
-
-    #[inline]
-    pub fn is_checkbox(&self) -> bool {
-        matches!(self, SettingFieldType::Checkbox)
-    }
-
-    #[inline]
-    pub fn is_number_input(&self) -> bool {
-        matches!(self, SettingFieldType::NumberInput { .. })
-    }
-
-    #[inline]
-    pub fn is_input(&self) -> bool {
-        matches!(self, SettingFieldType::Input)
-    }
-
-    #[inline]
-    pub fn is_dropdown(&self) -> bool {
-        matches!(self, SettingFieldType::Dropdown { .. })
-    }
-
-    #[inline]
-    pub(super) fn dropdown_options(&self) -> Option<&Vec<(SharedString, SharedString)>> {
-        match self {
-            SettingFieldType::Dropdown { options } => Some(options),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub(super) fn number_input_options(&self) -> Option<&NumberFieldOptions> {
-        match self {
-            SettingFieldType::NumberInput { options } => Some(options),
-            _ => None,
-        }
-    }
-}
-
-/// A setting field that can get and set a value of type T in the App.
-pub struct SettingField<T> {
-    /// Function to get the value for this field.
-    pub(crate) value: Rc<dyn Fn(&App) -> T>,
-    /// Function to set the value for this field.
-    pub(crate) set_value: Rc<dyn Fn(T, &mut App)>,
-    pub(crate) default_value: Option<T>,
-}
-
-impl<T> SettingField<T> {
-    /// Create a new setting field with the given get and set functions.
-    pub fn new<V, S>(value: V, set_value: S) -> Self
-    where
-        V: Fn(&App) -> T + 'static,
-        S: Fn(T, &mut App) + 'static,
-    {
-        Self {
-            value: Rc::new(value),
-            set_value: Rc::new(set_value),
-            default_value: None,
-        }
-    }
-
-    /// Set the default value for this setting field, default is None.
-    ///
-    /// If set, this value can be used to reset the setting to its default state.
-    /// If not set, the setting cannot be reset.
-    pub fn default_value(mut self, default_value: T) -> Self {
-        self.default_value = Some(default_value);
-        self
-    }
-}
-
-pub trait AnySettingField {
-    fn as_any(&self) -> &dyn std::any::Any;
-    fn type_name(&self) -> &'static str;
-    fn type_id(&self) -> std::any::TypeId;
-}
-
-impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingField<T> {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn type_name(&self) -> &'static str {
-        std::any::type_name::<T>()
-    }
-
-    fn type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<T>()
-    }
-}
-
+/// Setting item.
 #[derive(Clone)]
 pub enum SettingItem {
     /// A normal setting item with a title, description, and field.
     Item {
         title: SharedString,
-        description: Option<SharedString>,
-        field_type: SettingFieldType,
+        description: Option<Text>,
+        layout: Axis,
         field: Rc<dyn AnySettingField>,
     },
     /// A full custom element to render.
@@ -151,15 +31,65 @@ pub enum SettingItem {
 }
 
 impl SettingItem {
+    /// Create a new setting item.
+    pub fn new<F>(title: impl Into<SharedString>, field: F) -> Self
+    where
+        F: AnySettingField + 'static,
+    {
+        SettingItem::Item {
+            title: title.into(),
+            description: None,
+            layout: Axis::Horizontal,
+            field: Rc::new(field),
+        }
+    }
+
+    /// Create a new custom element setting item.
+    pub fn element<R, E>(render: R) -> Self
+    where
+        E: IntoElement,
+        R: Fn(&mut Window, &mut App) -> E + 'static,
+    {
+        SettingItem::Element {
+            render: Rc::new(move |window, cx| render(window, cx).into_any_element()),
+        }
+    }
+
+    /// Set the description of the setting item.
+    ///
+    /// Only applies to [`SettingItem::Item`].
+    pub fn description(mut self, description: impl Into<Text>) -> Self {
+        match &mut self {
+            SettingItem::Item { description: d, .. } => {
+                *d = Some(description.into());
+            }
+            SettingItem::Element { .. } => {}
+        }
+        self
+    }
+
+    /// Set the layout of the setting item.
+    ///
+    /// Only applies to [`SettingItem::Item`].
+    pub fn layout(mut self, layout: Axis) -> Self {
+        match &mut self {
+            SettingItem::Item { layout: l, .. } => {
+                *l = layout;
+            }
+            SettingItem::Element { .. } => {}
+        }
+        self
+    }
+
     pub(crate) fn is_match(&self, query: &str) -> bool {
         match self {
             SettingItem::Item {
                 title, description, ..
             } => {
                 title.to_lowercase().contains(&query.to_lowercase())
-                    || description
-                        .as_ref()
-                        .map_or(false, |d| d.to_lowercase().contains(&query.to_lowercase()))
+                    || description.as_ref().map_or(false, |d| {
+                        d.as_str().to_lowercase().contains(&query.to_lowercase())
+                    })
             }
             SettingItem::Element { .. } => {
                 // We need to show all custom elements when not searching.
@@ -186,14 +116,14 @@ impl SettingItem {
     // }
 
     fn render_field(
-        title: SharedString,
-        description: Option<SharedString>,
-        field_type: SettingFieldType,
         field: Rc<dyn AnySettingField>,
         size: Size,
+        layout: Axis,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
+        let field_type = field.field_type();
+        let style = field.style().clone();
         let type_id = field.deref().type_id();
         let renderer: Box<dyn SettingFieldRender> = match type_id {
             t if t == std::any::TypeId::of::<bool>() => {
@@ -214,14 +144,13 @@ impl SettingItem {
             t if t == TypeId::of::<String>() && field_type.is_dropdown() => {
                 Box::new(DropdownField::<String>::new(field_type.dropdown_options()))
             }
-            _ => unimplemented!(
-                "Unsupported setting type: {} and field_type: {:?}",
-                field.deref().type_name(),
-                field_type
-            ),
+            _ if field_type.is_element() => {
+                Box::new(ElementField::new(field_type.element_render()))
+            }
+            _ => unimplemented!("Unsupported setting type: {}", field.deref().type_name()),
         };
 
-        renderer.render(title, description, field, size, window, cx)
+        renderer.render(field, size, layout, &style, window, cx)
     }
 
     pub(super) fn render(
@@ -237,41 +166,41 @@ impl SettingItem {
                 SettingItem::Item {
                     title,
                     description,
-                    field_type,
+                    layout,
                     field,
-                } => {
-                    h_flex()
-                        .gap_4()
-                        .justify_between()
-                        .items_start()
-                        .flex_wrap()
-                        .child(
-                            v_flex()
-                                .flex_1()
-                                .gap_1()
-                                .max_w_3_5()
-                                .child(Label::new(title.clone()))
-                                .when_some(description.clone(), |this, description| {
-                                    this.child(
-                                        Label::new(description)
-                                            .text_sm()
-                                            .text_color(cx.theme().muted_foreground),
-                                    )
-                                }),
-                        )
-                        .child(div().id("field").bg(cx.theme().background).child(
-                            Self::render_field(
-                                title,
-                                description,
-                                field_type,
-                                field,
-                                options.size,
-                                window,
-                                cx,
-                            ),
-                        ))
-                        .into_any_element()
-                }
+                } => div()
+                    .map(|this| {
+                        if layout.is_horizontal() {
+                            this.h_flex().justify_between().items_start().flex_wrap()
+                        } else {
+                            this.v_flex().items_start()
+                        }
+                    })
+                    .gap_3()
+                    .w_full()
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .gap_1()
+                            .max_w_3_5()
+                            .child(Label::new(title.clone()))
+                            .when_some(description.clone(), |this, description| {
+                                this.child(
+                                    div()
+                                        .size_full()
+                                        .text_sm()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(description),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .id("field")
+                            .bg(cx.theme().background)
+                            .child(Self::render_field(field, options.size, layout, window, cx)),
+                    )
+                    .into_any_element(),
                 SettingItem::Element { render } => (render)(window, cx).into_any_element(),
             })
     }

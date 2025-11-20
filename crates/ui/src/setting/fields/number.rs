@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, AnyElement, App, AppContext as _, Entity, IntoElement, ParentElement as _, SharedString,
-    Styled, Window,
+    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Axis, Entity, IntoElement,
+    SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
-    Sizable, Size,
+    AxisExt, Sizable, Size, StyledExt,
 };
 
 #[derive(Clone, Debug)]
@@ -54,10 +54,10 @@ struct State {
 impl SettingFieldRender for NumberField {
     fn render(
         &self,
-        _label: SharedString,
-        _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
         size: Size,
+        layout: Axis,
+        style: &StyleRefinement,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -97,9 +97,16 @@ impl SettingFieldRender for NumberField {
             })
             .read(cx);
 
-        div()
-            .w_32()
-            .child(NumberInput::new(&state.input).with_size(size))
+        NumberInput::new(&state.input)
+            .with_size(size)
+            .map(|this| {
+                if layout.is_horizontal() {
+                    this.w_32()
+                } else {
+                    this.w_full()
+                }
+            })
+            .refine_style(style)
             .into_any_element()
     }
 }

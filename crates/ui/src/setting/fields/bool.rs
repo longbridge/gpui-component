@@ -7,9 +7,9 @@ use crate::{
         AnySettingField,
     },
     switch::Switch,
-    Sizable, Size,
+    Sizable, Size, StyledExt,
 };
-use gpui::{AnyElement, App, IntoElement, SharedString, Window};
+use gpui::{div, AnyElement, App, Axis, IntoElement, ParentElement as _, StyleRefinement, Window};
 
 pub(crate) struct BoolField {
     use_switch: bool,
@@ -24,32 +24,35 @@ impl BoolField {
 impl SettingFieldRender for BoolField {
     fn render(
         &self,
-        _label: SharedString,
-        _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
         size: Size,
+        _layout: Axis,
+        style: &StyleRefinement,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         let checked = get_value::<bool>(&field, cx);
         let set_value = set_value::<bool>(&field, cx);
 
-        if self.use_switch {
-            Switch::new("check")
-                .checked(checked)
-                .with_size(size)
-                .on_click(move |checked: &bool, _, cx: &mut App| {
-                    set_value(*checked, cx);
-                })
-                .into_any_element()
-        } else {
-            Checkbox::new("check")
-                .checked(checked)
-                .with_size(size)
-                .on_click(move |checked: &bool, _, cx: &mut App| {
-                    set_value(*checked, cx);
-                })
-                .into_any_element()
-        }
+        div()
+            .refine_style(style)
+            .child(if self.use_switch {
+                Switch::new("check")
+                    .checked(checked)
+                    .with_size(size)
+                    .on_click(move |checked: &bool, _, cx: &mut App| {
+                        set_value(*checked, cx);
+                    })
+                    .into_any_element()
+            } else {
+                Checkbox::new("check")
+                    .checked(checked)
+                    .with_size(size)
+                    .on_click(move |checked: &bool, _, cx: &mut App| {
+                        set_value(*checked, cx);
+                    })
+                    .into_any_element()
+            })
+            .into_any_element()
     }
 }

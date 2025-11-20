@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, AnyElement, App, AppContext as _, Entity, IntoElement, ParentElement as _, SharedString,
-    Styled, Window,
+    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Axis, Entity, IntoElement,
+    SharedString, StyleRefinement, Styled, Window,
 };
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
         fields::{get_value, set_value, SettingFieldRender},
         AnySettingField,
     },
-    Sizable, Size,
+    AxisExt as _, Sizable, Size, StyledExt,
 };
 
 pub(crate) struct StringField<T> {
@@ -37,10 +37,10 @@ where
 {
     fn render(
         &self,
-        _label: SharedString,
-        _description: Option<SharedString>,
         field: Rc<dyn AnySettingField>,
         size: Size,
+        layout: Axis,
+        style: &StyleRefinement,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -67,11 +67,16 @@ where
             })
             .read(cx);
 
-        // TODO: Support width from field options.
-
-        div()
-            .w_64()
-            .child(Input::new(&state.input).with_size(size))
+        Input::new(&state.input)
+            .with_size(size)
+            .map(|this| {
+                if layout.is_horizontal() {
+                    this.w_64()
+                } else {
+                    this.flex_1().min_w_64().w_full()
+                }
+            })
+            .refine_style(style)
             .into_any_element()
     }
 }
