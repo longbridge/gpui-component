@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size,
+    ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode,
     button::Button,
     group_box::GroupBoxVariant,
     h_flex,
@@ -15,25 +15,25 @@ use gpui_component::{
 };
 
 struct AppSettings {
-    dark_mode: bool,
     auto_switch_theme: bool,
     cli_path: SharedString,
     font_family: SharedString,
     font_size: f64,
     notifications_enabled: bool,
     auto_update: bool,
+    resetable: bool,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            dark_mode: false,
             auto_switch_theme: false,
             cli_path: "/usr/local/bin/bash".into(),
             font_family: "Arial".into(),
             font_size: 14.0,
             notifications_enabled: true,
             auto_update: true,
+            resetable: true,
         }
     }
 }
@@ -88,170 +88,193 @@ impl SettingsStory {
     fn setting_pages(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<SettingPage> {
         let view = cx.entity();
         let default_settings = AppSettings::default();
+        let resetable = AppSettings::global(cx).resetable;
 
         vec![
-            SettingPage::new("General").default_open(true).groups(vec![
-                SettingGroup::new().title("Appearance").items(vec![
-                    SettingItem::new(
-                        "Dark Mode",
-                        SettingField::switch(
-                            |cx: &App| AppSettings::global(cx).dark_mode,
-                            |val: bool, cx: &mut App| {
-                                AppSettings::global_mut(cx).dark_mode = val;
-                            },
-                        )
-                        .default_value(default_settings.dark_mode),
-                    )
-                    .description("Switch between light and dark themes."),
-                    SettingItem::new(
-                        "Auto Switch Theme",
-                        SettingField::checkbox(
-                            |cx: &App| AppSettings::global(cx).auto_switch_theme,
-                            |val: bool, cx: &mut App| {
-                                AppSettings::global_mut(cx).auto_switch_theme = val;
-                            },
-                        )
-                        .default_value(default_settings.auto_switch_theme),
-                    )
-                    .description("Automatically switch theme based on system settings."),
-                    SettingItem::new(
-                        "Group Variant",
-                        SettingField::dropdown(
-                            vec![
-                                (GroupBoxVariant::Normal.as_str().into(), "Normal".into()),
-                                (GroupBoxVariant::Outline.as_str().into(), "Outline".into()),
-                                (GroupBoxVariant::Fill.as_str().into(), "Fill".into()),
-                            ],
-                            {
-                                let view = view.clone();
-                                move |cx: &App| {
-                                    SharedString::from(
-                                        view.read(cx).group_variant.as_str().to_string(),
-                                    )
-                                }
-                            },
-                            {
-                                let view = view.clone();
-                                move |val: SharedString, cx: &mut App| {
-                                    view.update(cx, |view, cx| {
-                                        view.group_variant =
-                                            GroupBoxVariant::from_str(val.as_str());
-                                        cx.notify();
-                                    });
-                                }
-                            },
-                        )
-                        .default_value(GroupBoxVariant::Outline.as_str().to_string()),
-                    )
-                    .description("Select the variant for setting groups."),
-                    SettingItem::new(
-                        "Group Field Size",
-                        SettingField::dropdown(
-                            vec![
-                                (Size::Medium.as_str().into(), "Medium".into()),
-                                (Size::Small.as_str().into(), "Small".into()),
-                                (Size::XSmall.as_str().into(), "XSmall".into()),
-                            ],
-                            {
-                                let view = view.clone();
-                                move |cx: &App| {
-                                    SharedString::from(view.read(cx).size.as_str().to_string())
-                                }
-                            },
-                            {
-                                let view = view.clone();
-                                move |val: SharedString, cx: &mut App| {
-                                    view.update(cx, |view, cx| {
-                                        view.size = Size::from_str(val.as_str());
-                                        cx.notify();
-                                    });
-                                }
-                            },
-                        )
-                        .default_value(Size::default().as_str().to_string()),
-                    )
-                    .description("Select the size for the application."),
-                ]),
-                SettingGroup::new()
-                    .title("Font")
-                    .item(
+            SettingPage::new("General")
+                .resetable(resetable)
+                .default_open(true)
+                .groups(vec![
+                    SettingGroup::new().title("Appearance").items(vec![
                         SettingItem::new(
-                            "Font Family",
+                            "Dark Mode",
+                            SettingField::switch(
+                                |cx: &App| cx.theme().mode.is_dark(),
+                                |val: bool, cx: &mut App| {
+                                    let mode = if val {
+                                        ThemeMode::Dark
+                                    } else {
+                                        ThemeMode::Light
+                                    };
+                                    Theme::global_mut(cx).mode = mode;
+                                    Theme::change(mode, None, cx);
+                                },
+                            )
+                            .default_value(false),
+                        )
+                        .description("Switch between light and dark themes."),
+                        SettingItem::new(
+                            "Auto Switch Theme",
+                            SettingField::checkbox(
+                                |cx: &App| AppSettings::global(cx).auto_switch_theme,
+                                |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).auto_switch_theme = val;
+                                },
+                            )
+                            .default_value(default_settings.auto_switch_theme),
+                        )
+                        .description("Automatically switch theme based on system settings."),
+                        SettingItem::new(
+                            "Resetable",
+                            SettingField::switch(
+                                |cx: &App| AppSettings::global(cx).resetable,
+                                |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).resetable = checked
+                                },
+                            ),
+                        )
+                        .description("Enable/Disable reset button for settings."),
+                        SettingItem::new(
+                            "Group Variant",
                             SettingField::dropdown(
                                 vec![
-                                    ("Arial".into(), "Arial".into()),
-                                    ("Helvetica".into(), "Helvetica".into()),
-                                    ("Times New Roman".into(), "Times New Roman".into()),
-                                    ("Courier New".into(), "Courier New".into()),
+                                    (GroupBoxVariant::Normal.as_str().into(), "Normal".into()),
+                                    (GroupBoxVariant::Outline.as_str().into(), "Outline".into()),
+                                    (GroupBoxVariant::Fill.as_str().into(), "Fill".into()),
                                 ],
-                                |cx: &App| AppSettings::global(cx).font_family.clone(),
-                                |val: SharedString, cx: &mut App| {
-                                    AppSettings::global_mut(cx).font_family = val;
+                                {
+                                    let view = view.clone();
+                                    move |cx: &App| {
+                                        SharedString::from(
+                                            view.read(cx).group_variant.as_str().to_string(),
+                                        )
+                                    }
+                                },
+                                {
+                                    let view = view.clone();
+                                    move |val: SharedString, cx: &mut App| {
+                                        view.update(cx, |view, cx| {
+                                            view.group_variant =
+                                                GroupBoxVariant::from_str(val.as_str());
+                                            cx.notify();
+                                        });
+                                    }
                                 },
                             )
-                            .default_value(default_settings.font_family),
+                            .default_value(GroupBoxVariant::Outline.as_str().to_string()),
                         )
-                        .description("Select the font family for the story."),
-                    )
-                    .item(
+                        .description("Select the variant for setting groups."),
                         SettingItem::new(
-                            "Font Size",
-                            SettingField::number_input(
-                                NumberFieldOptions {
-                                    min: 8.0,
-                                    max: 72.0,
-                                    ..Default::default()
+                            "Group Size",
+                            SettingField::dropdown(
+                                vec![
+                                    (Size::Medium.as_str().into(), "Medium".into()),
+                                    (Size::Small.as_str().into(), "Small".into()),
+                                    (Size::XSmall.as_str().into(), "XSmall".into()),
+                                ],
+                                {
+                                    let view = view.clone();
+                                    move |cx: &App| {
+                                        SharedString::from(view.read(cx).size.as_str().to_string())
+                                    }
                                 },
-                                |cx: &App| AppSettings::global(cx).font_size,
-                                |val: f64, cx: &mut App| {
-                                    AppSettings::global_mut(cx).font_size = val;
+                                {
+                                    let view = view.clone();
+                                    move |val: SharedString, cx: &mut App| {
+                                        view.update(cx, |view, cx| {
+                                            view.size = Size::from_str(val.as_str());
+                                            cx.notify();
+                                        });
+                                    }
                                 },
                             )
-                            .default_value(default_settings.font_size),
+                            .default_value(Size::default().as_str().to_string()),
                         )
-                        .description("Adjust the font size for better readability."),
-                    ),
-                SettingGroup::new().title("Other").items(vec![
-                    SettingItem::element(|options, _, _| {
-                        h_flex()
-                            .w_full()
-                            .justify_between()
-                            .flex_wrap()
-                            .gap_3()
-                            .child("This is a custom element item by use SettingItem::element.")
-                            .child(
-                                Button::new("action")
-                                    .icon(IconName::Globe)
-                                    .label("Repository...")
-                                    .outline()
-                                    .with_size(options.size)
-                                    .on_click(|_, _, cx| {
-                                        cx.open_url("https://github.com/longbridge/gpui-component");
-                                    }),
+                        .description("Select the size for the setting group."),
+                    ]),
+                    SettingGroup::new()
+                        .title("Font")
+                        .item(
+                            SettingItem::new(
+                                "Font Family",
+                                SettingField::dropdown(
+                                    vec![
+                                        ("Arial".into(), "Arial".into()),
+                                        ("Helvetica".into(), "Helvetica".into()),
+                                        ("Times New Roman".into(), "Times New Roman".into()),
+                                        ("Courier New".into(), "Courier New".into()),
+                                    ],
+                                    |cx: &App| AppSettings::global(cx).font_family.clone(),
+                                    |val: SharedString, cx: &mut App| {
+                                        AppSettings::global_mut(cx).font_family = val;
+                                    },
+                                )
+                                .default_value(default_settings.font_family),
                             )
-                            .into_any_element()
-                    }),
-                    SettingItem::new(
-                        "CLI Path",
-                        SettingField::input(
-                            |cx: &App| AppSettings::global(cx).cli_path.clone(),
-                            |val: SharedString, cx: &mut App| {
-                                println!("cli-path set value: {}", val);
-                                AppSettings::global_mut(cx).cli_path = val;
-                            },
+                            .description("Select the font family for the story."),
                         )
-                        .default_value(default_settings.cli_path),
-                    )
-                    .layout(Axis::Vertical)
-                    .description(
-                        "Path to the CLI executable. \n\
+                        .item(
+                            SettingItem::new(
+                                "Font Size",
+                                SettingField::number_input(
+                                    NumberFieldOptions {
+                                        min: 8.0,
+                                        max: 72.0,
+                                        ..Default::default()
+                                    },
+                                    |cx: &App| AppSettings::global(cx).font_size,
+                                    |val: f64, cx: &mut App| {
+                                        AppSettings::global_mut(cx).font_size = val;
+                                    },
+                                )
+                                .default_value(default_settings.font_size),
+                            )
+                            .description("Adjust the font size for better readability."),
+                        ),
+                    SettingGroup::new().title("Other").items(vec![
+                        SettingItem::element(|options, _, _| {
+                            h_flex()
+                                .w_full()
+                                .justify_between()
+                                .flex_wrap()
+                                .gap_3()
+                                .child("This is a custom element item by use SettingItem::element.")
+                                .child(
+                                    Button::new("action")
+                                        .icon(IconName::Globe)
+                                        .label("Repository...")
+                                        .outline()
+                                        .with_size(options.size)
+                                        .on_click(|_, _, cx| {
+                                            cx.open_url(
+                                                "https://github.com/longbridge/gpui-component",
+                                            );
+                                        }),
+                                )
+                                .into_any_element()
+                        }),
+                        SettingItem::new(
+                            "CLI Path",
+                            SettingField::input(
+                                |cx: &App| AppSettings::global(cx).cli_path.clone(),
+                                |val: SharedString, cx: &mut App| {
+                                    println!("cli-path set value: {}", val);
+                                    AppSettings::global_mut(cx).cli_path = val;
+                                },
+                            )
+                            .default_value(default_settings.cli_path),
+                        )
+                        .layout(Axis::Vertical)
+                        .description(
+                            "Path to the CLI executable. \n\
                         This item uses Vertical layout. The title,\
                         description, and field are all aligned vertically with width 100%.",
-                    ),
+                        ),
+                    ]),
                 ]),
-            ]),
-            SettingPage::new("Software Update").groups(vec![
-                SettingGroup::new().title("Updates").items(vec![
+            SettingPage::new("Software Update")
+                .resetable(resetable)
+                .groups(vec![SettingGroup::new().title("Updates").items(vec![
                     SettingItem::new(
                         "Enable Notifications",
                         SettingField::switch(
@@ -274,9 +297,9 @@ impl SettingsStory {
                         .default_value(default_settings.auto_update),
                     )
                     .description("Automatically download and install updates."),
-                ]),
-            ]),
+                ])]),
             SettingPage::new("About")
+                .resetable(resetable)
                 .group(
                     SettingGroup::new().item(SettingItem::element(|_options, _, cx| {
                         v_flex()

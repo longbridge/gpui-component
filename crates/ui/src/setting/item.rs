@@ -104,6 +104,20 @@ impl SettingItem {
         }
     }
 
+    pub(crate) fn is_resetable(&self, cx: &App) -> bool {
+        match self {
+            SettingItem::Item { field, .. } => field.is_resetable(cx),
+            SettingItem::Element { .. } => false,
+        }
+    }
+
+    pub(crate) fn reset(&self, window: &mut Window, cx: &mut App) {
+        match self {
+            SettingItem::Item { field, .. } => field.reset(window, cx),
+            SettingItem::Element { .. } => {}
+        }
+    }
+
     fn render_field(
         field: Rc<dyn AnySettingField>,
         options: RenderOptions,

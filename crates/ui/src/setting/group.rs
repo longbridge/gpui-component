@@ -69,6 +69,10 @@ impl SettingGroup {
         self.items.iter().any(|item| item.is_match(query))
     }
 
+    pub(super) fn is_resetable(&self, cx: &App) -> bool {
+        self.items.iter().any(|item| item.is_resetable(cx))
+    }
+
     pub(crate) fn render(
         self,
         group_ix: usize,
@@ -101,5 +105,11 @@ impl SettingGroup {
                 }
             }))
             .refine_style(&self.style)
+    }
+
+    pub(crate) fn reset(&self, window: &mut Window, cx: &mut App) {
+        for item in &self.items {
+            item.reset(window, cx);
+        }
     }
 }

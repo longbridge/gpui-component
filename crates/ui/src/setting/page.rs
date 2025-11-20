@@ -2,18 +2,21 @@ use gpui::{
     list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Window,
 };
+use rust_i18n::t;
 
 use crate::{
+    button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     label::Label,
     setting::{settings::SettingsState, RenderOptions, SettingGroup},
-    v_flex, ActiveTheme,
+    v_flex, ActiveTheme, IconName, Sizable,
 };
 
 /// A setting page that can contain multiple setting groups.
 #[derive(Clone)]
 pub struct SettingPage {
+    resetable: bool,
     pub(super) default_open: bool,
     pub(super) title: SharedString,
     pub(super) description: Option<SharedString>,
@@ -23,6 +26,7 @@ pub struct SettingPage {
 impl SettingPage {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
+            resetable: true,
             default_open: false,
             title: title.into(),
             description: None,
@@ -48,6 +52,14 @@ impl SettingPage {
         self
     }
 
+    /// Set whether the setting page is resetable, default is true.
+    ///
+    /// If true and the items in this page has changed, the reset button will appear.
+    pub fn resetable(mut self, resetable: bool) -> Self {
+        self.resetable = resetable;
+        self
+    }
+
     /// Add a setting group to the page.
     pub fn group(mut self, group: SettingGroup) -> Self {
         self.groups.push(group);
@@ -58,6 +70,16 @@ impl SettingPage {
     pub fn groups(mut self, groups: impl IntoIterator<Item = SettingGroup>) -> Self {
         self.groups.extend(groups);
         self
+    }
+
+    fn is_resetable(&self, cx: &App) -> bool {
+        self.resetable && self.groups.iter().any(|group| group.is_resetable(cx))
+    }
+
+    fn reset_all(&self, window: &mut Window, cx: &mut App) {
+        for group in &self.groups {
+            group.reset(window, cx);
+        }
     }
 
     pub(super) fn render(
@@ -107,7 +129,24 @@ impl SettingPage {
             .child(
                 v_flex()
                     .gap_3()
-                    .child(h_flex().justify_between().child(self.title.clone()))
+                    .child(h_flex().justify_between().child(self.title.clone()).when(
+                        self.is_resetable(cx),
+                        |this| {
+                            this.child(
+                                Button::new("reset")
+                                    .icon(IconName::Undo2)
+                                    .ghost()
+                                    .small()
+                                    .tooltip(t!("Settings.Reset All"))
+                                    .on_click({
+                                        let page = self.clone();
+                                        move |_, window, cx| {
+                                            page.reset_all(window, cx);
+                                        }
+                                    }),
+                            )
+                        },
+                    ))
                     .when_some(self.description.clone(), |this, description| {
                         this.child(
                             Label::new(description)
