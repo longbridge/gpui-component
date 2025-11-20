@@ -140,7 +140,7 @@ impl TreeItem {
 
     /// Add multiple child items to this tree item.
     pub fn children(mut self, children: impl IntoIterator<Item = TreeItem>) -> Self {
-        self.children.extend(children.into_iter());
+        self.children.extend(children);
         self
     }
 

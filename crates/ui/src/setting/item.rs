@@ -93,14 +93,8 @@ impl SettingItem {
                         d.as_str().to_lowercase().contains(&query.to_lowercase())
                     })
             }
-            SettingItem::Element { .. } => {
-                // We need to show all custom elements when not searching.
-                if query.is_empty() {
-                    true
-                } else {
-                    false
-                }
-            }
+            // We need to show all custom elements when not searching.
+            SettingItem::Element { .. } => query.is_empty(),
         }
     }
 
