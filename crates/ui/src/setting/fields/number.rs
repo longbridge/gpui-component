@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Axis, Entity, IntoElement,
+    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Entity, IntoElement,
     SharedString, StyleRefinement, Styled, Window,
 };
 
@@ -9,9 +9,9 @@ use crate::{
     input::{InputState, NumberInput, NumberInputEvent},
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
-        AnySettingField,
+        AnySettingField, RenderOptions,
     },
-    AxisExt, Sizable, Size, StyledExt,
+    AxisExt, Sizable, StyledExt,
 };
 
 #[derive(Clone, Debug)]
@@ -55,15 +55,14 @@ impl SettingFieldRender for NumberField {
     fn render(
         &self,
         field: Rc<dyn AnySettingField>,
-        size: Size,
-        layout: Axis,
+        options: &RenderOptions,
         style: &StyleRefinement,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         let value = get_value::<f64>(&field, cx);
         let set_value = set_value::<f64>(&field, cx);
-        let options = self.options.clone();
+        let num_options = self.options.clone();
 
         let state = window
             .use_keyed_state("number-state", cx, |window, cx| {
@@ -75,9 +74,9 @@ impl SettingFieldRender for NumberField {
                             let value = input.value();
                             if let Ok(value) = value.parse::<f64>() {
                                 let new_value = if *action == crate::input::StepAction::Increment {
-                                    (value + options.step).min(options.max)
+                                    (value + num_options.step).min(num_options.max)
                                 } else {
-                                    (value - options.step).max(options.min)
+                                    (value - num_options.step).max(num_options.min)
                                 };
                                 set_value(new_value, cx);
                                 input.set_value(
@@ -98,9 +97,9 @@ impl SettingFieldRender for NumberField {
             .read(cx);
 
         NumberInput::new(&state.input)
-            .with_size(size)
+            .with_size(options.size)
             .map(|this| {
-                if layout.is_horizontal() {
+                if options.layout.is_horizontal() {
                     this.w_32()
                 } else {
                     this.w_full()

@@ -1,18 +1,19 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, Axis, Corner, IntoElement, SharedString,
+    prelude::FluentBuilder as _, AnyElement, App, Corner, IntoElement, SharedString,
     StyleRefinement, Styled, Window,
 };
 
 use crate::{
-    button::Button,
+    button::{Button, ButtonVariants},
+    group_box::GroupBoxVariant,
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
-        AnySettingField,
+        AnySettingField, RenderOptions,
     },
-    AxisExt, Sizable, Size, StyledExt,
+    AxisExt, Sizable, StyledExt,
 };
 
 pub(crate) struct DropdownField<T> {
@@ -36,32 +37,35 @@ where
     fn render(
         &self,
         field: Rc<dyn AnySettingField>,
-        size: Size,
-        layout: Axis,
+        options: &RenderOptions,
         style: &StyleRefinement,
         _: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         let old_value = get_value::<T>(&field, cx);
         let set_value = set_value::<T>(&field, cx);
-        let options = self.options.clone();
+        let dropdown_options = self.options.clone();
 
-        let old_label = options
+        let old_label = dropdown_options
             .iter()
             .find(|(value, _)| *value == old_value.clone().into())
             .map(|(_, label)| label.clone())
             .unwrap_or_else(|| old_value.clone().into());
 
         Button::new("btn")
-            .when(layout.is_vertical(), |this| this.w_full())
+            .when(options.layout.is_vertical(), |this| this.w_full())
             .label(old_label)
             .dropdown_caret(true)
-            .outline()
-            .with_size(size)
+            .map(|this| match options.group_variant {
+                GroupBoxVariant::Fill => this.ghost(),
+                GroupBoxVariant::Outline => this.outline(),
+                _ => this,
+            })
+            .with_size(options.size)
             .refine_style(style)
             .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
                 let set_value = set_value.clone();
-                let menu = options.iter().fold(menu, |menu, (value, label)| {
+                let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
                     let old_value: SharedString = old_value.clone().into();
                     let checked = &old_value == value;
                     menu.item(

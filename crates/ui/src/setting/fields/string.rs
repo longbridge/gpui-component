@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Axis, Entity, IntoElement,
+    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Entity, IntoElement,
     SharedString, StyleRefinement, Styled, Window,
 };
 
@@ -9,9 +9,9 @@ use crate::{
     input::{Input, InputEvent, InputState},
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
-        AnySettingField,
+        AnySettingField, RenderOptions,
     },
-    AxisExt as _, Sizable, Size, StyledExt,
+    AxisExt as _, Sizable, StyledExt,
 };
 
 pub(crate) struct StringField<T> {
@@ -38,8 +38,7 @@ where
     fn render(
         &self,
         field: Rc<dyn AnySettingField>,
-        size: Size,
-        layout: Axis,
+        options: &RenderOptions,
         style: &StyleRefinement,
         window: &mut Window,
         cx: &mut App,
@@ -68,9 +67,9 @@ where
             .read(cx);
 
         Input::new(&state.input)
-            .with_size(size)
+            .with_size(options.size)
             .map(|this| {
-                if layout.is_horizontal() {
+                if options.layout.is_horizontal() {
                     this.w_64()
                 } else {
                     this.flex_1().min_w_64().w_full()

@@ -11,7 +11,7 @@ use crate::{
         AnySettingField, ElementField, RenderOptions,
     },
     text::Text,
-    v_flex, ActiveTheme as _, AxisExt, Size, StyledExt as _,
+    v_flex, ActiveTheme as _, AxisExt, StyledExt as _,
 };
 
 /// Setting item.
@@ -26,7 +26,7 @@ pub enum SettingItem {
     },
     /// A full custom element to render.
     Element {
-        render: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
+        render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static>,
     },
 }
 
@@ -48,10 +48,12 @@ impl SettingItem {
     pub fn element<R, E>(render: R) -> Self
     where
         E: IntoElement,
-        R: Fn(&mut Window, &mut App) -> E + 'static,
+        R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
     {
         SettingItem::Element {
-            render: Rc::new(move |window, cx| render(window, cx).into_any_element()),
+            render: Rc::new(move |options, window, cx| {
+                render(options, window, cx).into_any_element()
+            }),
         }
     }
 
@@ -117,8 +119,7 @@ impl SettingItem {
 
     fn render_field(
         field: Rc<dyn AnySettingField>,
-        size: Size,
-        layout: Axis,
+        options: RenderOptions,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -150,7 +151,7 @@ impl SettingItem {
             _ => unimplemented!("Unsupported setting type: {}", field.deref().type_name()),
         };
 
-        renderer.render(field, size, layout, &style, window, cx)
+        renderer.render(field, &options, &style, window, cx)
     }
 
     pub(super) fn render(
@@ -171,7 +172,7 @@ impl SettingItem {
                 } => div()
                     .map(|this| {
                         if layout.is_horizontal() {
-                            this.h_flex().justify_between().items_start().flex_wrap()
+                            this.h_flex().justify_between().items_start()
                         } else {
                             this.v_flex().items_start()
                         }
@@ -194,14 +195,16 @@ impl SettingItem {
                                 )
                             }),
                     )
-                    .child(
-                        div()
-                            .id("field")
-                            .bg(cx.theme().background)
-                            .child(Self::render_field(field, options.size, layout, window, cx)),
-                    )
+                    .child(div().id("field").child(Self::render_field(
+                        field,
+                        RenderOptions { layout, ..*options },
+                        window,
+                        cx,
+                    )))
                     .into_any_element(),
-                SettingItem::Element { render } => (render)(window, cx).into_any_element(),
+                SettingItem::Element { render } => {
+                    (render)(&options, window, cx).into_any_element()
+                }
             })
     }
 }

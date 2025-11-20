@@ -92,14 +92,6 @@ impl SettingGroup {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        // let is_resettable = self.is_resettable();
-        // let on_resets = self
-        //     .items
-        //     .iter()
-        //     .filter(|item| !item.is_default())
-        //     .map(|item| item.on_reset.clone())
-        //     .collect::<Vec<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>>();
-
         GroupBox::new()
             .id(SharedString::from(format!("group-{}", group_ix)))
             .with_variant(options.group_variant)

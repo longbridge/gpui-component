@@ -4,12 +4,12 @@ use crate::{
     checkbox::Checkbox,
     setting::{
         fields::{get_value, set_value, SettingFieldRender},
-        AnySettingField,
+        AnySettingField, RenderOptions,
     },
     switch::Switch,
-    Sizable, Size, StyledExt,
+    Sizable, StyledExt,
 };
-use gpui::{div, AnyElement, App, Axis, IntoElement, ParentElement as _, StyleRefinement, Window};
+use gpui::{div, AnyElement, App, IntoElement, ParentElement as _, StyleRefinement, Window};
 
 pub(crate) struct BoolField {
     use_switch: bool,
@@ -25,8 +25,7 @@ impl SettingFieldRender for BoolField {
     fn render(
         &self,
         field: Rc<dyn AnySettingField>,
-        size: Size,
-        _layout: Axis,
+        options: &RenderOptions,
         style: &StyleRefinement,
         _: &mut Window,
         cx: &mut App,
@@ -39,7 +38,7 @@ impl SettingFieldRender for BoolField {
             .child(if self.use_switch {
                 Switch::new("check")
                     .checked(checked)
-                    .with_size(size)
+                    .with_size(options.size)
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         set_value(*checked, cx);
                     })
@@ -47,7 +46,7 @@ impl SettingFieldRender for BoolField {
             } else {
                 Checkbox::new("check")
                     .checked(checked)
-                    .with_size(size)
+                    .with_size(options.size)
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         set_value(*checked, cx);
                     })

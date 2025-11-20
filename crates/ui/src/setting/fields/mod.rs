@@ -12,18 +12,17 @@ pub(crate) use string::*;
 
 pub use number::NumberFieldOptions;
 
-use gpui::{AnyElement, App, Axis, IntoElement, SharedString, StyleRefinement, Styled, Window};
+use gpui::{AnyElement, App, IntoElement, SharedString, StyleRefinement, Styled, Window};
 use std::{any::Any, rc::Rc};
 
-use crate::Size;
+use crate::setting::RenderOptions;
 
 pub(crate) trait SettingFieldRender {
     #[allow(clippy::too_many_arguments)]
     fn render(
         &self,
         field: Rc<dyn AnySettingField>,
-        size: Size,
-        layout: Axis,
+        options: &RenderOptions,
         style: &StyleRefinement,
         window: &mut Window,
         cx: &mut App,
@@ -62,7 +61,7 @@ pub enum SettingFieldType {
         options: Vec<(SharedString, SharedString)>,
     },
     Element {
-        element_render: Rc<dyn Fn(Size, &mut Window, &mut App) -> AnyElement>,
+        element_render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement>,
     },
 }
 
@@ -111,7 +110,7 @@ impl SettingFieldType {
     #[inline]
     pub(super) fn element_render(
         &self,
-    ) -> Rc<dyn Fn(Size, &mut Window, &mut App) -> AnyElement + 'static> {
+    ) -> Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static> {
         match self {
             SettingFieldType::Element { element_render } => element_render.clone(),
             _ => unreachable!("element_render called on non-element field"),
@@ -177,12 +176,12 @@ impl SettingField<SharedString> {
     pub fn element<R, E>(element_render: R) -> Self
     where
         E: IntoElement,
-        R: Fn(Size, &mut Window, &mut App) -> E + 'static,
+        R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
     {
         Self::new(
             SettingFieldType::Element {
-                element_render: Rc::new(move |size, window, cx| {
-                    element_render(size, window, cx).into_any_element()
+                element_render: Rc::new(move |options, window, cx| {
+                    element_render(options, window, cx).into_any_element()
                 }),
             },
             |_| SharedString::default(),

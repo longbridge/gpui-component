@@ -1,19 +1,15 @@
+use gpui::{AnyElement, App, StyleRefinement, Window};
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, Axis, StyleRefinement, Window};
-
-use crate::{
-    setting::{fields::SettingFieldRender, AnySettingField},
-    Size,
-};
+use crate::setting::{fields::SettingFieldRender, AnySettingField, RenderOptions};
 
 pub(crate) struct ElementField {
-    element_render: Rc<dyn Fn(Size, &mut Window, &mut App) -> AnyElement>,
+    element_render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement>,
 }
 
 impl ElementField {
     pub(crate) fn new(
-        element_render: Rc<dyn Fn(Size, &mut Window, &mut App) -> AnyElement + 'static>,
+        element_render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static>,
     ) -> Self {
         Self { element_render }
     }
@@ -23,12 +19,11 @@ impl SettingFieldRender for ElementField {
     fn render(
         &self,
         _: Rc<dyn AnySettingField>,
-        size: Size,
-        _: Axis,
-        _: &StyleRefinement,
+        options: &RenderOptions,
+        _style: &StyleRefinement,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        (self.element_render)(size, window, cx)
+        (self.element_render)(options, window, cx)
     }
 }

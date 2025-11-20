@@ -7,7 +7,7 @@ use crate::{
     IconName, Sizable, Size,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, ElementId, Entity,
+    div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, Axis, ElementId, Entity,
     IntoElement, ParentElement as _, Pixels, RenderOnce, Styled, Window,
 };
 use rust_i18n::t;
@@ -213,10 +213,12 @@ pub(super) struct SettingsState {
     pub(super) search_input: Entity<InputState>,
 }
 
+/// Options for rendering setting item.
 #[derive(Clone, Copy)]
-pub(crate) struct RenderOptions {
-    pub(super) size: Size,
-    pub(super) group_variant: GroupBoxVariant,
+pub struct RenderOptions {
+    pub size: Size,
+    pub group_variant: GroupBoxVariant,
+    pub layout: Axis,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -246,6 +248,7 @@ impl RenderOnce for Settings {
         let options = RenderOptions {
             size: self.size,
             group_variant: self.group_variant,
+            layout: Axis::Horizontal,
         };
 
         h_resizable(self.id.clone())

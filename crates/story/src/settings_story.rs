@@ -1,11 +1,11 @@
 use gpui::{
     App, AppContext, Axis, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window, px,
+    ParentElement as _, Render, SharedString, Styled, Window, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size,
-    button::Button,
+    button::{Button, ButtonVariants as _},
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
@@ -212,17 +212,21 @@ impl SettingsStory {
                         .description("Adjust the font size for better readability."),
                     ),
                 SettingGroup::new().title("Other").items(vec![
-                    SettingItem::element(|_, _| {
+                    SettingItem::element(|options, _, _| {
                         h_flex()
                             .w_full()
                             .justify_between()
                             .gap_3()
-                            .child("This is a custom element line.")
+                            .child("This is a custom element item by use SettingItem::element.")
                             .child(
                                 Button::new("action")
                                     .icon(IconName::Globe)
                                     .label("Repository...")
-                                    .outline()
+                                    .map(|this| match options.group_variant {
+                                        GroupBoxVariant::Fill => this.ghost(),
+                                        GroupBoxVariant::Outline => this.outline(),
+                                        _ => this,
+                                    })
                                     .on_click(|_, _, cx| {
                                         cx.open_url("https://github.com/longbridge/gpui-component");
                                     }),
@@ -272,70 +276,84 @@ impl SettingsStory {
                 ]),
             ]),
             SettingPage::new("About")
-                .group(SettingGroup::new().item(SettingItem::element(|_, cx| {
-                    v_flex()
-                        .gap_3()
-                        .w_full()
-                        .items_center()
-                        .justify_center()
-                        .child(Icon::new(IconName::GalleryVerticalEnd).size_16())
-                        .child("GPUI Component")
-                        .child(
-                            Label::new(
-                                "Rust GUI components for building fantastic cross-platform \
+                .group(
+                    SettingGroup::new().item(SettingItem::element(|_options, _, cx| {
+                        v_flex()
+                            .gap_3()
+                            .w_full()
+                            .items_center()
+                            .justify_center()
+                            .child(Icon::new(IconName::GalleryVerticalEnd).size_16())
+                            .child("GPUI Component")
+                            .child(
+                                Label::new(
+                                    "Rust GUI components for building fantastic cross-platform \
                                     desktop application by using GPUI.",
+                                )
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground),
                             )
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground),
-                        )
-                        .into_any()
-                })))
+                            .into_any()
+                    })),
+                )
                 .group(SettingGroup::new().title("Links").items(vec![
-                        SettingItem::new(
-                            "GitHub Repository",
-                            SettingField::element(|size, _window, _cx| {
-                                Button::new("open-url")
-                                    .outline()
-                                    .label("Repository...")
-                                    .with_size(size)
-                                    .on_click(|_, _window, cx| {
-                                        cx.open_url("https://github.com/longbridge/gpui-component");
-                                    })
-                            }),
-                        )
-                        .description("Open the GitHub repository in your default browser."),
-                        SettingItem::new(
-                            "Documentation",
-                            SettingField::element(|size, _window, _cx| {
-                                Button::new("open-url")
-                                    .outline()
-                                    .label("Rust Docs...")
-                                    .with_size(size)
-                                    .on_click(|_, _window, cx| {
-                                        cx.open_url("https://docs.rs/gpui-component");
-                                    })
-                            }),
-                        )
-                        .description(TextView::markdown(
-                            "desc",
-                            "Rust doc for the `gpui-component` crate.",
-                            window,
-                            cx,
-                        )),
-                        SettingItem::new(
-                            "Website",
-                            SettingField::element(|size, _window, _cx| {
-                                Button::new("open-url")
-                                    .outline()
-                                    .label("Website...")
-                                    .with_size(size)
-                                    .on_click(|_, _window, cx| {
-                                        cx.open_url("https://longbridge.github.io/gpui-component/");
-                                    })
-                            }),
-                        )
-                        .description("Official website and documentation for the GPUI Component."),
-                    ])),
+                    SettingItem::new(
+                        "GitHub Repository",
+                        SettingField::element(|options, _window, _cx| {
+                            Button::new("open-url")
+                                .map(|this| match options.group_variant {
+                                    GroupBoxVariant::Fill => this.ghost(),
+                                    GroupBoxVariant::Outline => this.outline(),
+                                    _ => this,
+                                })
+                                .label("Repository...")
+                                .with_size(options.size)
+                                .on_click(|_, _window, cx| {
+                                    cx.open_url("https://github.com/longbridge/gpui-component");
+                                })
+                        }),
+                    )
+                    .description("Open the GitHub repository in your default browser."),
+                    SettingItem::new(
+                        "Documentation",
+                        SettingField::element(|options, _window, _cx| {
+                            Button::new("open-url")
+                                .map(|this| match options.group_variant {
+                                    GroupBoxVariant::Fill => this.ghost(),
+                                    GroupBoxVariant::Outline => this.outline(),
+                                    _ => this,
+                                })
+                                .label("Rust Docs...")
+                                .with_size(options.size)
+                                .on_click(|_, _window, cx| {
+                                    cx.open_url("https://docs.rs/gpui-component");
+                                })
+                        }),
+                    )
+                    .description(TextView::markdown(
+                        "desc",
+                        "Rust doc for the `gpui-component` crate.",
+                        window,
+                        cx,
+                    )),
+                    SettingItem::new(
+                        "Website",
+                        SettingField::element(|options, _window, _cx| {
+                            Button::new("open-url")
+                                .map(|this| match options.group_variant {
+                                    GroupBoxVariant::Fill => this.ghost(),
+                                    GroupBoxVariant::Outline => this.outline(),
+                                    _ => this,
+                                })
+                                .label("Website...")
+                                .with_size(options.size)
+                                .on_click(|_, _window, cx| {
+                                    cx.open_url("https://longbridge.github.io/gpui-component/");
+                                })
+                        }),
+                    )
+                    .description("Official website and documentation for the GPUI Component."),
+                ])),
         ]
     }
 }
