@@ -20,7 +20,7 @@ use gpui_component::{
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
-    tree::{TreeItem, TreeState, tree},
+    tree::{TreeDelegate, TreeEntry, TreeItem, TreeState, tree},
     v_flex,
 };
 use gpui_component_assets::Assets;
@@ -44,9 +44,62 @@ fn init() {
     );
 }
 
+struct EditorTreeDelegate {
+    view: Entity<Example>,
+}
+
+impl TreeDelegate for EditorTreeDelegate {
+    fn render_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> ListItem {
+        let item = entry.item();
+
+        let icon = if !entry.is_folder() {
+            IconName::File
+        } else if entry.is_expanded() {
+            IconName::FolderOpen
+        } else {
+            IconName::Folder
+        };
+
+        ListItem::new(ix)
+            .w_full()
+            .rounded(cx.theme().radius)
+            .py_0p5()
+            .px_2()
+            .pl(px(16.) * entry.depth() + px(8.))
+            .child(h_flex().gap_2().child(icon).child(item.label.clone()))
+            .selected(selected)
+            .on_click(window.listener_for(&self.view, {
+                let view_entity = self.view.clone();
+                let item = item.clone();
+                move |_this, _, _window, cx| {
+                    if item.is_folder() {
+                        return;
+                    }
+
+                    Example::open_file(
+                        view_entity.clone(),
+                        PathBuf::from(item.id.as_str()),
+                        _window,
+                        cx,
+                    )
+                    .ok();
+
+                    cx.notify();
+                }
+            }))
+    }
+}
+
 pub struct Example {
     editor: Entity<InputState>,
-    tree_state: Entity<TreeState>,
+    tree_state: Entity<TreeState<EditorTreeDelegate>>,
     go_to_line_state: Entity<InputState>,
     language: Language,
     line_number: bool,
@@ -657,7 +710,13 @@ impl Example {
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
-        let tree_state = cx.new(|cx| TreeState::new(cx));
+        let view_entity = cx.entity();
+        let tree_state = cx.new(move |cx| {
+            TreeState::new(
+                EditorTreeDelegate { view: view_entity },
+                cx
+            )
+        });
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
         let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
@@ -678,7 +737,7 @@ impl Example {
         }
     }
 
-    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
+    fn load_files(state: Entity<TreeState<EditorTreeDelegate>>, path: PathBuf, cx: &mut App) {
         cx.spawn(async move |cx| {
             let ignorer = Ignorer::new(&path.to_string_lossy());
             let items = build_file_items(&ignorer, &path, &path);
@@ -849,48 +908,7 @@ impl Example {
     }
 
     fn render_file_tree(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = cx.entity();
-        tree(
-            &self.tree_state,
-            move |ix, entry, _selected, _window, cx| {
-                view.update(cx, |_, cx| {
-                    let item = entry.item();
-                    let icon = if !entry.is_folder() {
-                        IconName::File
-                    } else if entry.is_expanded() {
-                        IconName::FolderOpen
-                    } else {
-                        IconName::Folder
-                    };
-
-                    ListItem::new(ix)
-                        .w_full()
-                        .rounded(cx.theme().radius)
-                        .py_0p5()
-                        .px_2()
-                        .pl(px(16.) * entry.depth() + px(8.))
-                        .child(h_flex().gap_2().child(icon).child(item.label.clone()))
-                        .on_click(cx.listener({
-                            let item = item.clone();
-                            move |_, _, _window, cx| {
-                                if item.is_folder() {
-                                    return;
-                                }
-
-                                Self::open_file(
-                                    cx.entity(),
-                                    PathBuf::from(item.id.as_str()),
-                                    _window,
-                                    cx,
-                                )
-                                .ok();
-
-                                cx.notify();
-                            }
-                        }))
-                })
-            },
-        )
+        tree(&self.tree_state)
         .text_sm()
         .p_1()
         .bg(cx.theme().sidebar)

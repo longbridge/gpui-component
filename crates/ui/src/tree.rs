@@ -515,10 +515,9 @@ impl<D: TreeDelegate> RenderOnce for Tree<D> {
 mod tests {
     use indoc::indoc;
 
-    use super::{TreeDelegate, TreeItem, TreeState};
+    use super::{TreeDelegate, TreeEntry, TreeState};
     use crate::list::ListItem;
-    use crate::menu::PopupMenu;
-    use gpui::AppContext as _;
+    use gpui::{App, AppContext as _, IntoElement, ParentElement, Window};
 
     struct TestDelegate;
 
@@ -528,12 +527,12 @@ mod tests {
             ix: usize,
             entry: &TreeEntry,
             selected: bool,
-            window: &mut Window,
-            cx: &mut App,
+            _window: &mut Window,
+            _cx: &mut App,
         ) -> ListItem {
             ListItem::new(ix)
                 .selected(selected)
-                .child(entry.item().label.clone())
+                .child(entry.item().label.clone().into_any_element())
         }
     }
 
