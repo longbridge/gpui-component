@@ -29,7 +29,7 @@ impl<E: ParentElement + Styled> ContextMenuExt for E {}
 pub struct ContextMenu<E: ParentElement + Styled + Sized> {
     id: ElementId,
     element: Option<E>,
-    menu: Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+    menu: Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
     // This is not in use, just for style refinement forwarding.
     _ignore_style: StyleRefinement,
     anchor: Corner,
@@ -53,7 +53,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
     where
         F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     {
-        self.menu = Some(Box::new(builder));
+        self.menu = Some(Rc::new(builder));
         self
     }
 
@@ -235,9 +235,8 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
             element.paint(window, cx);
         }
 
-        let Some(builder) = self.menu.take() else {
-            return;
-        };
+        // Take the builder before setting up element state to avoid borrow issues
+        let builder = self.menu.clone();
 
         self.with_element_state(
             id.unwrap(),
@@ -254,26 +253,44 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                     {
                         {
                             let mut shared_state = shared_state.borrow_mut();
+                            // Clear any existing menu view to allow immediate replacement
+                            shared_state.menu_view = None;
+                            shared_state._subscription = None;
+                            // Set the new position and open the menu
                             shared_state.position = event.position;
                             shared_state.open = true;
                         }
 
-                        let menu = PopupMenu::build(window, cx, |menu, window, cx| {
-                            (builder)(menu, window, cx)
-                        })
-                        .into_element();
+                        // Use defer to build the menu in the next frame, avoiding race conditions
+                        let shared_state_defer = shared_state.clone();
+                        let builder_clone = builder.clone();
+                        window.defer(cx, move |window, cx| {
+                            let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                                if let Some(builder_fn) = &builder_clone {
+                                    builder_fn(menu, window, cx)
+                                } else {
+                                    menu
+                                }
+                            })
+                            .into_element();
 
-                        let _subscription = window.subscribe(&menu, cx, {
-                            let shared_state = shared_state.clone();
-                            move |_, _: &DismissEvent, window, _| {
-                                shared_state.borrow_mut().open = false;
+                            // Set up the subscription for dismiss handling
+                            let _subscription = window.subscribe(&menu, cx, {
+                                let shared_state = shared_state_defer.clone();
+                                move |_, _: &DismissEvent, window, _cx| {
+                                    shared_state.borrow_mut().open = false;
+                                    window.refresh();
+                                }
+                            });
+
+                            // Update the shared state with the built menu and subscription
+                            {
+                                let mut state = shared_state_defer.borrow_mut();
+                                state.menu_view = Some(menu.clone());
+                                state._subscription = Some(_subscription);
                                 window.refresh();
                             }
                         });
-
-                        shared_state.borrow_mut().menu_view = Some(menu.clone());
-                        shared_state.borrow_mut()._subscription = Some(_subscription);
-                        window.refresh();
                     }
                 });
             },
