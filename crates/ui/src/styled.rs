@@ -233,6 +233,35 @@ impl Size {
         }
     }
 
+    /// Returns the size as a static string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Size::XSmall => "xs",
+            Size::Small => "sm",
+            Size::Medium => "md",
+            Size::Large => "lg",
+            Size::Size(_) => "custom",
+        }
+    }
+
+    /// Create a Size from a static string.
+    ///
+    /// - "xs" or "xsmall"
+    /// - "sm" or "small"
+    /// - "md" or "medium"
+    /// - "lg" or "large"
+    ///
+    /// Any other value will return Size::Medium.
+    pub fn from_str(size: &str) -> Self {
+        match size.to_lowercase().as_str() {
+            "xs" | "xsmall" => Size::XSmall,
+            "sm" | "small" => Size::Small,
+            "md" | "medium" => Size::Medium,
+            "lg" | "large" => Size::Large,
+            _ => Size::Medium,
+        }
+    }
+
     /// Returns the height for table row.
     #[inline]
     pub fn table_row_height(&self) -> Pixels {
@@ -761,5 +790,32 @@ mod tests {
             Size::Size(px(10.)).max(Size::Size(px(20.))),
             Size::Size(px(10.))
         );
+    }
+
+    #[test]
+    fn test_size_as_str() {
+        assert_eq!(Size::XSmall.as_str(), "xs");
+        assert_eq!(Size::Small.as_str(), "sm");
+        assert_eq!(Size::Medium.as_str(), "md");
+        assert_eq!(Size::Large.as_str(), "lg");
+        assert_eq!(Size::Size(px(15.)).as_str(), "custom");
+    }
+
+    #[test]
+    fn test_size_from_str() {
+        assert_eq!(Size::from_str("xs"), Size::XSmall);
+        assert_eq!(Size::from_str("xsmall"), Size::XSmall);
+        assert_eq!(Size::from_str("sm"), Size::Small);
+        assert_eq!(Size::from_str("small"), Size::Small);
+        assert_eq!(Size::from_str("md"), Size::Medium);
+        assert_eq!(Size::from_str("medium"), Size::Medium);
+        assert_eq!(Size::from_str("lg"), Size::Large);
+        assert_eq!(Size::from_str("large"), Size::Large);
+        assert_eq!(Size::from_str("unknown"), Size::Medium);
+
+        // Case insensitive
+        assert_eq!(Size::from_str("XS"), Size::XSmall);
+        assert_eq!(Size::from_str("SMALL"), Size::Small);
+        assert_eq!(Size::from_str("Md"), Size::Medium);
     }
 }

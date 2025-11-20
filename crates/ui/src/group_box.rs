@@ -15,6 +15,47 @@ pub enum GroupBoxVariant {
     Outline,
 }
 
+/// Trait to add GroupBox variant methods to elements.
+pub trait GroupBoxVariants: Sized {
+    /// Set the variant of the [`GroupBox`].
+    fn with_variant(self, variant: GroupBoxVariant) -> Self;
+    /// Set to use [`GroupBoxVariant::Normal`] to GroupBox.
+    fn normal(mut self) -> Self {
+        self = self.with_variant(GroupBoxVariant::Normal);
+        self
+    }
+    /// Set to use [`GroupBoxVariant::Fill`] to GroupBox.
+    fn fill(mut self) -> Self {
+        self = self.with_variant(GroupBoxVariant::Fill);
+        self
+    }
+    /// Set to use [`GroupBoxVariant::Outline`] to GroupBox.
+    fn outline(mut self) -> Self {
+        self = self.with_variant(GroupBoxVariant::Outline);
+        self
+    }
+}
+
+impl GroupBoxVariant {
+    /// Create a GroupBoxVariant from a string.
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "fill" => GroupBoxVariant::Fill,
+            "outline" => GroupBoxVariant::Outline,
+            _ => GroupBoxVariant::Normal,
+        }
+    }
+
+    /// Convert the GroupBoxVariant to a string.
+    pub fn as_str(&self) -> &str {
+        match self {
+            GroupBoxVariant::Normal => "normal",
+            GroupBoxVariant::Fill => "fill",
+            GroupBoxVariant::Outline => "outline",
+        }
+    }
+}
+
 /// GroupBox is a styled container element that with
 /// an optional title to groups related content together.
 #[derive(IntoElement)]
@@ -40,26 +81,6 @@ impl GroupBox {
             title: None,
             children: SmallVec::new(),
         }
-    }
-
-    /// Set the variant of the group box.
-    pub fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
-        self.variant = variant;
-        self
-    }
-
-    /// Set to use Fill variant.
-    pub fn fill(mut self) -> Self {
-        self.variant = GroupBoxVariant::Fill;
-        self
-    }
-
-    /// Set use outline style of the group box.
-    ///
-    /// If true, the group box will have a border around it, and no background color.
-    pub fn outline(mut self) -> Self {
-        self.variant = GroupBoxVariant::Outline;
-        self
     }
 
     /// Set the id of the group box, default is None.
@@ -99,6 +120,13 @@ impl Styled for GroupBox {
     }
 }
 
+impl GroupBoxVariants for GroupBox {
+    fn with_variant(mut self, variant: GroupBoxVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+}
+
 impl RenderOnce for GroupBox {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (bg, border, has_paddings) = match self.variant {
@@ -133,5 +161,31 @@ impl RenderOnce for GroupBox {
                     .refine_style(&self.content_style)
                     .children(self.children),
             )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_group_variant_from_str() {
+        use super::GroupBoxVariant;
+
+        assert_eq!(GroupBoxVariant::from_str("normal"), GroupBoxVariant::Normal);
+        assert_eq!(GroupBoxVariant::from_str("fill"), GroupBoxVariant::Fill);
+        assert_eq!(
+            GroupBoxVariant::from_str("outline"),
+            GroupBoxVariant::Outline
+        );
+        assert_eq!(GroupBoxVariant::from_str("other"), GroupBoxVariant::Normal);
+
+        assert_eq!(GroupBoxVariant::from_str("FILL"), GroupBoxVariant::Fill);
+        assert_eq!(
+            GroupBoxVariant::from_str("OutLine"),
+            GroupBoxVariant::Outline
+        );
+
+        assert_eq!(GroupBoxVariant::Normal.as_str(), "normal");
+        assert_eq!(GroupBoxVariant::Fill.as_str(), "fill");
+        assert_eq!(GroupBoxVariant::Outline.as_str(), "outline");
     }
 }

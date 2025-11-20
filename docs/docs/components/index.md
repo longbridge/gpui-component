@@ -59,6 +59,7 @@ collapsed: false
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.
+- [Settings](settings) - Settings UI
 - [Table](table) - High-performance data tables
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display

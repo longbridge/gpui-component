@@ -1,0 +1,81 @@
+use std::rc::Rc;
+
+use gpui::{
+    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Entity, IntoElement,
+    SharedString, StyleRefinement, Styled, Window,
+};
+
+use crate::{
+    input::{Input, InputEvent, InputState},
+    setting::{
+        fields::{get_value, set_value, SettingFieldRender},
+        AnySettingField, RenderOptions,
+    },
+    AxisExt as _, Sizable, StyledExt,
+};
+
+pub(crate) struct StringField<T> {
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> StringField<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+struct State {
+    input: Entity<InputState>,
+    _subscription: gpui::Subscription,
+}
+
+impl<T> SettingFieldRender for StringField<T>
+where
+    T: Into<SharedString> + From<SharedString> + Clone + 'static,
+{
+    fn render(
+        &self,
+        field: Rc<dyn AnySettingField>,
+        options: &RenderOptions,
+        style: &StyleRefinement,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        let value = get_value::<T>(&field, cx);
+        let set_value = set_value::<T>(&field, cx);
+
+        let state = window
+            .use_keyed_state("string-state", cx, |window, cx| {
+                let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
+                let _subscription = cx.subscribe(&input, {
+                    move |_, input, event: &InputEvent, cx| match event {
+                        InputEvent::Change => {
+                            let value = input.read(cx).value();
+                            set_value(value.into(), cx);
+                        }
+                        _ => {}
+                    }
+                });
+
+                State {
+                    input,
+                    _subscription,
+                }
+            })
+            .read(cx);
+
+        Input::new(&state.input)
+            .with_size(options.size)
+            .map(|this| {
+                if options.layout.is_horizontal() {
+                    this.w_64()
+                } else {
+                    this.w_full()
+                }
+            })
+            .refine_style(style)
+            .into_any_element()
+    }
+}

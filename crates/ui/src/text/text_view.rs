@@ -87,6 +87,7 @@ impl RenderOnce for TextViewElement {
 pub struct TextView {
     id: ElementId,
     init_state: Option<InitState>,
+    raw: SharedString,
     state: Entity<TextViewState>,
     style: StyleRefinement,
     selectable: bool,
@@ -343,6 +344,14 @@ impl Text {
             Self::TextView(e) => Self::TextView(Box::new(e.style(style))),
         }
     }
+
+    /// Get the str
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::String(s) => s.as_str(),
+            Self::TextView(view) => view.raw.as_str(),
+        }
+    }
 }
 
 impl RenderOnce for Text {
@@ -403,11 +412,12 @@ impl TextView {
             cx,
         );
         if let Some(tx) = &state.read(cx).tx {
-            let _ = tx.try_send(Update::Text(markdown));
+            let _ = tx.try_send(Update::Text(markdown.clone()));
         }
         Self {
             id,
             init_state: Some(init_state),
+            raw: markdown.clone(),
             style: StyleRefinement::default(),
             state,
             selectable: false,
@@ -432,13 +442,14 @@ impl TextView {
         let init_state =
             Self::create_init_state(TextViewType::Html, &html, &highlight_theme, &state, cx);
         if let Some(tx) = &state.read(cx).tx {
-            let _ = tx.try_send(Update::Text(html));
+            let _ = tx.try_send(Update::Text(html.clone()));
         }
         Self {
             id,
             init_state: Some(init_state),
             style: StyleRefinement::default(),
             state,
+            raw: html,
             selectable: false,
             scrollable: false,
         }
@@ -446,15 +457,16 @@ impl TextView {
 
     /// Set the source text of the text view.
     pub fn text(mut self, raw: impl Into<SharedString>) -> Self {
+        let raw: SharedString = raw.into();
         if let Some(init_state) = &mut self.init_state {
             match init_state {
-                InitState::Initializing { text, .. } => *text = raw.into(),
+                InitState::Initializing { text, .. } => *text = raw.clone(),
                 InitState::Initialized { tx } => {
-                    let _ = tx.try_send(Update::Text(raw.into()));
+                    let _ = tx.try_send(Update::Text(raw.clone()));
                 }
             }
         }
-
+        self.raw = raw;
         self
     }
 

@@ -32,6 +32,7 @@ mod radio_story;
 mod resizable_story;
 mod scrollable_story;
 mod select_story;
+mod settings_story;
 mod sheet_story;
 mod sidebar_story;
 mod skeleton_story;
@@ -93,6 +94,7 @@ pub use resizable_story::ResizableStory;
 pub use scrollable_story::ScrollableStory;
 pub use select_story::SelectStory;
 use serde::{Deserialize, Serialize};
+pub use settings_story::SettingsStory;
 pub use sheet_story::SheetStory;
 pub use sidebar_story::SidebarStory;
 pub use skeleton_story::SkeletonStory;
@@ -115,7 +117,7 @@ use gpui_component::{
     ActiveTheme, IconName, Root, TitleBar, WindowExt,
     button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
-    group_box::GroupBox,
+    group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
     notification::Notification,

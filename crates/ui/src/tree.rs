@@ -139,8 +139,8 @@ impl TreeItem {
     }
 
     /// Add multiple child items to this tree item.
-    pub fn children(mut self, children: impl Into<Vec<TreeItem>>) -> Self {
-        self.children.extend(children.into());
+    pub fn children(mut self, children: impl IntoIterator<Item = TreeItem>) -> Self {
+        self.children.extend(children);
         self
     }
 

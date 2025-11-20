@@ -5,13 +5,14 @@ use crate::{
 use gpui::{
     div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
     InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use std::rc::Rc;
 
 /// Menu for the [`super::Sidebar`]
 #[derive(IntoElement)]
 pub struct SidebarMenu {
+    style: StyleRefinement,
     collapsed: bool,
     items: Vec<SidebarMenuItem>,
 }
@@ -20,6 +21,7 @@ impl SidebarMenu {
     /// Create a new SidebarMenu
     pub fn new() -> Self {
         Self {
+            style: StyleRefinement::default(),
             items: Vec::new(),
             collapsed: false,
         }
@@ -54,9 +56,15 @@ impl Collapsible for SidebarMenu {
     }
 }
 
+impl Styled for SidebarMenu {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for SidebarMenu {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        v_flex().gap_2().children(
+        v_flex().gap_2().refine_style(&self.style).children(
             self.items
                 .into_iter()
                 .enumerate()
