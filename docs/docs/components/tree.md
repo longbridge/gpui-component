@@ -144,29 +144,6 @@ tree(&self.tree_state, {
 })
 ```
 
-### Tree with Context Menu
-
-```rust
-tree(&tree_state, |ix, entry, selected, window, cx| {
-    ListItem::new(ix)
-        .selected(selected)
-        .child(entry.item().label.clone())
-        .on_secondary_mouse_down(MouseButton::Right, {
-            let item = entry.item().clone();
-            move |_, _, cx| {
-                cx.show_context_menu(
-                    ContextMenu::build(cx, |menu, cx| {
-                        menu.action("Rename", Rename)
-                            .action("Delete", Delete)
-                            .separator()
-                            .action("Copy Path", CopyPath)
-                    })
-                );
-            }
-        })
-})
-```
-
 ### Disabled Items
 
 ```rust

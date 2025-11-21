@@ -42,7 +42,8 @@ pub(crate) fn init(cx: &mut App) {
 /// });
 ///
 /// tree(&state, |ix, entry, selected, window, cx| {
-///     div().px(px(16.) * entry.depth()).child(item.label.clone())
+///     let item = entry.item();
+///     ListItem::new(ix).pl(px(16.) * entry.depth()).child(item.label.clone())
 /// })
 /// ```
 pub fn tree<R>(state: &Entity<TreeState>, render_item: R) -> Tree
