@@ -620,6 +620,7 @@ impl RenderOnce for Tab {
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
                 h_flex()
+                    .flex_1()
                     .h(inner_height)
                     .line_height(relative(1.))
                     .items_center()
