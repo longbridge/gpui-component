@@ -136,8 +136,8 @@ impl Settings {
         let search_input = state.read(cx).search_input.clone();
 
         Sidebar::left()
-            .width(relative(1.))
-            .border_width(px(0.))
+            .w(relative(1.))
+            .border_0()
             .collapsed(false)
             .header(
                 div()
