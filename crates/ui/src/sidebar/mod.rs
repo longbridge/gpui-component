@@ -5,8 +5,9 @@ use crate::{
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, InteractiveElement as _,
-    IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, EdgesRefinement,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
+    Styled, Window,
 };
 use std::rc::Rc;
 
@@ -186,12 +187,13 @@ impl<E: Collapsible + IntoElement> Styled for Sidebar<E> {
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
     fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.style.padding = EdgesRefinement::default();
+
         v_flex()
             .id("sidebar")
             .w(DEFAULT_WIDTH)
             .flex_shrink_0()
             .h_full()
-            .p_3()
             .gap_3()
             .overflow_hidden()
             .relative()
@@ -203,14 +205,24 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                 Side::Right => this.border_l_1(),
             })
             .refine_style(&self.style)
-            .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH).p_2().gap_2())
+            .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH).gap_2())
             .when_some(self.header.take(), |this, header| {
-                this.child(h_flex().id("header").gap_2().child(header))
+                this.child(
+                    h_flex()
+                        .id("header")
+                        .pt_3()
+                        .px_3()
+                        .gap_2()
+                        .when(self.collapsed, |this| this.pt_2().px_2())
+                        .child(header),
+                )
             })
             .child(
                 v_flex().id("content").flex_1().min_h_0().child(
                     v_flex()
                         .gap_3()
+                        .p_3()
+                        .when(self.collapsed, |this| this.p_2())
                         .children(
                             self.content
                                 .into_iter()
@@ -221,7 +233,15 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {
-                this.child(h_flex().id("footer").gap_2().child(footer))
+                this.child(
+                    h_flex()
+                        .id("footer")
+                        .pb_3()
+                        .px_3()
+                        .gap_2()
+                        .when(self.collapsed, |this| this.pt_2().px_2())
+                        .child(footer),
+                )
             })
     }
 }

@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Side, Sizable, StyledExt,
+    ActiveTheme, Icon, IconName, Side, Sizable,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     divider::Divider,
