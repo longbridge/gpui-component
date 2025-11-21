@@ -158,8 +158,8 @@ impl Render for Gallery {
                     .size_range(px(200.)..px(320.))
                     .child(
                         Sidebar::left()
-                            .width(relative(1.))
-                            .border_width(px(0.))
+                            .w(relative(1.))
+                            .border_0()
                             .collapsed(self.collapsed)
                             .header(
                                 v_flex()

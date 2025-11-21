@@ -5,8 +5,9 @@ use crate::{
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, DefiniteLength,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, EdgesRefinement,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
+    Styled, Window,
 };
 use std::rc::Rc;
 
@@ -25,6 +26,7 @@ const COLLAPSED_WIDTH: Pixels = px(48.);
 /// A Sidebar element that can contain collapsible child elements.
 #[derive(IntoElement)]
 pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
+    style: StyleRefinement,
     content: Vec<E>,
     /// header view
     header: Option<AnyElement>,
@@ -33,8 +35,6 @@ pub struct Sidebar<E: Collapsible + IntoElement + 'static> {
     /// The side of the sidebar
     side: Side,
     collapsible: bool,
-    width: DefiniteLength,
-    border_width: Pixels,
     collapsed: bool,
 }
 
@@ -42,13 +42,12 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
     /// Create a new Sidebar on the given [`Side`].
     pub fn new(side: Side) -> Self {
         Self {
+            style: StyleRefinement::default(),
             content: vec![],
             header: None,
             footer: None,
             side,
             collapsible: true,
-            width: DEFAULT_WIDTH.into(),
-            border_width: px(1.),
             collapsed: false,
         }
     }
@@ -61,18 +60,6 @@ impl<E: Collapsible + IntoElement> Sidebar<E> {
     /// Create a new Sidebar on the right side.
     pub fn right() -> Self {
         Self::new(Side::Right)
-    }
-
-    /// Set the width of the sidebar
-    pub fn width(mut self, width: impl Into<DefiniteLength>) -> Self {
-        self.width = width.into();
-        self
-    }
-
-    /// Set border width of the sidebar
-    pub fn border_width(mut self, border_width: impl Into<Pixels>) -> Self {
-        self.border_width = border_width.into();
-        self
     }
 
     /// Set the sidebar to be collapsible, default is true
@@ -192,25 +179,42 @@ impl RenderOnce for SidebarToggleButton {
     }
 }
 
+impl<E: Collapsible + IntoElement> Styled for Sidebar<E> {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
     fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let paddings = self.style.padding.clone();
+        self.style.padding = EdgesRefinement::default();
+
         v_flex()
             .id("sidebar")
-            .w(self.width)
             .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH))
             .flex_shrink_0()
             .h_full()
+            .w(DEFAULT_WIDTH)
             .overflow_hidden()
             .relative()
             .bg(cx.theme().sidebar)
             .text_color(cx.theme().sidebar_foreground)
             .border_color(cx.theme().sidebar_border)
             .map(|this| match self.side {
-                Side::Left => this.border_r(self.border_width),
-                Side::Right => this.border_l(self.border_width),
+                Side::Left => this.border_r_1(),
+                Side::Right => this.border_l_1(),
             })
+            .refine_style(&self.style)
             .when_some(self.header.take(), |this, header| {
-                this.child(h_flex().id("header").p_2().gap_2().child(header))
+                this.child(
+                    h_flex()
+                        .id("header")
+                        .p_3()
+                        .paddings(paddings.clone())
+                        .gap_2()
+                        .child(header),
+                )
             })
             .child(
                 v_flex().id("content").flex_1().min_h_0().child(
@@ -226,7 +230,14 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {
-                this.child(h_flex().id("footer").gap_2().p_2().child(footer))
+                this.child(
+                    h_flex()
+                        .id("footer")
+                        .gap_2()
+                        .p_3()
+                        .paddings(paddings)
+                        .child(footer),
+                )
             })
     }
 }
