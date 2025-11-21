@@ -9,7 +9,10 @@ use gpui_component::{
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
-    setting::{NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+    setting::{
+        NumberFieldOptions, RenderOptions, SettingField, SettingGroup, SettingItem, SettingPage,
+        Settings,
+    },
     text::TextView,
     v_flex,
 };
@@ -323,7 +326,7 @@ impl SettingsStory {
                 .group(SettingGroup::new().title("Links").items(vec![
                     SettingItem::new(
                         "GitHub Repository",
-                        SettingField::element(|options, _window, _cx| {
+                        SettingField::element(|options: &RenderOptions, _window, _cx| {
                             Button::new("open-url")
                                 .outline()
                                 .label("Repository...")
@@ -336,7 +339,7 @@ impl SettingsStory {
                     .description("Open the GitHub repository in your default browser."),
                     SettingItem::new(
                         "Documentation",
-                        SettingField::element(|options, _window, _cx| {
+                        SettingField::element(|options: &RenderOptions, _window, _cx| {
                             Button::new("open-url")
                                 .outline()
                                 .label("Rust Docs...")
@@ -354,7 +357,7 @@ impl SettingsStory {
                     )),
                     SettingItem::new(
                         "Website",
-                        SettingField::element(|options, _window, _cx| {
+                        SettingField::element(|options: &RenderOptions, _window, _cx| {
                             Button::new("open-url")
                                 .outline()
                                 .label("Website...")

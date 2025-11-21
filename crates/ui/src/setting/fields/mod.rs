@@ -61,7 +61,7 @@ pub enum SettingFieldType {
         options: Vec<(SharedString, SharedString)>,
     },
     Element {
-        element_render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement>,
+        element_render: Rc<dyn SettingFieldElement<Element = AnyElement>>,
     },
 }
 
@@ -108,9 +108,7 @@ impl SettingFieldType {
     }
 
     #[inline]
-    pub(super) fn element_render(
-        &self,
-    ) -> Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static> {
+    pub(super) fn element_render(&self) -> Rc<dyn SettingFieldElement<Element = AnyElement>> {
         match self {
             SettingFieldType::Element { element_render } => element_render.clone(),
             _ => unreachable!("element_render called on non-element field"),
@@ -173,16 +171,13 @@ impl SettingField<SharedString> {
     }
 
     /// Create a new setting field with the given element render function.
-    pub fn element<R, E>(element_render: R) -> Self
+    pub fn element<R>(element_render: R) -> Self
     where
-        E: IntoElement,
-        R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
+        R: SettingFieldElement + 'static,
     {
         Self::new(
             SettingFieldType::Element {
-                element_render: Rc::new(move |options, window, cx| {
-                    element_render(options, window, cx).into_any_element()
-                }),
+                element_render: Rc::new(AnySettingFieldElement(element_render)),
             },
             |_| SharedString::default(),
             |_, _| {},
