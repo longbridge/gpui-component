@@ -115,7 +115,6 @@ impl SettingPage {
             .clone();
 
         if list_state.item_count() != groups_count {
-            dbg!(groups_count);
             list_state.reset(groups_count);
         }
 
