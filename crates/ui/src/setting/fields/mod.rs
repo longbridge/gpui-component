@@ -10,6 +10,7 @@ pub(crate) use element::*;
 pub(crate) use number::*;
 pub(crate) use string::*;
 
+pub use element::SettingFieldElement;
 pub use number::NumberFieldOptions;
 
 use gpui::{AnyElement, App, IntoElement, SharedString, StyleRefinement, Styled, Window};
@@ -61,7 +62,7 @@ pub enum SettingFieldType {
         options: Vec<(SharedString, SharedString)>,
     },
     Element {
-        element_render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement>,
+        element: Rc<dyn SettingFieldElement<Element = AnyElement>>,
     },
 }
 
@@ -108,11 +109,9 @@ impl SettingFieldType {
     }
 
     #[inline]
-    pub(super) fn element_render(
-        &self,
-    ) -> Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static> {
+    pub(super) fn element(&self) -> Rc<dyn SettingFieldElement<Element = AnyElement>> {
         match self {
-            SettingFieldType::Element { element_render } => element_render.clone(),
+            SettingFieldType::Element { element } => element.clone(),
             _ => unreachable!("element_render called on non-element field"),
         }
     }
@@ -172,20 +171,34 @@ impl SettingField<SharedString> {
         Self::new(SettingFieldType::Dropdown { options }, value, set_value)
     }
 
-    /// Create a new setting field with the given element render function.
-    pub fn element<R, E>(element_render: R) -> Self
+    /// Create a new setting field with the given custom element that implements [`SettingFieldElement`] trait.
+    ///
+    /// See also [`SettingField::render`] for simply building with a render closure.
+    pub fn element<E>(element: E) -> Self
     where
-        E: IntoElement,
-        R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
+        E: SettingFieldElement + 'static,
     {
         Self::new(
             SettingFieldType::Element {
-                element_render: Rc::new(move |options, window, cx| {
-                    element_render(options, window, cx).into_any_element()
-                }),
+                element: Rc::new(AnySettingFieldElement(element)),
             },
             |_| SharedString::default(),
             |_, _| {},
+        )
+    }
+
+    /// Create a new setting field with the given element render closure.
+    ///
+    /// See also [`SettingField::element`] for building with a custom field for more complex scenarios.
+    pub fn render<E, R>(element_render: R) -> Self
+    where
+        E: IntoElement + 'static,
+        R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
+    {
+        Self::element(
+            move |options: &RenderOptions, window: &mut Window, cx: &mut App| {
+                (element_render)(options, window, cx).into_any_element()
+            },
         )
     }
 }
