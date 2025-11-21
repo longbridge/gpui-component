@@ -550,7 +550,7 @@ where
                 }
             })
             .when(scrollbar_visible, |this| {
-                this.child(Scrollbar::uniform_scroll(&scroll_state, &scroll_handle))
+                this.child(Scrollbar::vertical(&scroll_state, &scroll_handle))
             })
     }
 }

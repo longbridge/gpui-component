@@ -359,14 +359,6 @@ impl Scrollbar {
         Self::new(ScrollbarAxis::Vertical, state, scroll_handle)
     }
 
-    /// Create vertical scrollbar for uniform list.
-    pub fn uniform_scroll(
-        state: &ScrollbarState,
-        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
-    ) -> Self {
-        Self::new(ScrollbarAxis::Vertical, state, scroll_handle)
-    }
-
     /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
     pub fn scrollbar_show(mut self, scrollbar_show: ScrollbarShow) -> Self {
         self.scrollbar_show = Some(scrollbar_show);
