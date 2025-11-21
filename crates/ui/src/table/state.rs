@@ -1214,11 +1214,8 @@ where
                 .bottom_0()
                 .w(Scrollbar::width())
                 .child(
-                    Scrollbar::uniform_scroll(
-                        &self.vertical_scroll_state,
-                        &self.vertical_scroll_handle,
-                    )
-                    .max_fps(60),
+                    Scrollbar::vertical(&self.vertical_scroll_state, &self.vertical_scroll_handle)
+                        .max_fps(60),
                 ),
         )
     }
