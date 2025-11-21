@@ -1,14 +1,14 @@
 use gpui::{
-    list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Window,
+    div, list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
+    ListAlignment, ListState, ParentElement as _, SharedString, Styled, Window,
 };
 use rust_i18n::t;
 
 use crate::{
     button::{Button, ButtonVariants},
-    divider::Divider,
     h_flex,
     label::Label,
+    scroll::{Scrollbar, ScrollbarState},
     setting::{settings::SettingsState, RenderOptions, SettingGroup},
     v_flex, ActiveTheme, IconName, Sizable,
 };
@@ -100,11 +100,16 @@ impl SettingPage {
             .collect::<Vec<_>>();
         let groups_count = groups.len();
 
-        let list_state = window
+        let (scroll_state, list_state) = window
             .use_keyed_state(
                 SharedString::from(format!("list-state:{}", ix)),
                 cx,
-                |_, _| gpui::ListState::new(groups_count, gpui::ListAlignment::Top, px(0.)),
+                |_, _| {
+                    (
+                        ScrollbarState::default(),
+                        ListState::new(groups_count, ListAlignment::Top, px(100.)),
+                    )
+                },
             )
             .read(cx)
             .clone();
@@ -123,12 +128,13 @@ impl SettingPage {
 
         v_flex()
             .id(ix)
-            .p_4()
             .size_full()
-            .overflow_scroll()
             .child(
                 v_flex()
+                    .p_4()
                     .gap_3()
+                    .border_b_1()
+                    .border_color(cx.theme().border)
                     .child(h_flex().justify_between().child(self.title.clone()).when(
                         self.is_resettable(cx),
                         |this| {
@@ -153,22 +159,37 @@ impl SettingPage {
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground),
                         )
-                    })
-                    .child(Divider::horizontal()),
+                    }),
             )
             .child(
-                list(list_state.clone(), {
-                    let query = query.clone();
-                    let options = *options;
-                    move |ix, window, cx| {
-                        let group = groups[ix].clone();
-                        group
-                            .pt_6()
-                            .render(ix, &query, &options, window, cx)
-                            .into_any_element()
-                    }
-                })
-                .size_full(),
+                div()
+                    .px_4()
+                    .relative()
+                    .flex_1()
+                    .w_full()
+                    .child(
+                        list(list_state.clone(), {
+                            let query = query.clone();
+                            let options = *options;
+                            move |ix, window, cx| {
+                                let group = groups[ix].clone();
+                                group
+                                    .py_4()
+                                    .render(ix, &query, &options, window, cx)
+                                    .into_any_element()
+                            }
+                        })
+                        .size_full(),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .child(Scrollbar::vertical(&scroll_state, &list_state)),
+                    ),
             )
     }
 }
