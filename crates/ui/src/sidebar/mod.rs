@@ -5,9 +5,8 @@ use crate::{
     v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, EdgesRefinement,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
-    Styled, Window,
+    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, InteractiveElement as _,
+    IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window,
 };
 use std::rc::Rc;
 
@@ -187,15 +186,13 @@ impl<E: Collapsible + IntoElement> Styled for Sidebar<E> {
 
 impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
     fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let paddings = self.style.padding.clone();
-        self.style.padding = EdgesRefinement::default();
-
         v_flex()
             .id("sidebar")
-            .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH))
+            .w(DEFAULT_WIDTH)
             .flex_shrink_0()
             .h_full()
-            .w(DEFAULT_WIDTH)
+            .p_3()
+            .gap_3()
             .overflow_hidden()
             .relative()
             .bg(cx.theme().sidebar)
@@ -206,38 +203,25 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                 Side::Right => this.border_l_1(),
             })
             .refine_style(&self.style)
+            .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH).p_2().gap_2())
             .when_some(self.header.take(), |this, header| {
-                this.child(
-                    h_flex()
-                        .id("header")
-                        .p_3()
-                        .paddings(paddings.clone())
-                        .gap_2()
-                        .child(header),
-                )
+                this.child(h_flex().id("header").gap_2().child(header))
             })
             .child(
                 v_flex().id("content").flex_1().min_h_0().child(
-                    div()
+                    v_flex()
+                        .gap_3()
                         .children(
                             self.content
                                 .into_iter()
                                 .enumerate()
                                 .map(|(ix, c)| div().id(ix).child(c.collapsed(self.collapsed))),
                         )
-                        .gap_2()
                         .scrollable(ScrollbarAxis::Vertical),
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {
-                this.child(
-                    h_flex()
-                        .id("footer")
-                        .gap_2()
-                        .p_3()
-                        .paddings(paddings)
-                        .child(footer),
-                )
+                this.child(h_flex().id("footer").gap_2().child(footer))
             })
     }
 }

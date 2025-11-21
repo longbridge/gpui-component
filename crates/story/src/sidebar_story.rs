@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use gpui::{
     Action, App, AppContext, ClickEvent, Context, Entity, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, prelude::FluentBuilder, relative,
+    Render, SharedString, Styled, Window, div, prelude::FluentBuilder, px, relative,
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Side, Sizable,
+    ActiveTheme, Icon, IconName, Side, Sizable, StyledExt,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     divider::Divider,
@@ -280,9 +280,10 @@ impl Render for SidebarStory {
             .child(
                 Sidebar::new(self.side)
                     .collapsed(self.collapsed)
+                    .w(px(220.))
+                    .p_3()
                     .header(
                         SidebarHeader::new()
-                            .w_full()
                             .child(
                                 div()
                                     .flex()
