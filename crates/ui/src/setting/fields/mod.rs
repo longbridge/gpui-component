@@ -173,7 +173,7 @@ impl SettingField<SharedString> {
 
     /// Create a new setting field with the given custom element that implements [`SettingFieldElement`] trait.
     ///
-    /// See also [`SettingField::render`] for simplying building with a render closure.
+    /// See also [`SettingField::render`] for simply building with a render closure.
     pub fn element<E>(element: E) -> Self
     where
         E: SettingFieldElement + 'static,
