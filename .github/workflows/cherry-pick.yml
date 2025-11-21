@@ -1,0 +1,41 @@
+name: CherryPick Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "The commit hash to cherry-pick"
+        required: true
+        type: string
+      traget_branch:
+        description: "The target branch to cherry-pick into"
+        required: true
+        type: string
+
+jobs:
+  cherry_pick:
+    name: Cherry Pick Commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Authenticate as GitHub App
+        id: auth
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CI_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Cherry Pick Commit
+        run: |
+          git config user.name "Copilot"
+          git config user.email "198982749+Copilot@users.noreply.github.com"
+
+      - name: Execute Cherry Pick
+        env:
+          GITHUB_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          git fetch origin
+          git checkout ${{ inputs.traget_branch }}
+          git cherry-pick ${{ inputs.commit }}
+          git push origin ${{ inputs.traget_branch }}
