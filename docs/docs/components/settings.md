@@ -174,12 +174,12 @@ SettingItem::new("Title", SettingField::switch(...))
     .description("Description text")
 ```
 
-### Custom Element Item
+### Custom Item with a render closure
 
-You can create a fully custom setting item using `SettingItem::element`:
+You can create a fully custom setting item using `SettingItem::render`:
 
 ```rust
-SettingItem::element(|options, _, _| {
+SettingItem::render(|options, _, _| {
     h_flex()
         .w_full()
         .justify_between()
@@ -324,12 +324,14 @@ SettingItem::new(
 )
 ```
 
-### Custom Element Field
+### Custom Field by Render Closure
+
+The `SettingField::render` method allows you to create a custom field using a closure that returns an element.
 
 ```rust
 SettingItem::new(
     "GitHub Repository",
-    SettingField::element(|options, _window, _cx| {
+    SettingField::render(|options, _window, _cx| {
         Button::new("open-url")
             .outline()
             .label("Repository...")
@@ -337,6 +339,48 @@ SettingItem::new(
             .on_click(|_, _window, cx| {
                 cx.open_url("https://github.com/example/repo");
             })
+    })
+)
+```
+
+### Custom Field Element
+
+You may have a complex field that you want to reuse, you may want split the element into a separate struct to do the complex logic.
+
+In this case, the [SettingFieldElement] trait can help you to create a custom field element.
+
+````rust
+use gpui_component::setting::{SettingFieldElement, RenderOptions};
+
+struct OpenURLSettingField {
+    label: SharedString,
+    url: SharedString,
+}
+
+impl SettingFieldElement for OpenURLSettingField {
+    type Element = Button;
+
+    fn render_field(&self, options: &RenderOptions, _: &mut Window, _: &mut App) -> Self::Element {
+        let url = self.url.clone();
+        Button::new("open-url")
+            .outline()
+            .label(self.label.clone())
+            .with_size(options.size)
+            .on_click(move |_, _window, cx| {
+                cx.open_url(url.as_str());
+            })
+    }
+}
+```
+
+Then use it in the setting item:
+
+```rust
+SettingItem::new(
+    "GitHub Repository",
+    SettingField::element(OpenURLSettingField {
+        label: "Repository...".into(),
+        url: "https://github.com/longbridge/gpui-component".into(),
     })
 )
 ```
@@ -453,6 +497,8 @@ Settings::new("app-settings")
 [SettingGroup]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.SettingGroup.html
 [SettingItem]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.SettingItem.html
 [SettingField]: https://docs.rs/gpui-component/latest/gpui_component/setting/enum.SettingField.html
+[SettingFieldElement]: https://docs.rs/gpui-component/latest/gpui_component/setting/trait.SettingFieldElement.html
 [NumberFieldOptions]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.NumberFieldOptions.html
 [GroupBox]: ./group_box.md
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html
+````

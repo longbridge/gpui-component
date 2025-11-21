@@ -10,8 +10,8 @@ use gpui_component::{
     h_flex,
     label::Label,
     setting::{
-        NumberFieldOptions, RenderOptions, SettingField, SettingGroup, SettingItem, SettingPage,
-        Settings,
+        NumberFieldOptions, RenderOptions, SettingField, SettingFieldElement, SettingGroup,
+        SettingItem, SettingPage, Settings,
     },
     text::TextView,
     v_flex,
@@ -57,6 +57,34 @@ pub struct SettingsStory {
     focus_handle: FocusHandle,
     group_variant: GroupBoxVariant,
     size: Size,
+}
+
+struct OpenURLSettingField {
+    label: SharedString,
+    url: SharedString,
+}
+
+impl OpenURLSettingField {
+    fn new(label: impl Into<SharedString>, url: impl Into<SharedString>) -> Self {
+        Self {
+            label: label.into(),
+            url: url.into(),
+        }
+    }
+}
+
+impl SettingFieldElement for OpenURLSettingField {
+    type Element = Button;
+    fn render_field(&self, options: &RenderOptions, _: &mut Window, _: &mut App) -> Self::Element {
+        let url = self.url.clone();
+        Button::new("open-url")
+            .outline()
+            .label(self.label.clone())
+            .with_size(options.size)
+            .on_click(move |_, _window, cx| {
+                cx.open_url(url.as_str());
+            })
+    }
 }
 
 impl super::Story for SettingsStory {
@@ -235,7 +263,7 @@ impl SettingsStory {
                             .description("Adjust the font size for better readability."),
                         ),
                     SettingGroup::new().title("Other").items(vec![
-                        SettingItem::element(|options, _, _| {
+                        SettingItem::render(|options, _, _| {
                             h_flex()
                                 .w_full()
                                 .justify_between()
@@ -304,7 +332,7 @@ impl SettingsStory {
             SettingPage::new("About")
                 .resettable(resettable)
                 .group(
-                    SettingGroup::new().item(SettingItem::element(|_options, _, cx| {
+                    SettingGroup::new().item(SettingItem::render(|_options, _, cx| {
                         v_flex()
                             .gap_3()
                             .w_full()
@@ -324,51 +352,41 @@ impl SettingsStory {
                     })),
                 )
                 .group(SettingGroup::new().title("Links").items(vec![
-                    SettingItem::new(
-                        "GitHub Repository",
-                        SettingField::element(|options: &RenderOptions, _window, _cx| {
-                            Button::new("open-url")
-                                .outline()
-                                .label("Repository...")
-                                .with_size(options.size)
-                                .on_click(|_, _window, cx| {
-                                    cx.open_url("https://github.com/longbridge/gpui-component");
-                                })
-                        }),
-                    )
-                    .description("Open the GitHub repository in your default browser."),
-                    SettingItem::new(
-                        "Documentation",
-                        SettingField::element(|options: &RenderOptions, _window, _cx| {
-                            Button::new("open-url")
-                                .outline()
-                                .label("Rust Docs...")
-                                .with_size(options.size)
-                                .on_click(|_, _window, cx| {
-                                    cx.open_url("https://docs.rs/gpui-component");
-                                })
-                        }),
-                    )
-                    .description(TextView::markdown(
-                        "desc",
-                        "Rust doc for the `gpui-component` crate.",
-                        window,
-                        cx,
-                    )),
-                    SettingItem::new(
-                        "Website",
-                        SettingField::element(|options: &RenderOptions, _window, _cx| {
-                            Button::new("open-url")
-                                .outline()
-                                .label("Website...")
-                                .with_size(options.size)
-                                .on_click(|_, _window, cx| {
-                                    cx.open_url("https://longbridge.github.io/gpui-component/");
-                                })
-                        }),
-                    )
-                    .description("Official website and documentation for the GPUI Component."),
-                ])),
+                        SettingItem::new(
+                            "GitHub Repository",
+                            SettingField::element(OpenURLSettingField::new(
+                                "Repository...",
+                                "https://github.com/longbridge/gpui-component",
+                            )),
+                        )
+                        .description("Open the GitHub repository in your default browser."),
+                        SettingItem::new(
+                            "Documentation",
+                            SettingField::element(OpenURLSettingField::new(
+                                "Rust Docs...",
+                                "https://docs.rs/gpui-component"
+                            )),
+                        )
+                        .description(TextView::markdown(
+                            "desc",
+                            "Rust doc for the `gpui-component` crate.",
+                            window,
+                            cx,
+                        )),
+                        SettingItem::new(
+                            "Website",
+                            SettingField::render(|options, _window, _cx| {
+                                Button::new("open-url")
+                                    .outline()
+                                    .label("Website...")
+                                    .with_size(options.size)
+                                    .on_click(|_, _window, cx| {
+                                        cx.open_url("https://longbridge.github.io/gpui-component/");
+                                    })
+                            }),
+                        )
+                        .description("Official website and documentation for the GPUI Component."),
+                    ])),
         ]
     }
 }

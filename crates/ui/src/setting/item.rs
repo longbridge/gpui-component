@@ -44,8 +44,8 @@ impl SettingItem {
         }
     }
 
-    /// Create a new custom element setting item.
-    pub fn element<R, E>(render: R) -> Self
+    /// Create a new custom element setting item with a render closure.
+    pub fn render<R, E>(render: R) -> Self
     where
         E: IntoElement,
         R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
@@ -140,16 +140,14 @@ impl SettingItem {
             t if t == TypeId::of::<String>() && field_type.is_dropdown() => {
                 Box::new(DropdownField::<String>::new(field_type.dropdown_options()))
             }
-            _ if field_type.is_element() => {
-                Box::new(ElementField::new(field_type.element_render()))
-            }
+            _ if field_type.is_element() => Box::new(ElementField::new(field_type.element())),
             _ => unimplemented!("Unsupported setting type: {}", field.deref().type_name()),
         };
 
         renderer.render(field, &options, &style, window, cx)
     }
 
-    pub(super) fn render(
+    pub(super) fn render_item(
         self,
         ix: usize,
         options: &RenderOptions,
