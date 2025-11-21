@@ -194,7 +194,6 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
             .w(DEFAULT_WIDTH)
             .flex_shrink_0()
             .h_full()
-            .gap_3()
             .overflow_hidden()
             .relative()
             .bg(cx.theme().sidebar)

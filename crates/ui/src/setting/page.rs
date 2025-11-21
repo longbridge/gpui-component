@@ -1,6 +1,6 @@
 use gpui::{
-    list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Window,
+    div, list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
+    ListAlignment, ListState, ParentElement as _, SharedString, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -9,8 +9,9 @@ use crate::{
     divider::Divider,
     h_flex,
     label::Label,
+    scroll::{Scrollbar, ScrollbarState},
     setting::{settings::SettingsState, RenderOptions, SettingGroup},
-    v_flex, ActiveTheme, IconName, Sizable,
+    v_flex, ActiveTheme, IconName, Sizable, StyledExt,
 };
 
 /// A setting page that can contain multiple setting groups.
@@ -100,16 +101,22 @@ impl SettingPage {
             .collect::<Vec<_>>();
         let groups_count = groups.len();
 
-        let list_state = window
+        let (scroll_state, list_state) = window
             .use_keyed_state(
                 SharedString::from(format!("list-state:{}", ix)),
                 cx,
-                |_, _| gpui::ListState::new(groups_count, gpui::ListAlignment::Top, px(0.)),
+                |_, _| {
+                    (
+                        ScrollbarState::default(),
+                        ListState::new(groups_count, ListAlignment::Top, px(100.)),
+                    )
+                },
             )
             .read(cx)
             .clone();
 
         if list_state.item_count() != groups_count {
+            dbg!(groups_count);
             list_state.reset(groups_count);
         }
 
@@ -125,7 +132,7 @@ impl SettingPage {
             .id(ix)
             .p_4()
             .size_full()
-            .overflow_scroll()
+            .relative()
             .child(
                 v_flex()
                     .gap_3()
@@ -157,18 +164,30 @@ impl SettingPage {
                     .child(Divider::horizontal()),
             )
             .child(
-                list(list_state.clone(), {
-                    let query = query.clone();
-                    let options = *options;
-                    move |ix, window, cx| {
-                        let group = groups[ix].clone();
-                        group
-                            .pt_6()
-                            .render(ix, &query, &options, window, cx)
-                            .into_any_element()
-                    }
-                })
-                .size_full(),
+                div().flex_1().w_full().child(
+                    list(list_state.clone(), {
+                        let query = query.clone();
+                        let options = *options;
+                        move |ix, window, cx| {
+                            let group = groups[ix].clone();
+                            group
+                                .pt_6()
+                                .render(ix, &query, &options, window, cx)
+                                .into_any_element()
+                        }
+                    })
+                    .debug_red()
+                    .size_full(),
+                ),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .right_0()
+                    .bottom_0()
+                    .child(Scrollbar::vertical(&scroll_state, &list_state)),
             )
     }
 }

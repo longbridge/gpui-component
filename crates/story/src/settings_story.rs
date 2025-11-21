@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Axis, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window,
+    ParentElement as _, Render, SharedString, Styled, Window, px,
 };
 
 use gpui_component::{
@@ -98,6 +98,10 @@ impl super::Story for SettingsStory {
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
+    }
+
+    fn paddings() -> gpui::Pixels {
+        px(0.)
     }
 }
 

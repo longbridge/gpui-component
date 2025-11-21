@@ -4,11 +4,11 @@ use crate::{
     resizable::{h_resizable, resizable_panel},
     setting::{SettingGroup, SettingPage},
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
-    IconName, Sizable, Size,
+    IconName, Sizable, Size, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, Axis, ElementId, Entity,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, Styled, Window,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, StyleRefinement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -31,6 +31,7 @@ pub struct Settings {
     group_variant: GroupBoxVariant,
     size: Size,
     sidebar_width: Pixels,
+    sidebar_style: StyleRefinement,
 }
 
 impl Settings {
@@ -42,6 +43,7 @@ impl Settings {
             group_variant: GroupBoxVariant::default(),
             size: Size::default(),
             sidebar_width: px(250.0),
+            sidebar_style: StyleRefinement::default(),
         }
     }
 
@@ -68,6 +70,12 @@ impl Settings {
     /// All setting groups will use this variant unless overridden individually.
     pub fn with_group_variant(mut self, variant: GroupBoxVariant) -> Self {
         self.group_variant = variant;
+        self
+    }
+
+    /// Set the style refinement for the sidebar.
+    pub fn sidebar_style(mut self, style: &StyleRefinement) -> Self {
+        self.sidebar_style = style.clone();
         self
     }
 
@@ -138,6 +146,7 @@ impl Settings {
         Sidebar::left()
             .w(relative(1.))
             .border_0()
+            .refine_style(&self.sidebar_style)
             .collapsed(false)
             .header(
                 div()
@@ -145,57 +154,52 @@ impl Settings {
                     .child(Input::new(&search_input).prefix(IconName::Search)),
             )
             .child(
-                SidebarMenu::new()
-                    .p_2()
-                    .children(pages.iter().enumerate().map(|(page_ix, page)| {
-                        let is_page_active =
-                            selected_index.page_ix == page_ix && selected_index.group_ix.is_none();
-                        SidebarMenuItem::new(page.title.clone())
-                            .default_open(page.default_open)
-                            .active(is_page_active)
-                            .on_click({
-                                let state = state.clone();
-                                move |_, _, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.selected_index = SelectIndex {
-                                            page_ix,
-                                            ..Default::default()
-                                        };
-                                        cx.notify();
-                                    })
-                                }
-                            })
-                            .when(page.groups.len() > 1, |this| {
-                                this.children(
-                                    page.groups
-                                        .iter()
-                                        .filter(|g| g.title.is_some())
-                                        .enumerate()
-                                        .map(|(group_ix, group)| {
-                                            let is_active = selected_index.page_ix == page_ix
-                                                && selected_index.group_ix == Some(group_ix);
-                                            let title = group.title.clone().unwrap_or_default();
+                SidebarMenu::new().children(pages.iter().enumerate().map(|(page_ix, page)| {
+                    let is_page_active =
+                        selected_index.page_ix == page_ix && selected_index.group_ix.is_none();
+                    SidebarMenuItem::new(page.title.clone())
+                        .default_open(page.default_open)
+                        .active(is_page_active)
+                        .on_click({
+                            let state = state.clone();
+                            move |_, _, cx| {
+                                state.update(cx, |state, cx| {
+                                    state.selected_index = SelectIndex {
+                                        page_ix,
+                                        ..Default::default()
+                                    };
+                                    cx.notify();
+                                })
+                            }
+                        })
+                        .when(page.groups.len() > 1, |this| {
+                            this.children(
+                                page.groups
+                                    .iter()
+                                    .filter(|g| g.title.is_some())
+                                    .enumerate()
+                                    .map(|(group_ix, group)| {
+                                        let is_active = selected_index.page_ix == page_ix
+                                            && selected_index.group_ix == Some(group_ix);
+                                        let title = group.title.clone().unwrap_or_default();
 
-                                            SidebarMenuItem::new(title).active(is_active).on_click(
-                                                {
-                                                    let state = state.clone();
-                                                    move |_, _, cx| {
-                                                        state.update(cx, |state, cx| {
-                                                            state.selected_index = SelectIndex {
-                                                                page_ix,
-                                                                group_ix: Some(group_ix),
-                                                            };
-                                                            state.deferred_scroll_group_ix =
-                                                                Some(group_ix);
-                                                            cx.notify();
-                                                        })
-                                                    }
-                                                },
-                                            )
-                                        }),
-                                )
-                            })
-                    })),
+                                        SidebarMenuItem::new(title).active(is_active).on_click({
+                                            let state = state.clone();
+                                            move |_, _, cx| {
+                                                state.update(cx, |state, cx| {
+                                                    state.selected_index = SelectIndex {
+                                                        page_ix,
+                                                        group_ix: Some(group_ix),
+                                                    };
+                                                    state.deferred_scroll_group_ix = Some(group_ix);
+                                                    cx.notify();
+                                                })
+                                            }
+                                        })
+                                    }),
+                            )
+                        })
+                })),
             )
     }
 }
