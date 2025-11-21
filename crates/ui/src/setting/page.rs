@@ -6,12 +6,11 @@ use rust_i18n::t;
 
 use crate::{
     button::{Button, ButtonVariants},
-    divider::Divider,
     h_flex,
     label::Label,
     scroll::{Scrollbar, ScrollbarState},
     setting::{settings::SettingsState, RenderOptions, SettingGroup},
-    v_flex, ActiveTheme, IconName, Sizable, StyledExt,
+    v_flex, ActiveTheme, IconName, Sizable,
 };
 
 /// A setting page that can contain multiple setting groups.
@@ -130,12 +129,13 @@ impl SettingPage {
 
         v_flex()
             .id(ix)
-            .p_4()
             .size_full()
-            .relative()
             .child(
                 v_flex()
+                    .p_4()
                     .gap_3()
+                    .border_b_1()
+                    .border_color(cx.theme().border)
                     .child(h_flex().justify_between().child(self.title.clone()).when(
                         self.is_resettable(cx),
                         |this| {
@@ -160,34 +160,37 @@ impl SettingPage {
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground),
                         )
-                    })
-                    .child(Divider::horizontal()),
-            )
-            .child(
-                div().flex_1().w_full().child(
-                    list(list_state.clone(), {
-                        let query = query.clone();
-                        let options = *options;
-                        move |ix, window, cx| {
-                            let group = groups[ix].clone();
-                            group
-                                .pt_6()
-                                .render(ix, &query, &options, window, cx)
-                                .into_any_element()
-                        }
-                    })
-                    .debug_red()
-                    .size_full(),
-                ),
+                    }),
             )
             .child(
                 div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .child(Scrollbar::vertical(&scroll_state, &list_state)),
+                    .px_4()
+                    .relative()
+                    .flex_1()
+                    .w_full()
+                    .child(
+                        list(list_state.clone(), {
+                            let query = query.clone();
+                            let options = *options;
+                            move |ix, window, cx| {
+                                let group = groups[ix].clone();
+                                group
+                                    .py_4()
+                                    .render(ix, &query, &options, window, cx)
+                                    .into_any_element()
+                            }
+                        })
+                        .size_full(),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .child(Scrollbar::vertical(&scroll_state, &list_state)),
+                    ),
             )
     }
 }
