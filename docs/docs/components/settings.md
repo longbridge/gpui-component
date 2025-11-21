@@ -454,5 +454,5 @@ Settings::new("app-settings")
 [SettingItem]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.SettingItem.html
 [SettingField]: https://docs.rs/gpui-component/latest/gpui_component/setting/enum.SettingField.html
 [NumberFieldOptions]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.NumberFieldOptions.html
-[GroupBox]: ./group_box.md
+[GroupBox]: ./group-box.md
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html
