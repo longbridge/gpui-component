@@ -398,6 +398,7 @@ impl RenderOnce for ColorPicker {
                     .items_center()
                     .input_text_size(self.size)
                     .line_height(relative(1.))
+                    .rounded(cx.theme().radius)
                     .refine_style(&self.style)
                     .when_some(self.icon.clone(), |this, icon| {
                         this.child(
@@ -417,7 +418,6 @@ impl RenderOnce for ColorPicker {
                                 .border_1()
                                 .m_1()
                                 .border_color(cx.theme().input)
-                                .rounded(cx.theme().radius)
                                 .shadow_xs()
                                 .rounded(cx.theme().radius)
                                 .overflow_hidden()
@@ -470,7 +470,6 @@ impl RenderOnce for ColorPicker {
                                     .border_1()
                                     .border_color(cx.theme().border)
                                     .shadow_lg()
-                                    .rounded(cx.theme().radius)
                                     .bg(cx.theme().background)
                                     .child(self.render_colors(window, cx))
                                     .on_mouse_up_out(
