@@ -78,6 +78,7 @@ pub struct ThemeRegistry {
     themes_dir: PathBuf,
     default_themes: HashMap<ThemeMode, Rc<ThemeConfig>>,
     themes: HashMap<SharedString, Rc<ThemeConfig>>,
+    built_in_themes: Vec<Rc<ThemeConfig>>,
     has_custom_themes: bool,
 }
 
@@ -90,6 +91,67 @@ impl ThemeRegistry {
 
     pub fn global_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<Self>()
+    }
+
+    /// Registers a new set of themes by adding each theme from the provided `ThemeSet`
+    /// into the internal storage of built-in themes.
+    ///
+    /// # Parameters
+    /// - `theme_set`: A `ThemeSet` that contains multiple themes to be registered.
+    ///
+    /// # Behavior
+    /// - Iterates over the themes in the provided `ThemeSet`.
+    /// - Wraps each theme in a reference-counted pointer (`Rc`) for shared ownership.
+    /// - Pushes each wrapped theme into the `built_in_themes` collection.
+    ///
+    /// # Example
+    /// ```
+    /// let mut theme_manager = ThemeManager::new();
+    /// let theme_set = ThemeSet::load_default(); // Assume ThemeSet::load_default loads a default set of themes
+    /// theme_manager.register_theme_set(theme_set);
+    /// ```
+    ///
+    /// # Note
+    /// - The `ThemeSet` struct is expected to provide a `themes` field containing
+    ///   an iterable collection of themes.
+    /// - This function assumes `self.built_in_themes` is initialized prior to calling
+    ///   this method.
+    ///
+    /// # Safety
+    /// - No specific safety concerns, but ensure that themes in the `ThemeSet` do not
+    ///   contain invalid or malformed data.
+    pub fn register_theme_set(&mut self, theme_set: ThemeSet) {
+        for theme in theme_set.themes {
+            self.built_in_themes.push(Rc::new(theme));
+        }
+    }
+
+    /// Registers a new theme to the list of built-in themes.
+    ///
+    /// # Arguments
+    ///
+    /// * `theme` - A `ThemeConfig` instance representing the new theme to be added.
+    ///
+    /// # Behavior
+    ///
+    /// This function takes ownership of the provided `ThemeConfig` instance, wraps it in
+    /// a reference-counted pointer (`Rc`), and appends it to the `built_in_themes` list.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let mut app = MyApp::new();
+    /// let custom_theme = ThemeConfig::new("DarkMode", ...); // Construct theme as needed.
+    /// app.register_theme(custom_theme);
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// The theme is stored as an `Rc<ThemeConfig>`, allowing it to be shared safely.
+    /// Ensure that any modifications to the `ThemeConfig` after registration are handled
+    /// carefully to maintain consistency across its uses.
+    pub fn register_theme(&mut self, theme: ThemeConfig) {
+        self.built_in_themes.push(Rc::new(theme));
     }
 
     /// Watch themes directory.
@@ -246,6 +308,10 @@ impl ThemeRegistry {
         for theme in self.default_themes.values() {
             self.themes
                 .insert(theme.name.clone(), Rc::new((**theme).clone()));
+        }
+
+        for theme in self.built_in_themes.iter() {
+            self.themes.insert(theme.name.clone(), Rc::clone(theme));
         }
 
         for theme in themes.iter() {
