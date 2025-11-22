@@ -104,13 +104,6 @@ impl ThemeRegistry {
     /// - Wraps each theme in a reference-counted pointer (`Rc`) for shared ownership.
     /// - Pushes each wrapped theme into the `built_in_themes` collection.
     ///
-    /// # Example
-    /// ```
-    /// let mut theme_manager = ThemeManager::new();
-    /// let theme_set = ThemeSet::load_default(); // Assume ThemeSet::load_default loads a default set of themes
-    /// theme_manager.register_theme_set(theme_set);
-    /// ```
-    ///
     /// # Note
     /// - The `ThemeSet` struct is expected to provide a `themes` field containing
     ///   an iterable collection of themes.
@@ -136,14 +129,6 @@ impl ThemeRegistry {
     ///
     /// This function takes ownership of the provided `ThemeConfig` instance, wraps it in
     /// a reference-counted pointer (`Rc`), and appends it to the `built_in_themes` list.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let mut app = MyApp::new();
-    /// let custom_theme = ThemeConfig::new("DarkMode", ...); // Construct theme as needed.
-    /// app.register_theme(custom_theme);
-    /// ```
     ///
     /// # Notes
     ///
