@@ -1,11 +1,3 @@
----
-name: Pull Request
-about: Submit a pull request to fix a bug or add a feature.
-title: "[component name]: Fix [short description]"
-labels: enhancement, review-needed
-assignees:
----
-
 Closes #[issue number]
 
 ## Description
