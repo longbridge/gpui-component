@@ -2,16 +2,17 @@ use std::{borrow::Cow, rc::Rc};
 
 use chrono::{Datelike, Local, NaiveDate};
 use gpui::{
-    prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, ElementId, Empty, Entity,
-    EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
+    relative,
 };
 use rust_i18n::t;
 
 use crate::{
+    ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size, StyledExt as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size,
-    StyledExt as _,
+    h_flex, v_flex,
 };
 
 use super::utils::days_in_month;
@@ -543,7 +544,7 @@ impl Calendar {
         offset_month: usize,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         let state = self.state.read(cx);
         let (_, month) = state.offset_year_month(offset_month);
         let day = d.day();
@@ -561,7 +562,7 @@ impl Calendar {
         let date_id: SharedString = format!("{}_{}", date.format("%Y-%m-%d"), offset_month).into();
 
         self.item_button(
-            date_id,
+            date_id.clone(),
             day.to_string(),
             is_active,
             is_in_range,
@@ -734,7 +735,7 @@ impl Calendar {
         disabled: bool,
         _: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement + Styled + StatefulInteractiveElement {
+    ) -> Stateful<Div> {
         h_flex()
             .id(id.into())
             .map(|this| match self.size {
@@ -815,12 +816,7 @@ impl Calendar {
             )
     }
 
-    fn render_week(
-        &self,
-        week: impl Into<SharedString>,
-        _: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
+    fn render_week(&self, week: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> Div {
         h_flex()
             .map(|this| match self.size {
                 Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
