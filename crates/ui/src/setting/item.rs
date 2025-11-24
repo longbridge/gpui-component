@@ -1,17 +1,18 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, Axis, InteractiveElement as _, IntoElement,
-    ParentElement, SharedString, Styled, Window,
+    AnyElement, App, Axis, Div, InteractiveElement as _, IntoElement, ParentElement, SharedString,
+    Stateful, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, ops::Deref, rc::Rc};
 
 use crate::{
+    ActiveTheme as _, AxisExt, StyledExt as _,
     label::Label,
     setting::{
-        fields::{BoolField, DropdownField, NumberField, SettingFieldRender, StringField},
         AnySettingField, ElementField, RenderOptions,
+        fields::{BoolField, DropdownField, NumberField, SettingFieldRender, StringField},
     },
     text::Text,
-    v_flex, ActiveTheme as _, AxisExt, StyledExt as _,
+    v_flex,
 };
 
 /// Setting item.
@@ -153,7 +154,7 @@ impl SettingItem {
         options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         div()
             .id(SharedString::from(format!("item-{}", ix)))
             .w_full()

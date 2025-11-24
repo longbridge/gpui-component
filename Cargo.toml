@@ -17,6 +17,10 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+publish = false
+edition = "2024"
+
 [workspace.dependencies]
 gpui-component = { path = "crates/ui", version = "0.4.1" }
 gpui-component-macros = { path = "crates/macros", version = "0.4.1" }

@@ -5,21 +5,21 @@ use std::{
 };
 
 use crate::{
-    h_flex,
+    ActiveTheme, Icon, IconName, h_flex,
     history::{History, HistoryItem},
     scroll::{Scrollbar, ScrollbarShow, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName,
+    v_flex,
 };
 
 use super::{
     DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, size, AnyElement, App, AppContext, Bounds,
-    Context, DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
-    Window,
+    AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty,
+    EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
+    MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Size,
+    StatefulInteractiveElement, Styled, WeakEntity, Window, actions, canvas, div,
+    prelude::FluentBuilder, px, size,
 };
 
 actions!(tiles, [Undo, Redo]);
@@ -1030,7 +1030,7 @@ impl Tiles {
         item: &TileItem,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> Div {
         let entity_id = cx.entity_id();
         let item_id = item.id;
         let panel_view = item.panel.view();

@@ -1,18 +1,19 @@
 use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
+    ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
     actions::{Cancel, SelectDown, SelectUp},
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
     scroll::{ScrollableMask, Scrollbar, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
+    v_flex,
 };
 use gpui::{
-    canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, ClickEvent,
-    Context, Div, DragMoveEvent, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Render, ScrollStrategy, SharedString, StatefulInteractiveElement as _, Styled, Task,
-    UniformListScrollHandle, Window,
+    AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, canvas, div,
+    prelude::FluentBuilder, px, uniform_list,
 };
 
 use super::*;
@@ -791,12 +792,7 @@ where
     /// The children must be one by one items.
     /// Because the horizontal scroll handle will use the child_item_bounds to
     /// calculate the item position for itself's `scroll_to_item` method.
-    fn render_th(
-        &self,
-        col_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render_th(&self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let entity_id = cx.entity_id();
         let col_group = self.col_groups.get(col_ix).expect("BUG: invalid col index");
 
@@ -970,7 +966,7 @@ where
         is_filled: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
         let is_stripe_row = self.options.stripe && row_ix % 2 != 0;
         let is_selected = self.selected_row == Some(row_ix);
