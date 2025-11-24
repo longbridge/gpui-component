@@ -1,20 +1,21 @@
 use gpui::{
-    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, App, AppContext,
-    Bounds, ClickEvent, Context, Corner, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
-    Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels,
-    Point, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Subscription, Window,
+    App, AppContext, Bounds, ClickEvent, Context, Corner, Div, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, anchored,
+    canvas, deferred, div, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{
+    ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable, Size,
+    StyleSized, StyledExt,
     actions::{Cancel, Confirm},
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{Input, InputEvent, InputState},
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable,
-    Size, StyleSized, StyledExt,
+    v_flex,
 };
 
 const CONTEXT: &'static str = "ColorPicker";
@@ -250,7 +251,7 @@ impl ColorPicker {
         clickable: bool,
         window: &mut Window,
         _: &mut App,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         let state = self.state.clone();
         div()
             .id(SharedString::from(format!("color-{}", color.to_hex())))

@@ -2,13 +2,13 @@ use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
 use crate::scroll::{Scrollbar, ScrollbarState};
-use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
-use crate::{kbd::Kbd, Side, Size, StyledExt};
+use crate::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
+use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
-    anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
-    Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    Action, AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
+    WeakEntity, Window, anchored, canvas, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Subscription};
 use std::rc::Rc;
@@ -944,7 +944,7 @@ impl PopupMenu {
         action: Option<Box<dyn Action>>,
         window: &mut Window,
         _: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
+    ) -> Option<Kbd> {
         let action = action?;
 
         match self
@@ -1013,7 +1013,7 @@ impl PopupMenu {
         state: ItemState,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> MenuItemElement {
         let has_icon = self.has_icon;
         let selected = self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(4.);
