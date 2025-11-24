@@ -172,7 +172,7 @@ impl InputState {
             let start = self.text.position_to_offset(&target_range.start);
             let end = self.text.position_to_offset(&target_range.end);
 
-            self.move_to(start, true, cx);
+            self.move_to(start, None, cx);
             self.select_to(end, cx);
         }
     }

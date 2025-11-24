@@ -14,7 +14,10 @@ use crate::{
     actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
-    input::{Enter, Escape, IndentInline, Input, InputEvent, InputState, RopeExt as _, Search},
+    input::{
+        Enter, Escape, IndentInline, Input, InputEvent, InputState, RopeExt as _, Search,
+        movement::MoveDirection,
+    },
     label::Label,
     v_flex,
 };
@@ -310,7 +313,7 @@ impl SearchPanel {
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(range) = self.matcher.next_back() {
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.start, true, cx);
+                state.scroll_to(range.start, Some(MoveDirection::Up), cx);
             });
         }
     }
@@ -318,7 +321,7 @@ impl SearchPanel {
     fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(range) = self.matcher.next() {
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.end, true, cx);
+                state.scroll_to(range.end, Some(MoveDirection::Down), cx);
             });
         }
     }
@@ -347,7 +350,7 @@ impl SearchPanel {
                 cx.update(|window, cx| {
                     text_state.update(cx, |state, cx| {
                         let range_utf16 = state.range_to_utf16(&range);
-                        state.scroll_to(next_range.end, true, cx);
+                        state.scroll_to(next_range.end, Some(MoveDirection::Down), cx);
                         state.replace_text_in_range_silent(
                             Some(range_utf16),
                             new_text.as_str(),
@@ -384,7 +387,7 @@ impl SearchPanel {
                         window,
                         cx,
                     );
-                    state.scroll_to(0, true, cx);
+                    state.scroll_to(0, Some(MoveDirection::Down), cx);
                 });
             })
         })

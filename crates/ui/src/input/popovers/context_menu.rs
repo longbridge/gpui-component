@@ -31,7 +31,7 @@ impl InputState {
     ) {
         // Show Mouse context menu
         if !self.selected_range.contains(offset) {
-            self.move_to(offset, false, cx);
+            self.move_to(offset, None, cx);
         }
 
         self.context_menu = Some(ContextMenu::MouseContext(self.mouse_context_menu.clone()));

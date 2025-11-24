@@ -4,11 +4,11 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -19,20 +19,21 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    mode::InputMode, number_input, text_wrapper::TextWrapper, TabSize,
+    TabSize, blink_cursor::BlinkCursor, change::Change, element::TextElement,
+    mask_pattern::MaskPattern, mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::input::movement::MoveDirection;
 use crate::input::{
+    HoverDefinition, Lsp, Position,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
     text_wrapper::LineLayout,
-    HoverDefinition, Lsp, Position,
 };
 use crate::input::{RopeExt as _, Selection};
+use crate::{Root, history::History, scroll::ScrollbarState};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
-use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -825,7 +826,7 @@ impl InputState {
         let position: Position = position.into();
         let offset = self.text.position_to_offset(&position);
 
-        self.move_to(offset, false, cx);
+        self.move_to(offset, None, cx);
         self.update_preferred_column();
         self.focus(window, cx);
     }
@@ -1178,7 +1179,7 @@ impl InputState {
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
         self.selected_range = (0..0).into();
-        self.scroll_to(0, false, cx);
+        self.scroll_to(0, None, cx);
     }
 
     pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
@@ -1233,7 +1234,7 @@ impl InputState {
         if event.modifiers.shift {
             self.select_to(offset, cx);
         } else {
-            self.move_to(offset, false, cx)
+            self.move_to(offset, None, cx)
         }
     }
 
@@ -1333,8 +1334,13 @@ impl InputState {
 
     /// Scroll to make the given offset visible.
     ///
-    /// If `keep_edges` is true, will keep some safe edges at the editor top and bottom.
-    pub(crate) fn scroll_to(&mut self, offset: usize, keep_edges: bool, cx: &mut Context<Self>) {
+    /// If `direction` is Some, will keep edges at the same side.
+    pub(crate) fn scroll_to(
+        &mut self,
+        offset: usize,
+        direction: Option<MoveDirection>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(last_layout) = self.last_layout.as_ref() else {
             return;
         };
@@ -1343,6 +1349,7 @@ impl InputState {
         };
 
         let mut scroll_offset = self.scroll_handle.offset();
+        let was_offset = scroll_offset;
         let line_height = last_layout.line_height;
 
         let point = self.text.offset_to_point(offset);
@@ -1376,17 +1383,24 @@ impl InputState {
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
-        let edge_height = if keep_edges && self.mode.is_code_editor() {
+        let edge_height = if direction.is_some() && self.mode.is_code_editor() {
             3 * line_height
         } else {
             line_height
         };
-        if row_offset_y - edge_height < -scroll_offset.y {
+        if row_offset_y - edge_height + line_height < -scroll_offset.y {
             // Scroll up
-            scroll_offset.y = -row_offset_y + edge_height;
+            scroll_offset.y = -row_offset_y + edge_height - line_height;
         } else if row_offset_y + edge_height > -scroll_offset.y + bounds.size.height {
             // Scroll down
             scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
+        }
+
+        // Avoid necessary scroll, when it was already in the correct position.
+        if direction == Some(MoveDirection::Up) {
+            scroll_offset.y = scroll_offset.y.max(was_offset.y);
+        } else if direction == Some(MoveDirection::Down) {
+            scroll_offset.y = scroll_offset.y.min(was_offset.y);
         }
 
         scroll_offset.x = scroll_offset.x.min(px(0.));
@@ -1432,7 +1446,7 @@ impl InputState {
             }
 
             self.replace_text_in_range_silent(None, &new_text, window, cx);
-            self.scroll_to(self.cursor(), false, cx);
+            self.scroll_to(self.cursor(), None, cx);
         }
     }
 
