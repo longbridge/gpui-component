@@ -3,19 +3,20 @@ use rust_i18n::t;
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder as _, App, AppContext as _, Context, Empty,
-    Entity, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
-    ParentElement as _, Pixels, Render, Styled, Subscription, Window,
+    App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Pixels, Render, Styled,
+    Subscription, Window, actions, canvas, div, prelude::FluentBuilder as _,
 };
 use ropey::Rope;
 
 use crate::{
+    ActiveTheme, Disableable, IconName, Selectable, Sizable,
     actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
     input::{Enter, Escape, IndentInline, Input, InputEvent, InputState, RopeExt as _, Search},
     label::Label,
-    v_flex, ActiveTheme, Disableable, IconName, Selectable, Sizable,
+    v_flex,
 };
 
 const CONTEXT: &'static str = "SearchPanel";
@@ -309,7 +310,7 @@ impl SearchPanel {
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(range) = self.matcher.next_back() {
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.start, cx);
+                state.scroll_to(range.start, true, cx);
             });
         }
     }
@@ -317,7 +318,7 @@ impl SearchPanel {
     fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(range) = self.matcher.next() {
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.end, cx);
+                state.scroll_to(range.end, true, cx);
             });
         }
     }
@@ -346,7 +347,7 @@ impl SearchPanel {
                 cx.update(|window, cx| {
                     text_state.update(cx, |state, cx| {
                         let range_utf16 = state.range_to_utf16(&range);
-                        state.scroll_to(next_range.end, cx);
+                        state.scroll_to(next_range.end, true, cx);
                         state.replace_text_in_range_silent(
                             Some(range_utf16),
                             new_text.as_str(),
@@ -383,7 +384,7 @@ impl SearchPanel {
                         window,
                         cx,
                     );
-                    state.scroll_to(0, cx);
+                    state.scroll_to(0, true, cx);
                 });
             })
         })

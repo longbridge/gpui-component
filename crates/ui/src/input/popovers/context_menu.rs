@@ -1,14 +1,14 @@
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context,
-    Corner, DismissEvent, Entity, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point,
-    Render, Styled, Subscription, Window,
+    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseDownEvent,
+    ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
+    div, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
 use crate::{
-    input::{self, popovers::ContextMenu, InputState},
-    menu::PopupMenu,
     ActiveTheme as _,
+    input::{self, InputState, popovers::ContextMenu},
+    menu::PopupMenu,
 };
 
 /// Context menu for mouse right clicks.
@@ -31,7 +31,7 @@ impl InputState {
     ) {
         // Show Mouse context menu
         if !self.selected_range.contains(offset) {
-            self.move_to(offset, cx);
+            self.move_to(offset, false, cx);
         }
 
         self.context_menu = Some(ContextMenu::MouseContext(self.mouse_context_menu.clone()));

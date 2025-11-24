@@ -825,7 +825,7 @@ impl InputState {
         let position: Position = position.into();
         let offset = self.text.position_to_offset(&position);
 
-        self.move_to(offset, cx);
+        self.move_to(offset, false, cx);
         self.update_preferred_column();
         self.focus(window, cx);
     }
@@ -1178,7 +1178,7 @@ impl InputState {
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
         self.selected_range = (0..0).into();
-        self.scroll_to(0, cx);
+        self.scroll_to(0, false, cx);
     }
 
     pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
@@ -1233,7 +1233,7 @@ impl InputState {
         if event.modifiers.shift {
             self.select_to(offset, cx);
         } else {
-            self.move_to(offset, cx)
+            self.move_to(offset, false, cx)
         }
     }
 
@@ -1331,7 +1331,10 @@ impl InputState {
         cx.notify();
     }
 
-    pub(crate) fn scroll_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+    /// Scroll to make the given offset visible.
+    ///
+    /// If `keep_edges` is true, will keep some safe edges at the editor top and bottom.
+    pub(crate) fn scroll_to(&mut self, offset: usize, keep_edges: bool, cx: &mut Context<Self>) {
         let Some(last_layout) = self.last_layout.as_ref() else {
             return;
         };
@@ -1373,7 +1376,7 @@ impl InputState {
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
-        let edge_height = if self.mode.is_code_editor() {
+        let edge_height = if keep_edges && self.mode.is_code_editor() {
             3 * line_height
         } else {
             line_height
@@ -1429,7 +1432,7 @@ impl InputState {
             }
 
             self.replace_text_in_range_silent(None, &new_text, window, cx);
-            self.scroll_to(self.cursor(), cx);
+            self.scroll_to(self.cursor(), false, cx);
         }
     }
 

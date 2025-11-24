@@ -1,13 +1,13 @@
 use anyhow::Result;
 use gpui::{
-    px, App, Context, HighlightStyle, Hitbox, MouseDownEvent, Task, UnderlineStyle, Window,
+    App, Context, HighlightStyle, Hitbox, MouseDownEvent, Task, UnderlineStyle, Window, px,
 };
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
 use crate::{
-    input::{element::TextElement, GoToDefinition, InputState, RopeExt},
     ActiveTheme,
+    input::{GoToDefinition, InputState, RopeExt, element::TextElement},
 };
 
 /// Definition provider
@@ -172,7 +172,7 @@ impl InputState {
             let start = self.text.position_to_offset(&target_range.start);
             let end = self.text.position_to_offset(&target_range.end);
 
-            self.move_to(start, cx);
+            self.move_to(start, true, cx);
             self.select_to(end, cx);
         }
     }
