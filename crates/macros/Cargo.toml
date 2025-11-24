@@ -1,9 +1,9 @@
 [package]
-edition = "2021"
 name = "gpui-component-macros"
 description = "Macros for GPUI Component."
 version = "0.4.1"
 publish = true
+edition.workspace = true
 license = "Apache-2.0"
 
 [lib]
