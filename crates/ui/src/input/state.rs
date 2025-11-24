@@ -4,11 +4,11 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -19,20 +19,20 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    mode::InputMode, number_input, text_wrapper::TextWrapper, TabSize,
+    TabSize, blink_cursor::BlinkCursor, change::Change, element::TextElement,
+    mask_pattern::MaskPattern, mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::{
+    HoverDefinition, Lsp, Position,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
     text_wrapper::LineLayout,
-    HoverDefinition, Lsp, Position,
 };
 use crate::input::{RopeExt as _, Selection};
+use crate::{Root, history::History, scroll::ScrollbarState};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
-use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -1343,6 +1343,7 @@ impl InputState {
         let line_height = last_layout.line_height;
 
         let point = self.text.offset_to_point(offset);
+
         let row = point.row;
 
         let mut row_offset_y = px(0.);
@@ -1358,10 +1359,11 @@ impl InputState {
             .lines
             .get(row.saturating_sub(last_layout.visible_range.start))
         {
-            // Check to scroll horizontally
+            // Check to scroll horizontally and soft wrap lines
             if let Some(pos) = line.position_for_index(point.column, line_height) {
                 let bounds_width = bounds.size.width - last_layout.line_number_width;
                 let col_offset_x = pos.x;
+                row_offset_y += pos.y;
                 if col_offset_x - RIGHT_MARGIN < -scroll_offset.x {
                     // If the position is out of the visible area, scroll to make it visible
                     scroll_offset.x = -col_offset_x + RIGHT_MARGIN;
