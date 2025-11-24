@@ -2,7 +2,6 @@
 name: Bug report
 about: Report a problem or unexpected behavior
 title: ""
-labels: bug, triage
 assignees:
 ---
 
@@ -13,8 +12,7 @@ Use English with clear and concise description of the bug, if you just have a qu
 ## Environment
 
 - OS: [e.g., macOS, Windows, Linux]
-- Browser: [e.g., Chrome, Firefox, Safari]
-- Version: [e.g., 1.0.0]
+- Version: [e.g., v0.4.0]
 
 ## Steps to Reproduce
 
