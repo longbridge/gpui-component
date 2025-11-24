@@ -11,8 +11,9 @@ Use English with clear and concise description of the bug, if you just have a qu
 
 ## Environment
 
-- OS: [e.g., macOS, Windows, Linux]
-- Version: [e.g., v0.4.0]
+- GPUI: [e.g., v0.2.2]
+- GPUI Component: [e.g., v0.4.0]
+- Platform: [e.g., macOS 26, Windows 11, Ubuntu 20.04]
 
 ## Steps to Reproduce
 
