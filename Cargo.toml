@@ -1,4 +1,5 @@
 [workspace]
+edition = "2024"
 default-members = [
     "crates/ui",
     "crates/story",
