@@ -3,7 +3,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, StyledExt,
+    ActiveTheme as _, IconName, Side, StyledExt,
     button::Button,
     h_flex,
     menu::{ContextMenuExt, DropdownMenu as _, PopupMenuItem},
@@ -42,7 +42,7 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct MenuStory {
-    checked: bool,
+    check_side: Side,
     message: String,
 }
 
@@ -68,6 +68,7 @@ impl MenuStory {
     fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
             checked: true,
+            check_side: Side::Left,
             message: "".to_string(),
         }
     }
@@ -98,7 +99,11 @@ impl MenuStory {
     }
 
     fn on_action_toggle_check(&mut self, _: &ToggleCheck, _: &mut Window, cx: &mut Context<Self>) {
-        self.checked = !self.checked;
+        self.check_side = if self.check_side == Side::Left {
+            Side::Right
+        } else {
+            Side::Left
+        };
         self.message = format!("You have clicked toggle check: {}", self.checked);
         cx.notify()
     }
@@ -141,7 +146,11 @@ impl Render for MenuStory {
                                     .menu("Cut", Box::new(Cut))
                                     .menu("Paste", Box::new(Paste))
                                     .separator()
-                                    .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
+                                    .menu_with_check(
+                                        "Check Side Left",
+                                        checked,
+                                        Box::new(ToggleCheck),
+                                    )
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
                                     .separator()

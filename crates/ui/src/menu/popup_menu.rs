@@ -37,6 +37,7 @@ pub enum PopupMenuItem {
         icon: Option<Icon>,
         label: SharedString,
         disabled: bool,
+        checked: bool,
         is_link: bool,
         action: Option<Box<dyn Action>>,
         // For link item
@@ -46,6 +47,7 @@ pub enum PopupMenuItem {
     ElementItem {
         icon: Option<Icon>,
         disabled: bool,
+        checked: bool,
         action: Option<Box<dyn Action>>,
         render: Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
         handler: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
@@ -70,6 +72,7 @@ impl PopupMenuItem {
             icon: None,
             label: label.into(),
             disabled: false,
+            checked: false,
             action: None,
             is_link: false,
             handler: None,
@@ -86,6 +89,7 @@ impl PopupMenuItem {
         PopupMenuItem::ElementItem {
             icon: None,
             disabled: false,
+            checked: false,
             action: None,
             render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
             handler: None,
@@ -174,14 +178,24 @@ impl PopupMenuItem {
     /// If true, will set the icon to check icon, otherwise remove the icon.
     pub fn checked(mut self, checked: bool) -> Self {
         match &mut self {
-            PopupMenuItem::Item { icon: i, .. } => {
+            PopupMenuItem::Item {
+                icon: i,
+                checked: c,
+                ..
+            } => {
+                *c = checked;
                 if checked {
                     *i = Some(IconName::Check.into());
                 } else {
                     *i = None;
                 }
             }
-            PopupMenuItem::ElementItem { icon: i, .. } => {
+            PopupMenuItem::ElementItem {
+                icon: i,
+                checked: c,
+                ..
+            } => {
+                *c = checked;
                 if checked {
                     *i = Some(IconName::Check.into());
                 } else {
@@ -220,6 +234,7 @@ impl PopupMenuItem {
             icon: None,
             label: label.into(),
             disabled: false,
+            checked: false,
             action: None,
             is_link: true,
             handler: Some(Rc::new(move |_, _, cx| cx.open_url(&href))),
@@ -271,6 +286,7 @@ pub struct PopupMenu {
     max_height: Option<Pixels>,
     bounds: Bounds<Pixels>,
     size: Size,
+    check_side: Side,
 
     /// The parent menu of this menu, if this is a submenu
     parent_menu: Option<WeakEntity<Self>>,
@@ -296,6 +312,7 @@ impl PopupMenu {
             max_width: None,
             max_height: None,
             has_icon: false,
+            check_side: Side::Left,
             bounds: Bounds::default(),
             scrollable: false,
             scroll_handle: ScrollHandle::default(),
@@ -351,6 +368,12 @@ impl PopupMenu {
         self
     }
 
+    /// Set the side to show check icon, default is `Side::Left`.
+    pub fn check_side(mut self, side: Side) -> Self {
+        self.check_side = side;
+        self
+    }
+
     /// Set the menu to show external link icon, default is true.
     pub fn external_link_icon(mut self, visible: bool) -> Self {
         self.external_link_icon = visible;
@@ -369,7 +392,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         enable: bool,
     ) -> Self {
-        self.add_menu_item(label, None, action, !enable);
+        self.add_menu_item(label, None, action, !enable, false);
         self
     }
 
@@ -380,7 +403,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         disabled: bool,
     ) -> Self {
-        self.add_menu_item(label, None, action, disabled);
+        self.add_menu_item(label, None, action, disabled, false);
         self
     }
 
@@ -453,7 +476,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         disabled: bool,
     ) -> Self {
-        self.add_menu_item(label, Some(icon.into()), action, disabled);
+        self.add_menu_item(label, Some(icon.into()), action, disabled, false);
         self
     }
 
@@ -476,9 +499,15 @@ impl PopupMenu {
         disabled: bool,
     ) -> Self {
         if checked {
-            self.add_menu_item(label, Some(IconName::Check.into()), action, disabled);
+            self.add_menu_item(
+                label,
+                Some(IconName::Check.into()),
+                action,
+                disabled,
+                checked,
+            );
         } else {
-            self.add_menu_item(label, None, action, disabled);
+            self.add_menu_item(label, None, action, disabled, checked);
         }
 
         self
@@ -647,6 +676,7 @@ impl PopupMenu {
         icon: Option<Icon>,
         action: Box<dyn Action>,
         disabled: bool,
+        checked: bool,
     ) -> &mut Self {
         if icon.is_some() {
             self.has_icon = true;
@@ -656,6 +686,7 @@ impl PopupMenu {
             PopupMenuItem::new(label)
                 .when_some(icon, |item, icon| item.icon(icon))
                 .disabled(disabled)
+                .checked(checked)
                 .action(action),
         );
         self
@@ -1010,7 +1041,7 @@ impl PopupMenu {
         &self,
         ix: usize,
         item: &PopupMenuItem,
-        state: ItemState,
+        options: RenderOptions,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> MenuItemElement {
@@ -1023,8 +1054,8 @@ impl PopupMenu {
         let group_name = format!("popup-menu-item-{}", ix);
 
         let (item_height, radius) = match self.size {
-            Size::Small => (px(20.), state.radius.half()),
-            _ => (px(26.), state.radius),
+            Size::Small => (px(20.), options.radius.half()),
+            _ => (px(26.), options.radius),
         };
 
         let this = MenuItemElement::new(ix, &group_name)
@@ -1103,6 +1134,9 @@ impl PopupMenu {
                 })
                 .disabled(*disabled)
                 .h(item_height)
+                .when(options.check_side.is_right(), |this| {
+                    this.flex_row_reverse()
+                })
                 .children(Self::render_icon(has_icon, icon.clone(), window, cx))
                 .child(
                     h_flex()
@@ -1186,7 +1220,8 @@ impl Focusable for PopupMenu {
 }
 
 #[derive(Clone, Copy)]
-struct ItemState {
+struct RenderOptions {
+    check_side: Side,
     radius: Pixels,
 }
 
@@ -1206,7 +1241,8 @@ impl Render for PopupMenu {
         );
 
         let max_width = self.max_width();
-        let item_state = ItemState {
+        let options = RenderOptions {
+            check_side: self.check_side,
             radius: cx.theme().radius.min(px(8.)),
         };
 
@@ -1254,7 +1290,7 @@ impl Render for PopupMenu {
                             .enumerate()
                             // Ignore last separator
                             .filter(|(ix, item)| !(*ix + 1 == items_count && item.is_separator()))
-                            .map(|(ix, item)| self.render_item(ix, item, item_state, window, cx)),
+                            .map(|(ix, item)| self.render_item(ix, item, options, window, cx)),
                     )
                     .child({
                         canvas(
