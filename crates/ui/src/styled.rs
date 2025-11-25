@@ -1,13 +1,10 @@
-use std::fmt::{self, Display, Formatter};
-
 use crate::{
+    ActiveTheme, PixelsExt as _,
     scroll::{Scrollable, ScrollbarAxis},
-    ActiveTheme,
 };
 use gpui::{
-    div, point, px, AbsoluteLength, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges,
-    Element, FocusHandle, Hsla, Length, ParentElement, Pixels, Refineable, StyleRefinement, Styled,
-    Window,
+    App, BoxShadow, Corners, DefiniteLength, Div, Edges, Element, FocusHandle, Hsla, ParentElement,
+    Pixels, Refineable, StyleRefinement, Styled, Window, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
@@ -640,124 +637,10 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
     }
 }
 
-pub trait AxisExt {
-    fn is_horizontal(self) -> bool;
-    fn is_vertical(self) -> bool;
-}
-
-impl AxisExt for Axis {
-    #[inline]
-    fn is_horizontal(self) -> bool {
-        self == Axis::Horizontal
-    }
-
-    #[inline]
-    fn is_vertical(self) -> bool {
-        self == Axis::Vertical
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Placement {
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
-
-impl Display for Placement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Placement::Top => write!(f, "Top"),
-            Placement::Bottom => write!(f, "Bottom"),
-            Placement::Left => write!(f, "Left"),
-            Placement::Right => write!(f, "Right"),
-        }
-    }
-}
-
-impl Placement {
-    #[inline]
-    pub fn is_horizontal(&self) -> bool {
-        match self {
-            Placement::Left | Placement::Right => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub fn is_vertical(&self) -> bool {
-        match self {
-            Placement::Top | Placement::Bottom => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub fn axis(&self) -> Axis {
-        match self {
-            Placement::Top | Placement::Bottom => Axis::Vertical,
-            Placement::Left | Placement::Right => Axis::Horizontal,
-        }
-    }
-}
-
-/// A enum for defining the side of the element.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Side {
-    Left,
-    Right,
-}
-
-impl Side {
-    /// Returns true if the side is left.
-    #[inline]
-    pub fn is_left(&self) -> bool {
-        matches!(self, Self::Left)
-    }
-
-    /// Returns true if the side is right.
-    #[inline]
-    pub fn is_right(&self) -> bool {
-        matches!(self, Self::Right)
-    }
-}
-
 /// A trait for defining element that can be collapsed.
 pub trait Collapsible {
     fn collapsed(self, collapsed: bool) -> Self;
     fn is_collapsed(&self) -> bool;
-}
-
-/// A trait for converting `Pixels` to `f32` and `f64`.
-pub trait PixelsExt {
-    fn as_f32(&self) -> f32;
-    fn as_f64(self) -> f64;
-}
-impl PixelsExt for Pixels {
-    fn as_f32(&self) -> f32 {
-        f32::from(self)
-    }
-
-    fn as_f64(self) -> f64 {
-        f64::from(self)
-    }
-}
-
-pub trait LengthExt {
-    /// Converts the `Length` to `Pixels` based on a given `base_size` and `rem_size`.
-    ///
-    /// If the `Length` is `Auto`, it returns `None`.
-    fn to_pixels(&self, base_size: AbsoluteLength, rem_size: Pixels) -> Option<Pixels>;
-}
-
-impl LengthExt for Length {
-    fn to_pixels(&self, base_size: AbsoluteLength, rem_size: Pixels) -> Option<Pixels> {
-        match self {
-            Length::Auto => None,
-            Length::Definite(len) => Some(len.to_pixels(base_size, rem_size)),
-        }
-    }
 }
 
 #[cfg(test)]
