@@ -2,6 +2,7 @@ use gpui::{App, SharedString};
 use std::ops::Deref;
 
 mod event;
+mod geometry;
 mod global_state;
 mod icon;
 mod index_path;
@@ -75,6 +76,7 @@ pub use wry;
 
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
+pub use geometry::*;
 pub use icon::*;
 pub use index_path::IndexPath;
 pub use input::{Rope, RopeExt, RopeLines};
@@ -84,8 +86,8 @@ pub use root::{Root, WindowExt};
 pub use styled::*;
 pub use theme::*;
 pub use title_bar::*;
-pub use virtual_list::{h_virtual_list, v_virtual_list, VirtualList, VirtualListScrollHandle};
-pub use window_border::{window_border, window_paddings, WindowBorder};
+pub use virtual_list::{VirtualList, VirtualListScrollHandle, h_virtual_list, v_virtual_list};
+pub use window_border::{WindowBorder, window_border, window_paddings};
 
 rust_i18n::i18n!("locales", fallback = "en");
 
