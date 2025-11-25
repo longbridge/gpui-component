@@ -1,12 +1,12 @@
 use gpui::{
-    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
-    Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    Render, RenderOnce, StyleRefinement, Styled, Subscription, Window,
+    AnyElement, App, Bounds, Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
+    Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
+    canvas, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
-use crate::{actions::Cancel, v_flex, Selectable, StyledExt as _};
+use crate::{Selectable, StyledExt as _, actions::Cancel, v_flex};
 
 const CONTEXT: &str = "Popover";
 pub(crate) fn init(cx: &mut App) {
