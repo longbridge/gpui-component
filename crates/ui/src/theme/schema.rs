@@ -41,6 +41,15 @@ pub struct ThemeConfig {
     /// The base font family, default is system font: `.SystemUIFont`.
     #[serde(rename = "font.family")]
     pub font_family: Option<SharedString>,
+    /// The monospace font family, default is platform specific:
+    /// - macOS: `Menlo`
+    /// - Windows: `Consolas`
+    /// - Linux: `DejaVu Sans Mono`
+    #[serde(rename = "mono_font.family")]
+    pub mono_font_family: Option<SharedString>,
+    /// The monospace font size, default is 13.
+    #[serde(rename = "mono_font.size")]
+    pub mono_font_size: Option<f32>,
 
     /// The border radius for general elements, default is 6.
     #[serde(rename = "radius")]
@@ -651,6 +660,16 @@ impl Theme {
             self.font_family = font_family.clone();
         } else {
             self.font_family = default_theme.font_family.clone();
+        }
+        if let Some(mono_font_family) = &config.mono_font_family {
+            self.mono_font_family = mono_font_family.clone();
+        } else {
+            self.mono_font_family = default_theme.mono_font_family.clone();
+        }
+        if let Some(mono_font_size) = config.mono_font_size {
+            self.mono_font_size = px(mono_font_size);
+        } else {
+            self.mono_font_size = default_theme.mono_font_size;
         }
         if let Some(radius) = config.radius {
             self.radius = px(radius as f32);

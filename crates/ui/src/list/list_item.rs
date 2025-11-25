@@ -203,16 +203,19 @@ impl RenderOnce for ListItem {
             .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
             .map(|this| {
                 if is_selectable && (self.selected || self.secondary_selected) {
-                    this.bg(cx.theme().accent).child(
+                    let bg = if self.selected {
+                        cx.theme().list_active
+                    } else {
+                        cx.theme().accent
+                    };
+
+                    this.bg(bg).child(
                         div()
                             .absolute()
                             .top_0()
                             .left_0()
                             .right_0()
                             .bottom_0()
-                            .when(!self.secondary_selected, |this| {
-                                this.bg(cx.theme().list_active)
-                            })
                             .border_1()
                             .border_color(cx.theme().list_active_border)
                             .refine_style(&selected_style),

@@ -261,7 +261,8 @@ impl Render for ChartStory {
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .dot(),
+                            .dot()
+                            .stroke(cx.theme().chart_5),
                         false,
                         cx,
                     )),

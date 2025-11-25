@@ -15,6 +15,7 @@ collapsed: false
 - [Button](button) - Interactive buttons with multiple variants
 - [Checkbox](checkbox) - Binary selection control
 - [Collapsible](collapsible) - Expandable/collapsible content
+- [DropdownButton](dropdown_button) - Button with dropdown menu
 - [Icon](icon) - Icon display component
 - [Image](image) - Image display with fallbacks
 - [Kbd](kbd) - Keyboard shortcut display
@@ -58,6 +59,7 @@ collapsed: false
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.
+- [Settings](settings) - Settings UI
 - [Table](table) - High-performance data tables
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display

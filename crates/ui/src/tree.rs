@@ -42,7 +42,8 @@ pub(crate) fn init(cx: &mut App) {
 /// });
 ///
 /// tree(&state, |ix, entry, selected, window, cx| {
-///     div().px(px(16.) * entry.depth()).child(item.label.clone())
+///     let item = entry.item();
+///     ListItem::new(ix).pl(px(16.) * entry.depth()).child(item.label.clone())
 /// })
 /// ```
 pub fn tree<R>(state: &Entity<TreeState>, render_item: R) -> Tree
@@ -139,8 +140,8 @@ impl TreeItem {
     }
 
     /// Add multiple child items to this tree item.
-    pub fn children(mut self, children: impl Into<Vec<TreeItem>>) -> Self {
-        self.children.extend(children.into());
+    pub fn children(mut self, children: impl IntoIterator<Item = TreeItem>) -> Self {
+        self.children.extend(children);
         self
     }
 

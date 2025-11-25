@@ -42,6 +42,7 @@ struct Counter {
 
 static ALL_COUNTERS: LazyLock<Vec<Counter>> =
     LazyLock::new(|| serde_json::from_str(include_str!("./fixtures/counters.json")).unwrap());
+static INCREMENT_ID: LazyLock<std::sync::Mutex<usize>> = LazyLock::new(|| std::sync::Mutex::new(0));
 
 impl Counter {
     fn random() -> Self {
@@ -124,7 +125,15 @@ impl Stock {
 }
 
 fn random_stocks(size: usize) -> Vec<Stock> {
-    (0..size)
+    // Incremental ID with size.
+    let start = {
+        let mut id_lock = INCREMENT_ID.lock().unwrap();
+        let start = *id_lock;
+        *id_lock += size + 1;
+        start
+    };
+
+    (start..start + size)
         .map(|id| Stock {
             id,
             counter: Counter::random(),
@@ -268,6 +277,12 @@ impl StockTableDelegate {
     }
 
     fn update_stocks(&mut self, size: usize) {
+        // Reset incremental ID
+        {
+            let mut id_lock = INCREMENT_ID.lock().unwrap();
+            *id_lock = 0;
+        }
+
         self.stocks = random_stocks(size);
         self.eof = size <= 50;
         self.loading = false;

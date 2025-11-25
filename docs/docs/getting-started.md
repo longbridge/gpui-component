@@ -10,11 +10,21 @@ order: -2
 
 Add dependencies to your `Cargo.toml`:
 
-```toml
+```toml-vue
 [dependencies]
-gpui = "0.2"
-gpui-component = "0.4.0-preview2"
+gpui = "{{ GPUI_VERSION }}"
+gpui-component = "{{ VERSION }}"
+# Optional, for default bundled assets
+gpui-component-assets = "{{ VERSION }}"
 ```
+
+:::tip
+The `gpui-component-assets` crate is optional.
+
+It provides a default set of icon assets. If you want to manage your own assets, you can skip adding this dependency.
+
+See [Icons & Assets](./assets.md) for more details.
+:::
 
 ## Quick Start
 
@@ -45,7 +55,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = Application::new();
+    let app = Application::new().with_assets(gpui_component_assets::Assets);
 
     app.run(move |cx| {
         // This must be called before using any GPUI Component features.

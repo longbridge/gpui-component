@@ -54,7 +54,6 @@ impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .relative()
-            .p_2()
             .when(!self.collapsed, |this| {
                 this.child(
                     div()

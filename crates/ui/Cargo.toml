@@ -1,15 +1,15 @@
 [package]
 description = "UI components for building fantastic desktop application by using GPUI."
-edition = "2021"
 keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
 license = "Apache-2.0"
 name = "gpui-component"
 documentation = "https://docs.rs/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
-publish = true
 readme = "../../README.md"
-version = "0.4.0-preview2"
+version = "0.4.1"
+publish = true
+edition.workspace = true
 
 [lib]
 doctest = false

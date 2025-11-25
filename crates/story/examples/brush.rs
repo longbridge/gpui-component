@@ -5,12 +5,12 @@ use gpui_component::{
     ActiveTheme, Colorize as _, IconName, Sizable,
     button::Button,
     checkbox::Checkbox,
-    group_box::GroupBox,
+    group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     slider::{Slider, SliderState},
     v_flex,
 };
-use story::Assets;
+use gpui_component_assets::Assets;
 
 pub struct BrushStory {
     focus_handle: gpui::FocusHandle,
@@ -458,9 +458,9 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Brush Example", Example::view, cx);
+        gpui_component_story::create_new_window("Brush Example", Example::view, cx);
     });
 }

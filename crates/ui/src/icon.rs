@@ -5,6 +5,21 @@ use gpui::{
     Transformation, Window,
 };
 
+/// Types implementing this trait can automatically be converted to [`Icon`].
+///
+/// This allows you to implement a custom version of [`IconName`] that functions as a drop-in
+/// replacement for other UI components.
+pub trait IconNamed {
+    /// Returns the embedded path of the icon.
+    fn path(self) -> SharedString;
+}
+
+impl<T: IconNamed> From<T> for Icon {
+    fn from(value: T) -> Self {
+        Icon::build(value)
+    }
+}
+
 /// The name of an icon in the asset bundle.
 #[derive(IntoElement, Clone)]
 pub enum IconName {
@@ -71,6 +86,8 @@ pub enum IconName {
     PanelRightClose,
     PanelRightOpen,
     Plus,
+    Redo,
+    Redo2,
     Replace,
     ResizeCorner,
     Search,
@@ -85,6 +102,8 @@ pub enum IconName {
     ThumbsDown,
     ThumbsUp,
     TriangleAlert,
+    Undo,
+    Undo2,
     User,
     WindowClose,
     WindowMaximize,
@@ -93,7 +112,14 @@ pub enum IconName {
 }
 
 impl IconName {
-    pub fn path(self) -> SharedString {
+    /// Return the icon as a Entity<Icon>
+    pub fn view(self, cx: &mut App) -> Entity<Icon> {
+        Icon::build(self).view(cx)
+    }
+}
+
+impl IconNamed for IconName {
+    fn path(self) -> SharedString {
         match self {
             Self::ALargeSmall => "icons/a-large-small.svg",
             Self::ArrowDown => "icons/arrow-down.svg",
@@ -158,6 +184,8 @@ impl IconName {
             Self::PanelRightClose => "icons/panel-right-close.svg",
             Self::PanelRightOpen => "icons/panel-right-open.svg",
             Self::Plus => "icons/plus.svg",
+            Self::Redo => "icons/redo.svg",
+            Self::Redo2 => "icons/redo-2.svg",
             Self::Replace => "icons/replace.svg",
             Self::ResizeCorner => "icons/resize-corner.svg",
             Self::Search => "icons/search.svg",
@@ -172,6 +200,8 @@ impl IconName {
             Self::ThumbsDown => "icons/thumbs-down.svg",
             Self::ThumbsUp => "icons/thumbs-up.svg",
             Self::TriangleAlert => "icons/triangle-alert.svg",
+            Self::Undo => "icons/undo.svg",
+            Self::Undo2 => "icons/undo-2.svg",
             Self::User => "icons/user.svg",
             Self::WindowClose => "icons/window-close.svg",
             Self::WindowMaximize => "icons/window-maximize.svg",
@@ -179,17 +209,6 @@ impl IconName {
             Self::WindowRestore => "icons/window-restore.svg",
         }
         .into()
-    }
-
-    /// Return the icon as a Entity<Icon>
-    pub fn view(self, cx: &mut App) -> Entity<Icon> {
-        Icon::build(self).view(cx)
-    }
-}
-
-impl From<IconName> for Icon {
-    fn from(val: IconName) -> Self {
-        Icon::build(val)
     }
 }
 
@@ -239,16 +258,12 @@ impl Clone for Icon {
     }
 }
 
-pub trait IconNamed {
-    fn path(&self) -> SharedString;
-}
-
 impl Icon {
     pub fn new(icon: impl Into<Icon>) -> Self {
         icon.into()
     }
 
-    fn build(name: IconName) -> Self {
+    fn build(name: impl IconNamed) -> Self {
         Self::default().path(name.path())
     }
 

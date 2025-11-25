@@ -11,9 +11,9 @@ The WebView component provides a native web browser control that can display web
 
 WebView requires the optional `webview` feature to be enabled:
 
-```toml
+```toml-vue
 [dependencies]
-gpui-component = { version = "...", features = ["webview"] }
+gpui-component = { version = "{{ VERSION }}", features = ["webview"] }
 ```
 
 ## Import

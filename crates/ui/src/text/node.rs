@@ -5,23 +5,23 @@ use std::{
 };
 
 use gpui::{
-    div, img, prelude::FluentBuilder as _, px, relative, rems, AnyElement, App, DefiniteLength,
-    Div, Element, ElementId, FontStyle, FontWeight, Half, HighlightStyle, InteractiveElement as _,
-    IntoElement, Length, ListState, ObjectFit, ParentElement, SharedString, SharedUri,
-    StatefulInteractiveElement, Styled, StyledImage as _, Window,
+    AnyElement, App, DefiniteLength, Div, Element, ElementId, FontStyle, FontWeight, Half,
+    HighlightStyle, InteractiveElement as _, IntoElement, Length, ListState, ObjectFit,
+    ParentElement, SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _,
+    Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    h_flex,
+    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, SyntaxHighlighter},
     text::inline::{Inline, InlineState},
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Icon, IconName, StyledExt,
+    v_flex,
 };
 
-use super::{utils::list_item_prefix, TextViewStyle};
+use super::{TextViewStyle, utils::list_item_prefix};
 
 #[allow(unused)]
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -371,8 +371,8 @@ impl CodeBlock {
                     .p_3()
                     .rounded(cx.theme().radius)
                     .bg(cx.theme().secondary.opacity(0.85))
-                    .font_family("Menlo, Monaco, Consolas, monospace")
-                    .text_size(rems(0.875))
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .text_size(cx.theme().mono_font_size)
                     .relative()
                     .refine_style(&style.code_block)
                     .child(Inline::new(
@@ -767,11 +767,7 @@ impl Node {
                 children, checked, ..
             } => {
                 let checkbox = if let Some(checked) = checked {
-                    if *checked {
-                        "[x] "
-                    } else {
-                        "[ ] "
-                    }
+                    if *checked { "[x] " } else { "[ ] " }
                 } else {
                     ""
                 };
@@ -866,7 +862,7 @@ impl Node {
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement {
+    ) -> AnyElement {
         match item {
             Node::ListItem {
                 children,
@@ -899,10 +895,9 @@ impl Node {
                                 // merge content into last item.
                                 if last_not_list {
                                     if let Some(item_item) = items.last_mut() {
-                                        item_item.extend(vec![div()
-                                            .overflow_hidden()
-                                            .child(text)
-                                            .into_any_element()]);
+                                        item_item.extend(vec![
+                                            div().overflow_hidden().child(text).into_any_element(),
+                                        ]);
                                         continue;
                                     }
                                 }
@@ -1116,7 +1111,7 @@ impl Node {
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement {
+    ) -> AnyElement {
         let mb = if options.in_list || options.is_last {
             rems(0.)
         } else {

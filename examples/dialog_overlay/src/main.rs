@@ -1,5 +1,6 @@
 use gpui::*;
 use gpui_component::{button::*, menu::ContextMenuExt, *};
+use gpui_component_assets::Assets;
 
 actions!(class_menu, [Open, Delete, Export, Info]);
 
@@ -78,7 +79,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = Application::new();
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         gpui_component::init(cx);

@@ -1,7 +1,6 @@
 mod accordion_story;
 mod alert_story;
 mod app_menus;
-mod assets;
 mod avatar_story;
 mod badge_story;
 mod button_story;
@@ -14,6 +13,7 @@ mod color_picker_story;
 mod date_picker_story;
 mod description_list_story;
 mod dialog_story;
+mod dropdown_button_story;
 mod form_story;
 mod group_box_story;
 mod icon_story;
@@ -32,6 +32,7 @@ mod radio_story;
 mod resizable_story;
 mod scrollable_story;
 mod select_story;
+mod settings_story;
 mod sheet_story;
 mod sidebar_story;
 mod skeleton_story;
@@ -51,7 +52,6 @@ mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
 
-pub use assets::Assets;
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
     Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
@@ -74,6 +74,7 @@ pub use color_picker_story::ColorPickerStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
 pub use dialog_story::DialogStory;
+pub use dropdown_button_story::DropdownButtonStory;
 pub use form_story::FormStory;
 pub use group_box_story::GroupBoxStory;
 pub use icon_story::IconStory;
@@ -93,6 +94,7 @@ pub use resizable_story::ResizableStory;
 pub use scrollable_story::ScrollableStory;
 pub use select_story::SelectStory;
 use serde::{Deserialize, Serialize};
+pub use settings_story::SettingsStory;
 pub use sheet_story::SheetStory;
 pub use sidebar_story::SidebarStory;
 pub use skeleton_story::SkeletonStory;
@@ -115,7 +117,7 @@ use gpui_component::{
     ActiveTheme, IconName, Root, TitleBar, WindowExt,
     button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
-    group_box::GroupBox,
+    group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
     notification::Notification,
@@ -416,6 +418,7 @@ impl Styled for StorySection {
 impl RenderOnce for StorySection {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         GroupBox::new()
+            .id(self.title.clone())
             .outline()
             .title(
                 h_flex()

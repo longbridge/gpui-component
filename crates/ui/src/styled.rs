@@ -1,13 +1,10 @@
-use std::fmt::{self, Display, Formatter};
-
 use crate::{
+    ActiveTheme, PixelsExt as _,
     scroll::{Scrollable, ScrollbarAxis},
-    ActiveTheme,
 };
 use gpui::{
-    div, point, px, AbsoluteLength, App, Axis, BoxShadow, Corners, DefiniteLength, Div, Edges,
-    Element, FocusHandle, Hsla, Length, ParentElement, Pixels, Refineable, StyleRefinement, Styled,
-    Window,
+    App, BoxShadow, Corners, DefiniteLength, Div, Edges, Element, FocusHandle, Hsla, ParentElement,
+    Pixels, Refineable, StyleRefinement, Styled, Window, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
@@ -230,6 +227,35 @@ impl Size {
             Size::Small => 1.,
             Size::Medium => 2.,
             Size::Large => 3.,
+        }
+    }
+
+    /// Returns the size as a static string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Size::XSmall => "xs",
+            Size::Small => "sm",
+            Size::Medium => "md",
+            Size::Large => "lg",
+            Size::Size(_) => "custom",
+        }
+    }
+
+    /// Create a Size from a static string.
+    ///
+    /// - "xs" or "xsmall"
+    /// - "sm" or "small"
+    /// - "md" or "medium"
+    /// - "lg" or "large"
+    ///
+    /// Any other value will return Size::Medium.
+    pub fn from_str(size: &str) -> Self {
+        match size.to_lowercase().as_str() {
+            "xs" | "xsmall" => Size::XSmall,
+            "sm" | "small" => Size::Small,
+            "md" | "medium" => Size::Medium,
+            "lg" | "large" => Size::Large,
+            _ => Size::Medium,
         }
     }
 
@@ -461,9 +487,9 @@ impl<T: Styled> StyleSized<T> for T {
         match size {
             Size::Large => self.h_11(),
             Size::Medium => self.h_8(),
-            Size::Small => self.h(px(26.)),
+            Size::Small => self.h(px(24.)),
             Size::XSmall => self.h(px(20.)),
-            _ => self.h(px(26.)),
+            _ => self.h(px(24.)),
         }
         .input_text_size(size)
     }
@@ -611,124 +637,10 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
     }
 }
 
-pub trait AxisExt {
-    fn is_horizontal(self) -> bool;
-    fn is_vertical(self) -> bool;
-}
-
-impl AxisExt for Axis {
-    #[inline]
-    fn is_horizontal(self) -> bool {
-        self == Axis::Horizontal
-    }
-
-    #[inline]
-    fn is_vertical(self) -> bool {
-        self == Axis::Vertical
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Placement {
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
-
-impl Display for Placement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Placement::Top => write!(f, "Top"),
-            Placement::Bottom => write!(f, "Bottom"),
-            Placement::Left => write!(f, "Left"),
-            Placement::Right => write!(f, "Right"),
-        }
-    }
-}
-
-impl Placement {
-    #[inline]
-    pub fn is_horizontal(&self) -> bool {
-        match self {
-            Placement::Left | Placement::Right => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub fn is_vertical(&self) -> bool {
-        match self {
-            Placement::Top | Placement::Bottom => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub fn axis(&self) -> Axis {
-        match self {
-            Placement::Top | Placement::Bottom => Axis::Vertical,
-            Placement::Left | Placement::Right => Axis::Horizontal,
-        }
-    }
-}
-
-/// A enum for defining the side of the element.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Side {
-    Left,
-    Right,
-}
-
-impl Side {
-    /// Returns true if the side is left.
-    #[inline]
-    pub fn is_left(&self) -> bool {
-        matches!(self, Self::Left)
-    }
-
-    /// Returns true if the side is right.
-    #[inline]
-    pub fn is_right(&self) -> bool {
-        matches!(self, Self::Right)
-    }
-}
-
 /// A trait for defining element that can be collapsed.
 pub trait Collapsible {
     fn collapsed(self, collapsed: bool) -> Self;
     fn is_collapsed(&self) -> bool;
-}
-
-/// A trait for converting `Pixels` to `f32` and `f64`.
-pub trait PixelsExt {
-    fn as_f32(&self) -> f32;
-    fn as_f64(self) -> f64;
-}
-impl PixelsExt for Pixels {
-    fn as_f32(&self) -> f32 {
-        f32::from(self)
-    }
-
-    fn as_f64(self) -> f64 {
-        f64::from(self)
-    }
-}
-
-pub trait LengthExt {
-    /// Converts the `Length` to `Pixels` based on a given `base_size` and `rem_size`.
-    ///
-    /// If the `Length` is `Auto`, it returns `None`.
-    fn to_pixels(&self, base_size: AbsoluteLength, rem_size: Pixels) -> Option<Pixels>;
-}
-
-impl LengthExt for Length {
-    fn to_pixels(&self, base_size: AbsoluteLength, rem_size: Pixels) -> Option<Pixels> {
-        match self {
-            Length::Auto => None,
-            Length::Definite(len) => Some(len.to_pixels(base_size, rem_size)),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -761,5 +673,32 @@ mod tests {
             Size::Size(px(10.)).max(Size::Size(px(20.))),
             Size::Size(px(10.))
         );
+    }
+
+    #[test]
+    fn test_size_as_str() {
+        assert_eq!(Size::XSmall.as_str(), "xs");
+        assert_eq!(Size::Small.as_str(), "sm");
+        assert_eq!(Size::Medium.as_str(), "md");
+        assert_eq!(Size::Large.as_str(), "lg");
+        assert_eq!(Size::Size(px(15.)).as_str(), "custom");
+    }
+
+    #[test]
+    fn test_size_from_str() {
+        assert_eq!(Size::from_str("xs"), Size::XSmall);
+        assert_eq!(Size::from_str("xsmall"), Size::XSmall);
+        assert_eq!(Size::from_str("sm"), Size::Small);
+        assert_eq!(Size::from_str("small"), Size::Small);
+        assert_eq!(Size::from_str("md"), Size::Medium);
+        assert_eq!(Size::from_str("medium"), Size::Medium);
+        assert_eq!(Size::from_str("lg"), Size::Large);
+        assert_eq!(Size::from_str("large"), Size::Large);
+        assert_eq!(Size::from_str("unknown"), Size::Medium);
+
+        // Case insensitive
+        assert_eq!(Size::from_str("XS"), Size::XSmall);
+        assert_eq!(Size::from_str("SMALL"), Size::Small);
+        assert_eq!(Size::from_str("Md"), Size::Medium);
     }
 }

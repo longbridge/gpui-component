@@ -3,8 +3,18 @@ use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 
+/// Embed application assets for GPUI Component.
+///
+/// This assets provides icons svg files for [IconName](https://docs.rs/gpui-component/latest/gpui_component/enum.IconName.html).
+///
+/// ```
+/// use gpui::*;
+/// use gpui_component_assets::Assets;
+///
+/// let app = Application::new().with_assets(Assets);
+/// ```
 #[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../../assets"]
+#[folder = "assets"]
 #[include = "icons/**/*.svg"]
 pub struct Assets;
 

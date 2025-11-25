@@ -1,15 +1,15 @@
 [package]
-edition = "2021"
 name = "window_title"
 description = "An example of using gpui-component to create a window with a custom title bar."
+version = "0.4.1"
 publish = false
-version = "0.4.0-preview2"
+edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
-gpui-component = { workspace = true }
-rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
 
 [lints]
 workspace = true

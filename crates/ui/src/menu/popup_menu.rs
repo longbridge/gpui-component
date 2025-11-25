@@ -2,13 +2,13 @@ use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
 use crate::scroll::{Scrollbar, ScrollbarState};
-use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
-use crate::{kbd::Kbd, Side, Size, StyledExt};
+use crate::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
+use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
-    anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
-    Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    Action, AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
+    WeakEntity, Window, anchored, canvas, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Subscription};
 use std::rc::Rc;
@@ -944,7 +944,7 @@ impl PopupMenu {
         action: Option<Box<dyn Action>>,
         window: &mut Window,
         _: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
+    ) -> Option<Kbd> {
         let action = action?;
 
         match self
@@ -970,26 +970,17 @@ impl PopupMenu {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let icon_placeholder = if has_icon { Some(Icon::empty()) } else { None };
-
         if !has_icon {
             return None;
         }
 
-        let icon = h_flex()
-            .w_3p5()
-            .h_3p5()
-            .justify_center()
-            .text_sm()
-            .map(|this| {
-                if let Some(icon) = icon {
-                    this.child(icon.clone().xsmall())
-                } else {
-                    this.children(icon_placeholder.clone())
-                }
-            });
+        let icon = if let Some(icon) = icon {
+            icon.clone()
+        } else {
+            Icon::empty()
+        };
 
-        Some(icon)
+        Some(icon.xsmall())
     }
 
     #[inline]
@@ -1022,7 +1013,7 @@ impl PopupMenu {
         state: ItemState,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> MenuItemElement {
         let has_icon = self.has_icon;
         let selected = self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(4.);
@@ -1070,7 +1061,7 @@ impl PopupMenu {
                     .items_center()
                     .gap_x_1()
                     .children(Self::render_icon(has_icon, None, window, cx))
-                    .child(label.clone()),
+                    .child(div().flex_1().child(label.clone())),
             ),
             PopupMenuItem::ElementItem {
                 render,

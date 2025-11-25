@@ -24,16 +24,10 @@ Button::new("ok")
 
 Add the following to your `Cargo.toml`:
 
-```toml
-gpui = "0.2"
-gpui-component = "0.4.0-preview2"
+```toml-vue
+gpui = "{{ GPUI_VERSION }}"
+gpui-component = "{{ VERSION }}"
 ```
-
-:::warning
-We are currently working on the refactoring of some APIs.
-
-Currently, the documentation is updated to match the `main` branch's changes, so you can try depending on the `main` branch until the next release (v0.4.0).
-:::
 
 ## Hello World
 

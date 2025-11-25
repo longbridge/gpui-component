@@ -23,11 +23,12 @@ use gpui_component::{
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
+use gpui_component_assets::Assets;
+use gpui_component_story::Open;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
 };
-use story::{Assets, Open};
 
 fn init() {
     LanguageRegistry::singleton().register(
@@ -1002,8 +1003,8 @@ impl Render for Example {
                                     .bordered(false)
                                     .p_0()
                                     .h_full()
-                                    .font_family("Monaco")
-                                    .text_size(px(12.))
+                                    .font_family(cx.theme().mono_font_family.clone())
+                                    .text_size(cx.theme().mono_font_size)
                                     .focus_bordered(false)
                                     .into_any_element(),
                             ),
@@ -1035,11 +1036,11 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         init();
         cx.activate(true);
 
-        story::create_new_window_with_size(
+        gpui_component_story::create_new_window_with_size(
             "Editor",
             Some(size(px(1200.), px(750.))),
             |window, cx| cx.new(|cx| Example::new(window, cx)),

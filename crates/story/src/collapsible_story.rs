@@ -4,7 +4,7 @@ use gpui::{
     Styled, Window, prelude::FluentBuilder as _,
 };
 
-use gpui_component::group_box::GroupBox;
+use gpui_component::group_box::{GroupBox, GroupBoxVariants as _};
 use gpui_component::label::Label;
 use gpui_component::tag::Tag;
 use gpui_component::{ActiveTheme, IconName, StyledExt, h_flex};

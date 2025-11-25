@@ -1,14 +1,15 @@
 use crate::{
+    ActiveTheme, Placement,
     dialog::Dialog,
     input::InputState,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    window_border, ActiveTheme, Placement,
+    window_border,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder as _, AnyView, App, AppContext, Context,
-    DefiniteLength, Entity, FocusHandle, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Render, Styled, Window,
+    AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
+    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window, actions, canvas, div,
+    prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -278,7 +279,7 @@ impl Root {
     pub fn render_notification_layer(
         window: &mut Window,
         cx: &mut App,
-    ) -> Option<impl IntoElement> {
+    ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
 
         let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
@@ -301,7 +302,10 @@ impl Root {
     }
 
     /// Render the Sheet layer.
-    pub fn render_sheet_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+    pub fn render_sheet_layer(
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
 
         if let Some(active_sheet) = root.read(cx).active_sheet.clone() {
@@ -328,7 +332,10 @@ impl Root {
     }
 
     /// Render the Dialog layer.
-    pub fn render_dialog_layer(window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+    pub fn render_dialog_layer(
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
 
         let active_dialogs = root.read(cx).active_dialogs.clone();
@@ -388,8 +395,7 @@ impl Root {
 
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let base_font_size = cx.theme().font_size;
-        window.set_rem_size(base_font_size);
+        window.set_rem_size(cx.theme().font_size);
 
         window_border().child(
             div()
@@ -399,7 +405,7 @@ impl Render for Root {
                 .on_action(cx.listener(Self::on_action_tab_prev))
                 .relative()
                 .size_full()
-                .font_family(".SystemUIFont")
+                .font_family(cx.theme().font_family.clone())
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
                 .child(self.view.clone()),

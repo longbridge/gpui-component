@@ -10,7 +10,7 @@ The GroupBox component is a versatile container that groups related content toge
 ## Import
 
 ```rust
-use gpui_component::group_box::{GroupBox, GroupBoxVariant};
+use gpui_component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _};
 ```
 
 ## Usage
@@ -158,29 +158,6 @@ GroupBox::new()
             .child(Button::new("save").primary().label("Save Settings"))
     )
 ```
-
-## API Reference
-
-### GroupBox
-
-| Method                 | Description                                 |
-| ---------------------- | ------------------------------------------- |
-| `new()`                | Create a new GroupBox with default settings |
-| `variant(variant)`     | Set the variant of the group box            |
-| `fill()`               | Set to use Fill variant (with background)   |
-| `outline()`            | Set to use Outline variant (with border)    |
-| `id(id)`               | Set the element ID for the group box        |
-| `title(title)`         | Set the title/header for the group box      |
-| `title_style(style)`   | Customize the styling of the title          |
-| `content_style(style)` | Customize the styling of the content area   |
-
-### GroupBoxVariant
-
-| Variant   | Description                                    |
-| --------- | ---------------------------------------------- |
-| `Normal`  | Default variant with no background or border   |
-| `Fill`    | Variant with background color and padding      |
-| `Outline` | Variant with border and padding, no background |
 
 ## Examples
 

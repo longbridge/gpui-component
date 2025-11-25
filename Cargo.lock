@@ -94,7 +94,7 @@ checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
 
 [[package]]
 name = "app_assets"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -1605,11 +1605,12 @@ checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
 
 [[package]]
 name = "dialog_overlay"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
+ "gpui-component-assets",
 ]
 
 [[package]]
@@ -2827,7 +2828,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2894,12 +2895,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-component-assets"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "rust-embed",
+]
+
+[[package]]
 name = "gpui-component-macros"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.105",
+]
+
+[[package]]
+name = "gpui-component-story"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "autocorrect",
+ "chrono",
+ "color-lsp",
+ "fake",
+ "gpui",
+ "gpui-component",
+ "gpui-component-assets",
+ "gtk",
+ "itertools 0.14.0",
+ "lsp-types 0.97.0",
+ "rand 0.8.5",
+ "raw-window-handle",
+ "regex",
+ "reqwest_client",
+ "serde",
+ "serde_json",
+ "smol",
+ "tracing",
+ "tracing-subscriber",
+ "tree-sitter-navi",
+ "unindent",
 ]
 
 [[package]]
@@ -3194,7 +3232,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello_world"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -3644,11 +3682,12 @@ dependencies = [
 
 [[package]]
 name = "input"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
+ "gpui-component-assets",
 ]
 
 [[package]]
@@ -5956,7 +5995,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest_client"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6890,34 +6929,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "story"
-version = "0.4.0-preview2"
-dependencies = [
- "anyhow",
- "autocorrect",
- "chrono",
- "color-lsp",
- "fake",
- "gpui",
- "gpui-component",
- "gtk",
- "itertools 0.14.0",
- "lsp-types 0.97.0",
- "rand 0.8.5",
- "raw-window-handle",
- "regex",
- "reqwest_client",
- "rust-embed",
- "serde",
- "serde_json",
- "smol",
- "tracing",
- "tracing-subscriber",
- "tree-sitter-navi",
- "unindent",
-]
 
 [[package]]
 name = "str_indices"
@@ -8808,12 +8819,12 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "window_title"
-version = "0.4.0-preview2"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
- "rust-embed",
+ "gpui-component-assets",
 ]
 
 [[package]]

@@ -6,7 +6,7 @@ use gpui::{
 
 use crate::{
     menu::{DropdownMenu, PopupMenu},
-    IconName, Selectable, Sizable, Size, StyledExt as _,
+    Disableable, Selectable, Sizable, Size, StyledExt as _,
 };
 
 use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
@@ -19,11 +19,13 @@ pub struct DropdownButton {
     menu:
         Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
     selected: bool,
+    disabled: bool,
     // The button props
-    compact: Option<bool>,
-    outline: Option<bool>,
-    variant: Option<ButtonVariant>,
-    size: Option<Size>,
+    compact: bool,
+    outline: bool,
+    loading: bool,
+    variant: ButtonVariant,
+    size: Size,
     rounded: ButtonRounded,
     anchor: Corner,
 }
@@ -37,10 +39,12 @@ impl DropdownButton {
             button: None,
             menu: None,
             selected: false,
-            compact: None,
-            outline: None,
-            variant: None,
-            size: None,
+            disabled: false,
+            compact: false,
+            outline: false,
+            loading: false,
+            variant: ButtonVariant::default(),
+            size: Size::default(),
             rounded: ButtonRounded::default(),
             anchor: Corner::TopRight,
         }
@@ -82,7 +86,7 @@ impl DropdownButton {
     ///
     /// See also: [`Button::compact`]
     pub fn compact(mut self) -> Self {
-        self.compact = Some(true);
+        self.compact = true;
         self
     }
 
@@ -90,7 +94,20 @@ impl DropdownButton {
     ///
     /// See also: [`Button::outline`]
     pub fn outline(mut self) -> Self {
-        self.outline = Some(true);
+        self.outline = true;
+        self
+    }
+
+    /// Set the button to loading state.
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
+}
+
+impl Disableable for DropdownButton {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 }
@@ -103,14 +120,14 @@ impl Styled for DropdownButton {
 
 impl Sizable for DropdownButton {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.size = Some(size.into());
+        self.size = size.into();
         self
     }
 }
 
 impl ButtonVariants for DropdownButton {
     fn with_variant(mut self, variant: ButtonVariant) -> Self {
-        self.variant = Some(variant);
+        self.variant = variant;
         self
     }
 }
@@ -128,10 +145,7 @@ impl Selectable for DropdownButton {
 
 impl RenderOnce for DropdownButton {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let rounded = self
-            .variant
-            .map(|variant| variant.is_ghost() && !self.selected)
-            .unwrap_or(false);
+        let rounded = self.variant.is_ghost() && !self.selected;
 
         div()
             .id(self.id)
@@ -153,16 +167,18 @@ impl RenderOnce for DropdownButton {
                             right: true,
                             bottom: true,
                         })
+                        .loading(self.loading)
                         .selected(self.selected)
-                        .when_some(self.compact, |this, _| this.compact())
-                        .when_some(self.outline, |this, _| this.outline())
-                        .when_some(self.size, |this, size| this.with_size(size))
-                        .when_some(self.variant, |this, variant| this.with_variant(variant)),
+                        .disabled(self.disabled || self.loading)
+                        .when(self.compact, |this| this.compact())
+                        .when(self.outline, |this| this.outline())
+                        .with_size(self.size)
+                        .with_variant(self.variant),
                 )
                 .when_some(self.menu, |this, menu| {
                     this.child(
                         Button::new("popup")
-                            .icon(IconName::ChevronDown)
+                            .dropdown_caret(true)
                             .rounded(self.rounded)
                             .border_edges(Edges {
                                 left: rounded,
@@ -177,10 +193,11 @@ impl RenderOnce for DropdownButton {
                                 bottom_right: true,
                             })
                             .selected(self.selected)
-                            .when_some(self.compact, |this, _| this.compact())
-                            .when_some(self.outline, |this, _| this.outline())
-                            .when_some(self.size, |this, size| this.with_size(size))
-                            .when_some(self.variant, |this, variant| this.with_variant(variant))
+                            .disabled(self.disabled || self.loading)
+                            .when(self.compact, |this| this.compact())
+                            .when(self.outline, |this| this.outline())
+                            .with_size(self.size)
+                            .with_variant(self.variant)
                             .dropdown_menu_with_anchor(self.anchor, menu),
                     )
                 })

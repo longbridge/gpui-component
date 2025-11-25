@@ -6,7 +6,7 @@ use gpui_component::{
     input::{self, Input, InputEvent, InputState, TabSize},
     v_flex,
 };
-use story::Assets;
+use gpui_component_assets::Assets;
 
 pub struct Example {
     editor: Entity<InputState>,
@@ -157,9 +157,9 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("Large Text Editor", Example::view, cx);
+        gpui_component_story::create_new_window("Large Text Editor", Example::view, cx);
     });
 }

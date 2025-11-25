@@ -1,12 +1,13 @@
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext as _, Context,
-    Corner, DismissEvent, Entity, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point,
-    Render, Styled, Subscription, Window,
+    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseDownEvent,
+    ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
+    div, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
 use crate::{
-    input::{self, popovers::ContextMenu, InputState},
+    ActiveTheme as _,
+    input::{self, InputState, popovers::ContextMenu},
     menu::PopupMenu,
 };
 
@@ -30,7 +31,7 @@ impl InputState {
     ) {
         // Show Mouse context menu
         if !self.selected_range.contains(offset) {
-            self.move_to(offset, cx);
+            self.move_to(offset, None, cx);
         }
 
         self.context_menu = Some(ContextMenu::MouseContext(self.mouse_context_menu.clone()));
@@ -125,7 +126,7 @@ impl MouseContextMenu {
 }
 
 impl Render for MouseContextMenu {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.open {
             return div().into_any_element();
         }
@@ -137,8 +138,7 @@ impl Render for MouseContextMenu {
                 .position(self.mouse_position)
                 .child(
                     div()
-                        .font_family(".SystemUIFont")
-                        .text_size(px(14.))
+                        .font_family(cx.theme().font_family.clone())
                         .cursor_default()
                         .child(self.menu.clone()),
                 ),

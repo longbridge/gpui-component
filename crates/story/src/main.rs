@@ -6,7 +6,8 @@ use gpui_component::{
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
-use story::*;
+use gpui_component_assets::Assets;
+use gpui_component_story::*;
 
 pub struct Gallery {
     stories: Vec<(&'static str, Vec<Entity<StoryContainer>>)>,
@@ -50,6 +51,7 @@ impl Gallery {
                     StoryContainer::panel::<DatePickerStory>(window, cx),
                     StoryContainer::panel::<DescriptionListStory>(window, cx),
                     StoryContainer::panel::<DialogStory>(window, cx),
+                    StoryContainer::panel::<DropdownButtonStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<GroupBoxStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
@@ -68,6 +70,7 @@ impl Gallery {
                     StoryContainer::panel::<ResizableStory>(window, cx),
                     StoryContainer::panel::<ScrollableStory>(window, cx),
                     StoryContainer::panel::<SelectStory>(window, cx),
+                    StoryContainer::panel::<SettingsStory>(window, cx),
                     StoryContainer::panel::<SheetStory>(window, cx),
                     StoryContainer::panel::<SidebarStory>(window, cx),
                     StoryContainer::panel::<SkeletonStory>(window, cx),
@@ -155,8 +158,8 @@ impl Render for Gallery {
                     .size_range(px(200.)..px(320.))
                     .child(
                         Sidebar::left()
-                            .width(relative(1.))
-                            .border_width(px(0.))
+                            .w(relative(1.))
+                            .border_0()
                             .collapsed(self.collapsed)
                             .header(
                                 v_flex()
@@ -297,10 +300,10 @@ fn main() {
     let name = std::env::args().nth(1);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window(
+        gpui_component_story::create_new_window(
             "GPUI Component",
             move |window, cx| Gallery::view(name.as_deref(), window, cx),
             cx,

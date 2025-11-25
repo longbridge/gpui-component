@@ -1,11 +1,12 @@
 use gpui::*;
 use gpui_component::{
+    ActiveTheme as _,
     highlighter::Language,
     input::{Input, InputState, TabSize},
     resizable::h_resizable,
     text::TextView,
 };
-use story::Assets;
+use gpui_component_assets::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -52,8 +53,8 @@ impl Render for Example {
                 div()
                     .id("source")
                     .size_full()
-                    .font_family("Menlo")
-                    .text_size(px(13.))
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .text_size(cx.theme().mono_font_size)
                     .child(
                         Input::new(&self.input_state)
                             .h_full()
@@ -81,9 +82,9 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        story::init(cx);
+        gpui_component_story::init(cx);
         cx.activate(true);
 
-        story::create_new_window("HTML Render (native)", Example::view, cx);
+        gpui_component_story::create_new_window("HTML Render (native)", Example::view, cx);
     });
 }

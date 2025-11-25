@@ -59,6 +59,11 @@ where
         self
     }
 
+    pub fn stroke(mut self, stroke: impl Into<Hsla>) -> Self {
+        self.stroke = Some(stroke.into());
+        self
+    }
+
     pub fn natural(mut self) -> Self {
         self.stroke_style = StrokeStyle::Natural;
         self

@@ -28,11 +28,9 @@ We built multi-theme support in the application. This feature is not included in
 
 ## Usage
 
-GPUI and GPUI Component are still in development, so you need to add dependencies by git.
-
 ```toml
 gpui = "0.2.2"
-gpui-component = "0.4.0-preview2"
+gpui-component = "0.4.0"
 ```
 
 ### Basic Example
@@ -88,7 +86,7 @@ fn main() {
 GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-apps/wry). This is an optional feature, which you can enable with a feature flag.
 
 ```toml
-gpui-component = { version = "0.4.0-preview2", features = ["webview"] }
+gpui-component = { version = "0.4.0", features = ["webview"] }
 wry = { version = "0.53.3, package = "lb-wry" }
 ```
 

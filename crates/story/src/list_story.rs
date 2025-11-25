@@ -4,7 +4,7 @@ use fake::Fake;
 use gpui::{
     App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString, Styled,
-    Subscription, Task, Timer, Window, actions, div, prelude::FluentBuilder as _, px,
+    Subscription, Task, Timer, Window, actions, div, px,
 };
 
 use gpui_component::{
@@ -46,22 +46,15 @@ impl Company {
 #[derive(IntoElement)]
 struct CompanyListItem {
     base: ListItem,
-    ix: IndexPath,
     company: Rc<Company>,
     selected: bool,
 }
 
 impl CompanyListItem {
-    pub fn new(
-        id: impl Into<ElementId>,
-        company: Rc<Company>,
-        ix: IndexPath,
-        selected: bool,
-    ) -> Self {
+    pub fn new(id: impl Into<ElementId>, company: Rc<Company>, selected: bool) -> Self {
         CompanyListItem {
             company,
-            ix,
-            base: ListItem::new(id),
+            base: ListItem::new(id).selected(selected),
             selected,
         }
     }
@@ -92,24 +85,11 @@ impl RenderOnce for CompanyListItem {
             _ => cx.theme().foreground,
         };
 
-        let bg_color = if self.selected {
-            cx.theme().list_active
-        } else if self.ix.row % 2 == 0 {
-            cx.theme().list
-        } else {
-            cx.theme().list_even
-        };
-
         self.base
             .px_2()
             .py_1()
             .overflow_x_hidden()
-            .bg(bg_color)
             .border_1()
-            .border_color(bg_color)
-            .when(self.selected, |this| {
-                this.border_color(cx.theme().list_active_border)
-            })
             .rounded(cx.theme().radius)
             .child(
                 h_flex()
@@ -293,7 +273,7 @@ impl ListDelegate for CompanyListDelegate {
     fn render_item(&self, ix: IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
-            return Some(CompanyListItem::new(ix, company.clone(), ix, selected));
+            return Some(CompanyListItem::new(ix, company.clone(), selected));
         }
 
         None

@@ -1,14 +1,18 @@
-use crate::{h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, StyledExt};
+use crate::{
+    button::{Button, ButtonVariants as _},
+    h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
+};
 use gpui::{
     div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
     InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use std::rc::Rc;
 
 /// Menu for the [`super::Sidebar`]
 #[derive(IntoElement)]
 pub struct SidebarMenu {
+    style: StyleRefinement,
     collapsed: bool,
     items: Vec<SidebarMenuItem>,
 }
@@ -17,6 +21,7 @@ impl SidebarMenu {
     /// Create a new SidebarMenu
     pub fn new() -> Self {
         Self {
+            style: StyleRefinement::default(),
             items: Vec::new(),
             collapsed: false,
         }
@@ -51,9 +56,15 @@ impl Collapsible for SidebarMenu {
     }
 }
 
+impl Styled for SidebarMenu {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for SidebarMenu {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        v_flex().gap_2().children(
+        v_flex().gap_2().refine_style(&self.style).children(
             self.items
                 .into_iter()
                 .enumerate()
@@ -70,9 +81,12 @@ pub struct SidebarMenuItem {
     label: SharedString,
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
     active: bool,
+    default_open: bool,
+    click_to_open: bool,
     collapsed: bool,
     children: Vec<Self>,
     suffix: Option<AnyElement>,
+    disabled: bool,
 }
 
 impl SidebarMenuItem {
@@ -85,8 +99,11 @@ impl SidebarMenuItem {
             handler: Rc::new(|_, _, _| {}),
             active: false,
             collapsed: false,
+            default_open: false,
+            click_to_open: false,
             children: Vec::new(),
             suffix: None,
+            disabled: false,
         }
     }
 
@@ -117,6 +134,24 @@ impl SidebarMenuItem {
         self
     }
 
+    /// Set the default open state of the Submenu, default is `false`.
+    ///
+    /// This only used on initial render, the internal state will be used afterwards.
+    pub fn default_open(mut self, open: bool) -> Self {
+        self.default_open = open;
+        self
+    }
+
+    /// Set whether clicking the menu item open the submenu.
+    ///
+    /// Default is `false`.
+    ///
+    /// If `false` we only handle open/close via the caret button.
+    pub fn click_to_open(mut self, click_to_open: bool) -> Self {
+        self.click_to_open = click_to_open;
+        self
+    }
+
     pub fn children(mut self, children: impl IntoIterator<Item = impl Into<Self>>) -> Self {
         self.children = children.into_iter().map(Into::into).collect();
         self
@@ -125,6 +160,12 @@ impl SidebarMenuItem {
     /// Set the suffix for the menu item.
     pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
         self.suffix = Some(suffix.into_any_element());
+        self
+    }
+
+    /// Set disabled flat for menu item.
+    pub fn disable(mut self, disable: bool) -> Self {
+        self.disabled = disable;
         self
     }
 
@@ -137,23 +178,21 @@ impl SidebarMenuItem {
     fn is_submenu(&self) -> bool {
         self.children.len() > 0
     }
-
-    fn is_open(&self) -> bool {
-        if self.is_submenu() {
-            self.active
-        } else {
-            false
-        }
-    }
 }
 
 impl RenderOnce for SidebarMenuItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let click_to_open = self.click_to_open;
+        let default_open = self.default_open;
+        let open_state = window.use_keyed_state(self.id.clone(), cx, |_, _| default_open);
+
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
         let is_active = self.active;
-        let is_open = self.is_open();
+        let is_hoverable = !is_active && !self.disabled;
+        let is_disabled = self.disabled;
         let is_submenu = self.is_submenu();
+        let is_open = is_submenu && !is_collapsed && *open_state.read(cx);
 
         div()
             .id(self.id.clone())
@@ -168,15 +207,13 @@ impl RenderOnce for SidebarMenuItem {
                     .gap_x_2()
                     .rounded(cx.theme().radius)
                     .text_sm()
-                    .hover(|this| {
-                        if is_active {
-                            return this;
-                        }
-
-                        this.bg(cx.theme().sidebar_accent.opacity(0.8))
-                            .text_color(cx.theme().sidebar_accent_foreground)
+                    .when(is_hoverable, |this| {
+                        this.hover(|this| {
+                            this.bg(cx.theme().sidebar_accent.opacity(0.8))
+                                .text_color(cx.theme().sidebar_accent_foreground)
+                        })
                     })
-                    .when(is_active && !is_submenu, |this| {
+                    .when(is_active, |this| {
                         this.font_medium()
                             .bg(cx.theme().sidebar_accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
@@ -206,15 +243,50 @@ impl RenderOnce for SidebarMenuItem {
                             )
                             .when(is_submenu, |this| {
                                 this.child(
-                                    Icon::new(IconName::ChevronRight)
-                                        .size_4()
-                                        .when(is_open, |this| this.rotate(percentage(90. / 360.))),
+                                    Button::new("caret")
+                                        .xsmall()
+                                        .ghost()
+                                        .icon(
+                                            Icon::new(IconName::ChevronRight)
+                                                .size_4()
+                                                .when(is_open, |this| {
+                                                    this.rotate(percentage(90. / 360.))
+                                                }),
+                                        )
+                                        .on_click({
+                                            let open_state = open_state.clone();
+                                            move |_, _, cx| {
+                                                // Avoid trigger item click, just expand/collapse submenu
+                                                cx.stop_propagation();
+                                                open_state.update(cx, |is_open, cx| {
+                                                    *is_open = !*is_open;
+                                                    cx.notify();
+                                                })
+                                            }
+                                        }),
                                 )
                             })
                     })
-                    .on_click(move |ev, window, cx| handler(ev, window, cx)),
+                    .when(is_disabled, |this| {
+                        this.text_color(cx.theme().muted_foreground)
+                    })
+                    .when(!is_disabled, |this| {
+                        this.on_click({
+                            let open_state = open_state.clone();
+                            move |ev, window, cx| {
+                                if click_to_open {
+                                    open_state.update(cx, |is_open, cx| {
+                                        *is_open = true;
+                                        cx.notify();
+                                    });
+                                }
+
+                                handler(ev, window, cx)
+                            }
+                        })
+                    }),
             )
-            .when(is_submenu && is_open && !is_collapsed, |this| {
+            .when(is_open, |this| {
                 this.child(
                     v_flex()
                         .id("submenu")

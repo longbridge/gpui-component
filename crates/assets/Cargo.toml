@@ -1,0 +1,20 @@
+[package]
+name = "gpui-component-assets"
+description = "Default bundled assets for GPUI Component."
+keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
+license = "Apache-2.0"
+documentation = "https://docs.rs/gpui-component"
+homepage = "https://longbridge.github.io/gpui-component"
+repository = "https://github.com/longbridge/gpui-component"
+readme = "README.md"
+edition.workspace = true
+publish = true
+version = "0.4.1"
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
