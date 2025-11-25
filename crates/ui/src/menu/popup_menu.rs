@@ -1024,7 +1024,7 @@ impl PopupMenu {
         let has_left_icon = options.has_left_icon;
         let is_left_check = options.check_side.is_left() && item.is_checked();
         let right_check_icon = if options.check_side.is_right() && item.is_checked() {
-            Some(Icon::new(IconName::Check).xsmall().ml_4())
+            Some(Icon::new(IconName::Check).xsmall())
         } else {
             None
         };
@@ -1103,7 +1103,7 @@ impl PopupMenu {
                             cx,
                         ))
                         .child((render)(window, cx))
-                        .children(right_check_icon),
+                        .children(right_check_icon.map(|icon| icon.ml_3())),
                 ),
             PopupMenuItem::Item {
                 icon,
@@ -1135,10 +1135,11 @@ impl PopupMenu {
                 .child(
                     h_flex()
                         .w_full()
-                        .gap_2()
+                        .gap_3()
                         .items_center()
                         .justify_between()
                         .when(!show_link_icon, |this| this.child(label.clone()))
+                        .children(right_check_icon)
                         .when(show_link_icon, |this| {
                             this.child(
                                 h_flex()
@@ -1155,7 +1156,6 @@ impl PopupMenu {
                         })
                         .children(key),
                 )
-                .children(right_check_icon)
             }
             PopupMenuItem::Submenu {
                 icon,

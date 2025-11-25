@@ -38,6 +38,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-shift-f", SearchAll, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-shift-f", SearchAll, Some(CONTEXT)),
+        KeyBinding::new("ctrl-shift-alt-t", ToggleCheck, Some(CONTEXT)),
     ])
 }
 
