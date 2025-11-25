@@ -80,7 +80,6 @@ impl ColorPickerState {
                 InputEvent::Change => {
                     let value = state.read(cx).value();
                     if let Ok(color) = Hsla::parse_hex(value.as_str()) {
-                        this.value = Some(color);
                         this.hovered_color = Some(color);
                     }
                 }
@@ -127,12 +126,21 @@ impl ColorPickerState {
         self.value
     }
 
-    fn on_escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
         }
 
         self.open = false;
+        if self.hovered_color != self.value {
+            let color = self.value;
+            self.hovered_color = color;
+            if let Some(color) = color {
+                self.state.update(cx, |input, cx| {
+                    input.set_value(color.to_hex(), window, cx);
+                });
+            }
+        }
         cx.notify();
     }
 
@@ -302,6 +310,18 @@ impl ColorPicker {
         ]);
 
         let state = self.state.clone();
+        // If the input value is empty, fill it with the current value.
+        let input_value = state.read(cx).state.read(cx).value();
+        if input_value.is_empty()
+            && let Some(value) = state.read(cx).value
+        {
+            state.update(cx, |state, cx| {
+                state.state.update(cx, |input, cx| {
+                    input.set_value(value.to_hex(), window, cx);
+                });
+            });
+        }
+
         v_flex()
             .gap_3()
             .child(
