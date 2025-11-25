@@ -1,457 +1,639 @@
 [
   {
     "date": "Apr 1",
-    "desktop": 222.0,
-    "mobile": 111.0
+    "desktop": 222,
+    "mobile": 111,
+    "tablet": 67,
+    "watch": 28
   },
   {
     "date": "Apr 2",
-    "desktop": 97.0,
-    "mobile": 48.0
+    "desktop": 97,
+    "mobile": 48,
+    "tablet": 29,
+    "watch": 12
   },
   {
     "date": "Apr 3",
-    "desktop": 167.0,
-    "mobile": 84.0
+    "desktop": 167,
+    "mobile": 84,
+    "tablet": 50,
+    "watch": 21
   },
   {
     "date": "Apr 4",
-    "desktop": 242.0,
-    "mobile": 121.0
+    "desktop": 242,
+    "mobile": 121,
+    "tablet": 73,
+    "watch": 30
   },
   {
     "date": "Apr 5",
-    "desktop": 373.0,
-    "mobile": 187.0
+    "desktop": 373,
+    "mobile": 187,
+    "tablet": 112,
+    "watch": 47
   },
   {
     "date": "Apr 6",
-    "desktop": 301.0,
-    "mobile": 151.0
+    "desktop": 301,
+    "mobile": 151,
+    "tablet": 91,
+    "watch": 38
   },
   {
     "date": "Apr 7",
-    "desktop": 245.0,
-    "mobile": 123.0
+    "desktop": 245,
+    "mobile": 123,
+    "tablet": 74,
+    "watch": 31
   },
   {
     "date": "Apr 8",
-    "desktop": 409.0,
-    "mobile": 205.0
+    "desktop": 409,
+    "mobile": 205,
+    "tablet": 123,
+    "watch": 51
   },
   {
     "date": "Apr 9",
-    "desktop": 59.0,
-    "mobile": 30.0
+    "desktop": 59,
+    "mobile": 30,
+    "tablet": 18,
+    "watch": 8
   },
   {
     "date": "Apr 10",
-    "desktop": 261.0,
-    "mobile": 131.0
+    "desktop": 261,
+    "mobile": 131,
+    "tablet": 79,
+    "watch": 33
   },
   {
     "date": "Apr 11",
-    "desktop": 327.0,
-    "mobile": 164.0
+    "desktop": 327,
+    "mobile": 164,
+    "tablet": 98,
+    "watch": 41
   },
   {
     "date": "Apr 12",
-    "desktop": 292.0,
-    "mobile": 146.0
+    "desktop": 292,
+    "mobile": 146,
+    "tablet": 88,
+    "watch": 36
   },
   {
     "date": "Apr 13",
-    "desktop": 342.0,
-    "mobile": 171.0
+    "desktop": 342,
+    "mobile": 171,
+    "tablet": 103,
+    "watch": 43
   },
   {
     "date": "Apr 14",
-    "desktop": 137.0,
-    "mobile": 69.0
+    "desktop": 137,
+    "mobile": 69,
+    "tablet": 41,
+    "watch": 17
   },
   {
     "date": "Apr 15",
-    "desktop": 120.0,
-    "mobile": 60.0
+    "desktop": 120,
+    "mobile": 60,
+    "tablet": 36,
+    "watch": 15
   },
   {
     "date": "Apr 16",
-    "desktop": 138.0,
-    "mobile": 69.0
+    "desktop": 138,
+    "mobile": 69,
+    "tablet": 41,
+    "watch": 17
   },
   {
     "date": "Apr 17",
-    "desktop": 446.0,
-    "mobile": 223.0
+    "desktop": 446,
+    "mobile": 223,
+    "tablet": 134,
+    "watch": 56
   },
   {
     "date": "Apr 18",
-    "desktop": 364.0,
-    "mobile": 182.0
+    "desktop": 364,
+    "mobile": 182,
+    "tablet": 109,
+    "watch": 46
   },
   {
     "date": "Apr 19",
-    "desktop": 243.0,
-    "mobile": 122.0
+    "desktop": 243,
+    "mobile": 122,
+    "tablet": 73,
+    "watch": 30
   },
   {
     "date": "Apr 20",
-    "desktop": 89.0,
-    "mobile": 44.0
+    "desktop": 89,
+    "mobile": 44,
+    "tablet": 26,
+    "watch": 11
   },
   {
     "date": "Apr 21",
-    "desktop": 137.0,
-    "mobile": 69.0
+    "desktop": 137,
+    "mobile": 69,
+    "tablet": 41,
+    "watch": 17
   },
   {
     "date": "Apr 22",
-    "desktop": 224.0,
-    "mobile": 112.0
+    "desktop": 224,
+    "mobile": 112,
+    "tablet": 67,
+    "watch": 28
   },
   {
     "date": "Apr 23",
-    "desktop": 138.0,
-    "mobile": 69.0
+    "desktop": 138,
+    "mobile": 69,
+    "tablet": 41,
+    "watch": 17
   },
   {
     "date": "Apr 24",
-    "desktop": 387.0,
-    "mobile": 194.0
+    "desktop": 387,
+    "mobile": 194,
+    "tablet": 116,
+    "watch": 48
   },
   {
     "date": "Apr 25",
-    "desktop": 215.0,
-    "mobile": 108.0
+    "desktop": 215,
+    "mobile": 108,
+    "tablet": 65,
+    "watch": 27
   },
   {
     "date": "Apr 26",
-    "desktop": 75.0,
-    "mobile": 38.0
+    "desktop": 75,
+    "mobile": 38,
+    "tablet": 23,
+    "watch": 10
   },
   {
     "date": "Apr 27",
-    "desktop": 383.0,
-    "mobile": 192.0
+    "desktop": 383,
+    "mobile": 192,
+    "tablet": 115,
+    "watch": 48
   },
   {
     "date": "Apr 28",
-    "desktop": 122.0,
-    "mobile": 61.0
+    "desktop": 122,
+    "mobile": 61,
+    "tablet": 37,
+    "watch": 15
   },
   {
     "date": "Apr 29",
-    "desktop": 315.0,
-    "mobile": 158.0
+    "desktop": 315,
+    "mobile": 158,
+    "tablet": 95,
+    "watch": 40
   },
   {
     "date": "Apr 30",
-    "desktop": 454.0,
-    "mobile": 227.0
+    "desktop": 454,
+    "mobile": 227,
+    "tablet": 136,
+    "watch": 57
   },
   {
     "date": "May 1",
-    "desktop": 165.0,
-    "mobile": 82.0
+    "desktop": 165,
+    "mobile": 82,
+    "tablet": 49,
+    "watch": 20
   },
   {
     "date": "May 2",
-    "desktop": 293.0,
-    "mobile": 146.0
+    "desktop": 293,
+    "mobile": 146,
+    "tablet": 88,
+    "watch": 36
   },
   {
     "date": "May 3",
-    "desktop": 247.0,
-    "mobile": 124.0
+    "desktop": 247,
+    "mobile": 124,
+    "tablet": 74,
+    "watch": 31
   },
   {
     "date": "May 4",
-    "desktop": 385.0,
-    "mobile": 192.0
+    "desktop": 385,
+    "mobile": 192,
+    "tablet": 115,
+    "watch": 48
   },
   {
     "date": "May 5",
-    "desktop": 481.0,
-    "mobile": 241.0
+    "desktop": 481,
+    "mobile": 241,
+    "tablet": 145,
+    "watch": 60
   },
   {
     "date": "May 6",
-    "desktop": 498.0,
-    "mobile": 249.0
+    "desktop": 498,
+    "mobile": 249,
+    "tablet": 149,
+    "watch": 62
   },
   {
     "date": "May 7",
-    "desktop": 388.0,
-    "mobile": 194.0
+    "desktop": 388,
+    "mobile": 194,
+    "tablet": 116,
+    "watch": 48
   },
   {
     "date": "May 8",
-    "desktop": 149.0,
-    "mobile": 74.0
+    "desktop": 149,
+    "mobile": 74,
+    "tablet": 44,
+    "watch": 18
   },
   {
     "date": "May 9",
-    "desktop": 227.0,
-    "mobile": 114.0
+    "desktop": 227,
+    "mobile": 114,
+    "tablet": 68,
+    "watch": 28
   },
   {
     "date": "May 10",
-    "desktop": 293.0,
-    "mobile": 146.0
+    "desktop": 293,
+    "mobile": 146,
+    "tablet": 88,
+    "watch": 36
   },
   {
     "date": "May 11",
-    "desktop": 335.0,
-    "mobile": 168.0
+    "desktop": 335,
+    "mobile": 168,
+    "tablet": 101,
+    "watch": 42
   },
   {
     "date": "May 12",
-    "desktop": 197.0,
-    "mobile": 98.0
+    "desktop": 197,
+    "mobile": 98,
+    "tablet": 59,
+    "watch": 24
   },
   {
     "date": "May 13",
-    "desktop": 197.0,
-    "mobile": 98.0
+    "desktop": 197,
+    "mobile": 98,
+    "tablet": 59,
+    "watch": 24
   },
   {
     "date": "May 14",
-    "desktop": 448.0,
-    "mobile": 224.0
+    "desktop": 448,
+    "mobile": 224,
+    "tablet": 134,
+    "watch": 56
   },
   {
     "date": "May 15",
-    "desktop": 473.0,
-    "mobile": 236.0
+    "desktop": 473,
+    "mobile": 236,
+    "tablet": 142,
+    "watch": 59
   },
   {
     "date": "May 16",
-    "desktop": 338.0,
-    "mobile": 169.0
+    "desktop": 338,
+    "mobile": 169,
+    "tablet": 101,
+    "watch": 42
   },
   {
     "date": "May 17",
-    "desktop": 499.0,
-    "mobile": 250.0
+    "desktop": 499,
+    "mobile": 250,
+    "tablet": 150,
+    "watch": 62
   },
   {
     "date": "May 18",
-    "desktop": 315.0,
-    "mobile": 158.0
+    "desktop": 315,
+    "mobile": 158,
+    "tablet": 95,
+    "watch": 40
   },
   {
     "date": "May 19",
-    "desktop": 235.0,
-    "mobile": 118.0
+    "desktop": 235,
+    "mobile": 118,
+    "tablet": 71,
+    "watch": 30
   },
   {
     "date": "May 20",
-    "desktop": 177.0,
-    "mobile": 88.0
+    "desktop": 177,
+    "mobile": 88,
+    "tablet": 53,
+    "watch": 22
   },
   {
     "date": "May 21",
-    "desktop": 82.0,
-    "mobile": 41.0
+    "desktop": 82,
+    "mobile": 41,
+    "tablet": 25,
+    "watch": 10
   },
   {
     "date": "May 22",
-    "desktop": 81.0,
-    "mobile": 41.0
+    "desktop": 81,
+    "mobile": 41,
+    "tablet": 25,
+    "watch": 10
   },
   {
     "date": "May 23",
-    "desktop": 252.0,
-    "mobile": 126.0
+    "desktop": 252,
+    "mobile": 126,
+    "tablet": 76,
+    "watch": 32
   },
   {
     "date": "May 24",
-    "desktop": 294.0,
-    "mobile": 147.0
+    "desktop": 294,
+    "mobile": 147,
+    "tablet": 88,
+    "watch": 37
   },
   {
     "date": "May 25",
-    "desktop": 201.0,
-    "mobile": 100.0
+    "desktop": 201,
+    "mobile": 100,
+    "tablet": 60,
+    "watch": 25
   },
   {
     "date": "May 26",
-    "desktop": 213.0,
-    "mobile": 106.0
+    "desktop": 213,
+    "mobile": 106,
+    "tablet": 64,
+    "watch": 26
   },
   {
     "date": "May 27",
-    "desktop": 420.0,
-    "mobile": 210.0
+    "desktop": 420,
+    "mobile": 210,
+    "tablet": 126,
+    "watch": 52
   },
   {
     "date": "May 28",
-    "desktop": 233.0,
-    "mobile": 116.0
+    "desktop": 233,
+    "mobile": 116,
+    "tablet": 70,
+    "watch": 29
   },
   {
     "date": "May 29",
-    "desktop": 78.0,
-    "mobile": 39.0
+    "desktop": 78,
+    "mobile": 39,
+    "tablet": 23,
+    "watch": 10
   },
   {
     "date": "May 30",
-    "desktop": 340.0,
-    "mobile": 170.0
+    "desktop": 340,
+    "mobile": 170,
+    "tablet": 102,
+    "watch": 42
   },
   {
     "date": "May 31",
-    "desktop": 178.0,
-    "mobile": 89.0
+    "desktop": 178,
+    "mobile": 89,
+    "tablet": 53,
+    "watch": 22
   },
   {
     "date": "Jun 1",
-    "desktop": 178.0,
-    "mobile": 89.0
+    "desktop": 178,
+    "mobile": 89,
+    "tablet": 53,
+    "watch": 22
   },
   {
     "date": "Jun 2",
-    "desktop": 470.0,
-    "mobile": 235.0
+    "desktop": 470,
+    "mobile": 235,
+    "tablet": 141,
+    "watch": 59
   },
   {
     "date": "Jun 3",
-    "desktop": 103.0,
-    "mobile": 52.0
+    "desktop": 103,
+    "mobile": 52,
+    "tablet": 31,
+    "watch": 13
   },
   {
     "date": "Jun 4",
-    "desktop": 439.0,
-    "mobile": 220.0
+    "desktop": 439,
+    "mobile": 220,
+    "tablet": 132,
+    "watch": 55
   },
   {
     "date": "Jun 5",
-    "desktop": 88.0,
-    "mobile": 44.0
+    "desktop": 88,
+    "mobile": 44,
+    "tablet": 26,
+    "watch": 11
   },
   {
     "date": "Jun 6",
-    "desktop": 294.0,
-    "mobile": 147.0
+    "desktop": 294,
+    "mobile": 147,
+    "tablet": 88,
+    "watch": 37
   },
   {
     "date": "Jun 7",
-    "desktop": 323.0,
-    "mobile": 162.0
+    "desktop": 323,
+    "mobile": 162,
+    "tablet": 97,
+    "watch": 40
   },
   {
     "date": "Jun 8",
-    "desktop": 385.0,
-    "mobile": 192.0
+    "desktop": 385,
+    "mobile": 192,
+    "tablet": 115,
+    "watch": 48
   },
   {
     "date": "Jun 9",
-    "desktop": 438.0,
-    "mobile": 219.0
+    "desktop": 438,
+    "mobile": 219,
+    "tablet": 131,
+    "watch": 55
   },
   {
     "date": "Jun 10",
-    "desktop": 155.0,
-    "mobile": 78.0
+    "desktop": 155,
+    "mobile": 78,
+    "tablet": 47,
+    "watch": 20
   },
   {
     "date": "Jun 11",
-    "desktop": 92.0,
-    "mobile": 46.0
+    "desktop": 92,
+    "mobile": 46,
+    "tablet": 28,
+    "watch": 12
   },
   {
     "date": "Jun 12",
-    "desktop": 492.0,
-    "mobile": 246.0
+    "desktop": 492,
+    "mobile": 246,
+    "tablet": 148,
+    "watch": 62
   },
   {
     "date": "Jun 13",
-    "desktop": 81.0,
-    "mobile": 41.0
+    "desktop": 81,
+    "mobile": 41,
+    "tablet": 25,
+    "watch": 10
   },
   {
     "date": "Jun 14",
-    "desktop": 426.0,
-    "mobile": 213.0
+    "desktop": 426,
+    "mobile": 213,
+    "tablet": 128,
+    "watch": 53
   },
   {
     "date": "Jun 15",
-    "desktop": 307.0,
-    "mobile": 154.0
+    "desktop": 307,
+    "mobile": 154,
+    "tablet": 92,
+    "watch": 38
   },
   {
     "date": "Jun 16",
-    "desktop": 371.0,
-    "mobile": 186.0
+    "desktop": 371,
+    "mobile": 186,
+    "tablet": 112,
+    "watch": 46
   },
   {
     "date": "Jun 17",
-    "desktop": 475.0,
-    "mobile": 238.0
+    "desktop": 475,
+    "mobile": 238,
+    "tablet": 143,
+    "watch": 60
   },
   {
     "date": "Jun 18",
-    "desktop": 107.0,
-    "mobile": 54.0
+    "desktop": 107,
+    "mobile": 54,
+    "tablet": 32,
+    "watch": 14
   },
   {
     "date": "Jun 19",
-    "desktop": 341.0,
-    "mobile": 171.0
+    "desktop": 341,
+    "mobile": 171,
+    "tablet": 103,
+    "watch": 43
   },
   {
     "date": "Jun 20",
-    "desktop": 408.0,
-    "mobile": 204.0
+    "desktop": 408,
+    "mobile": 204,
+    "tablet": 122,
+    "watch": 51
   },
   {
     "date": "Jun 21",
-    "desktop": 169.0,
-    "mobile": 84.0
+    "desktop": 169,
+    "mobile": 84,
+    "tablet": 50,
+    "watch": 21
   },
   {
     "date": "Jun 22",
-    "desktop": 317.0,
-    "mobile": 158.0
+    "desktop": 317,
+    "mobile": 158,
+    "tablet": 95,
+    "watch": 40
   },
   {
     "date": "Jun 23",
-    "desktop": 480.0,
-    "mobile": 240.0
+    "desktop": 480,
+    "mobile": 240,
+    "tablet": 144,
+    "watch": 60
   },
   {
     "date": "Jun 24",
-    "desktop": 132.0,
-    "mobile": 66.0
+    "desktop": 132,
+    "mobile": 66,
+    "tablet": 40,
+    "watch": 16
   },
   {
     "date": "Jun 25",
-    "desktop": 141.0,
-    "mobile": 70.0
+    "desktop": 141,
+    "mobile": 70,
+    "tablet": 42,
+    "watch": 18
   },
   {
     "date": "Jun 26",
-    "desktop": 434.0,
-    "mobile": 217.0
+    "desktop": 434,
+    "mobile": 217,
+    "tablet": 130,
+    "watch": 54
   },
   {
     "date": "Jun 27",
-    "desktop": 448.0,
-    "mobile": 224.0
+    "desktop": 448,
+    "mobile": 224,
+    "tablet": 134,
+    "watch": 56
   },
   {
     "date": "Jun 28",
-    "desktop": 149.0,
-    "mobile": 74.0
+    "desktop": 149,
+    "mobile": 74,
+    "tablet": 44,
+    "watch": 18
   },
   {
     "date": "Jun 29",
-    "desktop": 103.0,
-    "mobile": 52.0
+    "desktop": 103,
+    "mobile": 52,
+    "tablet": 31,
+    "watch": 13
   },
   {
     "date": "Jun 30",
-    "desktop": 446.0,
-    "mobile": 223.0
+    "desktop": 446,
+    "mobile": 223,
+    "tablet": 134,
+    "watch": 56
   }
 ]

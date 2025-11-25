@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
-use gpui::{px, App, Bounds, Hsla, Pixels, SharedString, TextAlign, Window};
+use gpui::{App, Bounds, Hsla, Pixels, SharedString, TextAlign, Window, px};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
+    ActiveTheme, PixelsExt,
     plot::{
+        AXIS_GAP, AxisText, Grid, Plot, PlotAxis,
         label::Text,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::Bar,
-        PlotAxis, AxisText, Grid, Plot, AXIS_GAP,
     },
-    ActiveTheme, PixelsExt,
 };
 
 #[derive(IntoPlot)]
@@ -148,7 +148,7 @@ where
             .data(&self.data)
             .band_width(band_width)
             .x(move |d| x.tick(&x_fn(d)))
-            .y0(height)
+            .y0(move |_| height)
             .y1(move |d| y.tick(&y_fn(d)))
             .fill(move |d| fill.as_ref().map(|f| f(d)).unwrap_or(default_fill));
 

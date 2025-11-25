@@ -1,14 +1,20 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder, px,
+    App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement,
+    ParentElement, Pixels, Render, SharedString, Styled, TextAlign, Window, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder, px,
 };
 use gpui_component::{
-    ActiveTheme, StyledExt,
+    ActiveTheme, PixelsExt, StyledExt,
     chart::{AreaChart, BarChart, LineChart, PieChart},
     divider::Divider,
     dock::PanelControl,
-    h_flex, v_flex,
+    h_flex,
+    plot::{
+        AXIS_GAP, AxisText, IntoPlot, Plot, PlotAxis,
+        scale::{Scale, ScaleBand, ScaleLinear},
+        shape::{Bar, Stack, StackSeries},
+    },
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -30,6 +36,103 @@ struct DailyDevice {
     pub date: SharedString,
     pub desktop: f64,
     pub mobile: f64,
+    pub tablet: f64,
+    pub watch: f64,
+}
+
+#[derive(IntoPlot)]
+struct StackedBarChart {
+    data: Vec<DailyDevice>,
+    series: Vec<StackSeries<DailyDevice>>,
+}
+
+impl StackedBarChart {
+    pub fn new(data: Vec<DailyDevice>) -> Self {
+        let series = Stack::new()
+            .data(data.clone())
+            .keys(vec!["desktop", "mobile", "tablet", "watch"])
+            .value(move |d: &DailyDevice, key| match key {
+                "desktop" => Some(d.desktop as f32),
+                "mobile" => Some(d.mobile as f32),
+                "tablet" => Some(d.tablet as f32),
+                "watch" => Some(d.watch as f32),
+                _ => None,
+            })
+            .series();
+
+        Self { data, series }
+    }
+}
+
+impl Plot for StackedBarChart {
+    fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        let width = bounds.size.width.as_f32();
+        let height = bounds.size.height.as_f32() - AXIS_GAP;
+
+        // X scale
+        let x = ScaleBand::new(
+            self.data.iter().map(|v| v.date.clone()).collect(),
+            vec![0., width],
+        )
+        .padding_inner(0.4)
+        .padding_outer(0.2);
+        let band_width = x.band_width();
+
+        let max = self
+            .series
+            .iter()
+            .flat_map(|s| s.points.iter().map(|p| p.y1))
+            .fold(0., f32::max) as f64;
+        // Y scale
+        let y = ScaleLinear::new(vec![0., max], vec![height, 10.]);
+
+        // X axis labels
+        let x_label = self.data.iter().filter_map(|d| {
+            x.tick(&d.date.clone()).map(|x_tick| {
+                AxisText::new(
+                    d.date.clone(),
+                    x_tick + band_width / 2.,
+                    cx.theme().muted_foreground,
+                )
+                .align(TextAlign::Center)
+            })
+        });
+        PlotAxis::new()
+            .x(height)
+            .x_label(x_label)
+            .stroke(cx.theme().border)
+            .paint(&bounds, window, cx);
+
+        // Draw bars
+        let fill = cx.theme().chart_4;
+        let fill2 = cx.theme().chart_3;
+        let fill3 = cx.theme().chart_2;
+        let fill4 = cx.theme().chart_1;
+        for (i, series) in self.series.iter().enumerate() {
+            let x = x.clone();
+            let y0 = y.clone();
+            let y1 = y.clone();
+            let bar = Bar::new()
+                .data(&series.points)
+                .band_width(band_width)
+                .x(move |d| x.tick(&d.data.date.clone()))
+                .y0(move |d| y0.tick(&(d.y0 as f64)).unwrap_or(height))
+                .y1(move |d| y1.tick(&(d.y1 as f64)))
+                .fill(move |_| {
+                    if i == 0 {
+                        fill
+                    } else if i == 1 {
+                        fill2
+                    } else if i == 2 {
+                        fill3
+                    } else {
+                        fill4
+                    }
+                });
+
+            bar.paint(&bounds, window, cx);
+        }
+    }
 }
 
 pub struct ChartStory {
@@ -196,7 +299,7 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_8()
+                    .gap_x_4()
                     .h(px(400.))
                     .child(chart_container(
                         "Bar Chart",
@@ -223,7 +326,16 @@ impl Render for ChartStory {
                             .label(|d| d.desktop.to_string()),
                         false,
                         cx,
-                    )),
+                    ))
+                    .child({
+                        let data = self.daily_devices.iter().take(8).cloned().collect();
+                        chart_container(
+                            "Bar Chart - Stacked",
+                            StackedBarChart::new(data),
+                            false,
+                            cx,
+                        )
+                    }),
             )
             .child(Divider::horizontal())
             .child(
