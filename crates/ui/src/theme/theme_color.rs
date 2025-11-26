@@ -149,6 +149,8 @@ pub struct ThemeColor {
     pub success_active: Hsla,
     /// Switch background color.
     pub switch: Hsla,
+    /// Switch thumb background color.
+    pub switch_thumb: Hsla,
     /// Tab background color.
     pub tab: Hsla,
     /// Tab active background color.

@@ -284,6 +284,9 @@ pub struct ThemeConfigColors {
     /// Switch background color.
     #[serde(rename = "switch.background")]
     pub switch: Option<SharedString>,
+    /// Switch thumb background color.
+    #[serde(rename = "switch.thumb.background")]
+    pub switch_thumb: Option<SharedString>,
     /// Tab background color.
     #[serde(rename = "tab.background")]
     pub tab: Option<SharedString>,
@@ -599,6 +602,7 @@ impl ThemeColor {
         apply_color!(slider_bar, fallback = self.primary);
         apply_color!(slider_thumb, fallback = self.primary_foreground);
         apply_color!(switch, fallback = self.secondary);
+        apply_color!(switch_thumb, fallback = self.background);
         apply_color!(tab, fallback = self.background);
         apply_color!(tab_active, fallback = self.background);
         apply_color!(tab_active_foreground, fallback = self.foreground);
