@@ -20,6 +20,7 @@ pub struct StackedBarChart {
 
 impl StackedBarChart {
     pub fn new(data: Vec<DailyDevice>) -> Self {
+        // 1. Calculate the stacked data
         let series = Stack::new()
             .data(data.clone())
             .keys(vec!["desktop", "mobile", "tablet", "watch"])
@@ -41,7 +42,7 @@ impl Plot for StackedBarChart {
         let width = bounds.size.width.as_f32();
         let height = bounds.size.height.as_f32() - AXIS_GAP;
 
-        // X scale
+        // 2. Calculate X/Y scales
         let x = ScaleBand::new(
             self.data.iter().map(|v| v.date.clone()).collect(),
             vec![0., width],
@@ -55,10 +56,10 @@ impl Plot for StackedBarChart {
             .iter()
             .flat_map(|s| s.points.iter().map(|p| p.y1))
             .fold(0., f32::max) as f64;
-        // Y scale
+
         let y = ScaleLinear::new(vec![0., max], vec![height, 10.]);
 
-        // X axis labels
+        // 3. Draw X axis labels
         let x_label = self.data.iter().filter_map(|d| {
             x.tick(&d.date.clone()).map(|x_tick| {
                 AxisText::new(
@@ -75,7 +76,7 @@ impl Plot for StackedBarChart {
             .stroke(cx.theme().border)
             .paint(&bounds, window, cx);
 
-        // Fill color
+        // 4. Setup color scale
         let keys = self.series.iter().map(|s| s.key.clone()).collect();
         let colors = vec![
             cx.theme().chart_4,
@@ -85,14 +86,14 @@ impl Plot for StackedBarChart {
         ];
         let ordinal = ScaleOrdinal::new(keys, colors);
 
-        // Draw grid
+        // 5. Draw grid lines
         Grid::new()
             .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
             .stroke(cx.theme().border)
             .dash_array(&[px(4.), px(2.)])
             .paint(&bounds, window);
 
-        // Draw bars
+        // 6. Draw stacked bars
         for series in self.series.iter() {
             let x = x.clone();
             let y0 = y.clone();
