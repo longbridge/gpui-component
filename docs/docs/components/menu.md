@@ -73,7 +73,7 @@ However, if you prefer not to use [Action]s, you can create custom menu items us
 There have a `on_click` callback to handle the click event directly.
 :::
 
-### Menu with Anchor Position
+### Anchor Position
 
 Control where the dropdown menu appears relative to the trigger:
 
@@ -88,7 +88,7 @@ Button::new("menu-btn")
     })
 ```
 
-### Menu Items with Icons
+### Icons
 
 Add icons to menu items for better visual clarity:
 
@@ -101,7 +101,22 @@ menu.menu_with_icon("Search", IconName::Search, Box::new(Search))
     .menu_with_icon("Help", IconName::Help, Box::new(ShowHelp))
 ```
 
-### Checkable Menu Items
+### Disabled State
+
+Create disabled menu items that cannot be activated:
+
+```rust
+menu.menu("Available Action", Box::new(Action1))
+    .menu_with_disabled("Disabled Action", Box::new(Action2), true)
+    .menu_with_icon_and_disabled(
+        "Unavailable",
+        IconName::Lock,
+        Box::new(Action3),
+        true
+    )
+```
+
+### Check state
 
 Create menu items that show a check state:
 
@@ -112,7 +127,94 @@ menu.menu_with_check("Enable Feature", is_enabled, Box::new(ToggleFeature))
     .menu_with_check("Show Sidebar", sidebar_visible, Box::new(ToggleSidebar))
 ```
 
-### Menu Items with Keyboard Shortcuts
+By default, the check icon will be shown on the left side of the menu item, if this menu item has an icon, the check icon will replace the icon on the left side.
+
+There also have a `check_side` option for you to config the check icon to be shown on the right side:
+
+```rust
+menu.check_size(Side::Right)
+    .menu_with_check("Enable Feature", is_enabled, Box::new(ToggleFeature))
+```
+
+### Separators
+
+Use separators to group related menu items:
+
+```rust
+menu.menu("New", Box::new(NewFile))
+    .menu("Open", Box::new(OpenFile))
+    .separator()  // Groups file operations
+    .menu("Copy", Box::new(Copy))
+    .menu("Paste", Box::new(Paste))
+    .separator()  // Groups edit operations
+    .menu("Exit", Box::new(Exit))
+```
+
+### Labels
+
+Add non-interactive labels to organize menu sections:
+
+```rust
+menu.label("File Operations")
+    .menu("New", Box::new(NewFile))
+    .menu("Open", Box::new(OpenFile))
+    .separator()
+    .label("Edit Operations")
+    .menu("Copy", Box::new(Copy))
+    .menu("Paste", Box::new(Paste))
+```
+
+### Link MenuItem
+
+Create menu items that open external links:
+
+```rust
+menu.link("Documentation", "https://docs.example.com")
+    .link_with_icon(
+        "GitHub",
+        IconName::GitHub,
+        "https://github.com/example/repo"
+    )
+    .separator()
+    .external_link_icon(false) // Hide external link icons
+    .link("Support", "https://support.example.com")
+```
+
+### Custom Element
+
+Create custom menu items with complex content:
+
+```rust
+use gpui_component::{h_flex, v_flex};
+
+menu.menu_element(Box::new(CustomAction), |window, cx| {
+        v_flex()
+            .child("Custom Element")
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("This is a subtitle")
+            )
+    })
+    .menu_element_with_icon(
+        IconName::Info,
+        Box::new(InfoAction),
+        |window, cx| {
+            h_flex()
+                .gap_1()
+                .child("Status")
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().success)
+                        .child("✓ Connected")
+                )
+        }
+    )
+```
+
+### Keyboard Shortcuts
 
 Menu items automatically display keyboard shortcuts if they're bound to actions:
 
@@ -164,99 +266,6 @@ menu.submenu_with_icon(
         |submenu, window, cx| {
             submenu.menu("Open Project", Box::new(OpenProject))
                 .menu("Close Project", Box::new(CloseProject))
-        }
-    )
-```
-
-### Disabled Menu Items
-
-Create disabled menu items that cannot be activated:
-
-```rust
-menu.menu("Available Action", Box::new(Action1))
-    .menu_with_disabled("Disabled Action", Box::new(Action2), true)
-    .menu_with_icon_and_disabled(
-        "Unavailable",
-        IconName::Lock,
-        Box::new(Action3),
-        true
-    )
-```
-
-### Menu Separators
-
-Use separators to group related menu items:
-
-```rust
-menu.menu("New", Box::new(NewFile))
-    .menu("Open", Box::new(OpenFile))
-    .separator()  // Groups file operations
-    .menu("Copy", Box::new(Copy))
-    .menu("Paste", Box::new(Paste))
-    .separator()  // Groups edit operations
-    .menu("Exit", Box::new(Exit))
-```
-
-### Menu Labels
-
-Add non-interactive labels to organize menu sections:
-
-```rust
-menu.label("File Operations")
-    .menu("New", Box::new(NewFile))
-    .menu("Open", Box::new(OpenFile))
-    .separator()
-    .label("Edit Operations")
-    .menu("Copy", Box::new(Copy))
-    .menu("Paste", Box::new(Paste))
-```
-
-### Link Menu Items
-
-Create menu items that open external links:
-
-```rust
-menu.link("Documentation", "https://docs.example.com")
-    .link_with_icon(
-        "GitHub",
-        IconName::GitHub,
-        "https://github.com/example/repo"
-    )
-    .separator()
-    .external_link_icon(false) // Hide external link icons
-    .link("Support", "https://support.example.com")
-```
-
-### Custom Menu Elements
-
-Create custom menu items with complex content:
-
-```rust
-use gpui_component::{h_flex, v_flex};
-
-menu.menu_element(Box::new(CustomAction), |window, cx| {
-        v_flex()
-            .child("Custom Element")
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("This is a subtitle")
-            )
-    })
-    .menu_element_with_icon(
-        IconName::Info,
-        Box::new(InfoAction),
-        |window, cx| {
-            h_flex()
-                .gap_1()
-                .child("Status")
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().success)
-                        .child("✓ Connected")
-                )
         }
     )
 ```

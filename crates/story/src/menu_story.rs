@@ -3,7 +3,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, StyledExt,
+    ActiveTheme as _, IconName, Side, StyledExt,
     button::Button,
     h_flex,
     menu::{ContextMenuExt, DropdownMenu as _, PopupMenuItem},
@@ -38,11 +38,12 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-shift-f", SearchAll, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-shift-f", SearchAll, Some(CONTEXT)),
+        KeyBinding::new("ctrl-shift-alt-t", ToggleCheck, Some(CONTEXT)),
     ])
 }
 
 pub struct MenuStory {
-    checked: bool,
+    check_side: Option<Side>,
     message: String,
 }
 
@@ -67,7 +68,7 @@ impl MenuStory {
 
     fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
-            checked: true,
+            check_side: None,
             message: "".to_string(),
         }
     }
@@ -98,15 +99,22 @@ impl MenuStory {
     }
 
     fn on_action_toggle_check(&mut self, _: &ToggleCheck, _: &mut Window, cx: &mut Context<Self>) {
-        self.checked = !self.checked;
-        self.message = format!("You have clicked toggle check: {}", self.checked);
+        self.check_side = if self.check_side == Some(Side::Left) {
+            Some(Side::Right)
+        } else if self.check_side == Some(Side::Right) {
+            None
+        } else {
+            Some(Side::Left)
+        };
+
+        self.message = format!("You have used check at side: {:?}", self.check_side);
         cx.notify()
     }
 }
 
 impl Render for MenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let checked = self.checked;
+        let check_side = self.check_side;
         let view = cx.entity();
 
         v_flex()
@@ -128,6 +136,7 @@ impl Render for MenuStory {
                             .label("Edit")
                             .dropdown_menu(move |this, window, cx| {
                                 this.link("About", "https://github.com/longbridge/gpui-component")
+                                    .check_side(check_side.unwrap_or(Side::Left))
                                     .separator()
                                     .item(PopupMenuItem::new("Handle Click").on_click(
                                         window.listener_for(&view, |this, _, _, cx| {
@@ -141,7 +150,11 @@ impl Render for MenuStory {
                                     .menu("Cut", Box::new(Cut))
                                     .menu("Paste", Box::new(Paste))
                                     .separator()
-                                    .menu_with_check("Toggle Check", checked, Box::new(ToggleCheck))
+                                    .menu_with_check(
+                                        format!("Check Side {:?}", check_side),
+                                        check_side.is_some(),
+                                        Box::new(ToggleCheck),
+                                    )
                                     .separator()
                                     .menu_with_icon("Search", IconName::Search, Box::new(SearchAll))
                                     .separator()
@@ -162,14 +175,18 @@ impl Render for MenuStory {
                                             }),
                                         ),
                                     )
-                                    .menu_element_with_check(checked, Box::new(Info(0)), |_, cx| {
-                                        h_flex().gap_1().child("Custom Element").child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("checked"),
-                                        )
-                                    })
+                                    .menu_element_with_check(
+                                        check_side.is_some(),
+                                        Box::new(ToggleCheck),
+                                        |_, cx| {
+                                            h_flex().gap_1().child("Custom Element").child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child("checked"),
+                                            )
+                                        },
+                                    )
                                     .menu_element_with_icon(
                                         IconName::Info,
                                         Box::new(Info(0)),
@@ -222,7 +239,8 @@ impl Render for MenuStory {
                             .child("Right click to open ContextMenu")
                             .context_menu({
                                 move |this, window, cx| {
-                                    this.external_link_icon(false)
+                                    this.check_side(check_side.unwrap_or(Side::Left))
+                                        .external_link_icon(false)
                                         .link(
                                             "About",
                                             "https://github.com/longbridge/gpui-component",
@@ -234,8 +252,8 @@ impl Render for MenuStory {
                                         .separator()
                                         .label("This is a label")
                                         .menu_with_check(
-                                            "Toggle Check",
-                                            checked,
+                                            format!("Check Side {:?}", check_side),
+                                            check_side.is_some(),
                                             Box::new(ToggleCheck),
                                         )
                                         .separator()

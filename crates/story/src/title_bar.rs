@@ -6,11 +6,10 @@ use gpui::{
     Window, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, PixelsExt, Sizable as _, Theme, TitleBar, WindowExt as _,
+    ActiveTheme as _, IconName, PixelsExt, Side, Sizable as _, Theme, TitleBar, WindowExt as _,
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    menu::AppMenuBar,
-    menu::DropdownMenu as _,
+    menu::{AppMenuBar, DropdownMenu as _},
     scroll::ScrollbarShow,
 };
 
@@ -155,6 +154,7 @@ impl Render for FontSizeSelector {
                     .icon(IconName::Settings2)
                     .dropdown_menu(move |this, _, _| {
                         this.scrollable(true)
+                            .check_side(Side::Right)
                             .max_h(px(480.))
                             .label("Font Size")
                             .menu_with_check("Large", font_size == 18, Box::new(SelectFont(18)))
