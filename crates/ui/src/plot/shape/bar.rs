@@ -1,7 +1,7 @@
-use gpui::{fill, point, px, App, Bounds, Hsla, PaintQuad, Pixels, Point, Window};
+use gpui::{App, Bounds, Hsla, PaintQuad, Pixels, Point, Window, fill, point, px};
 
 use crate::plot::{
-    label::{PlotLabel, Text, TEXT_GAP, TEXT_HEIGHT},
+    label::{PlotLabel, TEXT_GAP, TEXT_HEIGHT, Text},
     origin_point,
 };
 
@@ -10,7 +10,7 @@ pub struct Bar<T> {
     data: Vec<T>,
     x: Box<dyn Fn(&T) -> Option<f32>>,
     band_width: f32,
-    y0: f32,
+    y0: Box<dyn Fn(&T) -> f32>,
     y1: Box<dyn Fn(&T) -> Option<f32>>,
     fill: Box<dyn Fn(&T) -> Hsla>,
     label: Option<Box<dyn Fn(&T, Point<Pixels>) -> Vec<Text>>>,
@@ -22,7 +22,7 @@ impl<T> Default for Bar<T> {
             data: Vec::new(),
             x: Box::new(|_| None),
             band_width: 0.,
-            y0: 0.,
+            y0: Box::new(|_| 0.),
             y1: Box::new(|_| None),
             fill: Box::new(|_| gpui::black()),
             label: None,
@@ -60,8 +60,11 @@ impl<T> Bar<T> {
     }
 
     /// Set the y0 of the Bar.
-    pub fn y0(mut self, y0: f32) -> Self {
-        self.y0 = y0;
+    pub fn y0<F>(mut self, y: F) -> Self
+    where
+        F: Fn(&T) -> f32 + 'static,
+    {
+        self.y0 = Box::new(y);
         self
     }
 
@@ -101,18 +104,19 @@ impl<T> Bar<T> {
         for v in &self.data {
             let x_tick = (self.x)(v);
             let y_tick = (self.y1)(v);
+            let y0 = (self.y0)(v);
 
             if let (Some(x_tick), Some(y_tick)) = (x_tick, y_tick) {
-                let is_negative = y_tick > self.y0;
+                let is_negative = y_tick > y0;
                 let (p1, p2) = if is_negative {
                     (
-                        origin_point(px(x_tick), px(self.y0), origin),
+                        origin_point(px(x_tick), px(y0), origin),
                         origin_point(px(x_tick + self.band_width), px(y_tick), origin),
                     )
                 } else {
                     (
                         origin_point(px(x_tick), px(y_tick), origin),
-                        origin_point(px(x_tick + self.band_width), px(self.y0), origin),
+                        origin_point(px(x_tick + self.band_width), px(y0), origin),
                     )
                 };
 
