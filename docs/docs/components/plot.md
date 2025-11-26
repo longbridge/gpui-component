@@ -11,8 +11,8 @@ The `plot` module provides low-level building blocks for creating custom charts.
 
 ```rust
 use gpui_component::plot::{
-    scale::{Scale, ScaleLinear, ScaleBand, ScaleOrdinal},
-    shape::{Bar, Stack},
+    scale::{Scale, ScaleLinear, ScaleBand, ScalePoint, ScaleOrdinal},
+    shape::{Bar, Stack, Line, Area, Pie, Arc},
     PlotAxis, AxisText
 };
 ```
@@ -50,6 +50,19 @@ scale.band_width(); // Returns width of each band
 scale.tick(&"A");   // Returns start position of band "A"
 ```
 
+### ScalePoint
+
+Maps a discrete domain to a set of points in a continuous range, useful for scatter plots or line charts with categorical axes.
+
+```rust
+let scale = ScalePoint::new(
+    vec!["A", "B", "C"], // Domain
+    vec![0., 300.]       // Range
+);
+
+scale.tick(&"A"); // Returns position of point "A"
+```
+
 ### ScaleOrdinal
 
 Maps a discrete domain to a discrete range.
@@ -80,18 +93,76 @@ Bar::new()
     .paint(&bounds, window, cx);
 ```
 
-#### Stacked Bar
+### Line
 
-Supports stacked data rendering.
+Renders a line shape, commonly used in line charts.
 
 ```rust
-Bar::new()
-    .stack_data(&series) // Pass StackSeries data
-    .band_width(30.)
-    .x(|d| x_scale.tick(&d.data.date))
-    // y0/y1 are automatically handled from stack data
-    .fill(|_| color)
-    .paint(&bounds, window, cx);
+Line::new()
+    .data(data)
+    .x(|d| x_scale.tick(&d.date))
+    .y(|d| y_scale.tick(&d.value))
+    .stroke(cx.theme().chart_1)
+    .stroke_width(px(2.))
+    .paint(&bounds, window);
+```
+
+#### Line with Dots
+
+Supports rendering dots at data points.
+
+```rust
+Line::new()
+    .data(data)
+    .x(|d| x_scale.tick(&d.date))
+    .y(|d| y_scale.tick(&d.value))
+    .dot()
+    .dot_size(px(4.))
+    .paint(&bounds, window);
+```
+
+### Area
+
+Renders an area shape, commonly used in area charts.
+
+```rust
+Area::new()
+    .data(data)
+    .x(|d| x_scale.tick(&d.date))
+    .y0(height) // Baseline
+    .y1(|d| y_scale.tick(&d.value))
+    .fill(cx.theme().chart_1.opacity(0.5))
+    .stroke(cx.theme().chart_1)
+    .paint(&bounds, window);
+```
+
+### Pie & Arc
+
+Renders pie charts and donut charts using `Pie` layout and `Arc` shape.
+
+```rust
+// 1. Compute pie layout
+let pie = Pie::new()
+    .value(|d| Some(d.value))
+    .pad_angle(0.05);
+
+let arcs = pie.arcs(&data);
+
+// 2. Render arcs
+let arc_shape = Arc::new()
+    .inner_radius(0.)
+    .outer_radius(100.);
+
+for arc_data in arcs {
+    arc_shape.paint(
+        &arc_data,
+        color_scale.map(&arc_data.data.category), // Color
+        None, // Override inner radius
+        None, // Override outer radius
+        &bounds,
+        window
+    );
+}
 ```
 
 ### Stack
