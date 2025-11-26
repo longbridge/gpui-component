@@ -94,8 +94,8 @@ impl RenderOnce for Switch {
         let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
         let (bg, toggle_bg) = match checked {
-            true => (cx.theme().primary, cx.theme().background),
-            false => (cx.theme().switch, cx.theme().background),
+            true => (cx.theme().primary, cx.theme().switch_thumb),
+            false => (cx.theme().switch, cx.theme().switch_thumb),
         };
 
         let (bg, toggle_bg) = if self.disabled {
