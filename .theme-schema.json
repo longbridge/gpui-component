@@ -409,6 +409,10 @@
           "description": "Switch background color.",
           "type": ["string", "null"]
         },
+        "switch.thumb.background": {
+          "description": "Switch thumb background color.",
+          "type": ["string", "null"]
+        },
         "tab.background": {
           "description": "Tab background color.",
           "type": ["string", "null"]
