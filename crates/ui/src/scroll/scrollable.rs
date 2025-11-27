@@ -17,21 +17,22 @@ pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Eleme
         self,
         scroll_handle: &H,
         axis: impl Into<ScrollbarAxis>,
-    ) -> Scrollable<Self> {
-        Scrollable::new(self, axis).scroll_handle(scroll_handle)
+    ) -> Self {
+        self.child(ScrollbarLayer {
+            id: "scrollbar_layer".into(),
+            axis: axis.into(),
+            scroll_handle: Rc::new(scroll_handle.clone()),
+        })
     }
 
     /// Adds a vertical scrollbar to the element.
     #[track_caller]
-    fn vertical_scrollbar<H: ScrollbarHandle + Clone>(self, scroll_handle: &H) -> Scrollable<Self> {
+    fn vertical_scrollbar<H: ScrollbarHandle + Clone>(self, scroll_handle: &H) -> Self {
         self.scrollbar(scroll_handle, ScrollbarAxis::Vertical)
     }
     /// Adds a horizontal scrollbar to the element.
     #[track_caller]
-    fn horizontal_scrollbar<H: ScrollbarHandle + Clone>(
-        self,
-        scroll_handle: &H,
-    ) -> Scrollable<Self> {
+    fn horizontal_scrollbar<H: ScrollbarHandle + Clone>(self, scroll_handle: &H) -> Self {
         self.scrollbar(scroll_handle, ScrollbarAxis::Horizontal)
     }
 
@@ -60,7 +61,6 @@ pub struct Scrollable<E: InteractiveElement + Styled + ParentElement + Element> 
     id: ElementId,
     element: E,
     axis: ScrollbarAxis,
-    scroll_handle: Option<Rc<dyn ScrollbarHandle>>,
 }
 
 impl<E> Scrollable<E>
@@ -74,13 +74,7 @@ where
             id: ElementId::CodeLocation(*caller),
             element,
             axis: axis.into(),
-            scroll_handle: None,
         }
-    }
-
-    fn scroll_handle<H: ScrollbarHandle + Clone + 'static>(mut self, handle: &H) -> Self {
-        self.scroll_handle = Some(Rc::new(handle.clone()));
-        self
     }
 }
 
@@ -161,6 +155,22 @@ where
     E: ParentElement + Styled + Element,
     Self: InteractiveElement,
 {
+}
+
+#[derive(IntoElement)]
+struct ScrollbarLayer<H: ScrollbarHandle + Clone> {
+    id: ElementId,
+    axis: ScrollbarAxis,
+    scroll_handle: Rc<H>,
+}
+
+impl<H> RenderOnce for ScrollbarLayer<H>
+where
+    H: ScrollbarHandle + Clone + 'static,
+{
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        render_scrollbar(self.id, self.scroll_handle.as_ref(), self.axis, window, cx)
+    }
 }
 
 #[inline]
