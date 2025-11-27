@@ -1,7 +1,7 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App,  Bounds, BoxShadow, ClickEvent, Div, Edges,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Div, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
     Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, anchored, div, hsla,
     point, prelude::FluentBuilder, px, relative,
@@ -502,7 +502,7 @@ impl RenderOnce for Dialog {
                                         .id("contents")
                                         .pl(paddings.left)
                                         .pr(paddings.right)
-                                        .overflow_scrollbar()
+                                        .overflow_y_scrollbar()
                                         .child(self.content),
                                 ),
                             )
