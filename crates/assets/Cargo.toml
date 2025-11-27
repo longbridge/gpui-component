@@ -9,7 +9,7 @@ homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
 publish = true
 readme = "README.md"
-version = "0.4.1"
+version = "0.4.2"
 
 [lib]
 doctest = false
