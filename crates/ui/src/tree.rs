@@ -11,7 +11,7 @@ use crate::{
     StyledExt,
     actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
     list::ListItem,
-    scroll::Scrollbar,
+    scroll::ScrollableElement,
 };
 
 const CONTEXT: &str = "Tree";
@@ -347,54 +347,41 @@ impl Render for TreeState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_item = self.render_item.clone();
 
-        div()
-            .id("tree-state")
-            .size_full()
-            .relative()
-            .child(
-                uniform_list("entries", self.entries.len(), {
-                    cx.processor(move |state, visible_range: Range<usize>, window, cx| {
-                        let mut items = Vec::with_capacity(visible_range.len());
-                        for ix in visible_range {
-                            let entry = &state.entries[ix];
-                            let selected = Some(ix) == state.selected_ix;
-                            let item = (render_item)(ix, entry, selected, window, cx);
+        div().id("tree-state").size_full().relative().child(
+            uniform_list("entries", self.entries.len(), {
+                cx.processor(move |state, visible_range: Range<usize>, window, cx| {
+                    let mut items = Vec::with_capacity(visible_range.len());
+                    for ix in visible_range {
+                        let entry = &state.entries[ix];
+                        let selected = Some(ix) == state.selected_ix;
+                        let item = (render_item)(ix, entry, selected, window, cx);
 
-                            let el = div()
-                                .id(ix)
-                                .child(item.disabled(entry.item().is_disabled()).selected(selected))
-                                .when(!entry.item().is_disabled(), |this| {
-                                    this.on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener({
-                                            move |this, _, window, cx| {
-                                                this.on_entry_click(ix, window, cx);
-                                            }
-                                        }),
-                                    )
-                                });
+                        let el = div()
+                            .id(ix)
+                            .child(item.disabled(entry.item().is_disabled()).selected(selected))
+                            .when(!entry.item().is_disabled(), |this| {
+                                this.on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener({
+                                        move |this, _, window, cx| {
+                                            this.on_entry_click(ix, window, cx);
+                                        }
+                                    }),
+                                )
+                            });
 
-                            items.push(el)
-                        }
+                        items.push(el)
+                    }
 
-                        items
-                    })
+                    items
                 })
-                .flex_grow()
-                .size_full()
-                .track_scroll(self.scroll_handle.clone())
-                .with_sizing_behavior(ListSizingBehavior::Auto)
-                .into_any_element(),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .right_0()
-                    .bottom_0()
-                    .w(Scrollbar::width())
-                    .child(Scrollbar::vertical(&self.scroll_handle)),
-            )
+            })
+            .flex_grow()
+            .size_full()
+            .track_scroll(self.scroll_handle.clone())
+            .with_sizing_behavior(ListSizingBehavior::Auto)
+            .into_any_element(),
+        )
     }
 }
 
@@ -432,6 +419,7 @@ impl Styled for Tree {
 impl RenderOnce for Tree {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focus_handle = self.state.read(cx).focus_handle.clone();
+        let scroll_handle = self.state.read(cx).scroll_handle.clone();
 
         self.state
             .update(cx, |state, _| state.render_item = self.render_item);
@@ -448,6 +436,7 @@ impl RenderOnce for Tree {
             .size_full()
             .child(self.state)
             .refine_style(&self.style)
+            .vertical_scrollbar(&scroll_handle)
     }
 }
 

@@ -14,7 +14,7 @@ use gpui::{
 use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
-use crate::scroll::Scrollbar;
+use crate::scroll::ScrollableElement;
 use crate::{ActiveTheme, StyledExt, v_flex};
 use crate::{
     global_state::GlobalState,
@@ -626,17 +626,7 @@ impl Element for TextView {
                 state: self.state.clone(),
             })
             .refine_style(&self.style)
-            .when(self.scrollable, |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .w(Scrollbar::width())
-                        .top_0()
-                        .right_0()
-                        .bottom_0()
-                        .child(Scrollbar::vertical(list_state)),
-                )
-            })
+            .vertical_scrollbar(list_state)
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, el)

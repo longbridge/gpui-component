@@ -9,7 +9,7 @@ use crate::{
     button::{Button, ButtonVariants},
     h_flex,
     label::Label,
-    scroll::Scrollbar,
+    scroll::ScrollableElement,
     setting::{RenderOptions, SettingGroup, settings::SettingsState},
     v_flex,
 };
@@ -177,15 +177,7 @@ impl SettingPage {
                         })
                         .size_full(),
                     )
-                    .child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .child(Scrollbar::vertical(&list_state)),
-                    ),
+                    .vertical_scrollbar(&list_state),
             )
     }
 }
