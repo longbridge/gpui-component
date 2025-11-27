@@ -359,7 +359,7 @@ impl Render for DialogStory {
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_dialog(cx, move |dialog, window, cx| {
                                         dialog
-                                            .width(px(720.))
+                                            .w(px(720.))
                                             .h(px(600.))
                                             .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)

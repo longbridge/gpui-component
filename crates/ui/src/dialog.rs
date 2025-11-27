@@ -232,6 +232,14 @@ impl Dialog {
     }
 
     /// Sets the width of the dialog, defaults to 480px.
+    ///
+    /// See also [`Self::width`]
+    pub fn w(mut self, width: Pixels) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// Sets the width of the dialog, defaults to 480px.
     pub fn width(mut self, width: Pixels) -> Self {
         self.width = width;
         self
