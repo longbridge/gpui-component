@@ -2,16 +2,20 @@ use std::rc::Rc;
 
 use gpui::{
     App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Pixels, Render, Size, Styled, Window, div, px, size,
+    IntoElement, ParentElement, Pixels, Render, ScrollHandle, Size, StatefulInteractiveElement,
+    Styled, Window, div, px, size,
 };
 use gpui_component::{
     ActiveTheme as _, Selectable, StyledExt as _,
     button::{Button, ButtonGroup},
-    h_flex, v_flex,
+    h_flex,
+    scroll::{Scrollable as _, ScrollableElement as _, ScrollbarAxis},
+    v_flex,
 };
 
 pub struct ScrollableStory {
     focus_handle: FocusHandle,
+    scroll_handle: ScrollHandle,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
@@ -31,6 +35,7 @@ impl ScrollableStory {
 
         Self {
             focus_handle: cx.focus_handle(),
+            scroll_handle: ScrollHandle::default(),
             items,
             item_sizes: Rc::new(item_sizes),
             test_width,
@@ -155,8 +160,9 @@ impl Render for ScrollableStory {
                             .p_3()
                             .w(test_width)
                             .id("test-1")
-                            .scrollable(Axis::Vertical)
                             .gap_1()
+                            .track_scroll(&self.scroll_handle)
+                            .scrollbar(&self.scroll_handle, ScrollbarAxis::Vertical)
                             .child("Scrollable Example")
                             .children(self.items.iter().take(500).map(|item| {
                                 div()

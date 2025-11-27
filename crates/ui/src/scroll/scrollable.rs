@@ -1,222 +1,119 @@
+use crate::scroll::ScrollbarHandle;
+
 use super::{Scrollbar, ScrollbarAxis};
 use gpui::{
-    AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId, InspectorElementId,
-    InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement, Pixels, Position,
-    ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Style, StyleRefinement,
-    Styled, Window, div, relative,
+    AnyElement, App, Div, InteractiveElement, IntoElement, ParentElement, RenderOnce, ScrollHandle,
+    Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder,
 };
 
-/// A scroll view is a container that allows the user to scroll through a large amount of content.
+pub trait ScrollableElement: ParentElement + Sized {
+    /// Adds a scrollbar to the element.
+    fn scrollbar<H: ScrollbarHandle + Clone>(
+        self,
+        scroll_handle: &H,
+        axis: impl Into<ScrollbarAxis>,
+    ) -> Self {
+        self.child(render_scrollbar(scroll_handle, axis))
+    }
+
+    /// Adds a vertical scrollbar to the element.
+    fn vertical_scrollbar<H: ScrollbarHandle + Clone>(self, scroll_handle: &H) -> Self {
+        self.scrollbar(scroll_handle, ScrollbarAxis::Vertical)
+    }
+    /// Adds a horizontal scrollbar to the element.
+    fn horizontal_scrollbar<H: ScrollbarHandle + Clone>(self, scroll_handle: &H) -> Self {
+        self.scrollbar(scroll_handle, ScrollbarAxis::Horizontal)
+    }
+
+    /// Almost equivalent to [`StatefulInteractiveElement::overflow_scroll`], but adds scrollbars.
+    fn overflow_scrollbar(self) -> Scrollable<Self> {
+        Scrollable {
+            element: self,
+            axis: ScrollbarAxis::Both,
+        }
+    }
+
+    /// Almost equivalent to [`StatefulInteractiveElement::overflow_x_scroll`], but adds Horizontal scrollbar.
+    fn overflow_x_scrollbar(self) -> Scrollable<Self> {
+        Scrollable {
+            element: self,
+            axis: ScrollbarAxis::Horizontal,
+        }
+    }
+
+    /// Almost equivalent to [`StatefulInteractiveElement::overflow_y_scroll`], but adds Vertical scrollbar.
+    fn overflow_y_scrollbar(self) -> Scrollable<Self> {
+        Scrollable {
+            element: self,
+            axis: ScrollbarAxis::Vertical,
+        }
+    }
+}
+
+/// A scrollable element wrapper that adds scrollbars to an interactive element.
+#[derive(IntoElement)]
 pub struct Scrollable<E> {
-    id: ElementId,
-    element: Option<E>,
+    element: E,
+    children: Vec<AnyElement>,
     axis: ScrollbarAxis,
-    /// This is a fake element to handle Styled, InteractiveElement, not used.
-    _element: Stateful<Div>,
 }
 
-impl<E> Scrollable<E>
+impl<E> Styled for Scrollable<E>
 where
-    E: Element,
+    E: InteractiveElement + Styled + IntoElement,
 {
-    pub(crate) fn new(axis: impl Into<ScrollbarAxis>, element: E) -> Self {
-        let id = ElementId::Name(SharedString::from(
-            format!("scrollable-{:?}", element.id(),),
-        ));
-
-        Self {
-            element: Some(element),
-            _element: div().id("fake"),
-            id,
-            axis: axis.into(),
-        }
-    }
-
-    /// Set only a vertical scrollbar.
-    pub fn vertical(self) -> Self {
-        self.axis(ScrollbarAxis::Vertical)
-    }
-
-    /// Set only a horizontal scrollbar.
-    /// In current implementation, this is not supported yet.
-    pub fn horizontal(self) -> Self {
-        self.axis(ScrollbarAxis::Horizontal)
-    }
-
-    /// Set the axis of the scroll view.
-    pub fn axis(mut self, axis: impl Into<ScrollbarAxis>) -> Self {
-        self.axis = axis.into();
-        self
-    }
-
-    fn with_element_state<R>(
-        &mut self,
-        id: &GlobalElementId,
-        window: &mut Window,
-        cx: &mut App,
-        f: impl FnOnce(&mut Self, &mut ScrollViewState, &mut Window, &mut App) -> R,
-    ) -> R {
-        window.with_optional_element_state::<ScrollViewState, _>(
-            Some(id),
-            |element_state, window| {
-                let mut element_state = element_state.unwrap().unwrap_or_default();
-                let result = f(self, &mut element_state, window, cx);
-                (result, Some(element_state))
-            },
-        )
-    }
-}
-
-#[doc(hidden)]
-pub struct ScrollViewState {
-    handle: ScrollHandle,
-}
-
-impl Default for ScrollViewState {
-    fn default() -> Self {
-        Self {
-            handle: ScrollHandle::new(),
-        }
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.element.style()
     }
 }
 
 impl<E> ParentElement for Scrollable<E>
 where
-    E: Element + ParentElement,
+    E: ParentElement + IntoElement,
 {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        if let Some(element) = &mut self.element {
-            element.extend(elements);
-        }
+    fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
-impl<E> Styled for Scrollable<E>
+impl<E> RenderOnce for Scrollable<E>
 where
-    E: Element + Styled,
+    E: StatefulInteractiveElement + ParentElement + IntoElement + 'static,
 {
-    fn style(&mut self) -> &mut StyleRefinement {
-        if let Some(element) = &mut self.element {
-            element.style()
-        } else {
-            self._element.style()
-        }
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let scroll_handle = window
+            .use_state(cx, |_, _| ScrollHandle::default())
+            .read(cx)
+            .clone();
+
+        self.element
+            .track_scroll(&scroll_handle)
+            .map(|this| match self.axis {
+                ScrollbarAxis::Vertical => this.overflow_y_scroll(),
+                ScrollbarAxis::Horizontal => this.overflow_x_scroll(),
+                ScrollbarAxis::Both => this.overflow_scroll(),
+            })
+            .children(self.children)
+            .child(render_scrollbar(&scroll_handle, self.axis.clone()))
     }
 }
 
-impl<E> InteractiveElement for Scrollable<E>
-where
-    E: Element + InteractiveElement,
-{
-    fn interactivity(&mut self) -> &mut Interactivity {
-        if let Some(element) = &mut self.element {
-            element.interactivity()
-        } else {
-            self._element.interactivity()
-        }
-    }
-}
-impl<E> StatefulInteractiveElement for Scrollable<E> where E: Element + StatefulInteractiveElement {}
+impl ScrollableElement for Div {}
+impl<E: ParentElement> ScrollableElement for Stateful<E> {}
 
-impl<E> IntoElement for Scrollable<E>
-where
-    E: Element,
-{
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl<E> Element for Scrollable<E>
-where
-    E: Element,
-{
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ScrollViewState;
-
-    fn id(&self) -> Option<ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
-        style.flex_grow = 1.0;
-        style.position = Position::Relative;
-        style.size.width = relative(1.0).into();
-        style.size.height = relative(1.0).into();
-
-        let axis = self.axis;
-        let scroll_id = self.id.clone();
-        let content = self.element.take().map(|c| c.into_any_element());
-
-        self.with_element_state(id.unwrap(), window, cx, |_, element_state, window, cx| {
-            let mut element = div()
-                .relative()
-                .size_full()
-                .overflow_hidden()
-                .child(
-                    div()
-                        .id(scroll_id)
-                        .track_scroll(&element_state.handle)
-                        .overflow_scroll()
-                        .relative()
-                        .size_full()
-                        .child(div().children(content)),
-                )
-                .child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .right_0()
-                        .bottom_0()
-                        .child(Scrollbar::new(&element_state.handle).axis(axis)),
-                )
-                .into_any_element();
-
-            let element_id = element.request_layout(window, cx);
-            let layout_id = window.request_layout(style, vec![element_id], cx);
-
-            (layout_id, element)
-        })
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        element: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self::PrepaintState {
-        element.prepaint(window, cx);
-        // do nothing
-        ScrollViewState::default()
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        element: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        element.paint(window, cx)
-    }
+#[inline]
+#[track_caller]
+fn render_scrollbar<H: ScrollbarHandle + Clone>(
+    scroll_handle: &H,
+    axis: impl Into<ScrollbarAxis>,
+) -> Div {
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .bottom_0()
+        .p_1()
+        .child(Scrollbar::new(scroll_handle).axis(axis))
 }

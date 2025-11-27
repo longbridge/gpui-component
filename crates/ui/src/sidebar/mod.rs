@@ -1,13 +1,14 @@
 use crate::{
+    ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
     button::{Button, ButtonVariants},
     h_flex,
-    scroll::ScrollbarAxis,
-    v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
+    scroll::{ScrollableElement, ScrollbarAxis},
+    v_flex,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, EdgesRefinement,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
-    Styled, Window,
+    AnyElement, App, ClickEvent, EdgesRefinement, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder, px,
 };
 use std::rc::Rc;
 
@@ -228,7 +229,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                                 .enumerate()
                                 .map(|(ix, c)| div().id(ix).child(c.collapsed(self.collapsed))),
                         )
-                        .scrollable(ScrollbarAxis::Vertical),
+                        .overflow_y_scrollbar(),
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {
