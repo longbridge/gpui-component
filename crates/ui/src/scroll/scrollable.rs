@@ -137,7 +137,7 @@ where
                         ScrollbarAxis::Horizontal => this.flex_row().overflow_x_scroll(),
                         ScrollbarAxis::Both => this.overflow_scroll(),
                     })
-                    .child(self.element.flex_1().min_h_full().min_w_full()),
+                    .child(self.element.flex_1()),
             )
             .child(render_scrollbar(
                 "scrollbar",
