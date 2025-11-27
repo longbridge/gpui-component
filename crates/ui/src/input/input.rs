@@ -213,7 +213,7 @@ impl Input {
                     };
 
                     let scrollbar = if !state.soft_wrap {
-                        Scrollbar::both(&state.scroll_handle)
+                        Scrollbar::new(&state.scroll_handle)
                     } else {
                         Scrollbar::vertical(&state.scroll_handle)
                     };

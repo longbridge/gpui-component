@@ -1218,7 +1218,7 @@ impl Render for Tiles {
                     .right_0()
                     .bottom_0()
                     .child(
-                        Scrollbar::both(&self.scroll_handle)
+                        Scrollbar::new(&self.scroll_handle)
                             .scroll_size(scroll_size)
                             .when_some(self.scrollbar_show, |this, scrollbar_show| {
                                 this.scrollbar_show(scrollbar_show)

@@ -321,16 +321,15 @@ pub struct Scrollbar {
 }
 
 impl Scrollbar {
-    /// Create a new scrollbar with the given [`ScrollbarHandle`] and [`ScrollbarAxis`].
+    /// Create a new scrollbar.
+    ///
+    /// This will have both vertical and horizontal scrollbars.
     #[track_caller]
-    pub fn new<H: ScrollbarHandle + Clone>(
-        scroll_handle: &H,
-        axis: impl Into<ScrollbarAxis>,
-    ) -> Self {
+    pub fn new<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
         let caller = Location::caller();
         Self {
             id: ElementId::CodeLocation(*caller),
-            axis: axis.into(),
+            axis: ScrollbarAxis::Both,
             scrollbar_show: None,
             scroll_handle: Rc::new(scroll_handle.clone()),
             max_fps: 120,
@@ -338,22 +337,16 @@ impl Scrollbar {
         }
     }
 
-    /// Create with vertical and horizontal scrollbar.
-    #[track_caller]
-    pub fn both<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
-        Self::new(scroll_handle, ScrollbarAxis::Both)
-    }
-
     /// Create with horizontal scrollbar.
     #[track_caller]
     pub fn horizontal<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
-        Self::new(scroll_handle, ScrollbarAxis::Horizontal)
+        Self::new(scroll_handle).axis(ScrollbarAxis::Horizontal)
     }
 
     /// Create with vertical scrollbar.
     #[track_caller]
     pub fn vertical<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
-        Self::new(scroll_handle, ScrollbarAxis::Vertical)
+        Self::new(scroll_handle).axis(ScrollbarAxis::Vertical)
     }
 
     /// Set a specific element id, default is the [`Location::caller`].

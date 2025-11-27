@@ -289,7 +289,7 @@ impl Render for VirtualListStory {
                                     .left_0()
                                     .right_0()
                                     .bottom_0()
-                                    .child(Scrollbar::both(&self.scroll_handle).axis(self.axis))
+                                    .child(Scrollbar::new(&self.scroll_handle).axis(self.axis))
                             }),
                     ),
                 ),

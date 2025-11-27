@@ -182,7 +182,7 @@ where
                         .left_0()
                         .right_0()
                         .bottom_0()
-                        .child(Scrollbar::both(&element_state.handle).axis(axis)),
+                        .child(Scrollbar::new(&element_state.handle).axis(axis)),
                 )
                 .into_any_element();
 
