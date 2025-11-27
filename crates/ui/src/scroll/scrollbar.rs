@@ -326,7 +326,7 @@ impl Scrollbar {
         scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
     ) -> Self {
         Self {
-            id: ElementId::CodeLocation(Location::caller().clone()),
+            id: ElementId::CodeLocation(*Location::caller()),
             axis: axis.into(),
             scrollbar_show: None,
             scroll_handle: Rc::new(scroll_handle.clone()),
