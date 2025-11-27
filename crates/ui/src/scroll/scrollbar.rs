@@ -308,7 +308,7 @@ impl ScrollbarAxis {
 
 /// Scrollbar control for scroll-area or a uniform-list.
 pub struct Scrollbar {
-    id: ElementId,
+    pub(crate) id: ElementId,
     axis: ScrollbarAxis,
     scrollbar_show: Option<ScrollbarShow>,
     scroll_handle: Rc<dyn ScrollbarHandle>,
@@ -321,9 +321,15 @@ pub struct Scrollbar {
 }
 
 impl Scrollbar {
-    fn new<H: ScrollbarHandle + Clone>(axis: impl Into<ScrollbarAxis>, scroll_handle: &H) -> Self {
+    /// Create a new scrollbar with the given [`ScrollbarHandle`] and [`ScrollbarAxis`].
+    #[track_caller]
+    pub fn new<H: ScrollbarHandle + Clone>(
+        scroll_handle: &H,
+        axis: impl Into<ScrollbarAxis>,
+    ) -> Self {
+        let caller = Location::caller();
         Self {
-            id: ElementId::CodeLocation(*Location::caller()),
+            id: ElementId::CodeLocation(*caller),
             axis: axis.into(),
             scrollbar_show: None,
             scroll_handle: Rc::new(scroll_handle.clone()),
@@ -332,28 +338,30 @@ impl Scrollbar {
         }
     }
 
-    /// Set a specific element id, default is the [`Location::caller`].
-    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = id.into();
-        self
-    }
-
     /// Create with vertical and horizontal scrollbar.
     #[track_caller]
     pub fn both<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
-        Self::new(ScrollbarAxis::Both, scroll_handle)
+        Self::new(scroll_handle, ScrollbarAxis::Both)
     }
 
     /// Create with horizontal scrollbar.
     #[track_caller]
     pub fn horizontal<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
-        Self::new(ScrollbarAxis::Horizontal, scroll_handle)
+        Self::new(scroll_handle, ScrollbarAxis::Horizontal)
     }
 
     /// Create with vertical scrollbar.
     #[track_caller]
     pub fn vertical<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
-        Self::new(ScrollbarAxis::Vertical, scroll_handle)
+        Self::new(scroll_handle, ScrollbarAxis::Vertical)
+    }
+
+    /// Set a specific element id, default is the [`Location::caller`].
+    ///
+    /// NOTE: In most cases, you don't need to set a specific id for scrollbar.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
+        self
     }
 
     /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
