@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity,
-    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Pixels, Rems,
-    RenderOnce, StyleRefinement, Styled, Window,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
+    IntoElement, IsZero, MouseButton, ParentElement as _, Pixels, Rems, RenderOnce,
+    StyleRefinement, Styled, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -10,9 +10,9 @@ use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
-use crate::{h_flex, Selectable, StyledExt};
-use crate::{v_flex, ActiveTheme};
+use crate::{ActiveTheme, v_flex};
 use crate::{IconName, Size};
+use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
 use super::InputState;
@@ -213,9 +213,9 @@ impl Input {
                     };
 
                     let scrollbar = if !state.soft_wrap {
-                        Scrollbar::both(&state.scroll_state, &state.scroll_handle)
+                        Scrollbar::both(&state.scroll_handle)
                     } else {
-                        Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
+                        Scrollbar::vertical(&state.scroll_handle)
                     };
 
                     this.relative().child(

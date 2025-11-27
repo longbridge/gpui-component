@@ -7,7 +7,7 @@ use std::{
 use crate::{
     ActiveTheme, Icon, IconName, h_flex,
     history::{History, HistoryItem},
-    scroll::{Scrollbar, ScrollbarShow, ScrollbarState},
+    scroll::{Scrollbar, ScrollbarShow},
     v_flex,
 };
 
@@ -139,7 +139,6 @@ pub struct Tiles {
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
-    scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
     scrollbar_show: Option<ScrollbarShow>,
 }
@@ -195,7 +194,6 @@ impl Tiles {
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
-            scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
         }
     }
@@ -1220,7 +1218,7 @@ impl Render for Tiles {
                     .right_0()
                     .bottom_0()
                     .child(
-                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
+                        Scrollbar::both(&self.scroll_handle)
                             .scroll_size(scroll_size)
                             .when_some(self.scrollbar_show, |this, scrollbar_show| {
                                 this.scrollbar_show(scrollbar_show)

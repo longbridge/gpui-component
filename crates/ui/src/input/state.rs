@@ -32,7 +32,7 @@ use crate::input::{
     text_wrapper::LineLayout,
 };
 use crate::input::{RopeExt as _, Selection};
-use crate::{Root, history::History, scroll::ScrollbarState};
+use crate::{Root, history::History};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -295,7 +295,6 @@ pub struct InputState {
     pub(crate) scroll_handle: ScrollHandle,
     /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
-    pub(super) scroll_state: ScrollbarState,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
 
@@ -396,7 +395,6 @@ impl InputState {
             last_selected_range: None,
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
-            scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             deferred_scroll_offset: None,
             preferred_column: None,

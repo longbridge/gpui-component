@@ -9,14 +9,13 @@ use gpui_component::{
     button::{Button, ButtonGroup},
     divider::Divider,
     h_flex,
-    scroll::{Scrollbar, ScrollbarAxis, ScrollbarState},
+    scroll::{Scrollbar, ScrollbarAxis},
     v_flex, v_virtual_list,
 };
 
 pub struct VirtualListStory {
     focus_handle: FocusHandle,
     scroll_handle: VirtualListScrollHandle,
-    scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     columns_count: usize,
@@ -35,7 +34,6 @@ impl VirtualListStory {
         Self {
             focus_handle: cx.focus_handle(),
             scroll_handle: VirtualListScrollHandle::new(),
-            scroll_state: ScrollbarState::default(),
             items,
             item_sizes: Rc::new(item_sizes),
             columns_count: 100,
@@ -68,8 +66,6 @@ impl VirtualListStory {
         }
 
         self.item_sizes = Rc::new(self.items.iter().map(|_| ITEM_SIZE).collect());
-
-        self.scroll_state = ScrollbarState::default();
         cx.notify();
     }
 
@@ -293,10 +289,7 @@ impl Render for VirtualListStory {
                                     .left_0()
                                     .right_0()
                                     .bottom_0()
-                                    .child(
-                                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
-                                            .axis(self.axis),
-                                    )
+                                    .child(Scrollbar::both(&self.scroll_handle).axis(self.axis))
                             }),
                     ),
                 ),
