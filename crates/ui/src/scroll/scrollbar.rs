@@ -121,11 +121,11 @@ impl ScrollHandleOffsetable for ListState {
 
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
+struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy)]
-pub struct ScrollbarStateInner {
+struct ScrollbarStateInner {
     hovered_axis: Option<Axis>,
     hovered_on_thumb: Option<Axis>,
     dragged_axis: Option<Axis>,
