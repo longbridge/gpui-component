@@ -1,7 +1,7 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App,  Bounds, BoxShadow, ClickEvent, Div, Edges,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Div, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
     Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, anchored, div, hsla,
     point, prelude::FluentBuilder, px, relative,
@@ -228,6 +228,14 @@ impl Dialog {
     /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
     pub fn margin_top(mut self, margin_top: Pixels) -> Self {
         self.margin_top = Some(margin_top);
+        self
+    }
+
+    /// Sets the width of the dialog, defaults to 480px.
+    ///
+    /// See also [`Self::width`]
+    pub fn w(mut self, width: Pixels) -> Self {
+        self.width = width;
         self
     }
 
@@ -502,7 +510,7 @@ impl RenderOnce for Dialog {
                                         .id("contents")
                                         .pl(paddings.left)
                                         .pr(paddings.right)
-                                        .overflow_scrollbar()
+                                        .overflow_y_scrollbar()
                                         .child(self.content),
                                 ),
                             )
