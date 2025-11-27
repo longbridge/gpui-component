@@ -26,7 +26,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{AxisExt, PixelsExt, scroll::ScrollHandleOffsetable};
+use crate::{AxisExt, PixelsExt, scroll::ScrollbarHandle};
 
 struct VirtualListScrollHandleState {
     axis: Axis,
@@ -57,7 +57,7 @@ impl AsRef<ScrollHandle> for VirtualListScrollHandle {
     }
 }
 
-impl ScrollHandleOffsetable for VirtualListScrollHandle {
+impl ScrollbarHandle for VirtualListScrollHandle {
     fn offset(&self) -> Point<Pixels> {
         self.base_handle.offset()
     }

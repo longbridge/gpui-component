@@ -55,7 +55,7 @@ impl ScrollbarShow {
 }
 
 /// A trait for scroll handles that can get and set offset.
-pub trait ScrollHandleOffsetable {
+pub trait ScrollbarHandle: 'static {
     /// Get the current offset of the scroll handle.
     fn offset(&self) -> Point<Pixels>;
     /// Set the offset of the scroll handle.
@@ -68,7 +68,7 @@ pub trait ScrollHandleOffsetable {
     fn end_drag(&self) {}
 }
 
-impl ScrollHandleOffsetable for ScrollHandle {
+impl ScrollbarHandle for ScrollHandle {
     fn offset(&self) -> Point<Pixels> {
         self.offset()
     }
@@ -82,7 +82,7 @@ impl ScrollHandleOffsetable for ScrollHandle {
     }
 }
 
-impl ScrollHandleOffsetable for UniformListScrollHandle {
+impl ScrollbarHandle for UniformListScrollHandle {
     fn offset(&self) -> Point<Pixels> {
         self.0.borrow().base_handle.offset()
     }
@@ -97,7 +97,7 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
     }
 }
 
-impl ScrollHandleOffsetable for ListState {
+impl ScrollbarHandle for ListState {
     fn offset(&self) -> Point<Pixels> {
         self.scroll_px_offset_for_scrollbar()
     }
@@ -311,7 +311,7 @@ pub struct Scrollbar {
     id: ElementId,
     axis: ScrollbarAxis,
     scrollbar_show: Option<ScrollbarShow>,
-    scroll_handle: Rc<dyn ScrollHandleOffsetable>,
+    scroll_handle: Rc<dyn ScrollbarHandle>,
     scroll_size: Option<Size<Pixels>>,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
@@ -321,10 +321,7 @@ pub struct Scrollbar {
 }
 
 impl Scrollbar {
-    fn new(
-        axis: impl Into<ScrollbarAxis>,
-        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
-    ) -> Self {
+    fn new<H: ScrollbarHandle + Clone>(axis: impl Into<ScrollbarAxis>, scroll_handle: &H) -> Self {
         Self {
             id: ElementId::CodeLocation(*Location::caller()),
             axis: axis.into(),
@@ -343,19 +340,19 @@ impl Scrollbar {
 
     /// Create with vertical and horizontal scrollbar.
     #[track_caller]
-    pub fn both(scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static)) -> Self {
+    pub fn both<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
         Self::new(ScrollbarAxis::Both, scroll_handle)
     }
 
     /// Create with horizontal scrollbar.
     #[track_caller]
-    pub fn horizontal(scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static)) -> Self {
+    pub fn horizontal<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
         Self::new(ScrollbarAxis::Horizontal, scroll_handle)
     }
 
     /// Create with vertical scrollbar.
     #[track_caller]
-    pub fn vertical(scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static)) -> Self {
+    pub fn vertical<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
         Self::new(ScrollbarAxis::Vertical, scroll_handle)
     }
 
