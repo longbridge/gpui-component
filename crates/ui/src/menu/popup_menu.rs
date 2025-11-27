@@ -1,7 +1,7 @@
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
-use crate::scroll::{Scrollbar, ScrollbarState};
+use crate::scroll::Scrollbar;
 use crate::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
 use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
@@ -287,7 +287,6 @@ pub struct PopupMenu {
     scrollable: bool,
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
-    scroll_state: ScrollbarState,
     // This will update on render
     submenu_anchor: (Corner, Pixels),
 
@@ -309,7 +308,6 @@ impl PopupMenu {
             bounds: Bounds::default(),
             scrollable: false,
             scroll_handle: ScrollHandle::default(),
-            scroll_state: ScrollbarState::default(),
             external_link_icon: true,
             size: Size::default(),
             submenu_anchor: (Corner::TopLeft, Pixels::ZERO),
@@ -1318,7 +1316,7 @@ impl Render for PopupMenu {
                         .left_0()
                         .right_0()
                         .bottom_0()
-                        .child(Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)),
+                        .child(Scrollbar::vertical(&self.scroll_handle)),
                 )
             })
     }

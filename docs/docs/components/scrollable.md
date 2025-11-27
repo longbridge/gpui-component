@@ -11,7 +11,7 @@ A comprehensive scrollable container component that provides custom scrollbars, 
 
 ```rust
 use gpui_component::{
-    scroll::{Scrollable, ScrollbarState, ScrollbarAxis, ScrollbarShow},
+    scroll::{Scrollable, ScrollbarAxis, ScrollbarShow},
     StyledExt as _,
 };
 ```
@@ -86,10 +86,9 @@ div()
 For more control, you can create scrollbars manually:
 
 ```rust
-use gpui_component::scroll::{Scrollbar, ScrollbarState};
+use gpui_component::scroll::{Scrollbar};
 
 pub struct ScrollableView {
-    scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
 }
 
@@ -107,7 +106,7 @@ impl Render for ScrollableView {
                     .child("Your scrollable content")
             )
             .child(
-                Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)
+                Scrollbar::vertical(&self.scroll_handle)
             )
     }
 }
@@ -116,61 +115,9 @@ impl Render for ScrollableView {
 ### Customizing Scrollbar Behavior
 
 ```rust
-Scrollbar::both(&scroll_state, &scroll_handle)
+Scrollbar::both(&scroll_handle)
     .axis(ScrollbarAxis::Vertical)
     .scroll_size(size(px(1000.), px(2000.))) // Custom content size
-```
-
-## Scroll Tracking
-
-### ScrollbarState Management
-
-The `ScrollbarState` tracks scrollbar visibility, hover states, and drag interactions:
-
-```rust
-use gpui_component::scroll::ScrollbarState;
-
-pub struct MyView {
-    scroll_state: ScrollbarState,
-}
-
-impl MyView {
-    fn new(cx: &mut Context<Self>) -> Self {
-        Self {
-            scroll_state: ScrollbarState::default(),
-        }
-    }
-}
-```
-
-### Responding to Scroll Events
-
-```rust
-// In your render method
-div()
-    .on_scroll_wheel(|view, event, _, cx| {
-        // Handle scroll wheel events
-        if event.delta.y != px(0.) {
-            println!("Scrolled vertically: {:?}", event.delta.y);
-        }
-    })
-    .scrollable(Axis::Vertical)
-```
-
-### Programmatic Scrolling
-
-```rust
-// Using ScrollHandle for programmatic control
-impl MyView {
-    fn scroll_to_top(&mut self) {
-        self.scroll_handle.set_offset(point(px(0.), px(0.)));
-    }
-
-    fn scroll_to_bottom(&mut self) {
-        let max_offset = self.scroll_handle.max_offset();
-        self.scroll_handle.set_offset(point(px(0.), max_offset.y));
-    }
-}
 ```
 
 ## Virtualization
@@ -287,110 +234,6 @@ Sync scrollbar behavior with system preferences:
 Theme::sync_scrollbar_appearance(cx);
 ```
 
-## Advanced Usage
-
-### ScrollableMask for Custom Scroll Areas
-
-For advanced scroll control over specific areas:
-
-```rust
-use gpui_component::scroll::ScrollableMask;
-
-ScrollableMask::new(Axis::Vertical, &scroll_handle)
-    .debug() // Show debug borders
-```
-
-### Performance Optimization
-
-For high-performance scrolling with many elements:
-
-```rust
-// Limit scroll update frequency
-Scrollbar::vertical(&state, &handle)
-    .max_fps(60) // Limit to 60 FPS during drag
-```
-
-### Nested Scrollable Areas
-
-```rust
-v_flex()
-    .size_full()
-    .child(
-        // Outer vertical scroll
-        v_flex()
-            .flex_1()
-            .scrollable(Axis::Vertical)
-            .child(
-                // Inner horizontal scroll
-                h_flex()
-                    .w_full()
-                    .scrollable(Axis::Horizontal)
-                    .child("Nested scrollable content")
-            )
-    )
-```
-
-## API Reference
-
-### Scrollable
-
-| Method               | Description                   |
-| -------------------- | ----------------------------- |
-| `new(axis, element)` | Create scrollable wrapper     |
-| `vertical()`         | Set vertical scrolling only   |
-| `horizontal()`       | Set horizontal scrolling only |
-| `set_axis(axis)`     | Change scroll axis            |
-
-### ScrollbarAxis
-
-| Variant      | Description                  |
-| ------------ | ---------------------------- |
-| `Vertical`   | Vertical scrollbar only      |
-| `Horizontal` | Horizontal scrollbar only    |
-| `Both`       | Both vertical and horizontal |
-
-### ScrollbarState
-
-| Method      | Description                |
-| ----------- | -------------------------- |
-| `default()` | Create new scrollbar state |
-
-### Scrollbar
-
-| Method                      | Description                 |
-| --------------------------- | --------------------------- |
-| `vertical(state, handle)`   | Create vertical scrollbar   |
-| `horizontal(state, handle)` | Create horizontal scrollbar |
-| `both(state, handle)`       | Create both scrollbars      |
-| `axis(axis)`                | Set scrollbar axis          |
-| `scroll_size(size)`         | Set custom content size     |
-
-### VirtualListScrollHandle
-
-| Method                            | Description               |
-| --------------------------------- | ------------------------- |
-| `new()`                           | Create new handle         |
-| `scroll_to_item(index, strategy)` | Scroll to specific item   |
-| `offset()`                        | Get current scroll offset |
-| `set_offset(point)`               | Set scroll position       |
-| `content_size()`                  | Get total content size    |
-
-### ScrollStrategy
-
-| Variant  | Description          |
-| -------- | -------------------- |
-| `Top`    | Align item to top    |
-| `Center` | Center item in view  |
-| `Bottom` | Align item to bottom |
-
-### ScrollbarShow
-
-| Variant     | Description             |
-| ----------- | ----------------------- |
-| `Scrolling` | Show only during scroll |
-| `Hover`     | Show on hover           |
-| `Always`    | Always visible          |
-
 ## Examples
 
 ### File Browser with Scrolling
@@ -398,7 +241,6 @@ v_flex()
 ```rust
 pub struct FileBrowser {
     files: Vec<String>,
-    scroll_state: ScrollbarState,
 }
 
 impl Render for FileBrowser {
@@ -482,19 +324,3 @@ impl Render for DataTable {
     }
 }
 ```
-
-## Performance Tips
-
-1. **Use Virtualization**: For lists with >100 items, use `VirtualList`
-2. **Limit Scroll Updates**: Use `max_fps()` for heavy content during drag
-3. **Optimize Render**: Avoid complex rendering in scroll event handlers
-4. **Batch Updates**: Group multiple scroll changes together
-5. **Memory Management**: Virtual lists only render visible items
-
-## Best Practices
-
-1. **Consistent Behavior**: Keep scroll behavior consistent across your app
-2. **Visual Feedback**: Provide clear scroll indicators for long content
-3. **Responsive Design**: Ensure scrolling works well on different screen sizes
-4. **Error Handling**: Handle edge cases like empty content gracefully
-5. **Testing**: Test with various content sizes and screen readers

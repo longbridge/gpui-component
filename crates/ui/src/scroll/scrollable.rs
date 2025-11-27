@@ -1,9 +1,9 @@
-use super::{Scrollbar, ScrollbarAxis, ScrollbarState};
+use super::{Scrollbar, ScrollbarAxis};
 use gpui::{
-    div, relative, AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId,
-    InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement,
-    Pixels, Position, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Style,
-    StyleRefinement, Styled, Window,
+    AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId, InspectorElementId,
+    InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement, Pixels, Position,
+    ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Style, StyleRefinement,
+    Styled, Window, div, relative,
 };
 
 /// A scroll view is a container that allows the user to scroll through a large amount of content.
@@ -69,7 +69,6 @@ where
 
 #[doc(hidden)]
 pub struct ScrollViewState {
-    state: ScrollbarState,
     handle: ScrollHandle,
 }
 
@@ -77,7 +76,6 @@ impl Default for ScrollViewState {
     fn default() -> Self {
         Self {
             handle: ScrollHandle::new(),
-            state: ScrollbarState::default(),
         }
     }
 }
@@ -184,9 +182,7 @@ where
                         .left_0()
                         .right_0()
                         .bottom_0()
-                        .child(
-                            Scrollbar::both(&element_state.state, &element_state.handle).axis(axis),
-                        ),
+                        .child(Scrollbar::new(&element_state.handle).axis(axis)),
                 )
                 .into_any_element();
 

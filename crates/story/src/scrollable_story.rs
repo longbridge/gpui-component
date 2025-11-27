@@ -1,19 +1,17 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, size, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, Size, Styled, Window,
+    App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Pixels, Render, Size, Styled, Window, div, px, size,
 };
 use gpui_component::{
+    ActiveTheme as _, Selectable, StyledExt as _,
     button::{Button, ButtonGroup},
-    h_flex,
-    scroll::ScrollbarState,
-    v_flex, ActiveTheme as _, Selectable, StyledExt as _,
+    h_flex, v_flex,
 };
 
 pub struct ScrollableStory {
     focus_handle: FocusHandle,
-    scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
@@ -33,7 +31,6 @@ impl ScrollableStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            scroll_state: ScrollbarState::default(),
             items,
             item_sizes: Rc::new(item_sizes),
             test_width,
@@ -69,7 +66,6 @@ impl ScrollableStory {
             .map(|_| size(self.test_width, ITEM_HEIGHT))
             .collect::<Vec<_>>()
             .into();
-        self.scroll_state = ScrollbarState::default();
         cx.notify();
     }
 

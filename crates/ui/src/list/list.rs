@@ -5,20 +5,21 @@ use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
 use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::{
+    ActiveTheme, IconName, Size,
     input::{Input, InputEvent},
-    scroll::{Scrollbar, ScrollbarState},
-    v_flex, ActiveTheme, IconName, Size,
+    scroll::Scrollbar,
+    v_flex,
 };
-use crate::{list::ListDelegate, v_virtual_list, VirtualListScrollHandle};
 use crate::{Icon, IndexPath, Selectable, Sizable, StyledExt};
+use crate::{VirtualListScrollHandle, list::ListDelegate, v_virtual_list};
 use gpui::{
-    div, prelude::FluentBuilder, AppContext, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
+    App, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement, EventEmitter,
+    ListSizingBehavior, RenderOnce, ScrollStrategy, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Subscription, px, size,
 };
 use gpui::{
-    px, size, App, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement,
-    EventEmitter, ListSizingBehavior, RenderOnce, ScrollStrategy, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Subscription,
+    AppContext, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    Length, MouseButton, ParentElement, Render, Styled, Task, Window, div, prelude::FluentBuilder,
 };
 use rust_i18n::t;
 use smol::Timer;
@@ -72,7 +73,6 @@ pub struct ListState<D: ListDelegate> {
     delegate: D,
     last_query: Option<String>,
     scroll_handle: VirtualListScrollHandle,
-    scroll_state: ScrollbarState,
     rows_cache: RowsCache,
     selected_index: Option<IndexPath>,
     item_to_measure_index: IndexPath,
@@ -111,7 +111,6 @@ where
             deferred_scroll_to_index: None,
             mouse_right_clicked_index: None,
             scroll_handle: VirtualListScrollHandle::new(),
-            scroll_state: ScrollbarState::default(),
             reset_on_cancel: true,
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
@@ -484,7 +483,6 @@ where
         let rows_cache = self.rows_cache.clone();
         let scrollbar_visible = self.options.scrollbar_visible;
         let scroll_handle = self.scroll_handle.clone();
-        let scroll_state = self.scroll_state.clone();
         let measured_size = rows_cache.measured_size();
 
         v_flex()
@@ -550,7 +548,7 @@ where
                 }
             })
             .when(scrollbar_visible, |this| {
-                this.child(Scrollbar::vertical(&scroll_state, &scroll_handle))
+                this.child(Scrollbar::vertical(&scroll_handle))
             })
     }
 }

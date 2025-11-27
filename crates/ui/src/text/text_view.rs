@@ -6,25 +6,24 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, px, AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId,
-    Entity, EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement,
-    IntoElement, KeyBinding, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer,
-    Window,
+    AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId, Entity,
+    EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement, IntoElement,
+    KeyBinding, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer, Window, div, px,
 };
 use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
-use crate::scroll::{Scrollbar, ScrollbarState};
+use crate::scroll::Scrollbar;
+use crate::{ActiveTheme, StyledExt, v_flex};
 use crate::{
     global_state::GlobalState,
     input::{self},
     text::{
-        node::{self, NodeContext},
         TextViewStyle,
+        node::{self, NodeContext},
     },
 };
-use crate::{v_flex, ActiveTheme, StyledExt};
 
 const CONTEXT: &'static str = "TextView";
 
@@ -218,7 +217,6 @@ pub(crate) struct TextViewState {
     /// Is current in selection.
     is_selecting: bool,
     is_selectable: bool,
-    scrollbar_state: ScrollbarState,
     list_state: ListState,
 }
 
@@ -234,7 +232,6 @@ impl TextViewState {
             selection_positions: (None, None),
             is_selecting: false,
             is_selectable: false,
-            scrollbar_state: ScrollbarState::default(),
             list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)),
         }
     }
@@ -600,7 +597,6 @@ impl Element for TextView {
             self.init_state = Some(InitState::Initialized { tx });
         }
 
-        let scrollbar_state = &self.state.read(cx).scrollbar_state;
         let list_state = &self.state.read(cx).list_state;
 
         let focus_handle = self
@@ -638,7 +634,7 @@ impl Element for TextView {
                         .top_0()
                         .right_0()
                         .bottom_0()
-                        .child(Scrollbar::vertical(scrollbar_state, list_state)),
+                        .child(Scrollbar::vertical(list_state)),
                 )
             })
             .into_any_element();
@@ -800,7 +796,7 @@ fn selection_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{point, px, size, Bounds};
+    use gpui::{Bounds, point, px, size};
 
     #[test]
     fn test_text_view_state_selection_bounds() {

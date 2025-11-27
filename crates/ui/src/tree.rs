@@ -1,17 +1,17 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, uniform_list, App, Context, ElementId, Entity, FocusHandle,
-    InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior, MouseButton,
-    ParentElement, Render, RenderOnce, SharedString, StyleRefinement, Styled,
-    UniformListScrollHandle, Window,
+    App, Context, ElementId, Entity, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
+    ListSizingBehavior, MouseButton, ParentElement, Render, RenderOnce, SharedString,
+    StyleRefinement, Styled, UniformListScrollHandle, Window, div, prelude::FluentBuilder as _,
+    uniform_list,
 };
 
 use crate::{
+    StyledExt,
     actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
     list::ListItem,
-    scroll::{Scrollbar, ScrollbarState},
-    StyledExt,
+    scroll::Scrollbar,
 };
 
 const CONTEXT: &str = "Tree";
@@ -179,7 +179,6 @@ impl TreeItem {
 pub struct TreeState {
     focus_handle: FocusHandle,
     entries: Vec<TreeEntry>,
-    scrollbar_state: ScrollbarState,
     scroll_handle: UniformListScrollHandle,
     selected_ix: Option<usize>,
     render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
@@ -191,7 +190,6 @@ impl TreeState {
         Self {
             selected_ix: None,
             focus_handle: cx.focus_handle(),
-            scrollbar_state: ScrollbarState::default(),
             scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
             render_item: Rc::new(|_, _, _, _, _| ListItem::new(0)),
@@ -395,10 +393,7 @@ impl Render for TreeState {
                     .right_0()
                     .bottom_0()
                     .w(Scrollbar::width())
-                    .child(Scrollbar::vertical(
-                        &self.scrollbar_state,
-                        &self.scroll_handle,
-                    )),
+                    .child(Scrollbar::vertical(&self.scroll_handle)),
             )
     }
 }
