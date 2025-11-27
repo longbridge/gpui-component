@@ -1,12 +1,15 @@
 use std::rc::Rc;
 
-use crate::{h_flex, ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _};
-use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, Div, Element,
-    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
-    Stateful, StatefulInteractiveElement as _, Style, Styled, TitlebarOptions, Window,
-    WindowControlArea,
+use crate::{
+    ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, h_flex,
 };
+use gpui::{
+    AnyElement, App, ClickEvent, Element, Hsla, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Pixels, RenderOnce, StatefulInteractiveElement as _, Style, StyleRefinement,
+    Styled, TitlebarOptions, Window, WindowControlArea, div, prelude::FluentBuilder as _, px,
+    relative,
+};
+use smallvec::SmallVec;
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(34.);
 #[cfg(target_os = "macos")]
@@ -19,8 +22,8 @@ const TITLE_BAR_LEFT_PADDING: Pixels = px(12.);
 /// We can put some elements inside the title bar.
 #[derive(IntoElement)]
 pub struct TitleBar {
-    base: Stateful<Div>,
-    children: Vec<AnyElement>,
+    style: StyleRefinement,
+    children: SmallVec<[AnyElement; 1]>,
     on_close_window: Option<Rc<Box<dyn Fn(&ClickEvent, &mut Window, &mut App)>>>,
 }
 
@@ -28,8 +31,8 @@ impl TitleBar {
     /// Create a new TitleBar.
     pub fn new() -> Self {
         Self {
-            base: div().id("title-bar").pl(TITLE_BAR_LEFT_PADDING),
-            children: Vec::new(),
+            style: StyleRefinement::default(),
+            children: SmallVec::new(),
             on_close_window: None,
         }
     }
@@ -233,7 +236,7 @@ impl RenderOnce for WindowControls {
 
 impl Styled for TitleBar {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.base.style()
+        &mut self.style
     }
 }
 
@@ -244,24 +247,23 @@ impl ParentElement for TitleBar {
 }
 
 impl RenderOnce for TitleBar {
-    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
 
-        let paddings = self.base.style().padding.clone();
-        self.base.style().padding.left = None;
-        let left_padding = paddings.left.unwrap_or(TITLE_BAR_LEFT_PADDING.into());
-
         div().flex_shrink_0().child(
-            self.base
+            div()
+                .id("title-bar")
                 .flex()
                 .flex_row()
                 .items_center()
                 .justify_between()
                 .h(TITLE_BAR_HEIGHT)
+                .pl(TITLE_BAR_LEFT_PADDING)
                 .border_b_1()
                 .border_color(cx.theme().title_bar_border)
                 .bg(cx.theme().title_bar)
+                .refine_style(&self.style)
                 .when(is_linux, |this| {
                     this.on_double_click(|_, window, _| window.zoom_window())
                 })
@@ -271,7 +273,6 @@ impl RenderOnce for TitleBar {
                 .child(
                     h_flex()
                         .id("bar")
-                        .pl(left_padding)
                         .when(window.is_fullscreen(), |this| this.pl_3())
                         .window_control_area(WindowControlArea::Drag)
                         .h_full()
