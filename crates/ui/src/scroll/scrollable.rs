@@ -4,17 +4,17 @@ use crate::{StyledExt, scroll::ScrollbarHandle};
 
 use super::{Scrollbar, ScrollbarAxis};
 use gpui::{
-    AnyElement, App, Div, Element, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder,
+    App, Div, Element, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    ScrollHandle, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder,
 };
 
 /// A trait for elements that can be made scrollable with scrollbars.
-pub trait ScrollableElement: InteractiveElement + ParentElement + Element {
+pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Element {
     /// Adds a scrollbar to the element.
     #[track_caller]
     fn scrollbar<H: ScrollbarHandle + Clone>(
-        mut self,
+        self,
         scroll_handle: &H,
         axis: impl Into<ScrollbarAxis>,
     ) -> Scrollable<Self> {
@@ -38,7 +38,7 @@ pub trait ScrollableElement: InteractiveElement + ParentElement + Element {
     /// Almost equivalent to [`StatefulInteractiveElement::overflow_scroll`], but adds scrollbars.
     #[track_caller]
     fn overflow_scrollbar(self) -> Scrollable<Self> {
-        Scrollable::new(&self, ScrollbarAxis::Both)
+        Scrollable::new(self, ScrollbarAxis::Both)
     }
 
     /// Almost equivalent to [`StatefulInteractiveElement::overflow_x_scroll`], but adds Horizontal scrollbar.
@@ -56,11 +56,9 @@ pub trait ScrollableElement: InteractiveElement + ParentElement + Element {
 
 /// A scrollable element wrapper that adds scrollbars to an interactive element.
 #[derive(IntoElement)]
-pub struct Scrollable<E: InteractiveElement + ParentElement + Element> {
+pub struct Scrollable<E: InteractiveElement + Styled + ParentElement + Element> {
     id: ElementId,
-    style: StyleRefinement,
     element: E,
-    children: Vec<AnyElement>,
     axis: ScrollbarAxis,
     scroll_handle: Option<Rc<dyn ScrollbarHandle>>,
 }
@@ -70,14 +68,11 @@ where
     E: InteractiveElement + Styled + ParentElement + Element,
 {
     #[track_caller]
-    fn new(element: &mut E, axis: impl Into<ScrollbarAxis>) -> Self {
-        let style = element.style().clone();
+    fn new(element: E, axis: impl Into<ScrollbarAxis>) -> Self {
         let caller = Location::caller();
         Self {
             id: ElementId::CodeLocation(*caller),
-            style: StyleRefinement::default(),
             element,
-            children: vec![],
             axis: axis.into(),
             scroll_handle: None,
         }
@@ -91,49 +86,64 @@ where
 
 impl<E> Styled for Scrollable<E>
 where
-    E: InteractiveElement + ParentElement + Element,
+    E: InteractiveElement + Styled + ParentElement + Element,
 {
     fn style(&mut self) -> &mut StyleRefinement {
-        &mut self.style
+        self.element.style()
     }
 }
 
 impl<E> ParentElement for Scrollable<E>
 where
-    E: InteractiveElement + ParentElement + Element,
+    E: InteractiveElement + Styled + ParentElement + Element,
 {
     fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
-        self.children.extend(elements);
+        self.element.extend(elements)
+    }
+}
+
+impl InteractiveElement for Scrollable<Div> {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.element.interactivity()
+    }
+}
+
+impl InteractiveElement for Scrollable<Stateful<Div>> {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.element.interactivity()
     }
 }
 
 impl<E> RenderOnce for Scrollable<E>
 where
-    E: InteractiveElement + ParentElement + Element + 'static,
+    E: InteractiveElement + Styled + ParentElement + Element + 'static,
 {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let scroll_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, _| ScrollHandle::default())
             .read(cx)
             .clone();
 
+        let style = self.element.style().clone();
+        *self.element.style() = StyleRefinement::default();
+
         div()
             .id(self.id)
             .size_full()
-            .refine_style(&self.style)
+            .refine_style(&style)
             .relative()
             .child(
                 div()
                     .id("scroll-area")
+                    .flex()
                     .size_full()
                     .track_scroll(&scroll_handle)
-                    .debug_blue()
                     .map(|this| match self.axis {
-                        ScrollbarAxis::Vertical => this.overflow_y_scroll(),
-                        ScrollbarAxis::Horizontal => this.overflow_x_scroll(),
+                        ScrollbarAxis::Vertical => this.flex_col().overflow_y_scroll(),
+                        ScrollbarAxis::Horizontal => this.flex_row().overflow_x_scroll(),
                         ScrollbarAxis::Both => this.overflow_scroll(),
                     })
-                    .child(self.element),
+                    .child(self.element.flex_1().min_h_full().min_w_full()),
             )
             .child(render_scrollbar(
                 "scrollbar",
@@ -148,7 +158,7 @@ where
 impl ScrollableElement for Div {}
 impl<E> ScrollableElement for Stateful<E>
 where
-    E: ParentElement + Element,
+    E: ParentElement + Styled + Element,
     Self: InteractiveElement,
 {
 }

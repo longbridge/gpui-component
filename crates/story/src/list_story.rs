@@ -458,7 +458,6 @@ impl Render for ListStory {
             .child(
                 h_flex()
                     .gap_2()
-                    .flex_wrap()
                     .child(
                         Button::new("scroll-top")
                             .outline()

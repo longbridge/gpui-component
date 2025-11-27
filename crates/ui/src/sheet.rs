@@ -1,8 +1,8 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Axis, ClickEvent, DefiniteLength, DismissEvent,
-    Div, EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    Animation, AnimationExt as _, AnyElement, App,ClickEvent, DefiniteLength, DismissEvent, Div,
+    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
     ParentElement, Pixels, RenderOnce, Styled, Window, anchored, div, point,
     prelude::FluentBuilder as _, px,
 };
