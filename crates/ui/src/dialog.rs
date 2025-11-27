@@ -499,6 +499,7 @@ impl RenderOnce for Dialog {
                             .child(
                                 div().w_full().flex_1().overflow_hidden().child(
                                     v_flex()
+                                        .id("contents")
                                         .pl(paddings.left)
                                         .pr(paddings.right)
                                         .overflow_scrollbar()

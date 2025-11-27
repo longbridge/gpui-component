@@ -3,8 +3,8 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Axis, ClickEvent, DefiniteLength, DismissEvent,
     Div, EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, RenderOnce, StatefulInteractiveElement, Styled, Window, anchored, div,
-    point, prelude::FluentBuilder as _, px,
+    ParentElement, Pixels, RenderOnce, Styled, Window, anchored, div, point,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -219,12 +219,7 @@ impl RenderOnce for Sheet {
                             )
                             .child(
                                 // Body
-                                div().flex_1().overflow_hidden().child(
-                                    v_flex()
-                                        .id("content")
-                                        .overflow_scrollbar()
-                                        .child(self.content),
-                                ),
+                                div().flex_1().overflow_scrollbar().child(self.content),
                             )
                             .when_some(self.footer, |this, footer| {
                                 // Footer

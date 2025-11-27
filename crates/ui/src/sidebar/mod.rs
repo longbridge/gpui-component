@@ -2,7 +2,7 @@ use crate::{
     ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
     button::{Button, ButtonVariants},
     h_flex,
-    scroll::{ScrollableElement, ScrollbarAxis},
+    scroll::ScrollableElement,
     v_flex,
 };
 use gpui::{
@@ -220,6 +220,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
             .child(
                 v_flex().id("content").flex_1().min_h_0().child(
                     v_flex()
+                        .id("inner")
                         .gap_3()
                         .p_3()
                         .when(self.collapsed, |this| this.p_2())

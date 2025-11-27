@@ -1,7 +1,4 @@
-use crate::{
-    ActiveTheme, PixelsExt as _,
-    scroll::{Scrollable, ScrollbarAxis},
-};
+use crate::{ActiveTheme, PixelsExt as _};
 use gpui::{
     App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
     Refineable, StyleRefinement, Styled, Window, div, point, px,
