@@ -1,4 +1,4 @@
-//! Vistual List for render a large number of differently sized rows/columns.
+//! Virtual List for render a large number of differently sized rows/columns.
 //!
 //! > NOTE: This must ensure each column width or row height.
 //!
@@ -18,15 +18,15 @@ use std::{
 };
 
 use gpui::{
-    div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask,
-    Context, DeferredScrollToItem, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox,
+    Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context,
+    DeferredScrollToItem, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox,
     InteractiveElement, IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render,
     ScrollHandle, ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement,
-    Styled, Window,
+    Styled, Window, div, point, px, size,
 };
 use smallvec::SmallVec;
 
-use crate::{scroll::ScrollHandleOffsetable, AxisExt, PixelsExt};
+use crate::{AxisExt, PixelsExt, scroll::ScrollHandleOffsetable};
 
 struct VirtualListScrollHandleState {
     axis: Axis,
