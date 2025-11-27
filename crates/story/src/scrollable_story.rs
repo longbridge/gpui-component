@@ -1,13 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Pixels, Render, Size, Styled, Window, div, px, size,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Pixels,
+    Render, Size, Styled, Window, div, px, size,
 };
 use gpui_component::{
-    ActiveTheme as _, Selectable, StyledExt as _,
+    ActiveTheme as _, Selectable,
     button::{Button, ButtonGroup},
-    h_flex, v_flex,
+    h_flex,
+    scroll::ScrollableElement,
+    v_flex,
 };
 
 pub struct ScrollableStory {
@@ -152,13 +154,12 @@ impl Render for ScrollableStory {
                     .min_h(px(200.))
                     .child(
                         v_flex()
-                            .p_3()
                             .w(test_width)
-                            .id("test-1")
-                            .scrollable(Axis::Vertical)
+                            .p_3()
                             .gap_1()
+                            .overflow_y_scrollbar()
                             .child("Scrollable Example")
-                            .children(self.items.iter().take(500).map(|item| {
+                            .children(self.items.iter().map(|item| {
                                 div()
                                     .h(ITEM_HEIGHT)
                                     .bg(cx.theme().background)

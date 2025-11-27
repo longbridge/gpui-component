@@ -1,10 +1,7 @@
-use crate::{
-    ActiveTheme, PixelsExt as _,
-    scroll::{Scrollable, ScrollbarAxis},
-};
+use crate::{ActiveTheme, PixelsExt as _};
 use gpui::{
-    App, BoxShadow, Corners, DefiniteLength, Div, Edges, Element, FocusHandle, Hsla, ParentElement,
-    Pixels, Refineable, StyleRefinement, Styled, Window, div, point, px,
+    App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
+    Refineable, StyleRefinement, Styled, Window, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
@@ -163,17 +160,6 @@ pub trait StyledExt: Styled + Sized {
     #[inline]
     fn focused_border(self, cx: &App) -> Self {
         self.border_1().border_color(cx.theme().ring)
-    }
-
-    /// Wraps the element in a ScrollView.
-    ///
-    /// Current this is only have a vertical scrollbar.
-    #[inline]
-    fn scrollable(self, axis: impl Into<ScrollbarAxis>) -> Scrollable<Self>
-    where
-        Self: Element,
-    {
-        Scrollable::new(axis, self)
     }
 
     font_weight!(font_thin, THIN);

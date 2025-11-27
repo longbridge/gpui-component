@@ -11,7 +11,7 @@ A comprehensive scrollable container component that provides custom scrollbars, 
 
 ```rust
 use gpui_component::{
-    scroll::{Scrollable, ScrollbarAxis, ScrollbarShow},
+    scroll::{ScrollableElement, ScrollbarAxis, ScrollbarShow},
     StyledExt as _,
 };
 ```
@@ -20,21 +20,31 @@ use gpui_component::{
 
 ### Basic Scrollable Container
 
-The simplest way to make any element scrollable is using the `scrollable()` method from `StyledExt`:
+The simplest way to make any element scrollable is using the `overflow_scrollbar()` method from `ScrollableElement` trait.
+
+This method is almost like the `overflow_scroll()` method, but it adds scrollbars.
+
+- `overflow_scrollbar()` - Adds scrollbars for both axes as needed.
+- `overflow_x_scrollbar()` - Adds horizontal scrollbar as needed.
+- `overflow_y_scrollbar()` - Adds vertical scrollbar as needed.
 
 ```rust
 use gpui::{div, Axis};
+use gpui_component::ScrollableElement;
 
 div()
+    .id("scrollable-container")
     .size_full()
     .child("Your content here")
-    .scrollable(Axis::Vertical)
+    .overflow_scrollbar()
 ```
 
-### Scrollable with Content
+### Vertical Scrolling
 
 ```rust
 v_flex()
+    .id("scrollable-container")
+    .overflow_y_scrollbar()
     .gap_2()
     .p_4()
     .child("Scrollable Content")
@@ -45,13 +55,14 @@ v_flex()
             .bg(cx.theme().secondary)
             .child(format!("Item {}", i))
     }))
-    .scrollable(Axis::Vertical)
 ```
 
 ### Horizontal Scrolling
 
 ```rust
 h_flex()
+    .id("scrollable-container")
+    .overflow_x_scrollbar()
     .gap_2()
     .p_4()
     .children((0..50).map(|i| {
@@ -61,14 +72,15 @@ h_flex()
             .bg(cx.theme().accent)
             .child(format!("Card {}", i))
     }))
-    .scrollable(Axis::Horizontal)
 ```
 
 ### Both Directions
 
 ```rust
 div()
+    .id("scrollable-container")
     .size_full()
+    .overflow_scrollbar()
     .child(
         div()
             .w(px(2000.))  // Wide content
@@ -76,7 +88,6 @@ div()
             .bg(cx.theme().background)
             .child("Large content area")
     )
-    .scrollable(ScrollbarAxis::Both)
 ```
 
 ## Custom Scrollbars
@@ -86,7 +97,7 @@ div()
 For more control, you can create scrollbars manually:
 
 ```rust
-use gpui_component::scroll::{Scrollbar};
+use gpui_component::scroll::{ScrollableElement};
 
 pub struct ScrollableView {
     scroll_handle: ScrollHandle,
@@ -105,19 +116,9 @@ impl Render for ScrollableView {
                     .size_full()
                     .child("Your scrollable content")
             )
-            .child(
-                Scrollbar::vertical(&self.scroll_handle)
-            )
+            .vertical_scrollbar(&self.scroll_handle)
     }
 }
-```
-
-### Customizing Scrollbar Behavior
-
-```rust
-Scrollbar::both(&scroll_handle)
-    .axis(ScrollbarAxis::Vertical)
-    .scroll_size(size(px(1000.), px(2000.))) // Custom content size
 ```
 
 ## Virtualization
@@ -253,6 +254,7 @@ impl Render for FileBrowser {
                 v_flex()
                     .gap_1()
                     .p_2()
+                    .overflow_y_scrollbar()
                     .children(self.files.iter().map(|file| {
                         div()
                             .h(px(32.))
@@ -263,7 +265,6 @@ impl Render for FileBrowser {
                             .hover(|style| style.bg(cx.theme().secondary_hover))
                             .child(file.clone())
                     }))
-                    .scrollable(Axis::Vertical)
             )
     }
 }

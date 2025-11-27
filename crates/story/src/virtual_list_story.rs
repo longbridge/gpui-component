@@ -9,7 +9,7 @@ use gpui_component::{
     button::{Button, ButtonGroup},
     divider::Divider,
     h_flex,
-    scroll::{Scrollbar, ScrollbarAxis},
+    scroll::{ScrollableElement, ScrollbarAxis},
     v_flex, v_virtual_list,
 };
 
@@ -282,15 +282,7 @@ impl Render for VirtualListStory {
                                 .border_color(cx.theme().border)
                                 .gap_1(),
                             )
-                            .child({
-                                div()
-                                    .absolute()
-                                    .top_0()
-                                    .left_0()
-                                    .right_0()
-                                    .bottom_0()
-                                    .child(Scrollbar::new(&self.scroll_handle).axis(self.axis))
-                            }),
+                            .scrollbar(&self.scroll_handle, self.axis),
                     ),
                 ),
             )

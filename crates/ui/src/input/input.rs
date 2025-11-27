@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
-    IntoElement, IsZero, MouseButton, ParentElement as _, Pixels, Rems, RenderOnce,
-    StyleRefinement, Styled, Window, div, px, relative,
+    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
+    Styled, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -193,8 +193,6 @@ impl Input {
                 .unwrap_or(px(0.)),
         };
 
-        const MIN_SCROLL_PADDING: Pixels = px(2.0);
-
         v_flex()
             .size_full()
             .children(state.search_panel.clone())
@@ -221,10 +219,10 @@ impl Input {
                     this.relative().child(
                         div()
                             .absolute()
-                            .top(-paddings.top + MIN_SCROLL_PADDING)
+                            .top(-paddings.top)
                             .left(left)
-                            .right(-paddings.right + MIN_SCROLL_PADDING)
-                            .bottom(-paddings.bottom + MIN_SCROLL_PADDING)
+                            .right(-paddings.right)
+                            .bottom(-paddings.bottom)
                             .child(scrollbar.scroll_size(scroll_size)),
                     )
                 } else {

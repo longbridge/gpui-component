@@ -1,19 +1,21 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    anchored, div, point, prelude::FluentBuilder as _, px, Animation, AnimationExt as _,
-    AnyElement, App, Axis, ClickEvent, DefiniteLength, DismissEvent, Div, EventEmitter,
-    FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, RenderOnce, Styled, Window,
+    Animation, AnimationExt as _, AnyElement, App,ClickEvent, DefiniteLength, DismissEvent, Div,
+    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement, Pixels, RenderOnce, Styled, Window, anchored, div, point,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{
+    ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
     actions::Cancel,
     button::{Button, ButtonVariants as _},
     dialog::overlay_color,
     h_flex,
+    scroll::ScrollableElement as _,
     title_bar::TITLE_BAR_HEIGHT,
-    v_flex, ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
+    v_flex,
 };
 
 const CONTEXT: &str = "Sheet";
@@ -217,10 +219,7 @@ impl RenderOnce for Sheet {
                             )
                             .child(
                                 // Body
-                                div()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .child(v_flex().scrollable(Axis::Vertical).child(self.content)),
+                                div().flex_1().overflow_scrollbar().child(self.content),
                             )
                             .when_some(self.footer, |this, footer| {
                                 // Footer
