@@ -12,15 +12,14 @@ use gpui::{
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
-use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    TabSize, blink_cursor::BlinkCursor, change::Change, element::TextElement,
-    mask_pattern::MaskPattern, mode::InputMode, number_input, text_wrapper::TextWrapper,
+    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
+    mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::movement::MoveDirection;
@@ -418,48 +417,13 @@ impl InputState {
     ///
     /// Default rows is 2.
     pub fn multi_line(mut self, multi_line: bool) -> Self {
-        match &mut self.mode {
-            InputMode::Plain {
-                rows,
-                multi_line: m,
-                ..
-            } => {
-                *rows = match multi_line {
-                    true => 2,
-                    false => 1,
-                };
-                *m = multi_line;
-            }
-            InputMode::CodeEditor {
-                rows,
-                multi_line: m,
-                line_number,
-                indent_guides,
-                ..
-            } => {
-                if multi_line {
-                    *rows = 2;
-                    *m = true;
-                } else {
-                    *rows = 1;
-                    *m = false;
-                    // Disable indent guides and line numbers in single line mode
-                    *indent_guides = false;
-                    *line_number = false;
-                }
-            }
-            _ => {}
-        }
+        self.mode = self.mode.multi_line(multi_line);
         self
     }
 
     /// Set Input to use [`InputMode::AutoGrow`] mode with min, max rows limit.
     pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
-        self.mode = InputMode::AutoGrow {
-            rows: min_rows,
-            min_rows: min_rows,
-            max_rows: max_rows,
-        };
+        self.mode = InputMode::auto_grow(min_rows, max_rows);
         self
     }
 
@@ -485,16 +449,7 @@ impl InputState {
     /// - Large Text support, up to 50K lines.
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
-        self.mode = InputMode::CodeEditor {
-            rows: 2,
-            multi_line: true,
-            tab: TabSize::default(),
-            language,
-            highlighter: Rc::new(RefCell::new(None)),
-            line_number: true,
-            indent_guides: true,
-            diagnostics: DiagnosticSet::new(&Rope::new()),
-        };
+        self.mode = InputMode::code_editor(language);
         self.searchable = true;
         self
     }

@@ -67,7 +67,11 @@ impl InputMode {
     #[inline]
     pub(super) fn has_indent_guides(&self) -> bool {
         match self {
-            InputMode::CodeEditor { indent_guides, .. } => *indent_guides,
+            InputMode::CodeEditor {
+                indent_guides,
+                multi_line,
+                ..
+            } => *indent_guides && *multi_line,
             _ => false,
         }
     }
