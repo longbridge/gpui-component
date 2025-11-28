@@ -2,20 +2,20 @@ use std::rc::Rc;
 
 use chrono::NaiveDate;
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, ClickEvent, Context,
-    ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, KeyBinding, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window,
+    App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
+    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
 use crate::{
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
     actions::{Cancel, Confirm},
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{clear_button, Delete},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _,
-    StyledExt as _,
+    input::{Delete, clear_button},
+    v_flex,
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
@@ -443,7 +443,8 @@ impl RenderOnce for DatePicker {
                                 .border_color(cx.theme().border)
                                 .shadow_lg()
                                 .rounded((cx.theme().radius * 2.).min(px(8.)))
-                                .bg(cx.theme().background)
+                                .bg(cx.theme().popover)
+                                .text_color(cx.theme().popover_foreground)
                                 .on_mouse_up_out(
                                     MouseButton::Left,
                                     window.listener_for(&self.state, |view, _, window, cx| {

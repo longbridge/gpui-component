@@ -370,7 +370,7 @@ impl CodeBlock {
                     .id("codeblock")
                     .p_3()
                     .rounded(cx.theme().radius)
-                    .bg(cx.theme().secondary.opacity(0.85))
+                    .bg(cx.theme().muted)
                     .font_family(cx.theme().mono_font_family.clone())
                     .text_size(cx.theme().mono_font_size)
                     .relative()
