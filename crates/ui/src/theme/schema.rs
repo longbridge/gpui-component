@@ -1,13 +1,13 @@
 use std::{rc::Rc, sync::Arc};
 
 use anyhow::Result;
-use gpui::{px, Hsla, SharedString};
+use gpui::{Hsla, SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    highlighter::{HighlightTheme, HighlightThemeStyle},
     Colorize, Theme, ThemeColor, ThemeMode,
+    highlighter::{HighlightTheme, HighlightThemeStyle},
 };
 
 /// Represents a theme configuration.
@@ -528,7 +528,7 @@ impl ThemeColor {
 
         // Other colors
         apply_color!(accent, fallback = self.secondary);
-        apply_color!(accent_foreground, fallback = self.secondary_foreground);
+        apply_color!(accent_foreground, fallback = self.foreground);
         apply_color!(accordion, fallback = self.background);
         apply_color!(accordion_hover, fallback = self.accent.opacity(0.8));
         apply_color!(
@@ -540,7 +540,7 @@ impl ThemeColor {
                         .opacity(if config.mode.is_dark() { 0.3 } else { 0.4 })
                 )
         );
-        apply_color!(group_box_foreground, fallback = self.secondary_foreground);
+        apply_color!(group_box_foreground, fallback = self.foreground);
         apply_color!(caret, fallback = self.primary);
         apply_color!(chart_1, fallback = self.blue.lighten(0.4));
         apply_color!(chart_2, fallback = self.blue.lighten(0.2));
@@ -560,7 +560,7 @@ impl ThemeColor {
         );
         apply_color!(
             description_list_label_foreground,
-            fallback = self.secondary_foreground
+            fallback = self.muted_foreground
         );
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
         apply_color!(drop_target, fallback = self.primary.opacity(0.2));
@@ -608,7 +608,7 @@ impl ThemeColor {
         apply_color!(tab_active_foreground, fallback = self.foreground);
         apply_color!(tab_bar, fallback = self.background);
         apply_color!(tab_bar_segmented, fallback = self.secondary);
-        apply_color!(tab_foreground, fallback = self.secondary_foreground);
+        apply_color!(tab_foreground, fallback = self.foreground);
         apply_color!(table, fallback = self.list);
         apply_color!(table_active, fallback = self.list_active);
         apply_color!(table_active_border, fallback = self.list_active_border);

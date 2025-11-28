@@ -491,7 +491,8 @@ impl RenderOnce for ColorPicker {
                                     .border_1()
                                     .border_color(cx.theme().border)
                                     .shadow_lg()
-                                    .bg(cx.theme().background)
+                                    .bg(cx.theme().popover)
+                                    .text_color(cx.theme().popover_foreground)
                                     .child(self.render_colors(window, cx))
                                     .on_mouse_up_out(
                                         MouseButton::Left,
