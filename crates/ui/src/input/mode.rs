@@ -273,7 +273,6 @@ mod tests {
 
     #[test]
     fn test_code_editor() {
-        let text = Rope::from_str("Hello world");
         let mode = InputMode::code_editor("rust");
         assert_eq!(mode.is_code_editor(), true);
         assert_eq!(mode.is_multi_line(), true);
@@ -291,7 +290,7 @@ mod tests {
             tab: Default::default(),
             language: "rust".into(),
             highlighter: Default::default(),
-            diagnostics: DiagnosticSet::new(&text),
+            diagnostics: DiagnosticSet::new(&Rope::new()),
         };
         assert_eq!(mode.is_code_editor(), true);
         assert_eq!(mode.is_multi_line(), false);
