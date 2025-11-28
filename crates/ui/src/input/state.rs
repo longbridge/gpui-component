@@ -389,7 +389,7 @@ impl InputState {
             loading: false,
             pattern: None,
             validate: None,
-            mode: InputMode::SingleLine,
+            mode: InputMode::default(),
             last_layout: None,
             last_bounds: None,
             last_selected_range: None,
@@ -414,14 +414,42 @@ impl InputState {
         }
     }
 
-    /// Set Input to use [`InputMode::MultiLine`] mode.
+    /// Set Input to use multi line mode.
     ///
     /// Default rows is 2.
-    pub fn multi_line(mut self) -> Self {
-        self.mode = InputMode::MultiLine {
-            rows: 2,
-            tab: TabSize::default(),
-        };
+    pub fn multi_line(mut self, multi_line: bool) -> Self {
+        match &mut self.mode {
+            InputMode::Plain {
+                rows,
+                multi_line: m,
+                ..
+            } => {
+                *rows = match multi_line {
+                    true => 2,
+                    false => 1,
+                };
+                *m = multi_line;
+            }
+            InputMode::CodeEditor {
+                rows,
+                multi_line: m,
+                line_number,
+                indent_guides,
+                ..
+            } => {
+                if multi_line {
+                    *rows = 2;
+                    *m = true;
+                } else {
+                    *rows = 1;
+                    *m = false;
+                    // Disable indent guides and line numbers in single line mode
+                    *indent_guides = false;
+                    *line_number = false;
+                }
+            }
+            _ => {}
+        }
         self
     }
 
@@ -443,6 +471,7 @@ impl InputState {
     /// - tab_size: 2
     /// - hard_tabs: false
     /// - height: full
+    /// - multi_line: true
     ///
     /// If `highlighter` is None, will use the default highlighter.
     ///
@@ -458,6 +487,7 @@ impl InputState {
         let language: SharedString = language.into();
         self.mode = InputMode::CodeEditor {
             rows: 2,
+            multi_line: true,
             tab: TabSize::default(),
             language,
             highlighter: Rc::new(RefCell::new(None)),
@@ -484,7 +514,7 @@ impl InputState {
 
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
     pub fn line_number(mut self, line_number: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -493,7 +523,7 @@ impl InputState {
 
     /// Set line number, only for [`InputMode::CodeEditor`] mode.
     pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -507,7 +537,7 @@ impl InputState {
     /// default: 2
     pub fn rows(mut self, rows: usize) -> Self {
         match &mut self.mode {
-            InputMode::MultiLine { rows: r, .. } => *r = rows,
+            InputMode::Plain { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => *r = rows,
             InputMode::AutoGrow {
                 max_rows: max_r,
                 rows: r,
@@ -516,7 +546,6 @@ impl InputState {
                 *r = rows;
                 *max_r = rows;
             }
-            _ => {}
         }
         self
     }

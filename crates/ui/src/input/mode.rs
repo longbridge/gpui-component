@@ -10,11 +10,10 @@ use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
 use crate::input::{RopeExt as _, TabSize};
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub enum InputMode {
-    #[default]
-    SingleLine,
-    MultiLine {
+    Plain {
+        multi_line: bool,
         tab: TabSize,
         rows: usize,
     },
@@ -24,6 +23,7 @@ pub enum InputMode {
         max_rows: usize,
     },
     CodeEditor {
+        multi_line: bool,
         tab: TabSize,
         rows: usize,
         /// Show line number
@@ -35,11 +35,25 @@ pub enum InputMode {
     },
 }
 
+impl Default for InputMode {
+    fn default() -> Self {
+        InputMode::Plain {
+            multi_line: false,
+            tab: TabSize::default(),
+            rows: 1,
+        }
+    }
+}
+
 #[allow(unused)]
 impl InputMode {
     #[inline]
     pub(super) fn is_single_line(&self) -> bool {
-        matches!(self, InputMode::SingleLine)
+        match self {
+            InputMode::Plain { multi_line, .. } => !*multi_line,
+            InputMode::CodeEditor { multi_line, .. } => !*multi_line,
+            InputMode::AutoGrow { max_rows, .. } => *max_rows == 1,
+        }
     }
 
     #[inline]
@@ -54,15 +68,16 @@ impl InputMode {
 
     #[inline]
     pub(super) fn is_multi_line(&self) -> bool {
-        matches!(
-            self,
-            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. }
-        )
+        match self {
+            InputMode::Plain { multi_line, .. } => *multi_line,
+            InputMode::CodeEditor { multi_line, .. } => *multi_line,
+            InputMode::AutoGrow { max_rows, .. } => *max_rows > 1,
+        }
     }
 
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
-            InputMode::MultiLine { rows, .. } => {
+            InputMode::Plain { rows, .. } => {
                 *rows = new_rows;
             }
             InputMode::CodeEditor { rows, .. } => {
@@ -75,7 +90,6 @@ impl InputMode {
             } => {
                 *rows = new_rows.clamp(*min_rows, *max_rows);
             }
-            _ => {}
         }
     }
 
@@ -91,10 +105,9 @@ impl InputMode {
     /// At least 1 row be return.
     pub(super) fn rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { rows, .. } => *rows,
+            InputMode::Plain { rows, .. } => *rows,
             InputMode::CodeEditor { rows, .. } => *rows,
             InputMode::AutoGrow { rows, .. } => *rows,
-            _ => 1,
         }
         .max(1)
     }
@@ -103,7 +116,6 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn min_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => 1,
             InputMode::AutoGrow { min_rows, .. } => *min_rows,
             _ => 1,
         }
@@ -113,9 +125,13 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn max_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => usize::MAX,
+            InputMode::Plain { multi_line, .. } | InputMode::CodeEditor { multi_line, .. } => {
+                match *multi_line {
+                    true => usize::MAX,
+                    false => 1,
+                }
+            }
             InputMode::AutoGrow { max_rows, .. } => *max_rows,
-            _ => 1,
         }
     }
 
