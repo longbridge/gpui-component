@@ -89,8 +89,6 @@ Input::new(&code_editor)
 let code_editor = cx.new(|cx|
     InputState::new(window, cx)
         .code_editor("rust") // Language for syntax highlighting
-        .line_number(false) // Hide line numbers
-        .indent_guides(false) // Hide indent guides
         .multi_line(false) // Single line
         .default_value("println!(\"Hello, world!\");")
 );
