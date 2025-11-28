@@ -23,6 +23,7 @@ pub struct InputStory {
     mask_input2: Entity<InputState>,
     currency_input: Entity<InputState>,
     custom_input: Entity<InputState>,
+    code_input: Entity<InputState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -87,6 +88,13 @@ impl InputStory {
         let custom_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("here is a custom input"));
 
+        let code_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .code_editor("json")
+                .multi_line(false)
+                .default_value(r#"{"single_line":"code editor"}"#)
+        });
+
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),
             cx.subscribe_in(&input2, window, Self::on_input_event),
@@ -113,6 +121,7 @@ impl InputStory {
             mask_input2,
             currency_input,
             custom_input,
+            code_input,
             _subscriptions,
         }
     }
@@ -249,6 +258,11 @@ impl Render for InputStory {
                         .w_full()
                         .child(Input::new(&self.custom_input).appearance(false)),
                 ),
+            )
+            .child(
+                section("Single line code editor")
+                    .max_w_md()
+                    .child(Input::new(&self.code_input)),
             )
     }
 }

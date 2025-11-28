@@ -12,15 +12,14 @@ use gpui::{
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
-use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    TabSize, blink_cursor::BlinkCursor, change::Change, element::TextElement,
-    mask_pattern::MaskPattern, mode::InputMode, number_input, text_wrapper::TextWrapper,
+    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
+    mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -391,7 +390,7 @@ impl InputState {
             loading: false,
             pattern: None,
             validate: None,
-            mode: InputMode::SingleLine,
+            mode: InputMode::default(),
             last_layout: None,
             last_bounds: None,
             last_selected_range: None,
@@ -417,24 +416,17 @@ impl InputState {
         }
     }
 
-    /// Set Input to use [`InputMode::MultiLine`] mode.
+    /// Set Input to use multi line mode.
     ///
     /// Default rows is 2.
-    pub fn multi_line(mut self) -> Self {
-        self.mode = InputMode::MultiLine {
-            rows: 2,
-            tab: TabSize::default(),
-        };
+    pub fn multi_line(mut self, multi_line: bool) -> Self {
+        self.mode = self.mode.multi_line(multi_line);
         self
     }
 
     /// Set Input to use [`InputMode::AutoGrow`] mode with min, max rows limit.
     pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
-        self.mode = InputMode::AutoGrow {
-            rows: min_rows,
-            min_rows: min_rows,
-            max_rows: max_rows,
-        };
+        self.mode = InputMode::auto_grow(min_rows, max_rows);
         self
     }
 
@@ -445,7 +437,9 @@ impl InputState {
     /// - line_number: true
     /// - tab_size: 2
     /// - hard_tabs: false
-    /// - height: full
+    /// - height: 100%
+    /// - multi_line: true
+    /// - indent_guides: true
     ///
     /// If `highlighter` is None, will use the default highlighter.
     ///
@@ -459,15 +453,7 @@ impl InputState {
     /// - Large Text support, up to 50K lines.
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
-        self.mode = InputMode::CodeEditor {
-            rows: 2,
-            tab: TabSize::default(),
-            language,
-            highlighter: Rc::new(RefCell::new(None)),
-            line_number: true,
-            indent_guides: true,
-            diagnostics: DiagnosticSet::new(&Rope::new()),
-        };
+        self.mode = InputMode::code_editor(language);
         self.searchable = true;
         self
     }
@@ -487,7 +473,7 @@ impl InputState {
 
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
     pub fn line_number(mut self, line_number: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -496,7 +482,7 @@ impl InputState {
 
     /// Set line number, only for [`InputMode::CodeEditor`] mode.
     pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -510,7 +496,9 @@ impl InputState {
     /// default: 2
     pub fn rows(mut self, rows: usize) -> Self {
         match &mut self.mode {
-            InputMode::MultiLine { rows: r, .. } => *r = rows,
+            InputMode::PlainText { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => {
+                *r = rows
+            }
             InputMode::AutoGrow {
                 max_rows: max_r,
                 rows: r,
@@ -519,7 +507,6 @@ impl InputState {
                 *r = rows;
                 *max_r = rows;
             }
-            _ => {}
         }
         self
     }

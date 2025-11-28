@@ -567,12 +567,12 @@ impl TextElement {
         bg_segments: &[(Range<usize>, Hsla)],
         window: &mut Window,
     ) -> Vec<LineLayout> {
-        let is_multi_line = state.mode.is_multi_line();
+        let is_single_line = state.mode.is_single_line();
         let text_wrapper = &state.text_wrapper;
         let visible_range = &last_layout.visible_range;
         let visible_range_offset = &last_layout.visible_range_offset;
 
-        if !is_multi_line {
+        if is_single_line {
             let shaped_line = window.text_system().shape_line(
                 display_text.to_string().into(),
                 font_size,
@@ -657,6 +657,7 @@ impl TextElement {
     ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
         let state = self.state.read(cx);
         let text = &state.text;
+        let is_multi_line = state.mode.is_multi_line();
 
         let (highlighter, diagnostics) = match &state.mode {
             InputMode::CodeEditor {
@@ -676,8 +677,13 @@ impl TextElement {
             .skip(visible_range.start)
             .take(visible_range.len())
         {
-            // +1 for `\n`
-            let line_len = line.len() + 1;
+            let line_len = if is_multi_line {
+                // +1 for `\n`
+                line.len() + 1
+            } else {
+                line.len()
+            };
+
             let range = offset..offset + line_len;
             let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
             styles = gpui::combine_highlights(styles, line_styles).collect();

@@ -10,20 +10,23 @@ use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
 use crate::input::{RopeExt as _, TabSize};
 
-#[derive(Default, Clone)]
-pub enum InputMode {
-    #[default]
-    SingleLine,
-    MultiLine {
+#[derive(Clone)]
+pub(crate) enum InputMode {
+    /// A plain text input mode.
+    PlainText {
+        multi_line: bool,
         tab: TabSize,
         rows: usize,
     },
+    /// An auto grow input mode.
     AutoGrow {
         rows: usize,
         min_rows: usize,
         max_rows: usize,
     },
+    /// A code editor input mode.
     CodeEditor {
+        multi_line: bool,
         tab: TabSize,
         rows: usize,
         /// Show line number
@@ -35,11 +38,58 @@ pub enum InputMode {
     },
 }
 
+impl Default for InputMode {
+    fn default() -> Self {
+        InputMode::plain_text()
+    }
+}
+
 #[allow(unused)]
 impl InputMode {
+    /// Create a plain input mode with default settings.
+    pub(super) fn plain_text() -> Self {
+        InputMode::PlainText {
+            multi_line: false,
+            tab: TabSize::default(),
+            rows: 1,
+        }
+    }
+
+    /// Create a code editor input mode with default settings.
+    pub(super) fn code_editor(language: impl Into<SharedString>) -> Self {
+        InputMode::CodeEditor {
+            rows: 2,
+            multi_line: true,
+            tab: TabSize::default(),
+            language: language.into(),
+            highlighter: Rc::new(RefCell::new(None)),
+            line_number: true,
+            indent_guides: true,
+            diagnostics: DiagnosticSet::new(&Rope::new()),
+        }
+    }
+
+    /// Create an auto grow input mode with given min and max rows.
+    pub(super) fn auto_grow(min_rows: usize, max_rows: usize) -> Self {
+        InputMode::AutoGrow {
+            rows: min_rows,
+            min_rows,
+            max_rows,
+        }
+    }
+
+    pub(super) fn multi_line(mut self, multi_line: bool) -> Self {
+        match &mut self {
+            InputMode::PlainText { multi_line: ml, .. } => *ml = multi_line,
+            InputMode::CodeEditor { multi_line: ml, .. } => *ml = multi_line,
+            InputMode::AutoGrow { .. } => {}
+        }
+        self
+    }
+
     #[inline]
     pub(super) fn is_single_line(&self) -> bool {
-        matches!(self, InputMode::SingleLine)
+        !self.is_multi_line()
     }
 
     #[inline]
@@ -54,15 +104,16 @@ impl InputMode {
 
     #[inline]
     pub(super) fn is_multi_line(&self) -> bool {
-        matches!(
-            self,
-            InputMode::MultiLine { .. } | InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. }
-        )
+        match self {
+            InputMode::PlainText { multi_line, .. } => *multi_line,
+            InputMode::CodeEditor { multi_line, .. } => *multi_line,
+            InputMode::AutoGrow { max_rows, .. } => *max_rows > 1,
+        }
     }
 
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
-            InputMode::MultiLine { rows, .. } => {
+            InputMode::PlainText { rows, .. } => {
                 *rows = new_rows;
             }
             InputMode::CodeEditor { rows, .. } => {
@@ -75,7 +126,6 @@ impl InputMode {
             } => {
                 *rows = new_rows.clamp(*min_rows, *max_rows);
             }
-            _ => {}
         }
     }
 
@@ -90,11 +140,14 @@ impl InputMode {
 
     /// At least 1 row be return.
     pub(super) fn rows(&self) -> usize {
+        if !self.is_multi_line() {
+            return 1;
+        }
+
         match self {
-            InputMode::MultiLine { rows, .. } => *rows,
+            InputMode::PlainText { rows, .. } => *rows,
             InputMode::CodeEditor { rows, .. } => *rows,
             InputMode::AutoGrow { rows, .. } => *rows,
-            _ => 1,
         }
         .max(1)
     }
@@ -103,7 +156,6 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn min_rows(&self) -> usize {
         match self {
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => 1,
             InputMode::AutoGrow { min_rows, .. } => *min_rows,
             _ => 1,
         }
@@ -112,10 +164,13 @@ impl InputMode {
 
     #[allow(unused)]
     pub(super) fn max_rows(&self) -> usize {
+        if !self.is_multi_line() {
+            return 1;
+        }
+
         match self {
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. } => usize::MAX,
             InputMode::AutoGrow { max_rows, .. } => *max_rows,
-            _ => 1,
+            _ => usize::MAX,
         }
     }
 
@@ -124,7 +179,11 @@ impl InputMode {
     #[inline]
     pub(super) fn line_number(&self) -> bool {
         match self {
-            InputMode::CodeEditor { line_number, .. } => *line_number,
+            InputMode::CodeEditor {
+                line_number,
+                multi_line,
+                ..
+            } => *line_number && *multi_line,
             _ => false,
         }
     }
@@ -200,5 +259,90 @@ impl InputMode {
             InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ropey::Rope;
+
+    use crate::{
+        highlighter::DiagnosticSet,
+        input::{TabSize, mode::InputMode},
+    };
+
+    #[test]
+    fn test_code_editor() {
+        let mode = InputMode::code_editor("rust");
+        assert_eq!(mode.is_code_editor(), true);
+        assert_eq!(mode.is_multi_line(), true);
+        assert_eq!(mode.is_single_line(), false);
+        assert_eq!(mode.line_number(), true);
+        assert_eq!(mode.has_indent_guides(), true);
+        assert_eq!(mode.max_rows(), usize::MAX);
+        assert_eq!(mode.min_rows(), 1);
+
+        let mode = InputMode::CodeEditor {
+            multi_line: false,
+            line_number: true,
+            indent_guides: true,
+            rows: 0,
+            tab: Default::default(),
+            language: "rust".into(),
+            highlighter: Default::default(),
+            diagnostics: DiagnosticSet::new(&Rope::new()),
+        };
+        assert_eq!(mode.is_code_editor(), true);
+        assert_eq!(mode.is_multi_line(), false);
+        assert_eq!(mode.is_single_line(), true);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.has_indent_guides(), false);
+        assert_eq!(mode.max_rows(), 1);
+        assert_eq!(mode.min_rows(), 1);
+    }
+
+    #[test]
+    fn test_plain() {
+        let mode = InputMode::PlainText {
+            multi_line: true,
+            tab: TabSize::default(),
+            rows: 5,
+        };
+        assert_eq!(mode.is_code_editor(), false);
+        assert_eq!(mode.is_multi_line(), true);
+        assert_eq!(mode.is_single_line(), false);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.rows(), 5);
+        assert_eq!(mode.max_rows(), usize::MAX);
+        assert_eq!(mode.min_rows(), 1);
+
+        let mode = InputMode::plain_text();
+        assert_eq!(mode.is_code_editor(), false);
+        assert_eq!(mode.is_multi_line(), false);
+        assert_eq!(mode.is_single_line(), true);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.max_rows(), 1);
+        assert_eq!(mode.min_rows(), 1);
+    }
+
+    #[test]
+    fn test_auto_grow() {
+        let mut mode = InputMode::auto_grow(2, 5);
+        assert_eq!(mode.is_code_editor(), false);
+        assert_eq!(mode.is_multi_line(), true);
+        assert_eq!(mode.is_single_line(), false);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.rows(), 2);
+        assert_eq!(mode.max_rows(), 5);
+        assert_eq!(mode.min_rows(), 2);
+
+        mode.set_rows(4);
+        assert_eq!(mode.rows(), 4);
+
+        mode.set_rows(1);
+        assert_eq!(mode.rows(), 2);
+
+        mode.set_rows(10);
+        assert_eq!(mode.rows(), 5);
     }
 }

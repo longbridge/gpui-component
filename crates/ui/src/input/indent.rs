@@ -1,15 +1,15 @@
 use gpui::{
-    point, px, Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels,
-    SharedString, TextRun, TextStyle, Window,
+    Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString,
+    TextRun, TextStyle, Window, point, px,
 };
 use ropey::RopeSlice;
 
 use crate::{
-    input::{
-        element::TextElement, mode::InputMode, Indent, IndentInline, InputState, LastLayout,
-        Outdent, OutdentInline,
-    },
     RopeExt,
+    input::{
+        Indent, IndentInline, InputState, LastLayout, Outdent, OutdentInline, element::TextElement,
+        mode::InputMode,
+    },
 };
 
 #[derive(Debug, Copy, Clone)]
@@ -56,16 +56,22 @@ impl TabSize {
 impl InputMode {
     #[inline]
     pub(super) fn is_indentable(&self) -> bool {
-        matches!(
-            self,
-            InputMode::MultiLine { .. } | InputMode::CodeEditor { .. }
-        )
+        match self {
+            InputMode::PlainText { multi_line, .. } | InputMode::CodeEditor { multi_line, .. } => {
+                *multi_line
+            }
+            _ => false,
+        }
     }
 
     #[inline]
     pub(super) fn has_indent_guides(&self) -> bool {
         match self {
-            InputMode::CodeEditor { indent_guides, .. } => *indent_guides,
+            InputMode::CodeEditor {
+                indent_guides,
+                multi_line,
+                ..
+            } => *indent_guides && *multi_line,
             _ => false,
         }
     }
@@ -73,7 +79,7 @@ impl InputMode {
     #[inline]
     pub(super) fn tab_size(&self) -> TabSize {
         match self {
-            InputMode::MultiLine { tab, .. } => *tab,
+            InputMode::PlainText { tab, .. } => *tab,
             InputMode::CodeEditor { tab, .. } => *tab,
             _ => TabSize::default(),
         }
@@ -168,7 +174,7 @@ impl InputState {
     ///
     /// Only for [`InputMode::CodeEditor`] mode.
     pub fn indent_guides(mut self, indent_guides: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor {
             indent_guides: l, ..
         } = &mut self.mode
@@ -199,11 +205,11 @@ impl InputState {
 
     /// Set the tab size for the input.
     ///
-    /// Only for [`InputMode::MultiLine`] and [`InputMode::CodeEditor`] mode.
+    /// Only for [`InputMode::PlainText`] and [`InputMode::CodeEditor`] mode with multi_line.
     pub fn tab_size(mut self, tab: TabSize) -> Self {
         debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
         match &mut self.mode {
-            InputMode::MultiLine { tab: t, .. } => *t = tab,
+            InputMode::PlainText { tab: t, .. } => *t = tab,
             InputMode::CodeEditor { tab: t, .. } => *t = tab,
             _ => {}
         }

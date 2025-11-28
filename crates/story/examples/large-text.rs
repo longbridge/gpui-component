@@ -22,7 +22,7 @@ impl Example {
 
         let editor = cx.new(|cx| {
             InputState::new(window, cx)
-                .multi_line()
+                .multi_line(true)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
