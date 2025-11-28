@@ -20,7 +20,7 @@ use gpui_component::input::{InputState, Input};
 ```rust
 let textarea = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .placeholder("Enter your message...")
 );
 
@@ -32,7 +32,7 @@ Input::new(&textarea)
 ```rust
 let textarea = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .rows(10) // Set number of rows
         .placeholder("Enter text here...")
 );
@@ -58,7 +58,7 @@ Input::new(&textarea)
 ```rust
 let textarea = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .rows(6)
         .default_value("Hello World!\n\nThis is a multi-line textarea with default content.")
 );
@@ -67,6 +67,8 @@ Input::new(&textarea)
 ```
 
 ### Code Editor Mode
+
+#### Multi Line
 
 ```rust
 let code_editor = cx.new(|cx|
@@ -81,6 +83,21 @@ Input::new(&code_editor)
     .h_full() // Full height
 ```
 
+#### Single Line
+
+```rust
+let code_editor = cx.new(|cx|
+    InputState::new(window, cx)
+        .code_editor("rust") // Language for syntax highlighting
+        .line_number(false) // Hide line numbers
+        .indent_guides(false) // Hide indent guides
+        .multi_line(false) // Single line
+        .default_value("println!(\"Hello, world!\");")
+);
+
+Input::new(&code_editor)
+```
+
 ### Textarea with Custom Tab Size
 
 ```rust
@@ -88,7 +105,7 @@ use gpui_component::input::TabSize;
 
 let textarea = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .tab_size(TabSize {
             tab_size: 4,
             hard_tabs: false, // Use spaces instead of tabs
@@ -103,7 +120,7 @@ Input::new(&textarea)
 ```rust
 let textarea = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .searchable(true) // Enable Ctrl+F search
         .rows(15)
         .default_value("Search through this content...")
@@ -118,7 +135,7 @@ Input::new(&textarea)
 // With soft wrap (default)
 let textarea_wrap = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .soft_wrap(true)
         .rows(6)
 );
@@ -126,7 +143,7 @@ let textarea_wrap = cx.new(|cx|
 // Without soft wrap (horizontal scrolling)
 let textarea_no_wrap = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .soft_wrap(false)
         .rows(6)
         .default_value("This is a very long line that will not wrap automatically but will show horizontal scrollbar instead.")
@@ -199,7 +216,7 @@ println!("Line: {}, Column: {}", position.line, position.character);
 ```rust
 let textarea = cx.new(|cx|
     InputState::new(window, cx)
-        .multi_line()
+        .multi_line(true)
         .validate(|text, _| {
             // Validate that content is not empty and under 1000 chars
             !text.trim().is_empty() && text.len() <= 1000
