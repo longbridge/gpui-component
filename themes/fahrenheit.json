@@ -33,6 +33,7 @@
         "secondary.foreground": "#979797",
         "secondary.hover.background": "#202020DD",
         "tab.foreground": "#808080",
+        "title_bar.background": "#0e0e0e",
         "table.background": "#1e1e1e00",
         "table.hover.background": "#1E1E1E",
         "ring": "#570101",

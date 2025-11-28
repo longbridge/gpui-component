@@ -19,43 +19,6 @@
       "type": ["string", "null"],
       "default": null
     },
-    "font.size": {
-      "description": "The base font size, default is 16.",
-      "type": ["number", "null"],
-      "format": "float",
-      "default": 16
-    },
-    "font.family": {
-      "description": "The base font family, default is system font: `.SystemUIFont`.",
-      "type": ["string", "null"],
-      "default": ".SystemUIFont"
-    },
-    "mono_font.size": {
-      "description": "The base monospace font size, default is 13.",
-      "type": ["number", "null"],
-      "format": "float",
-      "default": 13
-    },
-    "mono_font.family": {
-      "description": "The monospace font family, default is platform specific:\nmacOS: `Menlo`\n- Windows: `Consolas`\n- Linux: `DejaVu Sans Mono`",
-      "type": ["string", "null"],
-      "default": null
-    },
-    "radius": {
-      "description": "The border radius for general elements, default is 6.",
-      "type": ["number", "null"],
-      "default": 6
-    },
-    "radius.lg": {
-      "description": "The border radius for large elements like Dialogs and Notifications, default is 8.",
-      "type": ["number", "null"],
-      "default": 8
-    },
-    "shadow": {
-      "description": "Set shadows in the theme, for example the Input and Button, default is true.",
-      "type": ["boolean", "null"],
-      "default": true
-    },
     "themes": {
       "type": "array",
       "items": {
@@ -78,6 +41,43 @@
           "description": "The mode of the theme, default is light.",
           "$ref": "#/$defs/ThemeMode",
           "default": "light"
+        },
+        "font.size": {
+          "description": "The base font size, default is 16.",
+          "type": ["number", "null"],
+          "format": "float",
+          "default": 16
+        },
+        "font.family": {
+          "description": "The base font family, default is system font: `.SystemUIFont`.",
+          "type": ["string", "null"],
+          "default": ".SystemUIFont"
+        },
+        "mono_font.size": {
+          "description": "The base monospace font size, default is 13.",
+          "type": ["number", "null"],
+          "format": "float",
+          "default": 13
+        },
+        "mono_font.family": {
+          "description": "The monospace font family, default is platform specific:\nmacOS: `Menlo`\n- Windows: `Consolas`\n- Linux: `DejaVu Sans Mono`",
+          "type": ["string", "null"],
+          "default": null
+        },
+        "radius": {
+          "description": "The border radius for general elements, default is 6.",
+          "type": ["number", "null"],
+          "default": 6
+        },
+        "radius.lg": {
+          "description": "The border radius for large elements like Dialogs and Notifications, default is 8.",
+          "type": ["number", "null"],
+          "default": 8
+        },
+        "shadow": {
+          "description": "Set shadows in the theme, for example the Input and Button, default is true.",
+          "type": ["boolean", "null"],
+          "default": true
         },
         "colors": {
           "description": "The colors of the theme.",
@@ -407,6 +407,10 @@
         },
         "switch.background": {
           "description": "Switch background color.",
+          "type": ["string", "null"]
+        },
+        "switch.thumb.background": {
+          "description": "Switch thumb background color.",
           "type": ["string", "null"]
         },
         "tab.background": {

@@ -1,13 +1,14 @@
 use crate::{
+    ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
     button::{Button, ButtonVariants},
     h_flex,
-    scroll::ScrollbarAxis,
-    v_flex, ActiveTheme, Collapsible, Icon, IconName, Side, Sizable, StyledExt,
+    scroll::ScrollableElement,
+    v_flex,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, ClickEvent, EdgesRefinement,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
-    Styled, Window,
+    AnyElement, App, ClickEvent, EdgesRefinement, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder, px,
 };
 use std::rc::Rc;
 
@@ -219,16 +220,15 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
             .child(
                 v_flex().id("content").flex_1().min_h_0().child(
                     v_flex()
-                        .gap_3()
+                        .id("inner")
                         .p_3()
                         .when(self.collapsed, |this| this.p_2())
                         .children(
-                            self.content
-                                .into_iter()
-                                .enumerate()
-                                .map(|(ix, c)| div().id(ix).child(c.collapsed(self.collapsed))),
+                            self.content.into_iter().enumerate().map(|(ix, c)| {
+                                div().id(ix).mt_3().child(c.collapsed(self.collapsed))
+                            }),
                         )
-                        .scrollable(ScrollbarAxis::Vertical),
+                        .overflow_y_scrollbar(),
                 ),
             )
             .when_some(self.footer.take(), |this, footer| {

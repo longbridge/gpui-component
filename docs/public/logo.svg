@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="22px" height="22px" viewBox="0 0 22 22" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>gpui-component</title>
+<svg width="24px" height="25px" viewBox="0 0 24 25" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Slice</title>
     <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-        <g id="gpui-component" transform="translate(11.394059, 11.386736) rotate(-180.000000) translate(-11.394059, -11.386736) translate(2.257359, 3.000000)">
-            <rect id="Rectangle" fill="#000000" x="9.27339927" y="0.5" width="9" height="6" rx="0.5"></rect>
-            <rect id="Rectangle-Copy" stroke="#000000" x="9.77339927" y="9" width="8" height="7" rx="0.5"></rect>
-            <rect id="Rectangle" stroke="#000000" x="0.773399268" y="0.5" width="5" height="7" rx="1"></rect>
-            <rect id="Rectangle" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" transform="translate(3.424871, 13.641421) rotate(-210.000000) translate(-3.424871, -13.641421) " x="0.624871131" y="11.6414214" width="5.6" height="4" rx="2"></rect>
+        <g id="gpui-component" transform="translate(12.257359, 12.015009) rotate(-180.000000) translate(-12.257359, -12.015009) translate(0.257359, 1.000000)">
+            <rect id="Rectangle" fill="#000000" x="12.1795392" y="0.656692267" width="11" height="7.33333333" rx="0.5"></rect>
+            <rect id="Rectangle-Copy" stroke="#000000" x="12.6795392" y="11.6637685" width="10.8204608" height="9.50707628" rx="0.5"></rect>
+            <rect id="Rectangle" stroke="#000000" x="0.85907837" y="0.5" width="6.88030721" height="9.50707628" rx="1"></rect>
+            <path d="M6.17564948,15.7896628 C6.58986304,15.7896628 6.96486304,15.957556 7.23630965,16.2290026 C7.50775626,16.5004492 7.67564948,16.8754492 7.67564948,17.2896628 L7.67564948,17.2896628 L7.67564948,18.5432009 C7.67564948,18.9574145 7.50775626,19.3324145 7.23630965,19.6038611 C6.96486304,19.8753077 6.58986304,20.0432009 6.17564948,20.0432009 L6.17564948,20.0432009 L2.82069608,20.0432009 C2.40648252,20.0432009 2.03148252,19.8753077 1.76003591,19.6038611 C1.4885893,19.3324145 1.32069608,18.9574145 1.32069608,18.5432009 L1.32069608,18.5432009 L1.32069608,17.2896628 C1.32069608,16.8754492 1.4885893,16.5004492 1.76003591,16.2290026 C2.03148252,15.957556 2.40648252,15.7896628 2.82069608,15.7896628 L2.82069608,15.7896628 Z" id="Rectangle" stroke="#000000" transform="translate(4.498173, 17.916432) rotate(-210.000000) translate(-4.498173, -17.916432) "></path>
         </g>
     </g>
 </svg>

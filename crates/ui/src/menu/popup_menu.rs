@@ -1,14 +1,14 @@
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
-use crate::scroll::{Scrollbar, ScrollbarState};
-use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
-use crate::{kbd::Kbd, Side, Size, StyledExt};
+use crate::scroll::ScrollableElement;
+use crate::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
+use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
-    anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
-    Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window,
+    Action, AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
+    WeakEntity, Window, anchored, canvas, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Subscription};
 use std::rc::Rc;
@@ -37,6 +37,7 @@ pub enum PopupMenuItem {
         icon: Option<Icon>,
         label: SharedString,
         disabled: bool,
+        checked: bool,
         is_link: bool,
         action: Option<Box<dyn Action>>,
         // For link item
@@ -46,6 +47,7 @@ pub enum PopupMenuItem {
     ElementItem {
         icon: Option<Icon>,
         disabled: bool,
+        checked: bool,
         action: Option<Box<dyn Action>>,
         render: Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
         handler: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
@@ -70,6 +72,7 @@ impl PopupMenuItem {
             icon: None,
             label: label.into(),
             disabled: false,
+            checked: false,
             action: None,
             is_link: false,
             handler: None,
@@ -86,6 +89,7 @@ impl PopupMenuItem {
         PopupMenuItem::ElementItem {
             icon: None,
             disabled: false,
+            checked: false,
             action: None,
             render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
             handler: None,
@@ -169,24 +173,16 @@ impl PopupMenuItem {
         self
     }
 
-    /// Set checked state for the menu item by adding or removing check icon.
+    /// Set checked state for the menu item.
     ///
-    /// If true, will set the icon to check icon, otherwise remove the icon.
+    /// NOTE: If `check_side` is [`Side::Left`], the icon will replace with a check icon.
     pub fn checked(mut self, checked: bool) -> Self {
         match &mut self {
-            PopupMenuItem::Item { icon: i, .. } => {
-                if checked {
-                    *i = Some(IconName::Check.into());
-                } else {
-                    *i = None;
-                }
+            PopupMenuItem::Item { checked: c, .. } => {
+                *c = checked;
             }
-            PopupMenuItem::ElementItem { icon: i, .. } => {
-                if checked {
-                    *i = Some(IconName::Check.into());
-                } else {
-                    *i = None;
-                }
+            PopupMenuItem::ElementItem { checked: c, .. } => {
+                *c = checked;
             }
             _ => {}
         }
@@ -220,6 +216,7 @@ impl PopupMenuItem {
             icon: None,
             label: label.into(),
             disabled: false,
+            checked: false,
             action: None,
             is_link: true,
             handler: Some(Rc::new(move |_, _, cx| cx.open_url(&href))),
@@ -249,11 +246,24 @@ impl PopupMenuItem {
         matches!(self, PopupMenuItem::Separator)
     }
 
-    fn has_icon(&self) -> bool {
+    fn has_left_icon(&self, check_side: Side) -> bool {
         match self {
-            PopupMenuItem::Item { icon, .. } => icon.is_some(),
-            PopupMenuItem::ElementItem { icon, .. } => icon.is_some(),
+            PopupMenuItem::Item { icon, checked, .. } => {
+                icon.is_some() || (check_side.is_left() && *checked)
+            }
+            PopupMenuItem::ElementItem { icon, checked, .. } => {
+                icon.is_some() || (check_side.is_left() && *checked)
+            }
             PopupMenuItem::Submenu { icon, .. } => icon.is_some(),
+            _ => false,
+        }
+    }
+
+    #[inline]
+    fn is_checked(&self) -> bool {
+        match self {
+            PopupMenuItem::Item { checked, .. } => *checked,
+            PopupMenuItem::ElementItem { checked, .. } => *checked,
             _ => false,
         }
     }
@@ -264,20 +274,19 @@ pub struct PopupMenu {
     pub(crate) menu_items: Vec<PopupMenuItem>,
     /// The focus handle of Entity to handle actions.
     pub(crate) action_context: Option<FocusHandle>,
-    has_icon: bool,
     selected_index: Option<usize>,
     min_width: Option<Pixels>,
     max_width: Option<Pixels>,
     max_height: Option<Pixels>,
     bounds: Bounds<Pixels>,
     size: Size,
+    check_side: Side,
 
     /// The parent menu of this menu, if this is a submenu
     parent_menu: Option<WeakEntity<Self>>,
     scrollable: bool,
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
-    scroll_state: ScrollbarState,
     // This will update on render
     submenu_anchor: (Corner, Pixels),
 
@@ -295,11 +304,10 @@ impl PopupMenu {
             min_width: None,
             max_width: None,
             max_height: None,
-            has_icon: false,
+            check_side: Side::Left,
             bounds: Bounds::default(),
             scrollable: false,
             scroll_handle: ScrollHandle::default(),
-            scroll_state: ScrollbarState::default(),
             external_link_icon: true,
             size: Size::default(),
             submenu_anchor: (Corner::TopLeft, Pixels::ZERO),
@@ -351,6 +359,12 @@ impl PopupMenu {
         self
     }
 
+    /// Set the side to show check icon, default is `Side::Left`.
+    pub fn check_side(mut self, side: Side) -> Self {
+        self.check_side = side;
+        self
+    }
+
     /// Set the menu to show external link icon, default is true.
     pub fn external_link_icon(mut self, visible: bool) -> Self {
         self.external_link_icon = visible;
@@ -369,7 +383,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         enable: bool,
     ) -> Self {
-        self.add_menu_item(label, None, action, !enable);
+        self.add_menu_item(label, None, action, !enable, false);
         self
     }
 
@@ -380,7 +394,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         disabled: bool,
     ) -> Self {
-        self.add_menu_item(label, None, action, disabled);
+        self.add_menu_item(label, None, action, disabled, false);
         self
     }
 
@@ -453,7 +467,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         disabled: bool,
     ) -> Self {
-        self.add_menu_item(label, Some(icon.into()), action, disabled);
+        self.add_menu_item(label, Some(icon.into()), action, disabled, false);
         self
     }
 
@@ -475,12 +489,7 @@ impl PopupMenu {
         action: Box<dyn Action>,
         disabled: bool,
     ) -> Self {
-        if checked {
-            self.add_menu_item(label, Some(IconName::Check.into()), action, disabled);
-        } else {
-            self.add_menu_item(label, None, action, disabled);
-        }
-
+        self.add_menu_item(label, None, action, disabled, checked);
         self
     }
 
@@ -553,7 +562,6 @@ impl PopupMenu {
                 .icon(icon)
                 .disabled(disabled),
         );
-        self.has_icon = true;
         self
     }
 
@@ -572,10 +580,9 @@ impl PopupMenu {
         self.menu_items.push(
             PopupMenuItem::element(builder)
                 .action(action)
-                .when(checked, |item| item.icon(IconName::Check))
+                .checked(checked)
                 .disabled(disabled),
         );
-        self.has_icon = self.has_icon || checked;
         self
     }
 
@@ -628,9 +635,6 @@ impl PopupMenu {
     /// Add menu item.
     pub fn item(mut self, item: impl Into<PopupMenuItem>) -> Self {
         let item: PopupMenuItem = item.into();
-        if item.has_icon() {
-            self.has_icon = true;
-        }
         self.menu_items.push(item);
         self
     }
@@ -647,15 +651,13 @@ impl PopupMenu {
         icon: Option<Icon>,
         action: Box<dyn Action>,
         disabled: bool,
+        checked: bool,
     ) -> &mut Self {
-        if icon.is_some() {
-            self.has_icon = true;
-        }
-
         self.menu_items.push(
             PopupMenuItem::new(label)
                 .when_some(icon, |item, icon| item.icon(icon))
                 .disabled(disabled)
+                .checked(checked)
                 .action(action),
         );
         self
@@ -944,7 +946,7 @@ impl PopupMenu {
         action: Option<Box<dyn Action>>,
         window: &mut Window,
         _: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
+    ) -> Option<Kbd> {
         let action = action?;
 
         match self
@@ -966,6 +968,7 @@ impl PopupMenu {
 
     fn render_icon(
         has_icon: bool,
+        checked: bool,
         icon: Option<Icon>,
         _: &mut Window,
         _: &mut Context<Self>,
@@ -976,6 +979,8 @@ impl PopupMenu {
 
         let icon = if let Some(icon) = icon {
             icon.clone()
+        } else if checked {
+            Icon::new(IconName::Check)
         } else {
             Icon::empty()
         };
@@ -1010,11 +1015,18 @@ impl PopupMenu {
         &self,
         ix: usize,
         item: &PopupMenuItem,
-        state: ItemState,
+        options: RenderOptions,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let has_icon = self.has_icon;
+    ) -> MenuItemElement {
+        let has_left_icon = options.has_left_icon;
+        let is_left_check = options.check_side.is_left() && item.is_checked();
+        let right_check_icon = if options.check_side.is_right() && item.is_checked() {
+            Some(Icon::new(IconName::Check).xsmall())
+        } else {
+            None
+        };
+
         let selected = self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(4.);
         const INNER_PADDING: Pixels = px(8.);
@@ -1023,8 +1035,8 @@ impl PopupMenu {
         let group_name = format!("popup-menu-item-{}", ix);
 
         let (item_height, radius) = match self.size {
-            Size::Small => (px(20.), state.radius.half()),
-            _ => (px(26.), state.radius),
+            Size::Small => (px(20.), options.radius.half()),
+            _ => (px(26.), options.radius),
         };
 
         let this = MenuItemElement::new(ix, &group_name)
@@ -1060,7 +1072,7 @@ impl PopupMenu {
                     .cursor_default()
                     .items_center()
                     .gap_x_1()
-                    .children(Self::render_icon(has_icon, None, window, cx))
+                    .children(Self::render_icon(has_left_icon, false, None, window, cx))
                     .child(div().flex_1().child(label.clone())),
             ),
             PopupMenuItem::ElementItem {
@@ -1081,8 +1093,15 @@ impl PopupMenu {
                         .min_h(item_height)
                         .items_center()
                         .gap_x_1()
-                        .children(Self::render_icon(has_icon, icon.clone(), window, cx))
-                        .child((render)(window, cx)),
+                        .children(Self::render_icon(
+                            has_left_icon,
+                            is_left_check,
+                            icon.clone(),
+                            window,
+                            cx,
+                        ))
+                        .child((render)(window, cx))
+                        .children(right_check_icon.map(|icon| icon.ml_3())),
                 ),
             PopupMenuItem::Item {
                 icon,
@@ -1103,14 +1122,22 @@ impl PopupMenu {
                 })
                 .disabled(*disabled)
                 .h(item_height)
-                .children(Self::render_icon(has_icon, icon.clone(), window, cx))
+                .gap_x_1()
+                .children(Self::render_icon(
+                    has_left_icon,
+                    is_left_check,
+                    icon.clone(),
+                    window,
+                    cx,
+                ))
                 .child(
                     h_flex()
                         .w_full()
-                        .gap_2()
+                        .gap_3()
                         .items_center()
                         .justify_between()
                         .when(!show_link_icon, |this| this.child(label.clone()))
+                        .children(right_check_icon)
                         .when(show_link_icon, |this| {
                             this.child(
                                 h_flex()
@@ -1143,7 +1170,13 @@ impl PopupMenu {
                         .size_full()
                         .items_center()
                         .gap_x_1()
-                        .children(Self::render_icon(has_icon, icon.clone(), window, cx))
+                        .children(Self::render_icon(
+                            has_left_icon,
+                            false,
+                            icon.clone(),
+                            window,
+                            cx,
+                        ))
                         .child(
                             h_flex()
                                 .flex_1()
@@ -1186,7 +1219,9 @@ impl Focusable for PopupMenu {
 }
 
 #[derive(Clone, Copy)]
-struct ItemState {
+struct RenderOptions {
+    has_left_icon: bool,
+    check_side: Side,
     radius: Pixels,
 }
 
@@ -1205,8 +1240,15 @@ impl Render for PopupMenu {
             |height| height,
         );
 
+        let has_left_icon = self
+            .menu_items
+            .iter()
+            .any(|item| item.has_left_icon(self.check_side));
+
         let max_width = self.max_width();
-        let item_state = ItemState {
+        let options = RenderOptions {
+            has_left_icon,
+            check_side: self.check_side,
             radius: cx.theme().radius.min(px(8.)),
         };
 
@@ -1254,7 +1296,7 @@ impl Render for PopupMenu {
                             .enumerate()
                             // Ignore last separator
                             .filter(|(ix, item)| !(*ix + 1 == items_count && item.is_separator()))
-                            .map(|(ix, item)| self.render_item(ix, item, item_state, window, cx)),
+                            .map(|(ix, item)| self.render_item(ix, item, options, window, cx)),
                     )
                     .child({
                         canvas(
@@ -1267,15 +1309,7 @@ impl Render for PopupMenu {
             )
             .when(self.scrollable, |this| {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
-                this.child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .right_0()
-                        .bottom_0()
-                        .child(Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)),
-                )
+                this.vertical_scrollbar(&self.scroll_handle)
             })
     }
 }

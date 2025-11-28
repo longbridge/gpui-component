@@ -1,18 +1,19 @@
 use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
+    ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
     actions::{Cancel, SelectDown, SelectUp},
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
-    scroll::{ScrollableMask, Scrollbar, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
+    scroll::{ScrollableMask, Scrollbar},
+    v_flex,
 };
 use gpui::{
-    canvas, div, prelude::FluentBuilder, px, uniform_list, AppContext, Axis, Bounds, ClickEvent,
-    Context, Div, DragMoveEvent, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    Render, ScrollStrategy, SharedString, StatefulInteractiveElement as _, Styled, Task,
-    UniformListScrollHandle, Window,
+    AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
+    ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, canvas, div,
+    prelude::FluentBuilder, px, uniform_list,
 };
 
 use super::*;
@@ -94,9 +95,7 @@ pub struct TableState<D: TableDelegate> {
     pub col_fixed: bool,
 
     pub vertical_scroll_handle: UniformListScrollHandle,
-    pub vertical_scroll_state: ScrollbarState,
     pub horizontal_scroll_handle: VirtualListScrollHandle,
-    pub horizontal_scroll_state: ScrollbarState,
 
     selected_row: Option<usize>,
     selection_state: SelectionState,
@@ -126,8 +125,6 @@ where
             col_groups: Vec::new(),
             horizontal_scroll_handle: VirtualListScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
-            vertical_scroll_state: ScrollbarState::default(),
-            horizontal_scroll_state: ScrollbarState::default(),
             selection_state: SelectionState::Row,
             selected_row: None,
             right_clicked_row: None,
@@ -791,12 +788,7 @@ where
     /// The children must be one by one items.
     /// Because the horizontal scroll handle will use the child_item_bounds to
     /// calculate the item position for itself's `scroll_to_item` method.
-    fn render_th(
-        &self,
-        col_ix: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render_th(&self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let entity_id = cx.entity_id();
         let col_group = self.col_groups.get(col_ix).expect("BUG: invalid col index");
 
@@ -970,7 +962,7 @@ where
         is_filled: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
         let is_stripe_row = self.options.stripe && row_ix % 2 != 0;
         let is_selected = self.selected_row == Some(row_ix);
@@ -1213,10 +1205,7 @@ where
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
-                .child(
-                    Scrollbar::vertical(&self.vertical_scroll_state, &self.vertical_scroll_handle)
-                        .max_fps(60),
-                ),
+                .child(Scrollbar::vertical(&self.vertical_scroll_handle).max_fps(60)),
         )
     }
 
@@ -1232,10 +1221,7 @@ where
             .right_0()
             .bottom_0()
             .h(Scrollbar::width())
-            .child(Scrollbar::horizontal(
-                &self.horizontal_scroll_state,
-                &self.horizontal_scroll_handle,
-            ))
+            .child(Scrollbar::horizontal(&self.horizontal_scroll_handle))
     }
 }
 

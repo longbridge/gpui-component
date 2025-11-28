@@ -1,20 +1,21 @@
 use gpui::{
-    anchored, canvas, deferred, div, prelude::FluentBuilder as _, px, relative, App, AppContext,
-    Bounds, ClickEvent, Context, Corner, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
-    Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels,
-    Point, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Subscription, Window,
+    App, AppContext, Bounds, ClickEvent, Context, Corner, Div, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, anchored,
+    canvas, deferred, div, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{
+    ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable, Size,
+    StyleSized, StyledExt,
     actions::{Cancel, Confirm},
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{Input, InputEvent, InputState},
     tooltip::Tooltip,
-    v_flex, ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable,
-    Size, StyleSized, StyledExt,
+    v_flex,
 };
 
 const CONTEXT: &'static str = "ColorPicker";
@@ -79,7 +80,6 @@ impl ColorPickerState {
                 InputEvent::Change => {
                     let value = state.read(cx).value();
                     if let Ok(color) = Hsla::parse_hex(value.as_str()) {
-                        this.value = Some(color);
                         this.hovered_color = Some(color);
                     }
                 }
@@ -126,12 +126,21 @@ impl ColorPickerState {
         self.value
     }
 
-    fn on_escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
         }
 
         self.open = false;
+        if self.hovered_color != self.value {
+            let color = self.value;
+            self.hovered_color = color;
+            if let Some(color) = color {
+                self.state.update(cx, |input, cx| {
+                    input.set_value(color.to_hex(), window, cx);
+                });
+            }
+        }
         cx.notify();
     }
 
@@ -250,7 +259,7 @@ impl ColorPicker {
         clickable: bool,
         window: &mut Window,
         _: &mut App,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         let state = self.state.clone();
         div()
             .id(SharedString::from(format!("color-{}", color.to_hex())))
@@ -301,6 +310,18 @@ impl ColorPicker {
         ]);
 
         let state = self.state.clone();
+        // If the input value is empty, fill it with the current value.
+        let input_value = state.read(cx).state.read(cx).value();
+        if input_value.is_empty()
+            && let Some(value) = state.read(cx).value
+        {
+            state.update(cx, |state, cx| {
+                state.state.update(cx, |input, cx| {
+                    input.set_value(value.to_hex(), window, cx);
+                });
+            });
+        }
+
         v_flex()
             .gap_3()
             .child(
@@ -470,7 +491,8 @@ impl RenderOnce for ColorPicker {
                                     .border_1()
                                     .border_color(cx.theme().border)
                                     .shadow_lg()
-                                    .bg(cx.theme().background)
+                                    .bg(cx.theme().popover)
+                                    .text_color(cx.theme().popover_foreground)
                                     .child(self.render_colors(window, cx))
                                     .on_mouse_up_out(
                                         MouseButton::Left,

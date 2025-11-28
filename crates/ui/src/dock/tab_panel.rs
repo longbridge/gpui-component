@@ -1,20 +1,21 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, relative, rems, App, AppContext, Context, Corner,
-    DismissEvent, Div, DragMoveEvent, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, ScrollHandle,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window,
+    App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
 };
 use rust_i18n::t;
 
 use crate::{
+    ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
     button::{Button, ButtonVariants as _},
     dock::PanelInfo,
     h_flex,
     menu::{DropdownMenu, PopupMenu},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
+    v_flex,
 };
 
 use super::{
@@ -508,7 +509,7 @@ impl TabPanel {
         placement: DockPlacement,
         _: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
+    ) -> Option<Button> {
         if self.zoomed {
             return None;
         }
@@ -600,7 +601,6 @@ impl TabPanel {
         let Some(dock_area) = self.dock_area.upgrade() else {
             return div().into_any_element();
         };
-        let panel_style = dock_area.read(cx).panel_style;
 
         let left_dock_button = self.render_dock_toggle_button(DockPlacement::Left, window, cx);
         let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
@@ -608,8 +608,11 @@ impl TabPanel {
 
         let is_bottom_dock = bottom_dock_button.is_some();
 
-        if self.panels.len() == 1 && panel_style == PanelStyle::Default {
-            let panel = self.panels.get(0).unwrap();
+        let panel_style = dock_area.read(cx).panel_style;
+        let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
+
+        if visible_panels.len() == 1 && panel_style == PanelStyle::default() {
+            let panel = visible_panels.get(0).unwrap();
 
             if !panel.visible(cx) {
                 return div().into_any_element();

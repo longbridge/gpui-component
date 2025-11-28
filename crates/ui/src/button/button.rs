@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
 use crate::{
-    h_flex, spinner::Spinner, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
-    FocusableExt as _, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, IconName, Selectable,
+    Sizable, Size, StyleSized, StyledExt, h_flex, spinner::Spinner, tooltip::Tooltip,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, Action, AnyElement, App, ClickEvent, Corners,
-    Div, Edges, ElementId, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton,
-    ParentElement, Pixels, RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window,
+    Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
+    Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, SharedString,
+    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px, relative,
 };
 
 #[derive(Default, Clone, Copy)]

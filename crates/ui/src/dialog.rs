@@ -1,18 +1,21 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    anchored, div, hsla, point, prelude::FluentBuilder, px, relative, Animation, AnimationExt as _,
-    AnyElement, App, Axis, Bounds, BoxShadow, ClickEvent, Div, Edges, FocusHandle, Hsla,
-    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Div, Edges,
+    FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
+    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, anchored, div, hsla,
+    point, prelude::FluentBuilder, px, relative,
 };
 use rust_i18n::t;
 
 use crate::{
+    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
+    h_flex,
+    scroll::ScrollableElement as _,
+    v_flex,
 };
 
 const CONTEXT: &str = "Dialog";
@@ -225,6 +228,14 @@ impl Dialog {
     /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
     pub fn margin_top(mut self, margin_top: Pixels) -> Self {
         self.margin_top = Some(margin_top);
+        self
+    }
+
+    /// Sets the width of the dialog, defaults to 480px.
+    ///
+    /// See also [`Self::width`]
+    pub fn w(mut self, width: Pixels) -> Self {
+        self.width = width;
         self
     }
 
@@ -496,9 +507,10 @@ impl RenderOnce for Dialog {
                             .child(
                                 div().w_full().flex_1().overflow_hidden().child(
                                     v_flex()
+                                        .id("contents")
                                         .pl(paddings.left)
                                         .pr(paddings.right)
-                                        .scrollable(Axis::Vertical)
+                                        .overflow_y_scrollbar()
                                         .child(self.content),
                                 ),
                             )

@@ -24,8 +24,6 @@ Here is the first application: [Longbridge Pro](https://longbridge.com/desktop),
 
 <img width="1763" alt="Image" src="https://github.com/user-attachments/assets/e1ecb9c3-2dd3-431e-bd97-5a819c30e551" />
 
-We built multi-theme support in the application. This feature is not included in GPUI Component itself, but is based on the `Theme` feature, so it's easy to implement.
-
 ## Usage
 
 ```toml

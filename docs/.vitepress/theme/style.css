@@ -41,7 +41,7 @@
   --sidebar-ring: oklch(0.708 0 0);
 
   --vp-c-bg: var(--background);
-  --vp-c-bg-alt: var(--sidebar);
+  --vp-c-bg-alt: var(--secondary);
   --vp-c-bg-elv: var(--popover);
   --vp-c-bg-soft: var(--secondary);
 
@@ -104,15 +104,23 @@
   }
 
   .DocSearch-Button {
-    @apply rounded-md py-0 px-2 h-8 lg:w-56 xl:w-64;
+    @apply rounded-full py-0 px-2 h-8 lg:w-56 xl:w-64;
+
+    .DocSearch-Button-Keys {
+      @apply rounded-full p-1;
+    }
   }
 
   .VPNav {
-    @apply bg-(--background) border-b border-(--border) border-dashed;
+    @apply bg-(--background) border-b border-(--border);
 
     .divider {
       @apply hidden;
     }
+  }
+
+  .VPSwitch {
+    @apply border-(--secondary) bg-(--secondary) hover:border-(--border);
   }
 
   .VPFooter {
@@ -120,22 +128,12 @@
   }
 
   .VPSidebar {
-    @apply border-r border-dashed border-(--border) bg-(--background);
-
-    .VPSidebarItem .items {
-      @apply border-dashed;
-    }
+    @apply border-r border-(--border) bg-(--background);
   }
 
   .VPNavBarTitle {
     a.title {
       border-bottom: 0 !important;
-    }
-  }
-
-  .aside {
-    .content {
-      @apply border-dashed;
     }
   }
 
@@ -145,6 +143,14 @@
     .pager-link {
       @apply border-dashed;
     }
+  }
+}
+
+.VPContent.has-sidebar {
+  .VPDoc {
+    @apply pt-32;
+    background: url("/components.svg") no-repeat;
+    background-position: top -45px right 320px;
   }
 }
 

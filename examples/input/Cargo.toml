@@ -1,8 +1,8 @@
 [package]
 name = "input"
-version = "0.4.1"
+version = "0.5.0-preview0"
 publish = false
-edition = "2024"
+edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true

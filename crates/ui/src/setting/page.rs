@@ -1,16 +1,17 @@
 use gpui::{
-    div, list, prelude::FluentBuilder as _, px, App, Entity, InteractiveElement as _, IntoElement,
-    ListAlignment, ListState, ParentElement as _, SharedString, Styled, Window,
+    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    ParentElement as _, SharedString, Styled, Window, div, list, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
 use crate::{
+    ActiveTheme, IconName, Sizable,
     button::{Button, ButtonVariants},
     h_flex,
     label::Label,
-    scroll::{Scrollbar, ScrollbarState},
-    setting::{settings::SettingsState, RenderOptions, SettingGroup},
-    v_flex, ActiveTheme, IconName, Sizable,
+    scroll::ScrollableElement,
+    setting::{RenderOptions, SettingGroup, settings::SettingsState},
+    v_flex,
 };
 
 /// A setting page that can contain multiple setting groups.
@@ -100,16 +101,11 @@ impl SettingPage {
             .collect::<Vec<_>>();
         let groups_count = groups.len();
 
-        let (scroll_state, list_state) = window
+        let list_state = window
             .use_keyed_state(
                 SharedString::from(format!("list-state:{}", ix)),
                 cx,
-                |_, _| {
-                    (
-                        ScrollbarState::default(),
-                        ListState::new(groups_count, ListAlignment::Top, px(100.)),
-                    )
-                },
+                |_, _| ListState::new(groups_count, ListAlignment::Top, px(100.)),
             )
             .read(cx)
             .clone();
@@ -181,15 +177,7 @@ impl SettingPage {
                         })
                         .size_full(),
                     )
-                    .child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .child(Scrollbar::vertical(&scroll_state, &list_state)),
-                    ),
+                    .vertical_scrollbar(&list_state),
             )
     }
 }

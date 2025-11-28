@@ -1,5 +1,7 @@
 <template>
     <div class="contributors-page">
+        <h1>Contributors</h1>
+        <p>Thanks to all the people who have contributed to this project!</p>
         <div class="contributors-list">
             <a
                 :href="contributor.html_url"
@@ -18,6 +20,16 @@
                 </div>
             </a>
         </div>
+        <div class="mt-6 text-(--muted-foreground)">
+            More contributors not shown here. See the full
+            <a
+                href="https://github.com/longbridge/gpui-component/graphs/contributors"
+                target="_blank"
+            >
+                Contributors</a
+            >
+            on GitHub.
+        </div>
     </div>
 </template>
 
@@ -28,12 +40,23 @@ const contributors = data;
 
 <style lang="scss" scoped>
 @reference "./.vitepress/theme/style.css";
+
+.contributors-page {
+    @apply py-10 pt-30;
+    background: url("/contributors.svg") no-repeat;
+    background-position: top 20px right 20px;
+}
+
 .contributors-list {
-    @apply my-8 grid grid-cols-1 lg:grid-cols-4 gap-6;
+    @apply mt-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 border-r border-b border-(--border);
 }
 
 .contributor-card {
-    @apply px-4 py-3 gap-3  border border-[var(--border)] rounded-lg hover:shadow-lg transition-shadow items-center text-center justify-center no-underline flex flex-col;
+    @apply px-4 py-3 gap-3 border border-(--border) hover:bg-(--secondary) transition-shadow
+    items-center text-center text-(--foreground) hover:text-(--foreground) justify-center no-underline flex flex-col
+    border border-b-0 border-(--border);
+
+    @apply border-r-0 last:border-r-0 md:last:border-b-0 lg:last:border-b-0;
 
     .contributor-avatar {
         @apply w-12 h-12 rounded-full;

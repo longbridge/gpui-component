@@ -1,32 +1,33 @@
 use std::{
     cell::Cell,
     ops::Deref,
+    panic::Location,
     rc::Rc,
     time::{Duration, Instant},
 };
 
 use crate::{ActiveTheme, AxisExt};
 use gpui::{
-    fill, point, px, relative, size, App, Axis, BorderStyle, Bounds, ContentMask, Corner,
-    CursorStyle, Edges, Element, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
-    IntoElement, IsZero, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    PaintQuad, Pixels, Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer,
-    UniformListScrollHandle, Window,
+    App, Axis, BorderStyle, Bounds, ContentMask, Corner, CursorStyle, Edges, Element, ElementId,
+    GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, IsZero,
+    LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
+    Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
+    fill, point, px, relative, size,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// The width of the scrollbar (THUMB_ACTIVE_INSET * 2 + THUMB_ACTIVE_WIDTH)
-const WIDTH: Pixels = px(2. * 2. + 8.);
+const WIDTH: Pixels = px(4. * 2. + 8.);
 const MIN_THUMB_SIZE: f32 = 48.;
 
 const THUMB_WIDTH: Pixels = px(6.);
 const THUMB_RADIUS: Pixels = px(6. / 2.);
-const THUMB_INSET: Pixels = px(2.);
+const THUMB_INSET: Pixels = px(4.);
 
 const THUMB_ACTIVE_WIDTH: Pixels = px(8.);
 const THUMB_ACTIVE_RADIUS: Pixels = px(8. / 2.);
-const THUMB_ACTIVE_INSET: Pixels = px(2.);
+const THUMB_ACTIVE_INSET: Pixels = px(4.);
 
 const FADE_OUT_DURATION: f32 = 3.0;
 const FADE_OUT_DELAY: f32 = 2.0;
@@ -54,7 +55,7 @@ impl ScrollbarShow {
 }
 
 /// A trait for scroll handles that can get and set offset.
-pub trait ScrollHandleOffsetable {
+pub trait ScrollbarHandle: 'static {
     /// Get the current offset of the scroll handle.
     fn offset(&self) -> Point<Pixels>;
     /// Set the offset of the scroll handle.
@@ -67,7 +68,7 @@ pub trait ScrollHandleOffsetable {
     fn end_drag(&self) {}
 }
 
-impl ScrollHandleOffsetable for ScrollHandle {
+impl ScrollbarHandle for ScrollHandle {
     fn offset(&self) -> Point<Pixels> {
         self.offset()
     }
@@ -81,7 +82,7 @@ impl ScrollHandleOffsetable for ScrollHandle {
     }
 }
 
-impl ScrollHandleOffsetable for UniformListScrollHandle {
+impl ScrollbarHandle for UniformListScrollHandle {
     fn offset(&self) -> Point<Pixels> {
         self.0.borrow().base_handle.offset()
     }
@@ -96,7 +97,7 @@ impl ScrollHandleOffsetable for UniformListScrollHandle {
     }
 }
 
-impl ScrollHandleOffsetable for ListState {
+impl ScrollbarHandle for ListState {
     fn offset(&self) -> Point<Pixels> {
         self.scroll_px_offset_for_scrollbar()
     }
@@ -120,11 +121,11 @@ impl ScrollHandleOffsetable for ListState {
 
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
+struct ScrollbarState(Rc<Cell<ScrollbarStateInner>>);
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy)]
-pub struct ScrollbarStateInner {
+struct ScrollbarStateInner {
     hovered_axis: Option<Axis>,
     hovered_on_thumb: Option<Axis>,
     dragged_axis: Option<Axis>,
@@ -307,10 +308,10 @@ impl ScrollbarAxis {
 
 /// Scrollbar control for scroll-area or a uniform-list.
 pub struct Scrollbar {
+    pub(crate) id: ElementId,
     axis: ScrollbarAxis,
     scrollbar_show: Option<ScrollbarShow>,
-    scroll_handle: Rc<dyn ScrollHandleOffsetable>,
-    state: ScrollbarState,
+    scroll_handle: Rc<dyn ScrollbarHandle>,
     scroll_size: Option<Size<Pixels>>,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
@@ -320,14 +321,15 @@ pub struct Scrollbar {
 }
 
 impl Scrollbar {
-    fn new(
-        axis: impl Into<ScrollbarAxis>,
-        state: &ScrollbarState,
-        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
-    ) -> Self {
+    /// Create a new scrollbar.
+    ///
+    /// This will have both vertical and horizontal scrollbars.
+    #[track_caller]
+    pub fn new<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
+        let caller = Location::caller();
         Self {
-            state: state.clone(),
-            axis: axis.into(),
+            id: ElementId::CodeLocation(*caller),
+            axis: ScrollbarAxis::Both,
             scrollbar_show: None,
             scroll_handle: Rc::new(scroll_handle.clone()),
             max_fps: 120,
@@ -335,28 +337,24 @@ impl Scrollbar {
         }
     }
 
-    /// Create with vertical and horizontal scrollbar.
-    pub fn both(
-        state: &ScrollbarState,
-        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
-    ) -> Self {
-        Self::new(ScrollbarAxis::Both, state, scroll_handle)
-    }
-
     /// Create with horizontal scrollbar.
-    pub fn horizontal(
-        state: &ScrollbarState,
-        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
-    ) -> Self {
-        Self::new(ScrollbarAxis::Horizontal, state, scroll_handle)
+    #[track_caller]
+    pub fn horizontal<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
+        Self::new(scroll_handle).axis(ScrollbarAxis::Horizontal)
     }
 
     /// Create with vertical scrollbar.
-    pub fn vertical(
-        state: &ScrollbarState,
-        scroll_handle: &(impl ScrollHandleOffsetable + Clone + 'static),
-    ) -> Self {
-        Self::new(ScrollbarAxis::Vertical, state, scroll_handle)
+    #[track_caller]
+    pub fn vertical<H: ScrollbarHandle + Clone>(scroll_handle: &H) -> Self {
+        Self::new(scroll_handle).axis(ScrollbarAxis::Vertical)
+    }
+
+    /// Set a specific element id, default is the [`Location::caller`].
+    ///
+    /// NOTE: In most cases, you don't need to set a specific id for scrollbar.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
+        self
     }
 
     /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
@@ -473,6 +471,7 @@ impl IntoElement for Scrollbar {
 #[doc(hidden)]
 pub struct PrepaintState {
     hitbox: Hitbox,
+    scrollbar_state: ScrollbarState,
     states: Vec<AxisPrepaintState>,
 }
 
@@ -499,7 +498,7 @@ impl Element for Scrollbar {
     type PrepaintState = PrepaintState;
 
     fn id(&self) -> Option<gpui::ElementId> {
-        None
+        Some(self.id.clone())
     }
 
     fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
@@ -535,6 +534,11 @@ impl Element for Scrollbar {
         let hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.insert_hitbox(bounds, HitboxBehavior::Normal)
         });
+
+        let state = window
+            .use_state(cx, |_, _| ScrollbarState::default())
+            .read(cx)
+            .clone();
 
         let mut states = vec![];
         let mut has_both = self.axis.is_both();
@@ -601,7 +605,6 @@ impl Element for Scrollbar {
             };
 
             let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
-            let state = self.state.clone();
             let is_always_to_show = scrollbar_show.is_always();
             let is_hover_to_show = scrollbar_show.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
@@ -716,7 +719,11 @@ impl Element for Scrollbar {
             })
         }
 
-        PrepaintState { hitbox, states }
+        PrepaintState {
+            hitbox,
+            states,
+            scrollbar_state: state,
+        }
     }
 
     fn paint(
@@ -729,16 +736,17 @@ impl Element for Scrollbar {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let scrollbar_state = &prepaint.scrollbar_state;
         let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
         let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible = self.state.get().is_scrollbar_visible() || scrollbar_show.is_always();
+        let is_visible = scrollbar_state.get().is_scrollbar_visible() || scrollbar_show.is_always();
         let is_hover_to_show = scrollbar_show.is_hover();
 
         // Update last_scroll_time when offset is changed.
-        if self.scroll_handle.offset() != self.state.get().last_scroll_offset {
-            self.state.set(
-                self.state
+        if self.scroll_handle.offset() != scrollbar_state.get().last_scroll_offset {
+            scrollbar_state.set(
+                scrollbar_state
                     .get()
                     .with_last_scroll(self.scroll_handle.offset(), Some(Instant::now())),
             );
@@ -798,7 +806,7 @@ impl Element for Scrollbar {
                     });
 
                     window.on_mouse_event({
-                        let state = self.state.clone();
+                        let state = scrollbar_state.clone();
                         let scroll_handle = self.scroll_handle.clone();
 
                         move |event: &ScrollWheelEvent, phase, _, cx| {
@@ -818,7 +826,7 @@ impl Element for Scrollbar {
 
                     if is_hover_to_show || is_visible {
                         window.on_mouse_event({
-                            let state = self.state.clone();
+                            let state = scrollbar_state.clone();
                             let scroll_handle = self.scroll_handle.clone();
 
                             move |event: &MouseDownEvent, phase, _, cx| {
@@ -867,7 +875,7 @@ impl Element for Scrollbar {
 
                     window.on_mouse_event({
                         let scroll_handle = self.scroll_handle.clone();
-                        let state = self.state.clone();
+                        let state = scrollbar_state.clone();
                         let max_fps_duration = Duration::from_millis((1000 / self.max_fps) as u64);
 
                         move |event: &MouseMoveEvent, _, _, cx| {
@@ -955,8 +963,8 @@ impl Element for Scrollbar {
                     });
 
                     window.on_mouse_event({
+                        let state = scrollbar_state.clone();
                         let scroll_handle = self.scroll_handle.clone();
-                        let state = self.state.clone();
 
                         move |_event: &MouseUpEvent, phase, _, cx| {
                             if phase.bubble() {

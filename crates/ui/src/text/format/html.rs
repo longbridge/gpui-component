@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui::{px, relative, DefiniteLength, SharedString};
+use gpui::{DefiniteLength, SharedString, px, relative};
 use html5ever::tendril::TendrilSink;
-use html5ever::{local_name, parse_document, LocalName, ParseOpts};
+use html5ever::{LocalName, ParseOpts, local_name, parse_document};
 use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use crate::text::node::{
@@ -252,7 +252,7 @@ fn parse_paragraph(
     }
 
     match &node.data {
-        NodeData::Text { ref contents } => {
+        NodeData::Text { contents } => {
             let part = &contents.borrow();
             text.push_str(&part);
             paragraph.push_str(&text);

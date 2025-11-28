@@ -1,10 +1,10 @@
 [package]
-edition = "2021"
 name = "gpui-component-macros"
 description = "Macros for GPUI Component."
-version = "0.4.1"
-publish = true
+version = "0.5.0-preview0"
 license = "Apache-2.0"
+publish = true
+edition.workspace = true
 
 [lib]
 proc-macro = true

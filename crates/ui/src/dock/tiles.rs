@@ -5,21 +5,21 @@ use std::{
 };
 
 use crate::{
-    h_flex,
+    ActiveTheme, Icon, IconName, h_flex,
     history::{History, HistoryItem},
-    scroll::{Scrollbar, ScrollbarShow, ScrollbarState},
-    v_flex, ActiveTheme, Icon, IconName,
+    scroll::{Scrollbar, ScrollbarShow},
+    v_flex,
 };
 
 use super::{
     DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
 };
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, px, size, AnyElement, App, AppContext, Bounds,
-    Context, DismissEvent, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, ScrollHandle, Size, StatefulInteractiveElement, Styled, WeakEntity,
-    Window,
+    AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty,
+    EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
+    MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Size,
+    StatefulInteractiveElement, Styled, WeakEntity, Window, actions, canvas, div,
+    prelude::FluentBuilder, px, size,
 };
 
 actions!(tiles, [Undo, Redo]);
@@ -139,7 +139,6 @@ pub struct Tiles {
     resizing_drag_data: Option<ResizeDrag>,
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
-    scroll_state: ScrollbarState,
     scroll_handle: ScrollHandle,
     scrollbar_show: Option<ScrollbarShow>,
 }
@@ -195,7 +194,6 @@ impl Tiles {
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
-            scroll_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::default(),
         }
     }
@@ -1030,7 +1028,7 @@ impl Tiles {
         item: &TileItem,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> Div {
         let entity_id = cx.entity_id();
         let item_id = item.id;
         let panel_view = item.panel.view();
@@ -1220,7 +1218,7 @@ impl Render for Tiles {
                     .right_0()
                     .bottom_0()
                     .child(
-                        Scrollbar::both(&self.scroll_state, &self.scroll_handle)
+                        Scrollbar::new(&self.scroll_handle)
                             .scroll_size(scroll_size)
                             .when_some(self.scrollbar_show, |this, scrollbar_show| {
                                 this.scrollbar_show(scrollbar_show)

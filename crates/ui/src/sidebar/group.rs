@@ -1,7 +1,7 @@
-use crate::{v_flex, ActiveTheme, Collapsible};
+use crate::{ActiveTheme, Collapsible, h_flex, v_flex};
 use gpui::{
-    div, prelude::FluentBuilder as _, App, Div, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled as _, Window,
+    App, Div, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 /// A group of items in the [`super::Sidebar`].
@@ -56,7 +56,7 @@ impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
             .relative()
             .when(!self.collapsed, |this| {
                 this.child(
-                    div()
+                    h_flex()
                         .flex_shrink_0()
                         .px_2()
                         .rounded(cx.theme().radius)

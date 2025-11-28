@@ -1,19 +1,19 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, size, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, Size, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Pixels,
+    Render, Size, Styled, Window, div, px, size,
 };
 use gpui_component::{
+    ActiveTheme as _, Selectable,
     button::{Button, ButtonGroup},
     h_flex,
-    scroll::ScrollbarState,
-    v_flex, ActiveTheme as _, Selectable, StyledExt as _,
+    scroll::ScrollableElement,
+    v_flex,
 };
 
 pub struct ScrollableStory {
     focus_handle: FocusHandle,
-    scroll_state: ScrollbarState,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
@@ -33,7 +33,6 @@ impl ScrollableStory {
 
         Self {
             focus_handle: cx.focus_handle(),
-            scroll_state: ScrollbarState::default(),
             items,
             item_sizes: Rc::new(item_sizes),
             test_width,
@@ -69,7 +68,6 @@ impl ScrollableStory {
             .map(|_| size(self.test_width, ITEM_HEIGHT))
             .collect::<Vec<_>>()
             .into();
-        self.scroll_state = ScrollbarState::default();
         cx.notify();
     }
 
@@ -156,13 +154,12 @@ impl Render for ScrollableStory {
                     .min_h(px(200.))
                     .child(
                         v_flex()
-                            .p_3()
                             .w(test_width)
-                            .id("test-1")
-                            .scrollable(Axis::Vertical)
+                            .p_3()
                             .gap_1()
+                            .overflow_y_scrollbar()
                             .child("Scrollable Example")
-                            .children(self.items.iter().take(500).map(|item| {
+                            .children(self.items.iter().map(|item| {
                                 div()
                                     .h(ITEM_HEIGHT)
                                     .bg(cx.theme().background)

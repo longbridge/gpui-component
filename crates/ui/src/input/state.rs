@@ -4,15 +4,14 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
-    ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
+    Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
-use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
@@ -20,19 +19,21 @@ use unicode_segmentation::*;
 
 use super::{
     blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    mode::InputMode, number_input, text_wrapper::TextWrapper, TabSize,
+    mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
+use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::input::movement::MoveDirection;
 use crate::input::{
+    HoverDefinition, Lsp, Position,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
     text_wrapper::LineLayout,
-    HoverDefinition, Lsp, Position,
 };
 use crate::input::{RopeExt as _, Selection};
+use crate::{Root, history::History};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
-use crate::{history::History, scroll::ScrollbarState, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -285,6 +286,7 @@ pub struct InputState {
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
+    pub(super) size: Size,
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -294,7 +296,6 @@ pub struct InputState {
     pub(crate) scroll_handle: ScrollHandle,
     /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
-    pub(super) scroll_state: ScrollbarState,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
 
@@ -389,13 +390,12 @@ impl InputState {
             loading: false,
             pattern: None,
             validate: None,
-            mode: InputMode::SingleLine,
+            mode: InputMode::default(),
             last_layout: None,
             last_bounds: None,
             last_selected_range: None,
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
-            scroll_state: ScrollbarState::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             deferred_scroll_offset: None,
             preferred_column: None,
@@ -409,30 +409,24 @@ impl InputState {
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
+            size: Size::default(),
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
         }
     }
 
-    /// Set Input to use [`InputMode::MultiLine`] mode.
+    /// Set Input to use multi line mode.
     ///
     /// Default rows is 2.
-    pub fn multi_line(mut self) -> Self {
-        self.mode = InputMode::MultiLine {
-            rows: 2,
-            tab: TabSize::default(),
-        };
+    pub fn multi_line(mut self, multi_line: bool) -> Self {
+        self.mode = self.mode.multi_line(multi_line);
         self
     }
 
     /// Set Input to use [`InputMode::AutoGrow`] mode with min, max rows limit.
     pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
-        self.mode = InputMode::AutoGrow {
-            rows: min_rows,
-            min_rows: min_rows,
-            max_rows: max_rows,
-        };
+        self.mode = InputMode::auto_grow(min_rows, max_rows);
         self
     }
 
@@ -443,7 +437,9 @@ impl InputState {
     /// - line_number: true
     /// - tab_size: 2
     /// - hard_tabs: false
-    /// - height: full
+    /// - height: 100%
+    /// - multi_line: true
+    /// - indent_guides: true
     ///
     /// If `highlighter` is None, will use the default highlighter.
     ///
@@ -457,15 +453,7 @@ impl InputState {
     /// - Large Text support, up to 50K lines.
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
-        self.mode = InputMode::CodeEditor {
-            rows: 2,
-            tab: TabSize::default(),
-            language,
-            highlighter: Rc::new(RefCell::new(None)),
-            line_number: true,
-            indent_guides: true,
-            diagnostics: DiagnosticSet::new(&Rope::new()),
-        };
+        self.mode = InputMode::code_editor(language);
         self.searchable = true;
         self
     }
@@ -485,7 +473,7 @@ impl InputState {
 
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
     pub fn line_number(mut self, line_number: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -494,7 +482,7 @@ impl InputState {
 
     /// Set line number, only for [`InputMode::CodeEditor`] mode.
     pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_code_editor());
+        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
@@ -508,7 +496,9 @@ impl InputState {
     /// default: 2
     pub fn rows(mut self, rows: usize) -> Self {
         match &mut self.mode {
-            InputMode::MultiLine { rows: r, .. } => *r = rows,
+            InputMode::PlainText { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => {
+                *r = rows
+            }
             InputMode::AutoGrow {
                 max_rows: max_r,
                 rows: r,
@@ -517,7 +507,6 @@ impl InputState {
                 *r = rows;
                 *max_r = rows;
             }
-            _ => {}
         }
         self
     }
@@ -825,7 +814,7 @@ impl InputState {
         let position: Position = position.into();
         let offset = self.text.position_to_offset(&position);
 
-        self.move_to(offset, cx);
+        self.move_to(offset, None, cx);
         self.update_preferred_column();
         self.focus(window, cx);
     }
@@ -1178,7 +1167,7 @@ impl InputState {
     pub(super) fn clean(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text("", window, cx);
         self.selected_range = (0..0).into();
-        self.scroll_to(0, cx);
+        self.scroll_to(0, None, cx);
     }
 
     pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
@@ -1233,7 +1222,7 @@ impl InputState {
         if event.modifiers.shift {
             self.select_to(offset, cx);
         } else {
-            self.move_to(offset, cx)
+            self.move_to(offset, None, cx)
         }
     }
 
@@ -1331,7 +1320,15 @@ impl InputState {
         cx.notify();
     }
 
-    pub(crate) fn scroll_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+    /// Scroll to make the given offset visible.
+    ///
+    /// If `direction` is Some, will keep edges at the same side.
+    pub(crate) fn scroll_to(
+        &mut self,
+        offset: usize,
+        direction: Option<MoveDirection>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(last_layout) = self.last_layout.as_ref() else {
             return;
         };
@@ -1340,9 +1337,11 @@ impl InputState {
         };
 
         let mut scroll_offset = self.scroll_handle.offset();
+        let was_offset = scroll_offset;
         let line_height = last_layout.line_height;
 
         let point = self.text.offset_to_point(offset);
+
         let row = point.row;
 
         let mut row_offset_y = px(0.);
@@ -1358,10 +1357,11 @@ impl InputState {
             .lines
             .get(row.saturating_sub(last_layout.visible_range.start))
         {
-            // Check to scroll horizontally
+            // Check to scroll horizontally and soft wrap lines
             if let Some(pos) = line.position_for_index(point.column, line_height) {
                 let bounds_width = bounds.size.width - last_layout.line_number_width;
                 let col_offset_x = pos.x;
+                row_offset_y += pos.y;
                 if col_offset_x - RIGHT_MARGIN < -scroll_offset.x {
                     // If the position is out of the visible area, scroll to make it visible
                     scroll_offset.x = -col_offset_x + RIGHT_MARGIN;
@@ -1373,17 +1373,24 @@ impl InputState {
 
         // Check if row_offset_y is out of the viewport
         // If row offset is not in the viewport, scroll to make it visible
-        let edge_height = if self.mode.is_code_editor() {
+        let edge_height = if direction.is_some() && self.mode.is_code_editor() {
             3 * line_height
         } else {
             line_height
         };
-        if row_offset_y - edge_height < -scroll_offset.y {
+        if row_offset_y - edge_height + line_height < -scroll_offset.y {
             // Scroll up
-            scroll_offset.y = -row_offset_y + edge_height;
+            scroll_offset.y = -row_offset_y + edge_height - line_height;
         } else if row_offset_y + edge_height > -scroll_offset.y + bounds.size.height {
             // Scroll down
             scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
+        }
+
+        // Avoid necessary scroll, when it was already in the correct position.
+        if direction == Some(MoveDirection::Up) {
+            scroll_offset.y = scroll_offset.y.max(was_offset.y);
+        } else if direction == Some(MoveDirection::Down) {
+            scroll_offset.y = scroll_offset.y.min(was_offset.y);
         }
 
         scroll_offset.x = scroll_offset.x.min(px(0.));
@@ -1429,7 +1436,7 @@ impl InputState {
             }
 
             self.replace_text_in_range_silent(None, &new_text, window, cx);
-            self.scroll_to(self.cursor(), cx);
+            self.scroll_to(self.cursor(), None, cx);
         }
     }
 

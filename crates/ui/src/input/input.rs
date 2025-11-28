@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity,
-    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Pixels, Rems,
-    RenderOnce, StyleRefinement, Styled, Window,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
+    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
+    Styled, Window, div, px, relative, rems,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -10,9 +10,9 @@ use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
-use crate::{h_flex, Selectable, StyledExt};
-use crate::{v_flex, ActiveTheme};
+use crate::{ActiveTheme, v_flex};
 use crate::{IconName, Size};
+use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
 use super::InputState;
@@ -193,8 +193,6 @@ impl Input {
                 .unwrap_or(px(0.)),
         };
 
-        const MIN_SCROLL_PADDING: Pixels = px(2.0);
-
         v_flex()
             .size_full()
             .children(state.search_panel.clone())
@@ -213,18 +211,18 @@ impl Input {
                     };
 
                     let scrollbar = if !state.soft_wrap {
-                        Scrollbar::both(&state.scroll_state, &state.scroll_handle)
+                        Scrollbar::new(&state.scroll_handle)
                     } else {
-                        Scrollbar::vertical(&state.scroll_state, &state.scroll_handle)
+                        Scrollbar::vertical(&state.scroll_handle)
                     };
 
                     this.relative().child(
                         div()
                             .absolute()
-                            .top(-paddings.top + MIN_SCROLL_PADDING)
+                            .top(-paddings.top)
                             .left(left)
-                            .right(-paddings.right + MIN_SCROLL_PADDING)
-                            .bottom(-paddings.bottom + MIN_SCROLL_PADDING)
+                            .right(-paddings.right)
+                            .bottom(-paddings.bottom)
                             .child(scrollbar.scroll_size(scroll_size)),
                     )
                 } else {
@@ -244,12 +242,17 @@ impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let font = window.text_style().font();
-        let font_size = window.text_style().font_size.to_pixels(window.rem_size());
+        let font_size = match self.size {
+            Size::Large => rems(1.),
+            _ => rems(0.875),
+        }
+        .to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
             state.text_wrapper.set_font(font, font_size, cx);
             state.text_wrapper.prepare_if_need(&state.text, cx);
             state.disabled = self.disabled;
+            state.size = self.size;
         });
 
         let state = self.state.read(cx);
@@ -257,7 +260,7 @@ impl RenderOnce for Input {
         let gap_x = match self.size {
             Size::Small => px(4.),
             Size::Large => px(8.),
-            _ => px(4.),
+            _ => px(6.),
         };
 
         let bg = if state.disabled {
@@ -399,7 +402,7 @@ impl RenderOnce for Input {
                 this.child(self.state.clone())
             })
             .when(has_suffix, |this| {
-                this.pr(self.size.input_px() / 2.).child(
+                this.pr(self.size.input_px()).child(
                     h_flex()
                         .id("suffix")
                         .gap(gap_x)
