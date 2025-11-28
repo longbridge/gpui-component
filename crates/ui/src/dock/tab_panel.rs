@@ -609,11 +609,7 @@ impl TabPanel {
         let is_bottom_dock = bottom_dock_button.is_some();
 
         let panel_style = dock_area.read(cx).panel_style;
-        let visible_panels = self
-            .panels
-            .iter()
-            .filter(|panel| panel.visible(cx))
-            .collect::<Vec<_>>();
+        let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
 
         if visible_panels.len() == 1 && panel_style == PanelStyle::default() {
             let panel = visible_panels.get(0).unwrap();
@@ -661,7 +657,7 @@ impl TabPanel {
                         .when(state.draggable, |this| {
                             this.on_drag(
                                 DragPanel {
-                                    panel: (**panel).clone(),
+                                    panel: panel.clone(),
                                     tab_panel: view,
                                 },
                                 |drag, _, _, cx| {
