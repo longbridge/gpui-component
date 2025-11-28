@@ -113,7 +113,10 @@ import {
 @reference "./.vitepress/theme/style.css";
 
 .banner {
-    @apply flex flex-col gap-2 lg:gap-4 -mt-20  py-12 xl:py-30 text-center border border-b-0 border-dashed border-(--border);
+    @apply flex flex-col gap-2 lg:gap-4 -mt-20  py-12 xl:py-30 text-center border border-b-0 border-(--border);
+
+    background: url("/home.svg") no-repeat;
+    background-position: bottom -90px right -90px;
 
     h1 {
         @apply mt-20 text-3xl xl:text-5xl font-bold mb-2 text-(--primary);
@@ -137,7 +140,7 @@ import {
         }
     }
     .version {
-        @apply text-sm text-(--muted-foreground);
+        @apply text-sm text-(--muted-foreground) pb-10;
         a {
             @apply text-(--muted-foreground) no-underline hover:underline;
         }
@@ -145,11 +148,11 @@ import {
 }
 
 .features {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-12 border-b border-r border-dashed border-(--border);
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-12 border-b border-r  border-(--border);
 }
 
 .feature-card {
-    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-b-0 border-(--border) border-dashed;
+    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-b-0 border-(--border);
     @apply border-r-0 last:border-r-0 md:last:border-b-0 lg:last:border-b-0;
 
     h3 {

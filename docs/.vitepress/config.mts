@@ -55,18 +55,24 @@ const config: UserConfig = {
       dark: "/logo-dark.svg",
     },
     footer: {
-      message:
-        "GPUI Component is an open source project under the Apache-2.0 License, developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.",
+      message: `GPUI Component is an open source project under the Apache-2.0 License,
+        developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.`,
       copyright: `
-      <a href="https://gpui.rs">GPUI</a>
-      |
-      <a href="/gpui-component/contributors">Contributors</a>
-      |
-      <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>
-      |
-      <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">Report Bug</a>
-      |
-      <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">Discussion</a>
+      <p>
+        <a href="https://gpui.rs">GPUI</a>
+        |
+        <a href="/gpui-component/contributors">Contributors</a>
+        |
+        <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>
+        |
+        <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">Report Bug</a>
+        |
+        <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">Discussion</a>
+      </p>
+      <p>
+        Icon resources are used <a href="https://lucide.dev" target="_blank">Lucide</a>,
+        <a href="https://isocons.app" target="_blank">Isocons</a>.
+      </p>
       `,
     },
     // https://vitepress.dev/reference/default-theme-config
