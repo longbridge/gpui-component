@@ -2,7 +2,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
     IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
-    Styled, Window, div, px, relative,
+    Styled, Window, div, px, relative, rems,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -242,7 +242,11 @@ impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let font = window.text_style().font();
-        let font_size = window.text_style().font_size.to_pixels(window.rem_size());
+        let font_size = match self.size {
+            Size::Large => rems(1.),
+            _ => rems(0.875),
+        }
+        .to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
             state.text_wrapper.set_font(font, font_size, cx);
@@ -255,7 +259,7 @@ impl RenderOnce for Input {
         let gap_x = match self.size {
             Size::Small => px(4.),
             Size::Large => px(8.),
-            _ => px(4.),
+            _ => px(6.),
         };
 
         let bg = if state.disabled {
@@ -397,7 +401,7 @@ impl RenderOnce for Input {
                 this.child(self.state.clone())
             })
             .when(has_suffix, |this| {
-                this.pr(self.size.input_px() / 2.).child(
+                this.pr(self.size.input_px()).child(
                     h_flex()
                         .id("suffix")
                         .gap(gap_x)

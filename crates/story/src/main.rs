@@ -218,6 +218,7 @@ impl Render for Gallery {
                                         div()
                                             .bg(cx.theme().sidebar_accent)
                                             .rounded_full()
+                                            .px_1()
                                             .when(cx.theme().radius.is_zero(), |this| {
                                                 this.rounded(px(0.))
                                             })

@@ -338,9 +338,9 @@ impl Size {
     /// Returns the horizontal input padding.
     pub fn input_px(&self) -> Pixels {
         match self {
-            Self::Large => px(20.),
+            Self::Large => px(16.),
             Self::Medium => px(12.),
-            Self::Small => px(8.),
+            Self::Small => px(6.),
             Self::XSmall => px(4.),
             _ => px(8.),
         }
@@ -350,7 +350,7 @@ impl Size {
     pub fn input_py(&self) -> Pixels {
         match self {
             Size::Large => px(10.),
-            Size::Medium => px(5.),
+            Size::Medium => px(8.),
             Size::Small => px(2.),
             Size::XSmall => px(0.),
             _ => px(2.),
@@ -473,9 +473,9 @@ impl<T: Styled> StyleSized<T> for T {
         match size {
             Size::Large => self.h_11(),
             Size::Medium => self.h_8(),
-            Size::Small => self.h(px(24.)),
-            Size::XSmall => self.h(px(20.)),
-            _ => self.h(px(24.)),
+            Size::Small => self.h_6(),
+            Size::XSmall => self.h_5(),
+            _ => self.h_6(),
         }
         .input_text_size(size)
     }
