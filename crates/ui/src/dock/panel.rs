@@ -8,7 +8,7 @@ use gpui::{
 
 use rust_i18n::t;
 
-use super::{invalid_panel::InvalidPanel, DockArea, PanelInfo, PanelState};
+use super::{DockArea, PanelInfo, PanelState, invalid_panel::InvalidPanel};
 
 pub enum PanelEvent {
     ZoomIn,
@@ -16,10 +16,11 @@ pub enum PanelEvent {
     LayoutChanged,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PanelStyle {
     /// Display the TabBar when there are multiple tabs, otherwise display the simple title.
-    Default,
+    #[default]
+    Auto,
     /// Always display the tab bar.
     TabBar,
 }

@@ -8,9 +8,10 @@ mod tiles;
 
 use anyhow::Result;
 use gpui::{
-    actions, canvas, div, prelude::FluentBuilder, AnyElement, AnyView, App, AppContext, Axis,
-    Bounds, Context, Edges, Entity, EntityId, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, Styled, Subscription, WeakEntity, Window,
+    AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
+    EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
+    SharedString, Styled, Subscription, WeakEntity, Window, actions, canvas, div,
+    prelude::FluentBuilder,
 };
 use std::sync::Arc;
 
@@ -463,7 +464,7 @@ impl DockArea {
             right_dock: None,
             bottom_dock: None,
             locked: false,
-            panel_style: PanelStyle::Default,
+            panel_style: PanelStyle::default(),
             _subscriptions: vec![],
         };
 
