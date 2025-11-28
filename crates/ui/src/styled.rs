@@ -340,7 +340,7 @@ impl Size {
         match self {
             Self::Large => px(16.),
             Self::Medium => px(12.),
-            Self::Small => px(6.),
+            Self::Small => px(8.),
             Self::XSmall => px(4.),
             _ => px(8.),
         }

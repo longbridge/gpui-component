@@ -252,6 +252,7 @@ impl RenderOnce for Input {
             state.text_wrapper.set_font(font, font_size, cx);
             state.text_wrapper.prepare_if_need(&state.text, cx);
             state.disabled = self.disabled;
+            state.size = self.size;
         });
 
         let state = self.state.read(cx);
