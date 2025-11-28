@@ -205,7 +205,7 @@ impl InputState {
 
     /// Set the tab size for the input.
     ///
-    /// Only for [`InputMode::Plain`] and [`InputMode::CodeEditor`] mode with multi_line.
+    /// Only for [`InputMode::PlainText`] and [`InputMode::CodeEditor`] mode with multi_line.
     pub fn tab_size(mut self, tab: TabSize) -> Self {
         debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
         match &mut self.mode {
