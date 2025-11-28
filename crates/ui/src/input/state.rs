@@ -492,7 +492,9 @@ impl InputState {
     /// default: 2
     pub fn rows(mut self, rows: usize) -> Self {
         match &mut self.mode {
-            InputMode::Plain { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => *r = rows,
+            InputMode::PlainText { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => {
+                *r = rows
+            }
             InputMode::AutoGrow {
                 max_rows: max_r,
                 rows: r,

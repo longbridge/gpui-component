@@ -57,7 +57,7 @@ impl InputMode {
     #[inline]
     pub(super) fn is_indentable(&self) -> bool {
         match self {
-            InputMode::Plain { multi_line, .. } | InputMode::CodeEditor { multi_line, .. } => {
+            InputMode::PlainText { multi_line, .. } | InputMode::CodeEditor { multi_line, .. } => {
                 *multi_line
             }
             _ => false,
@@ -79,7 +79,7 @@ impl InputMode {
     #[inline]
     pub(super) fn tab_size(&self) -> TabSize {
         match self {
-            InputMode::Plain { tab, .. } => *tab,
+            InputMode::PlainText { tab, .. } => *tab,
             InputMode::CodeEditor { tab, .. } => *tab,
             _ => TabSize::default(),
         }
@@ -209,7 +209,7 @@ impl InputState {
     pub fn tab_size(mut self, tab: TabSize) -> Self {
         debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
         match &mut self.mode {
-            InputMode::Plain { tab: t, .. } => *t = tab,
+            InputMode::PlainText { tab: t, .. } => *t = tab,
             InputMode::CodeEditor { tab: t, .. } => *t = tab,
             _ => {}
         }

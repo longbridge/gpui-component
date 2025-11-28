@@ -11,17 +11,20 @@ use crate::highlighter::SyntaxHighlighter;
 use crate::input::{RopeExt as _, TabSize};
 
 #[derive(Clone)]
-pub enum InputMode {
-    Plain {
+pub(crate) enum InputMode {
+    /// A plain text input mode.
+    PlainText {
         multi_line: bool,
         tab: TabSize,
         rows: usize,
     },
+    /// An auto grow input mode.
     AutoGrow {
         rows: usize,
         min_rows: usize,
         max_rows: usize,
     },
+    /// A code editor input mode.
     CodeEditor {
         multi_line: bool,
         tab: TabSize,
@@ -37,19 +40,15 @@ pub enum InputMode {
 
 impl Default for InputMode {
     fn default() -> Self {
-        InputMode::Plain {
-            multi_line: false,
-            tab: TabSize::default(),
-            rows: 1,
-        }
+        InputMode::plain_text()
     }
 }
 
 #[allow(unused)]
 impl InputMode {
     /// Create a plain input mode with default settings.
-    pub(super) fn plain() -> Self {
-        InputMode::Plain {
+    pub(super) fn plain_text() -> Self {
+        InputMode::PlainText {
             multi_line: false,
             tab: TabSize::default(),
             rows: 1,
@@ -81,7 +80,7 @@ impl InputMode {
 
     pub(super) fn multi_line(mut self, multi_line: bool) -> Self {
         match &mut self {
-            InputMode::Plain { multi_line: ml, .. } => *ml = multi_line,
+            InputMode::PlainText { multi_line: ml, .. } => *ml = multi_line,
             InputMode::CodeEditor { multi_line: ml, .. } => *ml = multi_line,
             InputMode::AutoGrow { .. } => {}
         }
@@ -106,7 +105,7 @@ impl InputMode {
     #[inline]
     pub(super) fn is_multi_line(&self) -> bool {
         match self {
-            InputMode::Plain { multi_line, .. } => *multi_line,
+            InputMode::PlainText { multi_line, .. } => *multi_line,
             InputMode::CodeEditor { multi_line, .. } => *multi_line,
             InputMode::AutoGrow { max_rows, .. } => *max_rows > 1,
         }
@@ -114,7 +113,7 @@ impl InputMode {
 
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
-            InputMode::Plain { rows, .. } => {
+            InputMode::PlainText { rows, .. } => {
                 *rows = new_rows;
             }
             InputMode::CodeEditor { rows, .. } => {
@@ -146,7 +145,7 @@ impl InputMode {
         }
 
         match self {
-            InputMode::Plain { rows, .. } => *rows,
+            InputMode::PlainText { rows, .. } => *rows,
             InputMode::CodeEditor { rows, .. } => *rows,
             InputMode::AutoGrow { rows, .. } => *rows,
         }
@@ -305,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_plain() {
-        let mode = InputMode::Plain {
+        let mode = InputMode::PlainText {
             multi_line: true,
             tab: TabSize::default(),
             rows: 5,
@@ -318,7 +317,7 @@ mod tests {
         assert_eq!(mode.max_rows(), usize::MAX);
         assert_eq!(mode.min_rows(), 1);
 
-        let mode = InputMode::plain();
+        let mode = InputMode::plain_text();
         assert_eq!(mode.is_code_editor(), false);
         assert_eq!(mode.is_multi_line(), false);
         assert_eq!(mode.is_single_line(), true);
