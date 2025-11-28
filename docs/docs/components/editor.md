@@ -15,63 +15,53 @@ use gpui_component::input::{InputState, Input};
 
 ## Usage
 
-### Basic Textarea
+### Textarea
 
 ```rust
-let textarea = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .placeholder("Enter your message...")
 );
 
-Input::new(&textarea)
+Input::new(&state)
 ```
 
-### Fixed Height Textarea
+With fixed height Textarea:
 
 ```rust
-let textarea = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .rows(10) // Set number of rows
         .placeholder("Enter text here...")
 );
 
-Input::new(&textarea)
+Input::new(&state)
     .h(px(320.)) // Set explicit height
 ```
 
-### Auto-Resizing Textarea
+### AutoGrow
 
 ```rust
-let textarea = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .auto_grow(1, 5) // min_rows: 1, max_rows: 5
         .placeholder("Type here and watch it grow...")
 );
 
-Input::new(&textarea)
+Input::new(&state)
 ```
 
-### With Default Content
+### CodeEditor
+
+GPUI Component's `InputState` supports a code editor mode with syntax highlighting, line numbers, and search functionality.
+
+It design for high performance and can handle large files efficiently. We
+used [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for syntax highlighting, and [ropey](https://github.com/cessen/ropey) for text storage and manipulation.
 
 ```rust
-let textarea = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .rows(6)
-        .default_value("Hello World!\n\nThis is a multi-line textarea with default content.")
-);
-
-Input::new(&textarea)
-```
-
-### Code Editor Mode
-
-#### Multi Line
-
-```rust
-let code_editor = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .code_editor("rust") // Language for syntax highlighting
         .line_number(true) // Show line numbers
@@ -79,29 +69,31 @@ let code_editor = cx.new(|cx|
         .default_value("fn main() {\n    println!(\"Hello, world!\");\n}")
 );
 
-Input::new(&code_editor)
+Input::new(&state)
     .h_full() // Full height
 ```
 
-#### Single Line
+#### Single Line Mode
+
+Sometimes you may want to use the code editor features but restrict input to a single line, for example for code snippets or commands.
 
 ```rust
-let code_editor = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
-        .code_editor("rust") // Language for syntax highlighting
+        .code_editor("rust")
         .multi_line(false) // Single line
         .default_value("println!(\"Hello, world!\");")
 );
 
-Input::new(&code_editor)
+Input::new(&state)
 ```
 
-### Textarea with Custom Tab Size
+### TabSize
 
 ```rust
 use gpui_component::input::TabSize;
 
-let textarea = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .tab_size(TabSize {
@@ -110,13 +102,19 @@ let textarea = cx.new(|cx|
         })
 );
 
-Input::new(&textarea)
+Input::new(&state)
 ```
 
-### Searchable Textarea
+### Searchable
+
+The search feature allows for all multi-line inputs to support searching through the content using `Ctrl+F` (or `Cmd+F` on Mac).
+
+It provides a search bar with options to navigate between matches and highlight them.
+
+Use `searchable` method to enable:
 
 ```rust
-let textarea = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .searchable(true) // Enable Ctrl+F search
@@ -124,14 +122,18 @@ let textarea = cx.new(|cx|
         .default_value("Search through this content...")
 );
 
-Input::new(&textarea)
+Input::new(&state)
 ```
 
-### Soft Wrap Control
+### SoftWrap
+
+By default multi-line inputs have soft wrapping enabled, meaning long lines will wrap to fit the width of the textarea.
+
+You can disable soft wrapping to allow horizontal scrolling instead:
 
 ```rust
 // With soft wrap (default)
-let textarea_wrap = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .soft_wrap(true)
@@ -139,80 +141,42 @@ let textarea_wrap = cx.new(|cx|
 );
 
 // Without soft wrap (horizontal scrolling)
-let textarea_no_wrap = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .soft_wrap(false)
         .rows(6)
         .default_value("This is a very long line that will not wrap automatically but will show horizontal scrollbar instead.")
 );
-
-v_flex()
-    .gap_4()
-    .child(Input::new(&textarea_wrap))
-    .child(Input::new(&textarea_no_wrap))
-```
-
-### Character Counting
-
-```rust
-struct TextareaView {
-    textarea: Entity<InputState>,
-}
-
-impl Render for TextareaView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let char_count = self.textarea.read(cx).value().len();
-        let max_chars = 500;
-
-        v_flex()
-            .gap_2()
-            .child(
-                Input::new(&self.textarea)
-                    .h(px(120.))
-            )
-            .child(
-                div()
-                    .text_right()
-                    .text_sm()
-                    .text_color(if char_count > max_chars {
-                        cx.theme().destructive
-                    } else {
-                        cx.theme().muted_foreground
-                    })
-                    .child(format!("{}/{}", char_count, max_chars))
-            )
-    }
-}
 ```
 
 ### Text Manipulation
 
 ```rust
 // Insert text at cursor position
-textarea.update(cx, |input, cx| {
-    input.insert("inserted text", window, cx);
+state.update(cx, |state, cx| {
+    state.insert("inserted text", window, cx);
 });
 
 // Replace all content
-textarea.update(cx, |input, cx| {
-    input.replace("new content", window, cx);
+state.update(cx, |state, cx| {
+    state.replace("new content", window, cx);
 });
 
 // Set cursor position
-textarea.update(cx, |input, cx| {
-    input.set_cursor_position(Position { line: 2, character: 5 }, window, cx);
+state.update(cx, |state, cx| {
+    state.set_cursor_position(Position { line: 2, character: 5 }, window, cx);
 });
 
 // Get cursor position
-let position = textarea.read(cx).cursor_position();
+let position = state.read(cx).cursor_position();
 println!("Line: {}, Column: {}", position.line, position.character);
 ```
 
 ### Validation
 
 ```rust
-let textarea = cx.new(|cx|
+let state = cx.new(|cx|
     InputState::new(window, cx)
         .multi_line(true)
         .validate(|text, _| {
@@ -221,13 +185,13 @@ let textarea = cx.new(|cx|
         })
 );
 
-Input::new(&textarea)
+Input::new(&state)
 ```
 
 ### Handle Events
 
 ```rust
-cx.subscribe_in(&textarea, window, |view, state, event, window, cx| {
+cx.subscribe_in(&state, window, |view, state, event, window, cx| {
     match event {
         InputEvent::Change => {
             let content = state.read(cx).value();
@@ -249,7 +213,7 @@ cx.subscribe_in(&textarea, window, |view, state, event, window, cx| {
 ### Disabled State
 
 ```rust
-Input::new(&textarea)
+Input::new(&state)
     .disabled(true)
     .h(px(200.))
 ```
@@ -258,7 +222,7 @@ Input::new(&textarea)
 
 ```rust
 // Without default appearance
-Input::new(&textarea)
+Input::new(&state)
     .appearance(false)
     .h(px(200.))
 
@@ -270,66 +234,11 @@ div()
     .rounded_lg()
     .p_4()
     .child(
-        Input::new(&textarea)
+        Input::new(&state)
             .appearance(false)
             .h(px(150.))
     )
 ```
-
-## API Reference
-
-### InputState (Multi-line Methods)
-
-| Method                                 | Description                                      |
-| -------------------------------------- | ------------------------------------------------ |
-| `multi_line()`                         | Enable multi-line mode with 2 rows default       |
-| `auto_grow(min, max)`                  | Enable auto-resize between min and max rows      |
-| `code_editor(language)`                | Enable code editor mode with syntax highlighting |
-| `rows(count)`                          | Set number of visible rows                       |
-| `tab_size(TabSize)`                    | Configure tab behavior                           |
-| `searchable(bool)`                     | Enable/disable search (Ctrl+F)                   |
-| `soft_wrap(bool)`                      | Enable/disable text wrapping                     |
-| `line_number(bool)`                    | Show/hide line numbers (code editor only)        |
-| `cursor_position()`                    | Get current cursor position as `Position`        |
-| `set_cursor_position(pos, window, cx)` | Set cursor to specific line/column               |
-| `insert(text, window, cx)`             | Insert text at cursor                            |
-| `replace(text, window, cx)`            | Replace all content                              |
-
-### Input (Multi-line Methods)
-
-| Method      | Description                |
-| ----------- | -------------------------- |
-| `h(height)` | Set explicit height        |
-| `h_full()`  | Take full available height |
-
-### Position
-
-| Field       | Description                        |
-| ----------- | ---------------------------------- |
-| `line`      | 0-based line number                |
-| `character` | 0-based character position in line |
-
-### TabSize
-
-| Field       | Description                                |
-| ----------- | ------------------------------------------ |
-| `tab_size`  | Number of spaces per tab (default: 2)      |
-| `hard_tabs` | Use actual tab characters (default: false) |
-
-### Keyboard Shortcuts
-
-| Shortcut      | Action                      |
-| ------------- | --------------------------- |
-| `Enter`       | Insert new line             |
-| `Shift+Enter` | Insert new line (secondary) |
-| `Tab`         | Indent line/selection       |
-| `Shift+Tab`   | Outdent line/selection      |
-| `Ctrl/Cmd+A`  | Select all                  |
-| `Ctrl/Cmd+Z`  | Undo                        |
-| `Ctrl/Cmd+Y`  | Redo                        |
-| `Ctrl/Cmd+F`  | Open search (if enabled)    |
-| `Ctrl/Cmd+[`  | Outdent block               |
-| `Ctrl/Cmd+]`  | Indent block                |
 
 ## Examples
 
@@ -337,13 +246,13 @@ div()
 
 ```rust
 struct CommentBox {
-    textarea: Entity<InputState>,
+    state: Entity<InputState>,
     char_limit: usize,
 }
 
 impl CommentBox {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let textarea = cx.new(|cx|
+        let state = cx.new(|cx|
             InputState::new(window, cx)
                 .auto_grow(3, 8)
                 .placeholder("Write your comment...")
@@ -351,7 +260,7 @@ impl CommentBox {
         );
 
         Self {
-            textarea,
+            state,
             char_limit: 500,
         }
     }
@@ -359,13 +268,13 @@ impl CommentBox {
 
 impl Render for CommentBox {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content = self.textarea.read(cx).value();
+        let content = self.state.read(cx).value();
         let char_count = content.len();
         let remaining = self.char_limit.saturating_sub(char_count);
 
         v_flex()
             .gap_2()
-            .child(Input::new(&self.textarea))
+            .child(Input::new(&self.state))
             .child(
                 h_flex()
                     .justify_between()
@@ -472,22 +381,3 @@ impl Render for TextEditor {
     }
 }
 ```
-
-## Performance Notes
-
-- Optimized for large text content (up to 200K lines in code editor mode)
-- Efficient text wrapping and line measurement
-- Virtual scrolling for long documents
-- Minimal re-renders on text changes
-- Efficient syntax highlighting with tree-sitter
-- Smart auto-grow calculations
-
-## Best Practices
-
-1. **Auto-resize**: Use `auto_grow()` for dynamic content like comments or messages
-2. **Fixed size**: Use `multi_line().rows(n)` for consistent layouts like forms
-3. **Code editing**: Use `code_editor()` for syntax-aware editing
-4. **Validation**: Always validate long-form content on the client side
-5. **Character limits**: Show character counters for user guidance
-6. **Search**: Enable search for long content areas
-7. **Soft wrap**: Disable for code, enable for prose
