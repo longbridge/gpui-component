@@ -1,20 +1,20 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
-    TextRun, TextStyle, UnderlineStyle, Window,
+    App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
+    HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels,
+    Point, ShapedLine, SharedString, Size, Style, TextRun, TextStyle, UnderlineStyle, Window, fill,
+    point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    input::{blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout, RopeExt as _},
     ActiveTheme as _, Colorize, PixelsExt, Root,
+    input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout},
 };
 
-use super::{mode::InputMode, InputState, LastLayout};
+use super::{InputState, LastLayout, mode::InputMode};
 
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
@@ -562,12 +562,12 @@ impl TextElement {
         bg_segments: &[(Range<usize>, Hsla)],
         window: &mut Window,
     ) -> Vec<LineLayout> {
-        let is_multi_line = state.mode.is_multi_line();
+        let is_single_line = state.mode.is_single_line();
         let text_wrapper = &state.text_wrapper;
         let visible_range = &last_layout.visible_range;
         let visible_range_offset = &last_layout.visible_range_offset;
 
-        if !is_multi_line {
+        if is_single_line {
             let shaped_line = window.text_system().shape_line(
                 display_text.to_string().into(),
                 font_size,
@@ -652,6 +652,7 @@ impl TextElement {
     ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
         let state = self.state.read(cx);
         let text = &state.text;
+        let is_multi_line = state.mode.is_multi_line();
 
         let (highlighter, diagnostics) = match &state.mode {
             InputMode::CodeEditor {
@@ -671,8 +672,13 @@ impl TextElement {
             .skip(visible_range.start)
             .take(visible_range.len())
         {
-            // +1 for `\n`
-            let line_len = line.len() + 1;
+            let line_len = if is_multi_line {
+                // +1 for `\n`
+                line.len() + 1
+            } else {
+                line.len()
+            };
+
             let range = offset..offset + line_len;
             let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
             styles = gpui::combine_highlights(styles, line_styles).collect();

@@ -49,11 +49,7 @@ impl Default for InputMode {
 impl InputMode {
     #[inline]
     pub(super) fn is_single_line(&self) -> bool {
-        match self {
-            InputMode::Plain { multi_line, .. } => !*multi_line,
-            InputMode::CodeEditor { multi_line, .. } => !*multi_line,
-            InputMode::AutoGrow { max_rows, .. } => *max_rows == 1,
-        }
+        !self.is_multi_line()
     }
 
     #[inline]

@@ -92,7 +92,7 @@ impl InputStory {
             InputState::new(window, cx)
                 .code_editor("json")
                 .multi_line(false)
-                .default_value("{\"single_line\":\"code editor\"}")
+                .default_value(r#"{"single_line":"code editor"}"#)
         });
 
         let _subscriptions = vec![
