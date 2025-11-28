@@ -1,11 +1,11 @@
 use gpui::{
-    actions, prelude::FluentBuilder as _, AnyElement, App, Context, Corners, Edges, Entity,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    AnyElement, App, Context, Corners, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, actions, prelude::FluentBuilder as _,
 };
 
 use crate::{
-    button::Button, h_flex, ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _,
+    ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex,
 };
 
 use super::{Input, InputState};
@@ -153,7 +153,7 @@ impl RenderOnce for NumberInput {
             .refine_style(&self.style)
             .when(self.disabled, |this| this.bg(cx.theme().muted))
             .child(
-                Button::new("-")
+                Button::new("minus")
                     .outline()
                     .with_size(self.size)
                     .icon(IconName::Minus)
@@ -191,7 +191,7 @@ impl RenderOnce for NumberInput {
                     .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
             )
             .child(
-                Button::new("+")
+                Button::new("plus")
                     .outline()
                     .with_size(self.size)
                     .icon(IconName::Plus)
