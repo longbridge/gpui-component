@@ -434,8 +434,9 @@ impl InputState {
     /// - line_number: true
     /// - tab_size: 2
     /// - hard_tabs: false
-    /// - height: full
+    /// - height: 100%
     /// - multi_line: true
+    /// - indent_guides: true
     ///
     /// If `highlighter` is None, will use the default highlighter.
     ///
