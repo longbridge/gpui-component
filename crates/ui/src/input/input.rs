@@ -241,18 +241,16 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        let font = window.text_style().font();
         let font_size = match self.size {
             Size::Large => rems(1.),
             _ => rems(0.875),
         }
         .to_pixels(window.rem_size());
 
-        self.state.update(cx, |state, cx| {
-            state.text_wrapper.set_font(font, font_size, cx);
-            state.text_wrapper.prepare_if_need(&state.text, cx);
+        self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
+            state.font_size = font_size;
         });
 
         let state = self.state.read(cx);

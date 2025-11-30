@@ -818,6 +818,14 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        let style = window.text_style();
+        let font = style.font();
+
+        self.state.update(cx, |state, cx| {
+            state.text_wrapper.set_font(font, state.font_size, cx);
+            state.text_wrapper.prepare_if_need(&state.text, cx);
+        });
+
         let state = self.state.read(cx);
         let line_height = window.line_height();
 
@@ -840,8 +848,8 @@ impl Element for TextElement {
         let text = state.text.clone();
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
-        let style = window.text_style();
-        let font_size = style.font_size.to_pixels(window.rem_size());
+        let font_size = state.font_size;
+
         let mut bounds = bounds;
 
         let (display_text, text_color) = if is_empty {
@@ -862,7 +870,7 @@ impl Element for TextElement {
 
         // Calculate the width of the line numbers
         let (line_number_width, line_number_len) =
-            Self::layout_line_numbers(&state, &text, font_size, &text_style, window);
+            Self::layout_line_numbers(&state, &text, state.font_size, &text_style, window);
 
         let wrap_width = if multi_line && state.soft_wrap {
             Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
