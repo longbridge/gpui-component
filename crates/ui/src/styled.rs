@@ -1,7 +1,7 @@
 use crate::{ActiveTheme, PixelsExt as _};
 use gpui::{
     App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable, StyleRefinement, Styled, Window, div, point, px,
+    Refineable, Rems, StyleRefinement, Styled, Window, div, point, px, rems,
 };
 use serde::{Deserialize, Serialize};
 
@@ -354,6 +354,15 @@ impl Size {
             Size::Small => px(2.),
             Size::XSmall => px(0.),
             _ => px(2.),
+        }
+    }
+
+    /// Returns the text size for input elements.
+    #[inline]
+    pub fn input_text_size(&self) -> Rems {
+        match self {
+            Size::Large => rems(1.),
+            _ => rems(0.875),
         }
     }
 }

@@ -2,7 +2,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
     IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
-    Styled, Window, div, px, relative, rems,
+    Styled, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -241,15 +241,12 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        let font_size = match self.size {
-            Size::Large => rems(1.),
-            _ => rems(0.875),
-        };
+        let text_size = self.size.input_text_size();
 
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
-            state.font_size = font_size;
+            state.text_size = text_size;
         });
 
         let state = self.state.read(cx);
@@ -363,7 +360,7 @@ impl RenderOnce for Input {
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
-            .text_size(font_size.to_pixels(window.rem_size()))
+            .text_size(text_size.to_pixels(window.rem_size()))
             .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()

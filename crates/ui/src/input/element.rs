@@ -824,7 +824,7 @@ impl Element for TextElement {
         self.state.update(cx, |state, cx| {
             state
                 .text_wrapper
-                .set_font(font, state.font_size.to_pixels(window.rem_size()), cx);
+                .set_font(font, state.text_size.to_pixels(window.rem_size()), cx);
             state.text_wrapper.prepare_if_need(&state.text, cx);
         });
 
@@ -850,7 +850,7 @@ impl Element for TextElement {
         let text = state.text.clone();
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
-        let font_size = state.font_size.to_pixels(window.rem_size());
+        let text_size = state.text_size.to_pixels(window.rem_size());
 
         let mut bounds = bounds;
 
@@ -872,7 +872,7 @@ impl Element for TextElement {
 
         // Calculate the width of the line numbers
         let (line_number_width, line_number_len) =
-            Self::layout_line_numbers(&state, &text, font_size, &text_style, window);
+            Self::layout_line_numbers(&state, &text, text_size, &text_style, window);
 
         let wrap_width = if multi_line && state.soft_wrap {
             Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
@@ -966,7 +966,7 @@ impl Element for TextElement {
             &state,
             &display_text,
             &last_layout,
-            font_size,
+            text_size,
             &runs,
             &document_colors,
             window,
@@ -982,7 +982,7 @@ impl Element for TextElement {
                 .text_system()
                 .shape_line(
                     longest_line.clone(),
-                    font_size,
+                    text_size,
                     &[TextRun {
                         len: longest_line.len(),
                         font: style.font(),
@@ -1094,7 +1094,7 @@ impl Element for TextElement {
                 sub_lines.push(
                     window
                         .text_system()
-                        .shape_line(line_no, font_size, &runs, None),
+                        .shape_line(line_no, text_size, &runs, None),
                 );
                 for _ in 0..line.wrapped_lines.len().saturating_sub(1) {
                     sub_lines.push(ShapedLine::default());
