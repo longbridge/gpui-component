@@ -692,7 +692,7 @@ impl Panel for StoryContainer {
         "StoryContainer"
     }
 
-    fn title(&mut self, _window: &Window, _cx: &mut Context<Self>) -> AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> AnyElement {
         self.name.clone().into_any_element()
     }
 

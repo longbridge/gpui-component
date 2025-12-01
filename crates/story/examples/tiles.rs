@@ -94,7 +94,7 @@ impl Panel for ContainerPanel {
         "ContainerPanel"
     }
 
-    fn title(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         self.panel.title(window, cx)
     }
 

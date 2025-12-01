@@ -32,7 +32,7 @@ impl Panel for StackPanel {
         "StackPanel"
     }
 
-    fn title(&mut self, _window: &gpui::Window, _cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> gpui::AnyElement {
         "StackPanel".into_any_element()
     }
     fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
