@@ -368,11 +368,7 @@ impl InputState {
         Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
-            text_wrapper: TextWrapper::new(
-                text_style.font(),
-                text_style.font_size.to_pixels(window.rem_size()),
-                None,
-            ),
+            text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
             blink_cursor,
             history,
             selected_range: Selection::default(),

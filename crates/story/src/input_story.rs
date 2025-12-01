@@ -85,8 +85,9 @@ impl InputStory {
                 fraction: Some(3),
             })
         });
-        let custom_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("here is a custom input"));
+        let custom_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Custom Input use monospace, 0123456789.")
+        });
 
         let code_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -247,11 +248,12 @@ impl Render for InputStory {
                     ))),
             )
             .child(
-                section("Appearance false").max_w_md().child(
+                section("Custom Appearance").max_w_md().child(
                     div()
                         .border_b_2()
                         .px_6()
                         .py_3()
+                        .font_family(cx.theme().mono_font_family.clone())
                         .border_color(cx.theme().border)
                         .bg(cx.theme().secondary)
                         .text_color(cx.theme().secondary_foreground)

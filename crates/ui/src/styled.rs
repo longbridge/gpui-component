@@ -437,9 +437,9 @@ impl<T: Styled> StyleSized<T> for T {
         match size {
             Size::XSmall => self.text_xs(),
             Size::Small => self.text_sm(),
-            Size::Medium => self.text_base(),
-            Size::Large => self.text_lg(),
-            Size::Size(size) => self.text_size(size),
+            Size::Medium => self.text_sm(),
+            Size::Large => self.text_base(),
+            Size::Size(size) => self.text_size(size * 0.875),
         }
     }
 
@@ -477,7 +477,6 @@ impl<T: Styled> StyleSized<T> for T {
             Size::XSmall => self.h_5(),
             _ => self.h_6(),
         }
-        .input_text_size(size)
     }
 
     #[inline]
