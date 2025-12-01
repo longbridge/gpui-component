@@ -1232,6 +1232,9 @@ impl InputState {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
+        if self.selected_range.is_empty() {
+            self.selection_reversed = false;
+        }
         self.selecting = false;
         self.selected_word_range = None;
     }
