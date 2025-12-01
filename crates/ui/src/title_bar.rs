@@ -121,7 +121,7 @@ impl ControlIcon {
     }
 
     #[inline]
-    fn fg(&self, cx: &App) -> Hsla {
+    fn hover_fg(&self, cx: &App) -> Hsla {
         if self.is_close() {
             cx.theme().danger_foreground
         } else {
@@ -152,7 +152,7 @@ impl RenderOnce for ControlIcon {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_linux = cfg!(target_os = "linux");
         let is_windows = cfg!(target_os = "windows");
-        let fg = self.fg(cx);
+        let hover_fg = self.hover_fg(cx);
         let bg = cx.theme().title_bar;
         let hover_bg = self.hover_bg(cx);
         let active_bg = self.active_bg(cx);
@@ -171,7 +171,10 @@ impl RenderOnce for ControlIcon {
             .justify_center()
             .content_center()
             .items_center()
-            .text_color(fg)
+            .bg(bg)
+            .text_color(cx.theme().foreground)
+            .hover(|style| style.bg(hover_bg).text_color(hover_fg))
+            .active(|style| style.bg(active_bg).text_color(hover_fg))
             .when(is_windows, |this| {
                 this.window_control_area(self.window_control_area())
             })
@@ -195,10 +198,6 @@ impl RenderOnce for ControlIcon {
                     }
                 })
             })
-            .bg(bg)
-            .text_color(fg)
-            .hover(|style| style.bg(hover_bg))
-            .active(|style| style.bg(active_bg))
             .child(Icon::new(self.icon()).small())
     }
 }
@@ -219,18 +218,12 @@ impl RenderOnce for WindowControls {
             .items_center()
             .flex_shrink_0()
             .h_full()
-            .child(
-                h_flex()
-                    .justify_center()
-                    .content_stretch()
-                    .h_full()
-                    .child(ControlIcon::minimize())
-                    .child(if window.is_maximized() {
-                        ControlIcon::restore()
-                    } else {
-                        ControlIcon::maximize()
-                    }),
-            )
+            .child(ControlIcon::minimize())
+            .child(if window.is_maximized() {
+                ControlIcon::restore()
+            } else {
+                ControlIcon::maximize()
+            })
             .child(ControlIcon::close(self.on_close_window))
     }
 }
