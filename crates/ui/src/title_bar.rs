@@ -166,6 +166,7 @@ impl RenderOnce for ControlIcon {
             .flex()
             .w(TITLE_BAR_HEIGHT)
             .h_full()
+            .flex_shrink_0()
             .justify_center()
             .content_center()
             .items_center()
