@@ -195,7 +195,7 @@ impl RenderOnce for ControlIcon {
             })
             .bg(bg)
             .text_color(fg)
-            .hover(|style| style.bg(bg))
+            .hover(|style| style.bg(hover_bg))
             .active(|style| style.bg(bg.opacity(0.7)))
             .child(Icon::new(self.icon()).small())
     }
