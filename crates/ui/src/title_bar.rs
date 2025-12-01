@@ -132,7 +132,7 @@ impl ControlIcon {
     #[inline]
     fn hover_bg(&self, cx: &App) -> Hsla {
         if self.is_close() {
-            cx.theme().danger_hover
+            cx.theme().danger
         } else {
             cx.theme().secondary_hover
         }
@@ -153,7 +153,6 @@ impl RenderOnce for ControlIcon {
         let is_linux = cfg!(target_os = "linux");
         let is_windows = cfg!(target_os = "windows");
         let hover_fg = self.hover_fg(cx);
-        let bg = cx.theme().title_bar;
         let hover_bg = self.hover_bg(cx);
         let active_bg = self.active_bg(cx);
         let icon = self.clone();
@@ -171,7 +170,6 @@ impl RenderOnce for ControlIcon {
             .justify_center()
             .content_center()
             .items_center()
-            .bg(bg)
             .text_color(cx.theme().foreground)
             .hover(|style| style.bg(hover_bg).text_color(hover_fg))
             .active(|style| style.bg(active_bg).text_color(hover_fg))
