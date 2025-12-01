@@ -1,7 +1,7 @@
 use crate::{ActiveTheme, PixelsExt as _};
 use gpui::{
     App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable, Rems, StyleRefinement, Styled, Window, div, point, px, rems,
+    Refineable, StyleRefinement, Styled, Window, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
