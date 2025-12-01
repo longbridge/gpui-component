@@ -262,6 +262,9 @@ impl RenderOnce for TitleBar {
         let is_client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
+        let is_windows = cfg!(target_os = "windows");
+
+        let show_system_menu = is_windows || (is_linux && is_client_decorated);
 
         let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
 
@@ -314,7 +317,7 @@ impl RenderOnce for TitleBar {
                         .justify_between()
                         .flex_shrink_0()
                         .flex_1()
-                        .when(is_linux && is_client_decorated, |this| {
+                        .when(show_system_menu, |this| {
                             this.child(
                                 div()
                                     .top_0()
