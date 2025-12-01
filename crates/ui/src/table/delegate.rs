@@ -1,15 +1,14 @@
 use std::ops::Range;
 
 use gpui::{
-    div, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Stateful,
-    Styled as _, Window,
+    App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Stateful,
+    Styled as _, Window, div,
 };
 
 use crate::{
-    h_flex,
+    ActiveTheme as _, Icon, IconName, Size, h_flex,
     menu::PopupMenu,
-    table::{loading::Loading, Column, ColumnSort, TableState},
-    ActiveTheme as _, Icon, IconName, Size,
+    table::{Column, ColumnSort, TableState, loading::Loading},
 };
 
 /// A delegate trait for providing data and rendering for a table.
@@ -37,35 +36,45 @@ pub trait TableDelegate: Sized + 'static {
     }
 
     /// Render the header cell at the given column index, default to the column name.
-    fn render_th(&self, col_ix: usize, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_th(
+        &mut self,
+        col_ix: usize,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
         div()
             .size_full()
             .child(self.column(col_ix, cx).name.clone())
     }
 
     /// Render the row at the given row and column.
-    fn render_tr(&self, row_ix: usize, window: &mut Window, cx: &mut App) -> Stateful<Div> {
+    fn render_tr(
+        &mut self,
+        row_ix: usize,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> Stateful<Div> {
         h_flex().id(("row", row_ix))
     }
 
     /// Render the context menu for the row at the given row index.
     fn context_menu(
-        &self,
+        &mut self,
         row_ix: usize,
         menu: PopupMenu,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<TableState<Self>>,
     ) -> PopupMenu {
         menu
     }
 
     /// Render cell at the given row and column.
     fn render_td(
-        &self,
+        &mut self,
         row_ix: usize,
         col_ix: usize,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement;
 
     /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
@@ -79,7 +88,11 @@ pub trait TableDelegate: Sized + 'static {
     }
 
     /// Return a Element to show when table is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_empty(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
         h_flex()
             .size_full()
             .justify_center()
@@ -96,7 +109,12 @@ pub trait TableDelegate: Sized + 'static {
     /// Return a Element to show when table is loading, default is built-in Skeleton loading view.
     ///
     /// The size is the size of the Table.
-    fn render_loading(&self, size: Size, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_loading(
+        &mut self,
+        size: Size,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
         Loading::new().size(size)
     }
 
@@ -125,7 +143,11 @@ pub trait TableDelegate: Sized + 'static {
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<TableState<Self>>) {}
 
     /// Render the last empty column, default to empty.
-    fn render_last_empty_col(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_last_empty_col(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
         h_flex().w_3().h_full().flex_shrink_0()
     }
 
