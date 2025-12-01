@@ -1,0 +1,21 @@
+[package]
+name = "tray-app"
+version = "0.5.0-preview0"
+publish = false
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
+tray-icon = { path = "/Users/jason/github/tray-icon" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "CFCGTypes",
+  "CFRunLoop",
+] }
+
+[lints]
+workspace = true
