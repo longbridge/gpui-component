@@ -362,6 +362,7 @@ impl Element for TitleBarElement {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let supported_controls = window.window_controls();
         use gpui::{MouseButton, MouseMoveEvent, MouseUpEvent};
         window.on_mouse_event(
             move |ev: &MouseMoveEvent, _, window: &mut Window, cx: &mut App| {
@@ -371,12 +372,14 @@ impl Element for TitleBarElement {
             },
         );
 
-        window.on_mouse_event(
-            move |ev: &MouseUpEvent, _, window: &mut Window, cx: &mut App| {
-                if bounds.contains(&ev.position) && ev.button == MouseButton::Right {
-                    window.show_window_menu(ev.position);
-                }
-            },
-        );
+        if supported_controls.window_menu {
+            window.on_mouse_event(
+                move |ev: &MouseUpEvent, _, window: &mut Window, cx: &mut App| {
+                    if bounds.contains(&ev.position) && ev.button == MouseButton::Right {
+                        window.show_window_menu(ev.position);
+                    }
+                },
+            );
+        }
     }
 }
