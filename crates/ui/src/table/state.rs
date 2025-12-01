@@ -788,7 +788,7 @@ where
     /// The children must be one by one items.
     /// Because the horizontal scroll handle will use the child_item_bounds to
     /// calculate the item position for itself's `scroll_to_item` method.
-    fn render_th(&self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn render_th(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let entity_id = cx.entity_id();
         let col_group = self.col_groups.get(col_ix).expect("BUG: invalid col index");
 
@@ -896,7 +896,8 @@ where
                         .bg(cx.theme().table_head)
                         .children(
                             self.col_groups
-                                .iter()
+                                .clone()
+                                .into_iter()
                                 .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
                                 .enumerate()
                                 .map(|(col_ix, _)| self.render_th(col_ix, window, cx)),
@@ -939,7 +940,8 @@ where
                             .relative()
                             .children(
                                 self.col_groups
-                                    .iter()
+                                    .clone()
+                                    .into_iter()
                                     .skip(left_columns_count)
                                     .enumerate()
                                     .map(|(col_ix, _)| {
@@ -1302,7 +1304,7 @@ where
                 move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
                     if let Some(row_ix) = view.read(cx).right_clicked_row {
                         view.update(cx, |menu, cx| {
-                            menu.delegate().context_menu(row_ix, this, window, cx)
+                            menu.delegate_mut().context_menu(row_ix, this, window, cx)
                         })
                     } else {
                         this
