@@ -4,10 +4,10 @@ use crate::{
     ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, h_flex,
 };
 use gpui::{
-    AnyElement, App, ClickEvent, Element, Hsla, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Pixels, RenderOnce, StatefulInteractiveElement as _, Style, StyleRefinement,
-    Styled, TitlebarOptions, Window, WindowControlArea, div, prelude::FluentBuilder as _, px,
-    relative,
+    AnyElement, App, ClickEvent, Context, Decorations, Hsla, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
+    prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
@@ -246,10 +246,24 @@ impl ParentElement for TitleBar {
     }
 }
 
+struct TitleBarState {
+    should_move: bool,
+}
+
+// TODO: Remove this when GPUI has released v0.2.3
+impl Render for TitleBarState {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
+}
+
 impl RenderOnce for TitleBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let is_client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
+
+        let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
 
         div().flex_shrink_0().child(
             div()
@@ -270,16 +284,36 @@ impl RenderOnce for TitleBar {
                 .when(is_macos, |this| {
                     this.on_double_click(|_, window, _| window.titlebar_double_click())
                 })
+                .on_mouse_down_out(window.listener_for(&state, |state, _, _, _| {
+                    state.should_move = false;
+                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    window.listener_for(&state, |state, _, _, _| {
+                        state.should_move = true;
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    window.listener_for(&state, |state, _, _, _| {
+                        state.should_move = false;
+                    }),
+                )
+                .on_mouse_move(window.listener_for(&state, |state, _, window, _| {
+                    if state.should_move {
+                        state.should_move = false;
+                        window.start_window_move();
+                    }
+                }))
                 .child(
                     h_flex()
                         .id("bar")
                         .when(window.is_fullscreen(), |this| this.pl_3())
-                        .window_control_area(WindowControlArea::Drag)
                         .h_full()
                         .justify_between()
                         .flex_shrink_0()
                         .flex_1()
-                        .when(is_linux, |this| {
+                        .when(is_linux && is_client_decorated, |this| {
                             this.child(
                                 div()
                                     .top_0()
@@ -287,7 +321,9 @@ impl RenderOnce for TitleBar {
                                     .absolute()
                                     .size_full()
                                     .h_full()
-                                    .child(TitleBarElement {}),
+                                    .on_mouse_down(MouseButton::Right, move |ev, window, _| {
+                                        window.show_window_menu(ev.position)
+                                    }),
                             )
                         })
                         .children(self.children),
@@ -296,90 +332,5 @@ impl RenderOnce for TitleBar {
                     on_close_window: self.on_close_window,
                 }),
         )
-    }
-}
-
-/// A TitleBar Element that can be move the window.
-pub struct TitleBarElement {}
-
-impl IntoElement for TitleBarElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for TitleBarElement {
-    type RequestLayoutState = ();
-
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
-        style.flex_grow = 1.0;
-        style.flex_shrink = 1.0;
-        style.size.width = relative(1.).into();
-        style.size.height = relative(1.).into();
-
-        let id = window.request_layout(style, [], cx);
-        (id, ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: gpui::Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        _window: &mut Window,
-        _cx: &mut App,
-    ) -> Self::PrepaintState {
-    }
-
-    #[allow(unused_variables)]
-    fn paint(
-        &mut self,
-        _: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        bounds: gpui::Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        let supported_controls = window.window_controls();
-        use gpui::{MouseButton, MouseMoveEvent, MouseUpEvent};
-        window.on_mouse_event(
-            move |ev: &MouseMoveEvent, _, window: &mut Window, cx: &mut App| {
-                if bounds.contains(&ev.position) && ev.pressed_button == Some(MouseButton::Left) {
-                    window.start_window_move();
-                }
-            },
-        );
-
-        if supported_controls.window_menu {
-            window.on_mouse_event(
-                move |ev: &MouseUpEvent, _, window: &mut Window, cx: &mut App| {
-                    if bounds.contains(&ev.position) && ev.button == MouseButton::Right {
-                        window.show_window_menu(ev.position);
-                    }
-                },
-            );
-        }
     }
 }
