@@ -356,15 +356,6 @@ impl Size {
             _ => px(2.),
         }
     }
-
-    /// Returns the text size for input elements.
-    #[inline]
-    pub fn input_text_size(&self) -> Rems {
-        match self {
-            Size::Large => rems(1.),
-            _ => rems(0.875),
-        }
-    }
 }
 
 impl From<Pixels> for Size {
