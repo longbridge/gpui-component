@@ -3,7 +3,6 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
-use gpui::Rems;
 use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
@@ -288,7 +287,6 @@ pub struct InputState {
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
     pub(super) size: Size,
-    pub(super) text_size: Rems,
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -365,17 +363,12 @@ impl InputState {
         ];
 
         let text_style = window.text_style();
-        let text_size = Size::default().input_text_size();
         let mouse_context_menu = MouseContextMenu::new(cx.entity(), window, cx);
 
         Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
-            text_wrapper: TextWrapper::new(
-                text_style.font(),
-                text_size.to_pixels(window.rem_size()),
-                None,
-            ),
+            text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
             blink_cursor,
             history,
             selected_range: Selection::default(),
@@ -413,7 +406,6 @@ impl InputState {
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
             size: Size::default(),
-            text_size,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,

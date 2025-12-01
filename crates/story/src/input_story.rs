@@ -247,11 +247,12 @@ impl Render for InputStory {
                     ))),
             )
             .child(
-                section("Appearance false").max_w_md().child(
+                section("Custom Appearance").max_w_md().child(
                     div()
                         .border_b_2()
                         .px_6()
                         .py_3()
+                        .font_family("Monaco")
                         .border_color(cx.theme().border)
                         .bg(cx.theme().secondary)
                         .text_color(cx.theme().secondary_foreground)

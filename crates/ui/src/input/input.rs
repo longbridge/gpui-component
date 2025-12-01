@@ -241,12 +241,10 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        let text_size = self.size.input_text_size();
 
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
-            state.text_size = text_size;
         });
 
         let state = self.state.read(cx);
@@ -359,8 +357,8 @@ impl RenderOnce for Input {
             .input_px(self.size)
             .input_py(self.size)
             .input_h(self.size)
+            .input_text_size(self.size)
             .cursor_text()
-            .text_size(text_size.to_pixels(window.rem_size()))
             .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()

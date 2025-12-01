@@ -820,11 +820,10 @@ impl Element for TextElement {
     ) -> Self::PrepaintState {
         let style = window.text_style();
         let font = style.font();
+        let text_size = style.font_size.to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
-            state
-                .text_wrapper
-                .set_font(font, state.text_size.to_pixels(window.rem_size()), cx);
+            state.text_wrapper.set_font(font, text_size, cx);
             state.text_wrapper.prepare_if_need(&state.text, cx);
         });
 
@@ -850,7 +849,6 @@ impl Element for TextElement {
         let text = state.text.clone();
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
-        let text_size = state.text_size.to_pixels(window.rem_size());
 
         let mut bounds = bounds;
 
