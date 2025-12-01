@@ -1,14 +1,15 @@
 use crate::{
+    Selectable, Sizable,
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     h_flex,
     menu::PopupMenu,
-    Selectable, Sizable,
 };
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder, px, App, AppContext as _, ClickEvent, Context,
-    DismissEvent, Entity, Focusable, InteractiveElement as _, IntoElement, KeyBinding, OwnedMenu,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window,
+    App, AppContext as _, ClickEvent, Context, DismissEvent, Entity, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, OwnedMenu, ParentElement,
+    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window, anchored,
+    deferred, div, prelude::FluentBuilder, px,
 };
 
 const CONTEXT: &str = "AppMenuBar";
@@ -224,6 +225,11 @@ impl Render for AppMenu {
                     .ghost()
                     .label(self.name.clone())
                     .selected(is_selected)
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                        // Stop propagation to avoid dragging the window.
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
                     .on_click(cx.listener(Self::handle_trigger_click)),
             )
             .on_hover(cx.listener(Self::handle_hover))
