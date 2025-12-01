@@ -252,7 +252,7 @@ impl Render for InputStory {
                         .border_b_2()
                         .px_6()
                         .py_3()
-                        .font_family(cx.theme().mono_font_family)
+                        .font_family(cx.theme().mono_font_family.clone())
                         .border_color(cx.theme().border)
                         .bg(cx.theme().secondary)
                         .text_color(cx.theme().secondary_foreground)
