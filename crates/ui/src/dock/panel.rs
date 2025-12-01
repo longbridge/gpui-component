@@ -66,7 +66,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     }
 
     /// The title of the panel
-    fn title(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         SharedString::from(t!("Dock.Unnamed")).into_any_element()
     }
 
@@ -165,7 +165,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn panel_name(&self, cx: &App) -> &'static str;
     fn panel_id(&self, cx: &App) -> EntityId;
     fn tab_name(&self, cx: &App) -> Option<SharedString>;
-    fn title(&self, window: &Window, cx: &mut App) -> AnyElement;
+    fn title(&self, window: &mut Window, cx: &mut App) -> AnyElement;
     fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
     fn title_style(&self, cx: &App) -> Option<TitleStyle>;
     fn closable(&self, cx: &App) -> bool;
@@ -196,7 +196,7 @@ impl<T: Panel> PanelView for Entity<T> {
         self.read(cx).tab_name(cx)
     }
 
-    fn title(&self, window: &Window, cx: &mut App) -> AnyElement {
+    fn title(&self, window: &mut Window, cx: &mut App) -> AnyElement {
         self.update(cx, |this, cx| this.title(window, cx))
     }
 

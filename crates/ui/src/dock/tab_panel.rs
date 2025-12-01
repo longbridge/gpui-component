@@ -91,7 +91,7 @@ impl Panel for TabPanel {
         "TabPanel"
     }
 
-    fn title(&mut self, window: &Window, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::AnyElement {
         self.active_panel(cx)
             .map(|panel| panel.title(window, cx))
             .unwrap_or("Empty Tab".into_any_element())
