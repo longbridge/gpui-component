@@ -66,8 +66,8 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     }
 
     /// The title of the panel
-    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        SharedString::from(t!("Dock.Unnamed")).into_any_element()
+    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        SharedString::from(t!("Dock.Unnamed"))
     }
 
     /// The theme of the panel title, default is `None`.
@@ -78,8 +78,12 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// The suffix of the panel title, default is `None`.
     ///
     /// This is used to add a suffix element to the panel title.
-    fn title_suffix(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        None
+    fn title_suffix(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        None::<gpui::Div>
     }
 
     /// Whether the panel can be closed, default is `true`.
@@ -197,11 +201,14 @@ impl<T: Panel> PanelView for Entity<T> {
     }
 
     fn title(&self, window: &mut Window, cx: &mut App) -> AnyElement {
-        self.update(cx, |this, cx| this.title(window, cx))
+        self.update(cx, |this, cx| this.title(window, cx).into_any_element())
     }
 
     fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-        self.update(cx, |this, cx| this.title_suffix(window, cx))
+        self.update(cx, |this, cx| {
+            this.title_suffix(window, cx)
+                .map(|el| el.into_any_element())
+        })
     }
 
     fn title_style(&self, cx: &App) -> Option<TitleStyle> {

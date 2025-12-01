@@ -148,7 +148,7 @@ impl Panel for Tiles {
         "Tiles"
     }
 
-    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         "Tiles".into_any_element()
     }
 
