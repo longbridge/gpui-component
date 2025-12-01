@@ -1,9 +1,8 @@
 use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Task, Window};
 
 use crate::{
-    h_flex,
-    list::{loading::Loading, ListState},
-    ActiveTheme as _, Icon, IconName, IndexPath, Selectable,
+    ActiveTheme as _, Icon, IconName, IndexPath, Selectable, h_flex,
+    list::{ListState, loading::Loading},
 };
 
 /// A delegate for the List.
@@ -35,16 +34,21 @@ pub trait ListDelegate: Sized + 'static {
     /// Return None will skip the item.
     ///
     /// NOTE: Every item should have same height.
-    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item>;
+    fn render_item(
+        &mut self,
+        ix: IndexPath,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item>;
 
     /// Render the section header at the given index, default is None.
     ///
     /// NOTE: Every header should have same height.
     fn render_section_header(
-        &self,
+        &mut self,
         section: usize,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         None::<AnyElement>
     }
@@ -53,16 +57,20 @@ pub trait ListDelegate: Sized + 'static {
     ///
     /// NOTE: Every footer should have same height.
     fn render_section_footer(
-        &self,
+        &mut self,
         section: usize,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         None::<AnyElement>
     }
 
     /// Return a Element to show when list is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_empty(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
         h_flex()
             .size_full()
             .justify_center()
@@ -79,7 +87,11 @@ pub trait ListDelegate: Sized + 'static {
     /// For example: The last search results, or the last selected item.
     ///
     /// Default is None, that means no initial state.
-    fn render_initial(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    fn render_initial(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> Option<AnyElement> {
         None
     }
 
@@ -90,7 +102,11 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Returns a Element to show when loading, default is built-in Skeleton
     /// loading view.
-    fn render_loading(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_loading(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
         Loading
     }
 

@@ -430,7 +430,7 @@ where
     }
 
     fn render_list_item(
-        &self,
+        &mut self,
         ix: IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -474,7 +474,7 @@ where
     }
 
     fn render_items(
-        &self,
+        &mut self,
         items_count: usize,
         entities_count: usize,
         window: &mut Window,
@@ -526,11 +526,11 @@ where
                                                     .into_any_element(),
                                             ),
                                             RowEntry::SectionHeader(section_ix) => list
-                                                .delegate()
+                                                .delegate_mut()
                                                 .render_section_header(section_ix, window, cx)
                                                 .map(|r| r.into_any_element()),
                                             RowEntry::SectionFooter(section_ix) => list
-                                                .delegate()
+                                                .delegate_mut()
                                                 .render_section_footer(section_ix, window, cx)
                                                 .map(|r| r.into_any_element()),
                                         })

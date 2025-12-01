@@ -1,19 +1,20 @@
 use gpui::{
-    anchored, canvas, deferred, div, prelude::FluentBuilder, px, rems, AnyElement, App, AppContext,
-    Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, Length, ParentElement, Pixels, Render,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
-    Task, WeakEntity, Window,
+    AnyElement, App, AppContext, Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId,
+    Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    Length, ParentElement, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Subscription, Task, WeakEntity, Window, anchored, canvas, deferred,
+    div, prelude::FluentBuilder, px, rems,
 };
 use rust_i18n::t;
 
 use crate::{
+    ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size, StyleSized,
+    StyledExt,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     h_flex,
     input::clear_button,
     list::{List, ListDelegate, ListState},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Selectable, Sizable, Size,
-    StyleSized, StyledExt,
+    v_flex,
 };
 
 const CONTEXT: &str = "Select";
@@ -167,10 +168,10 @@ where
     }
 
     fn render_section_header(
-        &self,
+        &mut self,
         section: usize,
         _: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         let state = self.state.upgrade()?.read(cx);
         let Some(item) = self.delegate.section(section) else {
@@ -188,7 +189,12 @@ where
         );
     }
 
-    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item> {
+    fn render_item(
+        &mut self,
+        ix: IndexPath,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item> {
         let selected = self
             .selected_index
             .map_or(false, |selected_index| selected_index == ix);
@@ -273,7 +279,11 @@ where
         self.selected_index = ix;
     }
 
-    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_empty(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
         if let Some(empty) = self
             .state
             .upgrade()

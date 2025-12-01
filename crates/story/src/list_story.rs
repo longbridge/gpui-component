@@ -225,10 +225,10 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn render_section_header(
-        &self,
+        &mut self,
         section: usize,
         _: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         let Some(industry) = self.industries.get(section) else {
             return None;
@@ -247,10 +247,10 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn render_section_footer(
-        &self,
+        &mut self,
         section: usize,
         _: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         let Some(_) = self.industries.get(section) else {
             return None;
@@ -270,7 +270,7 @@ impl ListDelegate for CompanyListDelegate {
         )
     }
 
-    fn render_item(&self, ix: IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
+    fn render_item(&mut self, ix: IndexPath, _: &mut Window, _: &mut Context<ListState<Self>>) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
             return Some(CompanyListItem::new(ix, company.clone(), selected));

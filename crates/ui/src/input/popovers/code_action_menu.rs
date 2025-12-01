@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    canvas, deferred, div, prelude::FluentBuilder, px, relative, Action, AnyElement, App,
-    AppContext, Bounds, Context, DismissEvent, Empty, Entity, EventEmitter,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
-    SharedString, Styled, StyledText, Subscription, Window,
+    Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
+    EventEmitter, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas, deferred, div,
+    prelude::FluentBuilder, px, relative,
 };
 use lsp_types::CodeAction;
 
@@ -12,10 +12,9 @@ const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use crate::{
-    actions, h_flex,
-    input::{self, popovers::editor_popover, InputState},
+    ActiveTheme, IndexPath, Selectable, actions, h_flex,
+    input::{self, InputState, popovers::editor_popover},
     list::{List, ListDelegate, ListEvent, ListState},
-    ActiveTheme, IndexPath, Selectable,
 };
 
 #[derive(Debug, Clone)]
@@ -110,7 +109,12 @@ impl ListDelegate for MenuDelegate {
         self.items.len()
     }
 
-    fn render_item(&self, ix: crate::IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
+    fn render_item(
+        &mut self,
+        ix: crate::IndexPath,
+        _: &mut Window,
+        _: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
         Some(MenuItem::new(ix.row, item.clone()))
     }

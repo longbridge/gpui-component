@@ -75,10 +75,10 @@ impl ListDelegate for DropdownListDelegate {
     }
 
     fn render_item(
-        &self,
+        &mut self,
         ix: gpui_component::IndexPath,
         _: &mut Window,
-        _: &mut App,
+        _: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         Some(ListItem::new(ix).child(format!("Item {}", ix.row)))
     }

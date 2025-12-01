@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    canvas, deferred, div, prelude::FluentBuilder, px, relative, Action, AnyElement, App,
-    AppContext, Bounds, Context, DismissEvent, Empty, Entity, EventEmitter, HighlightStyle,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
-    SharedString, Styled, StyledText, Subscription, Window,
+    Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
+    EventEmitter, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+    Point, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas,
+    deferred, div, prelude::FluentBuilder, px, relative,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -13,15 +13,13 @@ const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
 
 use crate::{
-    actions, h_flex,
+    ActiveTheme, IndexPath, Selectable, actions, h_flex,
     input::{
-        self,
+        self, InputState, RopeExt,
         popovers::{editor_popover, render_markdown},
-        InputState, RopeExt,
     },
     label::Label,
     list::{List, ListDelegate, ListEvent, ListState},
-    ActiveTheme, IndexPath, Selectable,
 };
 
 struct ContextMenuDelegate {
@@ -137,7 +135,12 @@ impl ListDelegate for ContextMenuDelegate {
         self.items.len()
     }
 
-    fn render_item(&self, ix: crate::IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
+    fn render_item(
+        &mut self,
+        ix: crate::IndexPath,
+        _: &mut Window,
+        _: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
         Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
     }

@@ -65,7 +65,7 @@ impl ListDelegate for ListItemDeletegate {
         })
     }
 
-    fn render_item(&self, ix: IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
+    fn render_item(&mut self, ix: IndexPath, _: &mut Window, _: &mut Context<ListState<Self>>) -> Option<Self::Item> {
         let confirmed = Some(ix.row) == self.confirmed_index;
 
         if let Some(item) = self.matches.get(ix.row) {
@@ -97,7 +97,11 @@ impl ListDelegate for ListItemDeletegate {
         }
     }
 
-    fn render_empty(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_empty(
+        &mut self,
+        _: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
         v_flex()
             .size_full()
             .child(
