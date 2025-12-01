@@ -308,6 +308,7 @@ impl RenderOnce for TitleBar {
                 .child(
                     h_flex()
                         .id("bar")
+                        .window_control_area(WindowControlArea::Drag)
                         .when(window.is_fullscreen(), |this| this.pl_3())
                         .h_full()
                         .justify_between()
