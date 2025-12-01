@@ -10,6 +10,7 @@ use gpui::{
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
+use gpui::{Rems, rems};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::ops::Range;
@@ -287,7 +288,7 @@ pub struct InputState {
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
     pub(super) size: Size,
-    pub(super) font_size: Pixels,
+    pub(super) font_size: Rems,
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -365,12 +366,17 @@ impl InputState {
 
         let text_style = window.text_style();
         let mouse_context_menu = MouseContextMenu::new(cx.entity(), window, cx);
-        let font_size = text_style.font_size.to_pixels(window.rem_size());
+        // Use text_sm by default
+        let font_size = rems(0.875);
 
         Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
-            text_wrapper: TextWrapper::new(text_style.font(), font_size, None),
+            text_wrapper: TextWrapper::new(
+                text_style.font(),
+                font_size.to_pixels(window.rem_size()),
+                None,
+            ),
             blink_cursor,
             history,
             selected_range: Selection::default(),

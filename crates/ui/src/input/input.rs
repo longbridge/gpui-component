@@ -244,8 +244,7 @@ impl RenderOnce for Input {
         let font_size = match self.size {
             Size::Large => rems(1.),
             _ => rems(0.875),
-        }
-        .to_pixels(window.rem_size());
+        };
 
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
@@ -364,7 +363,7 @@ impl RenderOnce for Input {
             .input_py(self.size)
             .input_h(self.size)
             .cursor_text()
-            .text_size(font_size)
+            .text_size(font_size.to_pixels(window.rem_size()))
             .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()
