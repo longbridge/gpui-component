@@ -121,32 +121,26 @@ impl ControlIcon {
     }
 
     fn fg(&self, cx: &App) -> Hsla {
-        if cx.theme().mode.is_dark() {
-            crate::white()
+        if self.is_close() {
+            cx.theme().danger_foreground
         } else {
-            crate::black()
+            cx.theme().secondary_foreground
         }
     }
 
     fn hover_fg(&self, cx: &App) -> Hsla {
-        if self.is_close() || cx.theme().mode.is_dark() {
-            crate::white()
+        if self.is_close() {
+            cx.theme().danger_hover
         } else {
-            crate::black()
+            cx.theme().secondary_foreground
         }
     }
 
     fn hover_bg(&self, cx: &App) -> Hsla {
         if self.is_close() {
-            if cx.theme().mode.is_dark() {
-                crate::red_800()
-            } else {
-                crate::red_600()
-            }
-        } else if cx.theme().mode.is_dark() {
-            crate::stone_700()
+            cx.theme().danger
         } else {
-            crate::stone_200()
+            cx.theme().secondary
         }
     }
 }
