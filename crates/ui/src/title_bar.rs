@@ -120,6 +120,7 @@ impl ControlIcon {
         matches!(self, Self::Close { .. })
     }
 
+    #[inline]
     fn fg(&self, cx: &App) -> Hsla {
         if self.is_close() {
             cx.theme().danger_foreground
@@ -128,19 +129,21 @@ impl ControlIcon {
         }
     }
 
-    fn hover_fg(&self, cx: &App) -> Hsla {
-        if self.is_close() {
-            cx.theme().danger_hover
-        } else {
-            cx.theme().secondary_foreground
-        }
-    }
-
-    fn hover_bg(&self, cx: &App) -> Hsla {
+    #[inline]
+    fn bg(&self, cx: &App) -> Hsla {
         if self.is_close() {
             cx.theme().danger
         } else {
             cx.theme().secondary
+        }
+    }
+
+    #[inline]
+    fn hover_bg(&self, cx: &App) -> Hsla {
+        if self.is_close() {
+            cx.theme().danger_hover
+        } else {
+            cx.theme().secondary_hover
         }
     }
 }
@@ -150,7 +153,7 @@ impl RenderOnce for ControlIcon {
         let is_linux = cfg!(target_os = "linux");
         let is_windows = cfg!(target_os = "windows");
         let fg = self.fg(cx);
-        let hover_fg = self.hover_fg(cx);
+        let bg = self.bg(cx);
         let hover_bg = self.hover_bg(cx);
         let icon = self.clone();
         let on_close_window = match &self {
@@ -190,8 +193,10 @@ impl RenderOnce for ControlIcon {
                     }
                 })
             })
-            .hover(|style| style.bg(hover_bg).text_color(hover_fg))
-            .active(|style| style.bg(hover_bg.opacity(0.7)))
+            .bg(bg)
+            .text_color(fg)
+            .hover(|style| style.bg(bg))
+            .active(|style| style.bg(bg.opacity(0.7)))
             .child(Icon::new(self.icon()).small())
     }
 }
