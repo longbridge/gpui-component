@@ -11,7 +11,7 @@ use gpui_component_assets::Assets;
 use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
     IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
-    PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SelectStory, SidebarStory,
+    PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
     StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
 };
 use serde::Deserialize;
@@ -269,7 +269,7 @@ impl StoryWorkspace {
                 ),
                 DockItem::tabs(
                     vec![
-                        Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+                        Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
                         Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     ],
                     None,
@@ -358,7 +358,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SidebarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<FormStory>(window, cx)),
@@ -447,7 +447,7 @@ impl StoryWorkspace {
             12 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
             13 => Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
             14 => Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
-            15 => Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+            15 => Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
             16 => Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
             17 => Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
             _ => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),

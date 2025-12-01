@@ -68,7 +68,7 @@ impl Gallery {
                     StoryContainer::panel::<ProgressStory>(window, cx),
                     StoryContainer::panel::<RadioStory>(window, cx),
                     StoryContainer::panel::<ResizableStory>(window, cx),
-                    StoryContainer::panel::<ScrollableStory>(window, cx),
+                    StoryContainer::panel::<ScrollbarStory>(window, cx),
                     StoryContainer::panel::<SelectStory>(window, cx),
                     StoryContainer::panel::<SettingsStory>(window, cx),
                     StoryContainer::panel::<SheetStory>(window, cx),

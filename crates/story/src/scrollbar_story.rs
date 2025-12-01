@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Pixels,
-    Render, Size, Styled, Window, div, px, size,
+    Render, Size, Styled, UniformListScrollHandle, Window, div, px, size, uniform_list,
 };
 use gpui_component::{
     ActiveTheme as _, Selectable,
@@ -12,17 +12,18 @@ use gpui_component::{
     v_flex,
 };
 
-pub struct ScrollableStory {
+pub struct ScrollbarStory {
     focus_handle: FocusHandle,
     items: Vec<String>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
     size_mode: usize,
+    scroll_handle: UniformListScrollHandle,
 }
 
-const ITEM_HEIGHT: Pixels = px(30.);
+const ITEM_HEIGHT: Pixels = px(50.);
 
-impl ScrollableStory {
+impl ScrollbarStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
         let test_width = px(3000.);
@@ -37,6 +38,7 @@ impl ScrollableStory {
             item_sizes: Rc::new(item_sizes),
             test_width,
             size_mode: 0,
+            scroll_handle: UniformListScrollHandle::new(),
         }
     }
 
@@ -113,13 +115,13 @@ impl ScrollableStory {
     }
 }
 
-impl super::Story for ScrollableStory {
+impl super::Story for ScrollbarStory {
     fn title() -> &'static str {
-        "Scrollable"
+        "Scrollbar"
     }
 
     fn description() -> &'static str {
-        "A scrollable container."
+        "Add scrollbar to a scrollable element."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -127,19 +129,18 @@ impl super::Story for ScrollableStory {
     }
 }
 
-impl Focusable for ScrollableStory {
+impl Focusable for ScrollbarStory {
     fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for ScrollableStory {
+impl Render for ScrollbarStory {
     fn render(
         &mut self,
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let test_width = self.test_width;
         v_flex()
             .size_full()
             .gap_4()
@@ -149,26 +150,38 @@ impl Render for ScrollableStory {
                     .relative()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .w_full()
-                    .max_h(px(400.))
-                    .min_h(px(200.))
+                    .flex_1()
                     .child(
-                        v_flex()
-                            .w(test_width)
-                            .p_3()
-                            .gap_1()
-                            .overflow_y_scrollbar()
-                            .child("Scrollable Example")
-                            .children(self.items.iter().map(|item| {
-                                div()
-                                    .h(ITEM_HEIGHT)
-                                    .bg(cx.theme().background)
-                                    .items_center()
-                                    .justify_center()
-                                    .text_sm()
-                                    .child(item.to_string())
-                            })),
+                        uniform_list("list", self.items.len(), {
+                            let items = self.items.clone();
+                            move |visible_range, _, cx| {
+                                let mut elements = Vec::with_capacity(visible_range.len());
+                                for ix in visible_range {
+                                    let item = &items[ix];
+                                    elements.push(
+                                        div()
+                                            .h(ITEM_HEIGHT)
+                                            .pt_1()
+                                            .items_center()
+                                            .justify_center()
+                                            .text_sm()
+                                            .child(
+                                                div()
+                                                    .p_2()
+                                                    .bg(cx.theme().secondary)
+                                                    .child(item.to_string()),
+                                            ),
+                                    );
+                                }
+                                elements
+                            }
+                        })
+                        .py_1()
+                        .px_3()
+                        .size_full()
+                        .track_scroll(self.scroll_handle.clone()),
                     )
+                    .vertical_scrollbar(&self.scroll_handle)
             })
     }
 }
