@@ -66,7 +66,7 @@ impl TableDelegate for MyTableDelegate {
         &self.columns[col_ix]
     }
 
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -143,7 +143,7 @@ impl TableDelegate for LargeDataDelegate {
     }
 
     // Only visible rows are rendered
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
+    fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
         // This is only called for visible rows
         // Efficiently render cell content
         let row = &self.data[row_ix];
@@ -191,26 +191,12 @@ impl TableDelegate for MyTableDelegate {
 }
 ```
 
-### Row Selection
-
-Handle row selection and interaction:
+### ContextMenu
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn render_tr(&self, row_ix: usize, _: &mut Window, cx: &mut App) -> Stateful<Div> {
-        div()
-            .id(row_ix)
-            .on_click(move |ev, _, _| {
-                if ev.modifiers().secondary() {
-                    println!("Right-clicked row {}", row_ix);
-                } else {
-                    println!("Selected row {}", row_ix);
-                }
-            })
-    }
-
     // Context menu for right-click
-    fn context_menu(&self, row_ix: usize, menu: PopupMenu, _: &mut Window, _: &mut App) -> PopupMenu {
+    fn context_menu(&mut self, row_ix: usize, menu: PopupMenu, _: &mut Window, _: &mut Context<TableState<Self>>) -> PopupMenu {
         let row = &self.data[row_ix];
         menu.menu(format!("Edit {}", row.name), Box::new(EditRowAction(row_ix)))
             .menu("Delete", Box::new(DeleteRowAction(row_ix)))
@@ -218,32 +204,15 @@ impl TableDelegate for MyTableDelegate {
             .menu("Duplicate", Box::new(DuplicateRowAction(row_ix)))
     }
 }
-
-// Handle table events
-cx.subscribe_in(&state, window, |view, table, event, _, cx| {
-    match event {
-        TableEvent::SelectRow(row_ix) => {
-            println!("Row {} selected", row_ix);
-        }
-        TableEvent::DoubleClickedRow(row_ix) => {
-            println!("Row {} double-clicked", row_ix);
-            // Open detail view or edit mode
-        }
-        TableEvent::SelectColumn(col_ix) => {
-            println!("Column {} selected", col_ix);
-        }
-        _ => {}
-    }
-}).detach();
 ```
 
-### Custom Cell Rendering
+### Cell Rendering
 
 Create rich cell content with custom rendering:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<TableState<Self>>) -> impl IntoElement {
         let row = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
@@ -413,7 +382,7 @@ struct StockData {
 }
 
 impl TableDelegate for StockTableDelegate {
-    fn render_td(&self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<TableState<Self>>) -> impl IntoElement {
         let stock = &self.stocks[row_ix];
         let col = &self.columns[col_ix];
 

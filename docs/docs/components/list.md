@@ -34,10 +34,10 @@ impl ListDelegate for MyListDelegate {
     }
 
     fn render_item(
-        &self,
+        &mut self,
         ix: IndexPath,
         _window: &mut Window,
-        _cx: &mut App,
+        _cx: &mut Context<TableState<Self>>,
     ) -> Option<Self::Item> {
         self.items.get(ix.row).map(|item| {
             ListItem::new(ix)
@@ -93,10 +93,10 @@ impl ListDelegate for MyListDelegate {
     }
 
     fn render_section_header(
-        &self,
+        &mut self,
         section: usize,
         _window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<TableState<Self>>,
     ) -> Option<impl IntoElement> {
         let title = match section {
             0 => "Section 1",
@@ -118,10 +118,10 @@ impl ListDelegate for MyListDelegate {
     }
 
     fn render_section_footer(
-        &self,
+        &mut self,
         section: usize,
         _window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<TableState<Self>>,
     ) -> Option<impl IntoElement> {
         Some(
             div()
@@ -139,10 +139,10 @@ impl ListDelegate for MyListDelegate {
 
 ```rust
 fn render_item(
-    &self,
+    &mut self,
     ix: IndexPath,
     _window: &mut Window,
-    cx: &mut App,
+    cx: &mut Context<TableState<Self>>,
 ) -> Option<Self::Item> {
     self.items.get(ix.row).map(|item| {
         ListItem::new(ix)
@@ -205,9 +205,9 @@ impl ListDelegate for MyListDelegate {
     }
 
     fn render_loading(
-        &self,
+        &mut self,
         _window: &mut Window,
-        _cx: &mut App,
+        _cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
         // Custom loading view
         v_flex()
@@ -305,7 +305,7 @@ ListSeparatorItem::new()
 
 ```rust
 impl ListDelegate for MyListDelegate {
-    fn render_empty(&self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_empty(&mut self, _window: &mut Window, cx: &mut Context<TableState<Self>>) -> impl IntoElement {
         v_flex()
             .size_full()
             .justify_center()
@@ -380,7 +380,7 @@ struct FileInfo {
 impl ListDelegate for FileBrowserDelegate {
     type Item = ListItem;
 
-    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item> {
+    fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<TableState<Self>>) -> Option<Self::Item> {
         self.files.get(ix.row).map(|file| {
             let icon = if file.is_directory {
                 IconName::Folder
@@ -430,7 +430,7 @@ impl ListDelegate for ContactListDelegate {
         self.contacts_by_letter.len()
     }
 
-    fn render_section_header(&self, section: usize, _window: &mut Window, cx: &mut App) -> Option<impl IntoElement> {
+    fn render_section_header(&mut self, section: usize, _window: &mut Window, cx: &mut Context<TableState<Self>>) -> Option<impl IntoElement> {
         let letter = self.contacts_by_letter.keys().nth(section)?;
 
         Some(
@@ -450,11 +450,3 @@ impl ListDelegate for ContactListDelegate {
     }
 }
 ```
-
-## Performance
-
-- **Virtualization**: Only renders visible items for large datasets
-- **Efficient Updates**: Optimized re-rendering with proper change detection
-- **Memory Management**: Automatic cleanup of off-screen items
-- **Smooth Scrolling**: Hardware-accelerated scrolling with momentum
-- **Lazy Loading**: Built-in support for infinite scrolling and pagination
