@@ -187,6 +187,7 @@ struct StockTableDelegate {
     columns: Vec<Column>,
     size: Size,
     loading: bool,
+    lazy_load: bool,
     full_loading: bool,
     eof: bool,
     visible_rows: Range<usize>,
@@ -200,6 +201,7 @@ impl StockTableDelegate {
         Self {
             size: Size::default(),
             stocks: random_stocks(size),
+            lazy_load: false,
             columns: vec![
                 Column::new("id", "ID")
                     .width(60.)
@@ -543,6 +545,10 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn is_eof(&self, _: &App) -> bool {
+        if !self.lazy_load {
+            return true;
+        }
+
         return !self.loading && !self.eof;
     }
 
@@ -551,6 +557,10 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
+        if !self.lazy_load {
+            return;
+        }
+
         self.loading = true;
 
         self._load_task = cx.spawn(async move |view, cx| {
@@ -959,7 +969,18 @@ impl Render for TableStory {
                                     this.child(
                                         h_flex().gap_1().child(Spinner::new()).child("Loading..."),
                                     )
-                                }),
+                                })
+                                .child(
+                                    Checkbox::new("lazy-load")
+                                        .label("Lazy Load")
+                                        .checked(delegate.lazy_load)
+                                        .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                            this.table.update(cx, |table, cx| {
+                                                table.delegate_mut().lazy_load = *check;
+                                                cx.notify();
+                                            })
+                                        })),
+                                ),
                         )
                         .child(
                             h_flex()
