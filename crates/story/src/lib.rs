@@ -30,7 +30,7 @@ mod popover_story;
 mod progress_story;
 mod radio_story;
 mod resizable_story;
-mod scrollable_story;
+mod scrollbar_story;
 mod select_story;
 mod settings_story;
 mod sheet_story;
@@ -90,7 +90,7 @@ pub use popover_story::PopoverStory;
 pub use progress_story::ProgressStory;
 pub use radio_story::RadioStory;
 pub use resizable_story::ResizableStory;
-pub use scrollable_story::ScrollableStory;
+pub use scrollbar_story::ScrollbarStory;
 pub use select_story::SelectStory;
 use serde::{Deserialize, Serialize};
 pub use settings_story::SettingsStory;
@@ -670,7 +670,7 @@ impl StoryState {
             "PopoverStory" => story!(PopoverStory),
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
-            "ScrollableStory" => story!(ScrollableStory),
+            "ScrollbarStory" => story!(ScrollbarStory),
             "SwitchStory" => story!(SwitchStory),
             "TableStory" => story!(TableStory),
             "LabelStory" => story!(LabelStory),
