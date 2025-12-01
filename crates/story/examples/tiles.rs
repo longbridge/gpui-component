@@ -94,11 +94,11 @@ impl Panel for ContainerPanel {
         "ContainerPanel"
     }
 
-    fn title(&self, window: &Window, cx: &App) -> AnyElement {
+    fn title(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         self.panel.title(window, cx)
     }
 
-    fn title_suffix(&self, _: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    fn title_suffix(&mut self, _: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         Some(
             div()
                 .w_24()

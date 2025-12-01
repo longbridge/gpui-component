@@ -91,7 +91,7 @@ impl Panel for TabPanel {
         "TabPanel"
     }
 
-    fn title(&self, window: &Window, cx: &App) -> gpui::AnyElement {
+    fn title(&mut self, window: &Window, cx: &mut Context<Self>) -> gpui::AnyElement {
         self.active_panel(cx)
             .map(|panel| panel.title(window, cx))
             .unwrap_or("Empty Tab".into_any_element())
@@ -121,7 +121,12 @@ impl Panel for TabPanel {
         self.visible_panels(cx).next().is_some()
     }
 
-    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn dropdown_menu(
+        &mut self,
+        menu: PopupMenu,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> PopupMenu {
         if let Some(panel) = self.active_panel(cx) {
             panel.dropdown_menu(menu, window, cx)
         } else {
@@ -129,7 +134,11 @@ impl Panel for TabPanel {
         }
     }
 
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Vec<Button>> {
         self.active_panel(cx)
             .and_then(|panel| panel.toolbar_buttons(window, cx))
     }
@@ -422,7 +431,7 @@ impl TabPanel {
     }
 
     fn render_toolbar(
-        &self,
+        &mut self,
         state: &TabState,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -481,23 +490,24 @@ impl TabPanel {
                         let zoomable = state.zoomable.map_or(false, |v| v.menu_visible());
                         let closable = state.closable;
 
-                        move |this, window, cx| {
-                            view.read(cx)
-                                .dropdown_menu(this, window, cx)
-                                .separator()
-                                .menu_with_disabled(
-                                    if zoomed {
-                                        t!("Dock.Zoom Out")
-                                    } else {
-                                        t!("Dock.Zoom In")
-                                    },
-                                    Box::new(ToggleZoom),
-                                    !zoomable,
-                                )
-                                .when(closable, |this| {
-                                    this.separator()
-                                        .menu(t!("Dock.Close"), Box::new(ClosePanel))
-                                })
+                        move |menu, window, cx| {
+                            view.update(cx, |this, cx| {
+                                this.dropdown_menu(menu, window, cx)
+                                    .separator()
+                                    .menu_with_disabled(
+                                        if zoomed {
+                                            t!("Dock.Zoom Out")
+                                        } else {
+                                            t!("Dock.Zoom In")
+                                        },
+                                        Box::new(ToggleZoom),
+                                        !zoomable,
+                                    )
+                                    .when(closable, |this| {
+                                        this.separator()
+                                            .menu(t!("Dock.Close"), Box::new(ClosePanel))
+                                    })
+                            })
                         }
                     })
                     .anchor(Corner::TopRight),
@@ -591,7 +601,7 @@ impl TabPanel {
     }
 
     fn render_title_bar(
-        &self,
+        &mut self,
         state: &TabState,
         window: &mut Window,
         cx: &mut Context<Self>,
