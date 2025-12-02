@@ -66,6 +66,8 @@ impl Default for ListOptions {
 }
 
 /// The state for List.
+///
+/// List required all items has the same height.
 pub struct ListState<D: ListDelegate> {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) query_input: Entity<InputState>,
@@ -447,6 +449,7 @@ where
             .id(id)
             .w_full()
             .relative()
+            .overflow_hidden()
             .children(self.delegate.render_item(ix, window, cx).map(|item| {
                 item.selected(selected)
                     .secondary_selected(mouse_right_clicked)
@@ -483,13 +486,11 @@ where
         let rows_cache = self.rows_cache.clone();
         let scrollbar_visible = self.options.scrollbar_visible;
         let scroll_handle = self.scroll_handle.clone();
-        let measured_size = rows_cache.measured_size();
 
         v_flex()
             .flex_grow()
             .relative()
-            .h_full()
-            .min_w(measured_size.item_size.width)
+            .size_full()
             .when_some(self.options.max_height, |this, h| this.max_h(h))
             .overflow_hidden()
             .when(items_count == 0, |this| {

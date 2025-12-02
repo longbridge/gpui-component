@@ -147,10 +147,6 @@ impl RowsCache {
         path
     }
 
-    pub(crate) fn measured_size(&self) -> MeasuredEntrySize {
-        self.measured_size
-    }
-
     pub(crate) fn prepare_if_needed<F>(
         &mut self,
         sections_count: usize,
@@ -207,7 +203,7 @@ impl RowsCache {
 mod tests {
     use std::rc::Rc;
 
-    use crate::{list::cache::RowsCache, IndexPath};
+    use crate::{IndexPath, list::cache::RowsCache};
 
     #[test]
     fn test_prev_next() {
