@@ -358,10 +358,13 @@ impl CodeBlock {
         &self,
         options: &NodeRenderOptions,
         node_cx: &NodeContext,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         let style = &node_cx.style;
+
+        let code = self.code();
+        let lang = self.lang.clone();
 
         div()
             .when(!options.is_last, |this| this.pb(style.paragraph_gap))
@@ -380,7 +383,16 @@ impl CodeBlock {
                         self.state.clone(),
                         vec![],
                         self.styles.clone(),
-                    )),
+                    ))
+                    // Render custom actions slot if provided
+                    .when_some(style.code_block_actions.as_ref(), |this, actions_fn| {
+                        this.child(div().absolute().top_1().right_1().child(actions_fn(
+                            code.clone(),
+                            lang.clone(),
+                            window,
+                            cx,
+                        )))
+                    }),
             )
             .into_any_element()
     }

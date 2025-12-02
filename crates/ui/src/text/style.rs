@@ -1,8 +1,22 @@
 use std::sync::Arc;
 
-use gpui::{px, rems, Pixels, Rems, StyleRefinement};
+use gpui::{
+    AnyElement, App, IntoElement, Pixels, Rems, SharedString, StyleRefinement, Window, px, rems,
+};
 
 use crate::highlighter::HighlightTheme;
+
+/// Function signature for rendering custom code block actions (e.g., copy button, run button).
+///
+/// Parameters:
+/// - `code`: The code content of the block
+/// - `lang`: Optional language identifier (e.g., "rust", "python")
+/// - `window`: Window context
+/// - `cx`: App context
+pub type CodeBlockActionsFn = dyn Fn(SharedString, Option<SharedString>, &mut Window, &mut App) -> AnyElement
+    + Send
+    + Sync
+    + 'static;
 
 /// TextViewStyle used to customize the style for [`TextView`].
 #[derive(Clone)]
@@ -20,6 +34,8 @@ pub struct TextViewStyle {
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
     pub code_block: StyleRefinement,
+    /// Optional slot for rendering actions on code blocks (copy, run, etc.)
+    pub code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     pub is_dark: bool,
 }
 
@@ -39,6 +55,7 @@ impl Default for TextViewStyle {
             heading_font_size: None,
             highlight_theme: HighlightTheme::default_light().clone(),
             code_block: StyleRefinement::default(),
+            code_block_actions: None,
             is_dark: false,
         }
     }
@@ -62,6 +79,24 @@ impl TextViewStyle {
     /// Set style for code blocks.
     pub fn code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
+        self
+    }
+
+    /// Set a custom renderer for code block actions (e.g., copy button, run button).
+    ///
+    /// The function receives the code content and optional language, and should return
+    /// an element to render in the top-right corner of the code block.
+    pub fn code_block_actions<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(SharedString, Option<SharedString>, &mut Window, &mut App) -> E
+            + Send
+            + Sync
+            + 'static,
+        E: IntoElement,
+    {
+        self.code_block_actions = Some(Arc::new(move |code, lang, window, cx| {
+            f(code, lang, window, cx).into_any_element()
+        }));
         self
     }
 }

@@ -1,10 +1,13 @@
-use gpui::*;
+use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _,
+    ActiveTheme as _, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    clipboard::Clipboard,
+    h_flex,
     highlighter::Language,
     input::{Input, InputEvent, InputState, TabSize},
     resizable::{h_resizable, resizable_panel},
-    text::TextView,
+    text::{TextView, TextViewStyle},
 };
 use gpui_component_assets::Assets;
 use gpui_component_story::Open;
@@ -103,6 +106,33 @@ impl Render for Example {
                                 window,
                                 cx,
                             )
+                            .style(TextViewStyle::default().code_block_actions(
+                                |code, lang, _window, _cx| {
+                                    h_flex()
+                                        .gap_1()
+                                        .child(Clipboard::new("copy").value(code.clone()))
+                                        .when_some(lang, |this, lang| {
+                                            // Only show run button for certain languages
+                                            if lang.as_ref() == "rust" || lang.as_ref() == "python"
+                                            {
+                                                this.child(
+                                                    Button::new("run")
+                                                        .icon(IconName::SquareTerminal)
+                                                        .ghost()
+                                                        .xsmall()
+                                                        .on_click(move |_, _, _cx| {
+                                                            println!(
+                                                                "Running {} code: {}",
+                                                                lang, code
+                                                            );
+                                                        }),
+                                                )
+                                            } else {
+                                                this
+                                            }
+                                        })
+                                },
+                            ))
                             .flex_none()
                             .p_5()
                             .scrollable(true)
