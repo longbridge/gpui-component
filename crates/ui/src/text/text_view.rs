@@ -131,6 +131,7 @@ struct UpdateFuture {
 }
 
 impl UpdateFuture {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         type_: TextViewType,
         style: TextViewStyle,
