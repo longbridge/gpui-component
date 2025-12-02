@@ -7,7 +7,7 @@ documentation = "https://docs.rs/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
 readme = "../../README.md"
-version = "0.5.0-preview0"
+version = "0.5.0-preview2"
 publish = true
 edition.workspace = true
 
