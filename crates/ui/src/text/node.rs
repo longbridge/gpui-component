@@ -385,7 +385,7 @@ impl CodeBlock {
                         self.styles.clone(),
                     ))
                     // Render custom actions slot if provided
-                    .when_some(style.code_block_actions.as_ref(), |this, actions_fn| {
+                    .when_some(node_cx.code_block_actions.clone(), |this, actions_fn| {
                         this.child(div().absolute().top_1().right_1().child(actions_fn(
                             code.clone(),
                             lang.clone(),
@@ -399,15 +399,24 @@ impl CodeBlock {
 }
 
 /// A context for rendering nodes, contains link references.
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone)]
 pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
+    /// Optional function to generate action items for code blocks.
+    pub(crate) code_block_actions: Option<Arc<super::text_view::CodeBlockActionsFn>>,
 }
 
 impl NodeContext {
     pub(super) fn add_ref(&mut self, identifier: SharedString, link: LinkMark) {
         self.link_refs.insert(identifier, link);
+    }
+}
+
+impl PartialEq for NodeContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.link_refs == other.link_refs && self.style == other.style
+        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
     }
 }
 
