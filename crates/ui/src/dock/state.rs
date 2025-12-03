@@ -1,4 +1,4 @@
-use gpui::{point, px, size, App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window};
+use gpui::{App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window, point, px, size};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -219,7 +219,7 @@ impl PanelState {
                     })
                     .collect_vec();
 
-                DockItem::tabs(items, Some(active_index), &dock_area, window, cx)
+                DockItem::tabs(items, &dock_area, window, cx).active_index(active_index)
             }
             PanelInfo::Panel(_) => {
                 let view = PanelRegistry::build_panel(
@@ -230,7 +230,7 @@ impl PanelState {
                     window,
                     cx,
                 );
-                DockItem::tabs(vec![view.into()], None, &dock_area, window, cx)
+                DockItem::tabs(vec![view.into()], &dock_area, window, cx)
             }
             PanelInfo::Tiles { metas } => DockItem::tiles(items, metas, &dock_area, window, cx),
         }

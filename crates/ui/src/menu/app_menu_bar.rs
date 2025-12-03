@@ -57,7 +57,7 @@ impl AppMenuBar {
         } else {
             selected_ix.saturating_sub(1)
         };
-        self.set_selected_ix(Some(new_ix), window, cx);
+        self.set_selected_index(Some(new_ix), window, cx);
     }
 
     fn on_move_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
@@ -70,14 +70,14 @@ impl AppMenuBar {
         } else {
             selected_ix + 1
         };
-        self.set_selected_ix(Some(new_ix), window, cx);
+        self.set_selected_index(Some(new_ix), window, cx);
     }
 
     fn on_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_selected_ix(None, window, cx);
+        self.set_selected_index(None, window, cx);
     }
 
-    fn set_selected_ix(&mut self, ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>) {
+    fn set_selected_index(&mut self, ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>) {
         self.selected_ix = ix;
         cx.notify();
     }
@@ -189,7 +189,7 @@ impl AppMenu {
 
         _ = self.menu_bar.update(cx, |state, cx| {
             let new_ix = if is_selected { None } else { Some(self.ix) };
-            state.set_selected_ix(new_ix, window, cx);
+            state.set_selected_index(new_ix, window, cx);
         });
     }
 
@@ -204,7 +204,7 @@ impl AppMenu {
         }
 
         _ = self.menu_bar.update(cx, |state, cx| {
-            state.set_selected_ix(Some(self.ix), window, cx);
+            state.set_selected_index(Some(self.ix), window, cx);
         });
     }
 }
