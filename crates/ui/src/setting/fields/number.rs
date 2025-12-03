@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Entity, IntoElement,
-    SharedString, StyleRefinement, Styled, Window,
+    AnyElement, App, AppContext as _, Entity, IntoElement, SharedString, StyleRefinement, Styled,
+    Window, prelude::FluentBuilder as _,
 };
 
 use crate::{
+    AxisExt, Sizable, StyledExt,
     input::{InputState, NumberInput, NumberInputEvent},
     setting::{
-        fields::{get_value, set_value, SettingFieldRender},
         AnySettingField, RenderOptions,
+        fields::{SettingFieldRender, get_value, set_value},
     },
-    AxisExt, Sizable, StyledExt,
 };
 
 #[derive(Clone, Debug)]
@@ -65,35 +65,43 @@ impl SettingFieldRender for NumberField {
         let num_options = self.options.clone();
 
         let state = window
-            .use_keyed_state("number-state", cx, |window, cx| {
-                let input =
-                    cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
-                let _subscription = cx.subscribe_in(&input, window, {
-                    move |_, input, event: &NumberInputEvent, window, cx| match event {
-                        NumberInputEvent::Step(action) => input.update(cx, |input, cx| {
-                            let value = input.value();
-                            if let Ok(value) = value.parse::<f64>() {
-                                let new_value = if *action == crate::input::StepAction::Increment {
-                                    (value + num_options.step).min(num_options.max)
-                                } else {
-                                    (value - num_options.step).max(num_options.min)
-                                };
-                                set_value(new_value, cx);
-                                input.set_value(
-                                    SharedString::from(new_value.to_string()),
-                                    window,
-                                    cx,
-                                );
-                            }
-                        }),
-                    }
-                });
+            .use_keyed_state(
+                SharedString::from(format!(
+                    "number-state-{}-{}-{}",
+                    options.page_ix, options.group_ix, options.item_ix
+                )),
+                cx,
+                |window, cx| {
+                    let input =
+                        cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
+                    let _subscription = cx.subscribe_in(&input, window, {
+                        move |_, input, event: &NumberInputEvent, window, cx| match event {
+                            NumberInputEvent::Step(action) => input.update(cx, |input, cx| {
+                                let value = input.value();
+                                if let Ok(value) = value.parse::<f64>() {
+                                    let new_value =
+                                        if *action == crate::input::StepAction::Increment {
+                                            (value + num_options.step).min(num_options.max)
+                                        } else {
+                                            (value - num_options.step).max(num_options.min)
+                                        };
+                                    set_value(new_value, cx);
+                                    input.set_value(
+                                        SharedString::from(new_value.to_string()),
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                        }
+                    });
 
-                State {
-                    input,
-                    _subscription,
-                }
-            })
+                    State {
+                        input,
+                        _subscription,
+                    }
+                },
+            )
             .read(cx);
 
         NumberInput::new(&state.input)
