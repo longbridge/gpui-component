@@ -16,7 +16,10 @@ use ropey::Rope;
 use crate::{
     ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, SyntaxHighlighter},
-    text::inline::{Inline, InlineState},
+    text::{
+        CodeBlockActionsFn,
+        inline::{Inline, InlineState},
+    },
     tooltip::Tooltip,
     v_flex,
 };
@@ -304,7 +307,7 @@ impl Paragraph {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CodeBlock {
+pub struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
     state: Arc<Mutex<InlineState>>,
@@ -317,6 +320,16 @@ impl PartialEq for CodeBlock {
 }
 
 impl CodeBlock {
+    /// Get the language of the code block.
+    pub fn lang(&self) -> Option<SharedString> {
+        self.lang.clone()
+    }
+
+    /// Get the code content of the code block.
+    pub fn code(&self) -> SharedString {
+        self.state.lock().unwrap().text.clone()
+    }
+
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
@@ -340,10 +353,6 @@ impl CodeBlock {
         }
     }
 
-    fn code(&self) -> SharedString {
-        self.state.lock().unwrap().text.clone()
-    }
-
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         let state = self.state.lock().unwrap();
@@ -358,7 +367,7 @@ impl CodeBlock {
         &self,
         options: &NodeRenderOptions,
         node_cx: &NodeContext,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         let style = &node_cx.style;
@@ -380,22 +389,41 @@ impl CodeBlock {
                         self.state.clone(),
                         vec![],
                         self.styles.clone(),
-                    )),
+                    ))
+                    .when_some(node_cx.code_block_actions.clone(), |this, actions| {
+                        this.child(
+                            div()
+                                .absolute()
+                                .top_2()
+                                .right_2()
+                                .bg(cx.theme().muted)
+                                .rounded(cx.theme().radius)
+                                .child(actions(&self, window, cx)),
+                        )
+                    }),
             )
             .into_any_element()
     }
 }
 
 /// A context for rendering nodes, contains link references.
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone)]
 pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
+    pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 impl NodeContext {
     pub(super) fn add_ref(&mut self, identifier: SharedString, link: LinkMark) {
         self.link_refs.insert(identifier, link);
+    }
+}
+
+impl PartialEq for NodeContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.link_refs == other.link_refs && self.style == other.style
+        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
     }
 }
 

@@ -15,6 +15,7 @@ use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
 use crate::scroll::ScrollableElement;
+use crate::text::node::CodeBlock;
 use crate::{ActiveTheme, StyledExt, v_flex};
 use crate::{
     global_state::GlobalState,
@@ -66,6 +67,10 @@ impl RenderOnce for TextViewElement {
     }
 }
 
+/// Type for code block actions generator function.
+pub(crate) type CodeBlockActionsFn =
+    dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
 /// A text view that can render Markdown or HTML.
 ///
 /// ## Goals
@@ -91,6 +96,7 @@ pub struct TextView {
     style: StyleRefinement,
     selectable: bool,
     scrollable: bool,
+    code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 #[derive(PartialEq)]
@@ -122,9 +128,11 @@ struct UpdateFuture {
     rx: Pin<Box<smol::channel::Receiver<Update>>>,
     tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
     delay: Duration,
+    code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 impl UpdateFuture {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         type_: TextViewType,
         style: TextViewStyle,
@@ -133,6 +141,7 @@ impl UpdateFuture {
         rx: smol::channel::Receiver<Update>,
         tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
         delay: Duration,
+        code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     ) -> Self {
         Self {
             type_,
@@ -143,6 +152,7 @@ impl UpdateFuture {
             rx: Box::pin(rx),
             tx_result,
             delay,
+            code_block_actions,
         }
     }
 }
@@ -182,6 +192,7 @@ impl Future for UpdateFuture {
                         &self.current_text,
                         self.current_style.clone(),
                         &self.highlight_theme,
+                        &self.code_block_actions.clone(),
                     );
                     _ = self.tx_result.try_send(res);
                     continue;
@@ -419,6 +430,7 @@ impl TextView {
             state,
             selectable: false,
             scrollable: false,
+            code_block_actions: None,
         }
     }
 
@@ -449,6 +461,7 @@ impl TextView {
             raw: html,
             selectable: false,
             scrollable: false,
+            code_block_actions: None,
         }
     }
 
@@ -510,6 +523,21 @@ impl TextView {
 
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text.trim().to_string()));
     }
+
+    /// Set custom block actions for code blocks.
+    ///
+    /// The closure receives the [`CodeBlock`],
+    /// and returns an element to display.
+    pub fn code_block_actions<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,
+        E: IntoElement,
+    {
+        self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
+            f(&code_block, window, cx).into_any_element()
+        }));
+        self
+    }
 }
 
 impl IntoElement for TextView {
@@ -548,10 +576,17 @@ impl Element for TextView {
         {
             let style = *style;
             let highlight_theme = highlight_theme.clone();
+            let code_block_actions = self.code_block_actions.clone();
             let (tx, rx) = smol::channel::unbounded::<Update>();
             let (tx_result, rx_result) =
                 smol::channel::unbounded::<Result<ParsedContent, SharedString>>();
-            let parsed_result = parse_content(type_, &text, style.clone(), &highlight_theme);
+            let parsed_result = parse_content(
+                type_,
+                &text,
+                style.clone(),
+                &highlight_theme,
+                &code_block_actions,
+            );
 
             self.state.update(cx, {
                 let tx = tx.clone();
@@ -591,6 +626,7 @@ impl Element for TextView {
                 rx,
                 tx_result,
                 Duration::from_millis(200),
+                code_block_actions,
             ))
             .detach();
 
@@ -744,9 +780,11 @@ fn parse_content(
     text: &str,
     style: TextViewStyle,
     highlight_theme: &HighlightTheme,
+    code_block_actions: &Option<Arc<CodeBlockActionsFn>>,
 ) -> Result<ParsedContent, SharedString> {
     let mut node_cx = NodeContext {
         style: style.clone(),
+        code_block_actions: code_block_actions.clone(),
         ..NodeContext::default()
     };
 
