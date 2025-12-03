@@ -150,13 +150,12 @@ impl SettingItem {
 
     pub(super) fn render_item(
         self,
-        ix: usize,
         options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
     ) -> Stateful<Div> {
         div()
-            .id(SharedString::from(format!("item-{}", ix)))
+            .id(SharedString::from(format!("item-{}", options.item_ix)))
             .w_full()
             .child(match self {
                 SettingItem::Item {

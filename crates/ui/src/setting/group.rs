@@ -1,13 +1,14 @@
 use gpui::{
-    prelude::FluentBuilder as _, App, IntoElement, ParentElement as _, SharedString,
-    StyleRefinement, Styled, Window,
+    App, IntoElement, ParentElement as _, SharedString, StyleRefinement, Styled, Window,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
+    ActiveTheme, StyledExt,
     group_box::{GroupBox, GroupBoxVariants},
     label::Label,
     setting::{RenderOptions, SettingItem},
-    v_flex, ActiveTheme, StyledExt,
+    v_flex,
 };
 
 /// A setting group that can contain multiple setting items.
@@ -75,14 +76,13 @@ impl SettingGroup {
 
     pub(crate) fn render(
         self,
-        group_ix: usize,
         query: &str,
         options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
         GroupBox::new()
-            .id(SharedString::from(format!("group-{}", group_ix)))
+            .id(SharedString::from(format!("group-{}", options.group_ix)))
             .with_variant(options.group_variant)
             .when_some(self.title.clone(), |this, title| {
                 this.title(v_flex().gap_1().child(title).when_some(
@@ -99,7 +99,14 @@ impl SettingGroup {
             .gap_4()
             .children(self.items.iter().enumerate().filter_map(|(item_ix, item)| {
                 if item.is_match(&query) {
-                    Some(item.clone().render_item(item_ix, options, window, cx))
+                    Some(item.clone().render_item(
+                        &RenderOptions {
+                            item_ix,
+                            ..*options
+                        },
+                        window,
+                        cx,
+                    ))
                 } else {
                     None
                 }

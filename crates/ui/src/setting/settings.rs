@@ -1,14 +1,14 @@
 use crate::{
+    IconName, Sizable, Size, StyledExt,
     group_box::GroupBoxVariant,
     input::{Input, InputState},
     resizable::{h_resizable, resizable_panel},
     setting::{SettingGroup, SettingPage},
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
-    IconName, Sizable, Size, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, Axis, ElementId, Entity,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, StyleRefinement, Styled, Window,
+    App, AppContext as _, Axis, ElementId, Entity, IntoElement, ParentElement as _, Pixels,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use rust_i18n::t;
 
@@ -221,6 +221,9 @@ pub(super) struct SettingsState {
 /// Options for rendering setting item.
 #[derive(Clone, Copy)]
 pub struct RenderOptions {
+    pub page_ix: usize,
+    pub group_ix: usize,
+    pub item_ix: usize,
     pub size: Size,
     pub group_variant: GroupBoxVariant,
     pub layout: Axis,
@@ -251,6 +254,9 @@ impl RenderOnce for Settings {
         let query = state.read(cx).search_input.read(cx).value();
         let filtered_pages = self.filtered_pages(&query);
         let options = RenderOptions {
+            page_ix: 0,
+            group_ix: 0,
+            item_ix: 0,
             size: self.size,
             group_variant: self.group_variant,
             layout: Axis::Horizontal,
