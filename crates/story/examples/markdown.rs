@@ -106,7 +106,10 @@ impl Render for Example {
                                 window,
                                 cx,
                             )
-                            .code_block_actions(|code, lang, _window, _cx| {
+                            .code_block_actions(|code_block, _window, _cx| {
+                                let code = code_block.code();
+                                let lang = code_block.lang();
+
                                 h_flex()
                                     .gap_1()
                                     .child(Clipboard::new("copy").value(code.clone()))

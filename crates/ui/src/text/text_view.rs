@@ -15,6 +15,7 @@ use smol::stream::StreamExt;
 
 use crate::highlighter::HighlightTheme;
 use crate::scroll::ScrollableElement;
+use crate::text::node::CodeBlock;
 use crate::{ActiveTheme, StyledExt, v_flex};
 use crate::{
     global_state::GlobalState,
@@ -68,7 +69,7 @@ impl RenderOnce for TextViewElement {
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
-    dyn Fn(SharedString, Option<SharedString>, &mut Window, &mut App) -> AnyElement + Send + Sync;
+    dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
 
 /// A text view that can render Markdown or HTML.
 ///
@@ -525,18 +526,15 @@ impl TextView {
 
     /// Set custom block actions for code blocks.
     ///
-    /// The closure receives the code content and optional language,
+    /// The closure receives the [`CodeBlock`],
     /// and returns an element to display.
     pub fn code_block_actions<F, E>(mut self, f: F) -> Self
     where
-        F: Fn(SharedString, Option<SharedString>, &mut Window, &mut App) -> E
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,
         E: IntoElement,
     {
-        self.code_block_actions = Some(Arc::new(move |code, lang, window, cx| {
-            f(code, lang, window, cx).into_any_element()
+        self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
+            f(&code_block, window, cx).into_any_element()
         }));
         self
     }

@@ -16,7 +16,10 @@ use ropey::Rope;
 use crate::{
     ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, SyntaxHighlighter},
-    text::inline::{Inline, InlineState},
+    text::{
+        CodeBlockActionsFn,
+        inline::{Inline, InlineState},
+    },
     tooltip::Tooltip,
     v_flex,
 };
@@ -304,7 +307,7 @@ impl Paragraph {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CodeBlock {
+pub struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
     state: Arc<Mutex<InlineState>>,
@@ -317,6 +320,16 @@ impl PartialEq for CodeBlock {
 }
 
 impl CodeBlock {
+    /// Get the language of the code block.
+    pub fn lang(&self) -> Option<SharedString> {
+        self.lang.clone()
+    }
+
+    /// Get the code content of the code block.
+    pub fn code(&self) -> SharedString {
+        self.state.lock().unwrap().text.clone()
+    }
+
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
@@ -340,10 +353,6 @@ impl CodeBlock {
         }
     }
 
-    fn code(&self) -> SharedString {
-        self.state.lock().unwrap().text.clone()
-    }
-
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         let state = self.state.lock().unwrap();
@@ -363,9 +372,6 @@ impl CodeBlock {
     ) -> AnyElement {
         let style = &node_cx.style;
 
-        let code = self.code();
-        let lang = self.lang.clone();
-
         div()
             .when(!options.is_last, |this| this.pb(style.paragraph_gap))
             .child(
@@ -384,14 +390,16 @@ impl CodeBlock {
                         vec![],
                         self.styles.clone(),
                     ))
-                    // Render custom actions slot if provided
-                    .when_some(node_cx.code_block_actions.clone(), |this, actions_fn| {
-                        this.child(div().absolute().top_1().right_1().child(actions_fn(
-                            code.clone(),
-                            lang.clone(),
-                            window,
-                            cx,
-                        )))
+                    .when_some(node_cx.code_block_actions.clone(), |this, actions| {
+                        this.child(
+                            div()
+                                .absolute()
+                                .top_2()
+                                .right_2()
+                                .bg(cx.theme().muted)
+                                .rounded(cx.theme().radius)
+                                .child(actions(&self, window, cx)),
+                        )
                     }),
             )
             .into_any_element()
@@ -403,8 +411,7 @@ impl CodeBlock {
 pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
-    /// Optional function to generate action items for code blocks.
-    pub(crate) code_block_actions: Option<Arc<super::text_view::CodeBlockActionsFn>>,
+    pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 impl NodeContext {
