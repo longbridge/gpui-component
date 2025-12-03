@@ -615,6 +615,7 @@ impl TabPanel {
         let left_dock_button = self.render_dock_toggle_button(DockPlacement::Left, window, cx);
         let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
         let right_dock_button = self.render_dock_toggle_button(DockPlacement::Right, window, cx);
+        let has_extend_dock_button = left_dock_button.is_some() || bottom_dock_button.is_some();
 
         let is_bottom_dock = bottom_dock_button.is_some();
 
@@ -642,19 +643,16 @@ impl TabPanel {
                 .when_some(title_style, |this, theme| {
                     this.bg(theme.background).text_color(theme.foreground)
                 })
-                .when(
-                    left_dock_button.is_some() || bottom_dock_button.is_some(),
-                    |this| {
-                        this.child(
-                            h_flex()
-                                .flex_shrink_0()
-                                .mr_1()
-                                .gap_1()
-                                .children(left_dock_button)
-                                .children(bottom_dock_button),
-                        )
-                    },
-                )
+                .when(has_extend_dock_button, |this| {
+                    this.child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .mr_1()
+                            .gap_1()
+                            .children(left_dock_button)
+                            .children(bottom_dock_button),
+                    )
+                })
                 .child(
                     div()
                         .id("tab")
@@ -694,26 +692,23 @@ impl TabPanel {
         TabBar::new("tab-bar")
             .tab_item_top_offset(-px(1.))
             .track_scroll(&self.tab_bar_scroll_handle)
-            .when(
-                left_dock_button.is_some() || bottom_dock_button.is_some(),
-                |this| {
-                    this.prefix(
-                        h_flex()
-                            .items_center()
-                            .top_0()
-                            // Right -1 for avoid border overlap with the first tab
-                            .right(-px(1.))
-                            .border_r_1()
-                            .border_b_1()
-                            .h_full()
-                            .border_color(cx.theme().border)
-                            .bg(cx.theme().tab_bar)
-                            .px_2()
-                            .children(left_dock_button)
-                            .children(bottom_dock_button),
-                    )
-                },
-            )
+            .when(has_extend_dock_button, |this| {
+                this.prefix(
+                    h_flex()
+                        .items_center()
+                        .top_0()
+                        // Right -1 for avoid border overlap with the first tab
+                        .right(-px(1.))
+                        .border_r_1()
+                        .border_b_1()
+                        .h_full()
+                        .border_color(cx.theme().border)
+                        .bg(cx.theme().tab_bar)
+                        .px_2()
+                        .children(left_dock_button)
+                        .children(bottom_dock_button),
+                )
+            })
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
                 let droppable = self.collapsed;
@@ -729,6 +724,10 @@ impl TabPanel {
 
                 Some(
                     Tab::default()
+                        .when(!has_extend_dock_button && ix == 0, |this| {
+                            // Right 1px for avoid border overlap with the first tab
+                            this.right(px(1.))
+                        })
                         .map(|this| {
                             if let Some(tab_name) = panel.tab_name(cx) {
                                 this.child(tab_name)
