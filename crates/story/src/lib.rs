@@ -13,6 +13,7 @@ mod color_picker_story;
 mod date_picker_story;
 mod description_list_story;
 mod dialog_story;
+mod divider_story;
 mod dropdown_button_story;
 mod form_story;
 mod group_box_story;
@@ -73,6 +74,7 @@ pub use color_picker_story::ColorPickerStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
 pub use dialog_story::DialogStory;
+pub use divider_story::DividerStory;
 pub use dropdown_button_story::DropdownButtonStory;
 pub use form_story::FormStory;
 pub use group_box_story::GroupBoxStory;
@@ -667,6 +669,7 @@ impl StoryState {
             "InputStory" => story!(InputStory),
             "ListStory" => story!(ListStory),
             "DialogStory" => story!(DialogStory),
+            "DividerStory" => story!(DividerStory),
             "PopoverStory" => story!(PopoverStory),
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
