@@ -156,7 +156,7 @@ impl DockItem {
     }
 
     /// Set active index for the DockItem, only valid for [`DockItem::Tabs`].
-    pub fn active_ix(mut self, new_active_ix: usize) -> Self {
+    pub fn active_index(mut self, new_active_ix: usize) -> Self {
         debug_assert!(
             matches!(self, Self::Tabs { .. }),
             "active_ix can only be set for DockItem::Tabs"
