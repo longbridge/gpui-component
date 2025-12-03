@@ -727,6 +727,16 @@ pub(super) struct PrepaintState {
     bounds: Bounds<Pixels>,
 }
 
+impl PrepaintState {
+    /// Returns cursor bounds adjusted for scroll offset, if available.
+    fn cursor_bounds_with_scroll(&self) -> Option<Bounds<Pixels>> {
+        self.cursor_bounds.map(|mut bounds| {
+            bounds.origin.y += self.cursor_scroll_offset.y;
+            bounds
+        })
+    }
+}
+
 impl IntoElement for TextElement {
     type Element = Self;
 
@@ -1258,8 +1268,7 @@ impl Element for TextElement {
 
         // Paint blinking cursor
         if focused && show_cursor {
-            if let Some(mut cursor_bounds) = prepaint.cursor_bounds.take() {
-                cursor_bounds.origin.y += prepaint.cursor_scroll_offset.y;
+            if let Some(cursor_bounds) = prepaint.cursor_bounds_with_scroll() {
                 window.paint_quad(fill(cursor_bounds, cx.theme().caret));
             }
         }
@@ -1321,6 +1330,61 @@ impl Element for TextElement {
 
         if let Some(hitbox) = prepaint.hover_definition_hitbox.as_ref() {
             window.set_cursor_style(gpui::CursorStyle::PointingHand, &hitbox);
+        }
+
+        // Paint inline completion last so it renders on top
+        if focused {
+            let Some(completion_text) = self.state.read(cx).inline_completion_text.as_ref() else {
+                return;
+            };
+            let Some(cursor_bounds) = prepaint.cursor_bounds_with_scroll() else {
+                return;
+            };
+
+            let style = window.text_style();
+            let font_size = style.font_size.to_pixels(window.rem_size());
+            let completion_color = cx.theme().muted_foreground.opacity(0.5);
+            let line_height = prepaint.last_layout.line_height;
+
+            let text_run = TextRun {
+                len: completion_text.len(),
+                font: style.font(),
+                color: completion_color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+
+            let Ok(shaped_lines) = window.text_system().shape_text(
+                completion_text.clone(),
+                font_size,
+                &[text_run],
+                None,
+                None,
+            ) else {
+                return;
+            };
+
+            // First line starts after cursor, subsequent lines at text origin
+            let first_line_x = cursor_bounds.origin.x + cursor_bounds.size.width;
+            let continuation_x = origin.x + prepaint.last_layout.line_number_width;
+
+            let mut offset_y = px(0.);
+            for (i, line) in shaped_lines.iter().enumerate() {
+                let x = if i == 0 { first_line_x } else { continuation_x };
+                let p = point(x, cursor_bounds.origin.y + offset_y);
+
+                // Paint background to ensure readability over existing content
+                let line_size = line.size(line_height);
+                window.paint_quad(fill(
+                    Bounds::new(p, line_size),
+                    cx.theme().editor_background().opacity(0.8),
+                ));
+
+                line.paint(p, line_height, gpui::TextAlign::Left, None, window, cx)
+                    .ok();
+                offset_y += line_height;
+            }
         }
 
         self.paint_mouse_listeners(window, cx);

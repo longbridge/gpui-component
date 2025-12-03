@@ -1,13 +1,16 @@
 use anyhow::Result;
-use gpui::{Context, EntityInputHandler, Task, Window};
-use lsp_types::{request::Completion, CompletionContext, CompletionItem, CompletionResponse};
+use gpui::{Context, EntityInputHandler, SharedString, Task, Window};
+use lsp_types::{CompletionContext, CompletionItem, CompletionResponse, request::Completion};
 use ropey::Rope;
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use crate::input::{
-    popovers::{CompletionMenu, ContextMenu},
     InputState,
+    popovers::{CompletionMenu, ContextMenu},
 };
+
+/// Default debounce duration for inline completions.
+const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
 
 /// A trait for providing code completions based on the current input state and context.
 pub trait CompletionProvider {
@@ -26,6 +29,35 @@ pub trait CompletionProvider {
         window: &mut Window,
         cx: &mut Context<InputState>,
     ) -> Task<Result<CompletionResponse>>;
+
+    /// Fetches an inline completion suggestion for the given position.
+    ///
+    /// This is called after a debounce period when the user stops typing.
+    /// The provider can analyze the text and cursor position to determine
+    /// what inline completion suggestion to show.
+    ///
+    /// Returns `Ok(Some(text))` to show a suggestion, or `Ok(None)` for no suggestion.
+    /// Default implementation returns `None`.
+    ///
+    /// # Arguments
+    /// * `text` - The current text content
+    /// * `offset` - The cursor position in bytes
+    fn inline_completion(
+        &self,
+        _text: &Rope,
+        _offset: usize,
+        _window: &mut Window,
+        _cx: &mut Context<InputState>,
+    ) -> Task<Result<Option<SharedString>>> {
+        Task::ready(Ok(None))
+    }
+
+    /// Returns the debounce duration for inline completions.
+    ///
+    /// Default: 300ms
+    fn inline_completion_debounce(&self) -> Duration {
+        DEFAULT_INLINE_COMPLETION_DEBOUNCE
+    }
 
     fn resolve_completions(
         &self,
@@ -62,6 +94,10 @@ impl InputState {
         let Some(provider) = self.lsp.completion_provider.clone() else {
             return;
         };
+
+        // Always schedule inline completion (debounced).
+        // It will check if menu is open before showing the suggestion.
+        self.schedule_inline_completion(window, cx);
 
         let start = range.end;
         let new_offset = self.cursor();
@@ -144,5 +180,108 @@ impl InputState {
 
             Ok(())
         });
+    }
+
+    /// Schedule an inline completion request after debouncing.
+    pub(crate) fn schedule_inline_completion(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Clear any existing inline completion on text change
+        self.clear_inline_completion(cx);
+
+        let Some(provider) = self.lsp.completion_provider.clone() else {
+            return;
+        };
+
+        // Cancel any pending inline completion task
+        self.inline_completion_task = Task::ready(Ok(()));
+
+        let offset = self.cursor();
+        let text = self.text.clone();
+        let debounce = provider.inline_completion_debounce();
+
+        self.inline_completion_task = cx.spawn_in(window, async move |editor, cx| {
+            // Debounce: wait before fetching to avoid unnecessary requests while typing
+            smol::Timer::after(debounce).await;
+
+            // Now fetch the inline completion after the debounce period
+            let task = editor.update_in(cx, |editor, window, cx| {
+                // Check if cursor has moved during debounce
+                if editor.cursor() != offset {
+                    return None;
+                }
+
+                // Don't fetch if completion menu is open
+                if editor.is_context_menu_open(cx) {
+                    return None;
+                }
+
+                Some(provider.inline_completion(&text, offset, window, cx))
+            })?;
+
+            let Some(task) = task else {
+                return Ok(());
+            };
+
+            let response = task.await?;
+
+            editor.update_in(cx, |editor, _window, cx| {
+                // Only apply if cursor still hasn't moved
+                if editor.cursor() != offset {
+                    return;
+                }
+
+                // Don't show if completion menu opened while we were fetching
+                if editor.is_context_menu_open(cx) {
+                    return;
+                }
+
+                if let Some(text) = response {
+                    editor.inline_completion_text = Some(text);
+                    cx.notify();
+                }
+            })?;
+
+            Ok(())
+        });
+    }
+
+    /// Check if an inline completion suggestion is currently displayed.
+    pub fn has_inline_completion(&self) -> bool {
+        self.inline_completion_text.is_some()
+    }
+
+    /// Set inline completion text to display as a suggestion.
+    pub fn set_inline_completion(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.inline_completion_text = Some(text.into());
+        cx.notify();
+    }
+
+    /// Clear the inline completion suggestion.
+    pub fn clear_inline_completion(&mut self, cx: &mut Context<Self>) {
+        if self.inline_completion_text.is_some() {
+            self.inline_completion_text = None;
+            cx.notify();
+        }
+    }
+
+    /// Accept the inline completion, inserting it at the cursor position.
+    /// Returns true if a completion was accepted, false if there was none.
+    pub fn accept_inline_completion(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if let Some(completion_text) = self.inline_completion_text.take() {
+            let cursor = self.cursor();
+            let range_utf16 = self.range_to_utf16(&(cursor..cursor));
+            self.replace_text_in_range_silent(Some(range_utf16), &completion_text, window, cx);
+            cx.notify();
+            true
+        } else {
+            false
+        }
     }
 }

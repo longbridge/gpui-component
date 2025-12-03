@@ -187,6 +187,35 @@ impl CompletionProvider for ExampleLspStore {
         })
     }
 
+    fn inline_completion(
+        &self,
+        text: &Rope,
+        offset: usize,
+        _window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<Option<SharedString>>> {
+        let text_string = text.to_string();
+
+        cx.background_spawn(async move {
+            // Get the current line text before cursor
+            let line_start = text_string[..offset]
+                .rfind('\n')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let current_line = &text_string[line_start..offset];
+
+            // Simple pattern matching for demo
+            let suggestion =
+                if current_line.trim_start().starts_with("fn ") && !current_line.contains('{') {
+                    Some("() {\n    \n}".into())
+                } else {
+                    None
+                };
+
+            Ok(suggestion)
+        })
+    }
+
     fn is_completion_trigger(
         &self,
         _offset: usize,

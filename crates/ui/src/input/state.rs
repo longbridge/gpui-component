@@ -331,6 +331,10 @@ pub struct InputState {
     _subscriptions: Vec<Subscription>,
 
     pub(super) _context_menu_task: Task<Result<()>>,
+    /// Text to display as an inline completion suggestion (ghost text)
+    pub(super) inline_completion_text: Option<SharedString>,
+    /// Task for debouncing inline completion requests
+    pub(super) inline_completion_task: Task<Result<()>>,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -409,6 +413,8 @@ impl InputState {
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
+            inline_completion_text: None,
+            inline_completion_task: Task::ready(Ok(())),
         }
     }
 
@@ -1171,6 +1177,12 @@ impl InputState {
             return;
         }
 
+        // Clear inline completion on escape
+        if self.inline_completion_text.is_some() {
+            self.clear_inline_completion(cx);
+            return; // Consume the escape, don't propagate
+        }
+
         if self.ime_marked_range.is_some() {
             self.unmark_text(window, cx);
         }
@@ -1188,6 +1200,9 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Clear inline completion on any mouse interaction
+        self.clear_inline_completion(cx);
+
         // If there have IME marked range and is empty (Means pressed Esc to abort IME typing)
         // Clear the marked range.
         if let Some(ime_marked_range) = &self.ime_marked_range {
@@ -1592,6 +1607,8 @@ impl InputState {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     pub(crate) fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.clear_inline_completion(cx);
+
         let offset = offset.clamp(0, self.text.len());
         if self.selection_reversed {
             self.selected_range.start = offset
@@ -1693,6 +1710,8 @@ impl InputState {
         self.hover_popover = None;
         self.diagnostic_popover = None;
         self.context_menu = None;
+        self.inline_completion_text = None;
+        self.inline_completion_task = Task::ready(Ok(()));
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
