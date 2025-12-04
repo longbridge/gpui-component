@@ -1,14 +1,14 @@
 use std::{ops::Deref, rc::Rc};
 
 use wry::{
-    dpi::{self, LogicalSize},
     Rect,
+    dpi::{self, LogicalSize},
 };
 
 use gpui::{
-    canvas, div, App, Bounds, ContentMask, DismissEvent, Element, ElementId, Entity, EventEmitter,
-    FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId,
-    MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window,
+    App, Bounds, ContentMask, DismissEvent, Element, ElementId, Entity, EventEmitter, FocusHandle,
+    Focusable, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId, MouseDownEvent,
+    ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window, canvas, div,
 };
 
 use crate::PixelsExt;
@@ -73,6 +73,11 @@ impl WebView {
     /// Load a URL in the webview.
     pub fn load_url(&mut self, url: &str) {
         self.webview.load_url(url).unwrap();
+    }
+
+    /// Get the raw wry webview.
+    pub fn raw(&self) -> &wry::WebView {
+        &self.webview
     }
 }
 
