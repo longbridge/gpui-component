@@ -56,7 +56,7 @@ collapsed: false
 ### Advanced Components
 
 - [Calendar](calendar) - Calendar display and navigation
-- [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
+- [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie, Candlestick)
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.
 - [Settings](settings) - Settings UI
