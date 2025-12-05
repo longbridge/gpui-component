@@ -219,9 +219,6 @@ impl InputState {
             return;
         };
 
-        // Cancel any pending inline completion task
-        self.inline_completion.task = Task::ready(Ok(InlineCompletionResponse::Array(vec![])));
-
         let offset = self.cursor();
         let text = self.text.clone();
         let debounce = provider.inline_completion_debounce();
