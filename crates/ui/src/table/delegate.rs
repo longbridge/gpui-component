@@ -35,6 +35,15 @@ pub trait TableDelegate: Sized + 'static {
     ) {
     }
 
+    /// Render the table head row.
+    fn render_header(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> Stateful<Div> {
+        div().id("header")
+    }
+
     /// Render the header cell at the given column index, default to the column name.
     fn render_th(
         &mut self,
@@ -48,13 +57,15 @@ pub trait TableDelegate: Sized + 'static {
     }
 
     /// Render the row at the given row and column.
+    ///
+    /// Not include the table head row.
     fn render_tr(
         &mut self,
         row_ix: usize,
         window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
-        h_flex().id(("row", row_ix))
+        div().id(("row", row_ix))
     }
 
     /// Render the context menu for the row at the given row index.
