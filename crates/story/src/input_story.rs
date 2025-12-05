@@ -1,10 +1,12 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, InteractiveElement, IntoElement, ParentElement as _,
-    Render, Styled, Subscription, Window, div,
+    App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window, div,
 };
 
 use crate::section;
 use gpui_component::{button::*, input::*, *};
+
+const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
 
 pub fn init(_: &mut App) {}
 
@@ -93,7 +95,7 @@ impl InputStory {
             InputState::new(window, cx)
                 .code_editor("json")
                 .multi_line(false)
-                .default_value(r#"{"single_line":"code editor"}"#)
+                .default_value(CODE_EXAMPLE)
         });
 
         let _subscriptions = vec![
@@ -150,6 +152,12 @@ impl InputStory {
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),
         };
+    }
+
+    fn on_click_reset(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.code_input.update(cx, |input_state, cx| {
+            input_state.set_value(CODE_EXAMPLE, window, cx);
+        });
     }
 }
 
@@ -262,9 +270,15 @@ impl Render for InputStory {
                 ),
             )
             .child(
-                section("Single line code editor")
-                    .max_w_md()
-                    .child(Input::new(&self.code_input)),
+                section("Single line code editor").max_w_md().child(
+                    Input::new(&self.code_input).suffix(
+                        Button::new("code-reset")
+                            .ghost()
+                            .label("Reset")
+                            .xsmall()
+                            .on_click(cx.listener(Self::on_click_reset)),
+                    ),
+                ),
             )
     }
 }
