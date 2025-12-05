@@ -588,7 +588,12 @@ impl RenderOnce for Button {
                     })
                     .children(self.children)
                     .when(self.dropdown_caret, |this| {
-                        this.child(Icon::new(IconName::ChevronDown).with_size(icon_size))
+                        this.child(Icon::new(IconName::ChevronDown).xsmall().text_color(
+                            match self.disabled {
+                                true => cx.theme().muted_foreground.opacity(0.5),
+                                false => cx.theme().muted_foreground,
+                            },
+                        ))
                     })
             })
             .when(self.loading && !self.disabled, |this| {
