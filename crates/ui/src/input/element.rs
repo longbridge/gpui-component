@@ -1334,7 +1334,7 @@ impl Element for TextElement {
 
         // Paint inline completion last so it renders on top
         if focused {
-            let Some(completion_text) = self.state.read(cx).inline_completion_text.as_ref() else {
+            let Some(completion_item) = self.state.read(cx).inline_completion.item.as_ref() else {
                 return;
             };
             let Some(cursor_bounds) = prepaint.cursor_bounds_with_scroll() else {
@@ -1346,6 +1346,7 @@ impl Element for TextElement {
             let completion_color = cx.theme().muted_foreground.opacity(0.5);
             let line_height = prepaint.last_layout.line_height;
 
+            let completion_text: SharedString = completion_item.insert_text.clone().into();
             let text_run = TextRun {
                 len: completion_text.len(),
                 font: style.font(),

@@ -31,7 +31,7 @@ use crate::input::{
     search::{self, SearchPanel},
     text_wrapper::LineLayout,
 };
-use crate::input::{RopeExt as _, Selection};
+use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 
@@ -331,10 +331,7 @@ pub struct InputState {
     _subscriptions: Vec<Subscription>,
 
     pub(super) _context_menu_task: Task<Result<()>>,
-    /// Text to display as an inline completion suggestion (ghost text)
-    pub(super) inline_completion_text: Option<SharedString>,
-    /// Task for debouncing inline completion requests
-    pub(super) inline_completion_task: Task<Result<()>>,
+    pub(super) inline_completion: InlineCompletion,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -413,8 +410,7 @@ impl InputState {
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
-            inline_completion_text: None,
-            inline_completion_task: Task::ready(Ok(())),
+            inline_completion: InlineCompletion::default(),
         }
     }
 
@@ -1182,7 +1178,7 @@ impl InputState {
         }
 
         // Clear inline completion on escape
-        if self.inline_completion_text.is_some() {
+        if self.has_inline_completion() {
             self.clear_inline_completion(cx);
             return; // Consume the escape, don't propagate
         }
@@ -1714,8 +1710,7 @@ impl InputState {
         self.hover_popover = None;
         self.diagnostic_popover = None;
         self.context_menu = None;
-        self.inline_completion_text = None;
-        self.inline_completion_task = Task::ready(Ok(()));
+        self.clear_inline_completion(cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });

@@ -1,8 +1,9 @@
 use anyhow::Result;
-use gpui::{Context, EntityInputHandler, SharedString, Task, Window};
+use gpui::{Context, EntityInputHandler, Task, Window};
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
-    InlineCompletionResponse, InlineCompletionTriggerKind, request::Completion,
+    InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind,
+    request::Completion,
 };
 use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
@@ -84,6 +85,22 @@ pub trait CompletionProvider {
         new_text: &str,
         cx: &mut Context<InputState>,
     ) -> bool;
+}
+
+pub struct InlineCompletion {
+    /// Completion item to display as an inline completion suggestion
+    pub item: Option<InlineCompletionItem>,
+    /// Task for debouncing inline completion requests
+    pub task: Task<Result<InlineCompletionResponse>>,
+}
+
+impl Default for InlineCompletion {
+    fn default() -> Self {
+        Self {
+            item: None,
+            task: Task::ready(Ok(InlineCompletionResponse::Array(vec![]))),
+        }
+    }
 }
 
 impl InputState {
@@ -203,13 +220,13 @@ impl InputState {
         };
 
         // Cancel any pending inline completion task
-        self.inline_completion_task = Task::ready(Ok(()));
+        self.inline_completion.task = Task::ready(Ok(InlineCompletionResponse::Array(vec![])));
 
         let offset = self.cursor();
         let text = self.text.clone();
         let debounce = provider.inline_completion_debounce();
 
-        self.inline_completion_task = cx.spawn_in(window, async move |editor, cx| {
+        self.inline_completion.task = cx.spawn_in(window, async move |editor, cx| {
             // Debounce: wait before fetching to avoid unnecessary requests while typing
             smol::Timer::after(debounce).await;
 
@@ -234,7 +251,7 @@ impl InputState {
             })?;
 
             let Some(task) = task else {
-                return Ok(());
+                return Ok(InlineCompletionResponse::Array(vec![]));
             };
 
             let response = task.await?;
@@ -250,39 +267,28 @@ impl InputState {
                     return;
                 }
 
-                if let Some(insert_text) = match response {
-                    InlineCompletionResponse::Array(items) => {
-                        items.into_iter().map(|i| i.insert_text).next()
-                    }
-                    InlineCompletionResponse::List(comp_list) => {
-                        comp_list.items.into_iter().map(|i| i.insert_text).next()
-                    }
+                if let Some(item) = match response.clone() {
+                    InlineCompletionResponse::Array(items) => items.into_iter().next(),
+                    InlineCompletionResponse::List(comp_list) => comp_list.items.into_iter().next(),
                 } {
-                    let inline_completion_text: SharedString = insert_text.into();
-                    editor.inline_completion_text = Some(inline_completion_text);
+                    editor.inline_completion.item = Some(item);
                     cx.notify();
                 }
             })?;
 
-            Ok(())
+            Ok(response)
         });
     }
 
     /// Check if an inline completion suggestion is currently displayed.
     pub fn has_inline_completion(&self) -> bool {
-        self.inline_completion_text.is_some()
-    }
-
-    /// Set inline completion text to display as a suggestion.
-    pub fn set_inline_completion(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.inline_completion_text = Some(text.into());
-        cx.notify();
+        self.inline_completion.item.is_some()
     }
 
     /// Clear the inline completion suggestion.
     pub fn clear_inline_completion(&mut self, cx: &mut Context<Self>) {
-        if self.inline_completion_text.is_some() {
-            self.inline_completion_text = None;
+        if self.inline_completion.item.is_some() {
+            self.inline_completion = InlineCompletion::default();
             cx.notify();
         }
     }
@@ -294,9 +300,10 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        if let Some(completion_text) = self.inline_completion_text.take() {
+        if let Some(completion_item) = self.inline_completion.item.take() {
             let cursor = self.cursor();
             let range_utf16 = self.range_to_utf16(&(cursor..cursor));
+            let completion_text = completion_item.insert_text;
             self.replace_text_in_range_silent(Some(range_utf16), &completion_text, window, cx);
             cx.notify();
             true
