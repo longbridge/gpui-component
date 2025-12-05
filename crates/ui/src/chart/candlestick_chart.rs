@@ -1,15 +1,14 @@
 use std::rc::Rc;
 
-use gpui::{px, App, Bounds, Hsla, Pixels, SharedString, TextAlign, Window, fill, PathBuilder};
+use gpui::{App, Bounds, Hsla, PathBuilder, Pixels, SharedString, TextAlign, Window, fill, px};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
     ActiveTheme, PixelsExt,
     plot::{
-        AXIS_GAP, AxisText, Grid, Plot, PlotAxis,
+        AXIS_GAP, AxisText, Grid, Plot, PlotAxis, origin_point,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
-        origin_point,
     },
 };
 
@@ -107,28 +106,17 @@ where
         let height = bounds.size.height.as_f32() - AXIS_GAP;
 
         // X scale
-        let x = ScaleBand::new(
-            self.data.iter().map(|v| x_fn(v)).collect(),
-            vec![0., width],
-        )
-        .padding_inner(0.4)
-        .padding_outer(0.2);
+        let x = ScaleBand::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width])
+            .padding_inner(0.4)
+            .padding_outer(0.2);
         let band_width = x.band_width();
 
-        // Y scale - use high and low values
+        // Y scale
         let all_values: Vec<Y> = self
             .data
             .iter()
-            .flat_map(|d| {
-                vec![
-                    high_fn(d),
-                    low_fn(d),
-                    open_fn(d),
-                    close_fn(d),
-                ]
-            })
+            .flat_map(|d| vec![high_fn(d), low_fn(d), open_fn(d), close_fn(d)])
             .collect();
-
         let y = ScaleLinear::new(all_values, vec![height, 10.]);
 
         // Draw X axis
@@ -167,8 +155,6 @@ where
         let high_fn = high_fn.clone();
         let low_fn = low_fn.clone();
         let close_fn = close_fn.clone();
-        let bullish_color = cx.theme().bullish;
-        let bearish_color = cx.theme().bearish;
 
         for d in &self.data {
             let x_tick = x.tick(&x_fn(d));
@@ -176,11 +162,13 @@ where
                 continue;
             };
 
+            // Get OHLC values for the current data point
             let open = open_fn(d);
             let high = high_fn(d);
             let low = low_fn(d);
             let close = close_fn(d);
 
+            // Convert values to pixel coordinates
             let open_y = y.tick(&open);
             let high_y = y.tick(&high);
             let low_y = y.tick(&low);
@@ -192,9 +180,15 @@ where
                 continue;
             };
 
+            // Determine if bullish (close > open) or bearish (close < open)
             let is_bullish = close > open;
-            let color: Hsla = if is_bullish { bullish_color } else { bearish_color };
+            let color: Hsla = if is_bullish {
+                cx.theme().bullish
+            } else {
+                cx.theme().bearish
+            };
 
+            // Calculate candlestick body dimensions
             let center_x = x_tick + band_width / 2.;
             let body_width = band_width * self.body_width_ratio;
             let body_left = center_x - body_width / 2.;
@@ -210,6 +204,8 @@ where
             }
 
             // Draw body (open to close rectangle)
+            // For bullish: top is close, bottom is open
+            // For bearish: top is open, bottom is close
             let (top, bottom) = if is_bullish {
                 (close_y, open_y)
             } else {
