@@ -612,15 +612,19 @@ impl InputState {
         self.replace_text(value, window, cx);
         self.disabled = was_disabled;
         self.history.ignore = false;
+
         // Ensure cursor to start when set text
         if self.mode.is_single_line() {
             self.selected_range = (self.text.len()..self.text.len()).into();
         } else {
             self.selected_range.clear();
+        }
 
+        if self.mode.is_code_editor() {
             self._pending_update = true;
             self.lsp.reset();
         }
+
         // Move scroll to top
         self.scroll_handle.set_offset(point(px(0.), px(0.)));
 
