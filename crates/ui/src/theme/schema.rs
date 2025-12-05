@@ -281,6 +281,12 @@ pub struct ThemeConfigColors {
     /// Success active background color.
     #[serde(rename = "success.active.background")]
     pub success_active: Option<SharedString>,
+    /// Bullish color for candlestick charts (upward price movement).
+    #[serde(rename = "bullish.background")]
+    pub bullish: Option<SharedString>,
+    /// Bearish color for candlestick charts (downward price movement).
+    #[serde(rename = "bearish.background")]
+    pub bearish: Option<SharedString>,
     /// Switch background color.
     #[serde(rename = "switch.background")]
     pub switch: Option<SharedString>,
@@ -508,6 +514,8 @@ impl ThemeColor {
             success_active,
             fallback = self.success.darken(active_darken)
         );
+        apply_color!(bullish, fallback = self.green);
+        apply_color!(bearish, fallback = self.red);
         apply_color!(info, fallback = self.cyan);
         apply_color!(info_foreground, fallback = self.primary_foreground);
         apply_color!(
