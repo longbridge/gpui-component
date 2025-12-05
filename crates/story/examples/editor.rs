@@ -27,7 +27,8 @@ use gpui_component_assets::Assets;
 use gpui_component_story::Open;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
-    CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
+    CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
+    InsertReplaceEdit, InsertTextFormat, TextEdit, WorkspaceEdit,
 };
 
 fn init() {
@@ -189,20 +190,18 @@ impl CompletionProvider for ExampleLspStore {
 
     fn inline_completion(
         &self,
-        text: &Rope,
+        rope: &Rope,
         offset: usize,
+        _trigger: InlineCompletionContext,
         _window: &mut Window,
         cx: &mut Context<InputState>,
-    ) -> Task<Result<Option<SharedString>>> {
-        let text_string = text.to_string();
-
+    ) -> Task<Result<InlineCompletionResponse>> {
+        let rope = rope.clone();
         cx.background_spawn(async move {
-            // Get the current line text before cursor
-            let line_start = text_string[..offset]
-                .rfind('\n')
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            let current_line = &text_string[line_start..offset];
+            // Get the current line text before cursor using RopeExt
+            let point = rope.offset_to_point(offset);
+            let line_start = rope.line_start_offset(point.row);
+            let current_line = rope.slice(line_start..offset).to_string();
 
             // Simple pattern matching for demo
             let suggestion =
@@ -212,7 +211,19 @@ impl CompletionProvider for ExampleLspStore {
                     None
                 };
 
-            Ok(suggestion)
+            if let Some(insert_text) = suggestion {
+                Ok(InlineCompletionResponse::Array(vec![
+                    InlineCompletionItem {
+                        insert_text,
+                        filter_text: None,
+                        range: None,
+                        command: None,
+                        insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    },
+                ]))
+            } else {
+                Ok(InlineCompletionResponse::Array(vec![]))
+            }
         })
     }
 

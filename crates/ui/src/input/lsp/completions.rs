@@ -1,6 +1,9 @@
 use anyhow::Result;
 use gpui::{Context, EntityInputHandler, SharedString, Task, Window};
-use lsp_types::{CompletionContext, CompletionItem, CompletionResponse, request::Completion};
+use lsp_types::{
+    CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
+    InlineCompletionResponse, InlineCompletionTriggerKind, request::Completion,
+};
 use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
@@ -36,25 +39,29 @@ pub trait CompletionProvider {
     /// The provider can analyze the text and cursor position to determine
     /// what inline completion suggestion to show.
     ///
-    /// Returns `Ok(Some(text))` to show a suggestion, or `Ok(None)` for no suggestion.
-    /// Default implementation returns `None`.
     ///
     /// # Arguments
-    /// * `text` - The current text content
+    /// * `rope` - The current text content
     /// * `offset` - The cursor position in bytes
+    ///
+    /// textDocument/inlineCompletion
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocument_inlineCompletion
     fn inline_completion(
         &self,
-        _text: &Rope,
+        _rope: &Rope,
         _offset: usize,
+        _trigger: InlineCompletionContext,
         _window: &mut Window,
         _cx: &mut Context<InputState>,
-    ) -> Task<Result<Option<SharedString>>> {
-        Task::ready(Ok(None))
+    ) -> Task<Result<InlineCompletionResponse>> {
+        Task::ready(Ok(InlineCompletionResponse::Array(vec![])))
     }
 
     /// Returns the debounce duration for inline completions.
     ///
     /// Default: 300ms
+    #[inline]
     fn inline_completion_debounce(&self) -> Duration {
         DEFAULT_INLINE_COMPLETION_DEBOUNCE
     }
@@ -218,7 +225,12 @@ impl InputState {
                     return None;
                 }
 
-                Some(provider.inline_completion(&text, offset, window, cx))
+                let trigger = InlineCompletionContext {
+                    trigger_kind: InlineCompletionTriggerKind::Automatic,
+                    selected_completion_info: None,
+                };
+
+                Some(provider.inline_completion(&text, offset, trigger, window, cx))
             })?;
 
             let Some(task) = task else {
@@ -238,8 +250,16 @@ impl InputState {
                     return;
                 }
 
-                if let Some(text) = response {
-                    editor.inline_completion_text = Some(text);
+                if let Some(insert_text) = match response {
+                    InlineCompletionResponse::Array(items) => {
+                        items.into_iter().map(|i| i.insert_text).next()
+                    }
+                    InlineCompletionResponse::List(comp_list) => {
+                        comp_list.items.into_iter().map(|i| i.insert_text).next()
+                    }
+                } {
+                    let inline_completion_text: SharedString = insert_text.into();
+                    editor.inline_completion_text = Some(inline_completion_text);
                     cx.notify();
                 }
             })?;
