@@ -1,16 +1,16 @@
 ---
 title: Chart
-description: Beautiful charts and graphs for data visualization including line, bar, area, and pie charts.
+description: Beautiful charts and graphs for data visualization including line, bar, area, pie, and candlestick charts.
 ---
 
 # Chart
 
-A comprehensive charting library providing Line, Bar, Area, and Pie charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
+A comprehensive charting library providing Line, Bar, Area, Pie, and Candlestick charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
 
 ## Import
 
 ```rust
-use gpui_component::chart::{LineChart, BarChart, AreaChart, PieChart};
+use gpui_component::chart::{LineChart, BarChart, AreaChart, PieChart, CandlestickChart};
 ```
 
 ## Chart Types
@@ -208,6 +208,65 @@ PieChart::new(data)
     .pad_angle(4. / 100.) // 4% padding
 ```
 
+### CandlestickChart
+
+A candlestick chart displays financial data using OHLC (Open, High, Low, Close) values, perfect for visualizing stock prices and market trends.
+
+#### Basic Candlestick Chart
+
+```rust
+#[derive(Clone)]
+struct StockPrice {
+    pub date: String,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+}
+
+let data = vec![
+    StockPrice { date: "Jan".to_string(), open: 100.0, high: 110.0, low: 95.0, close: 105.0 },
+    StockPrice { date: "Feb".to_string(), open: 105.0, high: 115.0, low: 100.0, close: 112.0 },
+    StockPrice { date: "Mar".to_string(), open: 112.0, high: 120.0, low: 108.0, close: 115.0 },
+];
+
+CandlestickChart::new(data)
+    .x(|d| d.date.clone())
+    .open(|d| d.open)
+    .high(|d| d.high)
+    .low(|d| d.low)
+    .close(|d| d.close)
+```
+
+#### Candlestick Chart Customization
+
+```rust
+// Adjust body width ratio (default: 0.6)
+CandlestickChart::new(data)
+    .x(|d| d.date.clone())
+    .open(|d| d.open)
+    .high(|d| d.high)
+    .low(|d| d.low)
+    .close(|d| d.close)
+    .body_width_ratio(0.4) // Narrower bodies
+
+// Custom tick spacing
+CandlestickChart::new(data)
+    .x(|d| d.date.clone())
+    .open(|d| d.open)
+    .high(|d| d.high)
+    .low(|d| d.low)
+    .close(|d| d.close)
+    .tick_margin(2) // Show every 2nd tick
+```
+
+#### Candlestick Chart Colors
+
+The candlestick chart automatically uses theme colors:
+
+- **Bullish** (close > open): `bullish` color (green)
+- **Bearish** (close < open): `bearish` color (red)
+
 ## Data Structures
 
 ### Example Data Types
@@ -318,6 +377,7 @@ let chart = LineChart::new(data)
 - [BarChart]
 - [AreaChart]
 - [PieChart]
+- [CandlestickChart]
 
 ## Examples
 
@@ -443,13 +503,36 @@ struct StockData {
     volume: u64,
 }
 
-fn stock_chart(data: Vec<StockData>, cx: &mut Context<Self>) -> impl IntoElement {
+#[derive(Clone)]
+struct StockOHLC {
+    date: String,
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+}
+
+fn stock_chart(ohlc_data: Vec<StockOHLC>, price_data: Vec<StockData>, cx: &mut Context<Self>) -> impl IntoElement {
     v_flex()
         .gap_4()
         .child(
             chart_container(
-                "Stock Price",
-                LineChart::new(data.clone())
+                "Stock Price - Candlestick",
+                CandlestickChart::new(ohlc_data.clone())
+                    .x(|d| d.date.clone())
+                    .open(|d| d.open)
+                    .high(|d| d.high)
+                    .low(|d| d.low)
+                    .close(|d| d.close)
+                    .tick_margin(3),
+                false,
+                cx,
+            )
+        )
+        .child(
+            chart_container(
+                "Stock Price - Line",
+                LineChart::new(price_data.clone())
                     .x(|d| d.date.clone())
                     .y(|d| d.price)
                     .stroke(cx.theme().chart_1)
@@ -462,7 +545,7 @@ fn stock_chart(data: Vec<StockData>, cx: &mut Context<Self>) -> impl IntoElement
         .child(
             chart_container(
                 "Trading Volume",
-                BarChart::new(data)
+                BarChart::new(price_data)
                     .x(|d| d.date.clone())
                     .y(|d| d.volume as f64)
                     .fill(|d| {
@@ -627,3 +710,4 @@ impl LiveChart {
 [BarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.BarChart.html
 [AreaChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.AreaChart.html
 [PieChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.PieChart.html
+[CandlestickChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.CandlestickChart.html

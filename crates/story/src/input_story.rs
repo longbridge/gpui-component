@@ -65,6 +65,7 @@ impl InputStory {
         let mask_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .masked(true)
+                .placeholder("Enter your password...")
                 .default_value("this-is-password-中文🚀🎉")
         });
 

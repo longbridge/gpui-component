@@ -147,6 +147,10 @@ pub struct ThemeColor {
     pub success_hover: Hsla,
     /// Success active background color.
     pub success_active: Hsla,
+    /// Bullish color for candlestick charts (upward price movement).
+    pub bullish: Hsla,
+    /// Bearish color for candlestick charts (downward price movement).
+    pub bearish: Hsla,
     /// Switch background color.
     pub switch: Hsla,
     /// Switch thumb background color.
