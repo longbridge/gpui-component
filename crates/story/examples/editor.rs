@@ -206,7 +206,7 @@ impl CompletionProvider for ExampleLspStore {
             // Simple pattern matching for demo
             let suggestion =
                 if current_line.trim_start().starts_with("fn ") && !current_line.contains('{') {
-                    Some("() {\n // Write your code here..\n   \n}".into())
+                    Some("() {\n    // Write your code here..\n}".into())
                 } else {
                     None
                 };
