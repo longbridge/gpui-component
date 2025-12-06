@@ -1179,7 +1179,7 @@ impl Element for TextElement {
         let invisible_top_padding = prepaint.last_layout.visible_top;
 
         let mut mask_offset_y = px(0.);
-        if self.state.read(cx).masked {
+        if self.state.read(cx).masked && self.state.read(cx).text.len() > 0 {
             // Move down offset for vertical centering the *****
             if cfg!(target_os = "macos") {
                 mask_offset_y = px(3.);
