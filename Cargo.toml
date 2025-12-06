@@ -34,7 +34,7 @@ sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 
 anyhow = "1"
 log = "0.4"
-lsp-types = "0.97.0"
+lsp-types = { version = "0.97.0", features = ["proposed"] }
 notify = "7.0.0"
 raw-window-handle = "0.6.2"
 ropey = { version = "=2.0.0-beta.1", features = [
