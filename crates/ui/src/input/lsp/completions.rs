@@ -87,11 +87,11 @@ pub trait CompletionProvider {
     ) -> bool;
 }
 
-pub struct InlineCompletion {
+pub(crate) struct InlineCompletion {
     /// Completion item to display as an inline completion suggestion
-    pub item: Option<InlineCompletionItem>,
+    pub(crate) item: Option<InlineCompletionItem>,
     /// Task for debouncing inline completion requests
-    pub task: Task<Result<InlineCompletionResponse>>,
+    pub(crate) task: Task<Result<InlineCompletionResponse>>,
 }
 
 impl Default for InlineCompletion {
