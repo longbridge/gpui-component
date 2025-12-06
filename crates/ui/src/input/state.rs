@@ -1144,6 +1144,11 @@ impl InputState {
             return;
         }
 
+        // Clear inline completion on enter (user chose not to accept it)
+        if self.has_inline_completion() {
+            self.clear_inline_completion(cx);
+        }
+
         if self.mode.is_multi_line() {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
