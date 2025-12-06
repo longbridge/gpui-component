@@ -278,34 +278,32 @@ impl InputState {
     }
 
     /// Check if an inline completion suggestion is currently displayed.
-    pub fn has_inline_completion(&self) -> bool {
+    #[inline]
+    pub(crate) fn has_inline_completion(&self) -> bool {
         self.inline_completion.item.is_some()
     }
 
     /// Clear the inline completion suggestion.
-    pub fn clear_inline_completion(&mut self, cx: &mut Context<Self>) {
-        if self.inline_completion.item.is_some() {
-            self.inline_completion = InlineCompletion::default();
-            cx.notify();
-        }
+    pub(crate) fn clear_inline_completion(&mut self, cx: &mut Context<Self>) {
+        self.inline_completion = InlineCompletion::default();
+        cx.notify();
     }
 
     /// Accept the inline completion, inserting it at the cursor position.
     /// Returns true if a completion was accepted, false if there was none.
-    pub fn accept_inline_completion(
+    pub(crate) fn accept_inline_completion(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        if let Some(completion_item) = self.inline_completion.item.take() {
-            let cursor = self.cursor();
-            let range_utf16 = self.range_to_utf16(&(cursor..cursor));
-            let completion_text = completion_item.insert_text;
-            self.replace_text_in_range_silent(Some(range_utf16), &completion_text, window, cx);
-            cx.notify();
-            true
-        } else {
-            false
-        }
+        let Some(completion_item) = self.inline_completion.item.take() else {
+            return false;
+        };
+
+        let cursor = self.cursor();
+        let range_utf16 = self.range_to_utf16(&(cursor..cursor));
+        let completion_text = completion_item.insert_text;
+        self.replace_text_in_range_silent(Some(range_utf16), &completion_text, window, cx);
+        true
     }
 }
