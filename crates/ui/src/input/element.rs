@@ -812,9 +812,10 @@ pub(super) struct PrepaintState {
     bounds: Bounds<Pixels>,
     // Inline completion rendering data
     /// Shaped ghost lines to paint after cursor row (completion lines 2+)
-    inline_completion_ghost_lines: Vec<ShapedLine>,
+    ghost_lines: Vec<ShapedLine>,
     /// First line of inline completion (painted after cursor on same line)
-    inline_completion_first_line: Option<ShapedLine>,
+    ghost_first_line: Option<ShapedLine>,
+    ghost_lines_height: Pixels,
 }
 
 impl PrepaintState {
@@ -1095,16 +1096,15 @@ impl Element for TextElement {
         }
         last_layout.lines = Rc::new(lines);
 
-        // Compute inline completion ghost lines before scroll_size calculation
-        let (inline_completion_first_line, inline_completion_ghost_lines) =
-            Self::layout_inline_completion(
-                state,
-                &last_layout.visible_range,
-                text_size,
-                window,
-                cx,
-            );
-        let ghost_line_count = inline_completion_ghost_lines.len();
+        let (ghost_first_line, ghost_lines) = Self::layout_inline_completion(
+            state,
+            &last_layout.visible_range,
+            text_size,
+            window,
+            cx,
+        );
+        let ghost_line_count = ghost_lines.len();
+        let ghost_lines_height = ghost_line_count as f32 * line_height;
 
         let total_wrapped_lines = state.text_wrapper.len();
         let empty_bottom_height = if state.mode.is_code_editor() {
@@ -1116,9 +1116,6 @@ impl Element for TextElement {
         } else {
             px(0.)
         };
-
-        // Add ghost line height to scroll size
-        let ghost_lines_height = ghost_line_count as f32 * line_height;
 
         let scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
@@ -1236,8 +1233,9 @@ impl Element for TextElement {
             hover_definition_hitbox,
             document_color_paths,
             indent_guides_path,
-            inline_completion_first_line,
-            inline_completion_ghost_lines,
+            ghost_first_line,
+            ghost_lines,
+            ghost_lines_height,
         }
     }
 
@@ -1364,7 +1362,7 @@ impl Element for TextElement {
 
         // Paint text with inline completion ghost line support
         let mut offset_y = mask_offset_y + invisible_top_padding;
-        let ghost_lines = &prepaint.inline_completion_ghost_lines;
+        let ghost_lines = &prepaint.ghost_lines;
         let has_ghost_lines = !ghost_lines.is_empty();
 
         for (ix, line) in prepaint.last_layout.lines.iter().enumerate() {
@@ -1413,16 +1411,13 @@ impl Element for TextElement {
         let mut offset_y = px(0.);
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
-            let ghost_line_count = prepaint.inline_completion_ghost_lines.len();
 
-            // Paint line number background (extend for ghost lines)
-            let total_ghost_height = ghost_line_count as f32 * line_height;
             window.paint_quad(fill(
                 Bounds {
                     origin: input_bounds.origin,
                     size: size(
                         prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN,
-                        input_bounds.size.height + total_ghost_height,
+                        input_bounds.size.height + prepaint.ghost_lines_height,
                     ),
                 },
                 cx.theme().editor_background(),
@@ -1452,8 +1447,8 @@ impl Element for TextElement {
                 }
 
                 // Add ghost line height after cursor row for line numbers alignment
-                if ghost_line_count > 0 && Some(row) == prepaint.current_row {
-                    offset_y += ghost_line_count as f32 * line_height;
+                if !prepaint.ghost_lines.is_empty() && prepaint.current_row.is_some() {
+                    offset_y += prepaint.ghost_lines_height;
                 }
             }
         }
@@ -1477,7 +1472,7 @@ impl Element for TextElement {
 
         // Paint inline completion first line suffix (after cursor on same line)
         if focused {
-            if let Some(first_line) = &prepaint.inline_completion_first_line {
+            if let Some(first_line) = &prepaint.ghost_first_line {
                 if let Some(cursor_bounds) = prepaint.cursor_bounds_with_scroll() {
                     let first_line_x = cursor_bounds.origin.x + cursor_bounds.size.width;
                     let p = point(first_line_x, cursor_bounds.origin.y);
