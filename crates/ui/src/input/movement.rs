@@ -51,6 +51,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
         self.hide_context_menu(cx);
+        self.clear_inline_completion(cx);
         cx.notify()
     }
 

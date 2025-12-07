@@ -31,7 +31,7 @@ use crate::input::{
     search::{self, SearchPanel},
     text_wrapper::LineLayout,
 };
-use crate::input::{RopeExt as _, Selection};
+use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
 
@@ -331,6 +331,7 @@ pub struct InputState {
     _subscriptions: Vec<Subscription>,
 
     pub(super) _context_menu_task: Task<Result<()>>,
+    pub(super) inline_completion: InlineCompletion,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -409,6 +410,7 @@ impl InputState {
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
+            inline_completion: InlineCompletion::default(),
         }
     }
 
@@ -1142,6 +1144,11 @@ impl InputState {
             return;
         }
 
+        // Clear inline completion on enter (user chose not to accept it)
+        if self.has_inline_completion() {
+            self.clear_inline_completion(cx);
+        }
+
         if self.mode.is_multi_line() {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
@@ -1175,6 +1182,12 @@ impl InputState {
             return;
         }
 
+        // Clear inline completion on escape
+        if self.has_inline_completion() {
+            self.clear_inline_completion(cx);
+            return; // Consume the escape, don't propagate
+        }
+
         if self.ime_marked_range.is_some() {
             self.unmark_text(window, cx);
         }
@@ -1192,6 +1205,9 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Clear inline completion on any mouse interaction
+        self.clear_inline_completion(cx);
+
         // If there have IME marked range and is empty (Means pressed Esc to abort IME typing)
         // Clear the marked range.
         if let Some(ime_marked_range) = &self.ime_marked_range {
@@ -1596,6 +1612,8 @@ impl InputState {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     pub(crate) fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.clear_inline_completion(cx);
+
         let offset = offset.clamp(0, self.text.len());
         if self.selection_reversed {
             self.selected_range.start = offset
@@ -1697,6 +1715,7 @@ impl InputState {
         self.hover_popover = None;
         self.diagnostic_popover = None;
         self.context_menu = None;
+        self.clear_inline_completion(cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });

@@ -27,7 +27,8 @@ use gpui_component_assets::Assets;
 use gpui_component_story::Open;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
-    CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
+    CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
+    InsertReplaceEdit, InsertTextFormat, TextEdit, WorkspaceEdit,
 };
 
 fn init() {
@@ -184,6 +185,45 @@ impl CompletionProvider for ExampleLspStore {
                 .collect::<Vec<_>>();
 
             Ok(CompletionResponse::Array(items))
+        })
+    }
+
+    fn inline_completion(
+        &self,
+        rope: &Rope,
+        offset: usize,
+        _trigger: InlineCompletionContext,
+        _window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<InlineCompletionResponse>> {
+        let rope = rope.clone();
+        cx.background_spawn(async move {
+            // Get the current line text before cursor using RopeExt
+            let point = rope.offset_to_point(offset);
+            let line_start = rope.line_start_offset(point.row);
+            let current_line = rope.slice(line_start..offset).to_string();
+
+            // Simple pattern matching for demo
+            let suggestion =
+                if current_line.trim_start().starts_with("fn ") && !current_line.contains('{') {
+                    Some("() {\n    // Write your code here..\n}".into())
+                } else {
+                    None
+                };
+
+            if let Some(insert_text) = suggestion {
+                Ok(InlineCompletionResponse::Array(vec![
+                    InlineCompletionItem {
+                        insert_text,
+                        filter_text: None,
+                        range: None,
+                        command: None,
+                        insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    },
+                ]))
+            } else {
+                Ok(InlineCompletionResponse::Array(vec![]))
+            }
         })
     }
 
