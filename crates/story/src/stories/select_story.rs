@@ -70,7 +70,7 @@ impl Focusable for SelectStory {
 impl SelectStory {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let countries =
-            serde_json::from_str::<Vec<Country>>(include_str!("./fixtures/countries.json"))
+            serde_json::from_str::<Vec<Country>>(include_str!("../fixtures/countries.json"))
                 .unwrap();
         let mut grouped_countries: SearchableVec<SelectGroup<Country>> = SearchableVec::new(vec![]);
         for (prefix, items) in countries.iter().chunk_by(|c| c.letter_prefix()).into_iter() {

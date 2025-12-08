@@ -56,7 +56,7 @@ impl Render for WelcomeStory {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        TextView::markdown("intro", include_str!("../../../README.md"), window, cx)
+        TextView::markdown("intro", include_str!("../../../../README.md"), window, cx)
             .p_4()
             .scrollable(true)
             .selectable(true)
