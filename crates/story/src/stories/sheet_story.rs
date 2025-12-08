@@ -6,7 +6,6 @@ use gpui::{
     ParentElement, Render, SharedString, Styled, Task, Timer, WeakEntity, Window, div,
     prelude::FluentBuilder as _, px,
 };
-use raw_window_handle::HasWindowHandle;
 
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, IndexPath, Placement, WindowExt as _,
@@ -17,8 +16,6 @@ use gpui_component::{
     input::{Input, InputState},
     list::{List, ListDelegate, ListItem, ListState},
     v_flex,
-    webview::WebView,
-    wry,
 };
 
 use crate::TestAction;
@@ -65,7 +62,12 @@ impl ListDelegate for ListItemDeletegate {
         })
     }
 
-    fn render_item(&mut self, ix: IndexPath, _: &mut Window, _: &mut Context<ListState<Self>>) -> Option<Self::Item> {
+    fn render_item(
+        &mut self,
+        ix: IndexPath,
+        _: &mut Window,
+        _: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item> {
         let confirmed = Some(ix.row) == self.confirmed_index;
 
         if let Some(item) = self.matches.get(ix.row) {
@@ -432,38 +434,6 @@ impl Render for SheetStory {
                                         \nthis still can handle the action.",
                                     ),
                             ),
-                    )
-                    .child(
-                        section("WebView in Sheet").child(
-                            Button::new("webview")
-                                .outline()
-                                .label("Open WebView")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    let webview = cx.new(|cx| {
-                                        let webview = wry::WebViewBuilder::new()
-                                            .build_as_child(
-                                                &window.window_handle().expect("No window handle"),
-                                            )
-                                            .unwrap();
-
-                                        WebView::new(webview, window, cx)
-                                    });
-                                    webview.update(cx, |webview, _| {
-                                        webview.load_url("https://github.com/explore");
-                                    });
-                                    window.open_sheet(cx, move |sheet, window, cx| {
-                                        let height =
-                                            window.window_bounds().get_bounds().size.height;
-                                        let webview_bounds = webview.read(cx).bounds();
-
-                                        sheet.title("WebView Title").p_0().child(
-                                            div()
-                                                .h(height - webview_bounds.origin.y)
-                                                .child(webview.clone()),
-                                        )
-                                    });
-                                })),
-                        ),
                     )
                     .when_some(self.selected_value.clone(), |this, selected_value| {
                         this.child(

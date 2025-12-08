@@ -81,14 +81,12 @@ fn main() {
 
 > Still early and experimental; there are a lot of limitations.
 
-GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-apps/wry). This is an optional feature, which you can enable with a feature flag.
+The [gpui-component-webview](crates/webview) provided a `WebView` element based on [Wry](https://github.com/tauri-apps/wry) to supports render a webview container in GPUI application.
 
 ```toml
-gpui-component = { version = "0.4.0", features = ["webview"] }
-wry = { version = "0.53.3, package = "lb-wry" }
+gpui-component-webview = { version = "0.5.0" }
+wry = { version = "0.53.3" }
 ```
-
-More usage examples can be found in the [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
 
 ### Icons
 

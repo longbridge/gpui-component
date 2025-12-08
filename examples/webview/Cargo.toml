@@ -1,0 +1,23 @@
+[package]
+name = "webview"
+description = "A minimal example of webview inside the GPUI application."
+version = "0.5.0"
+publish = false
+edition.workspace = true
+
+[features]
+inspector = []
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component = { workspace = true }
+gpui-component-assets.workspace = true
+
+# WebView dependencies
+gpui-wry = { path = "../../crates/webview" }
+wry = { version = "0.53.3" }
+raw-window-handle = { version = "0.6", features = ["std"] }
+
+[lints]
+workspace = true

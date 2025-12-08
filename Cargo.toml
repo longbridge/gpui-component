@@ -2,18 +2,20 @@
 default-members = [
     "crates/ui",
     "crates/story",
-    "crates/assets"
+    "crates/assets",
 ]
 members = [
     "crates/macros",
     "crates/story",
     "crates/ui",
     "crates/assets",
+    "crates/webview",
     "examples/app_assets",
     "examples/hello_world",
     "examples/input",
     "examples/window_title",
     "examples/dialog_overlay",
+    "examples/webview",
 ]
 resolver = "2"
 

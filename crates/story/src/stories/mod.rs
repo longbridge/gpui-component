@@ -50,7 +50,6 @@ mod toggle_story;
 mod tooltip_story;
 mod tree_story;
 mod virtual_list_story;
-mod webview_story;
 mod welcome_story;
 
 pub use accordion_story::AccordionStory;
@@ -102,7 +101,7 @@ pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 pub use tree_story::TreeStory;
 pub use virtual_list_story::VirtualListStory;
-pub use webview_story::WebViewStory;
+
 pub use welcome_story::WelcomeStory;
 
 pub(crate) fn init(cx: &mut App) {
@@ -112,7 +111,6 @@ pub(crate) fn init(cx: &mut App) {
     select_story::init(cx);
     popover_story::init(cx);
     menu_story::init(cx);
-    webview_story::init(cx);
     tooltip_story::init(cx);
     otp_input_story::init(cx);
     tree_story::init(cx);

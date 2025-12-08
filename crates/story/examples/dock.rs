@@ -12,7 +12,7 @@ use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
     IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
-    StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
+    StoryContainer, SwitchStory, TableStory, TooltipStory,
 };
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
@@ -439,7 +439,6 @@ impl StoryWorkspace {
             14 => Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
             15 => Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
             16 => Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
-            17 => Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
             _ => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
         };
 
