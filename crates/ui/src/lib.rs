@@ -67,13 +67,6 @@ pub mod tooltip;
 pub mod tree;
 pub use time::{calendar, date_picker};
 
-#[cfg(feature = "webview")]
-pub mod webview;
-
-// re-export
-#[cfg(feature = "webview")]
-pub use wry;
-
 pub use crate::Disableable;
 pub use event::InteractiveElementExt;
 pub use geometry::*;

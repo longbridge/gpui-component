@@ -12,7 +12,6 @@ anyhow.workspace = true
 gpui.workspace = true
 gpui-component = { workspace = true, features = [
   "tree-sitter-languages",
-  "webview",
 ] }
 gpui-component-assets.workspace = true
 reqwest_client = { path = "../reqwest_client" }
@@ -24,7 +23,6 @@ fake = { version = "2.10.0", features = ["dummy"] }
 itertools = "0.14.0"
 lsp-types.workspace = true
 rand = "0.8"
-raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
 serde = "1"
 serde_json = "1"

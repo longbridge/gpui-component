@@ -77,19 +77,6 @@ fn main() {
 }
 ```
 
-### WebView
-
-> Still early and experimental; there are a lot of limitations.
-
-GPUI Component has a `WebView` element based on [Wry](https://github.com/tauri-apps/wry). This is an optional feature, which you can enable with a feature flag.
-
-```toml
-gpui-component = { version = "0.4.0", features = ["webview"] }
-wry = { version = "0.53.3, package = "lb-wry" }
-```
-
-More usage examples can be found in the [story](https://github.com/longbridge/gpui-component/tree/main/crates/story) directory.
-
 ### Icons
 
 GPUI Component has an `Icon` element, but it does not include SVG files by default.

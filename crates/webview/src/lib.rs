@@ -11,8 +11,6 @@ use gpui::{
     ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window, canvas, div,
 };
 
-use crate::PixelsExt;
-
 /// A webview based on wry WebView.
 ///
 /// [experimental]
@@ -166,12 +164,13 @@ impl Element for WebViewElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
-        style.flex_grow = 0.0;
-        style.flex_shrink = 1.;
-        style.size = Size::full();
-        // If the parent view is no longer visible, we don't need to layout the webview
+        let style = Style {
+            size: Size::full(),
+            flex_shrink: 1.,
+            ..Default::default()
+        };
 
+        // If the parent view is no longer visible, we don't need to layout the webview
         let id = window.request_layout(style, [], cx);
         (id, ())
     }
@@ -192,8 +191,8 @@ impl Element for WebViewElement {
         self.view
             .set_bounds(Rect {
                 size: dpi::Size::Logical(LogicalSize {
-                    width: (bounds.size.width.as_f32()).into(),
-                    height: (bounds.size.height.as_f32()).into(),
+                    width: bounds.size.width.into(),
+                    height: bounds.size.height.into(),
                 }),
                 position: dpi::Position::Logical(dpi::LogicalPosition::new(
                     bounds.origin.x.into(),

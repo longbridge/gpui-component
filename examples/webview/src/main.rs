@@ -1,47 +1,19 @@
-use gpui::{
-    App, AppContext, ClickEvent, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement as _, Render, Styled as _, Window, div,
-};
+use gpui::*;
 use gpui_component::{
-    ActiveTheme, h_flex,
+    ActiveTheme as _, Root, h_flex,
     input::{Input, InputEvent, InputState},
     v_flex,
-    webview::WebView,
-    wry,
 };
+use gpui_wry::WebView;
 
-pub fn init(_: &mut App) {
-    #[cfg(target_os = "linux")]
-    gtk::init().unwrap();
-}
-
-pub struct WebViewStory {
+pub struct Example {
     focus_handle: FocusHandle,
     webview: Entity<WebView>,
     address_input: Entity<InputState>,
 }
 
-impl super::Story for WebViewStory {
-    fn title() -> &'static str {
-        "WebView"
-    }
-
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
-        Self::view(window, cx)
-    }
-    fn on_active(&mut self, active: bool, _window: &mut Window, cx: &mut App) {
-        if active {
-            self.webview.update(cx, |webview, _| webview.show());
-        } else {
-            self.webview.update(cx, |webview, _| webview.hide());
-        }
-    }
-}
-
-impl WebViewStory {
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        let focus_handle = cx.focus_handle();
-
+impl Example {
+    pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let webview = cx.new(|cx| {
             let builder = wry::WebViewBuilder::new();
             #[cfg(any(debug_assertions, feature = "inspector"))]
@@ -79,8 +51,9 @@ impl WebViewStory {
             WebView::new(webview, window, cx)
         });
 
-        let address_input =
-            cx.new(|cx| InputState::new(window, cx).default_value("https://google.com"));
+        let address_input = cx.new(|cx| {
+            InputState::new(window, cx).default_value("https://longbridge.github.io/gpui-component")
+        });
 
         let url = address_input.read(cx).value().clone();
         webview.update(cx, |view, _| {
@@ -88,8 +61,8 @@ impl WebViewStory {
         });
 
         cx.new(|cx| {
-            let this = WebViewStory {
-                focus_handle,
+            let this = Self {
+                focus_handle: cx.focus_handle(),
                 webview,
                 address_input: address_input.clone(),
             };
@@ -124,13 +97,13 @@ impl WebViewStory {
     }
 }
 
-impl Focusable for WebViewStory {
+impl Focusable for Example {
     fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for WebViewStory {
+impl Render for Example {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let webview = self.webview.clone();
 
@@ -153,4 +126,27 @@ impl Render for WebViewStory {
                     .child(webview.clone()),
             )
     }
+}
+
+fn main() {
+    // Required this for Windows to render the WebView.
+    #[cfg(target_os = "windows")]
+    unsafe {
+        std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "true");
+    }
+
+    Application::new().run(move |cx| {
+        // This must be called before using any GPUI Component features.
+        gpui_component::init(cx);
+
+        cx.spawn(async move |cx| {
+            cx.open_window(WindowOptions::default(), |window, cx| {
+                let view = Example::new(window, cx);
+                cx.new(|cx| Root::new(view, window, cx))
+            })?;
+
+            Ok::<_, anyhow::Error>(())
+        })
+        .detach();
+    });
 }
