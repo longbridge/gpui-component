@@ -179,7 +179,7 @@ impl Render for ScrollbarStory {
                         .py_1()
                         .px_3()
                         .size_full()
-                        .track_scroll(self.scroll_handle.clone()),
+                        .track_scroll(&self.scroll_handle),
                     )
                     .vertical_scrollbar(&self.scroll_handle)
             })
