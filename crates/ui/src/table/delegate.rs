@@ -23,7 +23,7 @@ pub trait TableDelegate: Sized + 'static {
     /// Returns the table column at the given index.
     ///
     /// This only call on Table prepare or refresh.
-    fn column(&self, col_ix: usize, cx: &App) -> &Column;
+    fn column(&self, col_ix: usize, cx: &App) -> Column;
 
     /// Perform sort on the column at the given index.
     fn perform_sort(

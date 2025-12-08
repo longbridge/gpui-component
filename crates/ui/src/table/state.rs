@@ -282,7 +282,7 @@ where
                 ColGroup {
                     width: column.width,
                     bounds: Bounds::default(),
-                    column: column.clone(),
+                    column,
                 }
             })
             .collect();
