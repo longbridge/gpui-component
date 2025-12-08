@@ -18,5 +18,8 @@ gpui-wry = { path = "../../crates/webview" }
 wry = { version = "0.53.3" }
 raw-window-handle = { version = "0.6", features = ["std"] }
 
+[workspace.dependencies.linux]
+gtk = "0.18.2"
+
 [lints]
 workspace = true
