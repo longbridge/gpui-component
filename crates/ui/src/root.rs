@@ -85,20 +85,22 @@ impl WindowExt for Window {
     where
         F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
-        Root::update(self, cx, move |root, window, cx| {
-            if root.active_sheet.is_none() {
-                root.previous_focus_handle = window.focused(cx);
-            }
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, move |root, window, cx| {
+                if root.active_sheet.is_none() {
+                    root.previous_focus_handle = window.focused(cx);
+                }
 
-            let focus_handle = cx.focus_handle();
-            focus_handle.focus(window);
+                let focus_handle = cx.focus_handle();
+                focus_handle.focus(window);
 
-            root.active_sheet = Some(ActiveSheet {
-                focus_handle,
-                placement,
-                builder: Rc::new(build),
-            });
-            cx.notify();
+                root.active_sheet = Some(ActiveSheet {
+                    focus_handle,
+                    placement,
+                    builder: Rc::new(build),
+                });
+                cx.notify();
+            })
         })
     }
 
@@ -107,11 +109,13 @@ impl WindowExt for Window {
     }
 
     fn close_sheet(&mut self, cx: &mut App) {
-        Root::update(self, cx, |root, window, cx| {
-            root.focused_input = None;
-            root.active_sheet = None;
-            root.focus_back(window, cx);
-            cx.notify();
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, |root, window, cx| {
+                root.focused_input = None;
+                root.active_sheet = None;
+                root.focus_back(window, cx);
+                cx.notify();
+            })
         })
     }
 
@@ -119,21 +123,23 @@ impl WindowExt for Window {
     where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
-        Root::update(self, cx, move |root, window, cx| {
-            // Only save focus handle if there are no active dialogs.
-            // This is used to restore focus when all dialogs are closed.
-            if root.active_dialogs.len() == 0 {
-                root.previous_focus_handle = window.focused(cx);
-            }
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, move |root, window, cx| {
+                // Only save focus handle if there are no active dialogs.
+                // This is used to restore focus when all dialogs are closed.
+                if root.active_dialogs.len() == 0 {
+                    root.previous_focus_handle = window.focused(cx);
+                }
 
-            let focus_handle = cx.focus_handle();
-            focus_handle.focus(window);
+                let focus_handle = cx.focus_handle();
+                focus_handle.focus(window);
 
-            root.active_dialogs.push(ActiveDialog {
-                focus_handle,
-                builder: Rc::new(build),
-            });
-            cx.notify();
+                root.active_dialogs.push(ActiveDialog {
+                    focus_handle,
+                    builder: Rc::new(build),
+                });
+                cx.notify();
+            })
         })
     }
 
@@ -142,54 +148,64 @@ impl WindowExt for Window {
     }
 
     fn close_dialog(&mut self, cx: &mut App) {
-        Root::update(self, cx, move |root, window, cx| {
-            root.focused_input = None;
-            root.active_dialogs.pop();
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, move |root, window, cx| {
+                root.focused_input = None;
+                root.active_dialogs.pop();
 
-            if let Some(top_dialog) = root.active_dialogs.last() {
-                // Focus the next dialog.
-                top_dialog.focus_handle.focus(window);
-            } else {
-                // Restore focus if there are no more dialogs.
-                root.focus_back(window, cx);
-            }
-            cx.notify();
+                if let Some(top_dialog) = root.active_dialogs.last() {
+                    // Focus the next dialog.
+                    top_dialog.focus_handle.focus(window);
+                } else {
+                    // Restore focus if there are no more dialogs.
+                    root.focus_back(window, cx);
+                }
+                cx.notify();
+            })
         })
     }
 
     fn close_all_dialogs(&mut self, cx: &mut App) {
-        Root::update(self, cx, |root, window, cx| {
-            root.focused_input = None;
-            root.active_dialogs.clear();
-            root.focus_back(window, cx);
-            cx.notify();
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, |root, window, cx| {
+                root.focused_input = None;
+                root.active_dialogs.clear();
+                root.focus_back(window, cx);
+                cx.notify();
+            })
         })
     }
 
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App) {
         let note = note.into();
-        Root::update(self, cx, move |root, window, cx| {
-            root.notification
-                .update(cx, |view, cx| view.push(note, window, cx));
-            cx.notify();
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, move |root, window, cx| {
+                root.notification
+                    .update(cx, |view, cx| view.push(note, window, cx));
+                cx.notify();
+            })
         })
     }
 
     fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App) {
-        Root::update(self, cx, move |root, window, cx| {
-            root.notification.update(cx, |view, cx| {
-                let id = TypeId::of::<T>();
-                view.close(id, window, cx);
-            });
-            cx.notify();
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, move |root, window, cx| {
+                root.notification.update(cx, |view, cx| {
+                    let id = TypeId::of::<T>();
+                    view.close(id, window, cx);
+                });
+                cx.notify();
+            })
         })
     }
 
     fn clear_notifications(&mut self, cx: &mut App) {
-        Root::update(self, cx, move |root, window, cx| {
-            root.notification
-                .update(cx, |view, cx| view.clear(window, cx));
-            cx.notify();
+        self.defer(cx, move |window, cx| {
+            Root::update(window, cx, move |root, window, cx| {
+                root.notification
+                    .update(cx, |view, cx| view.clear(window, cx));
+                cx.notify();
+            })
         })
     }
 
