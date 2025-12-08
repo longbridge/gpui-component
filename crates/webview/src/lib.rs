@@ -164,12 +164,13 @@ impl Element for WebViewElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
-        style.flex_grow = 0.0;
-        style.flex_shrink = 1.;
-        style.size = Size::full();
-        // If the parent view is no longer visible, we don't need to layout the webview
+        let style = Style {
+            size: Size::full(),
+            flex_shrink: 1.,
+            ..Default::default()
+        };
 
+        // If the parent view is no longer visible, we don't need to layout the webview
         let id = window.request_layout(style, [], cx);
         (id, ())
     }

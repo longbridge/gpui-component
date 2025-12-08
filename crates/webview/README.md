@@ -9,6 +9,14 @@ This still a experimental with limited features, please file issues for any bugs
 
 So, we recommend using the webview in a separate window or in a Popup layer.
 
+## Run Example
+
+In the root of the repository, run:
+
+```
+cargo run -p webview
+```
+
 ## License
 
 Apache-2.0
