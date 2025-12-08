@@ -5,7 +5,6 @@ use gpui_component::{
     v_flex,
 };
 use gpui_wry::WebView;
-use raw_window_handle::HasWindowHandle;
 
 pub struct Example {
     focus_handle: FocusHandle,
@@ -43,6 +42,8 @@ impl Example {
                 target_os = "android"
             ))]
             let webview = {
+                use raw_window_handle::HasWindowHandle;
+
                 let window_handle = window.window_handle().expect("No window handle");
                 builder.build_as_child(&window_handle).unwrap()
             };
