@@ -64,4 +64,3 @@ collapsed: false
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display
 - [VirtualList](virtual-list) - Virtualized list for large datasets
-- [WebView](webview) - Embedded web browser
