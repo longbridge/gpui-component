@@ -12,6 +12,7 @@ use gpui_component::{
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
+    table::{Column, Table, TableDelegate, TableState},
     text::TextView,
     v_flex,
 };
@@ -25,10 +26,58 @@ pub struct DialogStory {
     input2: Entity<InputState>,
     date: Entity<DatePickerState>,
     select: Entity<SelectState<Vec<String>>>,
+    table: Entity<TableState<MyTable>>,
     dialog_overlay: bool,
     close_button: bool,
     keyboard: bool,
     overlay_closable: bool,
+}
+
+struct MyTable {
+    columns: Vec<Column>,
+}
+impl MyTable {
+    fn new(_: &mut App) -> Self {
+        let columns = vec![
+            Column::new("id", "ID").width(px(50.)),
+            Column::new("name", "Name").width(px(150.)),
+            Column::new("email", "Email").width(px(250.)),
+            Column::new("role", "Role").width(px(150.)),
+            Column::new("status", "Status").width(px(100.)),
+        ];
+
+        Self { columns }
+    }
+}
+impl TableDelegate for MyTable {
+    fn columns_count(&self, _: &App) -> usize {
+        5
+    }
+
+    fn rows_count(&self, _: &App) -> usize {
+        200
+    }
+
+    fn column(&self, col_ix: usize, _: &App) -> &Column {
+        &self.columns[col_ix]
+    }
+
+    fn render_td(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        match col_ix {
+            0 => format!("{}", row_ix).into_any_element(),
+            1 => format!("User {}", row_ix).into_any_element(),
+            2 => format!("user-{}@mail.com", row_ix).into_any_element(),
+            3 => "User".into_any_element(),
+            4 => "Active".into_any_element(),
+            _ => panic!("Invalid column index"),
+        }
+    }
 }
 
 impl super::Story for DialogStory {
@@ -69,6 +118,8 @@ impl DialogStory {
             )
         });
 
+        let table = cx.new(|cx| TableState::new(MyTable::new(cx), window, cx));
+
         Self {
             focus_handle: cx.focus_handle(),
             selected_value: None,
@@ -80,6 +131,7 @@ impl DialogStory {
             close_button: true,
             keyboard: true,
             overlay_closable: true,
+            table,
         }
     }
 
@@ -373,6 +425,36 @@ impl Render for DialogStory {
                                     });
                                 })),
                         ),
+                    )
+                    .child(
+                        section("Table in Dialog")
+                            .child(
+                                Button::new("table-dialog")
+                                    .outline()
+                                    .label("Table Dialog")
+                                    .on_click(cx.listener({
+
+                                        move |this, _, window, cx| {
+                                            window.open_dialog(cx, {
+                                                let table = this.table.clone();
+                                                move |dialog, _, _| {
+                                                    dialog
+                                                        .w(px(800.))
+                                                        .h(px(600.))
+                                                        .overlay(dialog_overlay)
+                                                        .overlay_closable(overlay_closable)
+                                                        .title("Dialog with Table")
+                                                        .child(
+                                                            v_flex().size_full().gap_3().child(
+                                                                "This is a dialog contains a table component."
+                                                            )
+                                                            .child(Table::new(&table))
+                                                        )
+                                                }
+                                            });
+                                        }
+                                    })),
+                            )
                     )
                     .child(
                         section("Custom Paddings").child(
