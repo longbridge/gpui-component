@@ -287,21 +287,26 @@ impl SheetStory {
                 .overlay_closable(overlay_closable)
                 .size(drawer_h)
                 .title("Sheet Title")
-                .gap_4()
-                .child(Input::new(&input1))
-                .child(DatePicker::new(&date).placeholder("Date of Birth"))
                 .child(
-                    Button::new("send-notification")
-                        .child("Test Notification")
-                        .on_click(|_, window, cx| {
-                            window.push_notification("Hello this is message from Sheet.", cx)
-                        }),
-                )
-                .child(
-                    List::new(&list)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .rounded(cx.theme().radius),
+                    v_flex()
+                        .size_full()
+                        .gap_3()
+                        .child(Input::new(&input1))
+                        .child(DatePicker::new(&date).placeholder("Date of Birth"))
+                        .child(
+                            Button::new("send-notification")
+                                .child("Test Notification")
+                                .on_click(|_, window, cx| {
+                                    window
+                                        .push_notification("Hello this is message from Sheet.", cx)
+                                }),
+                        )
+                        .child(
+                            List::new(&list)
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(cx.theme().radius),
+                        ),
                 )
                 .footer(
                     h_flex()
@@ -412,6 +417,23 @@ impl Render for SheetStory {
                                         this.open_sheet_at(Placement::Bottom, window, cx)
                                     })),
                             ),
+                    )
+                    .child(
+                        section("Scrollable Sheet").max_w_md().child(
+                            Button::new("show-scrollable-sheet")
+                                .outline()
+                                .label("Scrollable Sheet...")
+                                .on_click(cx.listener(|_, _, window, cx| {
+                                    window.open_sheet_at(
+                                        Placement::Right,
+                                        cx,
+                                        move |this, _, _| {
+                                            this.title("Scrollable Sheet")
+                                                .child("This is a scrollable sheet.\n".repeat(150))
+                                        },
+                                    );
+                                })),
+                        ),
                     )
                     .child(
                         section("Focus back test")

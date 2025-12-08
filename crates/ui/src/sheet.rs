@@ -1,7 +1,7 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent,
+    Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
     ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, div, point,
     prelude::FluentBuilder as _, px,
@@ -137,6 +137,22 @@ impl RenderOnce for Sheet {
             );
         let on_close = self.on_close.clone();
 
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+        let mut paddings = Edges::all(px(16.));
+        if let Some(pl) = self.style.padding.left {
+            paddings.left = pl.to_pixels(base_size, rem_size);
+        }
+        if let Some(pr) = self.style.padding.right {
+            paddings.right = pr.to_pixels(base_size, rem_size);
+        }
+        if let Some(pt) = self.style.padding.top {
+            paddings.top = pt.to_pixels(base_size, rem_size);
+        }
+        if let Some(pb) = self.style.padding.bottom {
+            paddings.bottom = pb.to_pixels(base_size, rem_size);
+        }
+
         anchored()
             .position(point(
                 window_paddings.left,
@@ -182,6 +198,7 @@ impl RenderOnce for Sheet {
                             .bg(cx.theme().background)
                             .border_color(cx.theme().border)
                             .shadow_xl()
+                            .refine_style(&self.style)
                             .map(|this| {
                                 // Set the size of the sheet.
                                 if placement.is_horizontal() {
@@ -220,14 +237,13 @@ impl RenderOnce for Sheet {
                                     ),
                             )
                             .child(
-                                // Body
-                                div().overflow_scrollbar().child(
+                                div().flex_1().overflow_hidden().child(
+                                    // Body
                                     v_flex()
                                         .size_full()
-                                        .px_4()
-                                        .py_3()
-                                        .gap_3()
-                                        .refine_style(&self.style)
+                                        .overflow_y_scrollbar()
+                                        .pl(paddings.left)
+                                        .pr(paddings.right)
                                         .children(self.children),
                                 ),
                             )
