@@ -225,7 +225,7 @@ impl ListDelegate for MyListDelegate {
 ```rust
 impl ListDelegate for MyListDelegate {
     fn has_more(&self, _cx: &App) -> bool {
-        !self.has_more_data
+        self.has_more_data
     }
 
     fn load_more_threshold(&self) -> usize {

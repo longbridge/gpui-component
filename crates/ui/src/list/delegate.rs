@@ -130,9 +130,9 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Return true to enable load more data when scrolling to the bottom.
     ///
-    /// Default: true
+    /// Default: false
     fn has_more(&self, cx: &App) -> bool {
-        true
+        false
     }
 
     /// Returns a threshold value (n entities), of course,

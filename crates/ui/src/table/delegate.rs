@@ -131,7 +131,7 @@ pub trait TableDelegate: Sized + 'static {
 
     /// Return true to enable load more data when scrolling to the bottom.
     ///
-    /// Default: true
+    /// Default: false
     fn has_more(&self, cx: &App) -> bool {
         false
     }
