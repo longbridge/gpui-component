@@ -218,6 +218,14 @@ pub fn init(cx: &mut App) {
         cx.quit();
     });
 
+    cx.on_action(|_: &About, cx: &mut App| {
+        if let Some(active_window) = cx.active_window() {
+            _ = active_window.update(cx, |_, window, cx| {
+                window.push_notification("GPUI Component Storybook\nVersion 0.1.0", cx);
+            });
+        }
+    });
+
     register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
         let story_state = match info {
             PanelInfo::Panel(value) => StoryState::from_value(value.clone()),
