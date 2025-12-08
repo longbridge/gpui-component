@@ -8620,7 +8620,6 @@ dependencies = [
  "anyhow",
  "gpui",
  "gpui-component",
- "gpui-component-assets",
  "gpui-wry",
  "raw-window-handle",
  "wry",

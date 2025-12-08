@@ -12,7 +12,6 @@ inspector = []
 anyhow.workspace = true
 gpui.workspace = true
 gpui-component = { workspace = true }
-gpui-component-assets.workspace = true
 
 # WebView dependencies
 gpui-wry = { path = "../../crates/webview" }
