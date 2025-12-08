@@ -113,7 +113,7 @@ fn chart_container(
 ) -> impl IntoElement {
     v_flex()
         .flex_1()
-        .h_full()
+        .h(px(400.))
         .border_1()
         .border_color(cx.theme().border)
         .rounded_lg()
@@ -156,7 +156,7 @@ impl Render for ChartStory {
             .gap_y_4()
             .bg(cx.theme().background)
             .child(
-                div().h(px(400.)).child(chart_container(
+                div().child(chart_container(
                     "Area Chart - Stacked",
                     AreaChart::new(self.daily_devices.clone())
                         .x(|d| d.date.clone())
@@ -181,8 +181,8 @@ impl Render for ChartStory {
             )
             .child(
                 h_flex()
-                    .gap_x_8()
-                    .h(px(450.))
+                    .flex_wrap()
+                    .gap_4()
                     .child(chart_container(
                         "Pie Chart",
                         PieChart::new(self.monthly_devices.clone())
@@ -217,8 +217,8 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_4()
-                    .h(px(400.))
+                    .flex_wrap()
+                    .gap_4()
                     .child(chart_container(
                         "Bar Chart",
                         BarChart::new(self.monthly_devices.clone())
@@ -258,8 +258,8 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_4()
-                    .h(px(400.))
+                    .flex_wrap()
+                    .gap_4()
                     .child(chart_container(
                         "Line Chart",
                         LineChart::new(self.monthly_devices.clone())
@@ -300,8 +300,8 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_4()
-                    .h(px(400.))
+                    .flex_wrap()
+                    .gap_4()
                     .child(chart_container(
                         "Area Chart",
                         AreaChart::new(self.monthly_devices.clone())
@@ -345,8 +345,8 @@ impl Render for ChartStory {
             .child(Divider::horizontal())
             .child(
                 h_flex()
-                    .gap_x_4()
-                    .h(px(400.))
+                    .flex_wrap()
+                    .gap_4()
                     .child(chart_container(
                         "Candlestick Chart",
                         CandlestickChart::new(self.stock_prices.clone())
