@@ -563,6 +563,7 @@ impl RenderOnce for Button {
             .child({
                 h_flex()
                     .id("label")
+                    .w_full()
                     .items_center()
                     .justify_center()
                     .button_text_size(self.size)
@@ -588,12 +589,14 @@ impl RenderOnce for Button {
                     })
                     .children(self.children)
                     .when(self.dropdown_caret, |this| {
-                        this.child(Icon::new(IconName::ChevronDown).xsmall().text_color(
-                            match self.disabled {
-                                true => cx.theme().muted_foreground.opacity(0.5),
-                                false => cx.theme().muted_foreground,
-                            },
-                        ))
+                        this.justify_between().child(
+                            Icon::new(IconName::ChevronDown).xsmall().text_color(
+                                match self.disabled {
+                                    true => cx.theme().muted_foreground.opacity(0.5),
+                                    false => cx.theme().muted_foreground,
+                                },
+                            ),
+                        )
                     })
             })
             .when(self.loading && !self.disabled, |this| {

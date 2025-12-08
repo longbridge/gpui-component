@@ -1,18 +1,18 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, Corner, IntoElement, SharedString,
-    StyleRefinement, Styled, Window,
+    AnyElement, App, Corner, IntoElement, ParentElement, SharedString, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
+    AxisExt, Sizable, StyledExt,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
-        fields::{get_value, set_value, SettingFieldRender},
         AnySettingField, RenderOptions,
+        fields::{SettingFieldRender, get_value, set_value},
     },
-    AxisExt, Sizable, StyledExt,
 };
 
 pub(crate) struct DropdownField<T> {
@@ -51,33 +51,34 @@ where
             .map(|(_, label)| label.clone())
             .unwrap_or_else(|| old_value.clone().into());
 
-        Button::new("btn")
-            .when(options.layout.is_vertical(), |this| this.w_full())
-            .label(old_label)
-            .dropdown_caret(true)
-            .outline()
-            .with_size(options.size)
-            .refine_style(style)
-            .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
-                let set_value = set_value.clone();
-                let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
-                    let old_value: SharedString = old_value.clone().into();
-                    let checked = &old_value == value;
-                    menu.item(
-                        PopupMenuItem::new(label.clone())
-                            .checked(checked)
-                            .on_click({
-                                let value = value.clone();
-                                let set_value = set_value.clone();
-                                move |_, _, cx| {
-                                    set_value(T::from(value.clone()), cx);
-                                }
-                            }),
-                    )
-                });
-
-                menu
-            })
+        div()
+            .min_w(px(150.))
+            .child(
+                Button::new("btn")
+                    .when(options.layout.is_vertical(), |this| this.w_full())
+                    .label(old_label)
+                    .dropdown_caret(true)
+                    .outline()
+                    .with_size(options.size)
+                    .refine_style(style)
+                    .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
+                        let set_value = set_value.clone();
+                        let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
+                            let old_value: SharedString = old_value.clone().into();
+                            let checked = &old_value == value;
+                            menu.item(PopupMenuItem::new(label.clone()).checked(checked).on_click(
+                                {
+                                    let value = value.clone();
+                                    let set_value = set_value.clone();
+                                    move |_, _, cx| {
+                                        set_value(T::from(value.clone()), cx);
+                                    }
+                                },
+                            ))
+                        });
+                        menu
+                    }),
+            )
             .into_any_element()
     }
 }
