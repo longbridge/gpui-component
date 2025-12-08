@@ -10,7 +10,7 @@ use gpui_component::{
     },
 };
 
-use crate::chart_story::DailyDevice;
+use super::DailyDevice;
 
 #[derive(IntoPlot)]
 pub struct StackedBarChart {

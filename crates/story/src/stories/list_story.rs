@@ -289,7 +289,11 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn has_more(&self, _: &App) -> bool {
-        return !self.loading && !self.eof;
+        if self.loading {
+            return false;
+        }
+
+        return !self.eof;
     }
 
     fn load_more_threshold(&self) -> usize {

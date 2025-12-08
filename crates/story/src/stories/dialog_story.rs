@@ -366,7 +366,7 @@ impl Render for DialogStory {
                                             .title("Dialog with scrollbar")
                                             .child(TextView::markdown(
                                                 "markdown1",
-                                                include_str!("../../../README.md"),
+                                                include_str!("../../../../README.md"),
                                                 window,
                                                 cx
                                             ))

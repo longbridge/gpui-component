@@ -12,7 +12,8 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-use crate::{Story, chart_story::StackedBarChart};
+use super::StackedBarChart;
+use crate::Story;
 
 #[derive(Clone, Deserialize)]
 struct MonthlyDevice {
@@ -55,16 +56,17 @@ pub struct ChartStory {
 impl ChartStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let daily_devices = serde_json::from_str::<Vec<DailyDevice>>(include_str!(
-            "../fixtures/daily-devices.json"
+            "../../fixtures/daily-devices.json"
         ))
         .unwrap();
         let monthly_devices = serde_json::from_str::<Vec<MonthlyDevice>>(include_str!(
-            "../fixtures/monthly-devices.json"
+            "../../fixtures/monthly-devices.json"
         ))
         .unwrap();
-        let stock_prices =
-            serde_json::from_str::<Vec<StockPrice>>(include_str!("../fixtures/stock-prices.json"))
-                .unwrap();
+        let stock_prices = serde_json::from_str::<Vec<StockPrice>>(include_str!(
+            "../../fixtures/stock-prices.json"
+        ))
+        .unwrap();
 
         Self {
             daily_devices,
