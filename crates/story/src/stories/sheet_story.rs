@@ -273,9 +273,9 @@ impl SheetStory {
     fn open_sheet_at(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
         let list = self.list.clone();
 
-        let list_h = match placement {
+        let drawer_h = match placement {
             Placement::Left | Placement::Right => px(400.),
-            Placement::Top | Placement::Bottom => px(160.),
+            Placement::Top | Placement::Bottom => px(540.),
         };
 
         let overlay = self.overlay;
@@ -285,7 +285,7 @@ impl SheetStory {
         window.open_sheet_at(placement, cx, move |this, _, cx| {
             this.overlay(overlay)
                 .overlay_closable(overlay_closable)
-                .size(px(400.))
+                .size(drawer_h)
                 .title("Sheet Title")
                 .gap_4()
                 .child(Input::new(&input1))
@@ -301,10 +301,7 @@ impl SheetStory {
                     List::new(&list)
                         .border_1()
                         .border_color(cx.theme().border)
-                        .rounded(cx.theme().radius)
-                        .size_full()
-                        .flex_1()
-                        .h(list_h),
+                        .rounded(cx.theme().radius),
                 )
                 .footer(
                     h_flex()

@@ -1,9 +1,9 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App,ClickEvent, DefiniteLength, DismissEvent, Div,
+    Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, RenderOnce, Styled, Window, anchored, div, point,
+    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, div, point,
     prelude::FluentBuilder as _, px,
 };
 
@@ -33,7 +33,8 @@ pub struct Sheet {
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     title: Option<AnyElement>,
     footer: Option<AnyElement>,
-    content: Div,
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
     margin_top: Pixels,
     overlay: bool,
     overlay_closable: bool,
@@ -49,7 +50,8 @@ impl Sheet {
             resizable: true,
             title: None,
             footer: None,
-            content: v_flex().px_4().py_3(),
+            style: StyleRefinement::default(),
+            children: Vec::new(),
             margin_top: TITLE_BAR_HEIGHT,
             overlay: true,
             overlay_closable: true,
@@ -114,12 +116,12 @@ impl Sheet {
 impl EventEmitter<DismissEvent> for Sheet {}
 impl ParentElement for Sheet {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.content.extend(elements);
+        self.children.extend(elements);
     }
 }
 impl Styled for Sheet {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.content.style()
+        &mut self.style
     }
 }
 
@@ -219,7 +221,15 @@ impl RenderOnce for Sheet {
                             )
                             .child(
                                 // Body
-                                div().flex_1().overflow_scrollbar().child(self.content),
+                                div().overflow_scrollbar().child(
+                                    v_flex()
+                                        .size_full()
+                                        .px_4()
+                                        .py_3()
+                                        .gap_3()
+                                        .refine_style(&self.style)
+                                        .children(self.children),
+                                ),
                             )
                             .when_some(self.footer, |this, footer| {
                                 // Footer
