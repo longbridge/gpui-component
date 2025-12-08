@@ -77,17 +77,6 @@ fn main() {
 }
 ```
 
-### WebView
-
-> Still early and experimental; there are a lot of limitations.
-
-The [gpui-component-webview](crates/webview) provided a `WebView` element based on [Wry](https://github.com/tauri-apps/wry) to supports render a webview container in GPUI application.
-
-```toml
-gpui-component-webview = { version = "0.5.0" }
-wry = { version = "0.53.3" }
-```
-
 ### Icons
 
 GPUI Component has an `Icon` element, but it does not include SVG files by default.
