@@ -1,6 +1,6 @@
 [package]
 name = "gpui-component-story"
-version = "0.5.0-preview2"
+version = "0.5.0"
 publish = false
 edition.workspace = true
 
