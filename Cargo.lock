@@ -8621,6 +8621,7 @@ dependencies = [
  "gpui",
  "gpui-component",
  "gpui-wry",
+ "gtk",
  "raw-window-handle",
  "wry",
 ]
