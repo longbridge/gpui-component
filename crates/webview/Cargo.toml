@@ -16,5 +16,5 @@ doctest = false
 
 [dependencies]
 anyhow.workspace = true
-gpui.workspace = true
+gpui = "0.2.2"
 wry = { version = "0.53.3" }
