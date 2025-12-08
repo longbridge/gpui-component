@@ -224,8 +224,8 @@ impl ListDelegate for MyListDelegate {
 
 ```rust
 impl ListDelegate for MyListDelegate {
-    fn is_eof(&self, _cx: &App) -> bool {
-        !self.has_more_data
+    fn has_more(&self, _cx: &App) -> bool {
+        self.has_more_data
     }
 
     fn load_more_threshold(&self) -> usize {

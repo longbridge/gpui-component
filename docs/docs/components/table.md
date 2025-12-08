@@ -316,8 +316,8 @@ Implement loading more data as user scrolls:
 
 ```rust
 impl TableDelegate for MyTableDelegate {
-    fn is_eof(&self, _: &App) -> bool {
-        !self.has_more_data
+    fn has_more(&self, _: &App) -> bool {
+        self.has_more_data
     }
 
     fn load_more_threshold(&self) -> usize {
