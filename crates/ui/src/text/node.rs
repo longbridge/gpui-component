@@ -12,6 +12,7 @@ use gpui::{
 };
 use markdown::mdast;
 use ropey::Rope;
+use uuid::Uuid;
 
 use crate::{
     ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
@@ -308,6 +309,7 @@ impl Paragraph {
 
 #[derive(Debug, Clone)]
 pub struct CodeBlock {
+    id: ElementId,
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
     state: Arc<Mutex<InlineState>>,
@@ -320,6 +322,11 @@ impl PartialEq for CodeBlock {
 }
 
 impl CodeBlock {
+    /// Get the unique id of the code block.
+    pub fn id(&self) -> ElementId {
+        self.id.clone()
+    }
+
     /// Get the language of the code block.
     pub fn lang(&self) -> Option<SharedString> {
         self.lang.clone()
@@ -336,6 +343,7 @@ impl CodeBlock {
         _: &TextViewStyle,
         highlight_theme: &HighlightTheme,
     ) -> Self {
+        let id: ElementId = Uuid::new_v4().into();
         let mut styles = vec![];
         if let Some(lang) = &lang {
             let mut highlighter = SyntaxHighlighter::new(&lang);
@@ -347,6 +355,7 @@ impl CodeBlock {
         state.lock().unwrap().set_text(code);
 
         Self {
+            id,
             lang,
             styles,
             state,

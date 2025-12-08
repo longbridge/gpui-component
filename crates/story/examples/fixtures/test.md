@@ -58,6 +58,8 @@ And this is next blockquote
 
 ## Code block
 
+#### Rust
+
 ```rust
 struct Repository {
     /// Name of the repository.
@@ -71,6 +73,21 @@ fn main() {
 
     println!("Hello, World!");
 }
+```
+
+#### Python
+
+```python
+class Repository:
+    """A repository."""
+
+    def __init__(self, name: str):
+        """Initialize the repository.
+
+        Args:
+            name: Name of the repository.
+        """
+        self.name = name
 ```
 
 ---
