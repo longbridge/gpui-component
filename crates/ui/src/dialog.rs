@@ -1,7 +1,7 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Div, Edges,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
     Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, anchored, div, hsla,
     point, prelude::FluentBuilder, px, relative,
@@ -81,7 +81,7 @@ pub struct Dialog {
     style: StyleRefinement,
     title: Option<AnyElement>,
     footer: Option<FooterFn>,
-    content: Div,
+    children: Vec<AnyElement>,
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
@@ -117,7 +117,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             title: None,
             footer: None,
-            content: v_flex(),
+            children: Vec::new(),
             margin_top: None,
             width: px(480.),
             max_width: None,
@@ -278,7 +278,7 @@ impl Dialog {
 
 impl ParentElement for Dialog {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.content.extend(elements);
+        self.children.extend(elements);
     }
 }
 
@@ -505,13 +505,14 @@ impl RenderOnce for Dialog {
                                     })
                             }))
                             .child(
-                                div().w_full().flex_1().overflow_hidden().child(
+                                div().flex_1().overflow_hidden().child(
+                                    // Body
                                     v_flex()
-                                        .id("contents")
+                                        .size_full()
+                                        .overflow_y_scrollbar()
                                         .pl(paddings.left)
                                         .pr(paddings.right)
-                                        .overflow_y_scrollbar()
-                                        .child(self.content),
+                                        .children(self.children),
                                 ),
                             )
                             .when_some(self.footer, |this, footer| {

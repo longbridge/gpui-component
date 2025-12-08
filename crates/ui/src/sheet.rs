@@ -1,9 +1,9 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App,ClickEvent, DefiniteLength, DismissEvent, Div,
+    Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, RenderOnce, Styled, Window, anchored, div, point,
+    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, div, point,
     prelude::FluentBuilder as _, px,
 };
 
@@ -33,7 +33,8 @@ pub struct Sheet {
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     title: Option<AnyElement>,
     footer: Option<AnyElement>,
-    content: Div,
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
     margin_top: Pixels,
     overlay: bool,
     overlay_closable: bool,
@@ -49,7 +50,8 @@ impl Sheet {
             resizable: true,
             title: None,
             footer: None,
-            content: v_flex().px_4().py_3(),
+            style: StyleRefinement::default(),
+            children: Vec::new(),
             margin_top: TITLE_BAR_HEIGHT,
             overlay: true,
             overlay_closable: true,
@@ -114,12 +116,12 @@ impl Sheet {
 impl EventEmitter<DismissEvent> for Sheet {}
 impl ParentElement for Sheet {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.content.extend(elements);
+        self.children.extend(elements);
     }
 }
 impl Styled for Sheet {
     fn style(&mut self) -> &mut gpui::StyleRefinement {
-        self.content.style()
+        &mut self.style
     }
 }
 
@@ -134,6 +136,22 @@ impl RenderOnce for Sheet {
                 window_paddings.top + window_paddings.bottom,
             );
         let on_close = self.on_close.clone();
+
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+        let mut paddings = Edges::all(px(16.));
+        if let Some(pl) = self.style.padding.left {
+            paddings.left = pl.to_pixels(base_size, rem_size);
+        }
+        if let Some(pr) = self.style.padding.right {
+            paddings.right = pr.to_pixels(base_size, rem_size);
+        }
+        if let Some(pt) = self.style.padding.top {
+            paddings.top = pt.to_pixels(base_size, rem_size);
+        }
+        if let Some(pb) = self.style.padding.bottom {
+            paddings.bottom = pb.to_pixels(base_size, rem_size);
+        }
 
         anchored()
             .position(point(
@@ -180,6 +198,7 @@ impl RenderOnce for Sheet {
                             .bg(cx.theme().background)
                             .border_color(cx.theme().border)
                             .shadow_xl()
+                            .refine_style(&self.style)
                             .map(|this| {
                                 // Set the size of the sheet.
                                 if placement.is_horizontal() {
@@ -218,8 +237,15 @@ impl RenderOnce for Sheet {
                                     ),
                             )
                             .child(
-                                // Body
-                                div().flex_1().overflow_scrollbar().child(self.content),
+                                div().flex_1().overflow_hidden().child(
+                                    // Body
+                                    v_flex()
+                                        .size_full()
+                                        .overflow_y_scrollbar()
+                                        .pl(paddings.left)
+                                        .pr(paddings.right)
+                                        .children(self.children),
+                                ),
                             )
                             .when_some(self.footer, |this, footer| {
                                 // Footer
