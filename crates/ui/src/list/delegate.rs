@@ -131,7 +131,7 @@ pub trait ListDelegate: Sized + 'static {
     /// Return true to enable load more data when scrolling to the bottom.
     ///
     /// Default: true
-    fn is_eof(&self, cx: &App) -> bool {
+    fn has_more(&self, cx: &App) -> bool {
         true
     }
 

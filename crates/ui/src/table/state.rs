@@ -559,7 +559,7 @@ where
         let threshold = self.delegate.load_more_threshold();
         // Securely handle subtract logic to prevent attempt to subtract with overflow
         if visible_end >= rows_count.saturating_sub(threshold) {
-            if !self.delegate.is_eof(cx) {
+            if !self.delegate.has_more(cx) {
                 return;
             }
 
