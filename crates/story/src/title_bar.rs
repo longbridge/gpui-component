@@ -28,10 +28,8 @@ impl AppTitleBar {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        app_menus::init(title, cx);
-
+        let app_menu_bar = app_menus::init(title, cx);
         let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
-        let app_menu_bar = AppMenuBar::new(window, cx);
 
         Self {
             app_menu_bar,
