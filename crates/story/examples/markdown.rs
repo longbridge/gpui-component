@@ -110,20 +110,14 @@ impl Render for Example {
                                 let code = code_block.code();
                                 let lang = code_block.lang();
 
-                                let copy_id: SharedString =
-                                    format!("copy-{}", code_block.id()).into();
-
-                                let button_id: SharedString =
-                                    format!("run-terminal-{}", code_block.id()).into();
-
                                 h_flex()
                                     .gap_1()
-                                    .child(Clipboard::new(copy_id).value(code.clone()))
+                                    .child(Clipboard::new("copy").value(code.clone()))
                                     .when_some(lang, |this, lang| {
                                         // Only show run terminal button for certain languages
                                         if lang.as_ref() == "rust" || lang.as_ref() == "python" {
                                             this.child(
-                                                Button::new(button_id)
+                                                Button::new("run-terminal")
                                                     .icon(IconName::SquareTerminal)
                                                     .ghost()
                                                     .xsmall()
