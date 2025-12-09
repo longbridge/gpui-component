@@ -654,8 +654,9 @@ impl Render for StoryContainer {
             .id("story-container")
             .size_full()
             .overflow_y_scrollbar()
-            .p(self.paddings)
             .track_focus(&self.focus_handle)
-            .when_some(self.story.clone(), |this, story| this.child(story))
+            .when_some(self.story.clone(), |this, story| {
+                this.child(div().size_full().p(self.paddings).child(story))
+            })
     }
 }
