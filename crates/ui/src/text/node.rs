@@ -376,7 +376,7 @@ impl CodeBlock {
             .when(!options.is_last, |this| this.pb(style.paragraph_gap))
             .child(
                 div()
-                    .id("codeblock")
+                    .id(("codeblock", options.ix))
                     .p_3()
                     .rounded(cx.theme().radius)
                     .bg(cx.theme().muted)
@@ -393,6 +393,7 @@ impl CodeBlock {
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
                         this.child(
                             div()
+                                .id("actions")
                                 .absolute()
                                 .top_2()
                                 .right_2()
@@ -690,6 +691,7 @@ impl Paragraph {
 
 #[derive(Default, Clone, Copy)]
 struct NodeRenderOptions {
+    ix: usize,
     in_list: bool,
     todo: bool,
     ordered: bool,
@@ -897,7 +899,7 @@ impl Node {
                 spread,
                 checked,
             } => v_flex()
-                .id("li")
+                .id(("li", options.ix))
                 .when(*spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
@@ -994,6 +996,7 @@ impl Node {
 
     fn render_table(
         item: &Node,
+        options: &NodeRenderOptions,
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
@@ -1026,7 +1029,7 @@ impl Node {
                 .w_full()
                 .child(
                     div()
-                        .id("table")
+                        .id(("table", options.ix))
                         .w_full()
                         .border_1()
                         .border_color(cx.theme().border)
@@ -1126,7 +1129,16 @@ impl Node {
         gpui::list(list_state, move |ix, window, cx| {
             let is_last = ix + 1 == children.len();
             children[ix]
-                .render_block(options.is_last(is_last), &node_cx, window, cx)
+                .render_block(
+                    NodeRenderOptions {
+                        ix,
+                        is_last,
+                        ..options
+                    },
+                    &node_cx,
+                    window,
+                    cx,
+                )
                 .into_any_element()
         })
         .size_full()
@@ -1140,6 +1152,7 @@ impl Node {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
+        let ix = options.ix;
         let mb = if options.in_list || options.is_last {
             rems(0.)
         } else {
@@ -1148,15 +1161,13 @@ impl Node {
 
         match self {
             Node::Root { children } => div()
-                .id("div")
-                .children(
-                    children
-                        .into_iter()
-                        .map(move |node| node.render_block(options, node_cx, window, cx)),
-                )
+                .id(("div", ix))
+                .children(children.into_iter().enumerate().map(move |(ix, node)| {
+                    node.render_block(NodeRenderOptions { ix, ..options }, node_cx, window, cx)
+                }))
                 .into_any_element(),
             Node::Paragraph(paragraph) => div()
-                .id("p")
+                .id(("p", ix))
                 .pb(mb)
                 .child(paragraph.render(node_cx, window, cx))
                 .into_any_element(),
@@ -1177,7 +1188,7 @@ impl Node {
                 }
 
                 h_flex()
-                    .id(("h", *level as usize))
+                    .id(SharedString::from(format!("h{}-{}", level, ix)))
                     .pb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)
@@ -1190,7 +1201,7 @@ impl Node {
                 .pb(mb)
                 .child(
                     div()
-                        .id("blockquote")
+                        .id(("blockquote", ix))
                         .w_full()
                         .text_color(cx.theme().muted_foreground)
                         .border_l_3()
@@ -1206,18 +1217,19 @@ impl Node {
                 )
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
-                .id(if *ordered { "ol" } else { "ul" })
+                .id((if *ordered { "ol" } else { "ul" }, ix))
                 .pb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
-                    let mut ix = 0;
-                    for item in children.into_iter() {
+                    let mut item_index = 0;
+                    for (ix, item) in children.into_iter().enumerate() {
                         let is_item = item.is_list_item();
 
                         items.push(Self::render_list_item(
                             item,
-                            ix,
+                            item_index,
                             NodeRenderOptions {
+                                ix,
                                 ordered: *ordered,
                                 ..options
                             },
@@ -1227,14 +1239,16 @@ impl Node {
                         ));
 
                         if is_item {
-                            ix += 1;
+                            item_index += 1;
                         }
                     }
                     items
                 })
                 .into_any_element(),
             Node::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
-            Node::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
+            Node::Table { .. } => {
+                Self::render_table(self, &options, node_cx, window, cx).into_any_element()
+            }
             Node::Divider => div()
                 .pb(mb)
                 .child(div().id("divider").bg(cx.theme().border).h(px(2.)))
