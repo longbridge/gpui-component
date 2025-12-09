@@ -209,7 +209,6 @@ impl Render for StoryRoot {
 
         div()
             .id("story-root")
-            .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_panel_info))
             .on_action(cx.listener(Self::on_action_toggle_search))
             .size_full()
