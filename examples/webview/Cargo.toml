@@ -15,7 +15,7 @@ gpui-component = { workspace = true }
 
 # WebView dependencies
 gpui-wry = { path = "../../crates/webview" }
-wry = { version = "0.53.3" }
+wry = { version = "0.53.3", package = "lb-wry" }
 raw-window-handle = { version = "0.6", features = ["std"] }
 
 [target."cfg(target_os = \"linux\")".dependencies]
