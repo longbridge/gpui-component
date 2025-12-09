@@ -71,7 +71,9 @@ pub struct ColorPickerState {
 impl ColorPickerState {
     /// Create a new [`ColorPickerState`].
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let state = cx.new(|cx| InputState::new(window, cx));
+        let state = cx.new(|cx| {
+            InputState::new(window, cx).pattern(regex::Regex::new(r"^#[0-9a-fA-F]{0,8}$").unwrap())
+        });
 
         let _subscriptions = vec![cx.subscribe_in(
             &state,
@@ -309,19 +311,6 @@ impl ColorPicker {
             cx.theme().magenta_light,
         ]);
 
-        let state = self.state.clone();
-        // If the input value is empty, fill it with the current value.
-        let input_value = state.read(cx).state.read(cx).value();
-        if input_value.is_empty()
-            && let Some(value) = state.read(cx).value
-        {
-            state.update(cx, |state, cx| {
-                state.state.update(cx, |input, cx| {
-                    input.set_value(value.to_hex(), window, cx);
-                });
-            });
-        }
-
         v_flex()
             .gap_3()
             .child(
@@ -344,7 +333,7 @@ impl ColorPicker {
                         )
                     })),
             )
-            .when_some(state.read(cx).hovered_color, |this, hovered_color| {
+            .when_some(self.state.read(cx).hovered_color, |this, hovered_color| {
                 this.child(Divider::horizontal()).child(
                     h_flex()
                         .gap_2()
@@ -358,7 +347,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(Input::new(&state.read(cx).state).small()),
+                        .child(Input::new(&self.state.read(cx).state).small()),
                 )
             })
     }
