@@ -1,8 +1,9 @@
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
-    Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
-    Render, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window, WindowBounds,
-    WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems, size,
+    FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window,
+    WindowBounds, WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems,
+    size,
 };
 use gpui_component::{
     ActiveTheme, IconName, Root, TitleBar, WindowExt,
@@ -142,6 +143,7 @@ pub fn create_new_window_with_size<F, E>(
 }
 
 struct StoryRoot {
+    focus_handle: FocusHandle,
     title_bar: Entity<AppTitleBar>,
     view: AnyView,
 }
@@ -155,9 +157,47 @@ impl StoryRoot {
     ) -> Self {
         let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
         Self {
+            focus_handle: cx.focus_handle(),
             title_bar,
             view: view.into(),
         }
+    }
+
+    fn on_action_panel_info(
+        &mut self,
+        _: &ShowPanelInfo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        struct Info;
+        let note = Notification::new()
+            .message("You have clicked panel info.")
+            .id::<Info>();
+        window.push_notification(note, cx);
+    }
+
+    fn on_action_toggle_search(
+        &mut self,
+        _: &ToggleSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.propagate();
+        if window.has_focused_input(cx) {
+            return;
+        }
+
+        struct Search;
+        let note = Notification::new()
+            .message("You have toggled search.")
+            .id::<Search>();
+        window.push_notification(note, cx);
+    }
+}
+
+impl Focusable for StoryRoot {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
     }
 }
 
@@ -168,6 +208,10 @@ impl Render for StoryRoot {
         let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
+            .id("story-root")
+            .track_focus(&self.focus_handle)
+            .on_action(cx.listener(Self::on_action_panel_info))
+            .on_action(cx.listener(Self::on_action_toggle_search))
             .size_full()
             .child(
                 v_flex()
@@ -440,37 +484,6 @@ impl StoryContainer {
         self.on_active = Some(on_active);
         self
     }
-
-    fn on_action_panel_info(
-        &mut self,
-        _: &ShowPanelInfo,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        struct Info;
-        let note = Notification::new()
-            .message(format!("You have clicked panel info on: {}", self.name))
-            .id::<Info>();
-        window.push_notification(note, cx);
-    }
-
-    fn on_action_toggle_search(
-        &mut self,
-        _: &ToggleSearch,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        cx.propagate();
-        if window.has_focused_input(cx) {
-            return;
-        }
-
-        struct Search;
-        let note = Notification::new()
-            .message(format!("You have toggled search on: {}", self.name))
-            .id::<Search>();
-        window.push_notification(note, cx);
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -636,15 +649,13 @@ impl Focusable for StoryContainer {
     }
 }
 impl Render for StoryContainer {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("story-container")
             .size_full()
             .overflow_y_scrollbar()
             .p(self.paddings)
             .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::on_action_panel_info))
-            .on_action(cx.listener(Self::on_action_toggle_search))
             .when_some(self.story.clone(), |this, story| this.child(story))
     }
 }
