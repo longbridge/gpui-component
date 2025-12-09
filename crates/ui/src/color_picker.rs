@@ -264,7 +264,7 @@ impl ColorPicker {
     ) -> Stateful<Div> {
         let state = self.state.clone();
         div()
-            .id(SharedString::from(format!("color-{}", color.to_hex())))
+            .id(format!("color-{}", color.to_hex()))
             .h_5()
             .w_5()
             .bg(color)

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use gpui::{
     App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
+    Pixels, Render, ScrollHandle, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity,
+    Window, div, prelude::FluentBuilder, px, relative, rems,
 };
 use rust_i18n::t;
 
@@ -580,7 +580,7 @@ impl TabPanel {
         };
 
         Some(
-            Button::new(SharedString::from(format!("toggle-dock:{:?}", placement)))
+            Button::new(format!("toggle-dock:{:?}", placement))
                 .icon(icon)
                 .xsmall()
                 .ghost()

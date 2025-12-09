@@ -1188,7 +1188,7 @@ impl Node {
                 }
 
                 h_flex()
-                    .id(SharedString::from(format!("h{}-{}", level, ix)))
+                    .id(format!("h{}-{}", level, ix))
                     .pb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)

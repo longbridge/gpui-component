@@ -155,7 +155,7 @@ impl SettingItem {
         cx: &mut App,
     ) -> Stateful<Div> {
         div()
-            .id(SharedString::from(format!("item-{}", options.item_ix)))
+            .id(format!("item-{}", options.item_ix))
             .w_full()
             .child(match self {
                 SettingItem::Item {
