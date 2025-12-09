@@ -221,13 +221,19 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                 v_flex().id("content").flex_1().min_h_0().child(
                     v_flex()
                         .id("inner")
-                        .p_3()
+                        .px_3()
+                        .gap_y_3()
                         .when(self.collapsed, |this| this.p_2())
-                        .children(
-                            self.content.into_iter().enumerate().map(|(ix, c)| {
-                                div().id(ix).mt_3().child(c.collapsed(self.collapsed))
-                            }),
-                        )
+                        .children({
+                            let content_len = self.content.len();
+                            self.content.into_iter().enumerate().map(move |(ix, c)| {
+                                div()
+                                    .id(ix)
+                                    .child(c.collapsed(self.collapsed))
+                                    .when(ix == 0, |this| this.mt_3())
+                                    .when(ix == content_len - 1, |this| this.mb_3())
+                            })
+                        })
                         .overflow_y_scrollbar(),
                 ),
             )
