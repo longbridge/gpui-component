@@ -2955,6 +2955,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "reqwest_client",
+ "rust-i18n",
  "serde",
  "serde_json",
  "smol",

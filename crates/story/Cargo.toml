@@ -31,6 +31,7 @@ tracing.workspace = true
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 tree-sitter-navi = "0.2.2"
 unindent = "0.2.3"
+rust-i18n.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }
