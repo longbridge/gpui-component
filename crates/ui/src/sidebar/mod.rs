@@ -230,7 +230,6 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                                 div()
                                     .id(ix)
                                     .child(c.collapsed(self.collapsed))
-                                    .when(ix == 0, |this| this.mt_3())
                                     .when(ix == content_len - 1, |this| this.mb_3())
                             })
                         })
