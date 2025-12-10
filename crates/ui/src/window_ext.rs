@@ -68,10 +68,8 @@ impl WindowExt for Window {
     where
         F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, move |root, window, cx| {
-                root.open_sheet_at(placement, build, window, cx);
-            })
+        Root::update(self, cx, move |root, window, cx| {
+            root.open_sheet_at(placement, build, window, cx);
         })
     }
 
@@ -82,10 +80,8 @@ impl WindowExt for Window {
 
     #[inline]
     fn close_sheet(&mut self, cx: &mut App) {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, |root, window, cx| {
-                root.close_sheet(window, cx);
-            })
+        Root::update(self, cx, |root, window, cx| {
+            root.close_sheet(window, cx);
         })
     }
 
@@ -94,10 +90,8 @@ impl WindowExt for Window {
     where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, move |root, window, cx| {
-                root.open_dialog(build, window, cx);
-            })
+        Root::update(self, cx, move |root, window, cx| {
+            root.open_dialog(build, window, cx);
         })
     }
 
@@ -108,47 +102,37 @@ impl WindowExt for Window {
 
     #[inline]
     fn close_dialog(&mut self, cx: &mut App) {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, move |root, window, cx| {
-                root.close_dialog(window, cx);
-            })
+        Root::update(self, cx, |root, window, cx| {
+            root.close_dialog(window, cx);
         })
     }
 
     #[inline]
     fn close_all_dialogs(&mut self, cx: &mut App) {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, |root, window, cx| {
-                root.close_all_dialogs(window, cx);
-            })
+        Root::update(self, cx, |root, window, cx| {
+            root.close_all_dialogs(window, cx);
         })
     }
 
     #[inline]
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App) {
         let note = note.into();
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, move |root, window, cx| {
-                root.push_notification(note, window, cx);
-            })
+        Root::update(self, cx, |root, window, cx| {
+            root.push_notification(note, window, cx);
         })
     }
 
     #[inline]
     fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App) {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, move |root, window, cx| {
-                root.remove_notification::<T>(window, cx);
-            })
+        Root::update(self, cx, |root, window, cx| {
+            root.remove_notification::<T>(window, cx);
         })
     }
 
     #[inline]
     fn clear_notifications(&mut self, cx: &mut App) {
-        self.defer(cx, move |window, cx| {
-            Root::update(window, cx, move |root, window, cx| {
-                root.clear_notifications(window, cx);
-            })
+        Root::update(self, cx, |root, window, cx| {
+            root.clear_notifications(window, cx);
         })
     }
 
