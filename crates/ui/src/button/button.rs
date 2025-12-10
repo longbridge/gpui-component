@@ -563,6 +563,7 @@ impl RenderOnce for Button {
             .child({
                 h_flex()
                     .id("label")
+                    .w_full()
                     .items_center()
                     .justify_center()
                     .button_text_size(self.size)
@@ -588,7 +589,14 @@ impl RenderOnce for Button {
                     })
                     .children(self.children)
                     .when(self.dropdown_caret, |this| {
-                        this.child(Icon::new(IconName::ChevronDown).with_size(icon_size))
+                        this.justify_between().child(
+                            Icon::new(IconName::ChevronDown).xsmall().text_color(
+                                match self.disabled {
+                                    true => normal_style.fg.opacity(0.3),
+                                    false => normal_style.fg.opacity(0.5),
+                                },
+                            ),
+                        )
                     })
             })
             .when(self.loading && !self.disabled, |this| {

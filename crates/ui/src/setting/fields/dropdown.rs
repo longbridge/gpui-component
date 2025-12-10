@@ -1,18 +1,18 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, Corner, IntoElement, SharedString,
-    StyleRefinement, Styled, Window,
+    AnyElement, App, Corner, IntoElement, SharedString, StyleRefinement, Styled, Window,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
+    AxisExt, Sizable, StyledExt,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
-        fields::{get_value, set_value, SettingFieldRender},
         AnySettingField, RenderOptions,
+        fields::{SettingFieldRender, get_value, set_value},
     },
-    AxisExt, Sizable, StyledExt,
 };
 
 pub(crate) struct DropdownField<T> {
@@ -75,7 +75,6 @@ where
                             }),
                     )
                 });
-
                 menu
             })
             .into_any_element()

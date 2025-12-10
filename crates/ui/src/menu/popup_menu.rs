@@ -1187,7 +1187,11 @@ impl PopupMenu {
                                 .items_center()
                                 .justify_between()
                                 .child(label.clone())
-                                .child(IconName::ChevronRight),
+                                .child(
+                                    Icon::new(IconName::ChevronRight)
+                                        .xsmall()
+                                        .text_color(cx.theme().muted_foreground),
+                                ),
                         ),
                 )
                 .when(selected, |this| {
