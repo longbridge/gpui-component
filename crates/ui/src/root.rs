@@ -203,12 +203,8 @@ impl Root {
         Some(div().children(dialogs))
     }
 
-    pub(crate) fn open_dialog<F>(
-        &mut self,
-        build: F,
-        window: &mut Window,
-        cx: &mut Context<'_, Root>,
-    ) where
+    pub fn open_dialog<F>(&mut self, build: F, window: &mut Window, cx: &mut Context<'_, Root>)
+    where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
         let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
@@ -223,7 +219,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    pub fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         self.focused_input = None;
         if let Some(handle) = self
             .active_dialogs
@@ -236,7 +232,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn close_all_dialogs(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    pub fn close_all_dialogs(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         self.focused_input = None;
         let previous_focused_handle = self
             .active_dialogs
@@ -249,7 +245,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn open_sheet_at<F>(
+    pub fn open_sheet_at<F>(
         &mut self,
         placement: Placement,
         build: F,
@@ -271,7 +267,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn close_sheet(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    pub fn close_sheet(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         self.focused_input = None;
         if let Some(previous_handle) = self
             .active_sheet
@@ -285,7 +281,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn push_notification(
+    pub fn push_notification(
         &mut self,
         note: impl Into<Notification>,
         window: &mut Window,
@@ -296,7 +292,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn remove_notification<T: Sized + 'static>(
+    pub fn remove_notification<T: Sized + 'static>(
         &mut self,
         window: &mut Window,
         cx: &mut Context<'_, Root>,
@@ -308,7 +304,7 @@ impl Root {
         cx.notify();
     }
 
-    pub(crate) fn clear_notifications(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    pub fn clear_notifications(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         self.notification
             .update(cx, |view, cx| view.clear(window, cx));
         cx.notify();
