@@ -275,6 +275,11 @@ where
         &self.visible_range
     }
 
+    /// Returns the height of the table row.
+    pub fn table_row_height(&self) -> Pixels {
+        self.options.size.table_row_height()
+    }
+
     fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
         self.col_groups = (0..self.delegate.columns_count(cx))
             .map(|col_ix| {
