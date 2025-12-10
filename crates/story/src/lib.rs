@@ -123,12 +123,15 @@ pub fn create_new_window_with_size<F, E>(
         let window = cx
             .open_window(options, |window, cx| {
                 let view = crate_view_fn(window, cx);
-                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
+                let story_root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
                 // Set focus to the StoryRoot to enable it's actions.
-                root.focus_handle(cx).focus(window);
+                let focus_handle = story_root.focus_handle(cx);
+                window.defer(cx, move |window, _| {
+                    focus_handle.focus(window);
+                });
 
-                cx.new(|cx| Root::new(root, window, cx))
+                cx.new(|cx| Root::new(story_root, window, cx))
             })
             .expect("failed to open window");
 
@@ -662,7 +665,6 @@ impl Render for StoryRoot {
                         div()
                             .track_focus(&self.focus_handle)
                             .flex_1()
-                            .overflow_hidden()
                             .child(self.view.clone()),
                     )
                     .children(sheet_layer)

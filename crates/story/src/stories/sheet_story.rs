@@ -245,12 +245,7 @@ impl SheetStory {
             items: items.clone(),
             matches: items.clone(),
         };
-        let list = cx.new(|cx| {
-            let mut list = ListState::new(delegate, window, cx).searchable(true);
-            list.focus(window, cx);
-            list
-        });
-
+        let list = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
         let input1 = cx.new(|cx| InputState::new(window, cx).placeholder("Your Name"));
         let input2 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("For test focus back on dialog close.")
