@@ -51,34 +51,30 @@ where
             .map(|(_, label)| label.clone())
             .unwrap_or_else(|| old_value.clone().into());
 
-        div()
-            .min_w(px(150.))
-            .child(
-                Button::new("btn")
-                    .when(options.layout.is_vertical(), |this| this.w_full())
-                    .label(old_label)
-                    .dropdown_caret(true)
-                    .outline()
-                    .with_size(options.size)
-                    .refine_style(style)
-                    .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
-                        let set_value = set_value.clone();
-                        let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
-                            let old_value: SharedString = old_value.clone().into();
-                            let checked = &old_value == value;
-                            menu.item(PopupMenuItem::new(label.clone()).checked(checked).on_click(
-                                {
-                                    let value = value.clone();
-                                    let set_value = set_value.clone();
-                                    move |_, _, cx| {
-                                        set_value(T::from(value.clone()), cx);
-                                    }
-                                },
-                            ))
-                        });
-                        menu
-                    }),
-            )
-            .into_any_element()
+
+        Button::new("btn")
+            .when(options.layout.is_vertical(), |this| this.w_full())
+            .label(old_label)
+            .dropdown_caret(true)
+            .outline()
+            .with_size(options.size)
+            .refine_style(style)
+            .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
+                let set_value = set_value.clone();
+                let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
+                    let old_value: SharedString = old_value.clone().into();
+                    let checked = &old_value == value;
+                    menu.item(PopupMenuItem::new(label.clone()).checked(checked).on_click(
+                        {
+                            let value = value.clone();
+                            let set_value = set_value.clone();
+                            move |_, _, cx| {
+                                set_value(T::from(value.clone()), cx);
+                            }
+                        },
+                    ))
+                });
+                menu
+            }).into_any_element()
     }
 }
