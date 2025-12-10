@@ -29,7 +29,7 @@ pub(crate) fn init(cx: &mut App) {
 pub struct Root {
     /// Used to store the focus handle of the previous view.
     /// When the Dialog, Sheet closes, we will focus back to the previous view.
-    pub(crate) previous_focus_handle: Option<WeakFocusHandle>,
+    pub(crate) previous_focused_handle: Option<WeakFocusHandle>,
     pub(crate) active_sheet: Option<ActiveSheet>,
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
@@ -67,7 +67,7 @@ impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
-            previous_focus_handle: None,
+            previous_focused_handle: None,
             active_sheet: None,
             active_dialogs: Vec::new(),
             focused_input: None,
@@ -99,8 +99,12 @@ impl Root {
 
     pub(crate) fn focus_back(&mut self, window: &mut Window, _: &mut App) {
         // Here used WeakFocusHandle to avoid focus to a dropped view.
-        // If `previous_focus_handle` has dropped (e.g.: From some Dialog view, but it closed), do nothing.
-        if let Some(handle) = self.previous_focus_handle.clone().and_then(|h| h.upgrade()) {
+        // If `previous_focused_handle` has dropped (e.g.: From some Dialog view, but it closed), do nothing.
+        if let Some(handle) = self
+            .previous_focused_handle
+            .clone()
+            .and_then(|h| h.upgrade())
+        {
             window.focus(&handle);
         }
     }
@@ -220,7 +224,7 @@ impl Root {
         // Only save focus handle if there are no active dialogs.
         // This is used to restore focus when all dialogs are closed.
         if self.active_dialogs.len() == 0 {
-            self.previous_focus_handle = window.focused(cx).map(|h| h.downgrade());
+            self.previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
         }
 
         let focus_handle = cx.focus_handle();
@@ -248,7 +252,7 @@ impl Root {
         F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
         if self.active_sheet.is_none() {
-            self.previous_focus_handle = window.focused(cx).map(|h| h.downgrade());
+            self.previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
         }
 
         let focus_handle = cx.focus_handle();
