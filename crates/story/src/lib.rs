@@ -665,6 +665,7 @@ impl Render for StoryRoot {
                         div()
                             .track_focus(&self.focus_handle)
                             .flex_1()
+                            .overflow_hidden()
                             .child(self.view.clone()),
                     )
                     .children(sheet_layer)
