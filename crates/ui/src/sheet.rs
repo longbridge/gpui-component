@@ -172,8 +172,8 @@ impl RenderOnce for Sheet {
                                 cx.stop_propagation();
 
                                 if self.overlay_closable && event.button == MouseButton::Left {
-                                    on_close(&ClickEvent::default(), window, cx);
                                     window.close_sheet(cx);
+                                    on_close(&ClickEvent::default(), window, cx);
                                 }
                             }
                         })
@@ -189,8 +189,8 @@ impl RenderOnce for Sheet {
                                 move |_: &Cancel, window, cx| {
                                     cx.propagate();
 
-                                    on_close(&ClickEvent::default(), window, cx);
                                     window.close_sheet(cx);
+                                    on_close(&ClickEvent::default(), window, cx);
                                 }
                             })
                             .absolute()
@@ -231,8 +231,8 @@ impl RenderOnce for Sheet {
                                             .ghost()
                                             .icon(IconName::Close)
                                             .on_click(move |_, window, cx| {
-                                                on_close(&ClickEvent::default(), window, cx);
                                                 window.close_sheet(cx);
+                                                on_close(&ClickEvent::default(), window, cx);
                                             }),
                                     ),
                             )
