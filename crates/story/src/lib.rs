@@ -48,7 +48,6 @@ actions!(
         About,
         Open,
         Quit,
-        CloseWindow,
         ToggleSearch,
         TestAction,
         Tab,
@@ -124,9 +123,15 @@ pub fn create_new_window_with_size<F, E>(
         let window = cx
             .open_window(options, |window, cx| {
                 let view = crate_view_fn(window, cx);
-                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
+                let story_root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
-                cx.new(|cx| Root::new(root, window, cx))
+                // Set focus to the StoryRoot to enable it's actions.
+                let focus_handle = story_root.focus_handle(cx);
+                window.defer(cx, move |window, _| {
+                    focus_handle.focus(window);
+                });
+
+                cx.new(|cx| Root::new(story_root, window, cx))
             })
             .expect("failed to open window");
 
@@ -140,88 +145,6 @@ pub fn create_new_window_with_size<F, E>(
         Ok::<_, anyhow::Error>(())
     })
     .detach();
-}
-
-struct StoryRoot {
-    focus_handle: FocusHandle,
-    title_bar: Entity<AppTitleBar>,
-    view: AnyView,
-}
-
-impl StoryRoot {
-    pub fn new(
-        title: impl Into<SharedString>,
-        view: impl Into<AnyView>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
-        Self {
-            focus_handle: cx.focus_handle(),
-            title_bar,
-            view: view.into(),
-        }
-    }
-
-    fn on_action_panel_info(
-        &mut self,
-        _: &ShowPanelInfo,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        struct Info;
-        let note = Notification::new()
-            .message("You have clicked panel info.")
-            .id::<Info>();
-        window.push_notification(note, cx);
-    }
-
-    fn on_action_toggle_search(
-        &mut self,
-        _: &ToggleSearch,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        cx.propagate();
-        if window.has_focused_input(cx) {
-            return;
-        }
-
-        struct Search;
-        let note = Notification::new()
-            .message("You have toggled search.")
-            .id::<Search>();
-        window.push_notification(note, cx);
-    }
-}
-
-impl Focusable for StoryRoot {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Render for StoryRoot {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sheet_layer = Root::render_sheet_layer(window, cx);
-        let dialog_layer = Root::render_dialog_layer(window, cx);
-        let notification_layer = Root::render_notification_layer(window, cx);
-
-        div()
-            .id("story-root")
-            .on_action(cx.listener(Self::on_action_panel_info))
-            .on_action(cx.listener(Self::on_action_toggle_search))
-            .size_full()
-            .child(
-                v_flex()
-                    .size_full()
-                    .child(self.title_bar.clone())
-                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
-            )
-            .children(sheet_layer)
-            .children(dialog_layer)
-            .children(notification_layer)
-    }
 }
 
 impl Global for AppState {}
@@ -265,8 +188,12 @@ pub fn init(cx: &mut App) {
         if let Some(window) = cx.active_window().and_then(|w| w.downcast::<Root>()) {
             cx.defer(move |cx| {
                 window
-                    .update(cx, |_, window, cx| {
-                        window.push_notification("GPUI Component Storybook\nVersion 0.1.0", cx);
+                    .update(cx, |root, window, cx| {
+                        root.push_notification(
+                            "GPUI Component Storybook\nVersion 0.1.0",
+                            window,
+                            cx,
+                        );
                     })
                     .unwrap();
             });
@@ -657,5 +584,92 @@ impl Render for StoryContainer {
             .when_some(self.story.clone(), |this, story| {
                 this.child(div().size_full().p(self.paddings).child(story))
             })
+    }
+}
+
+struct StoryRoot {
+    focus_handle: FocusHandle,
+    title_bar: Entity<AppTitleBar>,
+    view: AnyView,
+}
+
+impl StoryRoot {
+    pub fn new(
+        title: impl Into<SharedString>,
+        view: impl Into<AnyView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
+        Self {
+            focus_handle: cx.focus_handle(),
+            title_bar,
+            view: view.into(),
+        }
+    }
+
+    fn on_action_panel_info(
+        &mut self,
+        _: &ShowPanelInfo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        struct Info;
+        let note = Notification::new()
+            .message("You have clicked panel info.")
+            .id::<Info>();
+        window.push_notification(note, cx);
+    }
+
+    fn on_action_toggle_search(
+        &mut self,
+        _: &ToggleSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.propagate();
+        if window.has_focused_input(cx) {
+            return;
+        }
+
+        struct Search;
+        let note = Notification::new()
+            .message("You have toggled search.")
+            .id::<Search>();
+        window.push_notification(note, cx);
+    }
+}
+
+impl Focusable for StoryRoot {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for StoryRoot {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let sheet_layer = Root::render_sheet_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
+
+        div()
+            .id("story-root")
+            .on_action(cx.listener(Self::on_action_panel_info))
+            .on_action(cx.listener(Self::on_action_toggle_search))
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(self.title_bar.clone())
+                    .child(
+                        div()
+                            .track_focus(&self.focus_handle)
+                            .flex_1()
+                            .child(self.view.clone()),
+                    )
+                    .children(sheet_layer)
+                    .children(dialog_layer)
+                    .children(notification_layer),
+            )
     }
 }

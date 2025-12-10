@@ -2,7 +2,7 @@ use gpui::{App, Entity, Menu, MenuItem, SharedString};
 use gpui_component::{ActiveTheme as _, Theme, ThemeMode, ThemeRegistry, menu::AppMenuBar};
 
 use crate::{
-    About, CloseWindow, Open, Quit, SelectLocale, ToggleSearch,
+    About, Open, Quit, SelectLocale, ToggleSearch,
     themes::{SwitchTheme, SwitchThemeMode},
 };
 
@@ -85,11 +85,7 @@ fn update_app_menu(title: impl Into<SharedString>, app_menu_bar: Entity<AppMenuB
         },
         Menu {
             name: "Window".into(),
-            items: vec![
-                MenuItem::action("Close Window", CloseWindow),
-                MenuItem::separator(),
-                MenuItem::action("Toggle Search", ToggleSearch),
-            ],
+            items: vec![MenuItem::action("Toggle Search", ToggleSearch)],
         },
         Menu {
             name: "Help".into(),
