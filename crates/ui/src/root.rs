@@ -8,8 +8,8 @@ use crate::{
 };
 use gpui::{
     AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, Styled, Window, actions, canvas, div,
-    prelude::FluentBuilder as _,
+    IntoElement, KeyBinding, ParentElement as _, Render, Styled, WeakFocusHandle, Window, actions,
+    canvas, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -27,9 +27,6 @@ pub(crate) fn init(cx: &mut App) {
 ///
 /// It is used to manage the Sheet, Dialog, and Notification.
 pub struct Root {
-    /// Used to store the focus handle of the previous view.
-    /// When the Dialog, Sheet closes, we will focus back to the previous view.
-    pub(crate) previous_focus_handle: Option<FocusHandle>,
     pub(crate) active_sheet: Option<ActiveSheet>,
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
@@ -41,6 +38,8 @@ pub struct Root {
 #[derive(Clone)]
 pub(crate) struct ActiveSheet {
     focus_handle: FocusHandle,
+    /// The previous focused handle before opening the Sheet.
+    previous_focused_handle: Option<WeakFocusHandle>,
     placement: Placement,
     builder: Rc<dyn Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static>,
 }
@@ -48,16 +47,20 @@ pub(crate) struct ActiveSheet {
 #[derive(Clone)]
 pub(crate) struct ActiveDialog {
     focus_handle: FocusHandle,
+    /// The previous focused handle before opening the Dialog.
+    previous_focused_handle: Option<WeakFocusHandle>,
     builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
 }
 
 impl ActiveDialog {
     pub(crate) fn new(
         focus_handle: FocusHandle,
+        previous_focused_handle: Option<WeakFocusHandle>,
         builder: impl Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     ) -> Self {
         Self {
             focus_handle,
+            previous_focused_handle,
             builder: Rc::new(builder),
         }
     }
@@ -67,7 +70,6 @@ impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
-            previous_focus_handle: None,
             active_sheet: None,
             active_dialogs: Vec::new(),
             focused_input: None,
@@ -95,12 +97,6 @@ impl Root {
             .expect("The window root view should be of type `ui::Root`.")
             .unwrap()
             .read(cx)
-    }
-
-    pub(crate) fn focus_back(&mut self, window: &mut Window, _: &mut App) {
-        if let Some(handle) = self.previous_focus_handle.clone() {
-            window.focus(&handle);
-        }
     }
 
     // Render Notification layer.
@@ -215,24 +211,41 @@ impl Root {
     ) where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
-        // Only save focus handle if there are no active dialogs.
-        // This is used to restore focus when all dialogs are closed.
-        if self.active_dialogs.len() == 0 {
-            self.previous_focus_handle = window.focused(cx);
-        }
-
+        let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window);
 
-        self.active_dialogs
-            .push(ActiveDialog::new(focus_handle, build));
+        self.active_dialogs.push(ActiveDialog::new(
+            focus_handle,
+            previous_focused_handle,
+            build,
+        ));
         cx.notify();
     }
 
-    pub(crate) fn close_sheet(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    pub(crate) fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         self.focused_input = None;
-        self.active_sheet = None;
-        self.focus_back(window, cx);
+        if let Some(handle) = self
+            .active_dialogs
+            .pop()
+            .and_then(|d| d.previous_focused_handle)
+            .and_then(|h| h.upgrade())
+        {
+            window.focus(&handle);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn close_all_dialogs(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+        self.focused_input = None;
+        let previous_focused_handle = self
+            .active_dialogs
+            .first()
+            .and_then(|d| d.previous_focused_handle.clone());
+        self.active_dialogs.clear();
+        if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
+            window.focus(&handle);
+        }
         cx.notify();
     }
 
@@ -245,39 +258,30 @@ impl Root {
     ) where
         F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
-        if self.active_sheet.is_none() {
-            self.previous_focus_handle = window.focused(cx);
-        }
+        let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
 
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window);
-
         self.active_sheet = Some(ActiveSheet {
             focus_handle,
+            previous_focused_handle,
             placement,
             builder: Rc::new(build),
         });
         cx.notify();
     }
 
-    pub(crate) fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    pub(crate) fn close_sheet(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         self.focused_input = None;
-        self.active_dialogs.pop();
-
-        if let Some(above_dialog) = self.active_dialogs.last() {
-            // Focus the next dialog.
-            above_dialog.focus_handle.focus(window);
-        } else {
-            // Restore focus if there are no more dialogs.
-            self.focus_back(window, cx);
+        if let Some(previous_handle) = self
+            .active_sheet
+            .as_ref()
+            .and_then(|s| s.previous_focused_handle.as_ref())
+            .and_then(|h| h.upgrade())
+        {
+            window.focus(&previous_handle);
         }
-        cx.notify();
-    }
-
-    pub(crate) fn close_all_dialogs(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
-        self.focused_input = None;
-        self.active_dialogs.clear();
-        self.focus_back(window, cx);
+        self.active_sheet = None;
         cx.notify();
     }
 

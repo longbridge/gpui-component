@@ -318,8 +318,8 @@ impl RenderOnce for Dialog {
                                 }
                             }
 
-                            on_close(&ClickEvent::default(), window, cx);
                             window.close_dialog(cx);
+                            on_close(&ClickEvent::default(), window, cx);
                         }
                     })
                     .into_any_element()
@@ -345,8 +345,8 @@ impl RenderOnce for Dialog {
                                 return;
                             }
 
-                            on_close(&ClickEvent::default(), window, cx);
                             window.close_dialog(cx);
+                            on_close(&ClickEvent::default(), window, cx);
                         }
                     })
                     .into_any_element()
@@ -440,13 +440,13 @@ impl RenderOnce for Dialog {
                                     let on_cancel = on_cancel.clone();
                                     let on_close = on_close.clone();
                                     move |_: &Cancel, window, cx| {
+                                        window.close_dialog(cx);
                                         // FIXME:
                                         //
                                         // Here some Dialog have no focus_handle, so it will not work will Escape key.
                                         // But by now, we `cx.close_dialog()` going to close the last active model, so the Escape is unexpected to work.
                                         on_cancel(&ClickEvent::default(), window, cx);
                                         on_close(&ClickEvent::default(), window, cx);
-                                        window.close_dialog(cx);
                                     }
                                 })
                                 .on_action({
@@ -456,11 +456,12 @@ impl RenderOnce for Dialog {
                                     move |_: &Confirm, window, cx| {
                                         if let Some(on_ok) = &on_ok {
                                             if on_ok(&ClickEvent::default(), window, cx) {
-                                                on_close(&ClickEvent::default(), window, cx);
                                                 window.close_dialog(cx);
+                                                on_close(&ClickEvent::default(), window, cx);
                                             }
                                         } else if has_footer {
                                             window.close_dialog(cx);
+                                            on_close(&ClickEvent::default(), window, cx);
                                         }
                                     }
                                 })
@@ -498,9 +499,9 @@ impl RenderOnce for Dialog {
                                         let on_cancel = self.on_cancel.clone();
                                         let on_close = self.on_close.clone();
                                         move |_, window, cx| {
+                                            window.close_dialog(cx);
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
-                                            window.close_dialog(cx);
                                         }
                                     })
                             }))
