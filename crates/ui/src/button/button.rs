@@ -592,8 +592,8 @@ impl RenderOnce for Button {
                         this.justify_between().child(
                             Icon::new(IconName::ChevronDown).xsmall().text_color(
                                 match self.disabled {
-                                    true => cx.theme().muted_foreground.opacity(0.5),
-                                    false => cx.theme().muted_foreground,
+                                    true => normal_style.fg.opacity(0.3),
+                                    false => normal_style.fg.opacity(0.5),
                                 },
                             ),
                         )

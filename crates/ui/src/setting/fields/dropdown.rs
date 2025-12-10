@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Corner, IntoElement, ParentElement, SharedString, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder as _, px,
+    AnyElement, App, Corner, IntoElement, SharedString, StyleRefinement, Styled, Window,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -51,7 +51,6 @@ where
             .map(|(_, label)| label.clone())
             .unwrap_or_else(|| old_value.clone().into());
 
-
         Button::new("btn")
             .when(options.layout.is_vertical(), |this| this.w_full())
             .label(old_label)
@@ -64,17 +63,20 @@ where
                 let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
                     let old_value: SharedString = old_value.clone().into();
                     let checked = &old_value == value;
-                    menu.item(PopupMenuItem::new(label.clone()).checked(checked).on_click(
-                        {
-                            let value = value.clone();
-                            let set_value = set_value.clone();
-                            move |_, _, cx| {
-                                set_value(T::from(value.clone()), cx);
-                            }
-                        },
-                    ))
+                    menu.item(
+                        PopupMenuItem::new(label.clone())
+                            .checked(checked)
+                            .on_click({
+                                let value = value.clone();
+                                let set_value = set_value.clone();
+                                move |_, _, cx| {
+                                    set_value(T::from(value.clone()), cx);
+                                }
+                            }),
+                    )
                 });
                 menu
-            }).into_any_element()
+            })
+            .into_any_element()
     }
 }
