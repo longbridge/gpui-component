@@ -98,7 +98,7 @@ impl Root {
     }
 
     pub(crate) fn focus_back(&mut self, window: &mut Window, _: &mut App) {
-        // Here used WeakFocusHandle to avoid cyclic reference.
+        // Here used WeakFocusHandle to avoid focus to a dropped view.
         // If `previous_focus_handle` has dropped (e.g.: From some Dialog view, but it closed), do nothing.
         if let Some(handle) = self.previous_focus_handle.clone().and_then(|h| h.upgrade()) {
             window.focus(&handle);
