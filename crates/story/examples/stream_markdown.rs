@@ -1,6 +1,7 @@
 use gpui::*;
 use gpui_component::{
-    button::{Button, ButtonVariants},
+    ActiveTheme,
+    button::Button,
     h_flex,
     text::{TextView, TextViewState},
     v_flex,
@@ -86,7 +87,7 @@ impl Render for Example {
                     .w_full()
                     .child(
                         Button::new("replay")
-                            .primary()
+                            .outline()
                             .label("Replay")
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.replay(window, cx);
@@ -98,6 +99,9 @@ impl Render for Example {
                     .id("contents")
                     .flex_1()
                     .w_full()
+                    .bg(cx.theme().secondary)
+                    .rounded_lg()
+                    .p_4()
                     .track_scroll(&self.scroll_handle)
                     .overflow_y_scroll()
                     .size_full()
@@ -113,6 +117,11 @@ fn main() {
         gpui_component_story::init(cx);
         cx.activate(true);
 
-        gpui_component_story::create_new_window("Stream Markdown", Example::view, cx);
+        gpui_component_story::create_new_window_with_size(
+            "Stream Markdown",
+            Some(size(px(600.), px(800.))),
+            Example::view,
+            cx,
+        );
     });
 }
