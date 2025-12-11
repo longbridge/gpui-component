@@ -1,12 +1,11 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder, App, ClickEvent, Div, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, SharedString, Stateful, StyleRefinement, Styled,
-    Window,
+    App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    SharedString, Stateful, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
-use crate::{button::Button, h_flex, icon::IconName, ActiveTheme, Disableable, StyledExt};
+use crate::{ActiveTheme, Disableable, StyledExt, button::Button, h_flex, icon::IconName};
 
 /// Pagination component for navigating through pages of data.
 ///
@@ -17,7 +16,7 @@ use crate::{button::Button, h_flex, icon::IconName, ActiveTheme, Disableable, St
 /// # Examples
 ///
 /// ```
-/// use gpui_component::Pagination;
+/// use gpui_component::pagination::Pagination;
 ///
 /// Pagination::new("my-pagination")
 ///     .current_page(1)
@@ -118,13 +117,19 @@ impl Pagination {
     }
 
     /// Set the handler for previous page button click.
-    pub fn on_prev(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+    pub fn on_prev(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
         self.on_prev = Some(Rc::new(handler));
         self
     }
 
     /// Set the handler for next page button click.
-    pub fn on_next(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+    pub fn on_next(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
         self.on_next = Some(Rc::new(handler));
         self
     }
@@ -160,12 +165,7 @@ impl RenderOnce for Pagination {
             .justify_between()
             .items_center()
             .when(self.show_info, |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(muted_fg)
-                        .child(info_text),
-                )
+                this.child(div().text_sm().text_color(muted_fg).child(info_text))
             })
             .child(
                 h_flex()
@@ -176,7 +176,7 @@ impl RenderOnce for Pagination {
                             .icon(self.prev_icon)
                             .compact()
                             .disabled(!can_prev);
-                        
+
                         if let Some(handler) = self.on_prev {
                             btn = btn.on_click(move |event, window, cx| handler(event, window, cx));
                         }
@@ -187,7 +187,7 @@ impl RenderOnce for Pagination {
                             .icon(self.next_icon)
                             .compact()
                             .disabled(!can_next);
-                        
+
                         if let Some(handler) = self.on_next {
                             btn = btn.on_click(move |event, window, cx| handler(event, window, cx));
                         }
