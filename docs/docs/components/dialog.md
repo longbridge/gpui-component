@@ -163,11 +163,13 @@ window.open_dialog(cx, |dialog, _, cx| {
 ### Scrollable Dialog
 
 ```rust
+use gpui_component::text::markdown;
+
 window.open_dialog(cx, |dialog, window, cx| {
     dialog
         .h(px(450.))
         .title("Long Content")
-        .child(TextView::markdown("content", long_markdown_text, window, cx))
+        .child(markdown(long_markdown_text))
 })
 ```
 

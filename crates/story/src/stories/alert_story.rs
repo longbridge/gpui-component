@@ -7,7 +7,7 @@ use gpui_component::{
     alert::Alert,
     button::{Button, ButtonGroup},
     dock::PanelControl,
-    text::TextView,
+    text::markdown,
     v_flex,
 };
 
@@ -63,7 +63,7 @@ impl Focusable for AlertStory {
 }
 
 impl Render for AlertStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
@@ -105,13 +105,10 @@ impl Render for AlertStory {
                 section("Default").w_2_3().child(
                     Alert::new(
                         "alert-default",
-                        TextView::markdown(
-                            "md",
+                        markdown(
                             "This is an alert with icon, title and description (in Markdown).\n\
                             - This is a **list** item.\n\
                             - This is another list item.",
-                            window,
-                            cx,
                         ),
                     )
                     .with_size(self.size)
@@ -151,14 +148,11 @@ impl Render for AlertStory {
                         .child(
                             Alert::error(
                                 "error-1",
-                                TextView::markdown(
-                                    "error-message",
+                                markdown(
                                     "Please verify your billing information and try again.\n\
                             - Check your card details\n\
                             - Ensure sufficient funds\n\
                             - Verify billing address",
-                                    window,
-                                    cx,
                                 ),
                             )
                             .with_size(self.size)

@@ -96,7 +96,7 @@ impl SettingPage {
         let groups = self
             .groups
             .iter()
-            .filter(|group| group.is_match(&query))
+            .filter(|group| group.is_match(&query, cx))
             .cloned()
             .collect::<Vec<_>>();
         let groups_count = groups.len();

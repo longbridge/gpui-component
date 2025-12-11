@@ -8,7 +8,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
     notification::{Notification, NotificationType},
-    text::TextView,
+    text::{ markdown},
     v_flex,
 };
 
@@ -216,14 +216,8 @@ impl Render for NotificationStory {
                         .label("Show Custom Notification")
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.push_notification(
-                                Notification::new().content(|_, window, cx| {
-                                    TextView::markdown(
-                                        "notification-markdown",
-                                        NOTIFICATION_MARKDOWN,
-                                        window,
-                                        cx,
-                                    )
-                                    .into_any_element()
+                                Notification::new().content(|_, _, _| {
+                                    markdown(NOTIFICATION_MARKDOWN).into_any_element()
                                 }),
                                 cx,
                             )

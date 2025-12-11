@@ -84,14 +84,16 @@ impl SettingItem {
         self
     }
 
-    pub(crate) fn is_match(&self, query: &str) -> bool {
+    pub(crate) fn is_match(&self, query: &str, cx: &App) -> bool {
         match self {
             SettingItem::Item {
                 title, description, ..
             } => {
                 title.to_lowercase().contains(&query.to_lowercase())
                     || description.as_ref().map_or(false, |d| {
-                        d.as_str().to_lowercase().contains(&query.to_lowercase())
+                        d.get_text(cx)
+                            .to_lowercase()
+                            .contains(&query.to_lowercase())
                     })
             }
             // We need to show all custom elements when not searching.

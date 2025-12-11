@@ -79,7 +79,7 @@ impl Settings {
         self
     }
 
-    fn filtered_pages(&self, query: &str) -> Vec<SettingPage> {
+    fn filtered_pages(&self, query: &str, cx: &App) -> Vec<SettingPage> {
         self.pages
             .iter()
             .filter_map(|page| {
@@ -91,7 +91,7 @@ impl Settings {
                         group.items = group
                             .items
                             .iter()
-                            .filter(|item| item.is_match(&query))
+                            .filter(|item| item.is_match(&query, cx))
                             .cloned()
                             .collect();
                         if group.items.is_empty() {
@@ -252,7 +252,7 @@ impl RenderOnce for Settings {
         });
 
         let query = state.read(cx).search_input.read(cx).value();
-        let filtered_pages = self.filtered_pages(&query);
+        let filtered_pages = self.filtered_pages(&query, cx);
         let options = RenderOptions {
             page_ix: 0,
             group_ix: 0,

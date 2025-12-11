@@ -119,18 +119,15 @@ DescriptionList::horizontal()
 ### Rich Content with Custom Elements
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_component::text::markdown;
 
 DescriptionList::new()
     .columns(2)
     .children([
         DescriptionItem::new("Name").value("GPUI Component"),
         DescriptionItem::new("Description").value(
-            TextView::markdown(
-                0,
+            markdown(
                 "UI components for building **fantastic** desktop applications.",
-                window,
-                cx
             ).into_any_element()
         ),
     ])
