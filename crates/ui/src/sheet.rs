@@ -3,7 +3,7 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, div, point,
+    ParentElement, RenderOnce, StyleRefinement, Styled, Window, anchored, div, point,
     prelude::FluentBuilder as _, px,
 };
 
@@ -35,7 +35,6 @@ pub struct Sheet {
     footer: Option<AnyElement>,
     style: StyleRefinement,
     children: Vec<AnyElement>,
-    margin_top: Pixels,
     overlay: bool,
     overlay_closable: bool,
 }
@@ -52,7 +51,6 @@ impl Sheet {
             footer: None,
             style: StyleRefinement::default(),
             children: Vec::new(),
-            margin_top: TITLE_BAR_HEIGHT,
             overlay: true,
             overlay_closable: true,
             on_close: Rc::new(|_, _, _| {}),
@@ -74,14 +72,6 @@ impl Sheet {
     /// Sets the size of the sheet, default is 350px.
     pub fn size(mut self, size: impl Into<DefiniteLength>) -> Self {
         self.size = size.into();
-        self
-    }
-
-    /// Sets the margin top of the sheet, default is 0px.
-    ///
-    /// This is used to let Sheet be placed below a Windows Title, you can give the height of the title bar.
-    pub fn margin_top(mut self, top: Pixels) -> Self {
-        self.margin_top = top;
         self
     }
 
@@ -128,8 +118,8 @@ impl Styled for Sheet {
 impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
-        let titlebar_height = self.margin_top;
-        let window_paddings = crate::window_border::window_paddings(window);
+        let mut window_paddings = crate::window_border::window_paddings(window);
+        window_paddings.top += TITLE_BAR_HEIGHT;
         let size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
@@ -154,16 +144,13 @@ impl RenderOnce for Sheet {
         }
 
         anchored()
-            .position(point(
-                window_paddings.left,
-                window_paddings.top + titlebar_height,
-            ))
+            .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
             .child(
                 div()
                     .occlude()
                     .w(size.width)
-                    .h(size.height - titlebar_height)
+                    .h(size.height)
                     .bg(overlay_color(self.overlay, cx))
                     .when(self.overlay, |this| {
                         this.on_any_mouse_down({
