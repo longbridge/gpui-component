@@ -66,8 +66,8 @@ impl SettingGroup {
     }
 
     /// Return true if any of the setting items in the group match the given query.
-    pub(super) fn is_match(&self, query: &str) -> bool {
-        self.items.iter().any(|item| item.is_match(query))
+    pub(super) fn is_match(&self, query: &str, cx: &App) -> bool {
+        self.items.iter().any(|item| item.is_match(query, cx))
     }
 
     pub(super) fn is_resettable(&self, cx: &App) -> bool {
@@ -98,7 +98,7 @@ impl SettingGroup {
             })
             .gap_4()
             .children(self.items.iter().enumerate().filter_map(|(item_ix, item)| {
-                if item.is_match(&query) {
+                if item.is_match(&query, cx) {
                     Some(item.clone().render_item(
                         &RenderOptions {
                             item_ix,
