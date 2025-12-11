@@ -91,12 +91,12 @@ fi
 echo ""
 
 # Step 4: Push to remote
-log_step "4/4" "Pushing changes and tag to remote"
-log_info "Pushing changes and ${BOLD}v$new_version${RESET} to origin..."
-if git push origin HEAD && git push origin "v$new_version"; then
-  log_success "Changes and tag pushed to remote successfully"
+log_step "4/4" "Pushing tag to remote"
+log_info "Pushing ${BOLD}v$new_version${RESET} to origin..."
+if git push origin "v$new_version"; then
+  log_success "Tag pushed to remote successfully"
 else
-  log_error "Failed to push changes or tag to remote"
+  log_error "Failed to push tag to remote"
   exit 1
 fi
 echo ""
