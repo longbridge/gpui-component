@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, InspectorElementId,
     InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -53,10 +54,11 @@ impl Styled for TextView {
 }
 
 impl TextView {
-    pub fn new(state: Entity<TextViewState>) -> Self {
+    /// Create new TextView with managed state.
+    pub fn new(state: &Entity<TextViewState>) -> Self {
         Self {
             id: ElementId::Name(state.entity_id().to_string().into()),
-            state: Some(state),
+            state: Some(state.clone()),
             format: None,
             text: None,
             text_view_style: TextViewStyle::default(),
@@ -212,12 +214,13 @@ impl Element for TextView {
         let mut el = div()
             .key_context("TextView")
             .track_focus(&focus_handle)
-            .size_full()
+            .when(self.scrollable, |this| {
+                this.size_full().vertical_scrollbar(&list_state)
+            })
             .relative()
             .on_action(window.listener_for(&state, TextViewState::on_action_copy))
             .child(state.clone())
             .refine_style(&self.style)
-            .vertical_scrollbar(&list_state)
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, TextViewLayoutState { state, element: el })

@@ -18,6 +18,8 @@ use crate::{
     v_flex,
 };
 
+const UPDATE_DELAY: Duration = Duration::from_millis(50);
+
 const CONTEXT: &'static str = "TextView";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys(vec![
@@ -192,7 +194,6 @@ impl TextViewState {
         if self.parsed_result.is_none() {
             self.parsed_result = Some(parse_content(self.format, &update_options));
         }
-
         _ = self.tx.try_send(update_options);
     }
 
@@ -270,7 +271,11 @@ impl Render for TextViewState {
             .size_full()
             .map(|this| match &mut self.parsed_result {
                 Some(Ok(content)) => this.child(content.root_node.render_root(
-                    Some(self.list_state.clone()),
+                    if self.scrollable {
+                        Some(self.list_state.clone())
+                    } else {
+                        None
+                    },
                     &content.node_cx,
                     window,
                     cx,
@@ -328,7 +333,7 @@ impl UpdateFuture {
             timer: Timer::never(),
             rx: Box::pin(rx),
             tx_result,
-            delay: Duration::from_millis(200),
+            delay: UPDATE_DELAY,
         }
     }
 }

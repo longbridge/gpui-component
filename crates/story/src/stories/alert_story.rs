@@ -7,7 +7,7 @@ use gpui_component::{
     alert::Alert,
     button::{Button, ButtonGroup},
     dock::PanelControl,
-    text::{TextView, markdown},
+    text::markdown,
     v_flex,
 };
 
@@ -105,8 +105,7 @@ impl Render for AlertStory {
                 section("Default").w_2_3().child(
                     Alert::new(
                         "alert-default",
-                        TextView::markdown(
-                            "md",
+                        markdown(
                             "This is an alert with icon, title and description (in Markdown).\n\
                             - This is a **list** item.\n\
                             - This is another list item.",
