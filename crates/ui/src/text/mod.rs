@@ -18,14 +18,14 @@ pub(crate) fn init(cx: &mut App) {
 /// Create a new markdown text view with code location as id.
 #[track_caller]
 pub fn markdown(source: impl Into<SharedString>) -> TextView {
-    let id: ElementId = ElementId::CodeLocation(std::panic::Location::caller().clone());
+    let id: ElementId = ElementId::CodeLocation(*std::panic::Location::caller());
     TextView::markdown(id, source)
 }
 
 /// Create a new html text view with code location as id.
 #[track_caller]
 pub fn html(source: impl Into<SharedString>) -> TextView {
-    let id: ElementId = ElementId::CodeLocation(std::panic::Location::caller().clone());
+    let id: ElementId = ElementId::CodeLocation(*std::panic::Location::caller());
     TextView::html(id, source)
 }
 

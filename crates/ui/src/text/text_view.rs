@@ -177,7 +177,7 @@ impl Element for TextView {
         let state = if let Some(state) = self.state.clone() {
             state
         } else {
-            let default_format = self.format.clone().unwrap_or(TextViewFormat::Markdown);
+            let default_format = self.format.unwrap_or(TextViewFormat::Markdown);
             let default_text = self.text.clone().unwrap_or_default();
 
             let state = window.use_keyed_state(
