@@ -30,7 +30,7 @@ pub(crate) fn init(cx: &mut App) {
 
 /// The content format of the text view.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum TextViewFormat {
+pub(super) enum TextViewFormat {
     /// Markdown view
     Markdown,
     /// HTML view
@@ -75,7 +75,7 @@ impl TextViewState {
     }
 
     /// Create a new TextViewState.
-    pub fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
+    fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
         let (tx, rx) = smol::channel::unbounded::<UpdateOptions>();
