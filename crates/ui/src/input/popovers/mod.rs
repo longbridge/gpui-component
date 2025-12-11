@@ -47,10 +47,10 @@ impl ContextMenu {
 pub(super) fn render_markdown(
     id: impl Into<ElementId>,
     markdown: impl Into<SharedString>,
-    window: &mut Window,
+    _: &mut Window,
     cx: &mut App,
 ) -> TextView {
-    TextView::markdown(id, markdown, window, cx)
+    TextView::markdown(id, markdown)
         .style(
             TextViewStyle::default()
                 .paragraph_gap(rems(0.5))

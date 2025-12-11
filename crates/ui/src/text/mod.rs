@@ -6,13 +6,27 @@ mod style;
 mod text_view;
 mod utils;
 
-use gpui::{App, IntoElement, RenderOnce, SharedString, Window};
+use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 pub use state::*;
 pub use style::*;
 pub use text_view::*;
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);
+}
+
+/// Create a new markdown text view with code location as id.
+#[track_caller]
+pub fn markdown(source: impl Into<SharedString>) -> TextView {
+    let id: ElementId = ElementId::CodeLocation(std::panic::Location::caller().clone());
+    TextView::markdown(id, source)
+}
+
+/// Create a new html text view with code location as id.
+#[track_caller]
+pub fn html(source: impl Into<SharedString>) -> TextView {
+    let id: ElementId = ElementId::CodeLocation(std::panic::Location::caller().clone());
+    TextView::html(id, source)
 }
 
 #[derive(IntoElement, Clone)]
@@ -60,7 +74,13 @@ impl Text {
     pub(crate) fn get_text(&self, cx: &App) -> SharedString {
         match self {
             Self::String(s) => s.clone(),
-            Self::TextView(view) => view.state.read(cx).text.clone().into(),
+            Self::TextView(view) => {
+                if let Some(state) = &view.state {
+                    state.read(cx).text.clone().into()
+                } else {
+                    SharedString::default()
+                }
+            }
         }
     }
 }

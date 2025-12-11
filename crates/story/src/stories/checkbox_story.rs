@@ -1,10 +1,10 @@
 use gpui::{
-    div, px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Window, div, px,
 };
 
 use gpui_component::{
-    checkbox::Checkbox, h_flex, text::TextView, v_flex, ActiveTheme, Disableable as _, Sizable,
+    ActiveTheme, Disableable as _, Sizable, checkbox::Checkbox, h_flex, text::markdown, v_flex,
 };
 
 use crate::section;
@@ -56,7 +56,7 @@ impl Focusable for CheckboxStory {
 }
 
 impl Render for CheckboxStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().gap_6().child(
             v_flex()
                 .items_start()
@@ -156,16 +156,15 @@ impl Render for CheckboxStory {
                             .w(px(300.))
                             .checked(self.check5)
                             .label("Label with description (Markdown)")
-                            .child(div().text_color(cx.theme().muted_foreground).child(
-                                TextView::markdown(
-                                    "longlong-markdown-checkbox",
-                                    "The [long long label](https://github.com) \
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(markdown(
+                                        "The [long long label](https://github.com) \
                             text used **Markdown**, \
                             it should wrap when the text is too long.",
-                                    window,
-                                    cx,
-                                ),
-                            ))
+                                    )),
+                            )
                             .on_click(cx.listener(|this, checked: &bool, _, _| {
                                 this.check5 = *checked;
                             })),

@@ -13,7 +13,7 @@ use gpui_component::{
     input::{Input, InputState},
     select::{Select, SelectState},
     table::{Column, Table, TableDelegate, TableState},
-    text::TextView,
+    text::markdown,
     v_flex,
 };
 
@@ -409,18 +409,15 @@ impl Render for DialogStory {
                                 .outline()
                                 .label("Scrollable Dialog")
                                 .on_click(cx.listener(move |_, _, window, cx| {
-                                    window.open_dialog(cx, move |dialog, window, cx| {
+                                    window.open_dialog(cx, move |dialog, _, _| {
                                         dialog
                                             .w(px(720.))
                                             .h(px(600.))
                                             .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)
                                             .title("Dialog with scrollbar")
-                                            .child(TextView::markdown(
-                                                "markdown1",
+                                            .child(markdown(
                                                 include_str!("../../../../README.md"),
-                                                window,
-                                                cx
                                             ))
                                     });
                                 })),

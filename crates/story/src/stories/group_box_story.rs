@@ -11,7 +11,7 @@ use gpui_component::{
     h_flex,
     radio::{Radio, RadioGroup},
     switch::Switch,
-    text::TextView,
+    text::markdown,
     v_flex,
 };
 
@@ -55,7 +55,7 @@ impl Focusable for GroupBoxStory {
 }
 
 impl Render for GroupBoxStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().gap_6().child(
             v_flex()
                 .items_start()
@@ -137,13 +137,10 @@ impl Render for GroupBoxStory {
                                     .px_4()
                                     .border_2(),
                             )
-                            .child(TextView::markdown(
-                                "custom-style",
+                            .child(markdown(
                                 "You can use `title_style` to customize the style \
                                 of the title. \n \
                                 And any style in `GroupBox` will apply to the content container.",
-                                window,
-                                cx,
                             )),
                     ),
                 ),

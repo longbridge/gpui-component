@@ -13,7 +13,7 @@ use gpui_component::{
         NumberFieldOptions, RenderOptions, SettingField, SettingFieldElement, SettingGroup,
         SettingItem, SettingPage, Settings,
     },
-    text::TextView,
+    text::markdown,
     v_flex,
 };
 
@@ -122,7 +122,7 @@ impl SettingsStory {
         }
     }
 
-    fn setting_pages(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<SettingPage> {
+    fn setting_pages(&self, _: &mut Window, cx: &mut Context<Self>) -> Vec<SettingPage> {
         let view = cx.entity();
         let default_settings = AppSettings::default();
         let resettable = AppSettings::global(cx).resettable;
@@ -395,11 +395,8 @@ impl SettingsStory {
                                 "https://docs.rs/gpui-component"
                             )),
                         )
-                        .description(TextView::markdown(
-                            "desc",
+                        .description(markdown(
                             "Rust doc for the `gpui-component` crate.",
-                            window,
-                            cx,
                         )),
                         SettingItem::new(
                             "Website",

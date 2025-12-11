@@ -116,7 +116,7 @@ impl Focusable for DescriptionListStory {
 }
 
 impl Render for DescriptionListStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("example")
             .on_action(cx.listener(Self::on_change_size))
@@ -187,7 +187,7 @@ impl Render for DescriptionListStory {
                             }
 
                             DescriptionItem::new(label)
-                                .value(TextView::markdown(ix, value, window, cx).into_any_element())
+                                .value(TextView::markdown(ix, value).into_any_element())
                                 .span(span)
                         },
                     )),

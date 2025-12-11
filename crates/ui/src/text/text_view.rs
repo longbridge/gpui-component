@@ -8,6 +8,7 @@ use gpui::{
 
 use crate::StyledExt;
 use crate::scroll::ScrollableElement;
+use crate::text::TextViewFormat;
 use crate::text::node::CodeBlock;
 use crate::text::state::TextViewState;
 use crate::{global_state::GlobalState, text::TextViewStyle};
@@ -35,8 +36,9 @@ pub(crate) type CodeBlockActionsFn =
 #[derive(Clone)]
 pub struct TextView {
     id: ElementId,
+    format: Option<TextViewFormat>,
     text: Option<SharedString>,
-    pub(super) state: Entity<TextViewState>,
+    pub(crate) state: Option<Entity<TextViewState>>,
     text_view_style: TextViewStyle,
     style: StyleRefinement,
     selectable: bool,
@@ -54,7 +56,8 @@ impl TextView {
     pub fn new(state: Entity<TextViewState>) -> Self {
         Self {
             id: ElementId::Name(state.entity_id().to_string().into()),
-            state,
+            state: Some(state),
+            format: None,
             text: None,
             text_view_style: TextViewStyle::default(),
             style: StyleRefinement::default(),
@@ -65,25 +68,14 @@ impl TextView {
     }
 
     /// Create a new markdown text view.
-    pub fn markdown(
-        id: impl Into<ElementId>,
-        markdown: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self {
-        let id: ElementId = id.into();
-        let markdown = markdown.into();
-        let state =
-            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
-                TextViewState::markdown(markdown.as_str(), cx)
-            });
-
+    pub fn markdown(id: impl Into<ElementId>, markdown: impl Into<SharedString>) -> Self {
         Self {
-            id,
-            text: Some(markdown),
+            id: id.into(),
+            format: Some(TextViewFormat::Markdown),
+            text: Some(markdown.into()),
             text_view_style: TextViewStyle::default(),
             style: StyleRefinement::default(),
-            state,
+            state: None,
             selectable: false,
             scrollable: false,
             code_block_actions: None,
@@ -91,25 +83,14 @@ impl TextView {
     }
 
     /// Create a new html text view.
-    pub fn html(
-        id: impl Into<ElementId>,
-        html: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self {
-        let id: ElementId = id.into();
-        let html = html.into();
-        let state =
-            window.use_keyed_state(SharedString::from(format!("{}/state", id)), cx, |_, cx| {
-                TextViewState::html(html.as_str(), cx)
-            });
-
+    pub fn html(id: impl Into<ElementId>, html: impl Into<SharedString>) -> Self {
         Self {
-            id,
-            text: Some(html),
+            id: id.into(),
+            format: Some(TextViewFormat::Html),
+            text: Some(html.into()),
             text_view_style: TextViewStyle::default(),
             style: StyleRefinement::default(),
-            state,
+            state: None,
             selectable: false,
             scrollable: false,
             code_block_actions: None,
@@ -169,8 +150,13 @@ impl IntoElement for TextView {
     }
 }
 
+pub struct TextViewLayoutState {
+    state: Entity<TextViewState>,
+    element: AnyElement,
+}
+
 impl Element for TextView {
-    type RequestLayoutState = AnyElement;
+    type RequestLayoutState = TextViewLayoutState;
     type PrepaintState = ();
 
     fn id(&self) -> Option<ElementId> {
@@ -188,7 +174,28 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        self.state.update(cx, |state, cx| {
+        let state = if let Some(state) = self.state.clone() {
+            state
+        } else {
+            let default_format = self.format.clone().unwrap_or(TextViewFormat::Markdown);
+            let default_text = self.text.clone().unwrap_or_default();
+
+            let state = window.use_keyed_state(
+                SharedString::from(format!("{}/state", self.id)),
+                cx,
+                move |_, cx| {
+                    if default_format == TextViewFormat::Markdown {
+                        TextViewState::markdown(default_text.as_str(), cx)
+                    } else {
+                        TextViewState::html(default_text.as_str(), cx)
+                    }
+                },
+            );
+            self.state = Some(state.clone());
+            state
+        };
+
+        state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
             state.selectable = self.selectable;
             state.scrollable = self.scrollable;
@@ -199,21 +206,21 @@ impl Element for TextView {
             }
         });
 
-        let focus_handle = self.state.read(cx).focus_handle.clone();
-        let list_state = self.state.read(cx).list_state.clone();
+        let focus_handle = state.read(cx).focus_handle.clone();
+        let list_state = state.read(cx).list_state.clone();
 
         let mut el = div()
             .key_context("TextView")
             .track_focus(&focus_handle)
             .size_full()
             .relative()
-            .on_action(window.listener_for(&self.state, TextViewState::on_action_copy))
-            .child(self.state.clone())
+            .on_action(window.listener_for(&state, TextViewState::on_action_copy))
+            .child(state.clone())
             .refine_style(&self.style)
             .vertical_scrollbar(&list_state)
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
-        (layout_id, el)
+        (layout_id, TextViewLayoutState { state, element: el })
     }
 
     fn prepaint(
@@ -225,7 +232,7 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        request_layout.prepaint(window, cx);
+        request_layout.element.prepaint(window, cx);
     }
 
     fn paint(
@@ -238,19 +245,20 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let state = &request_layout.state;
         GlobalState::global_mut(cx)
             .text_view_state_stack
-            .push(self.state.clone());
-        request_layout.paint(window, cx);
+            .push(state.clone());
+        request_layout.element.paint(window, cx);
         GlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
-            let is_selecting = self.state.read(cx).is_selecting;
-            let has_selection = self.state.read(cx).has_selection();
+            let is_selecting = state.read(cx).is_selecting;
+            let has_selection = state.read(cx).has_selection();
             let parent_view_id = window.current_view();
 
             window.on_mouse_event({
-                let state = self.state.clone();
+                let state = state.clone();
 
                 move |event: &MouseDownEvent, phase, _, cx| {
                     if !bounds.contains(&event.position) || !phase.bubble() {
@@ -267,7 +275,7 @@ impl Element for TextView {
             if is_selecting {
                 // move to update end position.
                 window.on_mouse_event({
-                    let state = self.state.clone();
+                    let state = state.clone();
                     move |event: &MouseMoveEvent, phase, _, cx| {
                         if !phase.bubble() {
                             return;
@@ -282,7 +290,7 @@ impl Element for TextView {
 
                 // up to end selection
                 window.on_mouse_event({
-                    let state = self.state.clone();
+                    let state = state.clone();
                     move |_: &MouseUpEvent, phase, _, cx| {
                         if !phase.bubble() {
                             return;
@@ -299,7 +307,7 @@ impl Element for TextView {
             if has_selection {
                 // down outside to clear selection
                 window.on_mouse_event({
-                    let state = self.state.clone();
+                    let state = state.clone();
                     move |event: &MouseDownEvent, _, _, cx| {
                         if bounds.contains(&event.position) {
                             return;
