@@ -9,7 +9,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
+    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, TITLE_BAR_HEIGHT, WindowExt as _,
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -353,7 +353,8 @@ impl RenderOnce for Dialog {
             }
         });
 
-        let window_paddings = crate::window_border::window_paddings(window);
+        let mut window_paddings = crate::window_border::window_paddings(window);
+        window_paddings.top += TITLE_BAR_HEIGHT;
         let view_size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
