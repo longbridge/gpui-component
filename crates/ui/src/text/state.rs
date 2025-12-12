@@ -186,7 +186,7 @@ impl TextViewState {
         let update_options = UpdateOptions {
             append,
             content: self.parsed_content.clone(),
-            pending_text: text.to_string().into(),
+            pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
             code_block_actions: code_block_actions.clone(),
         };
@@ -311,6 +311,7 @@ impl ParsedContent {
 struct UpdateFuture {
     format: TextViewFormat,
     options: UpdateOptions,
+    pending_text: String,
     timer: Timer,
     rx: Pin<Box<smol::channel::Receiver<UpdateOptions>>>,
     tx_result: smol::channel::Sender<Result<(), SharedString>>,
@@ -326,9 +327,10 @@ impl UpdateFuture {
     ) -> Self {
         Self {
             format,
+            pending_text: String::new(),
             options: UpdateOptions {
                 append: false,
-                pending_text: SharedString::default(),
+                pending_text: String::new(),
                 content: Default::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
                 code_block_actions: None,
@@ -349,6 +351,9 @@ impl Future for UpdateFuture {
             match self.rx.poll_next(cx) {
                 Poll::Ready(Some(options)) => {
                     let delay = self.delay;
+                    if options.append {
+                        self.pending_text.push_str(options.pending_text.as_str());
+                    }
                     self.options = options;
                     self.timer.set_after(delay);
                     continue;
@@ -359,7 +364,15 @@ impl Future for UpdateFuture {
 
             match self.timer.poll_next(cx) {
                 Poll::Ready(Some(_)) => {
-                    let res = parse_content(self.format, &self.options);
+                    let pending_text = std::mem::take(&mut self.pending_text);
+
+                    let res = parse_content(
+                        self.format,
+                        &UpdateOptions {
+                            pending_text,
+                            ..self.options.clone()
+                        },
+                    );
                     _ = self.tx_result.try_send(res);
                     continue;
                 }
@@ -372,7 +385,7 @@ impl Future for UpdateFuture {
 #[derive(Clone)]
 struct UpdateOptions {
     content: Arc<Mutex<ParsedContent>>,
-    pending_text: SharedString,
+    pending_text: String,
     append: bool,
     highlight_theme: Arc<HighlightTheme>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
