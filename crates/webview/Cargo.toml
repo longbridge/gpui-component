@@ -11,6 +11,9 @@ edition.workspace = true
 publish = true
 version = "0.5.0"
 
+[features]
+inspector = ["wry/devtools"]
+
 [lib]
 doctest = false
 
