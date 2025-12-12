@@ -94,6 +94,24 @@ impl BlockNode {
         }
     }
 
+    /// Get the span of the node.
+    pub(super) fn span(&self) -> Option<Span> {
+        match self {
+            BlockNode::Root { span, .. } => *span,
+            BlockNode::Paragraph(paragraph) => paragraph.span,
+            BlockNode::Heading { span, .. } => *span,
+            BlockNode::Blockquote { span, .. } => *span,
+            BlockNode::List { span, .. } => *span,
+            BlockNode::ListItem { span, .. } => *span,
+            BlockNode::CodeBlock(code_block) => code_block.span,
+            BlockNode::Table(table) => table.span,
+            BlockNode::Break { span, .. } => *span,
+            BlockNode::Divider { span, .. } => *span,
+            BlockNode::Definition { span, .. } => *span,
+            BlockNode::Unknown { .. } => None,
+        }
+    }
+
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         match self {
@@ -224,6 +242,7 @@ impl TextMark {
     }
 }
 
+/// The bytes
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Span {
     pub start: usize,
@@ -465,7 +484,7 @@ pub struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
     state: Arc<Mutex<InlineState>>,
-    span: Option<Span>,
+    pub span: Option<Span>,
 }
 
 impl PartialEq for CodeBlock {
