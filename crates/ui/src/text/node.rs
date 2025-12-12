@@ -33,37 +33,46 @@ pub(crate) enum BlockNode {
     /// Something like a Div container in HTML.
     Root {
         children: Vec<BlockNode>,
+        span: Option<Span>,
     },
     Paragraph(Paragraph),
     Heading {
         level: u8,
         children: Paragraph,
+        span: Option<Span>,
     },
     Blockquote {
         children: Vec<BlockNode>,
+        span: Option<Span>,
     },
     List {
         /// Only contains ListItem, others will be ignored
         children: Vec<BlockNode>,
         ordered: bool,
+        span: Option<Span>,
     },
     ListItem {
         children: Vec<BlockNode>,
         spread: bool,
         /// Whether the list item is checked, if None, it's not a checkbox
         checked: Option<bool>,
+        span: Option<Span>,
     },
     CodeBlock(CodeBlock),
     Table(Table),
     Break {
         html: bool,
+        span: Option<Span>,
     },
-    Divider,
+    Divider {
+        span: Option<Span>,
+    },
     /// Use for to_markdown get raw definition
     Definition {
         identifier: SharedString,
         url: SharedString,
         title: Option<SharedString>,
+        span: Option<Span>,
     },
     Unknown,
 }
@@ -80,7 +89,7 @@ impl BlockNode {
     /// Combine all children, omitting the empt parent nodes.
     pub(super) fn compact(self) -> BlockNode {
         match self {
-            Self::Root { mut children } if children.len() == 1 => children.remove(0).compact(),
+            Self::Root { mut children, .. } if children.len() == 1 => children.remove(0).compact(),
             _ => self,
         }
     }
@@ -88,7 +97,7 @@ impl BlockNode {
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         match self {
-            BlockNode::Root { children } => {
+            BlockNode::Root { children, .. } => {
                 let mut block_text = String::new();
                 for c in children.iter() {
                     block_text.push_str(&c.selected_text());
@@ -124,7 +133,7 @@ impl BlockNode {
                     text.push_str(&c.selected_text());
                 }
             }
-            BlockNode::Blockquote { children } => {
+            BlockNode::Blockquote { children, .. } => {
                 let mut block_text = String::new();
                 for c in children.iter() {
                     block_text.push_str(&c.selected_text());
@@ -162,8 +171,8 @@ impl BlockNode {
             }
             BlockNode::Definition { .. }
             | BlockNode::Break { .. }
-            | BlockNode::Divider
-            | BlockNode::Unknown => {}
+            | BlockNode::Divider { .. }
+            | BlockNode::Unknown { .. } => {}
         }
 
         text
@@ -354,8 +363,9 @@ impl Paragraph {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Table {
-    pub children: Vec<TableRow>,
-    pub column_aligns: Vec<ColumnumnAlign>,
+    pub(crate) children: Vec<TableRow>,
+    pub(crate) column_aligns: Vec<ColumnumnAlign>,
+    pub(crate) span: Option<Span>,
 }
 
 impl Table {
@@ -455,6 +465,7 @@ pub struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
     state: Arc<Mutex<InlineState>>,
+    span: Option<Span>,
 }
 
 impl PartialEq for CodeBlock {
@@ -479,6 +490,7 @@ impl CodeBlock {
         lang: Option<SharedString>,
         _: &TextViewStyle,
         highlight_theme: &HighlightTheme,
+        span: Option<impl Into<Span>>,
     ) -> Self {
         let mut styles = vec![];
         if let Some(lang) = &lang {
@@ -494,6 +506,7 @@ impl CodeBlock {
             lang,
             styles,
             state,
+            span: span.map(|s| s.into()),
         }
     }
 
@@ -745,17 +758,19 @@ impl BlockNode {
     #[allow(dead_code)]
     pub(crate) fn to_markdown(&self) -> String {
         match self {
-            BlockNode::Root { children } => children
+            BlockNode::Root { children, .. } => children
                 .iter()
                 .map(|child| child.to_markdown())
                 .collect::<Vec<_>>()
                 .join("\n"),
             BlockNode::Paragraph(paragraph) => paragraph.to_markdown(),
-            BlockNode::Heading { level, children } => {
+            BlockNode::Heading {
+                level, children, ..
+            } => {
                 let hashes = "#".repeat(*level as usize);
                 format!("{} {}", hashes, children.to_markdown())
             }
-            BlockNode::Blockquote { children } => {
+            BlockNode::Blockquote { children, .. } => {
                 let content = children
                     .iter()
                     .map(|child| child.to_markdown())
@@ -768,7 +783,9 @@ impl BlockNode {
                     .collect::<Vec<_>>()
                     .join("\n")
             }
-            BlockNode::List { children, ordered } => children
+            BlockNode::List {
+                children, ordered, ..
+            } => children
                 .iter()
                 .enumerate()
                 .map(|(i, child)| {
@@ -846,18 +863,19 @@ impl BlockNode {
                     .join("\n");
                 format!("{}\n{}\n{}", header, alignments, rows)
             }
-            BlockNode::Break { html } => {
+            BlockNode::Break { html, .. } => {
                 if *html {
                     "<br>".to_string()
                 } else {
                     "\n".to_string()
                 }
             }
-            BlockNode::Divider => "---".to_string(),
+            BlockNode::Divider { .. } => "---".to_string(),
             BlockNode::Definition {
                 identifier,
                 url,
                 title,
+                ..
             } => {
                 if let Some(title) = title {
                     format!("[{}]: {} \"{}\"", identifier, url, title)
@@ -865,7 +883,7 @@ impl BlockNode {
                     format!("[{}]: {}", identifier, url)
                 }
             }
-            BlockNode::Unknown => "".to_string(),
+            BlockNode::Unknown { .. } => "".to_string(),
         }
         .trim()
         .to_string()
@@ -886,6 +904,7 @@ impl BlockNode {
                 children,
                 spread,
                 checked,
+                ..
             } => v_flex()
                 .id(("li", options.ix))
                 .when(*spread, |this| this.child(div()))
@@ -894,7 +913,7 @@ impl BlockNode {
 
                     for (child_ix, child) in children.iter().enumerate() {
                         match child {
-                            BlockNode::Paragraph(_) => {
+                            BlockNode::Paragraph { .. } => {
                                 let last_not_list = child_ix > 0
                                     && !matches!(children[child_ix - 1], BlockNode::List { .. });
 
@@ -1099,7 +1118,7 @@ impl BlockNode {
         };
 
         match self {
-            BlockNode::Root { children } => div()
+            BlockNode::Root { children, .. } => div()
                 .id(("div", ix))
                 .children(children.into_iter().enumerate().map(move |(ix, node)| {
                     node.render_block(NodeRenderOptions { ix, ..options }, node_cx, window, cx)
@@ -1110,7 +1129,9 @@ impl BlockNode {
                 .pb(mb)
                 .child(paragraph.render(node_cx, window, cx))
                 .into_any_element(),
-            BlockNode::Heading { level, children } => {
+            BlockNode::Heading {
+                level, children, ..
+            } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
                     2 => (rems(1.5), FontWeight::SEMIBOLD),
@@ -1135,7 +1156,7 @@ impl BlockNode {
                     .child(children.render(node_cx, window, cx))
                     .into_any_element()
             }
-            BlockNode::Blockquote { children } => div()
+            BlockNode::Blockquote { children, .. } => div()
                 .w_full()
                 .pb(mb)
                 .child(
@@ -1155,7 +1176,9 @@ impl BlockNode {
                         }),
                 )
                 .into_any_element(),
-            BlockNode::List { children, ordered } => v_flex()
+            BlockNode::List {
+                children, ordered, ..
+            } => v_flex()
                 .id((if *ordered { "ol" } else { "ul" }, ix))
                 .pb(mb)
                 .children({
@@ -1188,12 +1211,12 @@ impl BlockNode {
             BlockNode::Table { .. } => {
                 Self::render_table(self, &options, node_cx, window, cx).into_any_element()
             }
-            BlockNode::Divider => div()
+            BlockNode::Divider { .. } => div()
                 .pb(mb)
                 .child(div().id("divider").bg(cx.theme().border).h(px(2.)))
                 .into_any_element(),
             BlockNode::Break { .. } => div().id("break").into_any_element(),
-            BlockNode::Unknown | BlockNode::Definition { .. } => div().into_any_element(),
+            BlockNode::Unknown { .. } | BlockNode::Definition { .. } => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("unknown implementation: {:?}", self);

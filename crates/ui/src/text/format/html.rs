@@ -377,7 +377,10 @@ fn parse_node(
             ref attrs,
             ..
         } => match name.local {
-            local_name!("br") => Some(node::BlockNode::Break { html: true }),
+            local_name!("br") => Some(node::BlockNode::Break {
+                html: true,
+                span: None,
+            }),
             local_name!("h1")
             | local_name!("h2")
             | local_name!("h3")
@@ -403,11 +406,15 @@ fn parse_node(
                 let heading = node::BlockNode::Heading {
                     level,
                     children: paragraph,
+                    span: None,
                 };
                 if children.len() > 0 {
                     children.push(heading);
 
-                    Some(node::BlockNode::Root { children })
+                    Some(node::BlockNode::Root {
+                        children,
+                        span: None,
+                    })
                 } else {
                     Some(heading)
                 }
@@ -439,7 +446,10 @@ fn parse_node(
 
                 if children.len() > 0 {
                     children.push(node::BlockNode::Paragraph(paragraph));
-                    Some(node::BlockNode::Root { children })
+                    Some(node::BlockNode::Root {
+                        children,
+                        span: None,
+                    })
                 } else {
                     Some(node::BlockNode::Paragraph(paragraph))
                 }
@@ -447,7 +457,11 @@ fn parse_node(
             local_name!("ul") | local_name!("ol") => {
                 let ordered = name.local == local_name!("ol");
                 let children = consume_children_nodes(node, paragraph, cx);
-                Some(node::BlockNode::List { children, ordered })
+                Some(node::BlockNode::List {
+                    children,
+                    ordered,
+                    span: None,
+                })
             }
             local_name!("li") => {
                 let mut children = vec![];
@@ -477,6 +491,7 @@ fn parse_node(
                     children,
                     spread: false,
                     checked: None,
+                    span: None,
                 })
             }
             local_name!("table") => {
@@ -504,14 +519,20 @@ fn parse_node(
                 let table = node::BlockNode::Table(table);
                 if children.len() > 0 {
                     children.push(table);
-                    Some(node::BlockNode::Root { children })
+                    Some(node::BlockNode::Root {
+                        children,
+                        span: None,
+                    })
                 } else {
                     Some(table)
                 }
             }
             local_name!("blockquote") => {
                 let children = consume_children_nodes(node, paragraph, cx);
-                Some(node::BlockNode::Blockquote { children })
+                Some(node::BlockNode::Blockquote {
+                    children,
+                    span: None,
+                })
             }
             local_name!("style") | local_name!("script") => None,
             _ => {
@@ -536,7 +557,10 @@ fn parse_node(
                     if children.is_empty() {
                         None
                     } else {
-                        Some(node::BlockNode::Root { children })
+                        Some(node::BlockNode::Root {
+                            children,
+                            span: None,
+                        })
                     }
                 } else {
                     // Others to as Inline
@@ -552,7 +576,10 @@ fn parse_node(
         },
         NodeData::Document => {
             let children = consume_children_nodes(node, paragraph, cx);
-            Some(node::BlockNode::Root { children })
+            Some(node::BlockNode::Root {
+                children,
+                span: None,
+            })
         }
         NodeData::Doctype { .. }
         | NodeData::Comment { .. }
