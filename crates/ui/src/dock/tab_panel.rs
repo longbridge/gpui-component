@@ -709,6 +709,10 @@ impl TabPanel {
                         .children(bottom_dock_button),
                 )
             })
+            .when(!has_extend_dock_button, |this| {
+                // left -1px for avoid border overlap with the first tab
+                this.left(-px(1.))
+            })
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
                 let droppable = self.collapsed;
@@ -724,10 +728,6 @@ impl TabPanel {
 
                 Some(
                     Tab::default()
-                        .when(!has_extend_dock_button && ix == 0, |this| {
-                            // Right 1px for avoid border overlap with the first tab
-                            this.right(px(1.))
-                        })
                         .map(|this| {
                             if let Some(tab_name) = panel.tab_name(cx) {
                                 this.child(tab_name)
