@@ -780,7 +780,7 @@ impl BlockNode {
                 .iter()
                 .map(|child| child.to_markdown())
                 .collect::<Vec<_>>()
-                .join("\n"),
+                .join("\n\n"),
             BlockNode::Paragraph(paragraph) => paragraph.to_markdown(),
             BlockNode::Heading {
                 level, children, ..
