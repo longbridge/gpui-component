@@ -28,7 +28,7 @@ use crate::{ActiveTheme, Disableable, StyledExt, button::Button, h_flex, icon::I
 ///     })
 ///     .on_next(|_, _, _| {
 ///         // Handle next page
-///     })
+///     });
 /// ```
 #[derive(IntoElement)]
 pub struct Pagination {
@@ -142,7 +142,7 @@ impl Styled for Pagination {
 }
 
 impl RenderOnce for Pagination {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted_fg = cx.theme().muted_foreground;
         let can_prev = self.current_page > 1 && !self.loading;
         let can_next = self.current_page < self.total_pages && !self.loading;
@@ -153,7 +153,7 @@ impl RenderOnce for Pagination {
                 self.current_page, self.total_pages, self.total_items
             ))
         });
-
+        let base_id = self.base.interactivity().element_id.clone();
         self.base
             .refine_style(&self.style)
             .flex()
@@ -172,22 +172,22 @@ impl RenderOnce for Pagination {
                     .gap_2()
                     .items_center()
                     .child({
-                        let mut btn = Button::new("pagination-prev")
-                            .icon(self.prev_icon)
-                            .compact()
-                            .disabled(!can_prev);
-
+                        let mut btn =
+                            Button::new(SharedString::from(format!("{:?}-prev", base_id)))
+                                .icon(self.prev_icon)
+                                .compact()
+                                .disabled(!can_prev);
                         if let Some(handler) = self.on_prev {
                             btn = btn.on_click(move |event, window, cx| handler(event, window, cx));
                         }
                         btn
                     })
                     .child({
-                        let mut btn = Button::new("pagination-next")
-                            .icon(self.next_icon)
-                            .compact()
-                            .disabled(!can_next);
-
+                        let mut btn =
+                            Button::new(SharedString::from(format!("{:?}-next", base_id)))
+                                .icon(self.next_icon)
+                                .compact()
+                                .disabled(!can_next);
                         if let Some(handler) = self.on_next {
                             btn = btn.on_click(move |event, window, cx| handler(event, window, cx));
                         }
