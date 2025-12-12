@@ -80,7 +80,7 @@ num-traits = "0.2"
 rust_decimal = { version = "1.37.0", optional = true }
 
 # Markdown Parser
-markdown = "1.0.0"
+markdown = { version = "1.0.0", features = ["serde"] }
 
 # HTML Parser
 html5ever = "0.27"

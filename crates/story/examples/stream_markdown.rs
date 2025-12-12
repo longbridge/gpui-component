@@ -1,6 +1,5 @@
 use gpui::*;
 use gpui_component::{
-    ActiveTheme,
     button::Button,
     h_flex,
     text::{TextView, TextViewState},
@@ -20,7 +19,8 @@ const EXAMPLE: &str = include_str!("./fixtures/test.md");
 
 impl Example {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let markdown_state = cx.new(|cx| TextViewState::markdown("# Streaming Markdown Parse", cx));
+        let markdown_state =
+            cx.new(|cx| TextViewState::markdown("# Streaming Markdown Parse\n\n", cx));
         let scroll_handle = ScrollHandle::new();
 
         let (tx, rx) = smol::channel::unbounded::<String>();
@@ -67,7 +67,7 @@ impl Example {
             while current < chars.len() {
                 let chunk_size = (5 + rand::random::<usize>() % 15).min(chars.len() - current);
                 let chunk: String = chars[current..current + chunk_size].iter().collect();
-                tx.try_send(chunk).unwrap();
+                _ = tx.try_send(chunk);
                 current += chunk_size;
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
@@ -99,9 +99,6 @@ impl Render for Example {
                     .id("contents")
                     .flex_1()
                     .w_full()
-                    .bg(cx.theme().secondary)
-                    .rounded_lg()
-                    .p_4()
                     .track_scroll(&self.scroll_handle)
                     .overflow_y_scroll()
                     .size_full()

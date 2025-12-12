@@ -1,9 +1,14 @@
-use std::{pin::Pin, sync::Arc, task::Poll, time::Duration};
+use std::{
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::Poll,
+    time::Duration,
+};
 
 use gpui::{
-    App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, KeyBinding, ListState,
-    ParentElement as _, Pixels, Point, Render, SharedString, Size, Styled as _, Task, Window,
-    canvas, prelude::FluentBuilder as _, px,
+    App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
+    ListState, ParentElement as _, Pixels, Point, Render, SharedString, Size, Styled as _, Task,
+    Window, canvas, prelude::FluentBuilder as _, px,
 };
 use smol::{Timer, stream::StreamExt as _};
 
@@ -13,6 +18,8 @@ use crate::{
     input::{self, Copy},
     text::{
         CodeBlockActionsFn, TextViewStyle,
+        document::ParsedDocument,
+        format,
         node::{self, NodeContext},
     },
     v_flex,
@@ -41,8 +48,6 @@ pub(super) enum TextViewFormat {
 
 /// The state of a TextView.
 pub struct TextViewState {
-    format: TextViewFormat,
-    pub(super) text: String,
     pub(super) focus_handle: FocusHandle,
     pub(super) list_state: ListState,
 
@@ -58,9 +63,10 @@ pub struct TextViewState {
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
 
-    pub(super) parsed_result: Option<Result<ParsedContent, SharedString>>,
+    pub(super) parsed_content: Arc<Mutex<ParsedContent>>,
+    text: SharedString,
+    parsed_error: Option<SharedString>,
     tx: smol::channel::Sender<UpdateOptions>,
-    _need_reparse: bool,
     _parse_task: Task<()>,
     _receive_task: Task<()>,
 }
@@ -81,13 +87,14 @@ impl TextViewState {
         let focus_handle = cx.focus_handle();
 
         let (tx, rx) = smol::channel::unbounded::<UpdateOptions>();
-        let (tx_result, rx_result) =
-            smol::channel::unbounded::<Result<ParsedContent, SharedString>>();
+        let (tx_result, rx_result) = smol::channel::unbounded::<Result<(), SharedString>>();
         let _receive_task = cx.spawn({
             async move |weak_self, cx| {
                 while let Ok(parsed_result) = rx_result.recv().await {
                     _ = weak_self.update(cx, |state, cx| {
-                        state.parsed_result = Some(parsed_result);
+                        if let Err(err) = &parsed_result {
+                            state.parsed_error = Some(err.clone());
+                        }
                         state.clear_selection();
                         cx.notify();
                     });
@@ -97,9 +104,7 @@ impl TextViewState {
 
         let _parse_task = cx.background_spawn(UpdateFuture::new(format, rx, tx_result, cx));
 
-        Self {
-            format,
-            text: text.to_string(),
+        let mut this = Self {
             focus_handle,
             bounds: Bounds::default(),
             selection_positions: (None, None),
@@ -109,12 +114,20 @@ impl TextViewState {
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
             is_selecting: false,
-            parsed_result: None,
+            parsed_content: Default::default(),
+            parsed_error: None,
+            text: text.to_string().into(),
             tx,
-            _need_reparse: true,
             _parse_task,
             _receive_task,
-        }
+        };
+        this.increment_update(&text, false, cx);
+        this
+    }
+
+    /// Get the text content.
+    pub(crate) fn source(&self) -> SharedString {
+        self.parsed_content.lock().unwrap().document.source.clone()
     }
 
     /// Set whether the text is selectable, default false.
@@ -143,57 +156,39 @@ impl TextViewState {
 
     /// Set the text content.
     pub fn set_text(&mut self, text: &str, cx: &mut Context<Self>) {
-        if text == self.text {
+        if self.text.as_str() == text {
             return;
         }
 
-        self.text = text.to_string();
-        self._need_reparse = true;
-        cx.notify();
+        self.text = text.to_string().into();
+        self.parsed_error = None;
+        self.increment_update(text, false, cx);
     }
 
     /// Append partial text content to the existing text.
-    pub fn push_str(&mut self, text: &str, cx: &mut Context<Self>) {
-        if text.is_empty() {
+    pub fn push_str(&mut self, new_text: &str, cx: &mut Context<Self>) {
+        if new_text.is_empty() {
             return;
         }
-
-        self.text.push_str(&text);
-        self._need_reparse = true;
-        cx.notify();
+        self.increment_update(new_text, true, cx);
     }
 
     /// Return the selected text.
     pub fn selected_text(&self) -> String {
-        if let Some(text) = self
-            .parsed_result
-            .as_ref()
-            .and_then(|res| res.as_ref().ok())
-            .map(|parsed| parsed.root_node.selected_text())
-        {
-            return text;
-        }
-
-        return String::new();
+        self.parsed_content.lock().unwrap().document.selected_text()
     }
 
-    pub(super) fn parse_if_needed(&mut self, cx: &mut Context<Self>) {
-        if !self._need_reparse {
-            return;
-        }
+    fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
         let code_block_actions = self.code_block_actions.clone();
-
-        self._need_reparse = false;
         let update_options = UpdateOptions {
-            text: self.text.clone().into(),
-            text_view_style: self.text_view_style.clone(),
+            append,
+            content: self.parsed_content.clone(),
+            pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
             code_block_actions: code_block_actions.clone(),
         };
+
         // Parse at first time by blocking.
-        if self.parsed_result.is_none() {
-            self.parsed_result = Some(parse_content(self.format, &update_options));
-        }
         _ = self.tx.try_send(update_options);
     }
 
@@ -259,34 +254,32 @@ impl TextViewState {
 }
 
 impl Render for TextViewState {
-    fn render(
-        &mut self,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
-        self.parse_if_needed(cx);
-
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = cx.entity();
+        let (document, node_cx) = {
+            let content = self.parsed_content.lock().unwrap();
+            (content.document.clone(), content.node_cx.clone())
+        };
+
         v_flex()
             .size_full()
-            .map(|this| match &mut self.parsed_result {
-                Some(Ok(content)) => this.child(content.root_node.render_root(
+            .map(|this| match &mut self.parsed_error {
+                None => this.child(document.render_root(
                     if self.scrollable {
                         Some(self.list_state.clone())
                     } else {
                         None
                     },
-                    &content.node_cx,
+                    &node_cx,
                     window,
                     cx,
                 )),
-                Some(Err(err)) => this.child(
+                Some(err) => this.child(
                     v_flex()
                         .gap_1()
                         .child("Failed to parse content")
                         .child(err.to_string()),
                 ),
-                None => this,
             })
             .child(canvas(
                 move |bounds, _, cx| {
@@ -299,34 +292,36 @@ impl Render for TextViewState {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Default)]
 pub(crate) struct ParsedContent {
-    pub(crate) root_node: node::Node,
+    pub(crate) document: ParsedDocument,
     pub(crate) node_cx: node::NodeContext,
 }
 
 struct UpdateFuture {
     format: TextViewFormat,
     options: UpdateOptions,
+    pending_text: String,
     timer: Timer,
     rx: Pin<Box<smol::channel::Receiver<UpdateOptions>>>,
-    tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
+    tx_result: smol::channel::Sender<Result<(), SharedString>>,
     delay: Duration,
 }
 
 impl UpdateFuture {
-    #[allow(clippy::too_many_arguments)]
     fn new(
         format: TextViewFormat,
         rx: smol::channel::Receiver<UpdateOptions>,
-        tx_result: smol::channel::Sender<Result<ParsedContent, SharedString>>,
+        tx_result: smol::channel::Sender<Result<(), SharedString>>,
         cx: &App,
     ) -> Self {
         Self {
             format,
+            pending_text: String::new(),
             options: UpdateOptions {
-                text: SharedString::default(),
-                text_view_style: TextViewStyle::default(),
+                append: false,
+                pending_text: String::new(),
+                content: Default::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
                 code_block_actions: None,
             },
@@ -345,8 +340,13 @@ impl Future for UpdateFuture {
         loop {
             match self.rx.poll_next(cx) {
                 Poll::Ready(Some(options)) => {
-                    self.options = options;
                     let delay = self.delay;
+                    if options.append {
+                        self.pending_text.push_str(options.pending_text.as_str());
+                    } else {
+                        self.pending_text = options.pending_text.clone();
+                    }
+                    self.options = options;
                     self.timer.set_after(delay);
                     continue;
                 }
@@ -356,7 +356,15 @@ impl Future for UpdateFuture {
 
             match self.timer.poll_next(cx) {
                 Poll::Ready(Some(_)) => {
-                    let res = parse_content(self.format, &self.options);
+                    let pending_text = std::mem::take(&mut self.pending_text);
+
+                    let res = parse_content(
+                        self.format,
+                        &UpdateOptions {
+                            pending_text,
+                            ..self.options.clone()
+                        },
+                    );
                     _ = self.tx_result.try_send(res);
                     continue;
                 }
@@ -368,32 +376,49 @@ impl Future for UpdateFuture {
 
 #[derive(Clone)]
 struct UpdateOptions {
-    text: SharedString,
-    text_view_style: TextViewStyle,
+    content: Arc<Mutex<ParsedContent>>,
+    pending_text: String,
+    append: bool,
     highlight_theme: Arc<HighlightTheme>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
-fn parse_content(
-    format: TextViewFormat,
-    options: &UpdateOptions,
-) -> Result<ParsedContent, SharedString> {
+fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), SharedString> {
     let mut node_cx = NodeContext {
-        style: options.text_view_style.clone(),
         code_block_actions: options.code_block_actions.clone(),
         ..NodeContext::default()
     };
 
-    let res = match format {
-        TextViewFormat::Markdown => super::format::markdown::parse(
-            options.text.as_str(),
-            &options.text_view_style,
-            &mut node_cx,
-            &options.highlight_theme,
-        ),
-        TextViewFormat::Html => super::format::html::parse(options.text.as_str(), &mut node_cx),
-    };
-    res.map(move |root_node| ParsedContent { root_node, node_cx })
+    let mut content = options.content.lock().unwrap();
+    let mut source = String::new();
+    if options.append
+        && let Some(last_block) = content.document.blocks.pop()
+        && let Some(span) = last_block.span()
+    {
+        node_cx.offset = span.start;
+        let last_source = &content.document.source[span.start..];
+        source.push_str(last_source);
+        source.push_str(&options.pending_text);
+    } else {
+        source = options.pending_text.to_string();
+    }
+
+    let new_content = match format {
+        TextViewFormat::Markdown => {
+            format::markdown::parse(&source, &mut node_cx, &options.highlight_theme)
+        }
+        TextViewFormat::Html => format::html::parse(&source, &mut node_cx),
+    }?;
+
+    if options.append {
+        content.document.source =
+            format!("{}{}", content.document.source, options.pending_text).into();
+        content.document.blocks.extend(new_content.blocks);
+    } else {
+        content.document = new_content;
+    }
+
+    Ok(())
 }
 
 fn selection_bounds(

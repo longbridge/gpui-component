@@ -1,3 +1,4 @@
+mod document;
 mod format;
 mod inline;
 mod node;
@@ -76,7 +77,7 @@ impl Text {
             Self::String(s) => s.clone(),
             Self::TextView(view) => {
                 if let Some(state) = &view.state {
-                    state.read(cx).text.clone().into()
+                    state.read(cx).source()
                 } else {
                     SharedString::default()
                 }
