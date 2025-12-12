@@ -13,6 +13,7 @@ use crate::{
     input::{self, Copy},
     text::{
         CodeBlockActionsFn, TextViewStyle,
+        document::ParsedDocument,
         node::{self, NodeContext},
     },
     v_flex,
@@ -169,7 +170,7 @@ impl TextViewState {
             .parsed_result
             .as_ref()
             .and_then(|res| res.as_ref().ok())
-            .map(|parsed| parsed.root_node.selected_text())
+            .map(|parsed| parsed.document.selected_text())
         {
             return text;
         }
@@ -270,7 +271,7 @@ impl Render for TextViewState {
         v_flex()
             .size_full()
             .map(|this| match &mut self.parsed_result {
-                Some(Ok(content)) => this.child(content.root_node.render_root(
+                Some(Ok(content)) => this.child(content.document.render_root(
                     if self.scrollable {
                         Some(self.list_state.clone())
                     } else {
@@ -301,7 +302,7 @@ impl Render for TextViewState {
 
 #[derive(PartialEq)]
 pub(crate) struct ParsedContent {
-    pub(crate) root_node: node::Node,
+    pub(crate) document: ParsedDocument,
     pub(crate) node_cx: node::NodeContext,
 }
 
@@ -393,7 +394,7 @@ fn parse_content(
         ),
         TextViewFormat::Html => super::format::html::parse(options.text.as_str(), &mut node_cx),
     };
-    res.map(move |root_node| ParsedContent { root_node, node_cx })
+    res.map(move |document| ParsedContent { document, node_cx })
 }
 
 fn selection_bounds(

@@ -1,17 +1,18 @@
 use gpui::SharedString;
 use markdown::{
-    mdast::{self, Node},
     ParseOptions,
+    mdast::{self, Node},
 };
 
 use crate::{
     highlighter::HighlightTheme,
     text::{
+        TextViewStyle,
+        document::ParsedDocument,
         node::{
             self, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Span, Table,
             TableRow, TextMark,
         },
-        TextViewStyle,
     },
 };
 
@@ -21,9 +22,9 @@ pub(crate) fn parse(
     style: &TextViewStyle,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
-) -> Result<node::Node, SharedString> {
+) -> Result<ParsedDocument, SharedString> {
     markdown::to_mdast(&raw, &ParseOptions::gfm())
-        .map(|n| ast_to_node(n, style, cx, highlight_theme))
+        .map(|n| ast_to_document(n, style, cx, highlight_theme))
         .map_err(|e| e.to_string().into())
 }
 
@@ -158,7 +159,12 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
         }
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => {
-                if el.is_break() {
+                if el
+                    .blocks
+                    .first()
+                    .map(|node| node.is_break())
+                    .unwrap_or(false)
+                {
                     text = "\n".to_owned();
                     paragraph.push(InlineNode::new(&text));
                 } else {
@@ -216,28 +222,40 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
     text
 }
 
+fn ast_to_document(
+    root: mdast::Node,
+    style: &TextViewStyle,
+    cx: &mut NodeContext,
+    highlight_theme: &HighlightTheme,
+) -> ParsedDocument {
+    let root = match root {
+        Node::Root(r) => r,
+        _ => panic!("expected root node"),
+    };
+
+    let blocks = root
+        .children
+        .into_iter()
+        .map(|c| ast_to_node(c, style, cx, highlight_theme))
+        .collect();
+    ParsedDocument { blocks }
+}
+
 fn ast_to_node(
     value: mdast::Node,
     style: &TextViewStyle,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
-) -> node::Node {
+) -> node::BlockNode {
     match value {
-        Node::Root(val) => {
-            let children = val
-                .children
-                .into_iter()
-                .map(|c| ast_to_node(c, style, cx, highlight_theme))
-                .collect();
-            node::Node::Root { children }
-        }
+        Node::Root(_) => unreachable!("node::Root should be handled separately"),
         Node::Paragraph(val) => {
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
 
-            node::Node::Paragraph(paragraph)
+            node::BlockNode::Paragraph(paragraph)
         }
         Node::Blockquote(val) => {
             let children = val
@@ -245,7 +263,7 @@ fn ast_to_node(
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
-            node::Node::Blockquote { children }
+            node::BlockNode::Blockquote { children }
         }
         Node::List(list) => {
             let children = list
@@ -253,7 +271,7 @@ fn ast_to_node(
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
-            node::Node::List {
+            node::BlockNode::List {
                 ordered: list.ordered,
                 children,
             }
@@ -264,14 +282,14 @@ fn ast_to_node(
                 .into_iter()
                 .map(|c| ast_to_node(c, style, cx, highlight_theme))
                 .collect();
-            node::Node::ListItem {
+            node::BlockNode::ListItem {
                 children,
                 spread: val.spread,
                 checked: val.checked,
             }
         }
-        Node::Break(_) => node::Node::Break { html: false },
-        Node::Code(raw) => node::Node::CodeBlock(CodeBlock::new(
+        Node::Break(_) => node::BlockNode::Break { html: false },
+        Node::Code(raw) => node::BlockNode::CodeBlock(CodeBlock::new(
             raw.value.into(),
             raw.lang.map(|s| s.into()),
             style,
@@ -283,40 +301,42 @@ fn ast_to_node(
                 parse_paragraph(&mut paragraph, c, cx);
             });
 
-            node::Node::Heading {
+            node::BlockNode::Heading {
                 level: val.depth,
                 children: paragraph,
             }
         }
-        Node::Math(val) => node::Node::CodeBlock(CodeBlock::new(
+        Node::Math(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             None,
             style,
             highlight_theme,
         )),
         Node::Html(val) => match super::html::parse(&val.value, cx) {
-            Ok(el) => el,
+            Ok(el) => node::BlockNode::Root {
+                children: el.blocks,
+            },
             Err(err) => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("error parsing html: {:#?}", err);
                 }
 
-                node::Node::Paragraph(Paragraph::new(val.value))
+                node::BlockNode::Paragraph(Paragraph::new(val.value))
             }
         },
-        Node::MdxFlowExpression(val) => node::Node::CodeBlock(CodeBlock::new(
+        Node::MdxFlowExpression(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("mdx".into()),
             style,
             highlight_theme,
         )),
-        Node::Yaml(val) => node::Node::CodeBlock(CodeBlock::new(
+        Node::Yaml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("yml".into()),
             style,
             highlight_theme,
         )),
-        Node::Toml(val) => node::Node::CodeBlock(CodeBlock::new(
+        Node::Toml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
             style,
@@ -327,16 +347,16 @@ fn ast_to_node(
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            node::Node::Paragraph(paragraph)
+            node::BlockNode::Paragraph(paragraph)
         }
         Node::MdxJsxFlowElement(val) => {
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            node::Node::Paragraph(paragraph)
+            node::BlockNode::Paragraph(paragraph)
         }
-        Node::ThematicBreak(_) => node::Node::Divider,
+        Node::ThematicBreak(_) => node::BlockNode::Divider,
         Node::Table(val) => {
             let mut table = Table::default();
             table.column_aligns = val
@@ -351,7 +371,7 @@ fn ast_to_node(
                 }
             });
 
-            node::Node::Table(table)
+            node::BlockNode::Table(table)
         }
         Node::FootnoteDefinition(def) => {
             let mut paragraph = Paragraph::default();
@@ -367,7 +387,7 @@ fn ast_to_node(
             def.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            node::Node::Paragraph(paragraph)
+            node::BlockNode::Paragraph(paragraph)
         }
         Node::Definition(def) => {
             cx.add_ref(
@@ -379,7 +399,7 @@ fn ast_to_node(
                 },
             );
 
-            node::Node::Definition {
+            node::BlockNode::Definition {
                 identifier: def.identifier.clone().into(),
                 url: def.url.clone().into(),
                 title: def.title.clone().map(|s| s.into()),
@@ -389,7 +409,7 @@ fn ast_to_node(
             if cfg!(debug_assertions) {
                 tracing::warn!("unsupported node: {:#?}", value);
             }
-            node::Node::Unknown
+            node::BlockNode::Unknown
         }
     }
 }

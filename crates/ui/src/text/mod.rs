@@ -1,3 +1,4 @@
+mod document;
 mod format;
 mod inline;
 mod node;
