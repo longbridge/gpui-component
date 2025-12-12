@@ -12,7 +12,8 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use crate::text::document::ParsedDocument;
 use crate::text::node::{
-    self, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table, TableRow, TextMark,
+    self, BlockNode, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table, TableRow,
+    TextMark,
 };
 
 const BLOCK_ELEMENTS: [&str; 35] = [
@@ -70,8 +71,8 @@ pub(crate) fn parse(source: &str, cx: &mut NodeContext) -> Result<ParsedDocument
 
     let mut paragraph = Paragraph::default();
     // NOTE: The outer paragraph is not used.
-    let node: node::BlockNode =
-        parse_node(&dom.document, &mut paragraph, cx).unwrap_or(node::BlockNode::Unknown);
+    let node: BlockNode =
+        parse_node(&dom.document, &mut paragraph, cx).unwrap_or(BlockNode::Unknown);
     let node = node.compact();
 
     Ok(ParsedDocument {
@@ -365,7 +366,7 @@ fn parse_node(
     node: &Rc<Node>,
     paragraph: &mut Paragraph,
     cx: &mut NodeContext,
-) -> Option<node::BlockNode> {
+) -> Option<BlockNode> {
     match node.data {
         NodeData::Text { ref contents } => {
             let text = contents.borrow().to_string();
@@ -380,7 +381,7 @@ fn parse_node(
             ref attrs,
             ..
         } => match name.local {
-            local_name!("br") => Some(node::BlockNode::Break {
+            local_name!("br") => Some(BlockNode::Break {
                 html: true,
                 span: None,
             }),
@@ -406,7 +407,7 @@ fn parse_node(
                     parse_paragraph(&mut paragraph, child);
                 }
 
-                let heading = node::BlockNode::Heading {
+                let heading = BlockNode::Heading {
                     level,
                     children: paragraph,
                     span: None,
@@ -414,7 +415,7 @@ fn parse_node(
                 if children.len() > 0 {
                     children.push(heading);
 
-                    Some(node::BlockNode::Root {
+                    Some(BlockNode::Root {
                         children,
                         span: None,
                     })
@@ -448,19 +449,19 @@ fn parse_node(
                 });
 
                 if children.len() > 0 {
-                    children.push(node::BlockNode::Paragraph(paragraph));
-                    Some(node::BlockNode::Root {
+                    children.push(BlockNode::Paragraph(paragraph));
+                    Some(BlockNode::Root {
                         children,
                         span: None,
                     })
                 } else {
-                    Some(node::BlockNode::Paragraph(paragraph))
+                    Some(BlockNode::Paragraph(paragraph))
                 }
             }
             local_name!("ul") | local_name!("ol") => {
                 let ordered = name.local == local_name!("ol");
                 let children = consume_children_nodes(node, paragraph, cx);
-                Some(node::BlockNode::List {
+                Some(BlockNode::List {
                     children,
                     ordered,
                     span: None,
@@ -478,19 +479,19 @@ fn parse_node(
                     if child_paragraph.text_len() > 0 {
                         // If last child is paragraph, merge child
                         if let Some(last_child) = children.last_mut() {
-                            if let node::BlockNode::Paragraph(last_paragraph) = last_child {
+                            if let BlockNode::Paragraph(last_paragraph) = last_child {
                                 last_paragraph.merge(child_paragraph);
                                 continue;
                             }
                         }
 
-                        children.push(node::BlockNode::Paragraph(child_paragraph));
+                        children.push(BlockNode::Paragraph(child_paragraph));
                     }
                 }
 
                 consume_paragraph(&mut children, paragraph);
 
-                Some(node::BlockNode::ListItem {
+                Some(BlockNode::ListItem {
                     children,
                     spread: false,
                     checked: None,
@@ -519,10 +520,10 @@ fn parse_node(
                 }
                 consume_paragraph(&mut children, paragraph);
 
-                let table = node::BlockNode::Table(table);
+                let table = BlockNode::Table(table);
                 if children.len() > 0 {
                     children.push(table);
-                    Some(node::BlockNode::Root {
+                    Some(BlockNode::Root {
                         children,
                         span: None,
                     })
@@ -532,7 +533,7 @@ fn parse_node(
             }
             local_name!("blockquote") => {
                 let children = consume_children_nodes(node, paragraph, cx);
-                Some(node::BlockNode::Blockquote {
+                Some(BlockNode::Blockquote {
                     children,
                     span: None,
                 })
@@ -540,7 +541,7 @@ fn parse_node(
             local_name!("style") | local_name!("script") => None,
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
-                    let mut children: Vec<node::BlockNode> = vec![];
+                    let mut children: Vec<BlockNode> = vec![];
 
                     // Case:
                     //
@@ -560,7 +561,7 @@ fn parse_node(
                     if children.is_empty() {
                         None
                     } else {
-                        Some(node::BlockNode::Root {
+                        Some(BlockNode::Root {
                             children,
                             span: None,
                         })
@@ -570,7 +571,7 @@ fn parse_node(
                     parse_paragraph(paragraph, node);
 
                     if paragraph.is_image() {
-                        Some(node::BlockNode::Paragraph(paragraph.take()))
+                        Some(BlockNode::Paragraph(paragraph.take()))
                     } else {
                         None
                     }
@@ -579,7 +580,7 @@ fn parse_node(
         },
         NodeData::Document => {
             let children = consume_children_nodes(node, paragraph, cx);
-            Some(node::BlockNode::Root {
+            Some(BlockNode::Root {
                 children,
                 span: None,
             })
@@ -594,7 +595,7 @@ fn consume_children_nodes(
     node: &Node,
     paragraph: &mut Paragraph,
     cx: &mut NodeContext,
-) -> Vec<node::BlockNode> {
+) -> Vec<BlockNode> {
     let mut children = vec![];
     consume_paragraph(&mut children, paragraph);
     for child in node.children.borrow().iter() {
@@ -607,12 +608,12 @@ fn consume_children_nodes(
     children
 }
 
-fn consume_paragraph(children: &mut Vec<node::BlockNode>, paragraph: &mut Paragraph) {
+fn consume_paragraph(children: &mut Vec<BlockNode>, paragraph: &mut Paragraph) {
     if paragraph.is_empty() {
         return;
     }
 
-    children.push(node::BlockNode::Paragraph(paragraph.take()));
+    children.push(BlockNode::Paragraph(paragraph.take()));
 }
 
 #[cfg(test)]

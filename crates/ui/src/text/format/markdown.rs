@@ -9,8 +9,8 @@ use crate::{
     text::{
         document::ParsedDocument,
         node::{
-            self, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Span, Table,
-            TableRow, TextMark,
+            self, BlockNode, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph,
+            Span, Table, TableRow, TextMark,
         },
     },
 };
@@ -257,7 +257,7 @@ fn ast_to_node(
     value: mdast::Node,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
-) -> node::BlockNode {
+) -> BlockNode {
     match value {
         Node::Root(_) => unreachable!("node::Root should be handled separately"),
         Node::Paragraph(val) => {
@@ -266,7 +266,7 @@ fn ast_to_node(
                 parse_paragraph(&mut paragraph, c, cx);
             });
             paragraph.span = new_span(val.position, cx);
-            node::BlockNode::Paragraph(paragraph)
+            BlockNode::Paragraph(paragraph)
         }
         Node::Blockquote(val) => {
             let children = val
@@ -274,7 +274,7 @@ fn ast_to_node(
                 .into_iter()
                 .map(|c| ast_to_node(c, cx, highlight_theme))
                 .collect();
-            node::BlockNode::Blockquote {
+            BlockNode::Blockquote {
                 children,
                 span: new_span(val.position, cx),
             }
@@ -285,7 +285,7 @@ fn ast_to_node(
                 .into_iter()
                 .map(|c| ast_to_node(c, cx, highlight_theme))
                 .collect();
-            node::BlockNode::List {
+            BlockNode::List {
                 ordered: list.ordered,
                 children,
                 span: new_span(list.position, cx),
@@ -297,18 +297,18 @@ fn ast_to_node(
                 .into_iter()
                 .map(|c| ast_to_node(c, cx, highlight_theme))
                 .collect();
-            node::BlockNode::ListItem {
+            BlockNode::ListItem {
                 children,
                 spread: val.spread,
                 checked: val.checked,
                 span: new_span(val.position, cx),
             }
         }
-        Node::Break(val) => node::BlockNode::Break {
+        Node::Break(val) => BlockNode::Break {
             html: false,
             span: new_span(val.position, cx),
         },
-        Node::Code(raw) => node::BlockNode::CodeBlock(CodeBlock::new(
+        Node::Code(raw) => BlockNode::CodeBlock(CodeBlock::new(
             raw.value.into(),
             raw.lang.map(|s| s.into()),
             highlight_theme,
@@ -320,20 +320,20 @@ fn ast_to_node(
                 parse_paragraph(&mut paragraph, c, cx);
             });
 
-            node::BlockNode::Heading {
+            BlockNode::Heading {
                 level: val.depth,
                 children: paragraph,
                 span: new_span(val.position, cx),
             }
         }
-        Node::Math(val) => node::BlockNode::CodeBlock(CodeBlock::new(
+        Node::Math(val) => BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             None,
             highlight_theme,
             new_span(val.position, cx),
         )),
         Node::Html(val) => match super::html::parse(&val.value, cx) {
-            Ok(el) => node::BlockNode::Root {
+            Ok(el) => BlockNode::Root {
                 children: el.blocks,
                 span: new_span(val.position, cx),
             },
@@ -342,22 +342,22 @@ fn ast_to_node(
                     tracing::warn!("error parsing html: {:#?}", err);
                 }
 
-                node::BlockNode::Paragraph(Paragraph::new(val.value))
+                BlockNode::Paragraph(Paragraph::new(val.value))
             }
         },
-        Node::MdxFlowExpression(val) => node::BlockNode::CodeBlock(CodeBlock::new(
+        Node::MdxFlowExpression(val) => BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("mdx".into()),
             highlight_theme,
             new_span(val.position, cx),
         )),
-        Node::Yaml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
+        Node::Yaml(val) => BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("yml".into()),
             highlight_theme,
             new_span(val.position, cx),
         )),
-        Node::Toml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
+        Node::Toml(val) => BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
             highlight_theme,
@@ -369,7 +369,7 @@ fn ast_to_node(
                 parse_paragraph(&mut paragraph, c, cx);
             });
             paragraph.span = new_span(val.position, cx);
-            node::BlockNode::Paragraph(paragraph)
+            BlockNode::Paragraph(paragraph)
         }
         Node::MdxJsxFlowElement(val) => {
             let mut paragraph = Paragraph::default();
@@ -377,9 +377,9 @@ fn ast_to_node(
                 parse_paragraph(&mut paragraph, c, cx);
             });
             paragraph.span = new_span(val.position, cx);
-            node::BlockNode::Paragraph(paragraph)
+            BlockNode::Paragraph(paragraph)
         }
-        Node::ThematicBreak(val) => node::BlockNode::Divider {
+        Node::ThematicBreak(val) => BlockNode::Divider {
             span: new_span(val.position, cx),
         },
         Node::Table(val) => {
@@ -397,7 +397,7 @@ fn ast_to_node(
             });
             table.span = new_span(val.position, cx);
 
-            node::BlockNode::Table(table)
+            BlockNode::Table(table)
         }
         Node::FootnoteDefinition(def) => {
             let mut paragraph = Paragraph::default();
@@ -414,7 +414,7 @@ fn ast_to_node(
                 parse_paragraph(&mut paragraph, c, cx);
             });
             paragraph.span = new_span(def.position, cx);
-            node::BlockNode::Paragraph(paragraph)
+            BlockNode::Paragraph(paragraph)
         }
         Node::Definition(def) => {
             cx.add_ref(
@@ -426,7 +426,7 @@ fn ast_to_node(
                 },
             );
 
-            node::BlockNode::Definition {
+            BlockNode::Definition {
                 identifier: def.identifier.clone().into(),
                 url: def.url.clone().into(),
                 title: def.title.clone().map(|s| s.into()),
@@ -437,7 +437,7 @@ fn ast_to_node(
             if cfg!(debug_assertions) {
                 tracing::warn!("unsupported node: {:#?}", value);
             }
-            node::BlockNode::Unknown
+            BlockNode::Unknown
         }
     }
 }
