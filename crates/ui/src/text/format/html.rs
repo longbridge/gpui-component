@@ -74,7 +74,10 @@ pub(crate) fn parse(source: &str, cx: &mut NodeContext) -> Result<ParsedDocument
         parse_node(&dom.document, &mut paragraph, cx).unwrap_or(node::BlockNode::Unknown);
     let node = node.compact();
 
-    Ok(ParsedDocument { blocks: vec![node] })
+    Ok(ParsedDocument {
+        source: source.to_string().into(),
+        blocks: vec![node],
+    })
 }
 
 fn cleanup_html(source: &str) -> Vec<u8> {
@@ -708,6 +711,7 @@ mod tests {
         assert_eq!(
             node,
             ParsedDocument {
+                source: html.to_string().into(),
                 blocks: vec![BlockNode::Paragraph(Paragraph {
                     span: None,
                     children: vec![InlineNode::image(ImageNode {
@@ -728,6 +732,7 @@ mod tests {
         assert_eq!(
             node,
             ParsedDocument {
+                source: html.to_string().into(),
                 blocks: vec![BlockNode::Paragraph(Paragraph {
                     span: None,
                     children: vec![InlineNode::image(ImageNode {

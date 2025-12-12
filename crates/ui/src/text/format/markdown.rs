@@ -18,13 +18,13 @@ use crate::{
 
 /// Parse Markdown into a tree of nodes.
 pub(crate) fn parse(
-    raw: &str,
+    source: &str,
     style: &TextViewStyle,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> Result<ParsedDocument, SharedString> {
-    markdown::to_mdast(&raw, &ParseOptions::gfm())
-        .map(|n| ast_to_document(n, style, cx, highlight_theme))
+    markdown::to_mdast(&source, &ParseOptions::gfm())
+        .map(|n| ast_to_document(source, n, style, cx, highlight_theme))
         .map_err(|e| e.to_string().into())
 }
 
@@ -223,6 +223,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
 }
 
 fn ast_to_document(
+    source: &str,
     root: mdast::Node,
     style: &TextViewStyle,
     cx: &mut NodeContext,
@@ -238,7 +239,10 @@ fn ast_to_document(
         .into_iter()
         .map(|c| ast_to_node(c, style, cx, highlight_theme))
         .collect();
-    ParsedDocument { blocks }
+    ParsedDocument {
+        source: source.to_string().into(),
+        blocks,
+    }
 }
 
 impl From<markdown::unist::Position> for Span {

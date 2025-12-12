@@ -1,13 +1,14 @@
 use gpui::{
-    App, InteractiveElement as _, IntoElement, ListState, ParentElement as _, Styled as _, Window,
-    div,
+    App, InteractiveElement as _, IntoElement, ListState, ParentElement as _, SharedString,
+    Styled as _, Window, div,
 };
 
 use crate::text::node::{BlockNode, NodeContext};
 
 /// The parsed document AST.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct ParsedDocument {
+    pub(crate) source: SharedString,
     pub(crate) blocks: Vec<BlockNode>,
 }
 

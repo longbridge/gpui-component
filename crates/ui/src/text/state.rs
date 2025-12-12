@@ -14,6 +14,7 @@ use crate::{
     text::{
         CodeBlockActionsFn, TextViewStyle,
         document::ParsedDocument,
+        format,
         node::{self, NodeContext},
     },
     v_flex,
@@ -43,7 +44,6 @@ pub(super) enum TextViewFormat {
 /// The state of a TextView.
 pub struct TextViewState {
     format: TextViewFormat,
-    pub(super) text: String,
     pub(super) focus_handle: FocusHandle,
     pub(super) list_state: ListState,
 
@@ -59,9 +59,11 @@ pub struct TextViewState {
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
 
-    pub(super) parsed_result: Option<Result<ParsedContent, SharedString>>,
+    pub(super) parsed_content: Option<ParsedContent>,
+    parsed_error: Option<SharedString>,
     tx: smol::channel::Sender<UpdateOptions>,
-    _need_reparse: bool,
+    _need_update: bool,
+    _pending_text: String,
     _parse_task: Task<()>,
     _receive_task: Task<()>,
 }
@@ -88,7 +90,16 @@ impl TextViewState {
             async move |weak_self, cx| {
                 while let Ok(parsed_result) = rx_result.recv().await {
                     _ = weak_self.update(cx, |state, cx| {
-                        state.parsed_result = Some(parsed_result);
+                        match parsed_result {
+                            Ok(content) => {
+                                state._pending_text.clear();
+                                state.parsed_content = Some(content);
+                            }
+                            Err(err) => {
+                                state.parsed_content = None;
+                                state.parsed_error = Some(err.clone());
+                            }
+                        };
                         state.clear_selection();
                         cx.notify();
                     });
@@ -100,7 +111,6 @@ impl TextViewState {
 
         Self {
             format,
-            text: text.to_string(),
             focus_handle,
             bounds: Bounds::default(),
             selection_positions: (None, None),
@@ -110,9 +120,11 @@ impl TextViewState {
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
             is_selecting: false,
-            parsed_result: None,
+            parsed_content: None,
+            parsed_error: None,
             tx,
-            _need_reparse: true,
+            _need_update: true,
+            _pending_text: text.to_string(),
             _parse_task,
             _receive_task,
         }
@@ -144,32 +156,31 @@ impl TextViewState {
 
     /// Set the text content.
     pub fn set_text(&mut self, text: &str, cx: &mut Context<Self>) {
-        if text == self.text {
-            return;
-        }
-
-        self.text = text.to_string();
-        self._need_reparse = true;
+        self.parsed_content = None;
+        self.parsed_error = None;
+        self._pending_text = text.to_string().into();
+        self._need_update = true;
+        self.parse_if_needed(cx);
         cx.notify();
     }
 
     /// Append partial text content to the existing text.
-    pub fn push_str(&mut self, text: &str, cx: &mut Context<Self>) {
-        if text.is_empty() {
+    pub fn push_str(&mut self, new_text: &str, cx: &mut Context<Self>) {
+        if new_text.is_empty() {
             return;
         }
 
-        self.text.push_str(&text);
-        self._need_reparse = true;
+        self._pending_text.push_str(new_text);
+        self._need_update = true;
+        self.parse_if_needed(cx);
         cx.notify();
     }
 
     /// Return the selected text.
     pub fn selected_text(&self) -> String {
         if let Some(text) = self
-            .parsed_result
+            .parsed_content
             .as_ref()
-            .and_then(|res| res.as_ref().ok())
             .map(|parsed| parsed.document.selected_text())
         {
             return text;
@@ -178,24 +189,42 @@ impl TextViewState {
         return String::new();
     }
 
-    pub(super) fn parse_if_needed(&mut self, cx: &mut Context<Self>) {
-        if !self._need_reparse {
+    fn parse_if_needed(&mut self, cx: &mut Context<Self>) {
+        if !self._need_update {
             return;
         }
-        let code_block_actions = self.code_block_actions.clone();
+        self._need_update = false;
 
-        self._need_reparse = false;
+        let code_block_actions = self.code_block_actions.clone();
+        let pending_text = self._pending_text.clone();
         let update_options = UpdateOptions {
-            text: self.text.clone().into(),
+            document: self
+                .parsed_content
+                .as_ref()
+                .map(|content| content.document.clone()),
+            pending_text: pending_text.into(),
+            incremental: self.parsed_content.is_some(),
             text_view_style: self.text_view_style.clone(),
             highlight_theme: cx.theme().highlight_theme.clone(),
             code_block_actions: code_block_actions.clone(),
         };
+
         // Parse at first time by blocking.
-        if self.parsed_result.is_none() {
-            self.parsed_result = Some(parse_content(self.format, &update_options));
+        if self.parsed_content.is_none() {
+            match parse_content(self.format, &update_options) {
+                Ok(content) => {
+                    self._pending_text.clear();
+                    self.parsed_content = Some(content);
+                    self.parsed_error = None;
+                }
+                Err(err) => {
+                    self.parsed_content = None;
+                    self.parsed_error = Some(err);
+                }
+            }
+        } else {
+            _ = self.tx.try_send(update_options);
         }
-        _ = self.tx.try_send(update_options);
     }
 
     /// Save bounds and unselect if bounds changed.
@@ -270,24 +299,26 @@ impl Render for TextViewState {
         let state = cx.entity();
         v_flex()
             .size_full()
-            .map(|this| match &mut self.parsed_result {
-                Some(Ok(content)) => this.child(content.document.render_root(
-                    if self.scrollable {
-                        Some(self.list_state.clone())
-                    } else {
-                        None
-                    },
-                    &content.node_cx,
-                    window,
-                    cx,
-                )),
-                Some(Err(err)) => this.child(
+            .map(|this| match &mut self.parsed_error {
+                None => match &self.parsed_content {
+                    Some(content) => this.child(content.document.render_root(
+                        if self.scrollable {
+                            Some(self.list_state.clone())
+                        } else {
+                            None
+                        },
+                        &content.node_cx,
+                        window,
+                        cx,
+                    )),
+                    None => this,
+                },
+                Some(err) => this.child(
                     v_flex()
                         .gap_1()
                         .child("Failed to parse content")
                         .child(err.to_string()),
                 ),
-                None => this,
             })
             .child(canvas(
                 move |bounds, _, cx| {
@@ -300,7 +331,7 @@ impl Render for TextViewState {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Default)]
 pub(crate) struct ParsedContent {
     pub(crate) document: ParsedDocument,
     pub(crate) node_cx: node::NodeContext,
@@ -326,7 +357,9 @@ impl UpdateFuture {
         Self {
             format,
             options: UpdateOptions {
-                text: SharedString::default(),
+                pending_text: SharedString::default(),
+                incremental: false,
+                document: None,
                 text_view_style: TextViewStyle::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
                 code_block_actions: None,
@@ -369,7 +402,9 @@ impl Future for UpdateFuture {
 
 #[derive(Clone)]
 struct UpdateOptions {
-    text: SharedString,
+    document: Option<ParsedDocument>,
+    pending_text: SharedString,
+    incremental: bool,
     text_view_style: TextViewStyle,
     highlight_theme: Arc<HighlightTheme>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
@@ -385,16 +420,43 @@ fn parse_content(
         ..NodeContext::default()
     };
 
+    let mut document = options.document.clone().unwrap_or_default();
+    let mut source = String::new();
+    if options.incremental {
+        let old_source = &document.source;
+        if let Some(last_block) = document.blocks.pop()
+            && let Some(span) = last_block.span()
+        {
+            let last_source = &old_source[span.start..];
+            source.push_str(last_source);
+            source.push_str(options.pending_text.as_str());
+        } else {
+            source = options.pending_text.to_string();
+        }
+    } else {
+        source = options.pending_text.to_string();
+    }
+
     let res = match format {
-        TextViewFormat::Markdown => super::format::markdown::parse(
-            options.text.as_str(),
+        TextViewFormat::Markdown => format::markdown::parse(
+            &source,
             &options.text_view_style,
             &mut node_cx,
             &options.highlight_theme,
         ),
-        TextViewFormat::Html => super::format::html::parse(options.text.as_str(), &mut node_cx),
+        TextViewFormat::Html => format::html::parse(&source, &mut node_cx),
     };
-    res.map(move |document| ParsedContent { document, node_cx })
+
+    document.source = source.into();
+    // Incremental update if possible
+    if options.incremental {
+        res.map(|new_content| {
+            document.blocks.extend(new_content.blocks);
+            ParsedContent { document, node_cx }
+        })
+    } else {
+        res.map(|document| ParsedContent { document, node_cx })
+    }
 }
 
 fn selection_bounds(
