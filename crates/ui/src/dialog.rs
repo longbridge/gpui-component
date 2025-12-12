@@ -85,6 +85,7 @@ pub struct Dialog {
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
+    overlay_top: Option<Pixels>,
 
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     on_ok: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>>,
@@ -131,6 +132,7 @@ impl Dialog {
             button_props: DialogButtonProps::default(),
             close_button: true,
             overlay_closable: true,
+            overlay_top: Some(TITLE_BAR_HEIGHT),
         }
     }
 
@@ -226,28 +228,36 @@ impl Dialog {
     }
 
     /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
-    pub fn margin_top(mut self, margin_top: Pixels) -> Self {
-        self.margin_top = Some(margin_top);
+    pub fn margin_top(mut self, margin_top: impl Into<Pixels>) -> Self {
+        self.margin_top = Some(margin_top.into());
+        self
+    }
+
+    /// Set the top offset of the overlay
+    ///
+    /// When not using [`TitleBar`] set your own value, for System title bar it should be `0.0`.
+    pub fn overlay_top(mut self, overlay_top: impl Into<Pixels>) -> Self {
+        self.overlay_top = Some(overlay_top.into());
         self
     }
 
     /// Sets the width of the dialog, defaults to 480px.
     ///
     /// See also [`Self::width`]
-    pub fn w(mut self, width: Pixels) -> Self {
-        self.width = width;
+    pub fn w(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = width.into();
         self
     }
 
     /// Sets the width of the dialog, defaults to 480px.
-    pub fn width(mut self, width: Pixels) -> Self {
-        self.width = width;
+    pub fn width(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = width.into();
         self
     }
 
     /// Set the maximum width of the dialog, defaults to `None`.
-    pub fn max_w(mut self, max_width: Pixels) -> Self {
-        self.max_width = Some(max_width);
+    pub fn max_w(mut self, max_width: impl Into<Pixels>) -> Self {
+        self.max_width = Some(max_width.into());
         self
     }
 
@@ -354,7 +364,7 @@ impl RenderOnce for Dialog {
         });
 
         let mut window_paddings = crate::window_border::window_paddings(window);
-        window_paddings.top += TITLE_BAR_HEIGHT;
+        window_paddings.top += self.overlay_top.unwrap_or_default();
         let view_size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
