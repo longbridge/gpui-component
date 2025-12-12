@@ -353,6 +353,8 @@ impl Future for UpdateFuture {
                     let delay = self.delay;
                     if options.append {
                         self.pending_text.push_str(options.pending_text.as_str());
+                    } else {
+                        self.pending_text = options.pending_text.clone();
                     }
                     self.options = options;
                     self.timer.set_after(delay);
