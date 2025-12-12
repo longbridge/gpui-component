@@ -585,6 +585,9 @@ impl CodeBlock {
 /// A context for rendering nodes, contains link references.
 #[derive(Default, Clone)]
 pub(crate) struct NodeContext {
+    /// The byte offset of the node in the original markdown text.
+    /// Used for incremental updates.
+    pub(crate) offset: usize,
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,

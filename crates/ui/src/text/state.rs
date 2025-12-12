@@ -92,13 +92,9 @@ impl TextViewState {
             async move |weak_self, cx| {
                 while let Ok(parsed_result) = rx_result.recv().await {
                     _ = weak_self.update(cx, |state, cx| {
-                        match parsed_result {
-                            Ok(_) => {}
-                            Err(err) => {
-                                state.parsed_content.lock().unwrap().clear();
-                                state.parsed_error = Some(err.clone());
-                            }
-                        };
+                        if let Err(err) = &parsed_result {
+                            state.parsed_error = Some(err.clone());
+                        }
                         state.clear_selection();
                         cx.notify();
                     });
@@ -164,6 +160,7 @@ impl TextViewState {
             return;
         }
 
+        self.text = text.to_string().into();
         self.parsed_error = None;
         self.increment_update(text, false, cx);
     }
@@ -301,13 +298,6 @@ pub(crate) struct ParsedContent {
     pub(crate) node_cx: node::NodeContext,
 }
 
-impl ParsedContent {
-    fn clear(&mut self) {
-        self.document = ParsedDocument::default();
-        self.node_cx = NodeContext::default();
-    }
-}
-
 struct UpdateFuture {
     format: TextViewFormat,
     options: UpdateOptions,
@@ -405,9 +395,10 @@ fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), 
         && let Some(last_block) = content.document.blocks.pop()
         && let Some(span) = last_block.span()
     {
+        node_cx.offset = span.start;
         let last_source = &content.document.source[span.start..];
         source.push_str(last_source);
-        source.push_str(options.pending_text.as_str());
+        source.push_str(&options.pending_text);
     } else {
         source = options.pending_text.to_string();
     }
@@ -419,8 +410,14 @@ fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), 
         TextViewFormat::Html => format::html::parse(&source, &mut node_cx),
     }?;
 
-    content.document.source = source.into();
-    content.document.blocks.extend(new_content.blocks);
+    if options.append {
+        content.document.source =
+            format!("{}{}", content.document.source, options.pending_text).into();
+        content.document.blocks.extend(new_content.blocks);
+    } else {
+        content.document = new_content;
+    }
+
     Ok(())
 }
 

@@ -55,8 +55,8 @@ fn parse_table_cell(row: &mut node::TableRow, node: &mdast::TableCell, cx: &mut 
 
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeContext) -> String {
     let span = node.position().map(|pos| Span {
-        start: pos.start.offset,
-        end: pos.end.offset,
+        start: cx.offset + pos.start.offset,
+        end: cx.offset + pos.end.offset,
     });
     if let Some(span) = span {
         paragraph.set_span(span);
@@ -244,13 +244,13 @@ fn ast_to_document(
     }
 }
 
-impl From<markdown::unist::Position> for Span {
-    fn from(pos: markdown::unist::Position) -> Self {
-        Span {
-            start: pos.start.offset,
-            end: pos.end.offset,
-        }
-    }
+fn new_span(pos: Option<markdown::unist::Position>, cx: &NodeContext) -> Option<Span> {
+    let pos = pos?;
+
+    Some(Span {
+        start: cx.offset + pos.start.offset,
+        end: cx.offset + pos.end.offset,
+    })
 }
 
 fn ast_to_node(
@@ -265,7 +265,7 @@ fn ast_to_node(
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            paragraph.span = val.position.map(|pos| pos.into());
+            paragraph.span = new_span(val.position, cx);
             node::BlockNode::Paragraph(paragraph)
         }
         Node::Blockquote(val) => {
@@ -276,7 +276,7 @@ fn ast_to_node(
                 .collect();
             node::BlockNode::Blockquote {
                 children,
-                span: val.position.map(|pos| pos.into()),
+                span: new_span(val.position, cx),
             }
         }
         Node::List(list) => {
@@ -288,7 +288,7 @@ fn ast_to_node(
             node::BlockNode::List {
                 ordered: list.ordered,
                 children,
-                span: list.position.map(|pos| pos.into()),
+                span: new_span(list.position, cx),
             }
         }
         Node::ListItem(val) => {
@@ -301,18 +301,18 @@ fn ast_to_node(
                 children,
                 spread: val.spread,
                 checked: val.checked,
-                span: val.position.map(|pos| pos.into()),
+                span: new_span(val.position, cx),
             }
         }
         Node::Break(val) => node::BlockNode::Break {
             html: false,
-            span: val.position.map(|pos| pos.into()),
+            span: new_span(val.position, cx),
         },
         Node::Code(raw) => node::BlockNode::CodeBlock(CodeBlock::new(
             raw.value.into(),
             raw.lang.map(|s| s.into()),
             highlight_theme,
-            raw.position,
+            new_span(raw.position, cx),
         )),
         Node::Heading(val) => {
             let mut paragraph = Paragraph::default();
@@ -323,19 +323,19 @@ fn ast_to_node(
             node::BlockNode::Heading {
                 level: val.depth,
                 children: paragraph,
-                span: val.position.map(|pos| pos.into()),
+                span: new_span(val.position, cx),
             }
         }
         Node::Math(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             None,
             highlight_theme,
-            val.position,
+            new_span(val.position, cx),
         )),
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => node::BlockNode::Root {
                 children: el.blocks,
-                span: val.position.map(|pos| pos.into()),
+                span: new_span(val.position, cx),
             },
             Err(err) => {
                 if cfg!(debug_assertions) {
@@ -349,26 +349,26 @@ fn ast_to_node(
             val.value.into(),
             Some("mdx".into()),
             highlight_theme,
-            val.position,
+            new_span(val.position, cx),
         )),
         Node::Yaml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("yml".into()),
             highlight_theme,
-            val.position,
+            new_span(val.position, cx),
         )),
         Node::Toml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
             highlight_theme,
-            val.position,
+            new_span(val.position, cx),
         )),
         Node::MdxJsxTextElement(val) => {
             let mut paragraph = Paragraph::default();
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            paragraph.span = val.position.map(|pos| pos.into());
+            paragraph.span = new_span(val.position, cx);
             node::BlockNode::Paragraph(paragraph)
         }
         Node::MdxJsxFlowElement(val) => {
@@ -376,11 +376,11 @@ fn ast_to_node(
             val.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            paragraph.span = val.position.map(|pos| pos.into());
+            paragraph.span = new_span(val.position, cx);
             node::BlockNode::Paragraph(paragraph)
         }
         Node::ThematicBreak(val) => node::BlockNode::Divider {
-            span: val.position.map(|pos| pos.into()),
+            span: new_span(val.position, cx),
         },
         Node::Table(val) => {
             let mut table = Table::default();
@@ -395,7 +395,7 @@ fn ast_to_node(
                     parse_table_row(&mut table, row, cx);
                 }
             });
-            table.span = val.position.map(|pos| pos.into());
+            table.span = new_span(val.position, cx);
 
             node::BlockNode::Table(table)
         }
@@ -413,7 +413,7 @@ fn ast_to_node(
             def.children.iter().for_each(|c| {
                 parse_paragraph(&mut paragraph, c, cx);
             });
-            paragraph.span = def.position.map(|pos| pos.into());
+            paragraph.span = new_span(def.position, cx);
             node::BlockNode::Paragraph(paragraph)
         }
         Node::Definition(def) => {
@@ -430,7 +430,7 @@ fn ast_to_node(
                 identifier: def.identifier.clone().into(),
                 url: def.url.clone().into(),
                 title: def.title.clone().map(|s| s.into()),
-                span: def.position.map(|pos| pos.into()),
+                span: new_span(def.position, cx),
             }
         }
         _ => {
