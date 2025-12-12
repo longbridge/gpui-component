@@ -43,7 +43,6 @@ pub(super) enum TextViewFormat {
 
 /// The state of a TextView.
 pub struct TextViewState {
-    format: TextViewFormat,
     pub(super) focus_handle: FocusHandle,
     pub(super) list_state: ListState,
 
@@ -110,7 +109,6 @@ impl TextViewState {
         let _parse_task = cx.background_spawn(UpdateFuture::new(format, rx, tx_result, cx));
 
         Self {
-            format,
             focus_handle,
             bounds: Bounds::default(),
             selection_positions: (None, None),
@@ -203,28 +201,13 @@ impl TextViewState {
                 .as_ref()
                 .map(|content| content.document.clone()),
             pending_text: pending_text.into(),
-            incremental: self.parsed_content.is_some(),
             text_view_style: self.text_view_style.clone(),
             highlight_theme: cx.theme().highlight_theme.clone(),
             code_block_actions: code_block_actions.clone(),
         };
 
         // Parse at first time by blocking.
-        if self.parsed_content.is_none() {
-            match parse_content(self.format, &update_options) {
-                Ok(content) => {
-                    self._pending_text.clear();
-                    self.parsed_content = Some(content);
-                    self.parsed_error = None;
-                }
-                Err(err) => {
-                    self.parsed_content = None;
-                    self.parsed_error = Some(err);
-                }
-            }
-        } else {
-            _ = self.tx.try_send(update_options);
-        }
+        _ = self.tx.try_send(update_options);
     }
 
     /// Save bounds and unselect if bounds changed.
@@ -358,7 +341,6 @@ impl UpdateFuture {
             format,
             options: UpdateOptions {
                 pending_text: SharedString::default(),
-                incremental: false,
                 document: None,
                 text_view_style: TextViewStyle::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
@@ -404,7 +386,6 @@ impl Future for UpdateFuture {
 struct UpdateOptions {
     document: Option<ParsedDocument>,
     pending_text: SharedString,
-    incremental: bool,
     text_view_style: TextViewStyle,
     highlight_theme: Arc<HighlightTheme>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
@@ -422,17 +403,12 @@ fn parse_content(
 
     let mut document = options.document.clone().unwrap_or_default();
     let mut source = String::new();
-    if options.incremental {
-        let old_source = &document.source;
-        if let Some(last_block) = document.blocks.pop()
-            && let Some(span) = last_block.span()
-        {
-            let last_source = &old_source[span.start..];
-            source.push_str(last_source);
-            source.push_str(options.pending_text.as_str());
-        } else {
-            source = options.pending_text.to_string();
-        }
+    if let Some(last_block) = document.blocks.pop()
+        && let Some(span) = last_block.span()
+    {
+        let last_source = &document.source[span.start..];
+        source.push_str(last_source);
+        source.push_str(options.pending_text.as_str());
     } else {
         source = options.pending_text.to_string();
     }
@@ -448,15 +424,10 @@ fn parse_content(
     };
 
     document.source = source.into();
-    // Incremental update if possible
-    if options.incremental {
-        res.map(|new_content| {
-            document.blocks.extend(new_content.blocks);
-            ParsedContent { document, node_cx }
-        })
-    } else {
-        res.map(|document| ParsedContent { document, node_cx })
-    }
+    res.map(|new_content| {
+        document.blocks.extend(new_content.blocks);
+        ParsedContent { document, node_cx }
+    })
 }
 
 fn selection_bounds(
