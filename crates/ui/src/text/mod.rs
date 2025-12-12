@@ -77,12 +77,7 @@ impl Text {
             Self::String(s) => s.clone(),
             Self::TextView(view) => {
                 if let Some(state) = &view.state {
-                    state
-                        .read(cx)
-                        .parsed_content
-                        .as_ref()
-                        .map(|content| content.document.source.clone())
-                        .unwrap_or_default()
+                    state.read(cx).source()
                 } else {
                     SharedString::default()
                 }
