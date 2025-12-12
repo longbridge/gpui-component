@@ -9,7 +9,10 @@ pub struct HelloWorld;
 impl HelloWorld {
     fn show_dialog(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.open_dialog(cx, move |dialog, _, _| {
-            dialog.title("Test dialog").child("Hello from dialog!")
+            dialog
+                .title("Test dialog")
+                .child("Hello from dialog!")
+                .padding_top(TITLE_BAR_HEIGHT)
         });
     }
 

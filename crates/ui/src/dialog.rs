@@ -9,7 +9,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, TITLE_BAR_HEIGHT, WindowExt as _,
+    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -85,6 +85,7 @@ pub struct Dialog {
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
+    padding_top: Option<Pixels>,
 
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     on_ok: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>>,
@@ -119,6 +120,7 @@ impl Dialog {
             footer: None,
             children: Vec::new(),
             margin_top: None,
+            padding_top: None,
             width: px(480.),
             max_width: None,
             overlay: true,
@@ -228,6 +230,12 @@ impl Dialog {
     /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
     pub fn margin_top(mut self, margin_top: Pixels) -> Self {
         self.margin_top = Some(margin_top);
+        self
+    }
+
+    /// Set the top offset of the overlay, defaults to None, will cover the window area.
+    pub fn padding_top(mut self, padding_top: Pixels) -> Self {
+        self.padding_top = Some(padding_top);
         self
     }
 
@@ -354,7 +362,10 @@ impl RenderOnce for Dialog {
         });
 
         let mut window_paddings = crate::window_border::window_paddings(window);
-        window_paddings.top += TITLE_BAR_HEIGHT;
+        if let Some(padding_top) = self.padding_top {
+            window_paddings.top += padding_top;
+        }
+
         let view_size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
