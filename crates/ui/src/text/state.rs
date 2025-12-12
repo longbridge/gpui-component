@@ -187,7 +187,6 @@ impl TextViewState {
             append,
             content: self.parsed_content.clone(),
             pending_text: text.to_string().into(),
-            text_view_style: self.text_view_style.clone(),
             highlight_theme: cx.theme().highlight_theme.clone(),
             code_block_actions: code_block_actions.clone(),
         };
@@ -331,7 +330,6 @@ impl UpdateFuture {
                 append: false,
                 pending_text: SharedString::default(),
                 content: Default::default(),
-                text_view_style: TextViewStyle::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
                 code_block_actions: None,
             },
@@ -376,14 +374,12 @@ struct UpdateOptions {
     content: Arc<Mutex<ParsedContent>>,
     pending_text: SharedString,
     append: bool,
-    text_view_style: TextViewStyle,
     highlight_theme: Arc<HighlightTheme>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), SharedString> {
     let mut node_cx = NodeContext {
-        style: options.text_view_style.clone(),
         code_block_actions: options.code_block_actions.clone(),
         ..NodeContext::default()
     };
@@ -402,12 +398,9 @@ fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), 
     }
 
     let new_content = match format {
-        TextViewFormat::Markdown => format::markdown::parse(
-            &source,
-            &options.text_view_style,
-            &mut node_cx,
-            &options.highlight_theme,
-        ),
+        TextViewFormat::Markdown => {
+            format::markdown::parse(&source, &mut node_cx, &options.highlight_theme)
+        }
         TextViewFormat::Html => format::html::parse(&source, &mut node_cx),
     }?;
 

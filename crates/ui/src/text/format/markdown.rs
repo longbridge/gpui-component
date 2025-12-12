@@ -7,7 +7,6 @@ use markdown::{
 use crate::{
     highlighter::HighlightTheme,
     text::{
-        TextViewStyle,
         document::ParsedDocument,
         node::{
             self, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Span, Table,
@@ -17,14 +16,15 @@ use crate::{
 };
 
 /// Parse Markdown into a tree of nodes.
+///
+/// TODO: Remove `highlight_theme` option, this should in render stage.
 pub(crate) fn parse(
     source: &str,
-    style: &TextViewStyle,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> Result<ParsedDocument, SharedString> {
     markdown::to_mdast(&source, &ParseOptions::gfm())
-        .map(|n| ast_to_document(source, n, style, cx, highlight_theme))
+        .map(|n| ast_to_document(source, n, cx, highlight_theme))
         .map_err(|e| e.to_string().into())
 }
 
@@ -225,7 +225,6 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
 fn ast_to_document(
     source: &str,
     root: mdast::Node,
-    style: &TextViewStyle,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> ParsedDocument {
@@ -237,7 +236,7 @@ fn ast_to_document(
     let blocks = root
         .children
         .into_iter()
-        .map(|c| ast_to_node(c, style, cx, highlight_theme))
+        .map(|c| ast_to_node(c, cx, highlight_theme))
         .collect();
     ParsedDocument {
         source: source.to_string().into(),
@@ -256,7 +255,6 @@ impl From<markdown::unist::Position> for Span {
 
 fn ast_to_node(
     value: mdast::Node,
-    style: &TextViewStyle,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> node::BlockNode {
@@ -274,7 +272,7 @@ fn ast_to_node(
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, highlight_theme))
+                .map(|c| ast_to_node(c, cx, highlight_theme))
                 .collect();
             node::BlockNode::Blockquote {
                 children,
@@ -285,7 +283,7 @@ fn ast_to_node(
             let children = list
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, highlight_theme))
+                .map(|c| ast_to_node(c, cx, highlight_theme))
                 .collect();
             node::BlockNode::List {
                 ordered: list.ordered,
@@ -297,7 +295,7 @@ fn ast_to_node(
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, style, cx, highlight_theme))
+                .map(|c| ast_to_node(c, cx, highlight_theme))
                 .collect();
             node::BlockNode::ListItem {
                 children,
@@ -313,7 +311,6 @@ fn ast_to_node(
         Node::Code(raw) => node::BlockNode::CodeBlock(CodeBlock::new(
             raw.value.into(),
             raw.lang.map(|s| s.into()),
-            style,
             highlight_theme,
             raw.position,
         )),
@@ -332,7 +329,6 @@ fn ast_to_node(
         Node::Math(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             None,
-            style,
             highlight_theme,
             val.position,
         )),
@@ -352,21 +348,18 @@ fn ast_to_node(
         Node::MdxFlowExpression(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("mdx".into()),
-            style,
             highlight_theme,
             val.position,
         )),
         Node::Yaml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("yml".into()),
-            style,
             highlight_theme,
             val.position,
         )),
         Node::Toml(val) => node::BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
-            style,
             highlight_theme,
             val.position,
         )),

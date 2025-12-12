@@ -507,7 +507,6 @@ impl CodeBlock {
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
-        _: &TextViewStyle,
         highlight_theme: &HighlightTheme,
         span: Option<impl Into<Span>>,
     ) -> Self {
