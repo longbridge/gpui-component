@@ -20,11 +20,6 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     ///
     /// This label will be displayed in the header unless a custom header is defined via
     /// [`header`] or [`spaced_header`].
-    ///
-    /// # Example
-    /// ```
-    /// let group = SidebarGroup::new("Settings");
-    /// ```
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             base: div().gap_2().flex_col(),
@@ -40,12 +35,6 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     ///
     /// Accepts any type implementing [`IntoElement`]. The provided element will completely
     /// replace the label from [`new`].
-    ///
-    /// # Example
-    /// ```
-    /// let group = SidebarGroup::new("Ignored Label")
-    ///     .header(div().child("Custom Header"));
-    /// ```
     pub fn header(mut self, header: impl IntoElement) -> Self {
         self.header = Some(header.into_any_element());
         self
@@ -54,12 +43,6 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     /// Sets a horizontally spaced header with left and right elements.
     ///
     /// Convenience method for aligning content at the left and right of the header.
-    ///
-    /// # Example
-    /// ```
-    /// let group = SidebarGroup::new("Ignored Label")
-    ///     .spaced_header("Title", "+");
-    /// ```
     ///
     /// **Warning:** This replaces the label from [`new`].
     pub fn spaced_header(self, left: impl IntoElement, right: impl IntoElement) -> Self {
@@ -79,12 +62,6 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     ///
     /// The closure receives the default [`Div`] used for the header and should return a
     /// customized [`Div`]. This allows changing padding, color, rounding, height, etc.
-    ///
-    /// # Example
-    /// ```
-    /// let group = SidebarGroup::new("Title")
-    ///     .with_header_style(|this| this.p(px(4.0)));
-    /// ```
     pub fn with_header_style<F>(mut self, f: F) -> Self
     where
         F: Fn(Div) -> Div + 'static,
