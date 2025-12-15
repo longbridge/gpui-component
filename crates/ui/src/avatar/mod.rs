@@ -5,7 +5,7 @@ pub use avatar::*;
 pub use avatar_group::*;
 
 use crate::{Icon, Size, StyledExt as _};
-use gpui::{px, rems, Div, Img, IntoElement, Pixels, Styled};
+use gpui::{Div, Img, IntoElement, Pixels, Styled, px, rems};
 
 /// Returns the size of the avatar based on the given [`Size`].
 pub(super) fn avatar_size(size: Size) -> Pixels {

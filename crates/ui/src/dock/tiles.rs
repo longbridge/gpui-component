@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    ActiveTheme, Icon, IconName, h_flex,
+    ActiveTheme, ElementExt, Icon, IconName, h_flex,
     history::{History, HistoryItem},
     scroll::{Scrollbar, ScrollbarShow},
     v_flex,
@@ -18,8 +18,8 @@ use gpui::{
     AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty,
     EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
     MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Size,
-    StatefulInteractiveElement, Styled, WeakEntity, Window, actions, canvas, div,
-    prelude::FluentBuilder, px, size,
+    StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div, prelude::FluentBuilder,
+    px, size,
 };
 
 actions!(tiles, [Undo, Redo]);
@@ -1192,14 +1192,7 @@ impl Render for Tiles {
                             .into_iter()
                             .map(|item| self.render_panel(&item, window, cx)),
                     )
-                    .child({
-                        canvas(
-                            move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full()
-                    })
+                    .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
                     .on_drop(cx.listener(move |_, item: &AnyDrag, _, cx| {
                         cx.emit(DragDrop(item.clone()));
                     })),

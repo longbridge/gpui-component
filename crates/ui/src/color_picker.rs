@@ -3,12 +3,12 @@ use gpui::{
     FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
     ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Stateful,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, anchored,
-    canvas, deferred, div, prelude::FluentBuilder as _, px, relative,
+    deferred, div, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{
-    ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable, Size,
-    StyleSized, StyledExt,
+    ActiveTheme as _, Colorize as _, ElementExt, FocusableExt as _, Icon, Selectable as _, Sizable,
+    Size, StyleSized, StyledExt,
     actions::{Cancel, Confirm},
     button::{Button, ButtonVariants},
     divider::Divider,
@@ -447,17 +447,10 @@ impl RenderOnce for ColorPicker {
                     })
                     .when_some(self.label.clone(), |this, label| this.child(label))
                     .on_click(window.listener_for(&self.state, ColorPickerState::toggle_picker))
-                    .child(
-                        canvas(
-                            {
-                                let state = self.state.clone();
-                                move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full(),
-                    ),
+                    .on_prepaint({
+                        let state = self.state.clone();
+                        move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
+                    }),
             )
             .when(state.open, |this| {
                 this.child(

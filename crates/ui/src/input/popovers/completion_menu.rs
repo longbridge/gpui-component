@@ -3,8 +3,8 @@ use std::rc::Rc;
 use gpui::{
     Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
     EventEmitter, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    Point, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas,
-    deferred, div, prelude::FluentBuilder, px, relative,
+    Point, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred,
+    div, prelude::FluentBuilder, px, relative,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -13,7 +13,7 @@ const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
 
 use crate::{
-    ActiveTheme, IndexPath, Selectable, actions, h_flex,
+    ActiveTheme, ElementExt, IndexPath, Selectable, actions, h_flex,
     input::{
         self, InputState, RopeExt,
         popovers::{editor_popover, render_markdown},
@@ -432,14 +432,9 @@ impl Render for CompletionMenu {
                         .max_w(max_width)
                         .min_w(px(120.))
                         .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
-                        .child(
-                            canvas(
-                                move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                                |_, _, _, _| {},
-                            )
-                            .absolute()
-                            .size_full(),
-                        ),
+                        .on_prepaint(move |bounds, _, cx| {
+                            view.update(cx, |r, _| r.bounds = bounds)
+                        }),
                 )
                 .when_some(selected_documentation, |this, documentation| {
                     let mut doc = match documentation {

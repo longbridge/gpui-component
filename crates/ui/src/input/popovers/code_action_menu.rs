@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
     Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
     EventEmitter, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas, deferred, div,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
     prelude::FluentBuilder, px, relative,
 };
 use lsp_types::CodeAction;
@@ -12,7 +12,7 @@ const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use crate::{
-    ActiveTheme, IndexPath, Selectable, actions, h_flex,
+    ActiveTheme, ElementExt, IndexPath, Selectable, actions, h_flex,
     input::{self, InputState, popovers::editor_popover},
     list::{List, ListDelegate, ListEvent, ListState},
 };
@@ -332,14 +332,7 @@ impl Render for CodeActionMenu {
                 .max_w(max_width)
                 .min_w(px(120.))
                 .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
-                .child(
-                    canvas(
-                        move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .size_full(),
-                )
+                .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                     this.hide(cx);
                 })),

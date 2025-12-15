@@ -1,6 +1,7 @@
 use gpui::{App, SharedString};
 use std::ops::Deref;
 
+mod element_ext;
 mod event;
 mod geometry;
 mod global_state;
@@ -69,6 +70,7 @@ pub mod tree;
 pub use time::{calendar, date_picker};
 
 pub use crate::Disableable;
+pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
 pub use geometry::*;
 pub use icon::*;

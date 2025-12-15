@@ -1,11 +1,12 @@
 use std::ops::Range;
 
-use crate::{h_flex, ActiveTheme, AxisExt, StyledExt};
+use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
 use gpui::{
-    canvas, div, prelude::FluentBuilder as _, px, Along, App, AppContext as _, Axis, Background,
-    Bounds, Context, Corners, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
-    Point, Render, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners, DragMoveEvent, Empty,
+    Entity, EntityId, EventEmitter, Hsla, InteractiveElement, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 
 #[derive(Clone)]
@@ -653,14 +654,9 @@ impl RenderOnce for Slider {
                                 window,
                                 cx,
                             ))
-                            .child({
+                            .on_prepaint({
                                 let state = self.state.clone();
-                                canvas(
-                                    move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds),
-                                    |_, _, _, _| {},
-                                )
-                                .absolute()
-                                .size_full()
+                                move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
                             }),
                     ),
             )

@@ -2,11 +2,11 @@ use gpui::{
     AnyElement, App, Bounds, Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle,
     Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
     Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
-    canvas, deferred, div, prelude::FluentBuilder as _, px,
+    deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
-use crate::{Selectable, StyledExt as _, actions::Cancel, v_flex};
+use crate::{ElementExt, Selectable, StyledExt as _, actions::Cancel, v_flex};
 
 const CONTEXT: &str = "Popover";
 pub(crate) fn init(cx: &mut App) {
@@ -324,21 +324,14 @@ impl RenderOnce for Popover {
                     cx.notify(parent_view_id);
                 }
             })
-            .child(
-                canvas(
-                    {
-                        let state = state.clone();
-                        move |bounds, _, cx| {
-                            state.update(cx, |state, _| {
-                                state.trigger_bounds = Some(bounds);
-                            })
-                        }
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full(),
-            );
+            .on_prepaint({
+                let state = state.clone();
+                move |bounds, _, cx| {
+                    state.update(cx, |state, _| {
+                        state.trigger_bounds = Some(bounds);
+                    })
+                }
+            });
 
         if !open {
             return el;
