@@ -1,9 +1,9 @@
 // From:
 // https://github.com/zed-industries/zed/blob/56daba28d40301ee4c05546fadb691d070b7b2b6/crates/gpui/examples/window_shadow.rs
 use gpui::{
-    canvas, div, point, prelude::FluentBuilder as _, px, AnyElement, App, Bounds, CursorStyle,
-    Decorations, Edges, HitboxBehavior, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, Pixels, Point, RenderOnce, ResizeEdge, Size, Styled as _, Window,
+    AnyElement, App, Bounds, CursorStyle, Decorations, Edges, HitboxBehavior, Hsla,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
+    ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::ActiveTheme;
@@ -137,7 +137,7 @@ impl RenderOnce for WindowBorder {
             .size_full()
             .child(
                 div()
-                    .cursor(CursorStyle::Arrow)
+                    .cursor(CursorStyle::default())
                     .map(|div| match decorations {
                         Decorations::Server => div,
                         Decorations::Client { tiling } => div
