@@ -1035,7 +1035,7 @@ impl PopupMenu {
         const INNER_PADDING: Pixels = px(8.);
 
         let is_submenu = matches!(item, PopupMenuItem::Submenu { .. });
-        let group_name = format!("popup-menu-item-{}", ix);
+        let group_name = format!("{}:item-{}", cx.entity().entity_id(), ix);
 
         let (item_height, radius) = match self.size {
             Size::Small => (px(20.), options.radius.half()),
