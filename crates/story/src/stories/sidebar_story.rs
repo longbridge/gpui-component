@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
 use gpui::{
-    Action, App, AppContext, ClickEvent, Context, Entity, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, prelude::FluentBuilder, px, relative,
+    Action, App, AppContext, ClickEvent, Context, Entity, Focusable, FontWeight, IntoElement,
+    ParentElement, Render, SharedString, Styled, Window, div, prelude::FluentBuilder, px, relative,
 };
 
 use gpui_component::{
     ActiveTheme, Icon, IconName, Side, Sizable,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
+    button::{Button, ButtonVariant, ButtonVariants},
     divider::Divider,
     h_flex,
     menu::DropdownMenu,
@@ -92,6 +93,8 @@ enum Item {
     DesignEngineering,
     SalesAndMarketing,
     Travel,
+    PostgreSQL,
+    MySQL,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -122,6 +125,8 @@ impl Item {
             Self::DesignEngineering => "Design Engineering",
             Self::SalesAndMarketing => "Sales and Marketing",
             Self::Travel => "Travel",
+            Self::PostgreSQL => "PostgreSQL - Local",
+            Self::MySQL => "MySQL - Production",
         }
     }
 
@@ -141,6 +146,8 @@ impl Item {
             Self::DesignEngineering => IconName::Frame,
             Self::SalesAndMarketing => IconName::ChartPie,
             Self::Travel => IconName::Map,
+            Self::PostgreSQL => IconName::Info,
+            Self::MySQL => IconName::Info,
         }
     }
 
@@ -257,7 +264,7 @@ impl Render for SidebarStory {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let groups: [Vec<Item>; 2] = [
+        let groups: [Vec<Item>; 3] = [
             vec![
                 Item::Playground,
                 Item::Models,
@@ -269,6 +276,7 @@ impl Render for SidebarStory {
                 Item::SalesAndMarketing,
                 Item::Travel,
             ],
+            vec![Item::PostgreSQL, Item::MySQL],
         ];
 
         h_flex()
@@ -392,6 +400,33 @@ impl Render for SidebarStory {
                                     .on_click(cx.listener(item.handler()))
                             }),
                         )),
+                    )
+                    .child(
+                        SidebarGroup::new("Ignored Label")
+                            .spaced_header(
+                                "Connections",
+                                Button::new("btn-add-connection")
+                                    .icon(IconName::Plus)
+                                    .xsmall()
+                                    .size_auto()
+                                    .with_variant(ButtonVariant::Ghost)
+                                    .tooltip("Add a new databse connection"),
+                            )
+                            .with_header_style(|this| this.font_weight(FontWeight::BOLD))
+                            .child(
+                                SidebarMenu::new().children(groups[2].iter().enumerate().map(
+                                    |(_ix, item)| {
+                                        let is_active = self.last_active_item == *item
+                                            && self.active_subitem == None;
+                                        SidebarMenuItem::new(item.label())
+                                            .icon(item.icon())
+                                            .active(is_active)
+                                            .disable(item.is_disabled())
+                                            .click_to_open(self.click_to_open_submenu)
+                                            .on_click(cx.listener(item.handler()))
+                                    },
+                                )),
+                            ),
                     )
                     .footer(
                         SidebarFooter::new()

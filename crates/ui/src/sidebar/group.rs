@@ -19,7 +19,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     /// Create a new [`SidebarGroup`] with a text label.
     ///
     /// This label will be displayed in the header unless a custom header is defined via
-    /// [`header`] or [`spaced_header`].
+    /// [`SidebarGroup::header`] or [`SidebarGroup::spaced_header`].
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             base: div().gap_2().flex_col(),
@@ -34,7 +34,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     /// Sets a fully custom header element.
     ///
     /// Accepts any type implementing [`IntoElement`]. The provided element will completely
-    /// replace the label from [`new`].
+    /// replace the label from [`SidebarGroup::new`].
     pub fn header(mut self, header: impl IntoElement) -> Self {
         self.header = Some(header.into_any_element());
         self
@@ -44,7 +44,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     ///
     /// Convenience method for aligning content at the left and right of the header.
     ///
-    /// **Warning:** This replaces the label from [`new`].
+    /// **Warning:** This replaces the label from [`SidebarGroup::new`].
     pub fn spaced_header(self, left: impl IntoElement, right: impl IntoElement) -> Self {
         self.header(
             div()
