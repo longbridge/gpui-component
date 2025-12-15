@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Axis, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _, px,
+    AnyElement, App, Axis, ClickEvent, ElementId, Half, InteractiveElement as _, IntoElement,
+    Length, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{ActiveTheme as _, AxisExt, Icon, IconName, Sizable, Size, StyledExt as _};
@@ -98,6 +98,7 @@ impl Styled for Stepper {
 pub struct StepperItem {
     step: usize,
     checked_step: usize,
+    style: StyleRefinement,
     icon: Option<Icon>,
     label: Option<SharedString>,
     description: Option<AnyElement>,
@@ -105,6 +106,7 @@ pub struct StepperItem {
     disabled: bool,
     size: Size,
     is_last: bool,
+    text_align: TextAlign,
     on_click: Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
 }
 
@@ -120,8 +122,16 @@ impl StepperItem {
             disabled: false,
             size: Size::default(),
             is_last: false,
+            style: StyleRefinement::default(),
+            text_align: TextAlign::Left,
             on_click: Box::new(|_, _, _| {}),
         }
+    }
+
+    /// Set the alignment center of the text within the stepper item.
+    pub fn text_center(mut self) -> Self {
+        self.text_align = TextAlign::Center;
+        self
     }
 
     /// Set the icon of the stepper item.
@@ -188,8 +198,15 @@ impl Sizable for StepperItem {
     }
 }
 
+impl Styled for StepperItem {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for StepperItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let is_text_center = self.text_align == TextAlign::Center;
         let icon_size = match self.size {
             Size::Small => px(18.),
             Size::Large => px(32.),
@@ -200,6 +217,16 @@ impl RenderOnce for StepperItem {
             Size::Large => px(3.),
             _ => px(2.),
         };
+        let (separator_start, separator_end, separator_magin) = if is_text_center {
+            (
+                Length::Definite(relative(0.5)),
+                Length::Definite(relative(-0.5)),
+                icon_size.half() + px(4.),
+            )
+        } else {
+            (icon_size.into(), px(0.).into(), px(4.))
+        };
+
         let is_checked = self.step <= self.checked_step;
         let is_passed = self.step < self.checked_step;
 
@@ -210,12 +237,16 @@ impl RenderOnce for StepperItem {
             .when(self.layout.is_vertical(), |this| this.v_flex())
             .when(!self.is_last, |this| this.flex_1())
             .items_start()
+            .when(is_text_center, |this| this.justify_center())
+            .debug_blue()
             .child(
                 div()
                     .id("stepper-tab")
                     .when(self.layout.is_horizontal(), |this| this.v_flex())
                     .when(self.layout.is_vertical(), |this| this.h_flex())
                     .gap_1()
+                    .refine_style(&self.style)
+                    .when(is_text_center, |this| this.items_center())
                     .child(
                         div()
                             .id(self.step)
@@ -250,7 +281,6 @@ impl RenderOnce for StepperItem {
                     .when_some(self.label, |this, label| {
                         this.child(
                             div()
-                                .mr_3()
                                 .text_sm()
                                 .text_color(cx.theme().foreground)
                                 .child(label),
@@ -260,7 +290,6 @@ impl RenderOnce for StepperItem {
                             |this, description| {
                                 this.child(
                                     div()
-                                        .mr_3()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
                                         .child(description),
@@ -278,15 +307,17 @@ impl RenderOnce for StepperItem {
                         .absolute()
                         .when(self.layout.is_horizontal(), |this| {
                             this.h(separator_size)
-                                .left(icon_size + px(4.))
+                                .mx(separator_magin)
+                                .left(separator_start)
                                 .top((icon_size - separator_size) / 2.)
-                                .right(px(4.))
+                                .right(separator_end)
                         })
                         .when(self.layout.is_vertical(), |this| {
                             this.w(separator_size)
-                                .top(icon_size + px(4.))
+                                .my(separator_magin)
+                                .top(separator_start)
                                 .left((icon_size - separator_size) / 2.)
-                                .bottom(px(4.))
+                                .bottom(separator_end)
                         })
                         .layout(self.layout)
                         .checked(is_passed),
@@ -346,10 +377,12 @@ impl RenderOnce for Stepper {
             .id(self.id)
             .when(self.layout.is_horizontal(), |this| this.h_flex())
             .when(self.layout.is_vertical(), |this| this.v_flex())
+            .items_start()
             .refine_style(&self.style)
             .children(self.items.into_iter().enumerate().map(|(step, item)| {
                 let is_last = step + 1 == total_items;
                 item.step(step)
+                    .with_size(self.size)
                     .checked_step(self.step)
                     .layout(self.layout)
                     .when(self.disabled, |this| this.disabled(true))

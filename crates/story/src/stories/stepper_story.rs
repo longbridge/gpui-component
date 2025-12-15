@@ -3,11 +3,10 @@ use gpui::{
     Subscription, Window, div,
 };
 use gpui_component::{
-    StyledExt,
+    IconName, Sizable, StyledExt,
     checkbox::Checkbox,
     h_flex,
     stepper::{Stepper, StepperItem},
-    text::markdown,
     v_flex,
 };
 
@@ -15,6 +14,7 @@ use crate::section;
 
 pub struct StepperStory {
     focus_handle: gpui::FocusHandle,
+    stepper0_step: usize,
     stepper1_step: usize,
     disabled: bool,
     _subscritions: Vec<Subscription>,
@@ -42,7 +42,8 @@ impl StepperStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            stepper1_step: 1,
+            stepper0_step: 1,
+            stepper1_step: 0,
             disabled: false,
             _subscritions: vec![],
         }
@@ -73,19 +74,43 @@ impl Render for StepperStory {
             .child(
                 section("Horizontal Stepper").max_w_md().v_flex().child(
                     Stepper::new("stepper0")
-                        .w_112()
+                        .w_full()
                         .disabled(self.disabled)
-                        .step(self.stepper1_step)
+                        .step(self.stepper0_step)
                         .items([
                             StepperItem::new()
+                                .text_center()
                                 .label("Step 1")
                                 .description(div().child("This is the description for step 1.")),
                             StepperItem::new()
+                                .text_center()
                                 .label("Step 2")
                                 .description("This is description 2."),
-                            StepperItem::new().label("Step 3").description(markdown(
-                                "**This is description 3.** You can use _Markdown_ here!",
-                            )),
+                            StepperItem::new()
+                                .text_center()
+                                .label("Step 3")
+                                .description("Description for step 3."),
+                        ])
+                        .on_click(cx.listener(|this, step, _, cx| {
+                            this.stepper0_step = *step;
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
+                section("Icon Stepper (large)").max_w_md().v_flex().child(
+                    Stepper::new("stepper0")
+                        .w_full()
+                        .disabled(self.disabled)
+                        .step(self.stepper1_step)
+                        .large()
+                        .items([
+                            StepperItem::new()
+                                .icon(IconName::Calendar)
+                                .label("Birthday"),
+                            StepperItem::new().icon(IconName::Inbox).label("Shipping"),
+                            StepperItem::new().icon(IconName::Frame).label("Preview"),
+                            StepperItem::new().icon(IconName::Info).label("Finish"),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper1_step = *step;
