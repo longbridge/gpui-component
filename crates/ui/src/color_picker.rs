@@ -7,7 +7,7 @@ use gpui::{
 
 use crate::{
     ActiveTheme as _, Colorize as _, Icon, Sizable, Size, StyleSized,
-    actions::{Cancel, Confirm},
+    actions::Confirm,
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
