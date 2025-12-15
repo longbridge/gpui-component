@@ -1,7 +1,7 @@
-use crate::{ActiveTheme, StyledExt};
+use crate::{ActiveTheme, ElementExt, StyledExt};
 use gpui::{
     App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
+    StyleRefinement, Styled, Window, div, point, prelude::FluentBuilder as _, px,
 };
 
 /// The style of the divider line.
@@ -88,32 +88,26 @@ impl Divider {
     }
 
     fn render_dashed(axis: Axis, color: Hsla) -> impl IntoElement {
-        Self::render_base(axis).child(
-            canvas(
-                move |_, _, _| {},
-                move |bounds, _, window, _| {
-                    let mut builder = PathBuilder::stroke(px(1.)).dash_array(&[px(4.), px(2.)]);
-                    let (start, end) = match axis {
-                        Axis::Horizontal => {
-                            let x = bounds.origin.x;
-                            let y = bounds.origin.y + px(0.5);
-                            (point(x, y), point(x + bounds.size.width, y))
-                        }
-                        Axis::Vertical => {
-                            let x = bounds.origin.x + px(0.5);
-                            let y = bounds.origin.y;
-                            (point(x, y), point(x, y + bounds.size.height))
-                        }
-                    };
-                    builder.move_to(start);
-                    builder.line_to(end);
-                    if let Ok(line) = builder.build() {
-                        window.paint_path(line, color);
-                    }
-                },
-            )
-            .size_full(),
-        )
+        Self::render_base(axis).on_prepaint(move |bounds, window, _| {
+            let mut builder = PathBuilder::stroke(px(1.)).dash_array(&[px(4.), px(2.)]);
+            let (start, end) = match axis {
+                Axis::Horizontal => {
+                    let x = bounds.origin.x;
+                    let y = bounds.origin.y + px(0.5);
+                    (point(x, y), point(x + bounds.size.width, y))
+                }
+                Axis::Vertical => {
+                    let x = bounds.origin.x + px(0.5);
+                    let y = bounds.origin.y;
+                    (point(x, y), point(x, y + bounds.size.height))
+                }
+            };
+            builder.move_to(start);
+            builder.line_to(end);
+            if let Ok(line) = builder.build() {
+                window.paint_path(line, color);
+            }
+        })
     }
 }
 

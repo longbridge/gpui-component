@@ -5,12 +5,12 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
     App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Pixels, Render, Styled,
-    Subscription, Window, actions, canvas, div, prelude::FluentBuilder as _,
+    Subscription, Window, actions, div, prelude::FluentBuilder as _,
 };
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme, Disableable, IconName, Selectable, Sizable,
+    ActiveTheme, Disableable, ElementExt, IconName, Selectable, Sizable,
     actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
@@ -456,21 +456,12 @@ impl Render for SearchPanel {
                                     .w_full()
                                     .shadow_none(),
                             )
-                            .child(
-                                canvas(
-                                    {
-                                        let view = cx.entity();
-                                        move |bounds, _, cx| {
-                                            view.update(cx, |r, _| {
-                                                r.input_width = bounds.size.width
-                                            })
-                                        }
-                                    },
-                                    |_, _, _, _| {},
-                                )
-                                .absolute()
-                                .size_full(),
-                            ),
+                            .on_prepaint({
+                                let view = cx.entity();
+                                move |bounds, _, cx| {
+                                    view.update(cx, |r, _| r.input_width = bounds.size.width)
+                                }
+                            }),
                     )
                     .child(
                         Button::new("replace-mode")

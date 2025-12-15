@@ -8,12 +8,12 @@ use std::{
 use gpui::{
     App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
     ListState, ParentElement as _, Pixels, Point, Render, SharedString, Size, Styled as _, Task,
-    Window, canvas, prelude::FluentBuilder as _, px,
+    Window, prelude::FluentBuilder as _, px,
 };
 use smol::{Timer, stream::StreamExt as _};
 
 use crate::{
-    ActiveTheme,
+    ActiveTheme, ElementExt,
     highlighter::HighlightTheme,
     input::{self, Copy},
     text::{
@@ -281,14 +281,11 @@ impl Render for TextViewState {
                         .child(err.to_string()),
                 ),
             })
-            .child(canvas(
-                move |bounds, _, cx| {
-                    state.update(cx, |state, _| {
-                        state.update_bounds(bounds);
-                    })
-                },
-                |_, _, _, _| {},
-            ))
+            .on_prepaint(move |bounds, _, cx| {
+                state.update(cx, |state, _| {
+                    state.update_bounds(bounds);
+                })
+            })
     }
 }
 

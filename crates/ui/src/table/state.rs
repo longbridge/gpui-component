@@ -1,7 +1,7 @@
 use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
-    ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
+    ActiveTheme, ElementExt, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
     actions::{Cancel, SelectDown, SelectUp},
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
@@ -12,7 +12,7 @@ use gpui::{
     AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter, FocusHandle,
     Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
     ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, canvas, div,
+    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
     prelude::FluentBuilder, px, uniform_list,
 };
 
@@ -852,16 +852,9 @@ where
             // resize handle
             .child(self.render_resize_handle(col_ix, window, cx))
             // to save the bounds of this col.
-            .child({
+            .on_prepaint({
                 let view = cx.entity().clone();
-                canvas(
-                    move |bounds, _, cx| {
-                        view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds)
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full()
+                move |bounds, _, cx| view.update(cx, |r, _| r.col_groups[col_ix].bounds = bounds)
             })
     }
 
@@ -919,16 +912,9 @@ where
                                 .border_r_1()
                                 .border_color(cx.theme().border),
                         )
-                        .child(
-                            canvas(
-                                move |bounds, _, cx| {
-                                    view.update(cx, |r, _| r.fixed_head_cols_bounds = bounds)
-                                },
-                                |_, _, _, _| {},
-                            )
-                            .absolute()
-                            .size_full(),
-                        ),
+                        .on_prepaint(move |bounds, _, cx| {
+                            view.update(cx, |r, _| r.fixed_head_cols_bounds = bounds)
+                        }),
                 )
             })
             .child(
@@ -1410,13 +1396,10 @@ where
                         }))
                     })
             })
-            .child(canvas(
-                {
-                    let state = cx.entity();
-                    move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
-                },
-                |_, _, _, _| {},
-            ))
+            .on_prepaint({
+                let state = cx.entity();
+                move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+            })
             .when(!window.is_inspector_picking(cx), |this| {
                 this.child(
                     div()

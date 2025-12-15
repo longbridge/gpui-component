@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme, Placement,
+    ActiveTheme, ElementExt, Placement,
     dialog::Dialog,
     input::InputState,
     notification::{Notification, NotificationList},
@@ -9,7 +9,7 @@ use crate::{
 use gpui::{
     AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
     IntoElement, KeyBinding, ParentElement as _, Render, Styled, WeakFocusHandle, Window, actions,
-    canvas, div, prelude::FluentBuilder as _,
+    div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -141,14 +141,10 @@ impl Root {
             let size = sheet.size;
 
             return Some(
-                div().relative().child(sheet).child(
-                    canvas(
-                        move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .size_full(),
-                ),
+                div()
+                    .relative()
+                    .child(sheet)
+                    .on_prepaint(move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size))),
             );
         }
 

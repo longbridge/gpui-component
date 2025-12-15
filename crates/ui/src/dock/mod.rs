@@ -10,8 +10,7 @@ use anyhow::Result;
 use gpui::{
     AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
     EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
-    SharedString, Styled, Subscription, WeakEntity, Window, actions, canvas, div,
-    prelude::FluentBuilder,
+    SharedString, Styled, Subscription, WeakEntity, Window, actions, div, prelude::FluentBuilder,
 };
 use std::sync::Arc;
 
@@ -21,6 +20,8 @@ pub use stack_panel::*;
 pub use state::*;
 pub use tab_panel::*;
 pub use tiles::*;
+
+use crate::ElementExt;
 
 pub(crate) fn init(cx: &mut App) {
     PanelRegistry::init(cx);
@@ -1092,14 +1093,7 @@ impl Render for DockArea {
             .relative()
             .size_full()
             .overflow_hidden()
-            .child(
-                canvas(
-                    move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full(),
-            )
+            .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
             .map(|this| {
                 if let Some(zoom_view) = self.zoom_view.clone() {
                     this.child(zoom_view)
