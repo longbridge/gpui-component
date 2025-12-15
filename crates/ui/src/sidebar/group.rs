@@ -12,10 +12,19 @@ pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
     header: Option<AnyElement>,
     collapsed: bool,
     children: Vec<E>,
+    header_style: Option<Box<dyn Fn(Div) -> Div>>,
 }
 
 impl<E: Collapsible + IntoElement> SidebarGroup<E> {
-    /// Create a new [`SidebarGroup`] with the given label.
+    /// Create a new [`SidebarGroup`] with a text label.
+    ///
+    /// This label will be displayed in the header unless a custom header is defined via
+    /// [`header`] or [`spaced_header`].
+    ///
+    /// # Example
+    /// ```
+    /// let group = SidebarGroup::new("Settings");
+    /// ```
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             base: div().gap_2().flex_col(),
@@ -23,23 +32,38 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
             header: None,
             collapsed: false,
             children: Vec::new(),
+            header_style: None,
         }
     }
 
-    /// Creates a new [`SidebarGroup`] with a fully custom header element.
-    pub fn new_with_header(header: impl IntoElement) -> Self {
-        Self {
-            base: div().gap_2().flex_col(),
-            label: None,
-            header: Some(header.into_any_element()),
-            collapsed: false,
-            children: Vec::new(),
-        }
+    /// Sets a fully custom header element.
+    ///
+    /// Accepts any type implementing [`IntoElement`]. The provided element will completely
+    /// replace the label from [`new`].
+    ///
+    /// # Example
+    /// ```
+    /// let group = SidebarGroup::new("Ignored Label")
+    ///     .header(div().child("Custom Header"));
+    /// ```
+    pub fn header(mut self, header: impl IntoElement) -> Self {
+        self.header = Some(header.into_any_element());
+        self
     }
 
-    /// Creates a new [`SidebarGroup`] with a horizontal header layout where the left and right elements are spaced apart.
-    pub fn new_with_spaced_header(left: impl IntoElement, right: impl IntoElement) -> Self {
-        Self::new_with_header(
+    /// Sets a horizontally spaced header with left and right elements.
+    ///
+    /// Convenience method for aligning content at the left and right of the header.
+    ///
+    /// # Example
+    /// ```
+    /// let group = SidebarGroup::new("Ignored Label")
+    ///     .spaced_header("Title", "+");
+    /// ```
+    ///
+    /// **Warning:** This replaces the label from [`new`].
+    pub fn spaced_header(self, left: impl IntoElement, right: impl IntoElement) -> Self {
+        self.header(
             div()
                 .flex()
                 .flex_row()
@@ -51,7 +75,27 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
         )
     }
 
-    /// Add a child to the sidebar group, the child should implement [`Collapsible`] + [`IntoElement`].
+    /// Set a closure to override the default header styling.
+    ///
+    /// The closure receives the default [`Div`] used for the header and should return a
+    /// customized [`Div`]. This allows changing padding, color, rounding, height, etc.
+    ///
+    /// # Example
+    /// ```
+    /// let group = SidebarGroup::new("Title")
+    ///     .with_header_style(|this| this.p(px(4.0)));
+    /// ```
+    pub fn with_header_style<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Div) -> Div + 'static,
+    {
+        self.header_style = Some(Box::new(f));
+        self
+    }
+
+    /// Add a single child to the sidebar group.
+    ///
+    /// The child must implement [`Collapsible`] and [`IntoElement`].
     pub fn child(mut self, child: E) -> Self {
         self.children.push(child);
         self
@@ -59,7 +103,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
 
     /// Add multiple children to the sidebar group.
     ///
-    /// See also [`SidebarGroup::child`].
+    /// See also [`SidebarGroup::child`] for adding a single child.
     pub fn children(mut self, children: impl IntoIterator<Item = E>) -> Self {
         self.children.extend(children);
         self
@@ -79,23 +123,27 @@ impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
 
 impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let mut header_div = h_flex()
+            .flex_shrink_0()
+            .px_2()
+            .rounded(cx.theme().radius)
+            .text_xs()
+            .text_color(cx.theme().sidebar_foreground.opacity(0.7))
+            .h_8();
+
+        if let Some(f) = self.header_style {
+            header_div = f(header_div);
+        }
+
+        let header_element = self
+            .header
+            .or_else(|| self.label.map(|label| label.into_any_element()))
+            .expect("SidebarGroup requires either label or header");
+
         v_flex()
             .relative()
             .when(!self.collapsed, |this| {
-                this.child(
-                    h_flex()
-                        .flex_shrink_0()
-                        .px_2()
-                        .rounded(cx.theme().radius)
-                        .text_xs()
-                        .text_color(cx.theme().sidebar_foreground.opacity(0.7))
-                        .h_8()
-                        .child(
-                            self.header
-                                .or_else(|| self.label.map(|label| label.into_any_element()))
-                                .expect("SidebarGroup requires either label or header"),
-                        ),
-                )
+                this.child(header_div.child(header_element))
             })
             .child(
                 self.base.children(
