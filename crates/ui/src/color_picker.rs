@@ -1,8 +1,8 @@
 use gpui::{
     App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
-    Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
-    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
-    Window, div, prelude::FluentBuilder as _,
+    Hsla, InteractiveElement as _, IntoElement, ParentElement, Render, RenderOnce, SharedString,
+    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -16,11 +16,6 @@ use crate::{
     tooltip::Tooltip,
     v_flex,
 };
-
-const CONTEXT: &'static str = "ColorPicker";
-pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
-}
 
 /// Events emitted by the [`ColorPicker`].
 #[derive(Clone)]
@@ -123,24 +118,6 @@ impl ColorPickerState {
     /// Get current color value.
     pub fn value(&self) -> Option<Hsla> {
         self.value
-    }
-
-    fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.open {
-            cx.propagate();
-        }
-
-        self.open = false;
-        if self.hovered_color != self.value {
-            let color = self.value;
-            self.hovered_color = color;
-            if let Some(color) = color {
-                self.state.update(cx, |input, cx| {
-                    input.set_value(color.to_hex(), window, cx);
-                });
-            }
-        }
-        cx.notify();
     }
 
     fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
@@ -304,6 +281,7 @@ impl ColorPicker {
         ]);
 
         v_flex()
+            .p_0p5()
             .gap_3()
             .child(
                 h_flex().gap_1().children(
@@ -378,9 +356,7 @@ impl RenderOnce for ColorPicker {
 
         div()
             .id(self.id.clone())
-            .key_context(CONTEXT)
             .track_focus(&focus_handle)
-            .on_action(window.listener_for(&self.state, ColorPickerState::on_escape))
             .on_action(window.listener_for(&self.state, ColorPickerState::on_confirm))
             .child(
                 Popover::new("color-picker")
