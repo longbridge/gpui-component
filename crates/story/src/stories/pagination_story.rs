@@ -4,7 +4,10 @@ use gpui::{
 use gpui_component::{pagination::Pagination, v_flex};
 
 pub struct PaginationStory {
-    current_page: u32,
+    basic_page: u32,
+    many_pages_page: u32,
+    legacy_page: u32,
+    loading_page: u32,
     focus_handle: gpui::FocusHandle,
 }
 
@@ -25,7 +28,10 @@ impl super::Story for PaginationStory {
 impl PaginationStory {
     pub fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
-            current_page: 1,
+            basic_page: 1,
+            many_pages_page: 1,
+            legacy_page: 1,
+            loading_page: 1,
             focus_handle: cx.focus_handle(),
         })
     }
@@ -39,62 +45,72 @@ impl Focusable for PaginationStory {
 
 impl Render for PaginationStory {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let entity = cx.entity();
+
         v_flex()
             .gap_6()
             .child(
-                v_flex().gap_2().child("Basic Pagination").child(
-                    Pagination::new("basic-pagination")
-                        .current_page(self.current_page)
-                        .total_pages(10)
-                        .total_items(100)
-                        .on_prev(cx.listener(|view, _, _, cx| {
-                            if view.current_page > 1 {
-                                view.current_page -= 1;
-                                cx.notify();
+                v_flex()
+                    .gap_2()
+                    .child("Basic Pagination with Page Numbers")
+                    .child(
+                        Pagination::new("basic-pagination")
+                            .current_page(self.basic_page)
+                            .total_pages(10)
+                            .on_page_change({
+                                let entity = entity.clone();
+                                move |page, _, cx| {
+                                    entity.update(cx, |this, cx| {
+                                        this.basic_page = *page;
+                                        cx.notify();
+                                    });
+                                }
+                            }),
+                    ),
+            )
+            .child(
+                v_flex().gap_2().child("Pagination with Many Pages").child(
+                    Pagination::new("many-pages-pagination")
+                        .current_page(self.many_pages_page)
+                        .total_pages(50)
+                        .on_page_change({
+                            let entity = entity.clone();
+                            move |page, _, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.many_pages_page = *page;
+                                    cx.notify();
+                                });
                             }
-                        }))
-                        .on_next(cx.listener(|view, _, _, cx| {
-                            if view.current_page < 10 {
-                                view.current_page += 1;
-                                cx.notify();
-                            }
-                        })),
+                        }),
                 ),
             )
             .child(
                 v_flex()
                     .gap_2()
-                    .child("Pagination with Custom Info Text")
+                    .child("Pagination without Page Numbers (Minimal Style)")
                     .child(
-                        Pagination::new("custom-pagination")
-                            .current_page(5)
-                            .total_pages(20)
-                            .total_items(200)
-                            .info_text("Showing page 5 of 20")
-                            .on_prev(|_, _, _| {})
-                            .on_next(|_, _, _| {}),
+                        Pagination::new("legacy-pagination")
+                            .current_page(self.legacy_page)
+                            .total_pages(10)
+                            .hide_page_numbers()
+                            .on_page_change({
+                                let entity = entity.clone();
+                                move |page, _, cx| {
+                                    entity.update(cx, |this, cx| {
+                                        this.legacy_page = *page;
+                                        cx.notify();
+                                    });
+                                }
+                            }),
                     ),
-            )
-            .child(
-                v_flex().gap_2().child("Pagination without Info").child(
-                    Pagination::new("no-info-pagination")
-                        .current_page(3)
-                        .total_pages(10)
-                        .total_items(100)
-                        .hide_info()
-                        .on_prev(|_, _, _| {})
-                        .on_next(|_, _, _| {}),
-                ),
             )
             .child(
                 v_flex().gap_2().child("Loading State").child(
                     Pagination::new("loading-pagination")
-                        .current_page(1)
+                        .current_page(self.loading_page)
                         .total_pages(10)
-                        .total_items(100)
                         .loading(true)
-                        .on_prev(|_, _, _| {})
-                        .on_next(|_, _, _| {}),
+                        .on_page_change(|_, _, _| {}),
                 ),
             )
     }
