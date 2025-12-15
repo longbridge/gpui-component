@@ -42,6 +42,7 @@ fn update_app_menu(title: impl Into<SharedString>, app_menu_bar: Entity<AppMenuB
                 MenuItem::action("About", About),
                 MenuItem::Separator,
                 MenuItem::action("Open...", Open),
+                theme_menu(cx),
                 MenuItem::Separator,
                 MenuItem::Submenu(Menu {
                     name: "Appearance".into(),
@@ -52,7 +53,6 @@ fn update_app_menu(title: impl Into<SharedString>, app_menu_bar: Entity<AppMenuB
                             .checked(mode.is_dark()),
                     ],
                 }),
-                theme_menu(cx),
                 language_menu(cx),
                 MenuItem::Separator,
                 MenuItem::action("Quit", Quit),
