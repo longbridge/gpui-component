@@ -739,9 +739,9 @@ impl Calendar {
         h_flex()
             .id(id.into())
             .map(|this| match self.size {
-                Size::Small => this.size_7().rounded(cx.theme().radius),
+                Size::Small => this.size_7().rounded(cx.theme().radius / 2.),
                 Size::Large => this.size_10().rounded(cx.theme().radius * 2.),
-                _ => this.size_9().rounded(cx.theme().radius * 2.),
+                _ => this.size_9().rounded(cx.theme().radius),
             })
             .justify_center()
             .when(muted, |this| {
