@@ -1,5 +1,5 @@
 use crate::{
-    Disableable, Selectable, Sizable, WindowExt,
+    Selectable, Sizable,
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     h_flex,
@@ -219,14 +219,12 @@ impl Render for AppMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let menu_bar = self.menu_bar.read(cx);
         let is_selected = menu_bar.selected_index == Some(self.ix);
-        let is_disabled = window.has_active_dialog(cx) || window.has_active_sheet(cx);
 
         div()
             .id(self.ix)
             .relative()
             .child(
                 Button::new("menu")
-                    .disabled(is_disabled)
                     .small()
                     .py_0p5()
                     .compact()

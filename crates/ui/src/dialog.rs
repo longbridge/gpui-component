@@ -132,7 +132,8 @@ impl Dialog {
             button_props: DialogButtonProps::default(),
             close_button: true,
             overlay_closable: true,
-            overlay_top: Some(TITLE_BAR_HEIGHT),
+            // Cover the title bar bottom border.
+            overlay_top: Some(TITLE_BAR_HEIGHT - px(1.)),
         }
     }
 

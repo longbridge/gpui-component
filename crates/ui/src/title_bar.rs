@@ -1,12 +1,13 @@
 use std::rc::Rc;
 
 use crate::{
-    ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, h_flex,
+    ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, WindowExt,
+    h_flex,
 };
 use gpui::{
     AnyElement, App, ClickEvent, Context, Decorations, Hsla, InteractiveElement, IntoElement,
     MouseButton, ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
+    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, deferred, div,
     prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
@@ -256,6 +257,7 @@ impl RenderOnce for TitleBar {
         let is_macos = cfg!(target_os = "macos");
 
         let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
+        let is_disabled = window.has_active_dialog(cx) || window.has_active_sheet(cx);
 
         div().flex_shrink_0().child(
             div()
@@ -306,6 +308,9 @@ impl RenderOnce for TitleBar {
                         .justify_between()
                         .flex_shrink_0()
                         .flex_1()
+                        .when(is_disabled, |this| {
+                            this.child(deferred(div().absolute().size_full().occlude()))
+                        })
                         .when(is_linux && is_client_decorated, |this| {
                             this.child(
                                 div()
