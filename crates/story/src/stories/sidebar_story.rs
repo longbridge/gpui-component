@@ -410,7 +410,7 @@ impl Render for SidebarStory {
                                     .xsmall()
                                     .size_auto()
                                     .with_variant(ButtonVariant::Ghost)
-                                    .tooltip("Add a new databse connection"),
+                                    .tooltip("Add a new database connection"),
                             )
                             .with_header_style(|this| this.font_weight(FontWeight::BOLD))
                             .child(
