@@ -54,7 +54,8 @@ impl Sheet {
             children: Vec::new(),
             overlay: true,
             overlay_closable: true,
-            overlay_top: Some(TITLE_BAR_HEIGHT),
+            // Cover the title bar bottom border.
+            overlay_top: Some(TITLE_BAR_HEIGHT - px(1.)),
             on_close: Rc::new(|_, _, _| {}),
         }
     }
