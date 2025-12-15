@@ -398,7 +398,7 @@ impl RenderOnce for Dialog {
 
         if !has_title {
             // When no title, reduce the top padding to fix line-height effect.
-            paddings.top -= px(4.);
+            paddings.top -= px(6.);
         }
 
         let animation = Animation::new(Duration::from_secs_f64(0.25))
