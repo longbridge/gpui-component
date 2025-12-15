@@ -1,8 +1,8 @@
 use gpui::{
     App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
-    Hsla, InteractiveElement as _, IntoElement, ParentElement, Render, RenderOnce, SharedString,
-    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, div,
-    prelude::FluentBuilder as _,
+    Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
+    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
+    Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -16,6 +16,15 @@ use crate::{
     tooltip::Tooltip,
     v_flex,
 };
+
+const CONTEXT: &'static str = "ColorPicker";
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([KeyBinding::new(
+        "enter",
+        Confirm { secondary: false },
+        Some(CONTEXT),
+    )])
+}
 
 /// Events emitted by the [`ColorPicker`].
 #[derive(Clone)]
@@ -356,10 +365,11 @@ impl RenderOnce for ColorPicker {
 
         div()
             .id(self.id.clone())
+            .key_context(CONTEXT)
             .track_focus(&focus_handle)
             .on_action(window.listener_for(&self.state, ColorPickerState::on_confirm))
             .child(
-                Popover::new("color-picker")
+                Popover::new("popover")
                     .open(state.open)
                     .w_72()
                     .on_open_change(
@@ -369,14 +379,14 @@ impl RenderOnce for ColorPicker {
                         }),
                     )
                     .trigger(
-                        Button::new("input")
+                        Button::new("trigger")
                             .with_size(self.size)
                             .text()
                             .when_some(self.icon.clone(), |this, icon| this.icon(icon.clone()))
                             .when_none(&self.icon, |this| {
                                 this.p_0().child(
                                     div()
-                                        .id("color-picker-square")
+                                        .id("square")
                                         .bg(cx.theme().background)
                                         .m_1()
                                         .border_1()
