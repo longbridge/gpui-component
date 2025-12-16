@@ -519,8 +519,7 @@ impl RenderOnce for Slider {
         let thumb_color = self
             .style
             .text
-            .clone()
-            .and_then(|text| text.color)
+            .color
             .unwrap_or_else(|| cx.theme().slider_thumb);
         let corner_radii = self.style.corner_radii.clone();
         let default_radius = px(999.);
