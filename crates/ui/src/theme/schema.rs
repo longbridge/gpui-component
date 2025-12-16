@@ -1,13 +1,13 @@
 use std::{rc::Rc, sync::Arc};
 
-use anyhow::Result;
-use gpui::{Hsla, SharedString, px};
+use gpui::{SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     Colorize, Theme, ThemeColor, ThemeMode,
     highlighter::{HighlightTheme, HighlightThemeStyle},
+    try_parse_color,
 };
 
 /// Represents a theme configuration.
@@ -404,12 +404,6 @@ pub struct ThemeConfigColors {
     yellow_light: Option<String>,
 }
 
-/// Try to parse HEX color, `#RRGGBB` or `#RRGGBBAA`
-fn try_parse_color(color: &str) -> Result<Hsla> {
-    let rgba = gpui::Rgba::try_from(color)?;
-    Ok(rgba.into())
-}
-
 impl ThemeColor {
     /// Create a new `ThemeColor` from a `ThemeConfig`.
     pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &ThemeColor) {
@@ -701,23 +695,5 @@ impl Theme {
 
         self.colors.apply_config(&config, &default_theme.colors);
         self.mode = config.mode;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::try_parse_color;
-    use gpui::hsla;
-
-    #[test]
-    fn test_try_parse_color() {
-        assert_eq!(
-            try_parse_color("#F2F200").ok(),
-            Some(hsla(0.16666667, 1., 0.4745098, 1.0))
-        );
-        assert_eq!(
-            try_parse_color("#00f21888").ok(),
-            Some(hsla(0.34986225, 1.0, 0.4745098, 0.53333336))
-        );
     }
 }
