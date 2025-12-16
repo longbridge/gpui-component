@@ -1,8 +1,8 @@
 use gpui::{
     AnyElement, App, Bounds, Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle,
     Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
-    deferred, div, prelude::FluentBuilder as _, px,
+    Pixels, Point, Render, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
@@ -312,19 +312,39 @@ impl RenderOnce for Popover {
         let el = div()
             .id(self.id)
             .child((trigger)(open, window, cx))
-            .on_mouse_down(self.mouse_button, {
-                let state = state.clone();
-                move |_, window, cx| {
-                    cx.stop_propagation();
-                    state.update(cx, |state, cx| {
-                        // We force set open to false to toggle it correctly.
-                        // Because if the mouse down out will toggle open first.
-                        state.open = open;
-                        state.toggle_open(window, cx);
-                    });
-                    cx.notify(parent_view_id);
-                }
-            })
+            .when_else(
+                self.mouse_button == MouseButton::Right,
+                |this| {
+                    this.on_mouse_down(self.mouse_button, {
+                        let state = state.clone();
+                        move |_, window, cx| {
+                            cx.stop_propagation();
+                            state.update(cx, |state, cx| {
+                                // We force set open to false to toggle it correctly.
+                                // Because if the mouse down out will toggle open first.
+                                state.open = open;
+                                state.toggle_open(window, cx);
+                            });
+                            cx.notify(parent_view_id);
+                        }
+                    })
+                },
+                |this| {
+                    this.on_click({
+                        let state = state.clone();
+                        move |_, window, cx| {
+                            cx.stop_propagation();
+                            state.update(cx, |state, cx| {
+                                // We force set open to false to toggle it correctly.
+                                // Because if the mouse down out will toggle open first.
+                                state.open = open;
+                                state.toggle_open(window, cx);
+                            });
+                            cx.notify(parent_view_id);
+                        }
+                    })
+                },
+            )
             .on_prepaint({
                 let state = state.clone();
                 move |bounds, _, cx| {
