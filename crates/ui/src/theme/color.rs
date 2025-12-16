@@ -527,24 +527,23 @@ pub fn try_parse_color(color: &str) -> Result<Hsla> {
     let mut name = String::new();
     let mut scale = None;
     let mut opacity = None;
-    let mut part = String::new();
     // 0: name, 1: scale, 2: opacity
     let mut state = 0;
+    let mut part = String::new();
 
     for c in color.chars() {
         match c {
             '-' if state == 0 => {
-                name = part.clone();
-                part.clear();
+                name = std::mem::take(&mut part);
                 state = 1;
             }
             '/' if state <= 1 => {
                 if state == 0 {
-                    name = part.clone();
+                    name = std::mem::take(&mut part);
                 } else if state == 1 {
                     scale = part.parse::<usize>().ok();
+                    part.clear();
                 }
-                part.clear();
                 state = 2;
             }
             _ => part.push(c),
@@ -566,7 +565,7 @@ pub fn try_parse_color(color: &str) -> Result<Hsla> {
         "black" => Ok::<Hsla, Error>(crate::black()),
         "white" => Ok(crate::white()),
         _ => {
-            let color_name = super::ColorName::try_from(name.as_str())?;
+            let color_name = ColorName::try_from(name.as_str())?;
             if let Some(scale) = scale {
                 Ok(color_name.scale(scale))
             } else {
