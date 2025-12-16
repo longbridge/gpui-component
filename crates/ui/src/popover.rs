@@ -315,6 +315,7 @@ impl RenderOnce for Popover {
             .on_mouse_down(self.mouse_button, {
                 let state = state.clone();
                 move |_, window, cx| {
+                    cx.stop_propagation();
                     state.update(cx, |state, cx| {
                         // We force set open to false to toggle it correctly.
                         // Because if the mouse down out will toggle open first.
