@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Error, Result, anyhow};
 use gpui::{Hsla, SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -404,10 +404,69 @@ pub struct ThemeConfigColors {
     yellow_light: Option<String>,
 }
 
-/// Try to parse HEX color, `#RRGGBB` or `#RRGGBBAA`
+/// Try to parse the color, HEX or tailwind style color expression.
+///
+/// # Parameter `color` should be one string value listed below:
+/// - `#RRGGBB` - The HEX color string.
+/// - `#RRGGBBAA` - The HEX color string with alpha.
+/// - `name` - The color name `black`, `white`, or any other defined in `crate::color`.
+/// - `name-scale` - The color name with scale.
+/// - `name/opacity` - The color name with opacity, `opacity` should be an integer between 0 and 100.
+/// - `name-scale/opacity` - The color name with scale and opacity.
+///
 fn try_parse_color(color: &str) -> Result<Hsla> {
-    let rgba = gpui::Rgba::try_from(color)?;
-    Ok(rgba.into())
+    if color.starts_with("#") {
+        let rgba = gpui::Rgba::try_from(color)?;
+        Ok(rgba.into())
+    } else {
+        let mut split = color.split(&['-', '/']);
+        if split.clone().count() > 3 {
+            return Err(anyhow!("Invalid color expression"));
+        }
+        // Should have at least a name.
+        let name = split.next().ok_or_else(|| anyhow!("Empty color name"))?;
+
+        let has_scale = color.contains('-');
+        let mut hsla = match name {
+            // `black` and `white` ignore the scale.
+            "black" => {
+                if has_scale {
+                    let _ = split.next();
+                }
+                Ok::<Hsla, Error>(crate::black())
+            }
+            "white" => {
+                if has_scale {
+                    let _ = split.next();
+                }
+                Ok(crate::white())
+            }
+            _ => {
+                let color_name = super::ColorName::try_from(name)?;
+                if color.contains('-') {
+                    let scale = split
+                        .next()
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .ok_or_else(|| anyhow!("Invalid color scale"))?;
+                    Ok(color_name.scale(scale))
+                } else {
+                    // Without scale specified, fallback to 500.
+                    Ok(color_name.scale(500))
+                }
+            }
+        }?;
+
+        if color.contains('/') {
+            let opacity = split
+                .next()
+                .and_then(|s| s.parse::<f32>().ok())
+                .filter(|v| v <= &100.)
+                .ok_or_else(|| anyhow!("Invalid color opacity"))?;
+            hsla = hsla.opacity(opacity / 100.);
+        }
+
+        Ok(hsla)
+    }
 }
 
 impl ThemeColor {
@@ -718,6 +777,18 @@ mod tests {
         assert_eq!(
             try_parse_color("#00f21888").ok(),
             Some(hsla(0.34986225, 1.0, 0.4745098, 0.53333336))
+        );
+        assert_eq!(try_parse_color("black").ok(), Some(crate::black()));
+        assert_eq!(try_parse_color("white-800").ok(), Some(crate::white()));
+        assert_eq!(try_parse_color("red").ok(), Some(crate::red_500()));
+        assert_eq!(try_parse_color("blue-600").ok(), Some(crate::blue_600()));
+        assert_eq!(
+            try_parse_color("pink/33").ok(),
+            Some(crate::pink_500().opacity(0.33))
+        );
+        assert_eq!(
+            try_parse_color("orange-300/66").ok(),
+            Some(crate::orange_300().opacity(0.66))
         );
     }
 }

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
-use gpui::{hsla, Hsla, SharedString};
-use serde::{de::Error, Deserialize, Deserializer};
+use gpui::{Hsla, SharedString, hsla};
+use serde::{Deserialize, Deserializer, de::Error};
 
 use anyhow::Result;
 
@@ -243,35 +243,38 @@ impl Display for ColorName {
     }
 }
 
-impl From<&str> for ColorName {
-    fn from(value: &str) -> Self {
+// Strict color name parser.
+impl TryFrom<&str> for ColorName {
+    type Error = anyhow::Error;
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
-            "gray" => ColorName::Gray,
-            "red" => ColorName::Red,
-            "orange" => ColorName::Orange,
-            "amber" => ColorName::Amber,
-            "yellow" => ColorName::Yellow,
-            "lime" => ColorName::Lime,
-            "green" => ColorName::Green,
-            "emerald" => ColorName::Emerald,
-            "teal" => ColorName::Teal,
-            "cyan" => ColorName::Cyan,
-            "sky" => ColorName::Sky,
-            "blue" => ColorName::Blue,
-            "indigo" => ColorName::Indigo,
-            "violet" => ColorName::Violet,
-            "purple" => ColorName::Purple,
-            "fuchsia" => ColorName::Fuchsia,
-            "pink" => ColorName::Pink,
-            "rose" => ColorName::Rose,
-            _ => ColorName::Gray,
+            "gray" => Ok(ColorName::Gray),
+            "red" => Ok(ColorName::Red),
+            "orange" => Ok(ColorName::Orange),
+            "amber" => Ok(ColorName::Amber),
+            "yellow" => Ok(ColorName::Yellow),
+            "lime" => Ok(ColorName::Lime),
+            "green" => Ok(ColorName::Green),
+            "emerald" => Ok(ColorName::Emerald),
+            "teal" => Ok(ColorName::Teal),
+            "cyan" => Ok(ColorName::Cyan),
+            "sky" => Ok(ColorName::Sky),
+            "blue" => Ok(ColorName::Blue),
+            "indigo" => Ok(ColorName::Indigo),
+            "violet" => Ok(ColorName::Violet),
+            "purple" => Ok(ColorName::Purple),
+            "fuchsia" => Ok(ColorName::Fuchsia),
+            "pink" => Ok(ColorName::Pink),
+            "rose" => Ok(ColorName::Rose),
+            _ => Err(anyhow::anyhow!("Invalid color name")),
         }
     }
 }
 
-impl From<SharedString> for ColorName {
-    fn from(value: SharedString) -> Self {
-        value.as_ref().into()
+impl TryFrom<SharedString> for ColorName {
+    type Error = anyhow::Error;
+    fn try_from(value: SharedString) -> std::result::Result<Self, Self::Error> {
+        value.as_ref().try_into()
     }
 }
 
@@ -591,7 +594,7 @@ mod tests {
         assert_eq!(color.scale(1500).to_hex(), "#21C55E");
 
         for name in ColorName::all().iter() {
-            let name1: ColorName = name.to_string().as_str().into();
+            let name1: ColorName = name.to_string().as_str().try_into().unwrap();
             assert_eq!(name1, *name);
         }
     }
