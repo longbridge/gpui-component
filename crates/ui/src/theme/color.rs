@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fmt::Display};
 
 use gpui::{Hsla, SharedString, hsla};
-use serde::{Deserialize, Deserializer, de::Error};
+use serde::{Deserialize, Deserializer, de::Error as _};
 
-use anyhow::Result;
+use anyhow::{Error, Result, anyhow};
 
 /// Create a [`gpui::Hsla`] color.
 ///
@@ -504,6 +504,87 @@ color_methods!(fuchsia);
 color_methods!(pink);
 color_methods!(rose);
 
+/// Try to parse the color, HEX or [Tailwind Color](https://tailwindcss.com/docs/colors) expression.
+///
+/// # Parameter `color` should be one string value listed below:
+///
+/// - `#RRGGBB` - The HEX color string.
+/// - `#RRGGBBAA` - The HEX color string with alpha.
+///
+/// Or the Tailwind Color format:
+///
+/// - `name` - The color name `black`, `white`, or any other defined in `crate::color`.
+/// - `name-scale` - The color name with scale.
+/// - `name/opacity` - The color name with opacity, `opacity` should be an integer between 0 and 100.
+/// - `name-scale/opacity` - The color name with scale and opacity.
+///
+pub fn try_parse_color(color: &str) -> Result<Hsla> {
+    if color.starts_with("#") {
+        let rgba = gpui::Rgba::try_from(color)?;
+        return Ok(rgba.into());
+    }
+
+    let mut name = String::new();
+    let mut scale = None;
+    let mut opacity = None;
+    let mut part = String::new();
+    // 0: name, 1: scale, 2: opacity
+    let mut state = 0;
+
+    for c in color.chars() {
+        match c {
+            '-' if state == 0 => {
+                name = part.clone();
+                part.clear();
+                state = 1;
+            }
+            '/' if state <= 1 => {
+                if state == 0 {
+                    name = part.clone();
+                } else if state == 1 {
+                    scale = part.parse::<usize>().ok();
+                }
+                part.clear();
+                state = 2;
+            }
+            _ => part.push(c),
+        }
+    }
+
+    match state {
+        0 => name = part,
+        1 => scale = part.parse::<usize>().ok(),
+        2 => opacity = part.parse::<f32>().ok(),
+        _ => {}
+    }
+
+    if name.is_empty() {
+        return Err(anyhow!("Empty color name"));
+    }
+
+    let mut hsla = match name.as_str() {
+        "black" => Ok::<Hsla, Error>(crate::black()),
+        "white" => Ok(crate::white()),
+        _ => {
+            let color_name = super::ColorName::try_from(name.as_str())?;
+            if let Some(scale) = scale {
+                Ok(color_name.scale(scale))
+            } else {
+                Ok(color_name.scale(500))
+            }
+        }
+    }?;
+
+    if let Some(opacity) = opacity {
+        if opacity > 100. {
+            return Err(anyhow!("Invalid color opacity"));
+        }
+        hsla = hsla.opacity(opacity / 100.);
+    }
+
+    Ok(hsla)
+}
+
 #[cfg(test)]
 mod tests {
     use gpui::{rgb, rgba};
@@ -605,5 +686,29 @@ mod tests {
         assert_eq!(color.hue(200. / 360.), hsl(200., 94., 80.));
         assert_eq!(color.saturation(74. / 100.), hsl(260., 74., 80.));
         assert_eq!(color.lightness(74. / 100.), hsl(260., 94., 74.));
+    }
+
+    #[test]
+    fn test_try_parse_color() {
+        assert_eq!(
+            try_parse_color("#F2F200").ok(),
+            Some(hsla(0.16666667, 1., 0.4745098, 1.0))
+        );
+        assert_eq!(
+            try_parse_color("#00f21888").ok(),
+            Some(hsla(0.34986225, 1.0, 0.4745098, 0.53333336))
+        );
+        assert_eq!(try_parse_color("black").ok(), Some(crate::black()));
+        assert_eq!(try_parse_color("white-800").ok(), Some(crate::white()));
+        assert_eq!(try_parse_color("red").ok(), Some(crate::red_500()));
+        assert_eq!(try_parse_color("blue-600").ok(), Some(crate::blue_600()));
+        assert_eq!(
+            try_parse_color("pink/33").ok(),
+            Some(crate::pink_500().opacity(0.33))
+        );
+        assert_eq!(
+            try_parse_color("orange-300/66").ok(),
+            Some(crate::orange_300().opacity(0.66))
+        );
     }
 }
