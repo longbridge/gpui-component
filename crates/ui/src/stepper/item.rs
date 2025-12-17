@@ -238,7 +238,7 @@ impl RenderOnce for StepperSeparator {
                     if !text_center {
                         this.ml(icon_size + gap).mr(gap).left_0().right_0()
                     } else {
-                        this.mx(icon_size.half() + (gap * 2))
+                        this.mx(icon_size.half() + gap)
                             .left(relative(0.5))
                             .right(relative(-0.5))
                     }
@@ -249,7 +249,7 @@ impl RenderOnce for StepperSeparator {
                     if !text_center {
                         this.mt(icon_size + gap).mb(gap).top_0().bottom_0()
                     } else {
-                        this.mx(icon_size.half() + (gap * 2))
+                        this.mx(icon_size.half() + gap)
                             .top(relative(0.5))
                             .bottom(relative(-0.5))
                     }

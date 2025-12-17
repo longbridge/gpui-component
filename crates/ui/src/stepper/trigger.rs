@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Axis, ClickEvent, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px, relative,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme as _, AxisExt, Icon, Size, StyleSized, StyledExt as _};
