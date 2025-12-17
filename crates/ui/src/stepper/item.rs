@@ -1,10 +1,12 @@
 use gpui::{
-    App, Axis, ClickEvent, Half, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, Axis, ClickEvent, Half, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+    relative,
 };
 
 use crate::{
-    ActiveTheme as _, AxisExt, Icon, Sizable, Size, StyledExt as _, stepper::StepperTrigger,
+    ActiveTheme as _, AxisExt, Icon, Sizable, Size, StyledExt as _,
+    stepper::trigger::StepperTrigger,
 };
 
 /// A step item within a [`Stepper`].
@@ -14,7 +16,7 @@ pub struct StepperItem {
     checked_step: usize,
     style: StyleRefinement,
     icon: Option<Icon>,
-    trigger: Option<StepperTrigger>,
+    children: Vec<AnyElement>,
     layout: Axis,
     disabled: bool,
     size: Size,
@@ -33,9 +35,9 @@ impl StepperItem {
             layout: Axis::Horizontal,
             disabled: false,
             size: Size::default(),
-            trigger: None,
             is_last: false,
             text_center: false,
+            children: Vec::new(),
             on_click: Box::new(|_, _, _| {}),
         }
     }
@@ -53,12 +55,6 @@ impl StepperItem {
     /// Default is false.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
-        self
-    }
-
-    /// Set the trigger of the stepper item.
-    pub fn trigger(mut self, trigger: StepperTrigger) -> Self {
-        self.trigger = Some(trigger);
         self
     }
 
@@ -96,6 +92,12 @@ impl StepperItem {
     }
 }
 
+impl ParentElement for StepperItem {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
 impl Sizable for StepperItem {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
@@ -111,14 +113,13 @@ impl Styled for StepperItem {
 
 impl RenderOnce for StepperItem {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let is_passed = self.step < self.checked_step;
         let icon_size = match self.size {
             Size::XSmall => px(8.),
             Size::Small => px(18.),
             Size::Large => px(32.),
             _ => px(24.),
         };
-
-        let is_passed = self.step < self.checked_step;
 
         div()
             .id(("stepper-item", self.step))
@@ -129,25 +130,24 @@ impl RenderOnce for StepperItem {
             .when(self.text_center, |this| this.flex_1().justify_center())
             .items_start()
             .refine_style(&self.style)
-            .when_some(self.trigger, |this, trigger| {
-                this.child(
-                    trigger
-                        .icon(self.icon)
-                        .icon_size(icon_size)
-                        .step(self.step)
-                        .with_size(self.size)
-                        .checked_step(self.checked_step)
-                        .text_center(self.text_center)
-                        .layout(self.layout)
-                        .disabled(self.disabled)
-                        .on_click({
-                            let on_click = self.on_click;
-                            move |e, window, cx| {
-                                on_click(e, window, cx);
-                            }
-                        }),
-                )
-            })
+            .child(
+                StepperTrigger::new()
+                    .icon(self.icon)
+                    .icon_size(icon_size)
+                    .step(self.step)
+                    .with_size(self.size)
+                    .checked_step(self.checked_step)
+                    .text_center(self.text_center)
+                    .layout(self.layout)
+                    .disabled(self.disabled)
+                    .children(self.children)
+                    .on_click({
+                        let on_click = self.on_click;
+                        move |e, window, cx| {
+                            on_click(e, window, cx);
+                        }
+                    }),
+            )
             .when(!self.is_last, |this| {
                 this.child(
                     StepperSeparator::new()

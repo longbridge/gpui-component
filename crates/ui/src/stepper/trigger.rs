@@ -4,11 +4,11 @@ use gpui::{
     prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme as _, AxisExt, Icon, IconName, Size, StyleSized, StyledExt as _};
+use crate::{ActiveTheme as _, AxisExt, Icon, Size, StyleSized, StyledExt as _};
 
 /// The trigger part of a stepper item.
 #[derive(IntoElement)]
-pub struct StepperTrigger {
+pub(super) struct StepperTrigger {
     step: usize,
     checked_step: usize,
     style: StyleRefinement,
@@ -23,7 +23,7 @@ pub struct StepperTrigger {
 }
 
 impl StepperTrigger {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             step: 0,
             checked_step: 0,
@@ -103,7 +103,6 @@ impl ParentElement for StepperTrigger {
 impl RenderOnce for StepperTrigger {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_checked = self.step <= self.checked_step;
-        let is_passed = self.step < self.checked_step;
 
         div()
             .id(("stepper-trigger", self.step))
@@ -134,15 +133,11 @@ impl RenderOnce for StepperTrigger {
                     })
                     .when(self.size != Size::XSmall, |this| {
                         this.map(|this| {
-                            if is_passed {
-                                this.child(IconName::Check)
+                            this.child(if let Some(icon) = self.icon {
+                                icon.into_any_element()
                             } else {
-                                this.child(if let Some(icon) = self.icon {
-                                    icon.into_any_element()
-                                } else {
-                                    div().child(format!("{}", self.step + 1)).into_any_element()
-                                })
-                            }
+                                div().child(format!("{}", self.step + 1)).into_any_element()
+                            })
                         })
                     }),
             )

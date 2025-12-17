@@ -1,7 +1,6 @@
 mod item;
 mod stepper;
-mod trigger;
+pub(super) mod trigger;
 
 pub use item::*;
 pub use stepper::*;
-pub use trigger::*;

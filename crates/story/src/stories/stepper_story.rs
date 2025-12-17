@@ -7,7 +7,7 @@ use gpui_component::{
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
-    stepper::{Stepper, StepperItem, StepperTrigger},
+    stepper::{Stepper, StepperItem},
     v_flex,
 };
 
@@ -124,9 +124,9 @@ impl Render for StepperStory {
                         .disabled(self.disabled)
                         .step(self.stepper0_step)
                         .items([
-                            StepperItem::new().trigger(StepperTrigger::new().child("Step 1")),
-                            StepperItem::new().trigger(StepperTrigger::new().child("Step 2")),
-                            StepperItem::new().trigger(StepperTrigger::new().child("Step 3")),
+                            StepperItem::new().child("Step 1"),
+                            StepperItem::new().child("Step 2"),
+                            StepperItem::new().child("Step 3"),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper0_step = *step;
@@ -144,16 +144,10 @@ impl Render for StepperStory {
                         .items([
                             StepperItem::new()
                                 .icon(IconName::Calendar)
-                                .trigger(StepperTrigger::new().child("Order Details")),
-                            StepperItem::new()
-                                .icon(IconName::Inbox)
-                                .trigger(StepperTrigger::new().child("Shipping")),
-                            StepperItem::new()
-                                .icon(IconName::Frame)
-                                .trigger(StepperTrigger::new().child("Preview")),
-                            StepperItem::new()
-                                .icon(IconName::Info)
-                                .trigger(StepperTrigger::new().child("Finish")),
+                                .child("Order Details"),
+                            StepperItem::new().icon(IconName::Inbox).child("Shipping"),
+                            StepperItem::new().icon(IconName::Frame).child("Preview"),
+                            StepperItem::new().icon(IconName::Info).child("Finish"),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper1_step = *step;
@@ -170,26 +164,21 @@ impl Render for StepperStory {
                         .step(self.stepper2_step)
                         .items_center()
                         .items([
-                            StepperItem::new().pb_8().icon(IconName::Building2).trigger(
-                                StepperTrigger::new().child(
-                                    v_flex().child("Step 1").child("Description for step 1."),
-                                ),
-                            ),
-                            StepperItem::new().pb_8().icon(IconName::Asterisk).trigger(
-                                StepperTrigger::new().child(
-                                    v_flex().child("Step 2").child("Description for step 2."),
-                                ),
-                            ),
-                            StepperItem::new().pb_8().icon(IconName::Folder).trigger(
-                                StepperTrigger::new().child(
-                                    v_flex().child("Step 3").child("Description for step 3."),
-                                ),
-                            ),
-                            StepperItem::new().icon(IconName::CircleCheck).trigger(
-                                StepperTrigger::new().child(
-                                    v_flex().child("Step 4").child("Description for step 4."),
-                                ),
-                            ),
+                            StepperItem::new()
+                                .pb_8()
+                                .icon(IconName::Building2)
+                                .child(v_flex().child("Step 1").child("Description for step 1.")),
+                            StepperItem::new()
+                                .pb_8()
+                                .icon(IconName::Asterisk)
+                                .child(v_flex().child("Step 2").child("Description for step 2.")),
+                            StepperItem::new()
+                                .pb_8()
+                                .icon(IconName::Folder)
+                                .child(v_flex().child("Step 3").child("Description for step 3.")),
+                            StepperItem::new()
+                                .icon(IconName::CircleCheck)
+                                .child(v_flex().child("Step 4").child("Description for step 4.")),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper2_step = *step;
@@ -205,29 +194,23 @@ impl Render for StepperStory {
                         .step(self.stepper3_step)
                         .text_center(true)
                         .items([
-                            StepperItem::new().trigger(
-                                StepperTrigger::new().child(
-                                    v_flex()
-                                        .items_center()
-                                        .child("Step 1")
-                                        .child("Desc for step 1."),
-                                ),
+                            StepperItem::new().child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Step 1")
+                                    .child("Desc for step 1."),
                             ),
-                            StepperItem::new().trigger(
-                                StepperTrigger::new().child(
-                                    v_flex()
-                                        .items_center()
-                                        .child("Step 2")
-                                        .child("Desc for step 2."),
-                                ),
+                            StepperItem::new().child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Step 2")
+                                    .child("Desc for step 2."),
                             ),
-                            StepperItem::new().trigger(
-                                StepperTrigger::new().items_center().child(
-                                    v_flex()
-                                        .items_center()
-                                        .child("Step 3")
-                                        .child("Desc for step 3."),
-                                ),
+                            StepperItem::new().child(
+                                v_flex()
+                                    .items_center()
+                                    .child("Step 3")
+                                    .child("Desc for step 3."),
                             ),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
