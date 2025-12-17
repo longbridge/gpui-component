@@ -1,7 +1,7 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, Corner, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    AnyElement, App, Corner, Div, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
+    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 use std::rc::Rc;
@@ -9,7 +9,7 @@ use std::rc::Rc;
 use super::{Tab, TabVariant};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 
 /// A TabBar element that contains multiple [`Tab`] items.
 #[derive(IntoElement)]
@@ -250,8 +250,10 @@ impl RenderOnce for TabBar {
                     .gap(gap)
                     .children(self.children.into_iter().enumerate().map(|(ix, child)| {
                         item_labels.push((child.label.clone(), child.disabled));
+                        let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
                         child
-                            .id(ix)
+                            .ix(ix)
+                            .tab_bar_prefix(tab_bar_prefix)
                             .mt(self.tab_item_top_offset)
                             .with_variant(self.variant)
                             .with_size(self.size)

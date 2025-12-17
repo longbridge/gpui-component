@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
-use crate::{h_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, relative, AnyElement, App, ClickEvent, Div, Edges, ElementId, Hsla,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    AnyElement, App, ClickEvent, Div, Edges, Hsla, InteractiveElement, IntoElement, ParentElement,
+    Pixels, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
+    relative,
 };
 
 /// Tab variants.
@@ -382,11 +382,12 @@ impl TabVariant {
 /// A Tab element for the [`super::TabBar`].
 #[derive(IntoElement)]
 pub struct Tab {
-    id: ElementId,
+    ix: usize,
     base: Div,
     pub(super) label: Option<SharedString>,
     icon: Option<Icon>,
     prefix: Option<AnyElement>,
+    pub(super) tab_bar_prefix: Option<bool>,
     suffix: Option<AnyElement>,
     children: Vec<AnyElement>,
     variant: TabVariant,
@@ -429,10 +430,11 @@ impl From<IconName> for Tab {
 impl Default for Tab {
     fn default() -> Self {
         Self {
-            id: ElementId::Integer(0),
+            ix: 0,
             base: div(),
             label: None,
             icon: None,
+            tab_bar_prefix: None,
             children: Vec::new(),
             disabled: false,
             selected: false,
@@ -520,9 +522,15 @@ impl Tab {
         self
     }
 
-    /// Set id to the tab.
-    pub(super) fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = id.into();
+    /// Set index to the tab.
+    pub(crate) fn ix(mut self, ix: usize) -> Self {
+        self.ix = ix;
+        self
+    }
+
+    /// Set if the tab bar has a prefix.
+    pub(crate) fn tab_bar_prefix(mut self, tab_bar_prefix: bool) -> Self {
+        self.tab_bar_prefix = Some(tab_bar_prefix);
         self
     }
 }
@@ -577,13 +585,20 @@ impl RenderOnce for Tab {
             tab_style = self.variant.disabled(self.selected, cx);
             hover_style = self.variant.disabled(self.selected, cx);
         }
+        let tab_bar_prefix = self.tab_bar_prefix.unwrap_or_default();
+        if !tab_bar_prefix {
+            if self.ix == 0 && self.variant == TabVariant::Tab {
+                tab_style.borders.left = px(0.);
+                hover_style.borders.left = px(0.);
+            }
+        }
         let inner_paddings = self.variant.inner_paddings(self.size);
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
         let height = self.variant.height(self.size);
 
         self.base
-            .id(self.id)
+            .id(self.ix)
             .flex()
             .flex_wrap()
             .gap_1()
