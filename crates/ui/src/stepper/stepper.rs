@@ -57,9 +57,9 @@ impl Stepper {
         self
     }
 
-    /// Sets the selected index of the stepper.
-    pub fn step(mut self, step_index: usize) -> Self {
-        self.step = step_index;
+    /// Sets the selected index of the stepper, default is 0.
+    pub fn selected_index(mut self, index: usize) -> Self {
+        self.step = index;
         self
     }
 

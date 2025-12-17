@@ -122,7 +122,7 @@ impl Render for StepperStory {
                         .w_full()
                         .with_size(self.size)
                         .disabled(self.disabled)
-                        .step(self.stepper0_step)
+                        .selected_index(self.stepper0_step)
                         .items([
                             StepperItem::new().child("Step 1"),
                             StepperItem::new().child("Step 2"),
@@ -140,7 +140,7 @@ impl Render for StepperStory {
                         .w_full()
                         .with_size(self.size)
                         .disabled(self.disabled)
-                        .step(self.stepper1_step)
+                        .selected_index(self.stepper1_step)
                         .items([
                             StepperItem::new()
                                 .icon(IconName::Calendar)
@@ -161,7 +161,7 @@ impl Render for StepperStory {
                         .vertical()
                         .with_size(self.size)
                         .disabled(self.disabled)
-                        .step(self.stepper2_step)
+                        .selected_index(self.stepper2_step)
                         .items_center()
                         .items([
                             StepperItem::new()
@@ -191,7 +191,7 @@ impl Render for StepperStory {
                     Stepper::new("stepper4")
                         .with_size(self.size)
                         .disabled(self.disabled)
-                        .step(self.stepper3_step)
+                        .selected_index(self.stepper3_step)
                         .text_center(true)
                         .items([
                             StepperItem::new().child(

@@ -25,6 +25,7 @@ collapsed: false
 - [Skeleton](skeleton) - Loading placeholders
 - [Slider](slider) - Value selection from a range
 - [Spinner](spinner) - Loading and status spinners
+- [Stepper](stepper) - Step-by-step progress indicator
 - [Switch](switch) - Toggle on/off control
 - [Tag](tag) - Labels and categories
 - [Toggle](toggle) - Toggle button states
