@@ -1,9 +1,8 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, Corner, DismissEvent, ElementId, Entity, EntityId,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, StatefulInteractiveElement,
-    StyleRefinement, Styled, Subscription, Window, anchored, deferred, div,
-    prelude::FluentBuilder as _, px,
+    AnyElement, App, Bounds, Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
+    Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
+    deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
@@ -231,23 +230,6 @@ impl PopoverState {
         }
     }
 
-    fn handle_toggle_open(
-        this: &Entity<Self>,
-        open: bool,
-        parent_view_id: EntityId,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        cx.stop_propagation();
-        this.update(cx, |state, cx| {
-            // We force set open to false to toggle it correctly.
-            // Because if the mouse down out will toggle open first.
-            state.open = open;
-            state.toggle_open(window, cx);
-        });
-        cx.notify(parent_view_id);
-    }
-
     fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         if self.open {
@@ -330,39 +312,19 @@ impl RenderOnce for Popover {
         let el = div()
             .id(self.id)
             .child((trigger)(open, window, cx))
-            .when_else(
-                self.mouse_button == MouseButton::Right,
-                |this| {
-                    // Use mouse up to toggle the popover when right click.
-                    this.on_mouse_up(self.mouse_button, {
-                        let state = state.clone();
-                        move |_, window, cx| {
-                            PopoverState::handle_toggle_open(
-                                &state,
-                                open,
-                                parent_view_id,
-                                window,
-                                cx,
-                            );
-                        }
-                    })
-                },
-                |this| {
-                    // Use click to toggle the popover when left click.
-                    this.on_click({
-                        let state = state.clone();
-                        move |_, window, cx| {
-                            PopoverState::handle_toggle_open(
-                                &state,
-                                open,
-                                parent_view_id,
-                                window,
-                                cx,
-                            );
-                        }
-                    })
-                },
-            )
+            .on_mouse_up(self.mouse_button, {
+                let state = state.clone();
+                move |_, window, cx| {
+                    cx.stop_propagation();
+                    state.update(cx, |state, cx| {
+                        // We force set open to false to toggle it correctly.
+                        // Because if the mouse down out will toggle open first.
+                        state.open = open;
+                        state.toggle_open(window, cx);
+                    });
+                    cx.notify(parent_view_id);
+                }
+            })
             .on_prepaint({
                 let state = state.clone();
                 move |bounds, _, cx| {
@@ -405,7 +367,7 @@ impl RenderOnce for Popover {
                             })
                             .children(self.children)
                             .when(self.overlay_closable, |this| {
-                                this.on_mouse_down_out({
+                                this.on_mouse_up_out(MouseButton::Left, {
                                     let state = state.clone();
                                     move |_, window, cx| {
                                         state.update(cx, |state, cx| {
