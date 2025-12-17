@@ -3,7 +3,7 @@ use gpui::{
     SharedString, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme, IndexPath, Sizable, h_flex,
+    ActiveTheme, IndexPath, h_flex,
     pagination::{Pagination, PaginationEvent},
     select::{Select, SelectEvent, SelectItem, SelectState},
     v_flex,

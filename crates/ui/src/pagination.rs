@@ -180,7 +180,7 @@ impl Pagination {
     pub fn get_total_pages(&self) -> usize {
         if let Some(total_items) = self.total_items {
             // Calculate total pages from total_items and page_size
-            (total_items + self.page_size - 1) / self.page_size
+            (total_items + self.page_size - 1).div_ceil(self.page_size)
         } else {
             self.total
         }
