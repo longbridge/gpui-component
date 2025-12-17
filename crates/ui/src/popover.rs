@@ -405,7 +405,7 @@ impl RenderOnce for Popover {
                             })
                             .children(self.children)
                             .when(self.overlay_closable, |this| {
-                                this.on_mouse_down_out({
+                                this.on_mouse_up_out(MouseButton::Left, {
                                     let state = state.clone();
                                     move |_, window, cx| {
                                         state.update(cx, |state, cx| {
