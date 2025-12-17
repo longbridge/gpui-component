@@ -113,6 +113,7 @@ impl Pagination {
     }
 
     /// Set the current page number (1-indexed).
+    /// The page will be clamped to the valid range (1 to total pages) during rendering.
     pub fn current(mut self, page: usize) -> Self {
         self.current = page.max(1);
         self
@@ -180,7 +181,7 @@ impl Pagination {
     pub fn get_total_pages(&self) -> usize {
         if let Some(total_items) = self.total_items {
             // Calculate total pages from total_items and page_size
-            (total_items + self.page_size - 1).div_ceil(self.page_size)
+            total_items.div_ceil(self.page_size)
         } else {
             self.total
         }
@@ -189,8 +190,9 @@ impl Pagination {
 
     /// Calculate which page numbers to display
     fn get_page_numbers(&self) -> Vec<PageItem> {
-        let current = self.current;
         let total = self.get_total_pages();
+        // Clamp current page to valid range
+        let current = self.current.max(1).min(total);
         let siblings = self.siblings;
 
         if total <= 1 {
@@ -223,7 +225,8 @@ impl Pagination {
         // Add right ellipsis if needed
         if right_sibling < total - 1 {
             items.push(PageItem::Ellipsis);
-        } else if right_sibling == total - 1 && total > 1 {
+        } else if right_sibling == total - 1 && total - 1 > 1 {
+            // Only add total-1 page if it's greater than 1 (to avoid re-adding page 1)
             items.push(PageItem::Page(total - 1));
         }
 
@@ -260,8 +263,9 @@ impl Styled for Pagination {
 impl RenderOnce for Pagination {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let current = self.current;
         let total = self.get_total_pages();
+        // Clamp current page to valid range
+        let current = self.current.max(1).min(total);
         let on_change = self.on_change.clone();
         let page_numbers = self.get_page_numbers();
         let previous_label = self.previous_label.clone();
@@ -353,6 +357,7 @@ impl RenderOnce for Pagination {
                             .into_any_element()
                     }
                     PageItem::Ellipsis => div()
+                        .id(ElementId::NamedInteger("ellipsis".into(), ix as u64))
                         .flex()
                         .items_center()
                         .justify_center()

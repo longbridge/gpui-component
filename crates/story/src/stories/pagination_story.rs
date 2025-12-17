@@ -116,7 +116,7 @@ impl PaginationStory {
     }
 
     fn total_pages(&self) -> usize {
-        (self.total_items + self.page_size - 1) / self.page_size
+        self.total_items.div_ceil(self.page_size)
     }
 }
 
