@@ -117,11 +117,6 @@ impl RenderOnce for StepperItem {
             Size::Large => px(32.),
             _ => px(24.),
         };
-        let separator_size = match self.size {
-            Size::XSmall => px(1.5),
-            Size::Large => px(3.),
-            _ => px(2.),
-        };
 
         let is_passed = self.step < self.checked_step;
 
@@ -156,10 +151,10 @@ impl RenderOnce for StepperItem {
             .when(!self.is_last, |this| {
                 this.child(
                     StepperSeparator::new()
+                        .with_size(self.size)
                         .layout(self.layout)
                         .text_center(self.text_center)
                         .icon_size(icon_size)
-                        .h(separator_size)
                         .checked(is_passed),
                 )
             })
@@ -170,7 +165,8 @@ impl RenderOnce for StepperItem {
 ///
 /// Default is `absolute` positioned.
 #[derive(IntoElement)]
-pub struct StepperSeparator {
+struct StepperSeparator {
+    size: Size,
     checked: bool,
     icon_size: Pixels,
     layout: Axis,
@@ -179,14 +175,20 @@ pub struct StepperSeparator {
 }
 
 impl StepperSeparator {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
+            size: Size::default(),
             checked: false,
             icon_size: px(24.),
             layout: Axis::Horizontal,
             style: StyleRefinement::default(),
             text_center: false,
         }
+    }
+
+    fn with_size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
     }
 
     fn text_center(mut self, center: bool) -> Self {
@@ -220,12 +222,19 @@ impl RenderOnce for StepperSeparator {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let icon_size = self.icon_size;
         let text_center = self.text_center;
+        let separator_wide = match self.size {
+            Size::XSmall => px(1.5),
+            Size::Large => px(3.),
+            _ => px(2.),
+        };
+
         let gap = px(4.);
+
         div()
-            .flex_1()
             .absolute()
+            .flex_1()
             .when(self.layout.is_horizontal(), |this| {
-                this.mt(icon_size.half()).map(|this| {
+                this.h(separator_wide).mt(icon_size.half()).map(|this| {
                     if !text_center {
                         this.ml(icon_size + gap).mr(gap).left_0().right_0()
                     } else {
@@ -236,8 +245,8 @@ impl RenderOnce for StepperSeparator {
                 })
             })
             .when(self.layout.is_vertical(), |this| {
-                this.ml(icon_size.half()).map(|this| {
-                    if text_center {
+                this.w(separator_wide).ml(icon_size.half()).map(|this| {
+                    if !text_center {
                         this.mt(icon_size + gap).mb(gap).top_0().bottom_0()
                     } else {
                         this.mx(icon_size.half() + (gap * 2))

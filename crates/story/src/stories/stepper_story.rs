@@ -170,28 +170,19 @@ impl Render for StepperStory {
                         .step(self.stepper2_step)
                         .items_center()
                         .items([
-                            StepperItem::new().icon(IconName::Building2).trigger(
+                            StepperItem::new().pb_8().icon(IconName::Building2).trigger(
                                 StepperTrigger::new().child(
-                                    v_flex()
-                                        .pb_12()
-                                        .child("Step 1")
-                                        .child("Description for step 1."),
+                                    v_flex().child("Step 1").child("Description for step 1."),
                                 ),
                             ),
-                            StepperItem::new().icon(IconName::Asterisk).trigger(
+                            StepperItem::new().pb_8().icon(IconName::Asterisk).trigger(
                                 StepperTrigger::new().child(
-                                    v_flex()
-                                        .pb_12()
-                                        .child("Step 2")
-                                        .child("Description for step 2."),
+                                    v_flex().child("Step 2").child("Description for step 2."),
                                 ),
                             ),
-                            StepperItem::new().icon(IconName::Folder).trigger(
+                            StepperItem::new().pb_8().icon(IconName::Folder).trigger(
                                 StepperTrigger::new().child(
-                                    v_flex()
-                                        .pb_12()
-                                        .child("Step 3")
-                                        .child("Description for step 3."),
+                                    v_flex().child("Step 3").child("Description for step 3."),
                                 ),
                             ),
                             StepperItem::new().icon(IconName::CircleCheck).trigger(
