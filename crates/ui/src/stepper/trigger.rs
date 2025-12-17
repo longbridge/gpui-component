@@ -105,7 +105,7 @@ impl RenderOnce for StepperTrigger {
         let is_checked = self.step <= self.checked_step;
 
         div()
-            .id(("stepper-trigger", self.step))
+            .id(("trigger", self.step))
             .when(self.layout.is_horizontal(), |this| this.v_flex())
             .when(self.layout.is_vertical(), |this| this.h_flex())
             .items_start()
@@ -125,6 +125,7 @@ impl RenderOnce for StepperTrigger {
                     .bg(cx.theme().secondary)
                     .when(!self.disabled && !is_checked, |this| {
                         this.hover(|this| this.bg(cx.theme().secondary_hover))
+                            .active(|this| this.bg(cx.theme().secondary_active))
                     })
                     .text_color(cx.theme().secondary_foreground)
                     .when(is_checked, |this| {
