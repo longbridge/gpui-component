@@ -77,6 +77,7 @@ impl Gallery {
                     StoryContainer::panel::<SkeletonStory>(window, cx),
                     StoryContainer::panel::<SliderStory>(window, cx),
                     StoryContainer::panel::<SpinnerStory>(window, cx),
+                    StoryContainer::panel::<StepperStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<TableStory>(window, cx),
                     StoryContainer::panel::<TabsStory>(window, cx),
