@@ -245,20 +245,21 @@ impl Render for TabsStory {
                         .children(vec!["Appearance", "Settings", "About", "License"]),
                 ),
             )
-
             .child(
-                section("Segmented Tabs (With filling space)").max_w_md().child(
-                    TabBar::new("flex tabs")
-                        .w_full()
-                        .segmented()
-                        .with_size(self.size)
-                        .selected_index(self.active_tab_ix)
-                        .on_click(cx.listener(|this, ix: &usize, window, cx| {
-                            this.set_active_tab(*ix, window, cx);
-                        }))
-                        .child(Tab::new().flex_1().label("About"))
-                        .child(Tab::new().flex_1().label("Profile"))
-                ),
+                section("Segmented Tabs (With filling space)")
+                    .max_w_md()
+                    .child(
+                        TabBar::new("flex tabs")
+                            .w_full()
+                            .segmented()
+                            .with_size(self.size)
+                            .selected_index(self.active_tab_ix)
+                            .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                                this.set_active_tab(*ix, window, cx);
+                            }))
+                            .child(Tab::new().flex_1().label("About"))
+                            .child(Tab::new().flex_1().label("Profile")),
+                    ),
             )
     }
 }

@@ -1,12 +1,13 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Subscription, Window, div,
+    Subscription, Window,
 };
 use gpui_component::{
-    IconName, Sizable, StyledExt,
+    IconName, Selectable as _, Sizable, Size, StyledExt,
+    button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
-    stepper::{Stepper, StepperItem},
+    stepper::{Stepper, StepperItem, StepperTrigger},
     v_flex,
 };
 
@@ -14,8 +15,11 @@ use crate::section;
 
 pub struct StepperStory {
     focus_handle: gpui::FocusHandle,
+    size: Size,
     stepper0_step: usize,
     stepper1_step: usize,
+    stepper2_step: usize,
+    stepper3_step: usize,
     disabled: bool,
     _subscritions: Vec<Subscription>,
 }
@@ -42,8 +46,11 @@ impl StepperStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            size: Size::default(),
             stepper0_step: 1,
             stepper1_step: 0,
+            stepper2_step: 2,
+            stepper3_step: 0,
             disabled: false,
             _subscritions: vec![],
         }
@@ -61,35 +68,65 @@ impl Render for StepperStory {
         v_flex()
             .gap_y_3()
             .child(
-                h_flex().child(
-                    Checkbox::new("disabled")
-                        .checked(self.disabled)
-                        .label("Disabled")
-                        .on_click(cx.listener(|this, check: &bool, _, cx| {
-                            this.disabled = *check;
-                            cx.notify();
-                        })),
-                ),
+                h_flex()
+                    .gap_3()
+                    .child(
+                        ButtonGroup::new("toggle-size")
+                            .outline()
+                            .compact()
+                            .child(
+                                Button::new("xsmall")
+                                    .label("XSmall")
+                                    .selected(self.size == Size::XSmall),
+                            )
+                            .child(
+                                Button::new("small")
+                                    .label("Small")
+                                    .selected(self.size == Size::Small),
+                            )
+                            .child(
+                                Button::new("medium")
+                                    .label("Medium")
+                                    .selected(self.size == Size::Medium),
+                            )
+                            .child(
+                                Button::new("large")
+                                    .label("Large")
+                                    .selected(self.size == Size::Large),
+                            )
+                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
+                                let size = match selecteds[0] {
+                                    0 => Size::XSmall,
+                                    1 => Size::Small,
+                                    2 => Size::Medium,
+                                    3 => Size::Large,
+                                    _ => unreachable!(),
+                                };
+                                this.size = size;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("disabled")
+                            .checked(self.disabled)
+                            .label("Disabled")
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                this.disabled = *check;
+                                cx.notify();
+                            })),
+                    ),
             )
             .child(
                 section("Horizontal Stepper").max_w_md().v_flex().child(
                     Stepper::new("stepper0")
                         .w_full()
+                        .with_size(self.size)
                         .disabled(self.disabled)
                         .step(self.stepper0_step)
                         .items([
-                            StepperItem::new()
-                                .text_center()
-                                .label("Step 1")
-                                .description(div().child("This is the description for step 1.")),
-                            StepperItem::new()
-                                .text_center()
-                                .label("Step 2")
-                                .description("This is description 2."),
-                            StepperItem::new()
-                                .text_center()
-                                .label("Step 3")
-                                .description("Description for step 3."),
+                            StepperItem::new().trigger(StepperTrigger::new().child("Step 1")),
+                            StepperItem::new().trigger(StepperTrigger::new().child("Step 2")),
+                            StepperItem::new().trigger(StepperTrigger::new().child("Step 3")),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper0_step = *step;
@@ -98,22 +135,112 @@ impl Render for StepperStory {
                 ),
             )
             .child(
-                section("Icon Stepper (large)").max_w_md().v_flex().child(
-                    Stepper::new("stepper0")
+                section("Icon Stepper").max_w_md().v_flex().child(
+                    Stepper::new("stepper1")
                         .w_full()
+                        .with_size(self.size)
                         .disabled(self.disabled)
                         .step(self.stepper1_step)
-                        .large()
                         .items([
                             StepperItem::new()
                                 .icon(IconName::Calendar)
-                                .label("Birthday"),
-                            StepperItem::new().icon(IconName::Inbox).label("Shipping"),
-                            StepperItem::new().icon(IconName::Frame).label("Preview"),
-                            StepperItem::new().icon(IconName::Info).label("Finish"),
+                                .trigger(StepperTrigger::new().child("Order Details")),
+                            StepperItem::new()
+                                .icon(IconName::Inbox)
+                                .trigger(StepperTrigger::new().child("Shipping")),
+                            StepperItem::new()
+                                .icon(IconName::Frame)
+                                .trigger(StepperTrigger::new().child("Preview")),
+                            StepperItem::new()
+                                .icon(IconName::Info)
+                                .trigger(StepperTrigger::new().child("Finish")),
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper1_step = *step;
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
+                section("Vertical Stepper").max_w_md().v_flex().child(
+                    Stepper::new("stepper3")
+                        .vertical()
+                        .with_size(self.size)
+                        .disabled(self.disabled)
+                        .step(self.stepper2_step)
+                        .items_center()
+                        .items([
+                            StepperItem::new().icon(IconName::Building2).trigger(
+                                StepperTrigger::new().child(
+                                    v_flex()
+                                        .pb_12()
+                                        .child("Step 1")
+                                        .child("Description for step 1."),
+                                ),
+                            ),
+                            StepperItem::new().icon(IconName::Asterisk).trigger(
+                                StepperTrigger::new().child(
+                                    v_flex()
+                                        .pb_12()
+                                        .child("Step 2")
+                                        .child("Description for step 2."),
+                                ),
+                            ),
+                            StepperItem::new().icon(IconName::Folder).trigger(
+                                StepperTrigger::new().child(
+                                    v_flex()
+                                        .pb_12()
+                                        .child("Step 3")
+                                        .child("Description for step 3."),
+                                ),
+                            ),
+                            StepperItem::new().icon(IconName::CircleCheck).trigger(
+                                StepperTrigger::new().child(
+                                    v_flex().child("Step 4").child("Description for step 4."),
+                                ),
+                            ),
+                        ])
+                        .on_click(cx.listener(|this, step, _, cx| {
+                            this.stepper2_step = *step;
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
+                section("Text Center").max_w_md().v_flex().child(
+                    Stepper::new("stepper4")
+                        .with_size(self.size)
+                        .disabled(self.disabled)
+                        .step(self.stepper3_step)
+                        .text_center(true)
+                        .items([
+                            StepperItem::new().trigger(
+                                StepperTrigger::new().child(
+                                    v_flex()
+                                        .items_center()
+                                        .child("Step 1")
+                                        .child("Desc for step 1."),
+                                ),
+                            ),
+                            StepperItem::new().trigger(
+                                StepperTrigger::new().child(
+                                    v_flex()
+                                        .items_center()
+                                        .child("Step 2")
+                                        .child("Desc for step 2."),
+                                ),
+                            ),
+                            StepperItem::new().trigger(
+                                StepperTrigger::new().items_center().child(
+                                    v_flex()
+                                        .items_center()
+                                        .child("Step 3")
+                                        .child("Desc for step 3."),
+                                ),
+                            ),
+                        ])
+                        .on_click(cx.listener(|this, step, _, cx| {
+                            this.stepper3_step = *step;
                             cx.notify();
                         })),
                 ),
