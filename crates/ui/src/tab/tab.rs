@@ -19,33 +19,6 @@ pub enum TabVariant {
     Underline,
 }
 
-#[allow(dead_code)]
-struct TabStyle {
-    borders: Edges<Pixels>,
-    border_color: Hsla,
-    bg: Hsla,
-    fg: Hsla,
-    radius: Pixels,
-    shadow: bool,
-    inner_bg: Hsla,
-    inner_radius: Pixels,
-}
-
-impl Default for TabStyle {
-    fn default() -> Self {
-        TabStyle {
-            borders: Edges::all(px(0.)),
-            border_color: gpui::transparent_white(),
-            bg: gpui::transparent_white(),
-            fg: gpui::transparent_white(),
-            radius: px(0.),
-            shadow: false,
-            inner_bg: gpui::transparent_white(),
-            inner_radius: px(0.),
-        }
-    }
-}
-
 impl TabVariant {
     fn height(&self, size: Size) -> Pixels {
         match size {
@@ -77,12 +50,12 @@ impl TabVariant {
             },
             Size::Small => match self {
                 TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(22.),
-                TabVariant::Segmented => px(20.),
+                TabVariant::Segmented => px(18.),
                 TabVariant::Underline => px(22.),
             },
             Size::Large => match self {
                 TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(36.),
-                TabVariant::Segmented => px(28.),
+                TabVariant::Segmented => px(26.),
                 TabVariant::Underline => px(32.),
             },
             _ => match self {
@@ -170,27 +143,22 @@ impl TabVariant {
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().border,
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
                 fg: cx.theme().foreground,
                 bg: cx.theme().transparent,
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
-                inner_radius: cx.theme().radius,
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
-                radius: px(0.),
                 inner_bg: cx.theme().transparent,
-                inner_radius: cx.theme().radius,
                 borders: Edges {
                     bottom: px(2.),
                     ..Default::default()
@@ -220,13 +188,11 @@ impl TabVariant {
                 bg: cx.theme().secondary_hover,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().border,
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
                 fg: cx.theme().secondary_foreground,
                 bg: cx.theme().secondary,
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Segmented => TabStyle {
@@ -237,15 +203,12 @@ impl TabVariant {
                 } else {
                     cx.theme().transparent
                 },
-                inner_radius: cx.theme().radius,
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
-                radius: px(0.),
                 inner_bg: cx.theme().transparent,
-                inner_radius: cx.theme().radius,
                 borders: Edges {
                     bottom: px(2.),
                     ..Default::default()
@@ -275,19 +238,16 @@ impl TabVariant {
                 bg: cx.theme().transparent,
                 borders: Edges::all(px(1.)),
                 border_color: cx.theme().primary,
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
                 fg: cx.theme().primary_foreground,
                 bg: cx.theme().primary,
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Segmented => TabStyle {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().transparent,
-                inner_radius: cx.theme().radius,
                 inner_bg: cx.theme().background,
                 shadow: true,
                 ..Default::default()
@@ -332,7 +292,6 @@ impl TabVariant {
                 } else {
                     cx.theme().border
                 },
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Pill => TabStyle {
@@ -346,7 +305,6 @@ impl TabVariant {
                 } else {
                     cx.theme().transparent
                 },
-                radius: px(99.),
                 ..Default::default()
             },
             TabVariant::Segmented => TabStyle {
@@ -357,13 +315,11 @@ impl TabVariant {
                 } else {
                     cx.theme().transparent
                 },
-                inner_radius: cx.theme().radius,
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
                 fg: cx.theme().muted_foreground,
                 bg: cx.theme().transparent,
-                radius: cx.theme().radius,
                 border_color: if selected {
                     cx.theme().border
                 } else {
@@ -375,6 +331,63 @@ impl TabVariant {
                 },
                 ..Default::default()
             },
+        }
+    }
+
+    pub(super) fn tab_bar_radius(&self, size: Size, cx: &App) -> Pixels {
+        if *self != TabVariant::Segmented {
+            return px(0.);
+        }
+
+        match size {
+            Size::XSmall | Size::Small => cx.theme().radius,
+            Size::Large => cx.theme().radius_lg,
+            _ => cx.theme().radius_lg,
+        }
+    }
+
+    fn radius(&self, size: Size, cx: &App) -> Pixels {
+        match self {
+            TabVariant::Outline | TabVariant::Pill => px(99.),
+            TabVariant::Segmented => match size {
+                Size::XSmall | Size::Small => cx.theme().radius,
+                Size::Large => cx.theme().radius_lg,
+                _ => cx.theme().radius_lg,
+            },
+            _ => px(0.),
+        }
+    }
+
+    fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
+        match self {
+            TabVariant::Segmented => match size {
+                Size::Large => self.tab_bar_radius(size, cx) - px(3.),
+                _ => self.tab_bar_radius(size, cx) - px(2.),
+            },
+            _ => px(0.),
+        }
+    }
+}
+
+#[allow(dead_code)]
+struct TabStyle {
+    borders: Edges<Pixels>,
+    border_color: Hsla,
+    bg: Hsla,
+    fg: Hsla,
+    shadow: bool,
+    inner_bg: Hsla,
+}
+
+impl Default for TabStyle {
+    fn default() -> Self {
+        TabStyle {
+            borders: Edges::all(px(0.)),
+            border_color: gpui::transparent_white(),
+            bg: gpui::transparent_white(),
+            fg: gpui::transparent_white(),
+            shadow: false,
+            inner_bg: gpui::transparent_white(),
         }
     }
 }
@@ -592,6 +605,8 @@ impl RenderOnce for Tab {
                 hover_style.borders.left = px(0.);
             }
         }
+        let radius = self.variant.radius(self.size, cx);
+        let inner_radius = self.variant.inner_radius(self.size, cx);
         let inner_paddings = self.variant.inner_paddings(self.size);
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
@@ -619,7 +634,7 @@ impl RenderOnce for Tab {
             .border_t(tab_style.borders.top)
             .border_b(tab_style.borders.bottom)
             .border_color(tab_style.border_color)
-            .rounded(tab_style.radius)
+            .rounded(radius)
             .when(!self.selected && !self.disabled, |this| {
                 this.hover(|this| {
                     this.text_color(hover_style.fg)
@@ -629,7 +644,7 @@ impl RenderOnce for Tab {
                         .border_t(hover_style.borders.top)
                         .border_b(hover_style.borders.bottom)
                         .border_color(hover_style.border_color)
-                        .rounded(tab_style.radius)
+                        .rounded(radius)
                 })
             })
             .when_some(self.prefix, |this, prefix| this.child(prefix))
@@ -662,12 +677,9 @@ impl RenderOnce for Tab {
                             .children(self.children),
                     })
                     .bg(tab_style.inner_bg)
-                    .rounded(tab_style.inner_radius)
+                    .rounded(inner_radius)
                     .when(tab_style.shadow, |this| this.shadow_xs())
-                    .hover(|this| {
-                        this.bg(hover_style.inner_bg)
-                            .rounded(hover_style.inner_radius)
-                    }),
+                    .hover(|this| this.bg(hover_style.inner_bg).rounded(inner_radius)),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
             .when(!self.disabled, |this| {

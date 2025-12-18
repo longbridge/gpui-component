@@ -181,9 +181,9 @@ impl RenderOnce for TabBar {
             TabVariant::Segmented => {
                 let padding_x = match self.size {
                     Size::XSmall => px(2.),
-                    Size::Small => px(2.),
+                    Size::Small => px(3.),
                     Size::Large => px(6.),
-                    _ => px(5.),
+                    _ => px(4.),
                 };
                 let padding = Edges {
                     left: padding_x,
@@ -232,10 +232,7 @@ impl RenderOnce for TabBar {
                     )
                 },
             )
-            .when(
-                self.variant == TabVariant::Pill || self.variant == TabVariant::Segmented,
-                |this| this.rounded(cx.theme().radius),
-            )
+            .rounded(self.variant.tab_bar_radius(self.size, cx))
             .paddings(paddings)
             .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
