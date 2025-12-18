@@ -340,9 +340,9 @@ impl TabVariant {
         }
 
         match size {
-            Size::Small | Size::XSmall => cx.theme().radius,
+            Size::XSmall | Size::Small => cx.theme().radius,
             Size::Large => cx.theme().radius_lg,
-            _ => cx.theme().radius,
+            _ => cx.theme().radius_lg,
         }
     }
 
@@ -360,7 +360,10 @@ impl TabVariant {
 
     fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
-            TabVariant::Segmented => self.radius(size, cx) - px(2.),
+            TabVariant::Segmented => match size {
+                Size::Large => self.tab_bar_radius(size, cx) - px(3.),
+                _ => self.tab_bar_radius(size, cx) - px(2.),
+            },
             _ => px(0.),
         }
     }
