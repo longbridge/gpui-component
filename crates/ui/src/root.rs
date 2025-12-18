@@ -205,7 +205,7 @@ impl Root {
     {
         let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
         let focus_handle = cx.focus_handle();
-        focus_handle.focus(window);
+        focus_handle.focus(window, cx);
 
         self.active_dialogs.push(ActiveDialog::new(
             focus_handle,
@@ -223,7 +223,7 @@ impl Root {
             .and_then(|d| d.previous_focused_handle)
             .and_then(|h| h.upgrade())
         {
-            window.focus(&handle);
+            window.focus(&handle, cx);
         }
         cx.notify();
     }
@@ -236,7 +236,7 @@ impl Root {
             .and_then(|d| d.previous_focused_handle.clone());
         self.active_dialogs.clear();
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
-            window.focus(&handle);
+            window.focus(&handle, cx);
         }
         cx.notify();
     }
@@ -253,7 +253,7 @@ impl Root {
         let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
 
         let focus_handle = cx.focus_handle();
-        focus_handle.focus(window);
+        focus_handle.focus(window, cx);
         self.active_sheet = Some(ActiveSheet {
             focus_handle,
             previous_focused_handle,
@@ -271,7 +271,7 @@ impl Root {
             .and_then(|s| s.previous_focused_handle.as_ref())
             .and_then(|h| h.upgrade())
         {
-            window.focus(&previous_handle);
+            window.focus(&previous_handle, cx);
         }
         self.active_sheet = None;
         cx.notify();
@@ -311,12 +311,12 @@ impl Root {
         &self.view
     }
 
-    fn on_action_tab(&mut self, _: &Tab, window: &mut Window, _: &mut Context<Self>) {
-        window.focus_next();
+    fn on_action_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus_next(cx);
     }
 
-    fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, _: &mut Context<Self>) {
-        window.focus_prev();
+    fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus_prev(cx);
     }
 }
 

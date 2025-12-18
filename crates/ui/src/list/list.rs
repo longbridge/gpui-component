@@ -155,7 +155,7 @@ where
 
     /// Focus the list, if the list is searchable, focus the search input.
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
-        self.focus_handle(cx).focus(window);
+        self.focus_handle(cx).focus(window, cx);
     }
 
     /// Return true if either the list or the search input is focused.

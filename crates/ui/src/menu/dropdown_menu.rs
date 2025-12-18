@@ -5,7 +5,7 @@ use gpui::{
     RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
-use crate::{button::Button, menu::PopupMenu, popover::Popover, Selectable};
+use crate::{Selectable, button::Button, menu::PopupMenu, popover::Popover};
 
 /// A dropdown menu trait for buttons and other interactive elements
 pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement + 'static {
@@ -110,7 +110,7 @@ where
                         menu_state.update(cx, |state, _| {
                             state.menu = Some(menu.clone());
                         });
-                        menu.focus_handle(cx).focus(window);
+                        menu.focus_handle(cx).focus(window, cx);
 
                         // Listen for dismiss events from the PopupMenu to close the popover.
                         let popover_state = cx.entity();

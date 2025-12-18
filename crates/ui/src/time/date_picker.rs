@@ -116,7 +116,7 @@ impl DatePickerState {
             |this, _, ev: &CalendarEvent, window, cx| match ev {
                 CalendarEvent::Selected(date) => {
                     this.update_date(*date, true, window, cx);
-                    this.focus_handle.focus(window);
+                    this.focus_handle.focus(window, cx);
                 }
             },
         )];
@@ -216,7 +216,7 @@ impl DatePickerState {
 
         if let Some(focused) = window.focused(cx) {
             if focused.contains(&self.focus_handle, window) {
-                self.focus_handle.focus(window);
+                self.focus_handle.focus(window, cx);
             }
         }
     }

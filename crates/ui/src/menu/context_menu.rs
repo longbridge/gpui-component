@@ -184,7 +184,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                                         .focus_handle(cx)
                                                         .contains_focused(window, cx)
                                                     {
-                                                        menu.focus_handle(cx).focus(window);
+                                                        menu.focus_handle(cx).focus(window, cx);
                                                     }
 
                                                     this.child(menu.clone())
