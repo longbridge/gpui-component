@@ -86,7 +86,7 @@ impl Render for ProgressStory {
                                     }),
                                 )),
                         )
-                        .child(Progress::new().value(self.value))
+                        .child(Progress::new("progress-1").value(self.value))
                         .child(
                             h_flex()
                                 .gap_x_2()
@@ -105,7 +105,7 @@ impl Render for ProgressStory {
             )
             .child(
                 section("Custom Style").max_w_md().child(
-                    Progress::new()
+                    Progress::new("progress-2")
                         .value(32.)
                         .h(px(16.))
                         .rounded(px(2.))

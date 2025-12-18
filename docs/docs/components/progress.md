@@ -18,7 +18,7 @@ use gpui_component::progress::Progress;
 ### Basic Progress Bar
 
 ```rust
-Progress::new()
+Progress::new("my-progress")
     .value(50.0) // 50% complete
 ```
 
@@ -26,19 +26,19 @@ Progress::new()
 
 ```rust
 // Starting state (0%)
-Progress::new()
+Progress::new("progress-0")
     .value(0.0)
 
 // Partially complete (25%)
-Progress::new()
+Progress::new("progress-25")
     .value(25.0)
 
 // Nearly complete (75%)
-Progress::new()
+Progress::new("progress-75")
     .value(75.0)
 
 // Complete (100%)
-Progress::new()
+Progress::new("progress-100")
     .value(100.0)
 ```
 
@@ -46,11 +46,11 @@ Progress::new()
 
 ```rust
 // For unknown progress duration
-Progress::new()
+Progress::new("indeterminate")
     .value(-1.0) // Any negative value shows as 0%
 
 // Or explicitly set to 0 for starting state
-Progress::new()
+Progress::new("starting")
     .value(0.0)
 ```
 
@@ -83,7 +83,7 @@ impl MyComponent {
                         })
                     ))
             )
-            .child(Progress::new().value(self.progress_value))
+            .child(Progress::new("progress").value(self.progress_value))
             .child(format!("{}%", self.progress_value as i32))
     }
 }
@@ -110,7 +110,7 @@ impl FileUpload {
         v_flex()
             .gap_2()
             .child("Uploading file...")
-            .child(Progress::new().value(self.progress_percentage()))
+            .child(Progress::new("upload-progress").value(self.progress_percentage()))
             .child(format!(
                 "{} / {} bytes",
                 self.bytes_uploaded,
@@ -134,11 +134,11 @@ impl LoadingComponent {
             .gap_3()
             .when(self.is_loading, |this| {
                 this.child("Loading...")
-                    .child(Progress::new().value(self.progress))
+                    .child(Progress::new("loading-progress").value(self.progress))
             })
             .when(!self.is_loading, |this| {
                 this.child("Task completed!")
-                    .child(Progress::new().value(100.0))
+                    .child(Progress::new("loading-progress").value(100.0))
             })
     }
 }
@@ -184,7 +184,7 @@ impl MultiStepProcess {
                 ProcessStep::Finalizing => "Finalizing...",
                 ProcessStep::Complete => "Complete!",
             })
-            .child(Progress::new().value(self.overall_progress()))
+            .child(Progress::new("overall-progress").value(self.overall_progress()))
             .child(format!("{:.1}% complete", self.overall_progress()))
     }
 }
@@ -218,7 +218,7 @@ impl TaskProgress {
                     .child("Task Progress")
                     .child(format!("{}/{}", self.completed_tasks, self.total_tasks))
             )
-            .child(Progress::new().value(self.progress_value()))
+            .child(Progress::new("task-progress").value(self.progress_value()))
             .when(self.completed_tasks == self.total_tasks, |this| {
                 this.child("All tasks completed!")
             })
@@ -256,7 +256,7 @@ impl DownloadProgress {
                     .child("Downloading...")
                     .child(format!("{:.1}%", progress))
             )
-            .child(Progress::new().value(progress))
+            .child(Progress::new("download-progress").value(progress))
             .child(
                 h_flex()
                     .justify_between()
@@ -303,13 +303,13 @@ impl InstallationProgress {
                             .child(format!("Overall Progress"))
                             .child(format!("{}/{}", self.package_index + 1, self.total_packages))
                     )
-                    .child(Progress::new().value(self.overall_progress()))
+                    .child(Progress::new("overall-progress").value(self.overall_progress()))
             )
             .child(
                 v_flex()
                     .gap_2()
                     .child(format!("Installing: {}", self.current_package))
-                    .child(Progress::new().value(self.package_progress))
+                    .child(Progress::new("package-progress").value(self.package_progress))
             )
     }
 }
@@ -327,7 +327,7 @@ The Progress component automatically adapts to the current theme:
 // Fill: theme.progress_bar at full opacity
 
 // These colors adapt to light/dark theme automatically
-Progress::new().value(75.0) // Uses theme colors
+Progress::new("themed-progress").value(75.0) // Uses theme colors
 ```
 
 ### Visual Properties
