@@ -1090,7 +1090,7 @@ impl TabPanel {
 
     fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(active_panel) = self.active_panel(cx) {
-            active_panel.focus_handle(cx).focus(window);
+            active_panel.focus_handle(cx).focus(window, cx);
         }
     }
 

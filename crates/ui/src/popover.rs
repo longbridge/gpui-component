@@ -240,7 +240,7 @@ impl PopoverState {
             } else {
                 self.focus_handle.clone()
             };
-            focus_handle.focus(window);
+            focus_handle.focus(window, cx);
 
             self._dismiss_subscription =
                 Some(
