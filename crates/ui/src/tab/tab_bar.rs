@@ -232,10 +232,7 @@ impl RenderOnce for TabBar {
                     )
                 },
             )
-            .when(
-                self.variant == TabVariant::Pill || self.variant == TabVariant::Segmented,
-                |this| this.rounded(cx.theme().radius),
-            )
+            .rounded(self.variant.tab_bar_radius(self.size, cx))
             .paddings(paddings)
             .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))

@@ -19,29 +19,6 @@ pub enum TabVariant {
     Underline,
 }
 
-#[allow(dead_code)]
-struct TabStyle {
-    borders: Edges<Pixels>,
-    border_color: Hsla,
-    bg: Hsla,
-    fg: Hsla,
-    shadow: bool,
-    inner_bg: Hsla,
-}
-
-impl Default for TabStyle {
-    fn default() -> Self {
-        TabStyle {
-            borders: Edges::all(px(0.)),
-            border_color: gpui::transparent_white(),
-            bg: gpui::transparent_white(),
-            fg: gpui::transparent_white(),
-            shadow: false,
-            inner_bg: gpui::transparent_white(),
-        }
-    }
-}
-
 impl TabVariant {
     fn height(&self, size: Size) -> Pixels {
         match size {
@@ -78,7 +55,7 @@ impl TabVariant {
             },
             Size::Large => match self {
                 TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(36.),
-                TabVariant::Segmented => px(28.),
+                TabVariant::Segmented => px(26.),
                 TabVariant::Underline => px(32.),
             },
             _ => match self {
@@ -357,6 +334,18 @@ impl TabVariant {
         }
     }
 
+    pub(super) fn tab_bar_radius(&self, size: Size, cx: &App) -> Pixels {
+        if *self != TabVariant::Segmented {
+            return px(0.);
+        }
+
+        match size {
+            Size::Small | Size::XSmall => cx.theme().radius,
+            Size::Large => cx.theme().radius_lg,
+            _ => cx.theme().radius,
+        }
+    }
+
     fn radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
             TabVariant::Outline | TabVariant::Pill => px(99.),
@@ -369,13 +358,33 @@ impl TabVariant {
         }
     }
 
-    fn inner_radius(&self, size: Size, _: &App) -> Pixels {
+    fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
-            TabVariant::Segmented => match size {
-                Size::XSmall | Size::Small => px(4.),
-                _ => px(6.),
-            },
+            TabVariant::Segmented => self.radius(size, cx) - px(2.),
             _ => px(0.),
+        }
+    }
+}
+
+#[allow(dead_code)]
+struct TabStyle {
+    borders: Edges<Pixels>,
+    border_color: Hsla,
+    bg: Hsla,
+    fg: Hsla,
+    shadow: bool,
+    inner_bg: Hsla,
+}
+
+impl Default for TabStyle {
+    fn default() -> Self {
+        TabStyle {
+            borders: Edges::all(px(0.)),
+            border_color: gpui::transparent_white(),
+            bg: gpui::transparent_white(),
+            fg: gpui::transparent_white(),
+            shadow: false,
+            inner_bg: gpui::transparent_white(),
         }
     }
 }
