@@ -599,17 +599,14 @@ where
 
         let col_width = col_group.width;
         let col_padding = col_group.column.paddings;
-        let is_last_col = col_ix + 1 == self.delegate.columns_count(cx);
         div()
             .w(col_width)
             .h_full()
             .flex_shrink_0()
             .overflow_hidden()
             .whitespace_nowrap()
-            .when(!is_last_col, |this| {
-                this.border_r_1() // Add a 1px border to the right
-                    .border_color(cx.theme().table_row_border) // Use the theme's row border color
-            })
+            .border_r_1()
+            .border_color(cx.theme().table_row_border)
             .table_cell_size(self.options.size)
             .map(|this| match col_padding {
                 Some(padding) => this
