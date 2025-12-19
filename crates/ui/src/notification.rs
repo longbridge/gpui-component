@@ -483,6 +483,8 @@ impl Render for NotificationList {
                         .map(|(index, notification)| {
                             // index: 0 = topmost/newest, larger = older/below
                             let stack_index = index;
+                            // Use entity_id for stable animation identity
+                            let entity_id = notification.entity_id();
 
                             // Collapsed state values (stacked effect)
                             let collapsed_scale =
@@ -500,22 +502,44 @@ impl Render for NotificationList {
                             let expanded_top = (ESTIMATED_NOTIFICATION_HEIGHT + NOTIFICATION_GAP)
                                 * stack_index as f32;
 
+                            // Calculate current position based on expanded state
+                            let current_top = if expanded {
+                                expanded_top
+                            } else {
+                                collapsed_top
+                            };
+                            let current_scale = if expanded {
+                                expanded_scale
+                            } else {
+                                collapsed_scale
+                            };
+                            let current_opacity = if expanded {
+                                expanded_opacity
+                            } else {
+                                collapsed_opacity
+                            };
+                            let current_padding_x = (1. - current_scale) / 2.;
+
                             // Wrap the notification in an animated container
                             // First item is relative (takes up space), others are absolute
                             div()
-                                .id(index)
+                                .id(("notification-item", entity_id.as_u64()))
                                 .when(stack_index == 0, |this| this.relative())
                                 .when(stack_index > 0, |this| this.absolute())
+                                .top(current_top)
+                                .px(relative(current_padding_x))
+                                .opacity(current_opacity)
                                 .w_full()
                                 .child(notification)
                                 .with_animation(
                                     ElementId::NamedInteger(
                                         "notification-stack".into(),
-                                        expanded as u64,
+                                        (entity_id.as_u64() << 1) | (expanded as u64),
                                     ),
                                     Animation::new(Duration::from_secs_f64(0.3))
                                         .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
                                     move |this, delta| {
+                                        // Only animate on hover expand/collapse
                                         // expanded = true means animating TO expanded state
                                         // expanded = false means animating TO collapsed state
                                         let progress = if expanded { delta } else { 1. - delta };
