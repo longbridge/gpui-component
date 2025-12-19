@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, Bounds, Context, Edges, Empty, EntityId, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, Styled as _, TextAlign, Window,
+    Bounds, Context, Edges, Empty, EntityId, IntoElement, ParentElement as _, Pixels, Render,
+    SharedString, Styled as _, TextAlign, Window, div, prelude::FluentBuilder, px,
 };
 
 use crate::ActiveTheme as _;
@@ -34,6 +34,10 @@ pub struct Column {
     pub movable: bool,
     /// Whether the column is selectable, if true this column's cells can be selected in column selection mode.
     pub selectable: bool,
+    /// The minimum width of the column.
+    pub min_width: Pixels,
+    /// The maximum width of the column.
+    pub max_width: Pixels,
 }
 
 impl Default for Column {
@@ -49,6 +53,8 @@ impl Default for Column {
             resizable: true,
             movable: true,
             selectable: true,
+            min_width: px(20.0),
+            max_width: px(1200.0),
         }
     }
 }
@@ -144,6 +150,18 @@ impl Column {
     /// Set whether the column is selectable, default is true.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
+        self
+    }
+
+    /// Set the minimum width of the column, default is 20px
+    pub fn min_width(mut self, min_width: impl Into<Pixels>) -> Self {
+        self.min_width = min_width.into();
+        self
+    }
+
+    /// Set the minimum width of the column, default is 1200px
+    pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
+        self.max_width = max_width.into();
         self
     }
 }
