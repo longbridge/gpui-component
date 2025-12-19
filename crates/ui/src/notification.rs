@@ -6,18 +6,30 @@ use std::{
 };
 
 use gpui::{
-    div, prelude::FluentBuilder, px, Animation, AnimationExt, AnyElement, App, AppContext,
-    ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Subscription, Window,
+    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
+    ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
+    Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Subscription, Window, div, prelude::FluentBuilder, px, relative,
 };
 use smol::Timer;
 
 use crate::{
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
+    h_flex, v_flex,
 };
+
+/// The gap between notifications when expanded (in pixels)
+const NOTIFICATION_GAP: f32 = 14.0;
+/// The height of a notification (in pixels)
+const NOTIFICATION_HEIGHT: f32 = 64.0;
+/// The offset between stacked notifications when collapsed (in pixels)
+const COLLAPSED_OFFSET: f32 = 10.0;
+/// The scale factor for stacked notifications
+const COLLAPSED_SCALE_FACTOR: f32 = 0.05;
+/// Maximum number of visible notifications in collapsed state
+const MAX_VISIBLE_COLLAPSED: usize = 3;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NotificationType {
@@ -269,8 +281,14 @@ impl Styled for Notification {
 }
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content = self.content_builder.clone().map(|builder| builder(self, window, cx));
-        let action = self.action_builder.clone().map(|builder| builder(self, window, cx).small().mr_3p5());
+        let content = self
+            .content_builder
+            .clone()
+            .map(|builder| builder(self, window, cx));
+        let action = self
+            .action_builder
+            .clone()
+            .map(|builder| builder(self, window, cx).small().mr_3p5());
 
         let closing = self.closing;
         let icon = match self.type_ {
@@ -308,13 +326,9 @@ impl Render for Notification {
                     .when_some(self.message.clone(), |this, message| {
                         this.child(div().text_sm().child(message))
                     })
-                    .when_some(content, |this, content| {
-                        this.child(content)
-                    }),
+                    .when_some(content, |this, content| this.child(content)),
             )
-            .when_some(action, |this, action| {
-                this.child(action)
-            })
+            .when_some(action, |this, action| this.child(action))
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(cx.listener(move |view, event, window, cx| {
                     view.dismiss(window, cx);
@@ -364,6 +378,7 @@ impl Render for Notification {
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
     pub(crate) notifications: VecDeque<Entity<Notification>>,
+    /// Whether the notification list is expanded (hovered).
     expanded: bool,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
@@ -440,25 +455,145 @@ impl NotificationList {
     }
 }
 
+/// A wrapper element for rendering a notification with stacking animation.
+#[derive(IntoElement)]
+struct NotificationItem {
+    notification: Entity<Notification>,
+    /// Index from top (0 = topmost/newest)
+    reverse_index: usize,
+    /// Whether the list is expanded
+    expanded: bool,
+}
+
+impl NotificationItem {
+    fn new(notification: Entity<Notification>, reverse_index: usize, expanded: bool) -> Self {
+        Self {
+            notification,
+            reverse_index,
+            expanded,
+        }
+    }
+}
+
+impl RenderOnce for NotificationItem {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let reverse_index = self.reverse_index;
+        let expanded = self.expanded;
+
+        // Collapsed state values
+        let collapsed_y = reverse_index as f32 * COLLAPSED_OFFSET;
+        let collapsed_scale = 1.0 - (reverse_index as f32 * COLLAPSED_SCALE_FACTOR);
+        let collapsed_opacity = if reverse_index < MAX_VISIBLE_COLLAPSED {
+            1.0 - (reverse_index as f32 * 0.15)
+        } else {
+            0.0
+        };
+
+        // Expanded state values
+        let expanded_y = reverse_index as f32 * (NOTIFICATION_HEIGHT + NOTIFICATION_GAP);
+        let expanded_scale = 1.0;
+        let expanded_opacity = 1.0;
+
+        // Wrap the notification in an animated container
+        div()
+            .absolute()
+            .w_full()
+            .child(self.notification)
+            .with_animation(
+                ElementId::NamedInteger("notification-stack".into(), expanded as u64),
+                Animation::new(Duration::from_secs_f64(0.3))
+                    .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
+                move |this, delta| {
+                    let progress = if expanded { delta } else { 1.0 - delta };
+
+                    let y_offset = collapsed_y + (expanded_y - collapsed_y) * progress;
+                    let scale = collapsed_scale + (expanded_scale - collapsed_scale) * progress;
+                    let opacity =
+                        collapsed_opacity + (expanded_opacity - collapsed_opacity) * progress;
+
+                    // Use relative width to simulate scale effect (centered)
+                    let margin_x = (1.0 - scale) / 2.0;
+
+                    this.mt(px(y_offset))
+                        .mx(relative(margin_x))
+                        .w(relative(scale))
+                        .opacity(opacity)
+                },
+            )
+    }
+}
+
 impl Render for NotificationList {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
+        _window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
-        let size = window.viewport_size();
-        let items = self.notifications.iter().rev().take(10).rev().cloned();
+        let expanded = self.expanded;
+
+        // Take the last N notifications (most recent)
+        let max_notifications = 10;
+        let items: Vec<_> = self
+            .notifications
+            .iter()
+            .rev()
+            .take(max_notifications)
+            .rev()
+            .cloned()
+            .collect();
+
+        let visible_count = items.len();
+
+        // Calculate the height for collapsed state (stack effect)
+        let collapsed_height = if visible_count == 0 {
+            0.0
+        } else {
+            let visible_in_stack = visible_count.min(MAX_VISIBLE_COLLAPSED);
+            NOTIFICATION_HEIGHT + (visible_in_stack.saturating_sub(1) as f32 * COLLAPSED_OFFSET)
+        };
+
+        // Calculate the height for expanded state
+        let expanded_height = if visible_count == 0 {
+            0.0
+        } else {
+            (visible_count - 1) as f32 * (NOTIFICATION_HEIGHT + NOTIFICATION_GAP)
+                + NOTIFICATION_HEIGHT
+        };
 
         div().absolute().top_4().right_4().child(
-            v_flex()
+            div()
                 .id("notification-list")
-                .h(size.height - px(8.))
+                .relative()
+                .w_112()
                 .on_hover(cx.listener(|view, hovered, _, cx| {
                     view.expanded = *hovered;
                     cx.notify()
                 }))
-                .gap_3()
-                .children(items),
+                // Render in reverse order: oldest first (at bottom), newest last (on top)
+                // This ensures newer notifications are rendered on top in GPUI
+                .children(
+                    items
+                        .into_iter()
+                        .enumerate()
+                        .rev()
+                        .map(|(index, notification)| {
+                            // reverse_index: 0 = topmost/newest, larger = older/below
+                            let reverse_index =
+                                visible_count.saturating_sub(1).saturating_sub(index);
+                            NotificationItem::new(notification, reverse_index, expanded)
+                        }),
+                )
+                .with_animation(
+                    ElementId::NamedInteger("notification-list-height".into(), expanded as u64),
+                    Animation::new(Duration::from_secs_f64(0.3))
+                        .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
+                    move |this, delta| {
+                        let progress = if expanded { delta } else { 1.0 - delta };
+                        let height =
+                            collapsed_height + (expanded_height - collapsed_height) * progress;
+                        this.h(px(height))
+                    },
+                ),
         )
     }
 }
