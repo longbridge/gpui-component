@@ -6,26 +6,27 @@ use std::{
 };
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
-    ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Subscription, Window, div, prelude::FluentBuilder, px, relative,
+    Animation, AnimationExt, AnyElement, App, AppContext, Bounds, ClickEvent, Context,
+    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, IsZero,
+    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Subscription, Window, div, prelude::FluentBuilder, px, relative,
 };
 use smol::Timer;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
+    ActiveTheme as _, ElementExt, Icon, IconName, Root, Sizable as _, StyledExt,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
 
+const MAX_DISPLAY_ITEMS: usize = 10;
 const CLOSE_DELAY: Duration = Duration::from_secs(15);
 /// The offset between stacked notifications when collapsed (in pixels)
-const COLLAPSED_OFFSET: Pixels = px(8.);
+const COLLAPSED_OFFSET: Pixels = px(10.);
 /// Estimated notification height for expanded layout calculation
 /// This is used to calculate positions in expanded state
-const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(52.);
+const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(50.);
 /// The gap between notifications when expanded (in pixels)
 const NOTIFICATION_GAP: Pixels = px(12.);
 /// The scale factor for stacked notifications
@@ -88,6 +89,7 @@ pub struct Notification {
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     closing: bool,
+    bounds: Bounds<Pixels>,
 }
 
 impl From<String> for Notification {
@@ -142,6 +144,7 @@ impl Notification {
             content_builder: None,
             on_click: None,
             closing: false,
+            bounds: Bounds::default(),
         }
     }
 
@@ -291,6 +294,15 @@ impl Render for Notification {
             .action_builder
             .clone()
             .map(|builder| builder(self, window, cx).small().mr_3p5());
+        let list = Root::read(window, cx).notification.read(cx);
+        let is_expanded = list.expanded
+            || list
+                .notifications
+                .iter()
+                .last()
+                .map(|n| n.entity_id() == cx.entity_id())
+                .unwrap_or(false);
+        let zero_bounds = self.bounds.size.height.is_zero();
 
         let closing = self.closing;
         let icon = match self.type_ {
@@ -312,6 +324,18 @@ impl Render for Notification {
             .px_4()
             .gap_3()
             .refine_style(&self.style)
+            .when(is_expanded && zero_bounds, |this| {
+                // Measure bounds on first render when expanded
+                this.on_prepaint({
+                    let view = cx.entity();
+                    move |bounds, _, cx| {
+                        view.update(cx, |this, cx| {
+                            this.bounds = bounds;
+                            cx.notify();
+                        })
+                    }
+                })
+            })
             .when_some(icon, |this, icon| {
                 this.child(div().absolute().py_3p5().left_4().child(icon))
             })
@@ -320,13 +344,20 @@ impl Render for Notification {
                     .flex_1()
                     .overflow_hidden()
                     .when(has_icon, |this| this.pl_6())
-                    .when_some(self.title.clone(), |this, title| {
-                        this.child(div().text_sm().font_semibold().child(title))
-                    })
-                    .when_some(self.message.clone(), |this, message| {
-                        this.child(div().text_sm().child(message))
-                    })
-                    .when_some(content, |this, content| this.child(content)),
+                    .map(|this| {
+                        if is_expanded {
+                            this.when_some(self.title.clone(), |this, title| {
+                                this.child(div().text_sm().font_semibold().child(title))
+                            })
+                            .when_some(self.message.clone(), |this, message| {
+                                this.child(div().text_sm().child(message))
+                            })
+                            .when_some(content, |this, content| this.child(content))
+                        } else {
+                            this.whitespace_nowrap()
+                                .child(self.message.clone().unwrap_or("...".into()))
+                        }
+                    }),
             )
             .when_some(action, |this, action| this.child(action))
             .when_some(self.on_click.clone(), |this, on_click| {
@@ -375,7 +406,7 @@ impl Render for Notification {
 
 /// A list of notifications.
 pub struct NotificationList {
-    /// Notifications that will be auto hidden.
+    /// Notifications that will be auto hidden, newest at the end.
     pub(crate) notifications: VecDeque<Entity<Notification>>,
     /// Whether the notification list is expanded (hovered).
     expanded: bool,
@@ -463,7 +494,27 @@ impl Render for NotificationList {
         let expanded = self.expanded;
 
         // Take the last N notifications (most recent first)
-        let items: Vec<_> = self.notifications.iter().rev().take(10).cloned().collect();
+        let items: Vec<_> = self
+            .notifications
+            .iter()
+            .rev()
+            .take(MAX_DISPLAY_ITEMS)
+            .cloned()
+            .collect();
+        let item_heights = items
+            .iter()
+            .map(|item| {
+                item.read(cx)
+                    .bounds
+                    .size
+                    .height
+                    .max(ESTIMATED_NOTIFICATION_HEIGHT)
+            })
+            .collect::<Vec<_>>();
+        let top_item_height = item_heights
+            .first()
+            .cloned()
+            .unwrap_or(ESTIMATED_NOTIFICATION_HEIGHT);
 
         div().absolute().top_4().right_4().child(
             div()
@@ -494,13 +545,19 @@ impl Render for NotificationList {
                             } else {
                                 0.
                             };
-                            let collapsed_top = COLLAPSED_OFFSET * stack_index as f32;
+                            let mut collapsed_top = COLLAPSED_OFFSET * stack_index as f32;
+                            if stack_index > 0 {
+                                // Offset down by top item height.
+                                collapsed_top += top_item_height - ESTIMATED_NOTIFICATION_HEIGHT;
+                            }
 
                             // Expanded state values
                             let expanded_scale = 1.;
                             let expanded_opacity = 1.;
-                            let expanded_top = (ESTIMATED_NOTIFICATION_HEIGHT + NOTIFICATION_GAP)
-                                * stack_index as f32;
+                            let expanded_top = item_heights
+                                .iter()
+                                .take(stack_index)
+                                .fold(px(0.), |acc, &h| acc + h + NOTIFICATION_GAP);
 
                             // Calculate current position based on expanded state
                             let current_top = if expanded {
