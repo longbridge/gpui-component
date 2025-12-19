@@ -1,73 +1,27 @@
 use crate::{ActiveTheme, Collapsible, h_flex, v_flex};
 use gpui::{
-    AnyElement, App, Div, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _,
-    Window, div, prelude::FluentBuilder as _,
+    App, Div, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 /// A group of items in the [`super::Sidebar`].
 #[derive(IntoElement)]
 pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
     base: Div,
-    label: Option<SharedString>,
-    header: Option<AnyElement>,
+    label: SharedString,
     collapsed: bool,
     children: Vec<E>,
-    header_style: Option<Box<dyn Fn(Div) -> Div>>,
 }
 
 impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     /// Create a new [`SidebarGroup`] with a text label.
-    ///
-    /// This label will be displayed in the header unless a custom header is defined via
-    /// [`SidebarGroup::header`] or [`SidebarGroup::spaced_header`].
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             base: div().gap_2().flex_col(),
-            label: Some(label.into()),
-            header: None,
+            label: label.into(),
             collapsed: false,
             children: Vec::new(),
-            header_style: None,
         }
-    }
-
-    /// Sets a fully custom header element.
-    ///
-    /// Accepts any type implementing [`IntoElement`]. The provided element will completely
-    /// replace the label from [`SidebarGroup::new`].
-    pub fn header(mut self, header: impl IntoElement) -> Self {
-        self.header = Some(header.into_any_element());
-        self
-    }
-
-    /// Sets a horizontally spaced header with left and right elements.
-    ///
-    /// Convenience method for aligning content at the left and right of the header.
-    ///
-    /// **Warning:** This replaces the label from [`SidebarGroup::new`].
-    pub fn spaced_header(self, left: impl IntoElement, right: impl IntoElement) -> Self {
-        self.header(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .flex_1()
-                .child(left)
-                .child(right),
-        )
-    }
-
-    /// Set a closure to override the default header styling.
-    ///
-    /// The closure receives the default [`Div`] used for the header and should return a
-    /// customized [`Div`]. This allows changing padding, color, rounding, height, etc.
-    pub fn with_header_style<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Div) -> Div + 'static,
-    {
-        self.header_style = Some(Box::new(f));
-        self
     }
 
     /// Add a single child to the sidebar group.
@@ -100,27 +54,19 @@ impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
 
 impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut header_div = h_flex()
-            .flex_shrink_0()
-            .px_2()
-            .rounded(cx.theme().radius)
-            .text_xs()
-            .text_color(cx.theme().sidebar_foreground.opacity(0.7))
-            .h_8();
-
-        if let Some(f) = self.header_style {
-            header_div = f(header_div);
-        }
-
-        let header_element = self
-            .header
-            .or_else(|| self.label.map(|label| label.into_any_element()))
-            .expect("SidebarGroup requires either label or header");
-
         v_flex()
             .relative()
             .when(!self.collapsed, |this| {
-                this.child(header_div.child(header_element))
+                this.child(
+                    h_flex()
+                        .flex_shrink_0()
+                        .px_2()
+                        .rounded(cx.theme().radius)
+                        .text_xs()
+                        .text_color(cx.theme().sidebar_foreground.opacity(0.7))
+                        .h_8()
+                        .child(self.label),
+                )
             })
             .child(
                 self.base.children(

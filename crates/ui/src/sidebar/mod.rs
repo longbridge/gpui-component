@@ -12,14 +12,18 @@ use gpui::{
 };
 use std::rc::Rc;
 
+mod content;
 mod footer;
 mod group;
 mod header;
 mod menu;
+mod section;
+pub use content::*;
 pub use footer::*;
 pub use group::*;
 pub use header::*;
 pub use menu::*;
+pub use section::*;
 
 const DEFAULT_WIDTH: Pixels = px(255.);
 const COLLAPSED_WIDTH: Pixels = px(48.);
@@ -248,5 +252,11 @@ impl<E: Collapsible + IntoElement> RenderOnce for Sidebar<E> {
                         .child(footer),
                 )
             })
+    }
+}
+
+impl Sidebar<SidebarContent<SidebarMenu>> {
+    pub fn default_content(side: Side) -> Self {
+        Self::new(side)
     }
 }

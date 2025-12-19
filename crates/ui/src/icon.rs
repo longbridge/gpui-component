@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size};
 use gpui::{
-    prelude::FluentBuilder as _, svg, AnyElement, App, AppContext, Context, Entity, Hsla,
-    IntoElement, Radians, Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg,
-    Transformation, Window,
+    AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
+    SharedString, StyleRefinement, Styled, Svg, Transformation, Window,
+    prelude::FluentBuilder as _, svg,
 };
 
 /// Types implementing this trait can automatically be converted to [`Icon`].
@@ -48,6 +48,9 @@ pub enum IconName {
     Close,
     Copy,
     Dash,
+    Database,
+    DatabaseBackup,
+    DatabaseZap,
     Delete,
     Ellipsis,
     EllipsisVertical,
@@ -146,6 +149,9 @@ impl IconNamed for IconName {
             Self::Close => "icons/close.svg",
             Self::Copy => "icons/copy.svg",
             Self::Dash => "icons/dash.svg",
+            Self::Database => "icons/database.svg",
+            Self::DatabaseBackup => "icons/database-backup.svg",
+            Self::DatabaseZap => "icons/database-zap.svg",
             Self::Delete => "icons/delete.svg",
             Self::Ellipsis => "icons/ellipsis.svg",
             Self::EllipsisVertical => "icons/ellipsis-vertical.svg",
