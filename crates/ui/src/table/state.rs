@@ -669,7 +669,7 @@ where
             .h_full()
             .w(HANDLE_SIZE)
             .ml(-(HANDLE_SIZE))
-            .justify_center()
+            .justify_end()
             .items_center()
             .child(
                 div()
