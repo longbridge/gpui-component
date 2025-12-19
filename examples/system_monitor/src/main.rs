@@ -1,13 +1,13 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use gpui::*;
-use gpui_component::{chart::AreaChart, h_flex, v_flex, ActiveTheme, Root};
+use gpui::{prelude::FluentBuilder as _, *};
+use gpui_component::{ActiveTheme, Root, TitleBar, chart::AreaChart, h_flex, v_flex};
 use smol::Timer;
 use sysinfo::System;
 
 const MAX_DATA_POINTS: usize = 60;
-const UPDATE_INTERVAL_MS: u64 = 1000;
+const UPDATE_INTERNAL: Duration = Duration::from_secs(1);
 
 /// A single data point for system metrics
 #[derive(Clone)]
@@ -195,7 +195,10 @@ impl SystemMonitor {
         #[cfg(target_os = "linux")]
         let (gpu_monitor, gpu_available) = {
             let monitor = LinuxGpuMonitor::new();
-            let available = monitor.as_ref().map(|m| m.nvidia_available).unwrap_or(false);
+            let available = monitor
+                .as_ref()
+                .map(|m| m.nvidia_available)
+                .unwrap_or(false);
             (monitor, available)
         };
 
@@ -217,7 +220,7 @@ impl SystemMonitor {
         // Start the update loop
         cx.spawn(async move |this, cx| {
             loop {
-                Timer::after(Duration::from_millis(UPDATE_INTERVAL_MS)).await;
+                Timer::after(Duration::from_secs(1)).await;
 
                 let result = this.update(cx, |this, cx| {
                     this.collect_metrics();
@@ -298,22 +301,19 @@ impl SystemMonitor {
         color: Hsla,
         cx: &Context<Self>,
     ) -> impl IntoElement {
-        let bg_color = cx.theme().background;
-
         v_flex()
             .flex_1()
             .gap_2()
-            .p_4()
-            .rounded_lg()
             .border_1()
             .border_color(cx.theme().border)
+            .h(px(120.))
             .child(
                 h_flex()
                     .justify_between()
+                    .p_3()
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(FontWeight::SEMIBOLD)
                             .text_color(cx.theme().foreground)
                             .child(title.to_string()),
                     )
@@ -321,24 +321,21 @@ impl SystemMonitor {
                         let current_value = data.last().map(|p| value_fn(p)).unwrap_or(0.0);
                         div()
                             .text_sm()
-                            .font_weight(FontWeight::BOLD)
                             .text_color(color)
                             .child(format!("{:.1}%", current_value))
                     }),
             )
             .child(
-                div().h(px(120.)).w(px(280.)).child(
-                    AreaChart::new(data)
-                        .x(|d| d.time.clone())
-                        .y(value_fn)
-                        .stroke(color)
-                        .fill(linear_gradient(
-                            0.,
-                            linear_color_stop(color.opacity(0.4), 1.),
-                            linear_color_stop(bg_color.opacity(0.1), 0.),
-                        ))
-                        .tick_margin(15),
-                ),
+                AreaChart::new(data)
+                    .x(|d| d.time.clone())
+                    .y(value_fn)
+                    .stroke(color)
+                    .fill(linear_gradient(
+                        0.,
+                        linear_color_stop(color.opacity(0.4), 1.),
+                        linear_color_stop(cx.theme().background.opacity(0.1), 0.),
+                    ))
+                    .tick_margin(15),
             )
     }
 }
@@ -346,25 +343,22 @@ impl SystemMonitor {
 impl Render for SystemMonitor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let data: Vec<MetricPoint> = self.data.iter().cloned().collect();
+        let has_gpu = if cfg!(target_os = "macos") {
+            false
+        } else {
+            true
+        };
 
         v_flex()
             .size_full()
+            .child(TitleBar::new().child("System Monitor"))
             .bg(cx.theme().background)
-            .p_6()
-            .gap_6()
             .child(
-                v_flex().gap_2().child(
-                    div()
-                        .text_xl()
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(cx.theme().foreground)
-                        .child("System Monitor"),
-                ),
-            )
-            .child(
-                h_flex()
-                    .flex_wrap()
+                v_flex()
+                    .p_4()
                     .gap_4()
+                    .flex_1()
+                    .w_full()
                     .child(self.render_chart(
                         "CPU Usage",
                         data.clone(),
@@ -378,23 +372,20 @@ impl Render for SystemMonitor {
                         |d| d.memory,
                         cx.theme().blue,
                         cx,
-                    )),
-            )
-            .child(
-                h_flex()
-                    .flex_wrap()
-                    .gap_4()
-                    .child(self.render_chart(
-                        if self.gpu_available {
-                            "GPU Usage"
-                        } else {
-                            "GPU Usage (N/A)"
-                        },
-                        data.clone(),
-                        |d| d.gpu,
-                        cx.theme().green,
-                        cx,
                     ))
+                    .when(has_gpu, |this| {
+                        this.child(self.render_chart(
+                            if self.gpu_available {
+                                "GPU Usage"
+                            } else {
+                                "GPU Usage (N/A)"
+                            },
+                            data.clone(),
+                            |d| d.gpu,
+                            cx.theme().green,
+                            cx,
+                        ))
+                    })
                     .child(self.render_chart(
                         if self.gpu_available {
                             "VRAM Usage"
@@ -405,17 +396,17 @@ impl Render for SystemMonitor {
                         |d| d.vram,
                         cx.theme().yellow,
                         cx,
-                    )),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(format!(
-                        "Total Memory: {:.1} GB | Update Interval: {} ms",
-                        self.sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
-                        UPDATE_INTERVAL_MS
-                    )),
+                    ))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!(
+                                "Total Memory: {:.1} GB | Update Interval: {} ms",
+                                self.sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
+                                UPDATE_INTERNAL.as_millis()
+                            )),
+                    ),
             )
     }
 }
@@ -427,8 +418,17 @@ fn main() {
         // Initialize GPUI Component
         gpui_component::init(cx);
 
+        let window_options = WindowOptions {
+            // Setup GPUI to use custom title bar
+            titlebar: Some(TitleBar::title_bar_options()),
+            window_bounds: Some(WindowBounds::centered(size(px(800.), px(800.)), cx)),
+            ..Default::default()
+        };
+
         cx.spawn(async move |cx| {
-            cx.open_window(WindowOptions::default(), |window, cx| {
+            cx.open_window(window_options, |window, cx| {
+                window.set_window_title("System Monitor");
+
                 let view = cx.new(|cx| SystemMonitor::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
             })?;
@@ -438,4 +438,3 @@ fn main() {
         .detach();
     });
 }
-
