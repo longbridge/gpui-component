@@ -8,8 +8,8 @@ use std::{
 use gpui::{
     Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
     ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Subscription, Window, div, prelude::FluentBuilder, px, relative,
+    Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
+    Window, div, prelude::FluentBuilder, px, relative,
 };
 use smol::Timer;
 
@@ -352,20 +352,23 @@ impl Render for Notification {
             )
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
-                Animation::new(Duration::from_secs_f64(0.25))
+                Animation::new(Duration::from_secs_f64(0.2))
                     .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
                 move |this, delta| {
                     if closing {
-                        let x_offset = px(0.) + delta * px(45.);
+                        // Sonner-style dismiss: slide up and fade out
+                        let y_offset = delta * px(-20.);
                         let opacity = 1. - delta;
-                        this.left(px(0.) + x_offset)
-                            .shadow_none()
+                        let scale = 1.0 - delta * 0.1;
+                        this.top(y_offset)
                             .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none())
+                            .mx(relative((1.0 - scale) / 2.0))
+                            .when(opacity < 0.5, |this| this.shadow_none())
                     } else {
+                        // Enter animation: slide down from top
                         let y_offset = px(-45.) + delta * px(45.);
                         let opacity = delta;
-                        this.top(px(0.) + y_offset)
+                        this.top(y_offset)
                             .opacity(opacity)
                             .when(opacity < 0.85, |this| this.shadow_none())
                     }
@@ -455,74 +458,6 @@ impl NotificationList {
     }
 }
 
-/// A wrapper element for rendering a notification with stacking animation.
-#[derive(IntoElement)]
-struct NotificationItem {
-    notification: Entity<Notification>,
-    /// Index from top (0 = topmost/newest)
-    reverse_index: usize,
-    /// Whether the list is expanded
-    expanded: bool,
-}
-
-impl NotificationItem {
-    fn new(notification: Entity<Notification>, reverse_index: usize, expanded: bool) -> Self {
-        Self {
-            notification,
-            reverse_index,
-            expanded,
-        }
-    }
-}
-
-impl RenderOnce for NotificationItem {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let reverse_index = self.reverse_index;
-        let expanded = self.expanded;
-
-        // Collapsed state values
-        let collapsed_y = reverse_index as f32 * COLLAPSED_OFFSET;
-        let collapsed_scale = 1.0 - (reverse_index as f32 * COLLAPSED_SCALE_FACTOR);
-        let collapsed_opacity = if reverse_index < MAX_VISIBLE_COLLAPSED {
-            1.0 - (reverse_index as f32 * 0.15)
-        } else {
-            0.0
-        };
-
-        // Expanded state values
-        let expanded_y = reverse_index as f32 * (NOTIFICATION_HEIGHT + NOTIFICATION_GAP);
-        let expanded_scale = 1.0;
-        let expanded_opacity = 1.0;
-
-        // Wrap the notification in an animated container
-        div()
-            .absolute()
-            .w_full()
-            .child(self.notification)
-            .with_animation(
-                ElementId::NamedInteger("notification-stack".into(), expanded as u64),
-                Animation::new(Duration::from_secs_f64(0.3))
-                    .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
-                move |this, delta| {
-                    let progress = if expanded { delta } else { 1.0 - delta };
-
-                    let y_offset = collapsed_y + (expanded_y - collapsed_y) * progress;
-                    let scale = collapsed_scale + (expanded_scale - collapsed_scale) * progress;
-                    let opacity =
-                        collapsed_opacity + (expanded_opacity - collapsed_opacity) * progress;
-
-                    // Use relative width to simulate scale effect (centered)
-                    let margin_x = (1.0 - scale) / 2.0;
-
-                    this.mt(px(y_offset))
-                        .mx(relative(margin_x))
-                        .w(relative(scale))
-                        .opacity(opacity)
-                },
-            )
-    }
-}
-
 impl Render for NotificationList {
     fn render(
         &mut self,
@@ -580,7 +515,61 @@ impl Render for NotificationList {
                             // reverse_index: 0 = topmost/newest, larger = older/below
                             let reverse_index =
                                 visible_count.saturating_sub(1).saturating_sub(index);
-                            NotificationItem::new(notification, reverse_index, expanded)
+
+                            // Collapsed state values (stacked effect)
+                            let collapsed_y = reverse_index as f32 * COLLAPSED_OFFSET;
+                            let collapsed_scale =
+                                1.0 - (reverse_index as f32 * COLLAPSED_SCALE_FACTOR);
+                            let collapsed_opacity = if reverse_index < MAX_VISIBLE_COLLAPSED {
+                                1.0 - (reverse_index as f32 * 0.15)
+                            } else {
+                                0.0
+                            };
+
+                            // Expanded state values (fully expanded with gaps)
+                            let expanded_y =
+                                reverse_index as f32 * (NOTIFICATION_HEIGHT + NOTIFICATION_GAP);
+                            let expanded_scale = 1.0;
+                            let expanded_opacity = 1.0;
+
+                            // Calculate current y_offset based on expanded state
+                            let y_offset = if expanded { expanded_y } else { collapsed_y };
+
+                            // Wrap the notification in an animated container
+                            div()
+                                .absolute()
+                                .top(px(y_offset))
+                                .w_full()
+                                .child(notification)
+                                .with_animation(
+                                    ElementId::NamedInteger(
+                                        "notification-stack".into(),
+                                        expanded as u64,
+                                    ),
+                                    Animation::new(Duration::from_secs_f64(0.3))
+                                        .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
+                                    move |this, delta| {
+                                        // expanded = true means animating TO expanded state
+                                        // expanded = false means animating TO collapsed state
+                                        let progress = if expanded { delta } else { 1.0 - delta };
+
+                                        let scale = collapsed_scale
+                                            + (expanded_scale - collapsed_scale) * progress;
+                                        let opacity = collapsed_opacity
+                                            + (expanded_opacity - collapsed_opacity) * progress;
+
+                                        // Animate y position
+                                        let animated_y =
+                                            collapsed_y + (expanded_y - collapsed_y) * progress;
+
+                                        // Scale horizontally from center (equal padding on both sides)
+                                        let padding_x = (1.0 - scale) / 2.0;
+
+                                        this.top(px(animated_y))
+                                            .mx(relative(padding_x))
+                                            .opacity(opacity)
+                                    },
+                                )
                         }),
                 )
                 .with_animation(
@@ -588,6 +577,8 @@ impl Render for NotificationList {
                     Animation::new(Duration::from_secs_f64(0.3))
                         .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
                     move |this, delta| {
+                        // expanded = true means animating TO expanded state
+                        // expanded = false means animating TO collapsed state
                         let progress = if expanded { delta } else { 1.0 - delta };
                         let height =
                             collapsed_height + (expanded_height - collapsed_height) * progress;
