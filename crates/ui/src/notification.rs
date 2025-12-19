@@ -526,98 +526,67 @@ impl Render for NotificationList {
                     cx.notify()
                 }))
                 // Render in reverse order so newest (index 0) is rendered last and appears on top
-                .children(
-                    items
-                        .into_iter()
-                        .enumerate()
-                        .rev()
-                        .map(|(index, notification)| {
-                            // index: 0 = topmost/newest, larger = older/below
-                            let stack_index = index;
-                            // Use entity_id for stable animation identity
-                            let entity_id = notification.entity_id();
+                .children(items.into_iter().enumerate().rev().map(|(ix, item)| {
+                    let entity_id = item.entity_id().as_u64();
+                    let animation_id =
+                        ElementId::NamedInteger("notification-stack".into(), entity_id);
 
-                            // Collapsed state values (stacked effect)
-                            let collapsed_scale =
-                                1. - (stack_index as f32 * COLLAPSED_SCALE_FACTOR);
-                            let collapsed_opacity = if stack_index < MAX_VISIBLE_COLLAPSED {
-                                1. - (stack_index as f32 * 0.15)
-                            } else {
-                                0.
-                            };
-                            let mut collapsed_top = COLLAPSED_OFFSET * stack_index as f32;
-                            if stack_index > 0 {
-                                // Offset down by top item height.
-                                collapsed_top += top_item_height - ESTIMATED_NOTIFICATION_HEIGHT;
-                            }
+                    let collapsed_scale = 1. - (ix as f32 * COLLAPSED_SCALE_FACTOR);
+                    let collapsed_opacity = if ix < MAX_VISIBLE_COLLAPSED {
+                        1. - (ix as f32 * 0.15)
+                    } else {
+                        0.
+                    };
+                    let mut collapsed_top = COLLAPSED_OFFSET * ix as f32;
+                    if ix > 0 {
+                        // Offset down by top item height.
+                        collapsed_top += top_item_height - ESTIMATED_NOTIFICATION_HEIGHT;
+                    }
 
-                            // Expanded state values
-                            let expanded_scale = 1.;
-                            let expanded_opacity = 1.;
-                            let expanded_top = item_heights
-                                .iter()
-                                .take(stack_index)
-                                .fold(px(0.), |acc, &h| acc + h + NOTIFICATION_GAP);
+                    let expanded_scale = 1.;
+                    let expanded_opacity = 1.;
+                    let expanded_top = item_heights
+                        .iter()
+                        .take(ix)
+                        .fold(px(0.), |acc, &h| acc + h + NOTIFICATION_GAP);
 
-                            // Calculate current position based on expanded state
-                            let current_top = if expanded {
-                                expanded_top
-                            } else {
-                                collapsed_top
-                            };
-                            let current_scale = if expanded {
-                                expanded_scale
-                            } else {
-                                collapsed_scale
-                            };
-                            let current_opacity = if expanded {
-                                expanded_opacity
-                            } else {
-                                collapsed_opacity
-                            };
-                            let current_padding_x = (1. - current_scale) / 2.;
+                    let (current_top, current_scale, current_opacity) = if expanded {
+                        (expanded_top, expanded_scale, expanded_opacity)
+                    } else {
+                        (collapsed_top, collapsed_scale, collapsed_opacity)
+                    };
+                    let current_padding_x = (1. - current_scale) / 2.;
 
-                            // Wrap the notification in an animated container
-                            // First item is relative (takes up space), others are absolute
-                            div()
-                                .id(("notification-item", entity_id.as_u64()))
-                                .when(stack_index == 0, |this| this.relative())
-                                .when(stack_index > 0, |this| this.absolute())
-                                .top(current_top)
-                                .px(relative(current_padding_x))
-                                .opacity(current_opacity)
-                                .w_full()
-                                .child(notification)
-                                .with_animation(
-                                    ElementId::NamedInteger(
-                                        "notification-stack".into(),
-                                        (entity_id.as_u64() << 1) | (expanded as u64),
-                                    ),
-                                    Animation::new(Duration::from_secs_f64(0.3))
-                                        .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
-                                    move |this, delta| {
-                                        // Only animate on hover expand/collapse
-                                        // expanded = true means animating TO expanded state
-                                        // expanded = false means animating TO collapsed state
-                                        let progress = if expanded { delta } else { 1. - delta };
+                    // Wrap the notification in an animated container
+                    // First item is relative (takes up space), others are absolute
+                    div()
+                        .id(("item", entity_id))
+                        .absolute()
+                        .when(ix == 0, |this| this.relative())
+                        .top(current_top)
+                        .px(relative(current_padding_x))
+                        .opacity(current_opacity)
+                        .w_full()
+                        .child(item)
+                        .with_animation(
+                            animation_id,
+                            Animation::new(Duration::from_secs_f64(0.3))
+                                .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
+                            move |this, delta| {
+                                let progress = if expanded { delta } else { 1. - delta };
 
-                                        let scale = collapsed_scale
-                                            + (expanded_scale - collapsed_scale) * progress;
-                                        let opacity = collapsed_opacity
-                                            + (expanded_opacity - collapsed_opacity) * progress;
+                                let scale =
+                                    collapsed_scale + (expanded_scale - collapsed_scale) * progress;
+                                let opacity = collapsed_opacity
+                                    + (expanded_opacity - collapsed_opacity) * progress;
 
-                                        // Interpolate top position
-                                        let top = collapsed_top
-                                            + (expanded_top - collapsed_top) * progress;
+                                let top = collapsed_top + (expanded_top - collapsed_top) * progress;
+                                let padding_x = (1. - scale) / 2.;
 
-                                        // Scale horizontally from center (equal padding on both sides)
-                                        let padding_x = (1. - scale) / 2.;
-
-                                        this.top(top).px(relative(padding_x)).opacity(opacity)
-                                    },
-                                )
-                        }),
-                ),
+                                this.top(top).px(relative(padding_x)).opacity(opacity)
+                            },
+                        )
+                })),
         )
     }
 }
