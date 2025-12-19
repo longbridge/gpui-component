@@ -1,3 +1,5 @@
+use std::f32;
+
 use gpui::{
     Bounds, Context, Edges, Empty, EntityId, IntoElement, ParentElement as _, Pixels, Render,
     SharedString, Styled as _, TextAlign, Window, div, prelude::FluentBuilder, px,
@@ -54,7 +56,7 @@ impl Default for Column {
             movable: true,
             selectable: true,
             min_width: px(20.0),
-            max_width: px(1200.0),
+            max_width: px(f32::MAX),
         }
     }
 }
@@ -178,7 +180,6 @@ impl Column {
         }
         self
     }
-
 }
 
 impl FluentBuilder for Column {}
