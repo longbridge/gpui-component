@@ -356,13 +356,9 @@ impl Render for Notification {
                     .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
                 move |this, delta| {
                     if closing {
-                        // Sonner-style dismiss: slide up and fade out
-                        let y_offset = delta * px(-20.);
+                        // Fade out animation, keep position
                         let opacity = 1. - delta;
-                        let scale = 1.0 - delta * 0.1;
-                        this.top(y_offset)
-                            .opacity(opacity)
-                            .mx(relative((1.0 - scale) / 2.0))
+                        this.opacity(opacity)
                             .when(opacity < 0.5, |this| this.shadow_none())
                     } else {
                         // Enter animation: slide down from top
@@ -466,15 +462,8 @@ impl Render for NotificationList {
     ) -> impl IntoElement {
         let expanded = self.expanded;
 
-        // Take the last N notifications (most recent)
-        let items: Vec<_> = self
-            .notifications
-            .iter()
-            .rev()
-            .take(10)
-            .rev()
-            .cloned()
-            .collect();
+        // Take the last N notifications (most recent first)
+        let items: Vec<_> = self.notifications.iter().rev().take(10).cloned().collect();
 
         div().absolute().top_4().right_4().child(
             div()
