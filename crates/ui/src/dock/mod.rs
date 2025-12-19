@@ -157,17 +157,22 @@ impl DockItem {
     }
 
     /// Set active index for the DockItem, only valid for [`DockItem::Tabs`].
-    pub fn active_index(mut self, new_active_ix: usize) -> Self {
+    pub fn active_index(mut self, new_active_ix: usize, cx: &mut App) -> Self {
         debug_assert!(
             matches!(self, Self::Tabs { .. }),
             "active_ix can only be set for DockItem::Tabs"
         );
 
         if let Self::Tabs {
-            ref mut active_ix, ..
+            ref mut active_ix,
+            ref mut view,
+            ..
         } = self
         {
             *active_ix = new_active_ix;
+            view.update(cx, |tab_panel, _| {
+                tab_panel.active_ix = new_active_ix;
+            });
         }
         self
     }

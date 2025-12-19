@@ -219,7 +219,7 @@ impl PanelState {
                     })
                     .collect_vec();
 
-                DockItem::tabs(items, &dock_area, window, cx).active_index(active_index)
+                DockItem::tabs(items, &dock_area, window, cx).active_index(active_index, cx)
             }
             PanelInfo::Panel(_) => {
                 let view = PanelRegistry::build_panel(
