@@ -155,23 +155,30 @@ impl Column {
 
     /// Set the minimum width of the column, default is 20px
     pub fn min_width(mut self, min_width: impl Into<Pixels>) -> Self {
-        self.min_width = min_width.into();
+        let min_width = min_width.into();
+        self.min_width = min_width;
+
+        // If the current width is smaller than the new minimum,
+        // bump the width up to match the minimum.
+        if self.width < min_width {
+            self.width = min_width;
+        }
         self
     }
 
     /// Set the minimum width of the column, default is 1200px
     pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
         let max_width = max_width.into();
-
-        // If a user sets a max width smaller than the current width, current width
-        // would become the max width, to prevent flickering when resizing the column
-        if max_width < self.width {
-            return self;
-        }
-
         self.max_width = max_width;
+
+        // If the current width is larger than the new maximum,
+        // pull the width down to match the maximum.
+        if self.width > max_width {
+            self.width = max_width;
+        }
         self
     }
+
 }
 
 impl FluentBuilder for Column {}
