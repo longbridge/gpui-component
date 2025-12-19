@@ -672,12 +672,6 @@ where
                     .justify_center()
                     .bg(cx.theme().table_row_border)
                     .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
-                    .ml(HANDLE_SIZE / 2. - px(1.))
-                    .bg(gpui::transparent_black()) // Invisible by default
-                    .group_hover(group_id, |this| {
-                        // Only show the "glow" color when hovering the 10px area
-                        this.bg(cx.theme().border)
-                    })
                     .w(px(1.)),
             )
             .on_drag_move(
