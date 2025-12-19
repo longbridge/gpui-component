@@ -592,7 +592,7 @@ where
         }
     }
 
-    fn render_cell(&self, col_ix: usize, _window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
             return div();
         };
