@@ -592,20 +592,24 @@ where
         }
     }
 
-    fn render_cell(&self, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>) -> Div {
+    fn render_cell(&self, col_ix: usize, _window: &mut Window, cx: &mut Context<Self>) -> Div {
         let Some(col_group) = self.col_groups.get(col_ix) else {
             return div();
         };
 
         let col_width = col_group.width;
         let col_padding = col_group.column.paddings;
-
+        let is_last_col = col_ix + 1 == self.delegate.columns_count(cx);
         div()
             .w(col_width)
             .h_full()
             .flex_shrink_0()
             .overflow_hidden()
             .whitespace_nowrap()
+            .when(!is_last_col, |this| {
+                this.border_r_1() // Add a 1px border to the right
+                    .border_color(cx.theme().table_row_border) // Use the theme's row border color
+            })
             .table_cell_size(self.options.size)
             .map(|this| match col_padding {
                 Some(padding) => this
@@ -672,7 +676,13 @@ where
                     .h_full()
                     .justify_center()
                     .bg(cx.theme().table_row_border)
-                    .group_hover(group_id, |this| this.bg(cx.theme().border).h_full())
+                    .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
+                    .ml(HANDLE_SIZE / 2. - px(1.))
+                    .bg(gpui::transparent_black()) // Invisible by default
+                    .group_hover(group_id, |this| {
+                        // Only show the "glow" color when hovering the 10px area
+                        this.bg(cx.theme().border)
+                    })
                     .w(px(1.)),
             )
             .on_drag_move(
