@@ -643,7 +643,7 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        const HANDLE_SIZE: Pixels = px(2.);
+        const HANDLE_SIZE: Pixels = px(10.);
 
         let resizable = self.col_resizable
             && self
