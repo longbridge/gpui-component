@@ -20,13 +20,14 @@ use crate::{
     h_flex, v_flex,
 };
 
+const CLOSE_DELAY: Duration = Duration::from_secs(15);
 /// The offset between stacked notifications when collapsed (in pixels)
-const COLLAPSED_OFFSET: Pixels = px(10.);
+const COLLAPSED_OFFSET: Pixels = px(8.);
 /// Estimated notification height for expanded layout calculation
 /// This is used to calculate positions in expanded state
-const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(64.);
+const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(52.);
 /// The gap between notifications when expanded (in pixels)
-const NOTIFICATION_GAP: Pixels = px(14.);
+const NOTIFICATION_GAP: Pixels = px(12.);
 /// The scale factor for stacked notifications
 const COLLAPSED_SCALE_FACTOR: f32 = 0.05;
 /// Maximum number of visible notifications in collapsed state
@@ -300,7 +301,6 @@ impl Render for Notification {
 
         h_flex()
             .id("notification")
-            .occlude()
             .relative()
             .w_full()
             .border_1()
@@ -418,7 +418,7 @@ impl NotificationList {
         if autohide {
             // Sleep for 5 seconds to autohide the notification
             cx.spawn_in(window, async move |_, cx| {
-                Timer::after(Duration::from_secs(5)).await;
+                Timer::after(CLOSE_DELAY).await;
 
                 if let Err(err) =
                     notification.update_in(cx, |note, window, cx| note.dismiss(window, cx))
