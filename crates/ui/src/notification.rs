@@ -8,8 +8,8 @@ use std::{
 use gpui::{
     Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
     ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription,
-    Window, div, prelude::FluentBuilder, px, relative,
+    Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Subscription, Window, div, prelude::FluentBuilder, px, relative,
 };
 use smol::Timer;
 
@@ -20,12 +20,13 @@ use crate::{
     h_flex, v_flex,
 };
 
-/// The gap between notifications when expanded (in pixels)
-const NOTIFICATION_GAP: f32 = 14.0;
-/// The height of a notification (in pixels)
-const NOTIFICATION_HEIGHT: f32 = 64.0;
 /// The offset between stacked notifications when collapsed (in pixels)
-const COLLAPSED_OFFSET: f32 = 10.0;
+const COLLAPSED_OFFSET: Pixels = px(10.);
+/// Estimated notification height for expanded layout calculation
+/// This is used to calculate positions in expanded state
+const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(64.);
+/// The gap between notifications when expanded (in pixels)
+const NOTIFICATION_GAP: Pixels = px(14.);
 /// The scale factor for stacked notifications
 const COLLAPSED_SCALE_FACTOR: f32 = 0.05;
 /// Maximum number of visible notifications in collapsed state
@@ -299,10 +300,9 @@ impl Render for Notification {
 
         h_flex()
             .id("notification")
-            .group("")
             .occlude()
             .relative()
-            .w_112()
+            .w_full()
             .border_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().popover)
@@ -467,33 +467,14 @@ impl Render for NotificationList {
         let expanded = self.expanded;
 
         // Take the last N notifications (most recent)
-        let max_notifications = 10;
         let items: Vec<_> = self
             .notifications
             .iter()
             .rev()
-            .take(max_notifications)
+            .take(10)
             .rev()
             .cloned()
             .collect();
-
-        let visible_count = items.len();
-
-        // Calculate the height for collapsed state (stack effect)
-        let collapsed_height = if visible_count == 0 {
-            0.0
-        } else {
-            let visible_in_stack = visible_count.min(MAX_VISIBLE_COLLAPSED);
-            NOTIFICATION_HEIGHT + (visible_in_stack.saturating_sub(1) as f32 * COLLAPSED_OFFSET)
-        };
-
-        // Calculate the height for expanded state
-        let expanded_height = if visible_count == 0 {
-            0.0
-        } else {
-            (visible_count - 1) as f32 * (NOTIFICATION_HEIGHT + NOTIFICATION_GAP)
-                + NOTIFICATION_HEIGHT
-        };
 
         div().absolute().top_4().right_4().child(
             div()
@@ -504,41 +485,38 @@ impl Render for NotificationList {
                     view.expanded = *hovered;
                     cx.notify()
                 }))
-                // Render in reverse order: oldest first (at bottom), newest last (on top)
-                // This ensures newer notifications are rendered on top in GPUI
+                // Render in reverse order so newest (index 0) is rendered last and appears on top
                 .children(
                     items
                         .into_iter()
                         .enumerate()
                         .rev()
                         .map(|(index, notification)| {
-                            // reverse_index: 0 = topmost/newest, larger = older/below
-                            let reverse_index =
-                                visible_count.saturating_sub(1).saturating_sub(index);
+                            // index: 0 = topmost/newest, larger = older/below
+                            let stack_index = index;
 
                             // Collapsed state values (stacked effect)
-                            let collapsed_y = reverse_index as f32 * COLLAPSED_OFFSET;
                             let collapsed_scale =
-                                1.0 - (reverse_index as f32 * COLLAPSED_SCALE_FACTOR);
-                            let collapsed_opacity = if reverse_index < MAX_VISIBLE_COLLAPSED {
-                                1.0 - (reverse_index as f32 * 0.15)
+                                1. - (stack_index as f32 * COLLAPSED_SCALE_FACTOR);
+                            let collapsed_opacity = if stack_index < MAX_VISIBLE_COLLAPSED {
+                                1. - (stack_index as f32 * 0.15)
                             } else {
-                                0.0
+                                0.
                             };
+                            let collapsed_top = COLLAPSED_OFFSET * stack_index as f32;
 
-                            // Expanded state values (fully expanded with gaps)
-                            let expanded_y =
-                                reverse_index as f32 * (NOTIFICATION_HEIGHT + NOTIFICATION_GAP);
-                            let expanded_scale = 1.0;
-                            let expanded_opacity = 1.0;
-
-                            // Calculate current y_offset based on expanded state
-                            let y_offset = if expanded { expanded_y } else { collapsed_y };
+                            // Expanded state values
+                            let expanded_scale = 1.;
+                            let expanded_opacity = 1.;
+                            let expanded_top = (ESTIMATED_NOTIFICATION_HEIGHT + NOTIFICATION_GAP)
+                                * stack_index as f32;
 
                             // Wrap the notification in an animated container
+                            // First item is relative (takes up space), others are absolute
                             div()
-                                .absolute()
-                                .top(px(y_offset))
+                                .id(index)
+                                .when(stack_index == 0, |this| this.relative())
+                                .when(stack_index > 0, |this| this.absolute())
                                 .w_full()
                                 .child(notification)
                                 .with_animation(
@@ -551,39 +529,24 @@ impl Render for NotificationList {
                                     move |this, delta| {
                                         // expanded = true means animating TO expanded state
                                         // expanded = false means animating TO collapsed state
-                                        let progress = if expanded { delta } else { 1.0 - delta };
+                                        let progress = if expanded { delta } else { 1. - delta };
 
                                         let scale = collapsed_scale
                                             + (expanded_scale - collapsed_scale) * progress;
                                         let opacity = collapsed_opacity
                                             + (expanded_opacity - collapsed_opacity) * progress;
 
-                                        // Animate y position
-                                        let animated_y =
-                                            collapsed_y + (expanded_y - collapsed_y) * progress;
+                                        // Interpolate top position
+                                        let top = collapsed_top
+                                            + (expanded_top - collapsed_top) * progress;
 
                                         // Scale horizontally from center (equal padding on both sides)
-                                        let padding_x = (1.0 - scale) / 2.0;
+                                        let padding_x = (1. - scale) / 2.;
 
-                                        this.top(px(animated_y))
-                                            .mx(relative(padding_x))
-                                            .opacity(opacity)
+                                        this.top(top).px(relative(padding_x)).opacity(opacity)
                                     },
                                 )
                         }),
-                )
-                .with_animation(
-                    ElementId::NamedInteger("notification-list-height".into(), expanded as u64),
-                    Animation::new(Duration::from_secs_f64(0.3))
-                        .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
-                    move |this, delta| {
-                        // expanded = true means animating TO expanded state
-                        // expanded = false means animating TO collapsed state
-                        let progress = if expanded { delta } else { 1.0 - delta };
-                        let height =
-                            collapsed_height + (expanded_height - collapsed_height) * progress;
-                        this.h(px(height))
-                    },
                 ),
         )
     }
