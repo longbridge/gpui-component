@@ -294,17 +294,22 @@ impl Render for Notification {
             .action_builder
             .clone()
             .map(|builder| builder(self, window, cx).small().mr_3p5());
-        let list = Root::read(window, cx).notification.read(cx);
-        let is_expanded = list.expanded
-            || list
-                .notifications
-                .iter()
-                .last()
-                .map(|n| n.entity_id() == cx.entity_id())
-                .unwrap_or(false);
-        let zero_bounds = self.bounds.size.height.is_zero();
-
         let closing = self.closing;
+        let list = Root::read(window, cx).notification.read(cx);
+        let is_last_item = list
+            .notifications
+            .iter()
+            .last()
+            .map(|n| n.entity_id() == cx.entity_id())
+            .unwrap_or(false);
+        let is_expanded = list.expanded || is_last_item;
+        let zero_bounds = self.bounds.size.height.is_zero();
+        let use_animation = if is_last_item {
+            zero_bounds || closing
+        } else {
+            true
+        };
+
         let icon = match self.type_ {
             None => self.icon.clone(),
             Some(type_) => Some(type_.icon(cx)),
@@ -381,26 +386,33 @@ impl Render for Notification {
                             .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
                     ),
             )
-            .with_animation(
-                ElementId::NamedInteger("slide-down".into(), closing as u64),
-                Animation::new(Duration::from_secs_f64(0.2))
-                    .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
-                move |this, delta| {
-                    if closing {
-                        // Fade out animation, keep position
-                        let opacity = 1. - delta;
-                        this.opacity(opacity)
-                            .when(opacity < 0.5, |this| this.shadow_none())
-                    } else {
-                        // Enter animation: slide down from top
-                        let y_offset = px(-45.) + delta * px(45.);
-                        let opacity = delta;
-                        this.top(y_offset)
-                            .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none())
-                    }
-                },
-            )
+            .map(|this| {
+                if use_animation {
+                    this.with_animation(
+                        ElementId::NamedInteger("slide-down".into(), closing as u64),
+                        Animation::new(Duration::from_secs_f64(0.2))
+                            .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
+                        move |this, delta| {
+                            if closing {
+                                // Fade out animation, keep position
+                                let opacity = 1. - delta;
+                                this.opacity(opacity)
+                                    .when(opacity < 0.5, |this| this.shadow_none())
+                            } else {
+                                // Enter animation: slide down from top
+                                let y_offset = px(-45.) + delta * px(45.);
+                                let opacity = delta;
+                                this.top(y_offset)
+                                    .opacity(opacity)
+                                    .when(opacity < 0.85, |this| this.shadow_none())
+                            }
+                        },
+                    )
+                    .into_any_element()
+                } else {
+                    this.into_any_element()
+                }
+            })
     }
 }
 
@@ -528,10 +540,6 @@ impl Render for NotificationList {
                 // Render in reverse order so newest (index 0) is rendered last and appears on top
                 .children(items.into_iter().enumerate().rev().map(|(ix, item)| {
                     let entity_id = item.entity_id().as_u64();
-                    let animation_id = ElementId::NamedInteger(
-                        "stack-item".into(),
-                        (entity_id << 1) | (expanded as u64),
-                    );
 
                     let collapsed_scale = 1. - (ix as f32 * COLLAPSED_SCALE_FACTOR);
                     let collapsed_opacity = if ix < MAX_VISIBLE_COLLAPSED {
@@ -571,7 +579,7 @@ impl Render for NotificationList {
                         .w_full()
                         .child(item)
                         .with_animation(
-                            animation_id,
+                            ElementId::NamedInteger("stack-item".into(), expanded as u64),
                             Animation::new(Duration::from_secs_f64(0.3))
                                 .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
                             move |this, delta| {
