@@ -605,8 +605,6 @@ where
             .flex_shrink_0()
             .overflow_hidden()
             .whitespace_nowrap()
-            .border_r_1()
-            .border_color(cx.theme().table_row_border)
             .table_cell_size(self.options.size)
             .map(|this| match col_padding {
                 Some(padding) => this
