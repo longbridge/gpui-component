@@ -21,12 +21,12 @@ use crate::{
 };
 
 const MAX_DISPLAY_ITEMS: usize = 10;
-const CLOSE_DELAY: Duration = Duration::from_secs(15);
+const CLOSE_DELAY: Duration = Duration::from_secs(5);
 /// The offset between stacked notifications when collapsed (in pixels)
 const COLLAPSED_OFFSET: Pixels = px(10.);
 /// Estimated notification height for expanded layout calculation
 /// This is used to calculate positions in expanded state
-const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(50.);
+const ESTIMATED_NOTIFICATION_HEIGHT: Pixels = px(50.5);
 /// The gap between notifications when expanded (in pixels)
 const NOTIFICATION_GAP: Pixels = px(12.);
 /// The scale factor for stacked notifications
@@ -304,11 +304,6 @@ impl Render for Notification {
             .unwrap_or(false);
         let is_expanded = list.expanded || is_last_item;
         let zero_bounds = self.bounds.size.height.is_zero();
-        let use_animation = if is_last_item {
-            zero_bounds || closing
-        } else {
-            true
-        };
 
         let icon = match self.type_ {
             None => self.icon.clone(),
@@ -386,33 +381,23 @@ impl Render for Notification {
                             .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
                     ),
             )
-            .map(|this| {
-                if use_animation {
-                    this.with_animation(
-                        ElementId::NamedInteger("slide-down".into(), closing as u64),
-                        Animation::new(Duration::from_secs_f64(0.2))
-                            .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
-                        move |this, delta| {
-                            if closing {
-                                // Fade out animation, keep position
-                                let opacity = 1. - delta;
-                                this.opacity(opacity)
-                                    .when(opacity < 0.5, |this| this.shadow_none())
-                            } else {
-                                // Enter animation: slide down from top
-                                let y_offset = px(-45.) + delta * px(45.);
-                                let opacity = delta;
-                                this.top(y_offset)
-                                    .opacity(opacity)
-                                    .when(opacity < 0.85, |this| this.shadow_none())
-                            }
-                        },
-                    )
-                    .into_any_element()
-                } else {
-                    this.into_any_element()
-                }
-            })
+            .with_animation(
+                ElementId::NamedInteger("slide-down".into(), closing as u64),
+                Animation::new(Duration::from_secs_f64(0.2))
+                    .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
+                move |this, delta| {
+                    if closing {
+                        // Fade out animation, keep position
+                        let opacity = 1. - delta;
+                        this.opacity(opacity)
+                            .when(opacity < 0.5, |this| this.shadow_none())
+                    } else {
+                        let opacity = delta;
+                        this.opacity(opacity)
+                            .when(opacity < 0.85, |this| this.shadow_none())
+                    }
+                },
+            )
     }
 }
 
@@ -420,7 +405,6 @@ impl Render for Notification {
 pub struct NotificationList {
     /// Notifications that will be auto hidden, newest at the end.
     pub(crate) notifications: VecDeque<Entity<Notification>>,
-    /// Whether the notification list is expanded (hovered).
     expanded: bool,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
@@ -459,7 +443,6 @@ impl NotificationList {
 
         self.notifications.push_back(notification.clone());
         if autohide {
-            // Sleep for 5 seconds to autohide the notification
             cx.spawn_in(window, async move |_, cx| {
                 Timer::after(CLOSE_DELAY).await;
 
@@ -542,7 +525,7 @@ impl Render for NotificationList {
                     let entity_id = item.entity_id().as_u64();
 
                     let collapsed_scale = 1. - (ix as f32 * COLLAPSED_SCALE_FACTOR);
-                    let collapsed_opacity = if ix < MAX_VISIBLE_COLLAPSED {
+                    let collapsed_opacity = if ix <= MAX_VISIBLE_COLLAPSED {
                         1. - (ix as f32 * 0.15)
                     } else {
                         0.
@@ -579,12 +562,11 @@ impl Render for NotificationList {
                         .w_full()
                         .child(item)
                         .with_animation(
-                            ElementId::NamedInteger("stack-item".into(), expanded as u64),
+                            SharedString::from(format!("stack-{}:{}", entity_id, expanded)),
                             Animation::new(Duration::from_secs_f64(0.3))
                                 .with_easing(cubic_bezier(0.32, 0.72, 0., 1.)),
                             move |this, delta| {
                                 let progress = if expanded { delta } else { 1. - delta };
-
                                 let scale =
                                     collapsed_scale + (expanded_scale - collapsed_scale) * progress;
                                 let opacity = collapsed_opacity
@@ -593,7 +575,12 @@ impl Render for NotificationList {
                                 let top = collapsed_top + (expanded_top - collapsed_top) * progress;
                                 let padding_x = (1. - scale) / 2.;
 
-                                this.top(top).px(relative(padding_x)).opacity(opacity)
+                                // Enter animation: slide down from top
+                                let y_offset = px(-25.) + delta * px(25.);
+
+                                this.top(top + y_offset)
+                                    .px(relative(padding_x))
+                                    .opacity(opacity)
                             },
                         )
                 })),
