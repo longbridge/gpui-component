@@ -161,7 +161,15 @@ impl Column {
 
     /// Set the minimum width of the column, default is 1200px
     pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
-        self.max_width = max_width.into();
+        let max_width = max_width.into();
+
+        // If a user sets a max width smaller than the current width, current width
+        // would become the max width, to prevent flickering when resizing the column
+        if max_width < self.width {
+            return self;
+        }
+
+        self.max_width = max_width;
         self
     }
 }
