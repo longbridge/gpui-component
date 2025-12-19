@@ -11,8 +11,8 @@ pub type DefaultSidebarContent = SidebarContent<SidebarMenu>;
 ///
 /// Allows mixing [`SidebarGroup`] and [`SidebarSection`] in the same sidebar.
 pub enum SidebarContent<E: Collapsible + IntoElement + 'static> {
-    Labeled(SidebarGroup<E>),
-    Section(SidebarSection<E>),
+    Labeled(Box<SidebarGroup<E>>),
+    Section(Box<SidebarSection<E>>),
 }
 
 impl<E: Collapsible + IntoElement + 'static> Collapsible for SidebarContent<E> {
@@ -25,8 +25,8 @@ impl<E: Collapsible + IntoElement + 'static> Collapsible for SidebarContent<E> {
 
     fn collapsed(self, collapsed: bool) -> Self {
         match self {
-            SidebarContent::Labeled(g) => SidebarContent::Labeled(g.collapsed(collapsed)),
-            SidebarContent::Section(g) => SidebarContent::Section(g.collapsed(collapsed)),
+            SidebarContent::Labeled(g) => SidebarContent::Labeled(Box::new(g.collapsed(collapsed))),
+            SidebarContent::Section(g) => SidebarContent::Section(Box::new(g.collapsed(collapsed))),
         }
     }
 }
@@ -45,13 +45,13 @@ impl<E: Collapsible + IntoElement + 'static> IntoElement for SidebarContent<E> {
 /// Converts a [`SidebarGroup`] into [`SidebarContent::Labeled`].
 impl<E: Collapsible + IntoElement + 'static> From<SidebarGroup<E>> for SidebarContent<E> {
     fn from(group: SidebarGroup<E>) -> Self {
-        SidebarContent::Labeled(group)
+        SidebarContent::Labeled(Box::new(group))
     }
 }
 
 /// Converts a [`SidebarSection`] into [`SidebarContent::Section`].
 impl<E: Collapsible + IntoElement + 'static> From<SidebarSection<E>> for SidebarContent<E> {
     fn from(group: SidebarSection<E>) -> Self {
-        SidebarContent::Section(group)
+        SidebarContent::Section(Box::new(group))
     }
 }
