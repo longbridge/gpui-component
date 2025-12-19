@@ -5,6 +5,7 @@ use gpui::{
 };
 
 /// Controls what is displayed when the sidebar is collapsed.
+#[derive(Default)]
 pub enum SectionCollapsedDisplay {
     /// Show nothing.
     Hidden,
@@ -15,15 +16,10 @@ pub enum SectionCollapsedDisplay {
     /// Show the section action element.
     Action,
     /// Show the section children in collapsed mode.
+    #[default]
     Children,
     /// Show a custom element.
     Custom(AnyElement),
-}
-
-impl Default for SectionCollapsedDisplay {
-    fn default() -> Self {
-        Self::Children
-    }
 }
 
 /// A section in a [`super::Sidebar`] with optional header, children, and states.
