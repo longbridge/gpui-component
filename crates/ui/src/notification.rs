@@ -528,8 +528,10 @@ impl Render for NotificationList {
                 // Render in reverse order so newest (index 0) is rendered last and appears on top
                 .children(items.into_iter().enumerate().rev().map(|(ix, item)| {
                     let entity_id = item.entity_id().as_u64();
-                    let animation_id =
-                        ElementId::NamedInteger("notification-stack".into(), entity_id);
+                    let animation_id = ElementId::NamedInteger(
+                        "stack-item".into(),
+                        (entity_id << 1) | (expanded as u64),
+                    );
 
                     let collapsed_scale = 1. - (ix as f32 * COLLAPSED_SCALE_FACTOR);
                     let collapsed_opacity = if ix < MAX_VISIBLE_COLLAPSED {
