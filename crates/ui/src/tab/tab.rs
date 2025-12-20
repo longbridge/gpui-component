@@ -3,9 +3,9 @@ use std::rc::Rc;
 use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, ClickEvent, Div, Edges, Hsla, InteractiveElement, IntoElement, ParentElement,
-    Pixels, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
-    relative,
+    AnyElement, App, ClickEvent, Div, Edges, Hsla, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
+    div, px, relative,
 };
 
 /// Tab variants.
@@ -682,6 +682,11 @@ impl RenderOnce for Tab {
                     .hover(|this| this.bg(hover_style.inner_bg).rounded(inner_radius)),
             )
             .when_some(self.suffix, |this, suffix| this.child(suffix))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                // Stop propagation behavior, for works on TitleBar.
+                // https://github.com/longbridge/gpui-component/issues/1836
+                cx.stop_propagation();
+            })
             .when(!self.disabled, |this| {
                 this.when_some(self.on_click.clone(), |this, on_click| {
                     this.on_click(move |event, window, cx| on_click(event, window, cx))

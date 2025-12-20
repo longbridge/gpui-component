@@ -768,19 +768,17 @@ impl Render for SystemMonitor {
             .child(
                 TitleBar::new()
                     .child(
-                        h_flex().gap_3().items_center().child(
-                            TabBar::new("monitor-tabs")
-                                .mt(px(1.))
-                                .segmented()
-                                .py(px(2.))
-                                .bg(cx.theme().title_bar)
-                                .selected_index(active_tab_index)
-                                .on_click(cx.listener(|this, ix: &usize, window, cx| {
-                                    this.set_active_tab(*ix, window, cx);
-                                }))
-                                .child(Tab::new().label("System"))
-                                .child(Tab::new().label("Processes")),
-                        ),
+                        TabBar::new("monitor-tabs")
+                            .mt(px(1.))
+                            .segmented()
+                            .py(px(2.))
+                            .bg(cx.theme().title_bar)
+                            .selected_index(active_tab_index)
+                            .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                                this.set_active_tab(*ix, window, cx);
+                            }))
+                            .child(Tab::new().label("System"))
+                            .child(Tab::new().label("Processes")),
                     )
                     .child(
                         div()
