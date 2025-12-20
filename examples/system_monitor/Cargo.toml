@@ -1,0 +1,30 @@
+[package]
+name = "system_monitor"
+description = "A real-time system resource monitor using GPUI Component charts."
+version = "0.5.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component-assets.workspace = true
+gpui-component.workspace = true
+sysinfo = "0.37"
+smol = "2"
+battery = "0.7"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.33"
+core-foundation = "0.10"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi",
+] }
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
