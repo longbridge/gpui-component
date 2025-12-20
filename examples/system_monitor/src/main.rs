@@ -1,9 +1,10 @@
+use std::collections::VecDeque;
 use std::time::Duration;
-use std::{collections::VecDeque, rc::Rc};
 
 use gpui::{actions, prelude::FluentBuilder as _, *};
+use gpui_component::ThemeMode;
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Root, Sizable, Theme, ThemeConfig, ThemeSet, TitleBar,
+    ActiveTheme, Icon, IconName, Root, Sizable, Theme, TitleBar,
     chart::AreaChart,
     h_flex,
     progress::Progress,
@@ -807,26 +808,12 @@ impl Render for SystemMonitor {
     }
 }
 
-const DEFAULT_THEME: &'static str = include_str!("../../../themes/adventure.json");
-
 fn main() {
     let app = Application::new().with_assets(gpui_component_assets::Assets);
-
-    let themes: Vec<ThemeConfig> = serde_json::from_str::<ThemeSet>(DEFAULT_THEME)
-        .expect("Failed to parse themes/default.json")
-        .themes;
-    let theme_config = themes
-        .iter()
-        .find(|theme| theme.name == "Adventure")
-        .cloned()
-        .unwrap();
 
     app.run(move |cx| {
         gpui_component::init(cx);
 
-        Theme::global_mut(cx).apply_config(&Rc::new(theme_config));
-
-        // Bind quit shortcuts: CMD+Q on macOS, ALT+F4 on Windows/Linux
         cx.bind_keys([
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-q", Quit, None),
@@ -849,6 +836,8 @@ fn main() {
             cx.open_window(window_options, |window, cx| {
                 window.activate_window();
                 window.set_window_title("System Monitor");
+
+                Theme::change(ThemeMode::Dark, Some(window), cx);
 
                 let view = cx.new(|cx| SystemMonitor::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))

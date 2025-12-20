@@ -7218,8 +7218,6 @@ dependencies = [
  "gpui-component",
  "gpui-component-assets",
  "metal 0.33.0",
- "serde",
- "serde_json",
  "smol",
  "sysinfo 0.37.2",
  "windows 0.62.2",
