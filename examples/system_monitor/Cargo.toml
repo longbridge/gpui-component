@@ -13,6 +13,8 @@ gpui-component.workspace = true
 sysinfo = "0.37"
 smol = "2"
 battery = "0.7"
+serde.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = "0.33"

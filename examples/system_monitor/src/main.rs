@@ -1,10 +1,9 @@
-use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::time::Duration;
+use std::{collections::VecDeque, rc::Rc};
 
 use gpui::{actions, prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Root, Sizable, Theme, ThemeMode, ThemeRegistry, TitleBar,
+    ActiveTheme, Icon, IconName, Root, Sizable, Theme, ThemeConfig, ThemeSet, TitleBar,
     chart::AreaChart,
     h_flex,
     progress::Progress,
@@ -13,7 +12,7 @@ use gpui_component::{
     v_flex,
 };
 use smol::Timer;
-use sysinfo::{Disks, Networks, Pid, System};
+use sysinfo::{Disks, Pid, System};
 
 // Define the Quit action
 actions!(system_monitor, [Quit]);
@@ -27,7 +26,6 @@ enum MonitorTab {
     #[default]
     System = 0,
     Processes = 1,
-    Network = 2,
 }
 
 impl MonitorTab {
@@ -35,7 +33,6 @@ impl MonitorTab {
         match index {
             0 => MonitorTab::System,
             1 => MonitorTab::Processes,
-            2 => MonitorTab::Network,
             _ => MonitorTab::System,
         }
     }
@@ -67,14 +64,6 @@ struct DiskInfo {
     name: String,
     total: u64,
     used: u64,
-}
-
-/// Network info for display
-#[derive(Clone)]
-struct NetworkInfo {
-    name: String,
-    received: u64,
-    transmitted: u64,
 }
 
 /// Battery info for display
@@ -271,14 +260,12 @@ fn format_bytes(bytes: u64) -> String {
 pub struct SystemMonitor {
     sys: System,
     disks: Disks,
-    networks: Networks,
     data: VecDeque<MetricPoint>,
     time_index: usize,
     gpu_available: bool,
     active_tab: MonitorTab,
     process_table: Entity<TableState<ProcessTableDelegate>>,
     disk_info: Vec<DiskInfo>,
-    network_info: Vec<NetworkInfo>,
     battery_info: Vec<BatteryInfo>,
     #[cfg(target_os = "macos")]
     gpu_monitor: Option<MacGpuMonitor>,
@@ -416,7 +403,6 @@ impl SystemMonitor {
         sys.refresh_all();
 
         let disks = Disks::new_with_refreshed_list();
-        let networks = Networks::new_with_refreshed_list();
 
         // Initialize GPU monitor based on platform
         #[cfg(target_os = "macos")]
@@ -457,14 +443,12 @@ impl SystemMonitor {
         let mut monitor = Self {
             sys,
             disks,
-            networks,
             data: VecDeque::with_capacity(MAX_DATA_POINTS),
             time_index: 0,
             gpu_available,
             active_tab: MonitorTab::System,
             process_table,
             disk_info: Vec::new(),
-            network_info: Vec::new(),
             battery_info: Vec::new(),
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             gpu_monitor,
@@ -497,7 +481,6 @@ impl SystemMonitor {
         // Refresh system info
         self.sys.refresh_all();
         self.disks.refresh(true);
-        self.networks.refresh(true);
 
         // Calculate CPU usage
         let cpu_usage = self.sys.global_cpu_usage() as f64;
@@ -544,17 +527,6 @@ impl SystemMonitor {
                 name: disk.name().to_string_lossy().to_string(),
                 total: disk.total_space(),
                 used: disk.total_space() - disk.available_space(),
-            })
-            .collect();
-
-        // Update network info
-        self.network_info = self
-            .networks
-            .iter()
-            .map(|(name, data)| NetworkInfo {
-                name: name.clone(),
-                received: data.total_received(),
-                transmitted: data.total_transmitted(),
             })
             .collect();
 
@@ -707,72 +679,6 @@ impl SystemMonitor {
             .child(Table::new(&self.process_table).stripe(true).small())
     }
 
-    fn render_network_tab(&self, cx: &Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .flex_1()
-            .children(self.network_info.iter().map(|net| {
-                v_flex()
-                    .gap_2()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded_md()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().foreground)
-                            .child(net.name.clone()),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_4()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("↓ Received:"),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().green)
-                                            .child(format_bytes(net.received)),
-                                    ),
-                            )
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("↑ Transmitted:"),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().blue)
-                                            .child(format_bytes(net.transmitted)),
-                                    ),
-                            ),
-                    )
-            }))
-            .when(self.network_info.is_empty(), |this| {
-                this.child(
-                    div()
-                        .flex_1()
-                        .items_center()
-                        .justify_center()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("No network interfaces found"),
-                )
-            })
-    }
-
     fn render_status_bar(&self, cx: &Context<Self>) -> impl IntoElement {
         let primary_disk = self.disk_info.first();
         let primary_battery = self.battery_info.first();
@@ -871,8 +777,7 @@ impl Render for SystemMonitor {
                                     this.set_active_tab(*ix, window, cx);
                                 }))
                                 .child(Tab::new().label("System"))
-                                .child(Tab::new().label("Processes"))
-                                .child(Tab::new().label("Network")),
+                                .child(Tab::new().label("Processes")),
                         ),
                     )
                     .child(
@@ -896,38 +801,30 @@ impl Render for SystemMonitor {
                     .map(|this| match self.active_tab {
                         MonitorTab::System => this.child(self.render_system_tab(cx)),
                         MonitorTab::Processes => this.child(self.render_processes_tab(cx)),
-                        MonitorTab::Network => this.child(self.render_network_tab(cx)),
                     }),
             )
             .child(self.render_status_bar(cx))
     }
 }
 
+const DEFAULT_THEME: &'static str = include_str!("../../../themes/adventure.json");
+
 fn main() {
     let app = Application::new().with_assets(gpui_component_assets::Assets);
+
+    let themes: Vec<ThemeConfig> = serde_json::from_str::<ThemeSet>(DEFAULT_THEME)
+        .expect("Failed to parse themes/default.json")
+        .themes;
+    let theme_config = themes
+        .iter()
+        .find(|theme| theme.name == "Adventure")
+        .cloned()
+        .unwrap();
 
     app.run(move |cx| {
         gpui_component::init(cx);
 
-        // Load themes from the themes directory and apply Adventure theme
-        let themes_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("themes");
-
-        let _ = ThemeRegistry::watch_dir(themes_dir, cx, |cx| {
-            // Apply the Adventure theme after themes are loaded
-            if let Some(theme) = ThemeRegistry::global(cx)
-                .themes()
-                .get(&SharedString::from("Adventure"))
-                .cloned()
-            {
-                Theme::global_mut(cx).apply_config(&theme);
-                cx.refresh_windows();
-            }
-        });
+        Theme::global_mut(cx).apply_config(&Rc::new(theme_config));
 
         // Bind quit shortcuts: CMD+Q on macOS, ALT+F4 on Windows/Linux
         cx.bind_keys([
@@ -952,7 +849,6 @@ fn main() {
             cx.open_window(window_options, |window, cx| {
                 window.activate_window();
                 window.set_window_title("System Monitor");
-                Theme::change(ThemeMode::Dark, Some(window), cx);
 
                 let view = cx.new(|cx| SystemMonitor::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
