@@ -329,6 +329,7 @@ impl WindowsGpuMonitor {
 
     fn get_usage(&self) -> (f64, f64) {
         use windows::Win32::Graphics::Dxgi::*;
+        use windows::core::Interface;
 
         unsafe {
             if let Ok(factory) = CreateDXGIFactory1::<IDXGIFactory4>() {
