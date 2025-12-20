@@ -23,6 +23,7 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::input::lsp::KeywordCompletionProvider;
 use crate::input::movement::MoveDirection;
 use crate::input::{
     HoverDefinition, Lsp, Position,
@@ -453,6 +454,12 @@ impl InputState {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
         self.searchable = true;
+        self
+    }
+
+    pub fn autocomplete_words(mut self, words: Vec<impl ToString>) -> Self {
+        let keywords = words.into_iter().map(|w| w.to_string()).collect();
+        self.lsp.completion_provider = Some(Rc::new(KeywordCompletionProvider::new(keywords)));
         self
     }
 

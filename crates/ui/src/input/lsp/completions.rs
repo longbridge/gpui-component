@@ -9,7 +9,7 @@ use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use crate::input::{
-    InputState,
+    InputState, RopeExt,
     popovers::{CompletionMenu, ContextMenu},
 };
 
@@ -305,5 +305,124 @@ impl InputState {
         let completion_text = completion_item.insert_text;
         self.replace_text_in_range_silent(Some(range_utf16), &completion_text, window, cx);
         true
+    }
+}
+
+pub struct KeywordCompletionProvider {
+    keywords: Vec<String>,
+}
+
+impl KeywordCompletionProvider {
+    pub fn new(keywords: Vec<String>) -> Self {
+        Self { keywords }
+    }
+}
+
+impl CompletionProvider for KeywordCompletionProvider {
+    fn is_completion_trigger(
+        &self,
+        _offset: usize,
+        _new_text: &str,
+        _cx: &mut Context<InputState>,
+    ) -> bool {
+        // Trigger automatically when typing
+        true
+    }
+
+    fn completions(
+        &self,
+        text: &Rope,
+        offset: usize,
+        _trigger: CompletionContext,
+        _window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<CompletionResponse>> {
+        let text = text.clone();
+        let keywords = self.keywords.clone();
+
+        cx.background_executor().spawn(async move {
+            let prefix_chars: String = text
+                .chars_at(offset)
+                .reversed()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+
+            let prefix = prefix_chars
+                .chars()
+                .rev()
+                .collect::<String>()
+                .to_lowercase();
+
+            let start = offset - prefix.len();
+            let prefix = text.slice(start..offset).to_string().to_lowercase();
+
+            if prefix.is_empty() {
+                return Ok(CompletionResponse::Array(vec![]));
+            }
+
+            let lsp_range = lsp_types::Range {
+                start: text.offset_to_position(start),
+                end: text.offset_to_position(offset),
+            };
+
+            let items = keywords
+                .into_iter()
+                .filter(|kw| kw.to_lowercase().starts_with(&prefix))
+                .map(|kw| CompletionItem {
+                    label: kw.clone(),
+                    kind: Some(lsp_types::CompletionItemKind::KEYWORD),
+                    text_edit: Some(lsp_types::CompletionTextEdit::Edit(lsp_types::TextEdit {
+                        range: lsp_range,
+                        new_text: kw,
+                    })),
+                    ..Default::default()
+                })
+                .collect();
+
+            Ok(CompletionResponse::Array(items))
+        })
+    }
+
+    fn inline_completion(
+        &self,
+        text: &Rope,
+        offset: usize,
+        _trigger: InlineCompletionContext,
+        _window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<InlineCompletionResponse>> {
+        let text = text.clone();
+        let keywords = self.keywords.clone();
+
+        cx.background_executor().spawn(async move {
+            let prefix_chars: String = text
+                .chars_at(offset)
+                .reversed()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+
+            let prefix = prefix_chars
+                .chars()
+                .rev()
+                .collect::<String>()
+                .to_lowercase();
+
+            if prefix.is_empty() {
+                return Ok(InlineCompletionResponse::Array(vec![]));
+            }
+
+            let item = keywords
+                .into_iter()
+                .find(|kw| kw.to_lowercase().starts_with(&prefix) && kw.to_lowercase() != prefix)
+                .map(|kw| InlineCompletionItem {
+                    insert_text: kw[prefix.len()..].to_string(),
+                    filter_text: None,
+                    range: None,
+                    command: None,
+                    insert_text_format: None,
+                });
+
+            Ok(InlineCompletionResponse::Array(item.into_iter().collect()))
+        })
     }
 }

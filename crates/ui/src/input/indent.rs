@@ -7,8 +7,8 @@ use ropey::RopeSlice;
 use crate::{
     RopeExt,
     input::{
-        Indent, IndentInline, InputState, LastLayout, Outdent, OutdentInline, element::TextElement,
-        mode::InputMode,
+        Enter, Indent, IndentInline, InputState, LastLayout, Outdent, OutdentInline,
+        element::TextElement, mode::InputMode,
     },
 };
 
@@ -222,10 +222,18 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // First, try to accept inline completion if present
+        if self.is_context_menu_open(cx) {
+            if self.handle_action_for_context_menu(Box::new(Enter { secondary: false }), window, cx)
+            {
+                return;
+            }
+        }
+
+        // Try to accept inline completion if present
         if self.accept_inline_completion(window, cx) {
             return;
         }
+
         self.indent(false, window, cx);
     }
 
