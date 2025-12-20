@@ -2,12 +2,15 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use gpui::{prelude::FluentBuilder as _, *};
-use gpui_component::{ActiveTheme, Root, TitleBar, chart::AreaChart, h_flex, v_flex};
+use gpui_component::{
+    ActiveTheme, Root, Theme, ThemeMode, TitleBar, chart::AreaChart, h_flex,
+    scroll::ScrollableElement, v_flex,
+};
 use smol::Timer;
 use sysinfo::System;
 
-const MAX_DATA_POINTS: usize = 60;
-const UPDATE_INTERNAL: Duration = Duration::from_secs(1);
+const INTERVAL: Duration = Duration::from_millis(150);
+const MAX_DATA_POINTS: usize = 120;
 
 /// A single data point for system metrics
 #[derive(Clone)]
@@ -220,7 +223,7 @@ impl SystemMonitor {
         // Start the update loop
         cx.spawn(async move |this, cx| {
             loop {
-                Timer::after(Duration::from_secs(1)).await;
+                Timer::after(INTERVAL).await;
 
                 let result = this.update(cx, |this, cx| {
                     this.collect_metrics();
@@ -270,6 +273,7 @@ impl SystemMonitor {
         if self.data.len() >= MAX_DATA_POINTS {
             self.data.pop_front();
         }
+
         self.data.push_back(point);
         self.time_index += 1;
     }
@@ -302,15 +306,16 @@ impl SystemMonitor {
         cx: &Context<Self>,
     ) -> impl IntoElement {
         v_flex()
+            .min_h(px(160.))
             .flex_1()
             .gap_2()
             .border_1()
             .border_color(cx.theme().border)
-            .h(px(120.))
             .child(
                 h_flex()
                     .justify_between()
-                    .p_3()
+                    .py_1()
+                    .px_3()
                     .child(
                         div()
                             .text_sm()
@@ -351,62 +356,64 @@ impl Render for SystemMonitor {
 
         v_flex()
             .size_full()
-            .child(TitleBar::new().child("System Monitor"))
+            .child(
+                TitleBar::new().child("System Monitor").child(
+                    div()
+                        .mr_4()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(format!(
+                            "Total Memory: {:.1} GB",
+                            self.sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0
+                        )),
+                ),
+            )
             .bg(cx.theme().background)
             .child(
-                v_flex()
-                    .p_4()
-                    .gap_4()
-                    .flex_1()
-                    .w_full()
-                    .child(self.render_chart(
-                        "CPU Usage",
-                        data.clone(),
-                        |d| d.cpu,
-                        cx.theme().red,
-                        cx,
-                    ))
-                    .child(self.render_chart(
-                        "Memory Usage",
-                        data.clone(),
-                        |d| d.memory,
-                        cx.theme().blue,
-                        cx,
-                    ))
-                    .when(has_gpu, |this| {
-                        this.child(self.render_chart(
-                            if self.gpu_available {
-                                "GPU Usage"
-                            } else {
-                                "GPU Usage (N/A)"
-                            },
+                div().id("body").overflow_y_scrollbar().child(
+                    v_flex()
+                        .p_4()
+                        .gap_4()
+                        .flex_1()
+                        .child(self.render_chart(
+                            "CPU Usage",
                             data.clone(),
-                            |d| d.gpu,
-                            cx.theme().green,
+                            |d| d.cpu,
+                            cx.theme().red,
                             cx,
                         ))
-                    })
-                    .child(self.render_chart(
-                        if self.gpu_available {
-                            "VRAM Usage"
-                        } else {
-                            "VRAM Usage (N/A)"
-                        },
-                        data,
-                        |d| d.vram,
-                        cx.theme().yellow,
-                        cx,
-                    ))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!(
-                                "Total Memory: {:.1} GB | Update Interval: {} ms",
-                                self.sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
-                                UPDATE_INTERNAL.as_millis()
-                            )),
-                    ),
+                        .child(self.render_chart(
+                            "Memory Usage",
+                            data.clone(),
+                            |d| d.memory,
+                            cx.theme().blue,
+                            cx,
+                        ))
+                        .when(has_gpu, |this| {
+                            this.child(self.render_chart(
+                                if self.gpu_available {
+                                    "GPU Usage"
+                                } else {
+                                    "GPU Usage (N/A)"
+                                },
+                                data.clone(),
+                                |d| d.gpu,
+                                cx.theme().yellow,
+                                cx,
+                            ))
+                        })
+                        .child(self.render_chart(
+                            if self.gpu_available {
+                                "VRAM Usage"
+                            } else {
+                                "VRAM Usage (N/A)"
+                            },
+                            data,
+                            |d| d.vram,
+                            cx.theme().green,
+                            cx,
+                        )),
+                ),
             )
     }
 }
@@ -421,13 +428,15 @@ fn main() {
         let window_options = WindowOptions {
             // Setup GPUI to use custom title bar
             titlebar: Some(TitleBar::title_bar_options()),
-            window_bounds: Some(WindowBounds::centered(size(px(800.), px(800.)), cx)),
+            window_bounds: Some(WindowBounds::centered(size(px(580.), px(600.)), cx)),
             ..Default::default()
         };
 
         cx.spawn(async move |cx| {
             cx.open_window(window_options, |window, cx| {
+                window.activate_window();
                 window.set_window_title("System Monitor");
+                Theme::change(ThemeMode::Dark, Some(window), cx);
 
                 let view = cx.new(|cx| SystemMonitor::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
