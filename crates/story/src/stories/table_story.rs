@@ -208,14 +208,18 @@ impl StockTableDelegate {
                 Column::new("id", "ID")
                     .width(60.)
                     .fixed(ColumnFixed::Left)
-                    .resizable(false),
+                    .resizable(true)
+                    .min_width(40.)
+                    .max_width(100.),
                 Column::new("market", "Market")
                     .width(60.)
                     .fixed(ColumnFixed::Left)
-                    .resizable(false),
+                    .resizable(true)
+                    .min_width(50.),
                 Column::new("name", "Name")
                     .width(180.)
-                    .fixed(ColumnFixed::Left),
+                    .fixed(ColumnFixed::Left)
+                    .max_width(300.),
                 Column::new("symbol", "Symbol")
                     .width(100.)
                     .fixed(ColumnFixed::Left)

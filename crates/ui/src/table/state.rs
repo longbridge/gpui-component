@@ -471,8 +471,6 @@ where
             return;
         }
 
-        const MIN_WIDTH: Pixels = px(10.0);
-        const MAX_WIDTH: Pixels = px(1200.0);
         let Some(col_group) = self.col_groups.get_mut(ix) else {
             return;
         };
@@ -480,21 +478,14 @@ where
         if !col_group.is_resizable() {
             return;
         }
-        let size = size.floor();
 
-        let old_width = col_group.width;
-        let new_width = size;
-        if new_width < MIN_WIDTH {
-            return;
-        }
-        let changed_width = new_width - old_width;
-        // If change size is less than 1px, do nothing.
-        if changed_width > px(-1.0) && changed_width < px(1.0) {
-            return;
-        }
-        col_group.width = new_width.min(MAX_WIDTH);
+        let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
 
-        cx.notify();
+        // Only update if it actually changed
+        if col_group.width != new_width {
+            col_group.width = new_width;
+            cx.notify();
+        }
     }
 
     fn perform_sort(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -608,7 +599,6 @@ where
 
         let col_width = col_group.width;
         let col_padding = col_group.column.paddings;
-
         div()
             .w(col_width)
             .h_full()
@@ -681,7 +671,7 @@ where
                     .h_full()
                     .justify_center()
                     .bg(cx.theme().table_row_border)
-                    .group_hover(group_id, |this| this.bg(cx.theme().border).h_full())
+                    .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
                     .w(px(1.)),
             )
             .on_drag_move(
