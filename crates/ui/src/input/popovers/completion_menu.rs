@@ -421,7 +421,7 @@ impl Render for CompletionMenu {
 
         let vertical_layout =
             abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
-            > window_size.width;
+                > window_size.width;
 
         deferred(
             div()
@@ -437,11 +437,7 @@ impl Render for CompletionMenu {
                         .w(menu_width)
                         .max_h(MAX_MENU_HEIGHT)
                         .overflow_hidden()
-                        .child(
-                            List::new(&self.list)
-                                .max_h(MAX_MENU_HEIGHT)
-                                .size_full(),
-                        ),
+                        .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT).size_full()),
                 )
                 .when_some(selected_documentation, |this, documentation| {
                     let mut doc = match documentation {
