@@ -437,7 +437,12 @@ impl Render for CompletionMenu {
                         .w(menu_width)
                         .max_h(MAX_MENU_HEIGHT)
                         .overflow_hidden()
-                        .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT).size_full()),
+                        .child(
+                            List::new(&self.list)
+                                .max_h(MAX_MENU_HEIGHT)
+                                .size_full()
+                                .p_1(),
+                        ),
                 )
                 .when_some(selected_documentation, |this, documentation| {
                     let mut doc = match documentation {
