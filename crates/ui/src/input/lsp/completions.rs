@@ -126,34 +126,39 @@ impl InputState {
         let start = range.end;
         let new_offset = self.cursor();
 
-    if let Some(menu) = self.context_menu.as_ref() {
-        if let Some(c_menu) = menu.as_completion_menu() {
-           if let Some(menu_start) = c_menu.read(cx).trigger_start_offset {
-                // If we deleted back to the start, cancel everything
-                if new_offset <= menu_start {
-                    self._context_menu_task = Task::ready(Ok(()));
-                    self.hide_context_menu(cx);
-                    return;
+        if let Some(menu) = self.context_menu.as_ref() {
+            if let Some(c_menu) = menu.as_completion_menu() {
+                if let Some(menu_start) = c_menu.read(cx).trigger_start_offset {
+                    // If we deleted back to the start, cancel everything
+                    if new_offset <= menu_start {
+                        self._context_menu_task = Task::ready(Ok(()));
+                        self.hide_context_menu(cx);
+                        return;
+                    }
                 }
-           }
+            }
         }
-    }
 
-    if new_text.trim().is_empty() && !self.is_context_menu_open(cx) {
-        return;
-    }
-
+        if new_text.trim().is_empty() && !self.is_context_menu_open(cx) {
+            return;
+        }
 
         if !provider.is_completion_trigger(start, new_text, cx) {
             return;
         }
 
         if !matches!(self.context_menu, Some(ContextMenu::Completion(_))) {
-             let menu = CompletionMenu::new(cx.entity(), window, cx);
-             self.context_menu = Some(ContextMenu::Completion(menu));
+            let menu = CompletionMenu::new(cx.entity(), self.autocompletion_menu_width, window, cx);
+            self.context_menu = Some(ContextMenu::Completion(menu));
         }
 
-        let menu_entity = self.context_menu.as_ref().unwrap().as_completion_menu().unwrap().clone();
+        let menu_entity = self
+            .context_menu
+            .as_ref()
+            .unwrap()
+            .as_completion_menu()
+            .unwrap()
+            .clone();
 
         let start_offset = menu_entity.read(cx).trigger_start_offset.unwrap_or(start);
 
@@ -167,11 +172,11 @@ impl InputState {
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
 
-    if query.is_empty() {
-        self._context_menu_task = Task::ready(Ok(())); // CANCEL PENDING TASK
-        self.hide_context_menu(cx);
-        return;
-    }
+        if query.is_empty() {
+            self._context_menu_task = Task::ready(Ok(())); 
+            self.hide_context_menu(cx);
+            return;
+        }
 
         _ = menu_entity.update(cx, |menu: &mut CompletionMenu, _| {
             menu.update_query(start_offset, query.clone());
@@ -203,17 +208,19 @@ impl InputState {
                 return Ok(());
             }
 
-            editor.update_in(cx, |editor, window, cx| {
-                if !editor.focus_handle.is_focused(window) {
-                    return;
-                }
+            editor
+                .update_in(cx, |editor, window, cx| {
+                    if !editor.focus_handle.is_focused(window) {
+                        return;
+                    }
 
-                _ = menu_entity.update(cx, |menu: &mut CompletionMenu, cx| {
-                    menu.show(new_offset, completions, window, cx);
-                });
+                    _ = menu_entity.update(cx, |menu: &mut CompletionMenu, cx| {
+                        menu.show(new_offset, completions, window, cx);
+                    });
 
-                cx.notify();
-            }).ok();
+                    cx.notify();
+                })
+                .ok();
 
             Ok(())
         });

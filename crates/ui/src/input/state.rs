@@ -333,6 +333,7 @@ pub struct InputState {
 
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
+    pub(super) autocompletion_menu_width: Pixels,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -412,6 +413,7 @@ impl InputState {
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
+            autocompletion_menu_width: px(320.0),
         }
     }
 
@@ -460,6 +462,21 @@ impl InputState {
     pub fn autocomplete_words(mut self, words: Vec<impl ToString>) -> Self {
         let keywords = words.into_iter().map(|w| w.to_string()).collect();
         self.lsp.completion_provider = Some(Rc::new(KeywordCompletionProvider::new(keywords)));
+        self
+    }
+
+    /// Sets the maximum width of the auto-completion menu.
+    pub fn autocompletion_menu_width(mut self, width: f32, cx: &mut Context<Self>) -> Self {
+        let width = px(width);
+        self.autocompletion_menu_width = width;
+
+        if let Some(menu) = self.context_menu.as_ref() {
+            if let Some(c_menu) = menu.as_completion_menu() { // Store it here!
+                c_menu.update(cx, |this, cx| {
+                    this.set_width(width, cx);
+                });
+            }
+        }
         self
     }
 
@@ -2010,18 +2027,18 @@ impl EntityInputHandler for InputState {
         self.update_preferred_column();
         self.update_search(cx);
         self.mode.update_auto_grow(&self.text_wrapper);
-    if !self.silent_replace_text {
-        self.handle_completion_trigger(&range, &new_text, window, cx);
-    } else {
-        if let Some(menu) = self.context_menu.as_ref() {
-            if let Some(c_menu) = menu.as_completion_menu() {
-                let menu_start = c_menu.read(cx).trigger_start_offset.unwrap_or(0);
-                if self.cursor() <= menu_start {
-                    self.hide_context_menu(cx);
+        if !self.silent_replace_text {
+            self.handle_completion_trigger(&range, &new_text, window, cx);
+        } else {
+            if let Some(menu) = self.context_menu.as_ref() {
+                if let Some(c_menu) = menu.as_completion_menu() {
+                    let menu_start = c_menu.read(cx).trigger_start_offset.unwrap_or(0);
+                    if self.cursor() <= menu_start {
+                        self.hide_context_menu(cx);
+                    }
                 }
             }
         }
-    }
         cx.emit(InputEvent::Change);
         cx.notify();
     }

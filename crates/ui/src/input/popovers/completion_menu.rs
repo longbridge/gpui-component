@@ -26,6 +26,7 @@ struct ContextMenuDelegate {
     menu: Entity<CompletionMenu>,
     items: Vec<Rc<CompletionItem>>,
     selected_ix: usize,
+    max_width: Pixels,
 }
 
 impl ContextMenuDelegate {
@@ -46,6 +47,7 @@ struct CompletionMenuItem {
     children: Vec<AnyElement>,
     selected: bool,
     highlight_prefix: SharedString,
+    max_width: Pixels,
 }
 
 impl CompletionMenuItem {
@@ -56,11 +58,17 @@ impl CompletionMenuItem {
             children: vec![],
             selected: false,
             highlight_prefix: "".into(),
+            max_width: MAX_MENU_WIDTH,
         }
     }
 
     fn highlight_prefix(mut self, s: impl Into<SharedString>) -> Self {
         self.highlight_prefix = s.into();
+        self
+    }
+
+    fn max_width(mut self, width: Pixels) -> Self {
+        self.max_width = width;
         self
     }
 }
@@ -86,7 +94,7 @@ impl RenderOnce for CompletionMenuItem {
         let display_label = &self.item.label;
         let query = &self.highlight_prefix;
 
-        let max_chars = (MAX_MENU_WIDTH.to_f64() / 10.0).floor() as usize;
+        let max_chars = (self.max_width.to_f64() / 10.0).floor() as usize;
         let final_text = if display_label.chars().count() > max_chars {
             let truncated: String = display_label.chars().take(max_chars - 3).collect();
             format!("{}...", truncated)
@@ -152,7 +160,11 @@ impl ListDelegate for ContextMenuDelegate {
         _: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
-        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
+        Some(
+            CompletionMenuItem::new(ix.row, item.clone())
+                .highlight_prefix(self.query.clone())
+                .max_width(self.max_width), // Use the field here!
+        )
     }
 
     fn set_selected_index(
@@ -187,6 +199,7 @@ pub struct CompletionMenu {
     pub(crate) trigger_start_offset: Option<usize>,
     query: SharedString,
     _subscriptions: Vec<Subscription>,
+    max_width: Pixels,
 }
 
 impl CompletionMenu {
@@ -195,6 +208,8 @@ impl CompletionMenu {
     /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
     pub(crate) fn new(
         editor: Entity<InputState>,
+        width: Pixels,
+
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -205,6 +220,7 @@ impl CompletionMenu {
                 menu: view,
                 items: vec![],
                 selected_ix: 0,
+                max_width: width,
             };
 
             let list = cx.new(|cx| ListState::new(menu, window, cx));
@@ -230,6 +246,7 @@ impl CompletionMenu {
                 trigger_start_offset: None,
                 query: SharedString::default(),
                 _subscriptions,
+                max_width: width,
             }
         })
     }
@@ -306,6 +323,14 @@ impl CompletionMenu {
         true
     }
 
+    pub fn set_width(&mut self, width: Pixels, cx: &mut Context<Self>) {
+        self.max_width = width;
+        self.list.update(cx, |list, _| {
+            list.delegate_mut().max_width = width;
+        });
+        cx.notify();
+    }
+
     fn on_action_enter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = self.list.read(cx).delegate().selected_item().cloned() else {
             return;
@@ -368,6 +393,7 @@ impl CompletionMenu {
                 .map(|(ix, _)| ix)
                 .unwrap_or(0);
 
+            this.delegate_mut().max_width = self.max_width; // Pass it to delegate
             this.delegate_mut().query = self.query.clone();
             this.delegate_mut().set_items(items);
             this.set_selected_index(Some(IndexPath::new(0)), window, cx);
@@ -410,7 +436,7 @@ impl Render for CompletionMenu {
         let window_size = window.bounds().size;
 
         let available_space_right = window_size.width - abs_pos.x - POPOVER_GAP;
-        let menu_width = MAX_MENU_WIDTH.min(available_space_right);
+        let menu_width = self.max_width.min(available_space_right);
 
         let selected_documentation = self
             .list
@@ -420,7 +446,7 @@ impl Render for CompletionMenu {
             .and_then(|item| item.documentation.clone());
 
         let vertical_layout =
-            abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
+            abs_pos.x + self.max_width + POPOVER_GAP + self.max_width + POPOVER_GAP
                 > window_size.width;
 
         deferred(
@@ -455,7 +481,7 @@ impl Render for CompletionMenu {
 
                     this.child(
                         editor_popover("completion-menu-doc", cx)
-                            .w(MAX_MENU_WIDTH.min(available_space_right))
+                            .w(self.max_width.min(available_space_right))
                             .max_h(MAX_MENU_HEIGHT)
                             .overflow_hidden()
                             .px_2()
