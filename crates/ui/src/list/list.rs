@@ -707,6 +707,7 @@ where
         self
     }
 
+    /// Sets whether to show scrollbar.
     pub fn scrollbar_show(mut self, show: ScrollbarShow) -> Self {
         self.options.scrollbar_show = Some(show);
         self
