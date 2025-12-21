@@ -105,15 +105,7 @@ impl RenderOnce for CompletionMenuItem {
         let display_label = &self.item.label;
         let query = &self.highlight_prefix;
 
-        let max_chars = (self.max_width.to_f64() / 10.0).floor() as usize;
-        let final_text = if display_label.chars().count() > max_chars {
-            let truncated: String = display_label.chars().take(max_chars - 3).collect();
-            format!("{}...", truncated)
-        } else {
-            display_label.to_string()
-        };
-
-        let indices = compute_match_indices(query, &final_text);
+        let indices = compute_match_indices(query, display_label);
 
         let highlight_style = HighlightStyle {
             color: Some(cx.theme().blue),
@@ -163,7 +155,7 @@ impl RenderOnce for CompletionMenuItem {
             .child(
                 div()
                     .flex_1()
-                    .child(StyledText::new(final_text).with_highlights(highlights)),
+                    .child(StyledText::new(display_label.clone()).with_highlights(highlights)),
             )
     }
 }
