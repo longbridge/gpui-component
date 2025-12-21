@@ -118,29 +118,28 @@ impl InputState {
         let Some(provider) = self.lsp.completion_provider.clone() else {
             return;
         };
-
         // Always schedule inline completion (debounced).
         // It will check if menu is open before showing the suggestion.
         self.schedule_inline_completion(window, cx);
 
         let start = range.end;
         let new_offset = self.cursor();
+        let manual_trigger = range.start == range.end;
+
+        if new_text.is_empty() && !self.is_context_menu_open(cx) && !manual_trigger {
+            return;
+        }
 
         if let Some(menu) = self.context_menu.as_ref() {
             if let Some(c_menu) = menu.as_completion_menu() {
                 if let Some(menu_start) = c_menu.read(cx).trigger_start_offset {
-                    // If we deleted back to the start, cancel everything
-                    if new_offset <= menu_start {
+                    if new_offset <= menu_start && !manual_trigger {
                         self._context_menu_task = Task::ready(Ok(()));
                         self.hide_context_menu(cx);
                         return;
                     }
                 }
             }
-        }
-
-        if new_text.trim().is_empty() && !self.is_context_menu_open(cx) {
-            return;
         }
 
         if !provider.is_completion_trigger(start, new_text, cx) {
@@ -152,16 +151,32 @@ impl InputState {
             self.context_menu = Some(ContextMenu::Completion(menu));
         }
 
-        let Some(context) = self.context_menu.as_ref() else {
+        let Some(menu_entity) = self
+            .context_menu
+            .as_ref()
+            .and_then(|m| m.as_completion_menu())
+        else {
             return;
         };
-        let Some(menu) = context.as_completion_menu() else {
-            return;
-        };
-        let menu_entity = menu.clone();
+        let menu_entity = menu_entity.clone();
 
+        let mut start_offset = menu_entity
+            .read(cx)
+            .trigger_start_offset
+            .unwrap_or(range.start);
 
-        let start_offset = menu_entity.read(cx).trigger_start_offset.unwrap_or(start);
+        if manual_trigger {
+            let mut word_start = range.start;
+            let text = self.text.clone();
+            for c in text.chars_at(range.start).reversed() {
+                if c.is_alphanumeric() || c.is_ascii_punctuation() {
+                    word_start -= c.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            start_offset = word_start;
+        }
 
         let query = self
             .text_for_range(
@@ -173,12 +188,11 @@ impl InputState {
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
 
-        if query.is_empty() {
+        if query.is_empty() && !manual_trigger {
             self._context_menu_task = Task::ready(Ok(()));
             self.hide_context_menu(cx);
             return;
         }
-
         _ = menu_entity.update(cx, |menu: &mut CompletionMenu, _| {
             menu.update_query(start_offset, query.clone());
         });
@@ -191,10 +205,10 @@ impl InputState {
         let provider_responses =
             provider.completions(&self.text, new_offset, completion_context, window, cx);
 
-        let task = cx.spawn_in(window, async move |editor, cx| {
+        self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];
-            if let Some(provider_responses) = provider_responses.await.ok() {
-                match provider_responses {
+            if let Some(resp) = provider_responses.await.ok() {
+                match resp {
                     CompletionResponse::Array(items) => completions.extend(items),
                     CompletionResponse::List(list) => completions.extend(list.items),
                 }
@@ -205,7 +219,6 @@ impl InputState {
                     menu.hide(cx);
                     cx.notify();
                 });
-
                 return Ok(());
             }
 
@@ -214,19 +227,15 @@ impl InputState {
                     if !editor.focus_handle.is_focused(window) {
                         return;
                     }
-
                     _ = menu_entity.update(cx, |menu, cx| {
                         menu.show(new_offset, completions, window, cx);
                     });
-
                     cx.notify();
                 })
                 .ok();
 
             Ok(())
         });
-
-        self._context_menu_task = task;
     }
     /// Schedule an inline completion request after debouncing.
     pub(crate) fn schedule_inline_completion(

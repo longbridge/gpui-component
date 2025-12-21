@@ -87,6 +87,7 @@ actions!(
         ToggleCodeActions,
         Search,
         GoToDefinition,
+        ShowCompletions,
     ]
 );
 
@@ -217,6 +218,7 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-f", Search, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
+        KeyBinding::new("ctrl-space", ShowCompletions, Some(CONTEXT)),
     ]);
 
     search::init(cx);
@@ -471,7 +473,7 @@ impl InputState {
         self.autocompletion_menu_width = width;
 
         if let Some(menu) = self.context_menu.as_ref() {
-            if let Some(c_menu) = menu.as_completion_menu() { // Store it here!
+            if let Some(c_menu) = menu.as_completion_menu() {
                 c_menu.update(cx, |this, cx| {
                     this.set_width(width, cx);
                 });
@@ -1923,6 +1925,16 @@ impl InputState {
         self.silent_replace_text = true;
         self.replace_text_in_range(range_utf16, new_text, window, cx);
         self.silent_replace_text = false;
+    }
+
+    pub(super) fn show_completions(
+        &mut self,
+        _: &ShowCompletions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let cursor = self.cursor();
+        self.handle_completion_trigger(&(cursor..cursor), "", window, cx);
     }
 }
 
