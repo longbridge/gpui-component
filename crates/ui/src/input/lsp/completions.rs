@@ -152,13 +152,14 @@ impl InputState {
             self.context_menu = Some(ContextMenu::Completion(menu));
         }
 
-        let menu_entity = self
-            .context_menu
-            .as_ref()
-            .unwrap()
-            .as_completion_menu()
-            .unwrap()
-            .clone();
+        let Some(context) = self.context_menu.as_ref() else {
+            return;
+        };
+        let Some(menu) = context.as_completion_menu() else {
+            return;
+        };
+        let menu_entity = menu.clone();
+
 
         let start_offset = menu_entity.read(cx).trigger_start_offset.unwrap_or(start);
 
@@ -173,7 +174,7 @@ impl InputState {
             .unwrap_or_default();
 
         if query.is_empty() {
-            self._context_menu_task = Task::ready(Ok(())); 
+            self._context_menu_task = Task::ready(Ok(()));
             self.hide_context_menu(cx);
             return;
         }
@@ -184,7 +185,7 @@ impl InputState {
 
         let completion_context = CompletionContext {
             trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
-            trigger_character: Some(query.clone()), // Clone to avoid move error
+            trigger_character: Some(query),
         };
 
         let provider_responses =
@@ -200,7 +201,7 @@ impl InputState {
             }
 
             if completions.is_empty() {
-                _ = menu_entity.update(cx, |menu: &mut CompletionMenu, cx| {
+                _ = menu_entity.update(cx, |menu, cx| {
                     menu.hide(cx);
                     cx.notify();
                 });
@@ -214,7 +215,7 @@ impl InputState {
                         return;
                     }
 
-                    _ = menu_entity.update(cx, |menu: &mut CompletionMenu, cx| {
+                    _ = menu_entity.update(cx, |menu, cx| {
                         menu.show(new_offset, completions, window, cx);
                     });
 
@@ -444,7 +445,7 @@ impl CompletionProvider for KeywordCompletionProvider {
             let prefix_chars: String = text
                 .chars_at(offset)
                 .reversed()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .take_while(|c| c.is_alphanumeric() || c.is_ascii_punctuation())
                 .collect();
 
             let prefix = prefix_chars
