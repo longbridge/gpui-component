@@ -130,7 +130,7 @@ impl InputState {
 
         let start = range.end;
         let new_offset = self.cursor();
-        let manual_trigger = range.start == range.end;
+        let manual_trigger = new_text.is_empty() && range.start == range.end;
 
         if new_text.is_empty() && !self.is_context_menu_open(cx) && !manual_trigger {
             return;
@@ -220,22 +220,25 @@ impl InputState {
                 }
             }
 
-            if completions.is_empty() {
-                _ = menu_entity.update(cx, |menu, cx| {
-                    menu.hide(cx);
-                    cx.notify();
-                });
-                return Ok(());
-            }
-
             editor
                 .update_in(cx, |editor, window, cx| {
-                    if !editor.focus_handle.is_focused(window) {
+                    if !editor.focus_handle.is_focused(window) && !manual_trigger {
                         return;
                     }
-                    _ = menu_entity.update(cx, |menu, cx| {
-                        menu.show(new_offset, completions, window, cx);
-                    });
+
+                    if completions.is_empty() {
+                        _ = menu_entity.update(cx, |menu, cx| {
+                            if manual_trigger {
+                                menu.show(new_offset, completions, window, cx);
+                            } else {
+                                menu.hide(cx);
+                            }
+                        });
+                    } else {
+                        _ = menu_entity.update(cx, |menu, cx| {
+                            menu.show(new_offset, completions, window, cx);
+                        });
+                    }
                     cx.notify();
                 })
                 .ok();
@@ -418,7 +421,7 @@ impl CompletionProvider for KeywordCompletionProvider {
                     })
                     .collect()
             };
-             // High score first, then by case
+            // High score first, then by case
             matches.sort_by(|(kw_a, score_a), (kw_b, score_b)| {
                 score_b
                     .cmp(score_a)

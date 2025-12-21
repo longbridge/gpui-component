@@ -167,6 +167,18 @@ impl ListDelegate for ContextMenuDelegate {
         )
     }
 
+    fn render_empty(
+        &mut self,
+        _: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
+        div()
+            .p_2()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child("Nothing Found")
+    }
+
     fn set_selected_index(
         &mut self,
         ix: Option<crate::IndexPath>,
@@ -432,7 +444,7 @@ impl CompletionMenu {
 
 impl Render for CompletionMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !self.open || self.list.read(cx).delegate().items.is_empty() {
+        if !self.open {
             return Empty.into_any_element();
         }
 
