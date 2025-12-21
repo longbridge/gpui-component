@@ -1,9 +1,5 @@
 [workspace]
-default-members = [
-    "crates/ui",
-    "crates/story",
-    "crates/assets",
-]
+default-members = ["crates/ui", "crates/story", "crates/assets"]
 members = [
     "crates/macros",
     "crates/story",
@@ -16,6 +12,7 @@ members = [
     "examples/window_title",
     "examples/dialog_overlay",
     "examples/webview",
+    "examples/system_monitor",
 ]
 resolver = "2"
 
