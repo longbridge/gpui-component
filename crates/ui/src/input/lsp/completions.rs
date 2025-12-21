@@ -115,6 +115,12 @@ impl InputState {
             return;
         }
 
+        if new_text == " " {
+            self._context_menu_task = Task::ready(Ok(()));
+            self.hide_context_menu(cx);
+            return;
+        }
+
         let Some(provider) = self.lsp.completion_provider.clone() else {
             return;
         };
@@ -387,39 +393,36 @@ impl CompletionProvider for KeywordCompletionProvider {
             let start = offset - prefix.len();
             let prefix = text.slice(start..offset).to_string().to_lowercase();
 
-            if prefix.is_empty() {
-                return Ok(CompletionResponse::Array(vec![]));
-            }
-
             let lsp_range = lsp_types::Range {
                 start: text.offset_to_position(start),
                 end: text.offset_to_position(offset),
             };
 
-            let mut matches: Vec<(String, i32)> = keywords
-                .into_iter()
-                .filter_map(|kw| {
-                    let kw_lower = kw.to_lowercase();
-
-                    if kw_lower == prefix {
-                        return Some((kw, 100));
-                    }
-                    if kw_lower.starts_with(&prefix) {
-                        return Some((kw, 50));
-                    }
-                    if is_subsequence(&prefix, &kw_lower) {
-                        return Some((kw, 10));
-                    }
-                    None
-                })
-                .collect();
-
-            // High score first, then shortest word, then alphabetical
+            let mut matches: Vec<(String, i32)> = if prefix.is_empty() {
+                keywords.into_iter().map(|kw| (kw, 1)).collect()
+            } else {
+                keywords
+                    .into_iter()
+                    .filter_map(|kw| {
+                        let kw_lower = kw.to_lowercase();
+                        if kw_lower == prefix {
+                            return Some((kw, 100));
+                        }
+                        if kw_lower.starts_with(&prefix) {
+                            return Some((kw, 50));
+                        }
+                        if is_subsequence(&prefix, &kw_lower) {
+                            return Some((kw, 10));
+                        }
+                        None
+                    })
+                    .collect()
+            };
+             // High score first, then by case
             matches.sort_by(|(kw_a, score_a), (kw_b, score_b)| {
                 score_b
                     .cmp(score_a)
-                    .then_with(|| kw_a.len().cmp(&kw_b.len()))
-                    .then_with(|| kw_a.cmp(kw_b))
+                    .then_with(|| kw_a.to_lowercase().cmp(&kw_b.to_lowercase()))
             });
 
             let items = matches
