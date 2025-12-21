@@ -1,10 +1,7 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
-    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
-    prelude::FluentBuilder, px,
+    Action, AnyElement, App, AppContext, Context, DismissEvent, Div, Empty, Entity, EventEmitter, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div, prelude::FluentBuilder, px
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -134,7 +131,7 @@ impl RenderOnce for CompletionMenuItem {
             }
             highlights.push((start..end, highlight_style));
         }
-        let menu = self.menu.clone(); // Capture handle for closure
+        let menu = self.menu.clone();
 
         h_flex()
             .id(self.ix)
@@ -433,7 +430,7 @@ impl CompletionMenu {
                 .map(|(ix, _)| ix)
                 .unwrap_or(0);
 
-            this.delegate_mut().max_width = self.max_width; // Pass it to delegate
+            this.delegate_mut().max_width = self.max_width;
             this.delegate_mut().query = self.query.clone();
             this.delegate_mut().set_items(items);
             this.set_selected_index(Some(IndexPath::new(0)), window, cx);
@@ -499,7 +496,7 @@ impl Render for CompletionMenu {
                 .flex()
                 .gap(POPOVER_GAP)
                 .items_start()
-                .when(vertical_layout, |this: gpui::Div| this.flex_col())
+                .when(vertical_layout, |this: Div| this.flex_col())
                 .child(
                     editor_popover("completion-menu", cx)
                         .w(menu_width)

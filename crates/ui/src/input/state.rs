@@ -461,13 +461,14 @@ impl InputState {
         self
     }
 
+    /// Sets the keywords for autocomplete suggestions.
     pub fn autocomplete_words(mut self, words: Vec<impl ToString>) -> Self {
         let keywords = words.into_iter().map(|w| w.to_string()).collect();
         self.lsp.completion_provider = Some(Rc::new(KeywordCompletionProvider::new(keywords)));
         self
     }
 
-    /// Sets the maximum width of the auto-completion menu.
+    /// Sets the width of the auto-completion menu.
     pub fn autocompletion_menu_width(mut self, width: f32, cx: &mut Context<Self>) -> Self {
         let width = px(width);
         self.autocompletion_menu_width = width;
