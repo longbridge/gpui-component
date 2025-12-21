@@ -2010,9 +2010,18 @@ impl EntityInputHandler for InputState {
         self.update_preferred_column();
         self.update_search(cx);
         self.mode.update_auto_grow(&self.text_wrapper);
-        if !self.silent_replace_text {
-            self.handle_completion_trigger(&range, &new_text, window, cx);
+    if !self.silent_replace_text {
+        self.handle_completion_trigger(&range, &new_text, window, cx);
+    } else {
+        if let Some(menu) = self.context_menu.as_ref() {
+            if let Some(c_menu) = menu.as_completion_menu() {
+                let menu_start = c_menu.read(cx).trigger_start_offset.unwrap_or(0);
+                if self.cursor() <= menu_start {
+                    self.hide_context_menu(cx);
+                }
+            }
         }
+    }
         cx.emit(InputEvent::Change);
         cx.notify();
     }

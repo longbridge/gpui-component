@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
 use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
+use crate::scroll::ScrollbarShow;
 use crate::{
     ActiveTheme, IconName, Size,
     input::{Input, InputEvent},
@@ -549,7 +550,9 @@ where
                 }
             })
             .when(scrollbar_visible, |this| {
-                this.child(Scrollbar::vertical(&scroll_handle))
+                this.child(
+                    Scrollbar::vertical(&scroll_handle).scrollbar_show(ScrollbarShow::Always), // ADD THIS HERE
+                )
             })
     }
 }

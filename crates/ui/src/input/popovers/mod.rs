@@ -79,3 +79,12 @@ pub(super) fn editor_popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div
         .text_xs()
         .p_1()
 }
+
+impl ContextMenu {
+    pub fn as_completion_menu(&self) -> Option<&gpui::Entity<completion_menu::CompletionMenu>> {
+        match self {
+            Self::Completion(menu) => Some(menu),
+            _ => None,
+        }
+    }
+}

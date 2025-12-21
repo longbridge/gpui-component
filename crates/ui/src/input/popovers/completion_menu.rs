@@ -1,10 +1,10 @@
-use std::rc::Rc;
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
     HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
     RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
-    prelude::FluentBuilder, px, relative,
+    prelude::FluentBuilder, px,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -18,7 +18,6 @@ use crate::{
         self, InputState, RopeExt,
         popovers::{editor_popover, render_markdown},
     },
-    label::Label,
     list::{List, ListDelegate, ListEvent, ListState},
 };
 
@@ -81,48 +80,59 @@ impl ParentElement for CompletionMenuItem {
         self.children.extend(elements);
     }
 }
+
 impl RenderOnce for CompletionMenuItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let item = self.item;
+        let display_label = &self.item.label;
+        let query = &self.highlight_prefix;
 
-        let deprecated = item.deprecated.unwrap_or(false);
-        let matched_len = item
-            .filter_text
-            .as_ref()
-            .map(|s| s.len())
-            .unwrap_or(self.highlight_prefix.len());
+        let max_chars = (MAX_MENU_WIDTH.to_f64() / 10.0).floor() as usize;
+        let final_text = if display_label.chars().count() > max_chars {
+            let truncated: String = display_label.chars().take(max_chars - 3).collect();
+            format!("{}...", truncated)
+        } else {
+            display_label.to_string()
+        };
 
-        let highlights = vec![(
-            0..matched_len,
-            HighlightStyle {
-                color: Some(cx.theme().blue),
-                ..Default::default()
-            },
-        )];
+        let indices = compute_match_indices(query, &final_text);
+
+        let highlight_style = HighlightStyle {
+            color: Some(cx.theme().blue),
+            ..Default::default()
+        };
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = Vec::new();
+        if !indices.is_empty() {
+            let mut start = indices[0];
+            let mut end = start + 1;
+            for &idx in indices.iter().skip(1) {
+                if idx == end {
+                    end += 1;
+                } else {
+                    highlights.push((start..end, highlight_style));
+                    start = idx;
+                    end = start + 1;
+                }
+            }
+            highlights.push((start..end, highlight_style));
+        }
 
         h_flex()
             .id(self.ix)
+            .overflow_hidden()
             .gap_2()
             .p_1()
             .text_xs()
-            .line_height(relative(1.))
             .rounded_sm()
-            .when(item.deprecated.unwrap_or(false), |this| this.line_through())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
                 this.bg(cx.theme().accent)
                     .text_color(cx.theme().accent_foreground)
             })
-            .child(div().child(StyledText::new(item.label.clone()).with_highlights(highlights)))
-            .when(item.detail.is_some(), |this| {
-                this.child(
-                    Label::new(item.detail.as_deref().unwrap_or("").to_string())
-                        .text_color(cx.theme().muted_foreground)
-                        .when(deprecated, |this| this.line_through())
-                        .italic(),
-                )
-            })
-            .children(self.children)
+            .child(
+                div()
+                    .flex_1()
+                    .child(StyledText::new(final_text).with_highlights(highlights)),
+            )
     }
 }
 
@@ -387,18 +397,20 @@ impl CompletionMenu {
 
 impl Render for CompletionMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !self.open {
-            return Empty.into_any_element();
-        }
-
-        if self.list.read(cx).delegate().items.is_empty() {
-            self.open = false;
+        if !self.open || self.list.read(cx).delegate().items.is_empty() {
             return Empty.into_any_element();
         }
 
         let Some(pos) = self.origin(cx) else {
             return Empty.into_any_element();
         };
+
+        let editor_origin = self.editor.read(cx).input_bounds.origin;
+        let abs_pos = editor_origin + pos;
+        let window_size = window.bounds().size;
+
+        let available_space_right = window_size.width - abs_pos.x - POPOVER_GAP;
+        let menu_width = MAX_MENU_WIDTH.min(available_space_right);
 
         let selected_documentation = self
             .list
@@ -407,11 +419,9 @@ impl Render for CompletionMenu {
             .selected_item()
             .and_then(|item| item.documentation.clone());
 
-        let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
-        let abs_pos = self.editor.read(cx).input_bounds.origin + pos;
         let vertical_layout =
             abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
-                > window.bounds().size.width;
+            > window_size.width;
 
         deferred(
             div()
@@ -419,15 +429,19 @@ impl Render for CompletionMenu {
                 .left(pos.x)
                 .top(pos.y)
                 .flex()
-                .flex_row()
                 .gap(POPOVER_GAP)
                 .items_start()
-                .when(vertical_layout, |this| this.flex_col())
+                .when(vertical_layout, |this: gpui::Div| this.flex_col())
                 .child(
                     editor_popover("completion-menu", cx)
-                        .max_w(max_width)
-                        .min_w(px(120.))
-                        .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT)),
+                        .w(menu_width)
+                        .max_h(MAX_MENU_HEIGHT)
+                        .overflow_hidden()
+                        .child(
+                            List::new(&self.list)
+                                .max_h(MAX_MENU_HEIGHT)
+                                .size_full(),
+                        ),
                 )
                 .when_some(selected_documentation, |this, documentation| {
                     let mut doc = match documentation {
@@ -435,16 +449,16 @@ impl Render for CompletionMenu {
                         lsp_types::Documentation::MarkupContent(mc) => mc.value.clone(),
                     };
                     if vertical_layout {
-                        doc = doc.split("\n").next().unwrap_or_default().to_string();
+                        doc = doc.lines().next().unwrap_or_default().to_string();
                     }
 
                     this.child(
-                        div().child(
-                            editor_popover("completion-menu", cx)
-                                .w(MAX_MENU_WIDTH)
-                                .px_2()
-                                .child(render_markdown("doc", doc, window, cx)),
-                        ),
+                        editor_popover("completion-menu-doc", cx)
+                            .w(MAX_MENU_WIDTH.min(available_space_right))
+                            .max_h(MAX_MENU_HEIGHT)
+                            .overflow_hidden()
+                            .px_2()
+                            .child(render_markdown("doc", doc, window, cx)),
                     )
                 })
                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
@@ -453,4 +467,19 @@ impl Render for CompletionMenu {
         )
         .into_any_element()
     }
+}
+
+fn compute_match_indices(query: &str, text: &str) -> Vec<usize> {
+    let mut indices = Vec::new();
+    let mut text_chars = text.char_indices().peekable();
+    for q_char in query.chars() {
+        let q_lower = q_char.to_lowercase().next().unwrap_or(q_char);
+        while let Some((idx, t_char)) = text_chars.next() {
+            if t_char.to_lowercase().next().unwrap_or(t_char) == q_lower {
+                indices.push(idx);
+                break;
+            }
+        }
+    }
+    indices
 }

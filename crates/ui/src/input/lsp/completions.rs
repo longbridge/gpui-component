@@ -126,29 +126,36 @@ impl InputState {
         let start = range.end;
         let new_offset = self.cursor();
 
+    if let Some(menu) = self.context_menu.as_ref() {
+        if let Some(c_menu) = menu.as_completion_menu() {
+           if let Some(menu_start) = c_menu.read(cx).trigger_start_offset {
+                // If we deleted back to the start, cancel everything
+                if new_offset <= menu_start {
+                    self._context_menu_task = Task::ready(Ok(()));
+                    self.hide_context_menu(cx);
+                    return;
+                }
+           }
+        }
+    }
+
+    if new_text.trim().is_empty() && !self.is_context_menu_open(cx) {
+        return;
+    }
+
+
         if !provider.is_completion_trigger(start, new_text, cx) {
             return;
         }
 
-        let menu = match self.context_menu.as_ref() {
-            Some(ContextMenu::Completion(menu)) => Some(menu),
-            _ => None,
-        };
-
-        // To create or get the existing completion menu.
-        let menu = match menu {
-            Some(menu) => menu.clone(),
-            None => {
-                let menu = CompletionMenu::new(cx.entity(), window, cx);
-                self.context_menu = Some(ContextMenu::Completion(menu.clone()));
-                menu
-            }
-        };
-
-        let start_offset = menu.read(cx).trigger_start_offset.unwrap_or(start);
-        if new_offset < start_offset {
-            return;
+        if !matches!(self.context_menu, Some(ContextMenu::Completion(_))) {
+             let menu = CompletionMenu::new(cx.entity(), window, cx);
+             self.context_menu = Some(ContextMenu::Completion(menu));
         }
+
+        let menu_entity = self.context_menu.as_ref().unwrap().as_completion_menu().unwrap().clone();
+
+        let start_offset = menu_entity.read(cx).trigger_start_offset.unwrap_or(start);
 
         let query = self
             .text_for_range(
@@ -159,18 +166,26 @@ impl InputState {
             )
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        _ = menu.update(cx, |menu, _| {
+
+    if query.is_empty() {
+        self._context_menu_task = Task::ready(Ok(())); // CANCEL PENDING TASK
+        self.hide_context_menu(cx);
+        return;
+    }
+
+        _ = menu_entity.update(cx, |menu: &mut CompletionMenu, _| {
             menu.update_query(start_offset, query.clone());
         });
 
         let completion_context = CompletionContext {
             trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
-            trigger_character: Some(query),
+            trigger_character: Some(query.clone()), // Clone to avoid move error
         };
 
         let provider_responses =
             provider.completions(&self.text, new_offset, completion_context, window, cx);
-        self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
+
+        let task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];
             if let Some(provider_responses) = provider_responses.await.ok() {
                 match provider_responses {
@@ -180,7 +195,7 @@ impl InputState {
             }
 
             if completions.is_empty() {
-                _ = menu.update(cx, |menu, cx| {
+                _ = menu_entity.update(cx, |menu: &mut CompletionMenu, cx| {
                     menu.hide(cx);
                     cx.notify();
                 });
@@ -188,24 +203,23 @@ impl InputState {
                 return Ok(());
             }
 
-            editor
-                .update_in(cx, |editor, window, cx| {
-                    if !editor.focus_handle.is_focused(window) {
-                        return;
-                    }
+            editor.update_in(cx, |editor, window, cx| {
+                if !editor.focus_handle.is_focused(window) {
+                    return;
+                }
 
-                    _ = menu.update(cx, |menu, cx| {
-                        menu.show(new_offset, completions, window, cx);
-                    });
+                _ = menu_entity.update(cx, |menu: &mut CompletionMenu, cx| {
+                    menu.show(new_offset, completions, window, cx);
+                });
 
-                    cx.notify();
-                })
-                .ok();
+                cx.notify();
+            }).ok();
 
             Ok(())
         });
-    }
 
+        self._context_menu_task = task;
+    }
     /// Schedule an inline completion request after debouncing.
     pub(crate) fn schedule_inline_completion(
         &mut self,
@@ -365,10 +379,35 @@ impl CompletionProvider for KeywordCompletionProvider {
                 end: text.offset_to_position(offset),
             };
 
-            let items = keywords
+            let mut matches: Vec<(String, i32)> = keywords
                 .into_iter()
-                .filter(|kw| kw.to_lowercase().starts_with(&prefix))
-                .map(|kw| CompletionItem {
+                .filter_map(|kw| {
+                    let kw_lower = kw.to_lowercase();
+
+                    if kw_lower == prefix {
+                        return Some((kw, 100));
+                    }
+                    if kw_lower.starts_with(&prefix) {
+                        return Some((kw, 50));
+                    }
+                    if is_subsequence(&prefix, &kw_lower) {
+                        return Some((kw, 10));
+                    }
+                    None
+                })
+                .collect();
+
+            // High score first, then shortest word, then alphabetical
+            matches.sort_by(|(kw_a, score_a), (kw_b, score_b)| {
+                score_b
+                    .cmp(score_a)
+                    .then_with(|| kw_a.len().cmp(&kw_b.len()))
+                    .then_with(|| kw_a.cmp(kw_b))
+            });
+
+            let items = matches
+                .into_iter()
+                .map(|(kw, _score)| CompletionItem {
                     label: kw.clone(),
                     kind: Some(lsp_types::CompletionItemKind::KEYWORD),
                     text_edit: Some(lsp_types::CompletionTextEdit::Edit(lsp_types::TextEdit {
@@ -425,4 +464,17 @@ impl CompletionProvider for KeywordCompletionProvider {
             Ok(InlineCompletionResponse::Array(item.into_iter().collect()))
         })
     }
+}
+
+fn is_subsequence(pattern: &str, text: &str) -> bool {
+    let mut pat_iter = pattern.chars();
+    let mut current_pat_char = pat_iter.next();
+    for c in text.chars() {
+        match current_pat_char {
+            Some(p) if p == c => current_pat_char = pat_iter.next(),
+            Some(_) => continue,
+            None => return true,
+        }
+    }
+    current_pat_char.is_none()
 }
