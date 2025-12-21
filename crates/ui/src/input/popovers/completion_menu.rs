@@ -476,6 +476,8 @@ impl Render for CompletionMenu {
             return Empty.into_any_element();
         }
 
+        let is_empty = self.list.read(cx).delegate().items.is_empty();
+
         let Some(pos) = self.origin(cx) else {
             return Empty.into_any_element();
         };
@@ -514,6 +516,7 @@ impl Render for CompletionMenu {
                         .overflow_hidden()
                         .child(
                             List::new(&self.list)
+                                .scrollbar_visible(!is_empty)
                                 .scrollbar_show(ScrollbarShow::Always)
                                 .max_h(MAX_MENU_HEIGHT)
                                 .size_full()
