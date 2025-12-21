@@ -19,6 +19,7 @@ use crate::{
         popovers::{editor_popover, render_markdown},
     },
     list::{List, ListDelegate, ListEvent, ListState},
+    scroll::ScrollbarShow,
 };
 
 struct ContextMenuDelegate {
@@ -27,6 +28,7 @@ struct ContextMenuDelegate {
     items: Vec<Rc<CompletionItem>>,
     selected_ix: usize,
     max_width: Pixels,
+    mouse_active: bool,
 }
 
 impl ContextMenuDelegate {
@@ -48,10 +50,12 @@ struct CompletionMenuItem {
     selected: bool,
     highlight_prefix: SharedString,
     max_width: Pixels,
+    mouse_active: bool,
+    menu: Entity<CompletionMenu>,
 }
 
 impl CompletionMenuItem {
-    fn new(ix: usize, item: Rc<CompletionItem>) -> Self {
+    fn new(ix: usize, item: Rc<CompletionItem>, menu: Entity<CompletionMenu>) -> Self {
         Self {
             ix,
             item,
@@ -59,6 +63,8 @@ impl CompletionMenuItem {
             selected: false,
             highlight_prefix: "".into(),
             max_width: MAX_MENU_WIDTH,
+            mouse_active: true,
+            menu,
         }
     }
 
@@ -69,6 +75,11 @@ impl CompletionMenuItem {
 
     fn max_width(mut self, width: Pixels) -> Self {
         self.max_width = width;
+        self
+    }
+
+    fn mouse_active(mut self, active: bool) -> Self {
+        self.mouse_active = active;
         self
     }
 }
@@ -123,6 +134,7 @@ impl RenderOnce for CompletionMenuItem {
             }
             highlights.push((start..end, highlight_style));
         }
+        let menu = self.menu.clone(); // Capture handle for closure
 
         h_flex()
             .id(self.ix)
@@ -131,7 +143,19 @@ impl RenderOnce for CompletionMenuItem {
             .p_1()
             .text_xs()
             .rounded_sm()
-            .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
+            .on_mouse_move(move |_, _, cx| {
+                menu.update(cx, |this, cx| {
+                    this.list.update(cx, |list, cx| {
+                        if !list.delegate().mouse_active {
+                            list.delegate_mut().mouse_active = true;
+                            cx.notify();
+                        }
+                    });
+                });
+            })
+            .when(self.mouse_active, |this| {
+                this.hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
+            })
             .when(self.selected, |this| {
                 this.bg(cx.theme().accent)
                     .text_color(cx.theme().accent_foreground)
@@ -161,9 +185,10 @@ impl ListDelegate for ContextMenuDelegate {
     ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
         Some(
-            CompletionMenuItem::new(ix.row, item.clone())
+            CompletionMenuItem::new(ix.row, item.clone(), self.menu.clone())
                 .highlight_prefix(self.query.clone())
-                .max_width(self.max_width), // Use the field here!
+                .max_width(self.max_width)
+                .mouse_active(self.mouse_active),
         )
     }
 
@@ -233,6 +258,7 @@ impl CompletionMenu {
                 items: vec![],
                 selected_ix: 0,
                 max_width: width,
+                mouse_active: true,
             };
 
             let list = cx.new(|cx| ListState::new(menu, window, cx));
@@ -365,12 +391,14 @@ impl CompletionMenu {
 
     fn on_action_up(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.list.update(cx, |this, cx| {
+            this.delegate_mut().mouse_active = false;
             this.on_action_select_prev(&actions::SelectUp, window, cx)
         });
     }
 
     fn on_action_down(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.list.update(cx, |this, cx| {
+            this.delegate_mut().mouse_active = false;
             this.on_action_select_next(&actions::SelectDown, window, cx)
         });
     }
@@ -486,7 +514,7 @@ impl Render for CompletionMenu {
                         .overflow_hidden()
                         .child(
                             List::new(&self.list)
-                                .scrollbar_show(crate::scroll::ScrollbarShow::Always)
+                                .scrollbar_show(ScrollbarShow::Always)
                                 .max_h(MAX_MENU_HEIGHT)
                                 .size_full()
                                 .p_1(),
