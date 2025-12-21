@@ -465,6 +465,7 @@ impl Render for CompletionMenu {
                         .overflow_hidden()
                         .child(
                             List::new(&self.list)
+                                .scrollbar_show(crate::scroll::ScrollbarShow::Always)
                                 .max_h(MAX_MENU_HEIGHT)
                                 .size_full()
                                 .p_1(),

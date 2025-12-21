@@ -49,6 +49,7 @@ pub enum ListEvent {
 struct ListOptions {
     size: Size,
     scrollbar_visible: bool,
+    scrollbar_show: Option<ScrollbarShow>,
     search_placeholder: Option<SharedString>,
     max_height: Option<Length>,
     paddings: EdgesRefinement<DefiniteLength>,
@@ -62,6 +63,7 @@ impl Default for ListOptions {
             max_height: None,
             search_placeholder: None,
             paddings: EdgesRefinement::default(),
+            scrollbar_show: None,
         }
     }
 }
@@ -550,9 +552,13 @@ where
                 }
             })
             .when(scrollbar_visible, |this| {
-                this.child(
-                    Scrollbar::vertical(&scroll_handle).scrollbar_show(ScrollbarShow::Always), // ADD THIS HERE
-                )
+                let mut scrollbar = Scrollbar::vertical(&scroll_handle);
+
+                if let Some(show) = self.options.scrollbar_show {
+                    scrollbar = scrollbar.scrollbar_show(show);
+                }
+
+                this.child(scrollbar)
             })
     }
 }
@@ -698,6 +704,11 @@ where
     /// Sets the placeholder text for the search input.
     pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.options.search_placeholder = Some(placeholder.into());
+        self
+    }
+
+    pub fn scrollbar_show(mut self, show: ScrollbarShow) -> Self {
+        self.options.scrollbar_show = Some(show);
         self
     }
 }
