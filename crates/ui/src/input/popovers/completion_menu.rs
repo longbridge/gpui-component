@@ -1,7 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    Action, AnyElement, App, AppContext, Context, DismissEvent, Div, Empty, Entity, EventEmitter, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div, prelude::FluentBuilder, px
+    Action, AnyElement, App, AppContext, Context, DismissEvent, Div, Empty, Entity, EventEmitter,
+    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
+    prelude::FluentBuilder, px,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -198,7 +201,7 @@ impl ListDelegate for ContextMenuDelegate {
             .p_2()
             .text_xs()
             .text_color(cx.theme().muted_foreground)
-            .child("Nothing Found")
+            .child("No Suggestions")
     }
 
     fn set_selected_index(
@@ -522,7 +525,7 @@ impl Render for CompletionMenu {
 
                     this.child(
                         editor_popover("completion-menu-doc", cx)
-                            .w(self.max_width.min(available_space_right))
+                            .w(menu_width)
                             .max_h(MAX_MENU_HEIGHT)
                             .overflow_hidden()
                             .px_2()
