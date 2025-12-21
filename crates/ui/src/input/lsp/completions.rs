@@ -366,7 +366,7 @@ impl CompletionProvider for KeywordCompletionProvider {
             let prefix_chars: String = text
                 .chars_at(offset)
                 .reversed()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .take_while(|c| c.is_alphanumeric() || c.is_ascii_punctuation())
                 .collect();
 
             let prefix = prefix_chars
