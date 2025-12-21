@@ -344,15 +344,6 @@ impl CompletionMenu {
         if !self.open {
             return false;
         }
-        if action.partial_eq(&input::IndentInline) {
-            self.on_action_enter(window, cx);
-            return true;
-        }
-
-        if action.partial_eq(&input::Enter { secondary: false }) {
-            self.hide(cx);
-            return false;
-        }
 
         cx.propagate();
         if action.partial_eq(&input::Enter { secondary: false }) {
