@@ -3,8 +3,8 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
     App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
     HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels,
-    Point, ShapedLine, SharedString, Size, Style, TextRun, TextStyle, UnderlineStyle, Window, fill,
-    point, px, relative, size,
+    Point, ShapedLine, SharedString, Size, Style, TextAlign, TextRun, TextStyle, UnderlineStyle,
+    Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -1394,7 +1394,7 @@ impl Element for TextElement {
                     window.paint_quad(fill(ghost_bounds, cx.theme().editor_background()));
 
                     // Paint ghost line text
-                    _ = ghost_line.paint(ghost_p, line_height, window, cx);
+                    _ = ghost_line.paint(ghost_p, line_height, TextAlign::Left, None, window, cx);
                     offset_y += line_height;
                 }
             }
@@ -1442,7 +1442,7 @@ impl Element for TextElement {
                 }
 
                 for line in lines {
-                    _ = line.paint(p, line_height, window, cx);
+                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
                     offset_y += line_height;
                 }
 
@@ -1482,7 +1482,7 @@ impl Element for TextElement {
                     window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
 
                     // Paint first line completion text
-                    _ = first_line.paint(p, line_height, window, cx);
+                    _ = first_line.paint(p, line_height, TextAlign::Left, None, window, cx);
                 }
             }
         }
