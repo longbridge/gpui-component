@@ -132,8 +132,8 @@ impl RenderOnce for CompletionMenuItem {
             .id(self.ix)
             .overflow_hidden()
             .gap_2()
-            .p_2()
-            .text_sm()
+            .p_1()
+            .text_xs()
             .rounded_sm()
             .on_mouse_move(move |_, _, cx| {
                 menu.update(cx, |this, cx| {
