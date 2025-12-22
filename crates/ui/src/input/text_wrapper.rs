@@ -388,7 +388,7 @@ impl LineLayout {
         let mut acc_len = 0;
         let mut offset_y = px(0.);
 
-        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
+        let x_offset = last_layout.alignment_offset(self.longest_width);
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
@@ -409,7 +409,7 @@ impl LineLayout {
     /// Get the closest index for the given x in this line layout.
     pub(super) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
         let mut acc_len = 0;
-        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
+        let x_offset = last_layout.alignment_offset(self.longest_width);
         let x = x - x_offset;
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
@@ -441,7 +441,7 @@ impl LineLayout {
     ) -> Option<usize> {
         let mut offset = 0;
         let mut line_top = px(0.);
-        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
+        let x_offset = last_layout.alignment_offset(self.longest_width);
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
             let line_bottom = line_top + last_layout.line_height;
@@ -469,7 +469,7 @@ impl LineLayout {
     ) -> Option<usize> {
         let mut offset = 0;
         let mut line_top = px(0.);
-        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
+        let x_offset = last_layout.alignment_offset(self.longest_width);
         for line in self.wrapped_lines.iter() {
             let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
@@ -486,15 +486,6 @@ impl LineLayout {
 
     pub(super) fn size(&self, line_height: Pixels) -> Size<Pixels> {
         size(self.longest_width, self.wrapped_lines.len() * line_height)
-    }
-
-    /// Get the alignment offset for the given text align and content width.
-    fn alignment_offset(&self, text_align: TextAlign, content_width: Pixels) -> Pixels {
-        match text_align {
-            TextAlign::Left => px(0.),
-            TextAlign::Center => (content_width - self.longest_width) / 2.,
-            TextAlign::Right => content_width - self.longest_width,
-        }
     }
 
     pub(super) fn paint(

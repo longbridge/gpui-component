@@ -110,6 +110,7 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
+        let mut alignment_offset = px(0.);
         for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
             let row = ix;
             let line_origin = point(px(0.), offset_y);
@@ -130,6 +131,7 @@ impl TextElement {
                     if let Some(pos) = line.position_for_index(offset, last_layout) {
                         current_row = Some(row);
                         cursor_pos = Some(line_origin + pos);
+                        alignment_offset = last_layout.alignment_offset(line.longest_width);
                     }
                 }
                 if cursor_start.is_none() {
@@ -186,6 +188,15 @@ impl TextElement {
                 } else {
                     scroll_offset.x
                 };
+                if last_layout.text_align == TextAlign::Right {
+                    println!(
+                        "--- scroll x {}, cursor x: {}, scroll_size: {}, diff: {}",
+                        scroll_offset.x,
+                        cursor_pos.x,
+                        state.scroll_size.width,
+                        scroll_offset.x + cursor_pos.x
+                    );
+                }
 
                 // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
                 // So, here we just adjust offset by `line_height` for move smooth.
@@ -200,6 +211,7 @@ impl TextElement {
                         scroll_offset.y
                     };
 
+                // For selection to move scroll
                 if state.selection_reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
                         // selection start is out of left
@@ -210,6 +222,8 @@ impl TextElement {
                         scroll_offset.y = -cursor_start.y;
                     }
                 } else {
+                    // TODO: Consider to remove this part,
+                    // maybe is not necessary (But selection_reversed is needed).
                     if scroll_offset.x + cursor_end.x <= px(0.) {
                         // selection end is out of left
                         scroll_offset.x = -cursor_end.x;

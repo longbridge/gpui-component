@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, TextAlign, Window, div,
+    ParentElement as _, Render, Styled, Subscription, Window, div,
 };
 
 use crate::section;
@@ -105,14 +105,12 @@ impl InputStory {
             InputState::new(window, cx)
                 .placeholder("Enter text to test center layout...")
                 .default_value("Centered Text")
-                .text_align(TextAlign::Center)
         });
 
         let input_text_right = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Enter text to test right layout...")
                 .default_value("Right Aligned Text")
-                .text_align(TextAlign::Right)
         });
 
         let _subscriptions = vec![
@@ -200,6 +198,16 @@ impl Render for InputStory {
                     .child(Input::new(&self.mask_input).mask_toggle().cleanable(true)),
             )
             .child(
+                section("Text Align").max_w_lg().child(
+                    h_flex()
+                        .w_full()
+                        .gap_4()
+                        .flex_wrap()
+                        .child(Input::new(&self.input_text_centered).text_center().flex_1())
+                        .child(Input::new(&self.input_text_right).text_right().flex_1()),
+                ),
+            )
+            .child(
                 section("Prefix and Suffix")
                     .max_w_md()
                     .child(
@@ -258,16 +266,6 @@ impl Render for InputStory {
                     .max_w_md()
                     .child(Input::new(&self.large_input).large())
                     .child(Input::new(&self.small_input).small()),
-            )
-            .child(
-                section("Text Align Center")
-                    .max_w_md()
-                    .child(Input::new(&self.input_text_centered)),
-            )
-            .child(
-                section("Text Align Right")
-                    .max_w_md()
-                    .child(Input::new(&self.input_text_right)),
             )
             .child(
                 section("Cleanable and ESC to clean")

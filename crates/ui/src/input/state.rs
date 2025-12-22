@@ -3,7 +3,6 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
-use gpui::TextAlign;
 use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
@@ -11,6 +10,7 @@ use gpui::{
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
+use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::ops::Range;
@@ -259,6 +259,15 @@ impl LastLayout {
         }
 
         self.lines.get(row.saturating_sub(self.visible_range.start))
+    }
+
+    /// Get the alignment offset for the given line width.
+    pub(super) fn alignment_offset(&self, line_width: Pixels) -> Pixels {
+        match self.text_align {
+            TextAlign::Left => px(0.),
+            TextAlign::Center => (self.content_width - line_width).half(),
+            TextAlign::Right => self.content_width - line_width,
+        }
     }
 }
 
@@ -574,7 +583,6 @@ impl InputState {
     /// - The index of the line (zero-based) containing the offset.
     /// - The index of the sub-line (zero-based) within the line containing the offset.
     /// - The position of the offset.
-    #[allow(unused)]
     pub(super) fn line_and_position_for_offset(
         &self,
         offset: usize,
@@ -787,12 +795,6 @@ impl InputState {
         }
         self.text_wrapper.set_default_text(&self.text);
         self._pending_update = true;
-        self
-    }
-
-    /// Set the text alignment of the input field, default is [`TextAlign::Left`].
-    pub fn text_align(mut self, align: impl Into<TextAlign>) -> Self {
-        self.text_align = align.into();
         self
     }
 

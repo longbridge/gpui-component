@@ -34,7 +34,6 @@ pub struct Input {
     focus_bordered: bool,
     tab_index: isize,
     selected: bool,
-    text_align: TextAlign,
 }
 
 impl Sizable for Input {
@@ -73,7 +72,6 @@ impl Input {
             focus_bordered: true,
             tab_index: 0,
             selected: false,
-            text_align: TextAlign::Left,
         }
     }
 
@@ -138,12 +136,6 @@ impl Input {
     /// Set the tab index for the input, default is 0.
     pub fn tab_index(mut self, index: isize) -> Self {
         self.tab_index = index;
-        self
-    }
-
-    /// Set the text alignment of the input field, default is [`TextAlign::Left`].
-    pub fn text_align(mut self, align: impl Into<TextAlign>) -> Self {
-        self.text_align = align.into();
         self
     }
 
@@ -249,11 +241,15 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
+        let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
 
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
-            state.text_align = self.text_align;
+            // Only for single line mode
+            if state.mode.is_single_line() {
+                state.text_align = text_align;
+            }
         });
 
         let state = self.state.read(cx);
