@@ -302,6 +302,8 @@ pub struct InputState {
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
     pub(super) placeholder: SharedString,
+    /// Whether to show context menu. (default: true)
+    pub(super) context_menu: bool,
 
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
@@ -332,9 +334,6 @@ pub struct InputState {
 
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
-
-    /// Whether to show right click action menu. (default: true)
-    pub(super) right_click_menu: bool,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -401,6 +400,7 @@ impl InputState {
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            context_menu: true,
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu: None,
@@ -414,7 +414,6 @@ impl InputState {
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
-            right_click_menu: true,
         }
     }
 
@@ -513,9 +512,9 @@ impl InputState {
         self
     }
 
-    /// Set whether to show right click action menu, default is true.
-    pub fn right_click_menu(mut self, enabled: bool) -> Self {
-        self.right_click_menu = enabled;
+    /// Set whether to show ContextMenu, default is true.
+    pub fn context_menu(mut self, enabled: bool) -> Self {
+        self.context_menu = enabled;
         self
     }
 
@@ -1240,11 +1239,8 @@ impl InputState {
         }
 
         // Show Mouse context menu
-        if event.button == MouseButton::Right {
-            if self.right_click_menu {
-                self.handle_right_click_menu(event, offset, window, cx);
-            }
-
+        if self.context_menu && event.button == MouseButton::Right {
+            self.handle_right_click_menu(event, offset, window, cx);
             return;
         }
 
