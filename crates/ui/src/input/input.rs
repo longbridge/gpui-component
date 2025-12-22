@@ -2,7 +2,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
     IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
-    Styled, Window, div, px, relative,
+    Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -34,6 +34,7 @@ pub struct Input {
     focus_bordered: bool,
     tab_index: isize,
     selected: bool,
+    text_align: TextAlign,
 }
 
 impl Sizable for Input {
@@ -72,6 +73,7 @@ impl Input {
             focus_bordered: true,
             tab_index: 0,
             selected: false,
+            text_align: TextAlign::Left,
         }
     }
 
@@ -136,6 +138,12 @@ impl Input {
     /// Set the tab index for the input, default is 0.
     pub fn tab_index(mut self, index: isize) -> Self {
         self.tab_index = index;
+        self
+    }
+
+    /// Set the text alignment of the input field, default is [`TextAlign::Left`].
+    pub fn text_align(mut self, align: impl Into<TextAlign>) -> Self {
+        self.text_align = align.into();
         self
     }
 
@@ -245,6 +253,7 @@ impl RenderOnce for Input {
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
+            state.text_align = self.text_align;
         });
 
         let state = self.state.read(cx);

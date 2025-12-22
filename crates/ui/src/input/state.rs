@@ -3,6 +3,7 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
+use gpui::TextAlign;
 use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
@@ -240,6 +241,10 @@ pub(super) struct LastLayout {
     pub(super) line_number_width: Pixels,
     /// The cursor position (top, left) in pixels.
     pub(super) cursor_bounds: Option<Bounds<Pixels>>,
+    /// The text align of the text layout.
+    pub(super) text_align: TextAlign,
+    /// The content width of the text layout.
+    pub(super) content_width: Pixels,
 }
 
 impl LastLayout {
@@ -298,6 +303,7 @@ pub struct InputState {
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
+    pub(super) text_align: TextAlign,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -398,6 +404,7 @@ impl InputState {
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            text_align: TextAlign::Left,
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu: None,
@@ -581,7 +588,7 @@ impl InputState {
         let mut y_offset = last_layout.visible_top;
         for (line_index, line) in last_layout.lines.iter().enumerate() {
             let local_offset = offset.saturating_sub(prev_lines_offset);
-            if let Some(pos) = line.position_for_index(local_offset, line_height) {
+            if let Some(pos) = line.position_for_index(local_offset, last_layout) {
                 let sub_line_index = (pos.y / line_height) as usize;
                 let adjusted_pos = point(pos.x + last_layout.line_number_width, pos.y + y_offset);
                 return (line_index, sub_line_index, Some(adjusted_pos));
@@ -780,6 +787,12 @@ impl InputState {
         }
         self.text_wrapper.set_default_text(&self.text);
         self._pending_update = true;
+        self
+    }
+
+    /// Set the text alignment of the input field, default is [`TextAlign::Left`].
+    pub fn text_align(mut self, align: impl Into<TextAlign>) -> Self {
+        self.text_align = align.into();
         self
     }
 
@@ -1376,7 +1389,7 @@ impl InputState {
             .get(row.saturating_sub(last_layout.visible_range.start))
         {
             // Check to scroll horizontally and soft wrap lines
-            if let Some(pos) = line.position_for_index(point.column, line_height) {
+            if let Some(pos) = line.position_for_index(point.column, last_layout) {
                 let bounds_width = bounds.size.width - last_layout.line_number_width;
                 let col_offset_x = pos.x;
                 row_offset_y += pos.y;
@@ -1556,11 +1569,11 @@ impl InputState {
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                index = line_layout.closest_index_for_x(pos.x);
+                index = line_layout.closest_index_for_x(pos.x, last_layout);
                 break;
             }
 
-            if let Some(v) = line_layout.closest_index_for_position(pos, line_height) {
+            if let Some(v) = line_layout.closest_index_for_position(pos, last_layout) {
                 index += v;
                 break;
             } else if pos.y < px(0.) {
@@ -2098,7 +2111,7 @@ impl EntityInputHandler for InputState {
 
             if start_origin.is_none() {
                 if let Some(p) =
-                    line.position_for_index(range.start.saturating_sub(index_offset), line_height)
+                    line.position_for_index(range.start.saturating_sub(index_offset), last_layout)
                 {
                     start_origin = Some(p + point(px(0.), y_offset));
                 }
@@ -2106,7 +2119,7 @@ impl EntityInputHandler for InputState {
 
             if end_origin.is_none() {
                 if let Some(p) =
-                    line.position_for_index(range.end.saturating_sub(index_offset), line_height)
+                    line.position_for_index(range.end.saturating_sub(index_offset), last_layout)
                 {
                     end_origin = Some(p + point(px(0.), y_offset));
                 }
@@ -2135,12 +2148,11 @@ impl EntityInputHandler for InputState {
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
         let last_layout = self.last_layout.as_ref()?;
-        let line_height = last_layout.line_height;
         let line_point = self.last_bounds?.localize(&point)?;
         let offset = last_layout.visible_range_offset.start;
 
         for line in last_layout.lines.iter() {
-            if let Some(utf8_index) = line.index_for_position(line_point, line_height) {
+            if let Some(utf8_index) = line.index_for_position(line_point, last_layout) {
                 return Some(self.offset_to_utf16(offset + utf8_index));
             }
         }

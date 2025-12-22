@@ -6,7 +6,7 @@ use gpui::{
 use ropey::Rope;
 use smallvec::SmallVec;
 
-use crate::input::RopeExt;
+use crate::input::{LastLayout, RopeExt};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
@@ -383,10 +383,12 @@ impl LineLayout {
     pub(crate) fn position_for_index(
         &self,
         offset: usize,
-        line_height: Pixels,
+        last_layout: &LastLayout,
     ) -> Option<Point<Pixels>> {
         let mut acc_len = 0;
         let mut offset_y = px(0.);
+
+        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
@@ -394,19 +396,22 @@ impl LineLayout {
 
             let range = acc_len..(acc_len + line_len);
             if range.contains(&offset) {
-                let x = line.x_for_index(offset.saturating_sub(acc_len));
+                let x = line.x_for_index(offset.saturating_sub(acc_len)) + x_offset;
                 return Some(point(x, offset_y));
             }
             acc_len += line_len;
-            offset_y += line_height;
+            offset_y += last_layout.line_height;
         }
 
         None
     }
 
     /// Get the closest index for the given x in this line layout.
-    pub(super) fn closest_index_for_x(&self, x: Pixels) -> usize {
+    pub(super) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
         let mut acc_len = 0;
+        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
+        let x = x - x_offset;
+
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
             if x <= line.width {
@@ -432,15 +437,16 @@ impl LineLayout {
     pub(super) fn closest_index_for_position(
         &self,
         pos: Point<Pixels>,
-        line_height: Pixels,
+        last_layout: &LastLayout,
     ) -> Option<usize> {
         let mut offset = 0;
         let mut line_top = px(0.);
+        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
-            let line_bottom = line_top + line_height;
+            let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                let mut ix = line.closest_index_for_x(pos.x);
+                let mut ix = line.closest_index_for_x(pos.x - x_offset);
                 if !is_last && ix == line.text.len() {
                     // For soft wrap line, we can't put the cursor at the end of the line.
                     let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
@@ -459,14 +465,15 @@ impl LineLayout {
     pub(super) fn index_for_position(
         &self,
         pos: Point<Pixels>,
-        line_height: Pixels,
+        last_layout: &LastLayout,
     ) -> Option<usize> {
         let mut offset = 0;
         let mut line_top = px(0.);
+        let x_offset = self.alignment_offset(last_layout.text_align, last_layout.content_width);
         for line in self.wrapped_lines.iter() {
-            let line_bottom = line_top + line_height;
+            let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                let ix = line.index_for_x(pos.x)?;
+                let ix = line.index_for_x(pos.x - x_offset)?;
                 return Some(offset + ix);
             }
 
@@ -481,10 +488,21 @@ impl LineLayout {
         size(self.longest_width, self.wrapped_lines.len() * line_height)
     }
 
+    /// Get the alignment offset for the given text align and content width.
+    fn alignment_offset(&self, text_align: TextAlign, content_width: Pixels) -> Pixels {
+        match text_align {
+            TextAlign::Left => px(0.),
+            TextAlign::Center => (content_width - self.longest_width) / 2.,
+            TextAlign::Right => content_width - self.longest_width,
+        }
+    }
+
     pub(super) fn paint(
         &self,
         pos: Point<Pixels>,
         line_height: Pixels,
+        text_align: TextAlign,
+        align_width: Option<Pixels>,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -492,8 +510,8 @@ impl LineLayout {
             _ = line.paint(
                 pos + point(px(0.), ix * line_height),
                 line_height,
-                TextAlign::Left,
-                None,
+                text_align,
+                align_width,
                 window,
                 cx,
             );

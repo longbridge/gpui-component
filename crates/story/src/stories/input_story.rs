@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window, div,
+    ParentElement as _, Render, Styled, Subscription, TextAlign, Window, div,
 };
 
 use crate::section;
@@ -14,6 +14,8 @@ pub struct InputStory {
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     input_esc: Entity<InputState>,
+    input_text_centered: Entity<InputState>,
+    input_text_right: Entity<InputState>,
     mask_input: Entity<InputState>,
     disabled_input: Entity<InputState>,
     prefix_input1: Entity<InputState>,
@@ -99,6 +101,20 @@ impl InputStory {
                 .default_value(CODE_EXAMPLE)
         });
 
+        let input_text_centered = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Enter text to test center layout...")
+                .default_value("Centered Text")
+                .text_align(TextAlign::Center)
+        });
+
+        let input_text_right = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Enter text to test right layout...")
+                .default_value("Right Aligned Text")
+                .text_align(TextAlign::Right)
+        });
+
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),
             cx.subscribe_in(&input2, window, Self::on_input_event),
@@ -126,6 +142,8 @@ impl InputStory {
             currency_input,
             custom_input,
             code_input,
+            input_text_centered,
+            input_text_right,
             _subscriptions,
         }
     }
@@ -240,6 +258,16 @@ impl Render for InputStory {
                     .max_w_md()
                     .child(Input::new(&self.large_input).large())
                     .child(Input::new(&self.small_input).small()),
+            )
+            .child(
+                section("Text Align Center")
+                    .max_w_md()
+                    .child(Input::new(&self.input_text_centered)),
+            )
+            .child(
+                section("Text Align Right")
+                    .max_w_md()
+                    .child(Input::new(&self.input_text_right)),
             )
             .child(
                 section("Cleanable and ESC to clean")

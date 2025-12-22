@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window,
+    ParentElement as _, Render, Styled, Subscription, Window, px,
 };
 use regex::Regex;
 
@@ -55,19 +55,19 @@ impl NumberInputStory {
         let number_input1_value = 1;
         let number_input1 = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Number Input")
+                .placeholder("Normal Integer")
                 .default_value(number_input1_value.to_string())
         });
 
         let number_input2 = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Unsized Integer Number Input")
+                .placeholder("Unsized Integer")
                 .pattern(Regex::new(r"^\d+$").unwrap())
         });
 
         let number_input3 = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Number Input with mask pattern")
+                .placeholder("Mask pattern")
                 .mask_pattern(MaskPattern::Number {
                     separator: Some(','),
                     fraction: Some(2),
@@ -76,7 +76,7 @@ impl NumberInputStory {
 
         let number_input4 = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Number Input without appearance")
+                .placeholder("Styling")
                 .mask_pattern(MaskPattern::Number {
                     separator: Some(','),
                     fraction: Some(2),
@@ -86,7 +86,7 @@ impl NumberInputStory {
         let disabled_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value("100")
-                .placeholder("Disabled input")
+                .placeholder("Disabled")
         });
 
         let _subscriptions = vec![
@@ -224,16 +224,16 @@ impl Render for NumberInputStory {
             .gap_3()
             .child(
                 section("Normal Size")
-                    .max_w_md()
+                    .max_w(px(200.))
                     .child(NumberInput::new(&self.number_input1)),
             )
             .child(
                 section("Disabled")
-                    .max_w_md()
+                    .max_w(px(200.))
                     .child(NumberInput::new(&self.disabled_input).disabled(true)),
             )
             .child(
-                section("Small Size with suffix").max_w_md().child(
+                section("Small Size with suffix").max_w(px(200.)).child(
                     NumberInput::new(&self.number_input2)
                         .small()
                         .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
@@ -241,11 +241,11 @@ impl Render for NumberInputStory {
             )
             .child(
                 section("With mask pattern")
-                    .max_w_md()
+                    .max_w(px(200.))
                     .child(NumberInput::new(&self.number_input3)),
             )
             .child(
-                section("Without appearance").max_w_md().child(
+                section("Without appearance").max_w(px(200.)).child(
                     NumberInput::new(&self.number_input4)
                         .appearance(false)
                         .bg(cx.theme().secondary),
