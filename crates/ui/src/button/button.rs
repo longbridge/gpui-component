@@ -135,7 +135,7 @@ impl ButtonCustomVariant {
     }
 }
 
-/// The veriant of the Button.
+/// The variant of the Button.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonVariant {
     Primary,
@@ -515,7 +515,7 @@ impl RenderOnce for Button {
                         let hover_style = style.hovered(self.outline, cx);
                         this.bg(hover_style.bg)
                             .border_color(hover_style.border)
-                            .text_color(crate::red_400())
+                            .text_color(hover_style.fg)
                     })
                     .active(|this| {
                         let active_style = style.active(self.outline, cx);
@@ -552,12 +552,12 @@ impl RenderOnce for Button {
                         return;
                     }
 
-                    (on_click)(event, window, cx);
+                    on_click(event, window, cx);
                 })
             })
             .when_some(self.on_hover.filter(|_| hoverable), |this, on_hover| {
                 this.on_hover(move |hovered, window, cx| {
-                    (on_hover)(hovered, window, cx);
+                    on_hover(hovered, window, cx);
                 })
             })
             .child({
