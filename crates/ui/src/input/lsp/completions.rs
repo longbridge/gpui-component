@@ -153,7 +153,13 @@ impl InputState {
         }
 
         if !matches!(self.context_menu, Some(ContextMenu::Completion(_))) {
-            let menu = CompletionMenu::new(cx.entity(), self.autocompletion_menu_width, window, cx);
+            let menu = CompletionMenu::new(
+                cx.entity(),
+                self.autocompletion_menu_width,
+                self.autocompletion_menu_height,
+                window,
+                cx,
+            );
             self.context_menu = Some(ContextMenu::Completion(menu));
         }
 

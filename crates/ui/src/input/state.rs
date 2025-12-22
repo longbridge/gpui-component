@@ -336,6 +336,7 @@ pub struct InputState {
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
     pub(super) autocompletion_menu_width: Pixels,
+    pub(super) autocompletion_menu_height: Pixels,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -416,6 +417,7 @@ impl InputState {
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
             autocompletion_menu_width: px(320.0),
+            autocompletion_menu_height: px(240.0),
         }
     }
 
@@ -468,7 +470,7 @@ impl InputState {
         self
     }
 
-    /// Sets the width of the auto-completion menu.
+    /// Sets the width of the auto-completion menu. Default is 320px
     pub fn autocompletion_menu_width(mut self, width: f32, cx: &mut Context<Self>) -> Self {
         let width = px(width);
         self.autocompletion_menu_width = width;
@@ -477,6 +479,21 @@ impl InputState {
             if let Some(c_menu) = menu.as_completion_menu() {
                 c_menu.update(cx, |this, cx| {
                     this.set_width(width, cx);
+                });
+            }
+        }
+        self
+    }
+
+    /// Sets the height of the auto-completion menu. Default is 240px
+    pub fn autocompletion_menu_height(mut self, height: f32, cx: &mut Context<Self>) -> Self {
+        let height = px(height);
+        self.autocompletion_menu_height = height;
+
+        if let Some(menu) = self.context_menu.as_ref() {
+            if let Some(c_menu) = menu.as_completion_menu() {
+                c_menu.update(cx, |this, cx| {
+                    this.set_height(height, cx);
                 });
             }
         }

@@ -229,6 +229,7 @@ pub struct CompletionMenu {
     query: SharedString,
     _subscriptions: Vec<Subscription>,
     max_width: Pixels,
+    max_height: Pixels,
 }
 
 impl CompletionMenu {
@@ -238,7 +239,7 @@ impl CompletionMenu {
     pub(crate) fn new(
         editor: Entity<InputState>,
         width: Pixels,
-
+        height: Pixels,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -277,6 +278,7 @@ impl CompletionMenu {
                 query: SharedString::default(),
                 _subscriptions,
                 max_width: width,
+                max_height: height,
             }
         })
     }
@@ -358,6 +360,11 @@ impl CompletionMenu {
         self.list.update(cx, |list, _| {
             list.delegate_mut().max_width = width;
         });
+        cx.notify();
+    }
+
+    pub fn set_height(&mut self, height: Pixels, cx: &mut Context<Self>) {
+        self.max_height = height;
         cx.notify();
     }
 
@@ -470,7 +477,16 @@ impl Render for CompletionMenu {
         let window_size = window.bounds().size;
 
         let available_space_right = window_size.width - abs_pos.x - POPOVER_GAP;
-        let menu_width = self.max_width.min(available_space_right);
+        let menu_width = self
+            .max_width
+            .min(available_space_right)
+            .min(window_size.width * 0.8);
+
+        let available_space_bottom = window_size.height - abs_pos.y - POPOVER_GAP;
+        let menu_height = self
+            .max_height
+            .min(available_space_bottom)
+            .min(window_size.height * 0.8);
 
         let selected_documentation = self
             .list
@@ -495,13 +511,13 @@ impl Render for CompletionMenu {
                 .child(
                     editor_popover("completion-menu", cx)
                         .w(menu_width)
-                        .max_h(MAX_MENU_HEIGHT)
+                        .max_h(menu_height)
                         .overflow_hidden()
                         .child(
                             List::new(&self.list)
                                 .scrollbar_visible(!is_empty)
                                 .scrollbar_show(ScrollbarShow::Always)
-                                .max_h(MAX_MENU_HEIGHT)
+                                .max_h(menu_height)
                                 .size_full()
                                 .p_1(),
                         ),
