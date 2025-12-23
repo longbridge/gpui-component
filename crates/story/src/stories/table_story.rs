@@ -785,6 +785,13 @@ impl TableStory {
         });
     }
 
+    fn toggle_row_selection(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.row_selectable = *checked;
+            cx.notify();
+        });
+    }
+
     fn toggle_stripe(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
         cx.notify();
@@ -867,6 +874,12 @@ impl Render for TableStory {
                             .label("Column Selectable")
                             .selected(table.col_selectable)
                             .on_click(cx.listener(Self::toggle_col_selection)),
+                    )
+                    .child(
+                        Checkbox::new("row-selection")
+                            .label("Row Selectable")
+                            .selected(table.row_selectable)
+                            .on_click(cx.listener(Self::toggle_row_selection)),
                     )
                     .child(
                         Checkbox::new("fixed")
