@@ -6,17 +6,18 @@ use std::{
 };
 
 use gpui::{
-    div, prelude::FluentBuilder, px, Animation, AnimationExt, AnyElement, App, AppContext,
-    ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Subscription, Window,
+    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent, Edges,
+    ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Subscription, Window, div, prelude::FluentBuilder, px,
 };
 use smol::Timer;
 
 use crate::{
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
+    h_flex, v_flex,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -74,6 +75,7 @@ pub struct Notification {
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     closing: bool,
+    placement: NotificationPlacement,
 }
 
 impl From<String> for Notification {
@@ -128,6 +130,7 @@ impl Notification {
             content_builder: None,
             on_click: None,
             closing: false,
+            placement: NotificationPlacement::default(),
         }
     }
 
@@ -259,6 +262,12 @@ impl Notification {
         self.content_builder = Some(Rc::new(content));
         self
     }
+
+    /// Set the placement of the notification, default is NotificationPlacement::TopRight.
+    pub(crate) fn placement(mut self, placement: NotificationPlacement) -> Self {
+        self.placement = placement;
+        self
+    }
 }
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
@@ -269,8 +278,14 @@ impl Styled for Notification {
 }
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content = self.content_builder.clone().map(|builder| builder(self, window, cx));
-        let action = self.action_builder.clone().map(|builder| builder(self, window, cx).small().mr_3p5());
+        let content = self
+            .content_builder
+            .clone()
+            .map(|builder| builder(self, window, cx));
+        let action = self
+            .action_builder
+            .clone()
+            .map(|builder| builder(self, window, cx).small().mr_3p5());
 
         let closing = self.closing;
         let icon = match self.type_ {
@@ -278,6 +293,7 @@ impl Render for Notification {
             Some(type_) => Some(type_.icon(cx)),
         };
         let has_icon = icon.is_some();
+        let placement = self.placement.clone();
 
         h_flex()
             .id("notification")
@@ -308,13 +324,9 @@ impl Render for Notification {
                     .when_some(self.message.clone(), |this, message| {
                         this.child(div().text_sm().child(message))
                     })
-                    .when_some(content, |this, content| {
-                        this.child(content)
-                    }),
+                    .when_some(content, |this, content| this.child(content)),
             )
-            .when_some(action, |this, action| {
-                this.child(action)
-            })
+            .when_some(action, |this, action| this.child(action))
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(cx.listener(move |view, event, window, cx| {
                     view.dismiss(window, cx);
@@ -342,14 +354,39 @@ impl Render for Notification {
                     .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
                 move |this, delta| {
                     if closing {
-                        let x_offset = px(0.) + delta * px(45.);
                         let opacity = 1. - delta;
-                        this.left(px(0.) + x_offset)
+                        let that = this
                             .shadow_none()
                             .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none())
+                            .when(opacity < 0.85, |this| this.shadow_none());
+                        match placement {
+                            NotificationPlacement::TopRight
+                            | NotificationPlacement::BottomRight => {
+                                let x_offset = px(0.) + delta * px(45.);
+                                that.left(px(0.) + x_offset)
+                            }
+                            NotificationPlacement::TopLeft | NotificationPlacement::BottomLeft => {
+                                let x_offset = px(0.) - delta * px(45.);
+                                that.left(px(0.) + x_offset)
+                            }
+                            NotificationPlacement::TopCenter => {
+                                let y_offset = px(0.) - delta * px(45.);
+                                that.top(px(0.) + y_offset)
+                            }
+                            NotificationPlacement::BottomCenter => {
+                                let y_offset = px(0.) + delta * px(45.);
+                                that.bottom(px(0.) + y_offset)
+                            }
+                        }
                     } else {
-                        let y_offset = px(-45.) + delta * px(45.);
+                        let y_offset = match placement {
+                            NotificationPlacement::TopLeft
+                            | NotificationPlacement::TopCenter
+                            | NotificationPlacement::TopRight => px(-45.) + delta * px(45.),
+                            NotificationPlacement::BottomLeft
+                            | NotificationPlacement::BottomCenter
+                            | NotificationPlacement::BottomRight => px(45.) - delta * px(45.),
+                        };
                         let opacity = delta;
                         this.top(px(0.) + y_offset)
                             .opacity(opacity)
@@ -360,11 +397,61 @@ impl Render for Notification {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub enum NotificationPlacement {
+    TopLeft,
+    TopCenter,
+    #[default]
+    TopRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+}
+
+pub struct NotificationOptions {
+    pub(crate) placement: NotificationPlacement,
+    pub(crate) paddings: Edges<Pixels>,
+    // avoid overlap with title bar
+    pub(crate) layer_top: Pixels,
+}
+
+impl Default for NotificationOptions {
+    fn default() -> Self {
+        Self {
+            placement: NotificationPlacement::default(),
+            paddings: Edges::all(px(16.)),
+            layer_top: TITLE_BAR_HEIGHT,
+        }
+    }
+}
+
+impl NotificationOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn placement(mut self, placement: NotificationPlacement) -> Self {
+        self.placement = placement;
+        self
+    }
+
+    pub fn paddings(mut self, paddings: Edges<Pixels>) -> Self {
+        self.paddings = paddings;
+        self
+    }
+
+    pub fn layer_top(mut self, layer_top: Pixels) -> Self {
+        self.layer_top = layer_top;
+        self
+    }
+}
+
 /// A list of notifications.
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
     pub(crate) notifications: VecDeque<Entity<Notification>>,
     expanded: bool,
+    pub(crate) options: NotificationOptions,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
@@ -373,8 +460,13 @@ impl NotificationList {
         Self {
             notifications: VecDeque::new(),
             expanded: false,
+            options: NotificationOptions::default(),
             _subscriptions: HashMap::new(),
         }
+    }
+
+    pub fn set_placement(&mut self, placement: NotificationPlacement) {
+        self.options.placement = placement;
     }
 
     pub fn push(
@@ -383,7 +475,9 @@ impl NotificationList {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let notification = notification.into();
+        let notification = notification
+            .into()
+            .placement(self.options.placement.clone());
         let id = notification.id.clone();
         let autohide = notification.autohide;
 
@@ -448,17 +542,43 @@ impl Render for NotificationList {
     ) -> impl IntoElement {
         let size = window.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
+        let placement = self.options.placement.clone();
+        let layer_top = self.options.layer_top;
+        let top = self.options.paddings.top + layer_top;
+        let right = self.options.paddings.right;
+        let bottom = self.options.paddings.bottom;
+        let left = self.options.paddings.left;
 
-        div().absolute().top_4().right_4().child(
-            v_flex()
-                .id("notification-list")
-                .h(size.height - px(8.))
-                .on_hover(cx.listener(|view, hovered, _, cx| {
-                    view.expanded = *hovered;
-                    cx.notify()
-                }))
-                .gap_3()
-                .children(items),
-        )
+        v_flex()
+            .id("notification-list")
+            .max_h(size.height)
+            .pt(top)
+            .pb(bottom)
+            .gap_3()
+            .when(
+                matches!(placement, NotificationPlacement::TopRight),
+                |this| this.pr(right), // ignore left
+            )
+            .when(
+                matches!(placement, NotificationPlacement::TopLeft),
+                |this| this.pl(left), // ignore right
+            )
+            .when(
+                matches!(placement, NotificationPlacement::BottomLeft),
+                |this| this.flex_col_reverse().pl(left), // ignore right
+            )
+            .when(
+                matches!(placement, NotificationPlacement::BottomRight),
+                |this| this.flex_col_reverse().pr(right), // ignore left
+            )
+            .when(
+                matches!(placement, NotificationPlacement::BottomCenter),
+                |this| this.flex_col_reverse(),
+            )
+            .on_hover(cx.listener(|view, hovered, _, cx| {
+                view.expanded = *hovered;
+                cx.notify()
+            }))
+            .children(items)
     }
 }

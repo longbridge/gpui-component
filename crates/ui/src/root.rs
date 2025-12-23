@@ -2,7 +2,7 @@ use crate::{
     ActiveTheme, ElementExt, Placement,
     dialog::Dialog,
     input::InputState,
-    notification::{Notification, NotificationList},
+    notification::{Notification, NotificationList, NotificationOptions, NotificationPlacement},
     sheet::Sheet,
     window_border,
 };
@@ -104,23 +104,70 @@ impl Root {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<impl IntoElement + use<>> {
+        Self::render_notification_layer_options(window, cx, NotificationOptions::default())
+    }
+
+    /// Render Notification layer with options.
+    ///
+    /// # Arguments
+    /// * `options` - `NotificationOptions` set the placement, paddings of the notification display, and layer_top avoid overlap with the custom title bar.
+    ///
+    pub fn render_notification_layer_options(
+        window: &mut Window,
+        cx: &mut App,
+        options: NotificationOptions,
+    ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
 
         let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
 
-        let (mt, mr) = match active_sheet_placement {
-            Some(Placement::Right) => (None, root.read(cx).sheet_size),
-            Some(Placement::Top) => (root.read(cx).sheet_size, None),
-            _ => (None, None),
+        let sheet_size = root.read(cx).sheet_size;
+        let (mt, mr, mb, ml) = match active_sheet_placement {
+            Some(Placement::Top) => (sheet_size, None, None, None),
+            Some(Placement::Right) => (None, sheet_size, None, None),
+            Some(Placement::Bottom) => (None, None, sheet_size, None),
+            Some(Placement::Left) => (None, None, None, sheet_size),
+            _ => (None, None, None, None),
         };
+
+        let placement = options.placement.clone();
+        root.update(cx, |root, cx| {
+            root.notification.update(cx, |view, _| {
+                view.options = options;
+            });
+        });
 
         Some(
             div()
                 .absolute()
-                .top_0()
-                .right_0()
+                .when(
+                    matches!(placement, NotificationPlacement::TopRight),
+                    |this| this.top_0().right_0(),
+                )
+                .when(
+                    matches!(placement, NotificationPlacement::TopLeft),
+                    |this| this.top_0().left_0(),
+                )
+                .when(
+                    matches!(placement, NotificationPlacement::TopCenter),
+                    |this| this.top_0().mx_auto(),
+                )
+                .when(
+                    matches!(placement, NotificationPlacement::BottomRight),
+                    |this| this.bottom_0().right_0(),
+                )
+                .when(
+                    matches!(placement, NotificationPlacement::BottomLeft),
+                    |this| this.bottom_0().left_0(),
+                )
+                .when(
+                    matches!(placement, NotificationPlacement::BottomCenter),
+                    |this| this.bottom_0().mx_auto(),
+                )
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
+                .when_some(mb, |this, offset| this.mb(offset))
+                .when_some(ml, |this, offset| this.ml(offset))
                 .child(root.read(cx).notification.clone()),
         )
     }

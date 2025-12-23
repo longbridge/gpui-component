@@ -7,8 +7,9 @@ use gpui_component::{
     WindowExt as _,
     button::{Button, ButtonVariants},
     h_flex,
-    notification::{Notification, NotificationType},
-    text::{ markdown},
+    notification::{Notification, NotificationPlacement as NPlacement, NotificationType},
+    radio::RadioGroup,
+    text::markdown,
     v_flex,
 };
 
@@ -21,8 +22,16 @@ This is a custom notification.
 - [Click here](https://github.com/longbridge/gpui-component)
 "#;
 
+pub struct NotificationPlacement(pub NPlacement);
+impl gpui::Global for NotificationPlacement {}
+
+pub fn init(cx: &mut App) {
+    cx.set_global::<NotificationPlacement>(NotificationPlacement(NPlacement::default()));
+}
+
 pub struct NotificationStory {
     focus_handle: FocusHandle,
+    radio_group_checked: Option<usize>,
 }
 
 impl super::Story for NotificationStory {
@@ -47,6 +56,7 @@ impl NotificationStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            radio_group_checked: Some(2),
         }
     }
 }
@@ -64,6 +74,36 @@ impl Render for NotificationStory {
             .track_focus(&self.focus_handle)
             .size_full()
             .gap_3()
+            .child(
+                section("Notification Placement").child(
+                    v_flex().child(
+                        RadioGroup::horizontal("notification-placement")
+                            .children([
+                                "Top-Left",
+                                "Top-Center",
+                                "Top-Right",
+                                "Bottom-Left",
+                                "Bottom-Center",
+                                "Bottom-Right",
+                            ])
+                            .selected_index(self.radio_group_checked)
+                            .on_click(cx.listener(|this, selected_ix: &usize, _, cx| {
+                                this.radio_group_checked = Some(*selected_ix);
+                                let placement = match selected_ix {
+                                    0 => NPlacement::TopLeft,
+                                    1 => NPlacement::TopCenter,
+                                    2 => NPlacement::TopRight,
+                                    3 => NPlacement::BottomLeft,
+                                    4 => NPlacement::BottomCenter,
+                                    5 => NPlacement::BottomRight,
+                                    _ => unreachable!(),
+                                };
+                                cx.global_mut::<NotificationPlacement>().0 = placement;
+                                cx.notify();
+                            })),
+                    ),
+                ),
+            )
             .child(
                 section("Simple Notification").child(
                     Button::new("show-notify-0")
