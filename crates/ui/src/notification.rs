@@ -6,11 +6,13 @@ use std::{
 };
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent, Edges,
+    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
     ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
     Subscription, Window, div, prelude::FluentBuilder, px,
 };
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use smol::Timer;
 
 use crate::{
@@ -75,7 +77,6 @@ pub struct Notification {
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     closing: bool,
-    placement: NotificationPlacement,
 }
 
 impl From<String> for Notification {
@@ -130,7 +131,6 @@ impl Notification {
             content_builder: None,
             on_click: None,
             closing: false,
-            placement: NotificationPlacement::default(),
         }
     }
 
@@ -262,12 +262,6 @@ impl Notification {
         self.content_builder = Some(Rc::new(content));
         self
     }
-
-    /// Set the placement of the notification, default is NotificationPlacement::TopRight.
-    pub(crate) fn placement(mut self, placement: NotificationPlacement) -> Self {
-        self.placement = placement;
-        self
-    }
 }
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
@@ -293,7 +287,7 @@ impl Render for Notification {
             Some(type_) => Some(type_.icon(cx)),
         };
         let has_icon = icon.is_some();
-        let placement = self.placement.clone();
+        let placement = cx.theme().notification_setting.placement.clone();
 
         h_flex()
             .id("notification")
@@ -375,7 +369,7 @@ impl Render for Notification {
                             }
                             NotificationPlacement::BottomCenter => {
                                 let y_offset = px(0.) + delta * px(45.);
-                                that.bottom(px(0.) + y_offset)
+                                that.top(px(0.) + y_offset)
                             }
                         }
                     } else {
@@ -397,7 +391,7 @@ impl Render for Notification {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub enum NotificationPlacement {
     TopLeft,
     TopCenter,
@@ -408,41 +402,25 @@ pub enum NotificationPlacement {
     BottomRight,
 }
 
-pub struct NotificationOptions {
-    pub(crate) placement: NotificationPlacement,
-    pub(crate) paddings: Edges<Pixels>,
-    // avoid overlap with title bar
-    pub(crate) layer_top: Pixels,
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct NotificationSetting {
+    pub placement: NotificationPlacement,
+    pub top: Pixels,
+    pub right: Pixels,
+    pub bottom: Pixels,
+    pub left: Pixels,
 }
 
-impl Default for NotificationOptions {
+impl Default for NotificationSetting {
     fn default() -> Self {
+        let offset = px(16.);
         Self {
             placement: NotificationPlacement::default(),
-            paddings: Edges::all(px(16.)),
-            layer_top: TITLE_BAR_HEIGHT,
+            top: TITLE_BAR_HEIGHT + offset, // avoid overlap with title bar
+            right: offset,
+            bottom: offset,
+            left: offset,
         }
-    }
-}
-
-impl NotificationOptions {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn placement(mut self, placement: NotificationPlacement) -> Self {
-        self.placement = placement;
-        self
-    }
-
-    pub fn paddings(mut self, paddings: Edges<Pixels>) -> Self {
-        self.paddings = paddings;
-        self
-    }
-
-    pub fn layer_top(mut self, layer_top: Pixels) -> Self {
-        self.layer_top = layer_top;
-        self
     }
 }
 
@@ -451,7 +429,6 @@ pub struct NotificationList {
     /// Notifications that will be auto hidden.
     pub(crate) notifications: VecDeque<Entity<Notification>>,
     expanded: bool,
-    pub(crate) options: NotificationOptions,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
@@ -460,13 +437,8 @@ impl NotificationList {
         Self {
             notifications: VecDeque::new(),
             expanded: false,
-            options: NotificationOptions::default(),
             _subscriptions: HashMap::new(),
         }
-    }
-
-    pub fn set_placement(&mut self, placement: NotificationPlacement) {
-        self.options.placement = placement;
     }
 
     pub fn push(
@@ -475,9 +447,7 @@ impl NotificationList {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let notification = notification
-            .into()
-            .placement(self.options.placement.clone());
+        let notification = notification.into();
         let id = notification.id.clone();
         let autohide = notification.autohide;
 
@@ -542,12 +512,13 @@ impl Render for NotificationList {
     ) -> impl IntoElement {
         let size = window.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
-        let placement = self.options.placement.clone();
-        let layer_top = self.options.layer_top;
-        let top = self.options.paddings.top + layer_top;
-        let right = self.options.paddings.right;
-        let bottom = self.options.paddings.bottom;
-        let left = self.options.paddings.left;
+
+        let setting = &cx.theme().notification_setting;
+        let placement = setting.placement.clone();
+        let top = setting.top;
+        let right = setting.right;
+        let bottom = setting.bottom;
+        let left = setting.left;
 
         v_flex()
             .id("notification-list")

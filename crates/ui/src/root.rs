@@ -2,7 +2,7 @@ use crate::{
     ActiveTheme, ElementExt, Placement,
     dialog::Dialog,
     input::InputState,
-    notification::{Notification, NotificationList, NotificationOptions, NotificationPlacement},
+    notification::{Notification, NotificationList, NotificationPlacement},
     sheet::Sheet,
     window_border,
 };
@@ -104,19 +104,6 @@ impl Root {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<impl IntoElement + use<>> {
-        Self::render_notification_layer_with_options(NotificationOptions::default(), window, cx)
-    }
-
-    /// Render Notification layer with options.
-    ///
-    /// # Arguments
-    /// * `options` - `NotificationOptions` set the placement, paddings of the notification display, and layer_top avoid overlap with the custom title bar.
-    ///
-    pub fn render_notification_layer_with_options(
-        options: NotificationOptions,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
 
         let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
@@ -130,12 +117,7 @@ impl Root {
             _ => (None, None, None, None),
         };
 
-        let placement = options.placement.clone();
-        root.update(cx, |root, cx| {
-            root.notification.update(cx, |view, _| {
-                view.options = options;
-            });
-        });
+        let placement = cx.theme().notification_setting.placement.clone();
 
         Some(
             div()

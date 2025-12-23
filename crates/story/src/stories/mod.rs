@@ -78,7 +78,7 @@ pub use kbd_story::KbdStory;
 pub use label_story::LabelStory;
 pub use list_story::ListStory;
 pub use menu_story::MenuStory;
-pub use notification_story::{NotificationPlacement, NotificationStory};
+pub use notification_story::NotificationStory;
 pub use number_input_story::NumberInputStory;
 pub use otp_input_story::OtpInputStory;
 pub use popover_story::PopoverStory;
@@ -116,7 +116,6 @@ pub(crate) fn init(cx: &mut App) {
     tooltip_story::init(cx);
     otp_input_story::init(cx);
     tree_story::init(cx);
-    notification_story::init(cx);
 }
 
 pub trait Story: Render + Sized {

@@ -12,7 +12,7 @@ use gpui_component::{
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
-    notification::{Notification, NotificationOptions},
+    notification::Notification,
     scroll::{ScrollableElement as _, ScrollbarShow},
     v_flex,
 };
@@ -650,13 +650,7 @@ impl Render for StoryRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
         let dialog_layer = Root::render_dialog_layer(window, cx);
-
-        let notification_placement = cx.global::<stories::NotificationPlacement>().0.clone();
-        let notification_layer = Root::render_notification_layer_with_options(
-            NotificationOptions::new().placement(notification_placement),
-            window,
-            cx,
-        );
+        let notification_layer = Root::render_notification_layer(window, cx);
 
         div()
             .id("story-root")
