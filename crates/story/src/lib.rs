@@ -652,10 +652,10 @@ impl Render for StoryRoot {
         let dialog_layer = Root::render_dialog_layer(window, cx);
 
         let notification_placement = cx.global::<stories::NotificationPlacement>().0.clone();
-        let notification_layer = Root::render_notification_layer_options(
+        let notification_layer = Root::render_notification_layer_with_options(
+            NotificationOptions::new().placement(notification_placement),
             window,
             cx,
-            NotificationOptions::new().placement(notification_placement),
         );
 
         div()

@@ -104,7 +104,7 @@ impl Root {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<impl IntoElement + use<>> {
-        Self::render_notification_layer_options(window, cx, NotificationOptions::default())
+        Self::render_notification_layer_with_options(NotificationOptions::default(), window, cx)
     }
 
     /// Render Notification layer with options.
@@ -112,10 +112,10 @@ impl Root {
     /// # Arguments
     /// * `options` - `NotificationOptions` set the placement, paddings of the notification display, and layer_top avoid overlap with the custom title bar.
     ///
-    pub fn render_notification_layer_options(
+    pub fn render_notification_layer_with_options(
+        options: NotificationOptions,
         window: &mut Window,
         cx: &mut App,
-        options: NotificationOptions,
     ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
 
