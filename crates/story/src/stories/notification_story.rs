@@ -91,7 +91,7 @@ impl Render for NotificationStory {
                                     5 => NotificationPlacement::BottomRight,
                                     _ => unreachable!(),
                                 };
-                                Theme::global_mut(cx).notification_setting.placement = placement;
+                                Theme::global_mut(cx).notification.placement = placement;
                                 cx.notify();
                             })),
                     ),

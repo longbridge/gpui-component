@@ -287,7 +287,7 @@ impl Render for Notification {
             Some(type_) => Some(type_.icon(cx)),
         };
         let has_icon = icon.is_some();
-        let placement = cx.theme().notification_setting.placement.clone();
+        let placement = cx.theme().notification.placement.clone();
 
         h_flex()
             .id("notification")
@@ -513,7 +513,7 @@ impl Render for NotificationList {
         let size = window.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
 
-        let setting = &cx.theme().notification_setting;
+        let setting = &cx.theme().notification;
         let placement = setting.placement.clone();
         let top = setting.top;
         let right = setting.right;

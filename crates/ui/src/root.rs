@@ -117,7 +117,7 @@ impl Root {
             _ => (None, None, None, None),
         };
 
-        let placement = cx.theme().notification_setting.placement.clone();
+        let placement = cx.theme().notification.placement.clone();
 
         Some(
             div()
