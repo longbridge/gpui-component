@@ -317,6 +317,10 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.row_selectable {
+            return;
+        }
+
         self.set_selected_row(row_ix, cx);
 
         if e.click_count() == 2 {
