@@ -181,6 +181,7 @@ pub struct TreeState {
     entries: Vec<TreeEntry>,
     scroll_handle: UniformListScrollHandle,
     selected_ix: Option<usize>,
+    render_selection: bool,
     render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
 }
 
@@ -192,6 +193,7 @@ impl TreeState {
             focus_handle: cx.focus_handle(),
             scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
+            render_selection: true,
             render_item: Rc::new(|_, _, _, _, _| ListItem::new(0)),
         }
     }
@@ -237,6 +239,11 @@ impl TreeState {
         self.selected_ix.and_then(|ix| self.entries.get(ix))
     }
 
+    /// clicking items will visually highlight them. Default is true
+    pub fn render_selection(mut self, render: bool) -> Self {
+        self.render_selection = render;
+        self
+    }
     fn add_entry(&mut self, item: TreeItem, depth: usize) {
         self.entries.push(TreeEntry {
             item: item.clone(),
@@ -347,18 +354,23 @@ impl Render for TreeState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_item = self.render_item.clone();
 
+        let should_render_selection = self.render_selection;
         div().id("tree-state").size_full().relative().child(
             uniform_list("entries", self.entries.len(), {
                 cx.processor(move |state, visible_range: Range<usize>, window, cx| {
                     let mut items = Vec::with_capacity(visible_range.len());
                     for ix in visible_range {
                         let entry = &state.entries[ix];
-                        let selected = Some(ix) == state.selected_ix;
-                        let item = (render_item)(ix, entry, selected, window, cx);
+                        let is_selected = Some(ix) == state.selected_ix;
+                        let visually_selected = is_selected && should_render_selection;
+                        let item = (render_item)(ix, entry, visually_selected, window, cx);
 
                         let el = div()
                             .id(ix)
-                            .child(item.disabled(entry.item().is_disabled()).selected(selected))
+                            .child(
+                                item.disabled(entry.item().is_disabled())
+                                    .selected(visually_selected),
+                            )
                             .when(!entry.item().is_disabled(), |this| {
                                 this.on_mouse_down(
                                     MouseButton::Left,
@@ -372,7 +384,6 @@ impl Render for TreeState {
 
                         items.push(el)
                     }
-
                     items
                 })
             })
