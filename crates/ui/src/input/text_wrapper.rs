@@ -1,6 +1,8 @@
 use std::ops::Range;
 
-use gpui::{App, Font, LineFragment, Pixels, Point, ShapedLine, Size, Window, point, px, size};
+use gpui::{
+    App, Font, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px, size,
+};
 use ropey::Rope;
 use smallvec::SmallVec;
 
@@ -490,6 +492,8 @@ impl LineLayout {
             _ = line.paint(
                 pos + point(px(0.), ix * line_height),
                 line_height,
+                TextAlign::Left,
+                None,
                 window,
                 cx,
             );
