@@ -72,6 +72,8 @@ pub struct Theme {
     pub tile_shadow: bool,
     /// The border radius of the tile panel, default is 0px.
     pub tile_radius: Pixels,
+    /// Whether to use active highlight style on ListItem, default: false
+    pub list_active_highlight: bool,
 }
 
 impl Default for Theme {
@@ -200,6 +202,7 @@ impl From<&ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             tile_radius: px(0.),
+            list_active_highlight: true,
             colors: *colors,
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),

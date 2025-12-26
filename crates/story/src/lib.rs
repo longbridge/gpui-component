@@ -52,7 +52,8 @@ actions!(
         TestAction,
         Tab,
         TabPrev,
-        ShowPanelInfo
+        ShowPanelInfo,
+        ToggleListActiveHighlight
     ]
 );
 
