@@ -4,11 +4,12 @@ use gpui::{
 };
 
 use gpui_component::{
-    WindowExt as _,
+    ActiveTheme, Anchor, Theme, WindowExt as _,
     button::{Button, ButtonVariants},
     h_flex,
+    menu::{DropdownMenu as _, PopupMenuItem},
     notification::{Notification, NotificationType},
-    text::{ markdown},
+    text::markdown,
     v_flex,
 };
 
@@ -59,11 +60,47 @@ impl Focusable for NotificationStory {
 
 impl Render for NotificationStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        const ANCHORS: [Anchor; 6] = [
+            Anchor::TopLeft,
+            Anchor::TopCenter,
+            Anchor::TopRight,
+            Anchor::BottomLeft,
+            Anchor::BottomCenter,
+            Anchor::BottomRight,
+        ];
+
+        let view = cx.entity();
+
         v_flex()
             .id("notification-story")
             .track_focus(&self.focus_handle)
             .size_full()
             .gap_3()
+            .child(
+                h_flex().gap_3().child(
+                    Button::new("placement")
+                        .outline()
+                        .label(cx.theme().notification.placement.to_string())
+                        .dropdown_menu(move |menu, window, cx| {
+                            let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
+                                menu.item(
+                                    PopupMenuItem::new(placement.to_string())
+                                        .checked(cx.theme().notification.placement == placement)
+                                        .on_click(window.listener_for(
+                                            &view,
+                                            move |_, _, _, cx| {
+                                                Theme::global_mut(cx).notification.placement =
+                                                    placement;
+                                                cx.notify();
+                                            },
+                                        )),
+                                )
+                            });
+
+                            menu
+                        }),
+                ),
+            )
             .child(
                 section("Simple Notification").child(
                     Button::new("show-notify-0")
