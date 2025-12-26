@@ -1,14 +1,22 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
-use gpui_component::{pagination::Pagination, v_flex};
+use gpui_component::{
+    Disableable, Selectable as _, Sizable, Size,
+    button::{Button, ButtonGroup},
+    pagination::Pagination,
+    v_flex,
+};
+
+use crate::section;
 
 pub struct PaginationStory {
-    basic_page: u32,
-    many_pages_page: u32,
-    legacy_page: u32,
-    loading_page: u32,
-    focus_handle: gpui::FocusHandle,
+    basic_page: usize,
+    many_pages_page: usize,
+    compact_page: usize,
+    focus_handle: FocusHandle,
+    size: Size,
 }
 
 impl super::Story for PaginationStory {
@@ -17,7 +25,7 @@ impl super::Story for PaginationStory {
     }
 
     fn description() -> &'static str {
-        "A pagination component for navigating through pages of data."
+        "Pagination with page navigation, next and previous links."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -28,12 +36,17 @@ impl super::Story for PaginationStory {
 impl PaginationStory {
     pub fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
-            basic_page: 1,
+            basic_page: 5,
             many_pages_page: 1,
-            legacy_page: 1,
-            loading_page: 1,
+            compact_page: 3,
             focus_handle: cx.focus_handle(),
+            size: Size::default(),
         })
+    }
+
+    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
+        self.size = size;
+        cx.notify();
     }
 }
 
@@ -50,29 +63,64 @@ impl Render for PaginationStory {
         v_flex()
             .gap_6()
             .child(
-                v_flex()
-                    .gap_2()
-                    .child("Basic Pagination with Page Numbers")
+                ButtonGroup::new("toggle-size")
+                    .outline()
+                    .compact()
                     .child(
-                        Pagination::new("basic-pagination")
-                            .current_page(self.basic_page)
-                            .total_pages(10)
-                            .on_page_change({
-                                let entity = entity.clone();
-                                move |page, _, cx| {
-                                    entity.update(cx, |this, cx| {
-                                        this.basic_page = *page;
-                                        cx.notify();
-                                    });
-                                }
-                            }),
-                    ),
+                        Button::new("xsmall")
+                            .label("XSmall")
+                            .selected(self.size == Size::XSmall),
+                    )
+                    .child(
+                        Button::new("small")
+                            .label("Small")
+                            .selected(self.size == Size::Small),
+                    )
+                    .child(
+                        Button::new("medium")
+                            .label("Medium")
+                            .selected(self.size == Size::Medium),
+                    )
+                    .child(
+                        Button::new("large")
+                            .label("Large")
+                            .selected(self.size == Size::Large),
+                    )
+                    .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
+                        let size = match selecteds[0] {
+                            0 => Size::XSmall,
+                            1 => Size::Small,
+                            2 => Size::Medium,
+                            3 => Size::Large,
+                            _ => Size::Medium,
+                        };
+                        this.set_size(size, window, cx);
+                    })),
             )
             .child(
-                v_flex().gap_2().child("Pagination with Many Pages").child(
+                section("Basic").child(
+                    Pagination::new("basic-pagination")
+                        .current_page(self.basic_page)
+                        .total_pages(10)
+                        .with_size(self.size)
+                        .on_page_change({
+                            let entity = entity.clone();
+                            move |page, _, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.basic_page = *page;
+                                    cx.notify();
+                                });
+                            }
+                        }),
+                ),
+            )
+            .child(
+                section("Pagination with 10 visible pages").child(
                     Pagination::new("many-pages-pagination")
                         .current_page(self.many_pages_page)
                         .total_pages(50)
+                        .visible_pages(10)
+                        .with_size(self.size)
                         .on_page_change({
                             let entity = entity.clone();
                             move |page, _, cx| {
@@ -85,31 +133,30 @@ impl Render for PaginationStory {
                 ),
             )
             .child(
-                v_flex()
-                    .gap_2()
-                    .child("Pagination without Page Numbers (Minimal Style)")
-                    .child(
-                        Pagination::new("legacy-pagination")
-                            .current_page(self.legacy_page)
-                            .total_pages(10)
-                            .hide_page_numbers()
-                            .on_page_change({
-                                let entity = entity.clone();
-                                move |page, _, cx| {
-                                    entity.update(cx, |this, cx| {
-                                        this.legacy_page = *page;
-                                        cx.notify();
-                                    });
-                                }
-                            }),
-                    ),
+                section("Compact Style").child(
+                    Pagination::new("compact-pagination")
+                        .compact()
+                        .current_page(self.compact_page)
+                        .total_pages(10)
+                        .with_size(self.size)
+                        .on_page_change({
+                            let entity = entity.clone();
+                            move |page, _, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.compact_page = *page;
+                                    cx.notify();
+                                });
+                            }
+                        }),
+                ),
             )
             .child(
-                v_flex().gap_2().child("Loading State").child(
-                    Pagination::new("loading-pagination")
-                        .current_page(self.loading_page)
+                section("Disabled").child(
+                    Pagination::new("disabled-pagination")
+                        .current_page(4)
                         .total_pages(10)
-                        .loading(true)
+                        .with_size(self.size)
+                        .disabled(true)
                         .on_page_change(|_, _, _| {}),
                 ),
             )

@@ -1,76 +1,51 @@
-use std::rc::Rc;
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
-    Stateful, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
+    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, prelude::FluentBuilder, px,
 };
+use rust_i18n::t;
 
 use crate::{
-    ActiveTheme, Disableable, StyledExt,
+    Disableable, Icon, Sizable, Size, StyledExt,
     button::{Button, ButtonVariants},
     h_flex,
     icon::IconName,
-    v_flex,
+    menu::{DropdownMenu as _, PopupMenuItem},
 };
 
-/// Pagination component for navigating through pages of data.
-///
-/// This component displays current page information and provides previous/next
-/// navigation buttons with page numbers. It's commonly used with tables or lists
-/// that display paginated data.
-///
-/// # Examples
-///
-/// Basic usage:
-///
-/// ```ignore
-/// use gpui_component::pagination::Pagination;
-///
-/// Pagination::new("my-pagination")
-///     .current_page(1)
-///     .total_pages(10)
-///     .on_page_change(|page, _, cx| {
-///         // Handle page change
-///     })
-/// ```
-///
-/// With custom info display:
-///
-/// ```ignore
-/// Pagination::new("my-pagination")
-///     .current_page(1)
-///     .total_pages(10)
-///     .child(div().text_sm().child("Page 1 of 10"))
-///     .on_page_change(|page, _, cx| {
-///         // Handle page change
-///     })
-/// ```
+/// Pagination with page navigation, next and previous links.
 #[derive(IntoElement)]
 pub struct Pagination {
-    base: Stateful<Div>,
+    id: ElementId,
     style: StyleRefinement,
-    current_page: u32,
-    total_pages: u32,
-    loading: bool,
-    info: Option<gpui::AnyElement>,
-    show_page_numbers: bool,
-    max_visible_pages: usize,
-    on_page_change: Option<Rc<dyn Fn(&u32, &mut Window, &mut App)>>,
+    size: Size,
+    current_page: usize,
+    total_pages: usize,
+    disabled: bool,
+    compact: bool,
+    visible_pages: usize,
+    on_page_change: Option<Rc<dyn Fn(&usize, &mut Window, &mut App)>>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum PageItem {
+    Page(usize),
+    Ellipsis(Range<usize>),
 }
 
 impl Pagination {
     /// Create a new Pagination component with the given ID.
     pub fn new(id: impl Into<ElementId>) -> Self {
-        let id = id.into();
         Self {
-            base: div().id(id),
+            id: id.into(),
             style: StyleRefinement::default(),
+            size: Size::default(),
             current_page: 1,
             total_pages: 1,
-            loading: false,
-            info: None,
-            show_page_numbers: true,
-            max_visible_pages: 7,
+            visible_pages: 5,
+            disabled: false,
+            compact: false,
             on_page_change: None,
         }
     }
@@ -78,31 +53,17 @@ impl Pagination {
     /// Set the current page number (1-based).
     ///
     /// The value will be clamped between 1 and total_pages when total_pages is set.
-    pub fn current_page(mut self, page: u32) -> Self {
+    pub fn current_page(mut self, page: usize) -> Self {
         self.current_page = page.max(1);
         self
     }
 
     /// Set the total number of pages.
-    pub fn total_pages(mut self, pages: u32) -> Self {
+    pub fn total_pages(mut self, pages: usize) -> Self {
         self.total_pages = pages.max(1);
         if self.current_page > self.total_pages {
             self.current_page = self.total_pages;
         }
-        self
-    }
-
-    /// Set the loading state. When true, buttons will be disabled.
-    pub fn loading(mut self, loading: bool) -> Self {
-        self.loading = loading;
-        self
-    }
-
-    /// Set custom info element to display page information.
-    ///
-    /// If not set, no info text will be displayed.
-    pub fn child(mut self, info: impl IntoElement) -> Self {
-        self.info = Some(info.into_any_element());
         self
     }
 
@@ -122,21 +83,85 @@ impl Pagination {
     /// ```
     pub fn on_page_change(
         mut self,
-        handler: impl Fn(&u32, &mut Window, &mut App) + 'static,
+        handler: impl Fn(&usize, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_page_change = Some(Rc::new(handler));
         self
     }
 
-    /// Hide page numbers display.
-    pub fn hide_page_numbers(mut self) -> Self {
-        self.show_page_numbers = false;
+    /// Set to display as compact style.
+    ///
+    /// If true, only the prev, next buttons with only icon.
+    pub fn compact(mut self) -> Self {
+        self.compact = true;
         self
     }
 
-    /// Set maximum number of visible page numbers (default: 7).
-    pub fn max_visible_pages(mut self, max: usize) -> Self {
-        self.max_visible_pages = max;
+    /// Set viewable maximum number of page buttons, default
+    pub fn visible_pages(mut self, max: usize) -> Self {
+        self.visible_pages = max;
+        self
+    }
+
+    fn render_nav_button(&self, is_prev: bool) -> Button {
+        let (id, label, icon, disabled) = if is_prev {
+            (
+                "prev",
+                t!("Pagination.previous"),
+                IconName::ChevronLeft,
+                self.current_page <= 1,
+            )
+        } else {
+            (
+                "next",
+                t!("Pagination.next"),
+                IconName::ChevronRight,
+                self.current_page >= self.total_pages,
+            )
+        };
+
+        let target_page = if is_prev {
+            self.current_page.saturating_sub(1)
+        } else {
+            self.current_page.saturating_add(1)
+        };
+
+        Button::new(id)
+            .ghost()
+            .compact()
+            .with_size(self.size)
+            .disabled(self.disabled || disabled)
+            .tooltip(label.clone())
+            .when(self.compact, |this| this.icon(icon.clone()))
+            .when(!self.compact, |this| {
+                this.child(
+                    h_flex()
+                        .w_full()
+                        .gap_2()
+                        .flex_nowrap()
+                        .when(is_prev, |this| this.flex_row_reverse())
+                        .child(SharedString::from(label))
+                        .child(Icon::new(icon)),
+                )
+            })
+            .when_some(self.on_page_change.clone(), |this, handler| {
+                this.on_click(move |_, window, cx| {
+                    handler(&target_page, window, cx);
+                })
+            })
+    }
+}
+
+impl Disableable for Pagination {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Sizable for Pagination {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
         self
     }
 }
@@ -148,122 +173,89 @@ impl Styled for Pagination {
 }
 
 impl RenderOnce for Pagination {
-    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let can_prev = self.current_page > 1 && !self.loading;
-        let can_next = self.current_page < self.total_pages && !self.loading;
-        let base_id = self.base.interactivity().element_id.clone();
-
-        let page_numbers = if self.show_page_numbers {
-            calculate_page_range(self.current_page, self.total_pages, self.max_visible_pages)
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let page_numbers = if !self.compact {
+            calculate_page_range(self.current_page, self.total_pages, self.visible_pages)
         } else {
             vec![]
         };
 
-        let has_info = self.info.is_some();
-        let layout = if has_info { v_flex().gap_3() } else { v_flex() };
-
         let current_page = self.current_page;
-        let loading = self.loading;
-        let on_page_change = self.on_page_change;
+        let is_disabled = self.disabled;
+        let on_page_change = self.on_page_change.clone();
 
-        // Helper to create navigation button
-        let nav_button = |id_suffix: &str, icon: IconName, page: u32, enabled: bool| {
-            let handler = on_page_change.clone();
-            Button::new(SharedString::from(format!("{:?}-{}", base_id, id_suffix)))
-                .icon(icon)
-                .compact()
-                .disabled(!enabled)
-                .when_some(handler, |this, handler| {
-                    this.on_click(move |_, window, cx| handler(&page, window, cx))
-                })
-        };
-
-        self.base
-            .flex()
-            .flex_shrink_0()
-            .bg(cx.theme().background)
+        h_flex()
+            .id(self.id.clone())
             .px_2()
             .py_2()
-            .rounded_lg()
+            .gap_1()
             .items_center()
             .refine_style(&self.style)
-            .child(
-                layout
-                    .when_some(self.info, |this, info| this.child(info))
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .items_center()
-                            .child(nav_button(
-                                "prev",
-                                IconName::ChevronLeft,
-                                current_page.saturating_sub(1),
-                                can_prev,
-                            ))
-                            .when(self.show_page_numbers, |this| {
-                                page_numbers.iter().fold(this, |this, page_item| match page_item {
-                                    PageItem::Page(page) => {
-                                        let is_current = *page == current_page;
-                                        let page_num = *page;
-                                        let handler = on_page_change.clone();
+            .child(self.render_nav_button(true))
+            .children({
+                page_numbers.into_iter().map(|item| match item {
+                    PageItem::Page(page) => {
+                        let is_selected = page == current_page;
 
-                                        let mut button = Button::new(SharedString::from(format!(
-                                            "{:?}-page-{}",
-                                            base_id, page
-                                        )))
-                                        .label(page.to_string())
-                                        .compact()
-                                        .disabled(loading);
-
-                                        if is_current {
-                                            button = button.primary();
-                                        }
-
-                                        if let Some(handler) = handler {
-                                            if !is_current && !loading {
-                                                button = button.on_click(move |_, window, cx| {
-                                                    handler(&page_num, window, cx);
-                                                });
-                                            }
-                                        }
-
-                                        this.child(button)
-                                    }
-                                    PageItem::Ellipsis(idx) => this.child(
-                                        div()
-                                            .id(SharedString::from(format!(
-                                                "{:?}-ellipsis-{}",
-                                                base_id, idx
-                                            )))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .w_8()
-                                            .h_8()
-                                            .text_sm()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("..."),
-                                    ),
+                        Button::new(page as usize)
+                            .with_size(self.size)
+                            .map(|this| {
+                                if is_selected {
+                                    this.outline()
+                                } else {
+                                    this.ghost()
+                                }
+                            })
+                            .label(page.to_string())
+                            .compact()
+                            .disabled(is_disabled)
+                            .when(!is_selected, |this| {
+                                this.when_some(on_page_change.clone(), |this, handler| {
+                                    this.on_click(move |_, window, cx| {
+                                        handler(&page, window, cx);
+                                    })
                                 })
                             })
-                            .child(nav_button(
-                                "next",
-                                IconName::ChevronRight,
-                                current_page + 1,
-                                can_next,
-                            )),
-                    ),
-            )
+                            .into_any_element()
+                    }
+                    PageItem::Ellipsis(range) => Button::new(SharedString::from(format!(
+                        "ellipsis-{}-{}",
+                        range.start, range.end
+                    )))
+                    .ghost()
+                    .with_size(self.size)
+                    .compact()
+                    .disabled(self.disabled)
+                    .icon(IconName::Ellipsis)
+                    .dropdown_menu({
+                        let on_page_change = on_page_change.clone();
+                        move |mut menu, _, _| {
+                            for page in range.clone() {
+                                menu = menu.item(
+                                    PopupMenuItem::new(format!("{}", page))
+                                        .checked(page == current_page)
+                                        .on_click({
+                                            let on_page_change = on_page_change.clone();
+                                            move |_, window, cx| {
+                                                if let Some(handler) = &on_page_change {
+                                                    handler(&page, window, cx);
+                                                }
+                                            }
+                                        }),
+                                )
+                            }
+
+                            menu.min_w(px(55.)).max_h(px(240.)).scrollable(true)
+                        }
+                    })
+                    .into_any_element(),
+                })
+            })
+            .child(self.render_nav_button(false))
     }
 }
 
-#[derive(Debug, Clone)]
-enum PageItem {
-    Page(u32),
-    Ellipsis(usize),
-}
-
-fn calculate_page_range(current: u32, total: u32, max_visible: usize) -> Vec<PageItem> {
+fn calculate_page_range(current: usize, total: usize, max_visible: usize) -> Vec<PageItem> {
     if total <= 1 {
         return vec![];
     }
@@ -279,24 +271,24 @@ fn calculate_page_range(current: u32, total: u32, max_visible: usize) -> Vec<Pag
 
     pages.push(PageItem::Page(1));
 
-    let start = if current <= side_pages as u32 + 1 {
+    let start = if current <= side_pages + 1 {
         2
-    } else if current > total - side_pages as u32 - 1 {
-        total - side_pages as u32 - 1
+    } else if current > total - side_pages - 1 {
+        total - side_pages - 1
     } else {
-        current - side_pages as u32
+        current - side_pages
     };
 
     if start > 2 {
-        pages.push(PageItem::Ellipsis(0));
+        pages.push(PageItem::Ellipsis(2..start));
     }
 
-    let end = if current >= total - side_pages as u32 {
+    let end = if current >= total - side_pages {
         total - 1
-    } else if current <= side_pages as u32 + 1 {
-        side_pages as u32 + 2
+    } else if current <= side_pages + 1 {
+        side_pages + 2
     } else {
-        current + side_pages as u32
+        current + side_pages
     };
 
     for page in start..=end {
@@ -304,10 +296,54 @@ fn calculate_page_range(current: u32, total: u32, max_visible: usize) -> Vec<Pag
     }
 
     if end < total - 1 {
-        pages.push(PageItem::Ellipsis(1));
+        pages.push(PageItem::Ellipsis(end + 1..total));
     }
 
     pages.push(PageItem::Page(total));
 
     pages
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_calculate_page_range() {
+        use super::{PageItem, calculate_page_range};
+
+        let result = calculate_page_range(1, 10, 7);
+        let expected = vec![
+            PageItem::Page(1),
+            PageItem::Page(2),
+            PageItem::Page(3),
+            PageItem::Page(4),
+            PageItem::Ellipsis(5..10),
+            PageItem::Page(10),
+        ];
+        assert_eq!(result, expected);
+
+        let result = calculate_page_range(5, 10, 7);
+        let expected = vec![
+            PageItem::Page(1),
+            PageItem::Ellipsis(2..3),
+            PageItem::Page(3),
+            PageItem::Page(4),
+            PageItem::Page(5),
+            PageItem::Page(6),
+            PageItem::Page(7),
+            PageItem::Ellipsis(8..10),
+            PageItem::Page(10),
+        ];
+        assert_eq!(result, expected);
+
+        let result = calculate_page_range(10, 10, 7);
+        let expected = vec![
+            PageItem::Page(1),
+            PageItem::Ellipsis(2..7),
+            PageItem::Page(7),
+            PageItem::Page(8),
+            PageItem::Page(9),
+            PageItem::Page(10),
+        ];
+        assert_eq!(result, expected);
+    }
 }
