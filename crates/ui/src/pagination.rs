@@ -25,7 +25,7 @@ pub struct Pagination {
     disabled: bool,
     compact: bool,
     visible_pages: usize,
-    on_page_change: Option<Rc<dyn Fn(&usize, &mut Window, &mut App)>>,
+    on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App)>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -46,7 +46,7 @@ impl Pagination {
             visible_pages: 5,
             disabled: false,
             compact: false,
-            on_page_change: None,
+            on_click: None,
         }
     }
 
@@ -77,15 +77,12 @@ impl Pagination {
     /// Pagination::new("my-pagination")
     ///     .current_page(current_page)
     ///     .total_pages(total_pages)
-    ///     .on_page_change(|page, _, cx| {
+    ///     .on_click(|page, _, cx| {
     ///         // Handle page change
     ///     })
     /// ```
-    pub fn on_page_change(
-        mut self,
-        handler: impl Fn(&usize, &mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.on_page_change = Some(Rc::new(handler));
+    pub fn on_click(mut self, handler: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Rc::new(handler));
         self
     }
 
@@ -144,7 +141,7 @@ impl Pagination {
                         .child(Icon::new(icon)),
                 )
             })
-            .when_some(self.on_page_change.clone(), |this, handler| {
+            .when_some(self.on_click.clone(), |this, handler| {
                 this.on_click(move |_, window, cx| {
                     handler(&target_page, window, cx);
                 })
@@ -182,7 +179,7 @@ impl RenderOnce for Pagination {
 
         let current_page = self.current_page;
         let is_disabled = self.disabled;
-        let on_page_change = self.on_page_change.clone();
+        let on_click = self.on_click.clone();
 
         h_flex()
             .id(self.id.clone())
@@ -210,7 +207,7 @@ impl RenderOnce for Pagination {
                             .compact()
                             .disabled(is_disabled)
                             .when(!is_selected, |this| {
-                                this.when_some(on_page_change.clone(), |this, handler| {
+                                this.when_some(on_click.clone(), |this, handler| {
                                     this.on_click(move |_, window, cx| {
                                         handler(&page, window, cx);
                                     })
@@ -228,16 +225,16 @@ impl RenderOnce for Pagination {
                     .disabled(self.disabled)
                     .icon(IconName::Ellipsis)
                     .dropdown_menu({
-                        let on_page_change = on_page_change.clone();
+                        let on_click = on_click.clone();
                         move |mut menu, _, _| {
                             for page in range.clone() {
                                 menu = menu.item(
                                     PopupMenuItem::new(format!("{}", page))
                                         .checked(page == current_page)
                                         .on_click({
-                                            let on_page_change = on_page_change.clone();
+                                            let on_click = on_click.clone();
                                             move |_, window, cx| {
-                                                if let Some(handler) = &on_page_change {
+                                                if let Some(handler) = &on_click {
                                                     handler(&page, window, cx);
                                                 }
                                             }

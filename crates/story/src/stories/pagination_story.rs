@@ -103,7 +103,7 @@ impl Render for PaginationStory {
                         .current_page(self.basic_page)
                         .total_pages(10)
                         .with_size(self.size)
-                        .on_page_change({
+                        .on_click({
                             let entity = entity.clone();
                             move |page, _, cx| {
                                 entity.update(cx, |this, cx| {
@@ -121,7 +121,7 @@ impl Render for PaginationStory {
                         .total_pages(50)
                         .visible_pages(10)
                         .with_size(self.size)
-                        .on_page_change({
+                        .on_click({
                             let entity = entity.clone();
                             move |page, _, cx| {
                                 entity.update(cx, |this, cx| {
@@ -139,7 +139,7 @@ impl Render for PaginationStory {
                         .current_page(self.compact_page)
                         .total_pages(10)
                         .with_size(self.size)
-                        .on_page_change({
+                        .on_click({
                             let entity = entity.clone();
                             move |page, _, cx| {
                                 entity.update(cx, |this, cx| {
@@ -157,7 +157,7 @@ impl Render for PaginationStory {
                         .total_pages(10)
                         .with_size(self.size)
                         .disabled(true)
-                        .on_page_change(|_, _, _| {}),
+                        .on_click(|_, _, _| {}),
                 ),
             )
     }
