@@ -1,5 +1,5 @@
-use crate::{highlighter::HighlightTheme, scroll::ScrollbarShow};
-use gpui::{px, App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance};
+use crate::{highlighter::HighlightTheme, list::ListSettings, scroll::ScrollbarShow};
+use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -73,6 +73,8 @@ pub struct Theme {
     pub tile_shadow: bool,
     /// The border radius of the tile panel, default is 0px.
     pub tile_radius: Pixels,
+    /// The list settings.
+    pub list: ListSettings,
 }
 
 impl Default for Theme {
@@ -202,6 +204,7 @@ impl From<&ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             tile_radius: px(0.),
+            list: ListSettings::default(),
             colors: *colors,
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),

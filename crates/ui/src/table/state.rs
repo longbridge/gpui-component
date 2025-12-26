@@ -1063,17 +1063,23 @@ where
                     this.when(
                         is_selected && self.selection_state == SelectionState::Row,
                         |this| {
-                            this.border_color(gpui::transparent_white()).child(
-                                div()
-                                    .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                                    .left(px(0.))
-                                    .right(px(0.))
-                                    .bottom(px(-1.))
-                                    .absolute()
-                                    .bg(cx.theme().table_active)
-                                    .border_1()
-                                    .border_color(cx.theme().table_active_border),
-                            )
+                            this.map(|this| {
+                                if cx.theme().list.active_highlight {
+                                    this.border_color(gpui::transparent_white()).child(
+                                        div()
+                                            .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                                            .left(px(0.))
+                                            .right(px(0.))
+                                            .bottom(px(-1.))
+                                            .absolute()
+                                            .bg(cx.theme().table_active)
+                                            .border_1()
+                                            .border_color(cx.theme().table_active_border),
+                                    )
+                                } else {
+                                    this.bg(cx.theme().accent)
+                                }
+                            })
                         },
                     )
                 })
