@@ -1064,7 +1064,7 @@ where
                         is_selected && self.selection_state == SelectionState::Row,
                         |this| {
                             this.map(|this| {
-                                if cx.theme().list_active_highlight {
+                                if cx.theme().list.active_highlight {
                                     this.border_color(gpui::transparent_white()).child(
                                         div()
                                             .top(if row_ix == 0 { px(0.) } else { px(-1.) })

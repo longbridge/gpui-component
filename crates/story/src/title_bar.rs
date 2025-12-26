@@ -144,7 +144,7 @@ impl FontSizeSelector {
         cx: &mut Context<Self>,
     ) {
         let theme = Theme::global_mut(cx);
-        theme.list_active_highlight = !theme.list_active_highlight;
+        theme.list.active_highlight = !theme.list.active_highlight;
         window.refresh();
     }
 }
@@ -210,7 +210,7 @@ impl Render for FontSizeSelector {
                             .separator()
                             .menu_with_check(
                                 "List Active Highlight",
-                                cx.theme().list_active_highlight,
+                                cx.theme().list.active_highlight,
                                 Box::new(ToggleListActiveHighlight),
                             )
                     })
