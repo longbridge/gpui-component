@@ -1,8 +1,8 @@
-use crate::{h_flex, ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt};
+use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex};
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId,
-    InteractiveElement, IntoElement, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseMoveEvent,
+    ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
@@ -203,23 +203,25 @@ impl RenderOnce for ListItem {
             .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
             .map(|this| {
                 if is_selectable && (self.selected || self.secondary_selected) {
-                    let bg = if self.selected {
+                    let bg = if self.selected && cx.theme().list.active_highlight {
                         cx.theme().list_active
                     } else {
                         cx.theme().accent
                     };
 
-                    this.bg(bg).child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .border_1()
-                            .border_color(cx.theme().list_active_border)
-                            .refine_style(&selected_style),
-                    )
+                    this.bg(bg).when(cx.theme().list.active_highlight, |this| {
+                        this.child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .right_0()
+                                .bottom_0()
+                                .border_1()
+                                .border_color(cx.theme().list_active_border)
+                                .refine_style(&selected_style),
+                        )
+                    })
                 } else {
                     this
                 }

@@ -581,7 +581,7 @@ impl ThemeColor {
         );
         apply_color!(list_even, fallback = self.list);
         apply_color!(list_head, fallback = self.list);
-        apply_color!(list_hover, fallback = self.secondary_hover);
+        apply_color!(list_hover, fallback = self.accent.opacity(0.6));
         apply_color!(popover, fallback = self.background);
         apply_color!(popover_foreground, fallback = self.foreground);
         apply_color!(progress_bar, fallback = self.primary);
