@@ -199,3 +199,12 @@ Settings:
     zh-CN: 重置全部
     zh-HK: 重置全部
     it: Resetta Tutto
+Pagination:
+  previous:
+    en: Previous
+    zh-CN: 上一页
+    zh-HK: 上一頁
+  next:
+    en: Next
+    zh-CN: 下一页
+    zh-HK: 下一頁

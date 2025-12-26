@@ -20,6 +20,7 @@ collapsed: false
 - [Image](image) - Image display with fallbacks
 - [Kbd](kbd) - Keyboard shortcut display
 - [Label](label) - Text labels for form elements
+- [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options
 - [Skeleton](skeleton) - Loading placeholders

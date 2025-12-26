@@ -46,6 +46,7 @@ pub mod link;
 pub mod list;
 pub mod menu;
 pub mod notification;
+pub mod pagination;
 pub mod plot;
 pub mod popover;
 pub mod progress;
