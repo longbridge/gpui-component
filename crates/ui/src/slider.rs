@@ -551,7 +551,7 @@ impl RenderOnce for Slider {
             .when(axis.is_vertical(), |this| this.h(px(120.)))
             .when(axis.is_horizontal(), |this| this.w_full())
             .refine_style(&self.style)
-            .bg(cx.theme().transparent)
+            .bg(gpui::transparent_white())
             .text_color(cx.theme().foreground)
             .child(
                 h_flex()

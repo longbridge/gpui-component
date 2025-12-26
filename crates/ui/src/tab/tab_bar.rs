@@ -172,11 +172,11 @@ impl RenderOnce for TabBar {
             }
             TabVariant::Outline => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, default_gap)
+                (gpui::transparent_white(), padding, default_gap)
             }
             TabVariant::Pill => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, px(4.))
+                (gpui::transparent_white(), padding, px(4.))
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
@@ -202,7 +202,7 @@ impl RenderOnce for TabBar {
                     _ => px(16.),
                 };
 
-                (cx.theme().transparent, Edges::all(px(0.)), gap)
+                (gpui::transparent_white(), Edges::all(px(0.)), gap)
             }
         };
 

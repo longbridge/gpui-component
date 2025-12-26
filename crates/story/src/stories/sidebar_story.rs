@@ -299,7 +299,7 @@ impl Render for SidebarStory {
                                     })
                                     .when(self.collapsed, |this| {
                                         this.size_4()
-                                            .bg(cx.theme().transparent)
+                                            .bg(gpui::transparent_white())
                                             .text_color(cx.theme().foreground)
                                             .child(Icon::new(IconName::GalleryVerticalEnd))
                                     }),

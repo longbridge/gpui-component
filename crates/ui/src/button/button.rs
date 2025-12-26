@@ -89,11 +89,11 @@ pub trait ButtonVariants: Sized {
 impl ButtonCustomVariant {
     pub fn new(cx: &App) -> Self {
         Self {
-            color: cx.theme().transparent,
+            color: gpui::transparent_white(),
             foreground: cx.theme().foreground,
-            border: cx.theme().transparent,
-            hover: cx.theme().transparent,
-            active: cx.theme().transparent,
+            border: gpui::transparent_white(),
+            hover: gpui::transparent_white(),
+            active: gpui::transparent_white(),
             shadow: false,
         }
     }
@@ -641,7 +641,7 @@ impl ButtonVariant {
             Self::Warning => cx.theme().warning,
             Self::Success => cx.theme().success,
             Self::Info => cx.theme().info,
-            Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
+            Self::Ghost | Self::Link | Self::Text => gpui::transparent_white(),
             Self::Custom(colors) => colors.color,
         }
     }
@@ -740,7 +740,7 @@ impl ButtonVariant {
                     bg
                 }
             }
-            Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
+            Self::Ghost | Self::Link | Self::Text => gpui::transparent_white(),
             Self::Custom(colors) => colors.border,
         }
     }
@@ -828,8 +828,8 @@ impl ButtonVariant {
                     cx.theme().secondary.darken(0.1).opacity(0.8)
                 }
             }
-            Self::Link => cx.theme().transparent,
-            Self::Text => cx.theme().transparent,
+            Self::Link => gpui::transparent_white(),
+            Self::Text => gpui::transparent_white(),
         };
 
         let border = self.border_color(bg, outline, cx);
@@ -895,8 +895,8 @@ impl ButtonVariant {
                     cx.theme().info_active
                 }
             }
-            Self::Link => cx.theme().transparent,
-            Self::Text => cx.theme().transparent,
+            Self::Link => gpui::transparent_white(),
+            Self::Text => gpui::transparent_white(),
             Self::Custom(colors) => {
                 if outline {
                     colors.active.opacity(0.1)
@@ -931,8 +931,8 @@ impl ButtonVariant {
             Self::Warning => cx.theme().warning_active,
             Self::Success => cx.theme().success_active,
             Self::Info => cx.theme().info_active,
-            Self::Link => cx.theme().transparent,
-            Self::Text => cx.theme().transparent,
+            Self::Link => gpui::transparent_white(),
+            Self::Text => gpui::transparent_white(),
             Self::Custom(colors) => colors.active,
         };
 
@@ -956,7 +956,7 @@ impl ButtonVariant {
 
     fn disabled(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
-            Self::Link | Self::Ghost | Self::Text => cx.theme().transparent,
+            Self::Link | Self::Ghost | Self::Text => gpui::transparent_white(),
             Self::Primary => cx.theme().primary.opacity(0.15),
             Self::Danger => cx.theme().danger.opacity(0.15),
             Self::Warning => cx.theme().warning.opacity(0.15),
@@ -967,7 +967,7 @@ impl ButtonVariant {
         };
         let fg = cx.theme().muted_foreground.opacity(0.5);
         let (bg, border) = if outline {
-            (cx.theme().transparent, cx.theme().border.opacity(0.5))
+            (gpui::transparent_white(), cx.theme().border.opacity(0.5))
         } else {
             (bg, bg)
         };

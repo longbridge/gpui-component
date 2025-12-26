@@ -990,7 +990,7 @@ impl Tiles {
             .absolute()
             .w_full()
             .h(DRAG_BAR_HEIGHT)
-            .bg(cx.theme().transparent)
+            .bg(gpui::transparent_white())
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _, cx| {
