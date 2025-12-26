@@ -42,7 +42,9 @@ Pagination::new("my-pagination")
 
 ### Compact Style
 
-The compact style only shows the previous and next buttons with icons, without displaying page numbers:
+The compact style only shows the previous and next buttons with icons, without displaying page numbers.
+
+Use `compact` method to enable compact style:
 
 ```rust
 Pagination::new("my-pagination")
