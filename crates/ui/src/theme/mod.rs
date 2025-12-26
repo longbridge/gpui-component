@@ -1,4 +1,4 @@
-use crate::{highlighter::HighlightTheme, scroll::ScrollbarShow};
+use crate::{highlighter::HighlightTheme, list::ListConfig, scroll::ScrollbarShow};
 use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -73,21 +73,7 @@ pub struct Theme {
     pub tile_shadow: bool,
     /// The border radius of the tile panel, default is 0px.
     pub tile_radius: Pixels,
-    pub list: ListSetting,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ListSetting {
-    /// Whether to use active highlight style on ListItem, default
-    pub active_highlight: bool,
-}
-
-impl Default for ListSetting {
-    fn default() -> Self {
-        Self {
-            active_highlight: true,
-        }
-    }
+    pub list: ListConfig,
 }
 
 impl Default for Theme {
@@ -217,7 +203,7 @@ impl From<&ThemeColor> for Theme {
             tile_grid_size: px(8.),
             tile_shadow: true,
             tile_radius: px(0.),
-            list: ListSetting::default(),
+            list: ListConfig::default(),
             colors: *colors,
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
