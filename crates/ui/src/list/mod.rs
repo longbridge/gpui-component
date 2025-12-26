@@ -12,14 +12,14 @@ use schemars::JsonSchema;
 pub use separator_item::*;
 use serde::{Deserialize, Serialize};
 
-/// Configuration options for List.
+/// Settings for List.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ListConfig {
+pub struct ListSettings {
     /// Whether to use active highlight style on ListItem, default
     pub active_highlight: bool,
 }
 
-impl Default for ListConfig {
+impl Default for ListSettings {
     fn default() -> Self {
         Self {
             active_highlight: true,
