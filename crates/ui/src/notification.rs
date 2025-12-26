@@ -287,7 +287,7 @@ impl Render for Notification {
             Some(type_) => Some(type_.icon(cx)),
         };
         let has_icon = icon.is_some();
-        let placement = cx.theme().notification.placement.clone();
+        let placement = cx.theme().notification.placement;
 
         h_flex()
             .id("notification")

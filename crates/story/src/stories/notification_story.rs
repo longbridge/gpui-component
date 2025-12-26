@@ -82,7 +82,7 @@ impl Render for NotificationStory {
                         .outline()
                         .label(cx.theme().notification.placement.to_string())
                         .dropdown_menu(move |menu, window, cx| {
-                            let menu = ANCHORS.clone().into_iter().fold(menu, |menu, placement| {
+                            let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
                                 menu.item(
                                     PopupMenuItem::new(placement.to_string())
                                         .checked(cx.theme().notification.placement == placement)
