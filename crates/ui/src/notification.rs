@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use smol::Timer;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
+    ActiveTheme as _, Anchor, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
@@ -354,32 +354,28 @@ impl Render for Notification {
                             .opacity(opacity)
                             .when(opacity < 0.85, |this| this.shadow_none());
                         match placement {
-                            NotificationPlacement::TopRight
-                            | NotificationPlacement::BottomRight => {
+                            Anchor::TopRight | Anchor::BottomRight => {
                                 let x_offset = px(0.) + delta * px(45.);
                                 that.left(px(0.) + x_offset)
                             }
-                            NotificationPlacement::TopLeft | NotificationPlacement::BottomLeft => {
+                            Anchor::TopLeft | Anchor::BottomLeft => {
                                 let x_offset = px(0.) - delta * px(45.);
                                 that.left(px(0.) + x_offset)
                             }
-                            NotificationPlacement::TopCenter => {
+                            Anchor::TopCenter => {
                                 let y_offset = px(0.) - delta * px(45.);
                                 that.top(px(0.) + y_offset)
                             }
-                            NotificationPlacement::BottomCenter => {
+                            Anchor::BottomCenter => {
                                 let y_offset = px(0.) + delta * px(45.);
                                 that.top(px(0.) + y_offset)
                             }
                         }
                     } else {
                         let y_offset = match placement {
-                            NotificationPlacement::TopLeft
-                            | NotificationPlacement::TopCenter
-                            | NotificationPlacement::TopRight => px(-45.) + delta * px(45.),
-                            NotificationPlacement::BottomLeft
-                            | NotificationPlacement::BottomCenter
-                            | NotificationPlacement::BottomRight => px(45.) - delta * px(45.),
+                            placement if placement.is_top() => px(-45.) + delta * px(45.),
+                            placement if placement.is_bottom() => px(45.) - delta * px(45.),
+                            _ => px(0.),
                         };
                         let opacity = delta;
                         this.top(px(0.) + y_offset)
@@ -391,35 +387,29 @@ impl Render for Notification {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-pub enum NotificationPlacement {
-    TopLeft,
-    TopCenter,
-    #[default]
-    TopRight,
-    BottomLeft,
-    BottomCenter,
-    BottomRight,
-}
-
+/// The settings for notifications.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct NotificationSetting {
-    pub placement: NotificationPlacement,
-    pub top: Pixels,
-    pub right: Pixels,
-    pub bottom: Pixels,
-    pub left: Pixels,
+pub struct NotificationSettings {
+    /// The placement of the notification, default: [`Anchor::TopRight`]
+    pub placement: Anchor,
+    /// The margins of the notification with respect to the window edges.
+    pub margins: Edges<Pixels>,
+    /// The maximum number of notifications to show at once, default: 10
+    pub max_items: usize,
 }
 
-impl Default for NotificationSetting {
+impl Default for NotificationSettings {
     fn default() -> Self {
         let offset = px(16.);
         Self {
-            placement: NotificationPlacement::default(),
-            top: TITLE_BAR_HEIGHT + offset, // avoid overlap with title bar
-            right: offset,
-            bottom: offset,
-            left: offset,
+            placement: Anchor::TopRight,
+            margins: Edges {
+                top: TITLE_BAR_HEIGHT + offset, // avoid overlap with title bar
+                right: offset,
+                bottom: offset,
+                left: offset,
+            },
+            max_items: 10,
         }
     }
 }
@@ -513,39 +503,34 @@ impl Render for NotificationList {
         let size = window.viewport_size();
         let items = self.notifications.iter().rev().take(10).rev().cloned();
 
-        let setting = &cx.theme().notification;
-        let placement = setting.placement.clone();
-        let top = setting.top;
-        let right = setting.right;
-        let bottom = setting.bottom;
-        let left = setting.left;
+        let placement = cx.theme().notification.placement;
+        let margins = &cx.theme().notification.margins;
 
         v_flex()
             .id("notification-list")
             .max_h(size.height)
-            .pt(top)
-            .pb(bottom)
+            .pt(margins.top)
+            .pb(margins.bottom)
             .gap_3()
             .when(
-                matches!(placement, NotificationPlacement::TopRight),
-                |this| this.pr(right), // ignore left
+                matches!(placement, Anchor::TopRight),
+                |this| this.pr(margins.right), // ignore left
             )
             .when(
-                matches!(placement, NotificationPlacement::TopLeft),
-                |this| this.pl(left), // ignore right
+                matches!(placement, Anchor::TopLeft),
+                |this| this.pl(margins.left), // ignore right
             )
             .when(
-                matches!(placement, NotificationPlacement::BottomLeft),
-                |this| this.flex_col_reverse().pl(left), // ignore right
+                matches!(placement, Anchor::BottomLeft),
+                |this| this.flex_col_reverse().pl(margins.left), // ignore right
             )
             .when(
-                matches!(placement, NotificationPlacement::BottomRight),
-                |this| this.flex_col_reverse().pr(right), // ignore left
+                matches!(placement, Anchor::BottomRight),
+                |this| this.flex_col_reverse().pr(margins.right), // ignore left
             )
-            .when(
-                matches!(placement, NotificationPlacement::BottomCenter),
-                |this| this.flex_col_reverse(),
-            )
+            .when(matches!(placement, Anchor::BottomCenter), |this| {
+                this.flex_col_reverse()
+            })
             .on_hover(cx.listener(|view, hovered, _, cx| {
                 view.expanded = *hovered;
                 cx.notify()

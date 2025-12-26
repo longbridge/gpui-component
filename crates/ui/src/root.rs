@@ -1,8 +1,8 @@
 use crate::{
-    ActiveTheme, ElementExt, Placement,
+    ActiveTheme, Anchor, ElementExt, Placement,
     dialog::Dialog,
     input::InputState,
-    notification::{Notification, NotificationList, NotificationPlacement},
+    notification::{Notification, NotificationList},
     sheet::Sheet,
     window_border,
 };
@@ -122,30 +122,24 @@ impl Root {
         Some(
             div()
                 .absolute()
-                .when(
-                    matches!(placement, NotificationPlacement::TopRight),
-                    |this| this.top_0().right_0(),
-                )
-                .when(
-                    matches!(placement, NotificationPlacement::TopLeft),
-                    |this| this.top_0().left_0(),
-                )
-                .when(
-                    matches!(placement, NotificationPlacement::TopCenter),
-                    |this| this.top_0().mx_auto(),
-                )
-                .when(
-                    matches!(placement, NotificationPlacement::BottomRight),
-                    |this| this.bottom_0().right_0(),
-                )
-                .when(
-                    matches!(placement, NotificationPlacement::BottomLeft),
-                    |this| this.bottom_0().left_0(),
-                )
-                .when(
-                    matches!(placement, NotificationPlacement::BottomCenter),
-                    |this| this.bottom_0().mx_auto(),
-                )
+                .when(matches!(placement, Anchor::TopRight), |this| {
+                    this.top_0().right_0()
+                })
+                .when(matches!(placement, Anchor::TopLeft), |this| {
+                    this.top_0().left_0()
+                })
+                .when(matches!(placement, Anchor::TopCenter), |this| {
+                    this.top_0().mx_auto()
+                })
+                .when(matches!(placement, Anchor::BottomRight), |this| {
+                    this.bottom_0().right_0()
+                })
+                .when(matches!(placement, Anchor::BottomLeft), |this| {
+                    this.bottom_0().left_0()
+                })
+                .when(matches!(placement, Anchor::BottomCenter), |this| {
+                    this.bottom_0().mx_auto()
+                })
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
                 .when_some(mb, |this, offset| this.mb(offset))

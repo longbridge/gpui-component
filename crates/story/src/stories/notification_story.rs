@@ -4,11 +4,11 @@ use gpui::{
 };
 
 use gpui_component::{
-    Theme, WindowExt as _,
+    ActiveTheme, Anchor, Theme, WindowExt as _,
     button::{Button, ButtonVariants},
     h_flex,
-    notification::{Notification, NotificationPlacement, NotificationType},
-    radio::RadioGroup,
+    menu::{DropdownMenu as _, PopupMenuItem},
+    notification::{Notification, NotificationType},
     text::markdown,
     v_flex,
 };
@@ -24,7 +24,6 @@ This is a custom notification.
 
 pub struct NotificationStory {
     focus_handle: FocusHandle,
-    radio_group_checked: Option<usize>,
 }
 
 impl super::Story for NotificationStory {
@@ -49,7 +48,6 @@ impl NotificationStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            radio_group_checked: Some(2),
         }
     }
 }
@@ -62,39 +60,45 @@ impl Focusable for NotificationStory {
 
 impl Render for NotificationStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        const ANCHORS: [Anchor; 6] = [
+            Anchor::TopLeft,
+            Anchor::TopCenter,
+            Anchor::TopRight,
+            Anchor::BottomLeft,
+            Anchor::BottomCenter,
+            Anchor::BottomRight,
+        ];
+
+        let view = cx.entity();
+
         v_flex()
             .id("notification-story")
             .track_focus(&self.focus_handle)
             .size_full()
             .gap_3()
             .child(
-                section("Notification Placement").child(
-                    v_flex().child(
-                        RadioGroup::horizontal("notification-placement")
-                            .children([
-                                "Top-Left",
-                                "Top-Center",
-                                "Top-Right",
-                                "Bottom-Left",
-                                "Bottom-Center",
-                                "Bottom-Right",
-                            ])
-                            .selected_index(self.radio_group_checked)
-                            .on_click(cx.listener(|this, selected_ix: &usize, _, cx| {
-                                this.radio_group_checked = Some(*selected_ix);
-                                let placement = match selected_ix {
-                                    0 => NotificationPlacement::TopLeft,
-                                    1 => NotificationPlacement::TopCenter,
-                                    2 => NotificationPlacement::TopRight,
-                                    3 => NotificationPlacement::BottomLeft,
-                                    4 => NotificationPlacement::BottomCenter,
-                                    5 => NotificationPlacement::BottomRight,
-                                    _ => unreachable!(),
-                                };
-                                Theme::global_mut(cx).notification.placement = placement;
-                                cx.notify();
-                            })),
-                    ),
+                h_flex().gap_3().child(
+                    Button::new("placement")
+                        .outline()
+                        .label(cx.theme().notification.placement.to_string())
+                        .dropdown_menu(move |menu, window, cx| {
+                            let menu = ANCHORS.clone().into_iter().fold(menu, |menu, placement| {
+                                menu.item(
+                                    PopupMenuItem::new(placement.to_string())
+                                        .checked(cx.theme().notification.placement == placement)
+                                        .on_click(window.listener_for(
+                                            &view,
+                                            move |_, _, _, cx| {
+                                                Theme::global_mut(cx).notification.placement =
+                                                    placement;
+                                                cx.notify();
+                                            },
+                                        )),
+                                )
+                            });
+
+                            menu
+                        }),
                 ),
             )
             .child(

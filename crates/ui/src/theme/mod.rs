@@ -1,5 +1,5 @@
 use crate::{
-    highlighter::HighlightTheme, notification::NotificationSetting, scroll::ScrollbarShow,
+    highlighter::HighlightTheme, notification::NotificationSettings, scroll::ScrollbarShow,
 };
 use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
 use schemars::JsonSchema;
@@ -70,7 +70,7 @@ pub struct Theme {
     /// Show the scrollbar mode, default: Scrolling
     pub scrollbar_show: ScrollbarShow,
     /// The notification setting.
-    pub notification: NotificationSetting,
+    pub notification: NotificationSettings,
     /// Tile grid size, default is 4px.
     pub tile_grid_size: Pixels,
     /// The shadow of the tile panel.
@@ -203,7 +203,7 @@ impl From<&ThemeColor> for Theme {
             radius_lg: px(8.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
-            notification: NotificationSetting::default(),
+            notification: NotificationSettings::default(),
             tile_grid_size: px(8.),
             tile_shadow: true,
             tile_radius: px(0.),
