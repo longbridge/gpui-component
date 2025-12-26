@@ -1,5 +1,5 @@
 use crate::{highlighter::HighlightTheme, scroll::ScrollbarShow};
-use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
+use gpui::{px, App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -64,6 +64,7 @@ pub struct Theme {
     /// Radius for the large elements, e.g.: Dialog, Notification border radius.
     pub radius_lg: Pixels,
     pub shadow: bool,
+    pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
     pub scrollbar_show: ScrollbarShow,
     /// Tile grid size, default is 4px.
@@ -184,6 +185,7 @@ impl From<&ThemeColor> for Theme {
     fn from(colors: &ThemeColor) -> Self {
         Theme {
             mode: ThemeMode::default(),
+            transparent: Hsla::transparent_black(),
             font_family: ".SystemUIFont".into(),
             font_size: px(16.),
             mono_font_family: if cfg!(target_os = "macos") {

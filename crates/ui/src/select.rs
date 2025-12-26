@@ -803,7 +803,7 @@ where
                     .items_center()
                     .justify_between()
                     .border_1()
-                    .border_color(gpui::transparent_white())
+                    .border_color(cx.theme().transparent)
                     .when(self.options.appearance, |this| {
                         this.bg(cx.theme().background)
                             .border_color(cx.theme().input)

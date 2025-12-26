@@ -1,10 +1,10 @@
 use crate::{
-    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, h_flex, text::Text, tooltip::Tooltip,
+    h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
 };
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, InteractiveElement, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _, px,
+    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, App, ElementId,
+    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -138,7 +138,7 @@ impl RenderOnce for Switch {
                         .flex()
                         .items_center()
                         .border(inset)
-                        .border_color(gpui::transparent_white())
+                        .border_color(cx.theme().transparent)
                         .bg(bg)
                         .when_some(self.tooltip.clone(), |this, tooltip| {
                             this.tooltip(move |window, cx| {

@@ -16,7 +16,7 @@ use gpui::{
 };
 
 use crate::{
-    StyledExt as _,
+    ActiveTheme, StyledExt as _,
     text::{TextView, TextViewStyle},
 };
 
@@ -48,7 +48,7 @@ pub(super) fn render_markdown(
     id: impl Into<ElementId>,
     markdown: impl Into<SharedString>,
     _: &mut Window,
-    _: &mut App,
+    cx: &mut App,
 ) -> TextView {
     TextView::markdown(id, markdown)
         .style(
@@ -61,7 +61,7 @@ pub(super) fn render_markdown(
                 })
                 .code_block(
                     StyleRefinement::default()
-                        .bg(gpui::transparent_white())
+                        .bg(cx.theme().transparent)
                         .p_0()
                         .text_size(px(11.)),
                 ),
