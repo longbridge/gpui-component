@@ -197,7 +197,7 @@ impl RenderOnce for Pagination {
                     PageItem::Page(page) => {
                         let is_selected = page == current_page;
 
-                        Button::new(page as usize)
+                        Button::new(page)
                             .with_size(self.size)
                             .map(|this| {
                                 if is_selected {
@@ -262,7 +262,7 @@ fn calculate_page_range(current: usize, total: usize, max_visible: usize) -> Vec
 
     let max_visible = max_visible.max(5);
 
-    if total as usize <= max_visible {
+    if total <= max_visible {
         return (1..=total).map(PageItem::Page).collect();
     }
 
