@@ -110,6 +110,7 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
+        let mut alignment_offset = px(0.);
         for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
             let row = ix;
             let line_origin = point(px(0.), offset_y);
@@ -127,20 +128,21 @@ impl TextElement {
                 // If in visible range lines
                 if cursor_pos.is_none() {
                     let offset = cursor.saturating_sub(prev_lines_offset);
-                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                    if let Some(pos) = line.position_for_index(offset, last_layout) {
                         current_row = Some(row);
                         cursor_pos = Some(line_origin + pos);
+                        alignment_offset = last_layout.alignment_offset(line.longest_width);
                     }
                 }
                 if cursor_start.is_none() {
                     let offset = selected_range.start.saturating_sub(prev_lines_offset);
-                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                    if let Some(pos) = line.position_for_index(offset, last_layout) {
                         cursor_start = Some(line_origin + pos);
                     }
                 }
                 if cursor_end.is_none() {
                     let offset = selected_range.end.saturating_sub(prev_lines_offset);
-                    if let Some(pos) = line.position_for_index(offset, line_height) {
+                    if let Some(pos) = line.position_for_index(offset, last_layout) {
                         cursor_end = Some(line_origin + pos);
                     }
                 }
@@ -186,6 +188,15 @@ impl TextElement {
                 } else {
                     scroll_offset.x
                 };
+                if last_layout.text_align == TextAlign::Right {
+                    println!(
+                        "--- scroll x {}, cursor x: {}, scroll_size: {}, diff: {}",
+                        scroll_offset.x,
+                        cursor_pos.x,
+                        state.scroll_size.width,
+                        scroll_offset.x + cursor_pos.x
+                    );
+                }
 
                 // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
                 // So, here we just adjust offset by `line_height` for move smooth.
@@ -200,6 +211,7 @@ impl TextElement {
                         scroll_offset.y
                     };
 
+                // For selection to move scroll
                 if state.selection_reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
                         // selection start is out of left
@@ -210,6 +222,8 @@ impl TextElement {
                         scroll_offset.y = -cursor_start.y;
                     }
                 } else {
+                    // TODO: Consider to remove this part,
+                    // maybe is not necessary (But selection_reversed is needed).
                     if scroll_offset.x + cursor_end.x <= px(0.) {
                         // selection end is out of left
                         scroll_offset.x = -cursor_end.x;
@@ -282,16 +296,16 @@ impl TextElement {
             let line_origin = point(px(0.), offset_y);
 
             let line_cursor_start =
-                line.position_for_index(start_ix.saturating_sub(prev_lines_offset), line_height);
+                line.position_for_index(start_ix.saturating_sub(prev_lines_offset), last_layout);
             let line_cursor_end =
-                line.position_for_index(end_ix.saturating_sub(prev_lines_offset), line_height);
+                line.position_for_index(end_ix.saturating_sub(prev_lines_offset), last_layout);
 
             if line_cursor_start.is_some() || line_cursor_end.is_some() {
                 let start = line_cursor_start
-                    .unwrap_or_else(|| line.position_for_index(0, line_height).unwrap());
+                    .unwrap_or_else(|| line.position_for_index(0, last_layout).unwrap());
 
                 let end = line_cursor_end
-                    .unwrap_or_else(|| line.position_for_index(line.len(), line_height).unwrap());
+                    .unwrap_or_else(|| line.position_for_index(line.len(), last_layout).unwrap());
 
                 // Split the selection into multiple items
                 let wrapped_lines =
@@ -988,6 +1002,8 @@ impl Element for TextElement {
             line_number_width,
             lines: Rc::new(vec![]),
             cursor_bounds: None,
+            text_align: state.text_align,
+            content_width: bounds.size.width,
         };
 
         let run = TextRun {
@@ -1255,6 +1271,7 @@ impl Element for TextElement {
         let bounds = prepaint.bounds;
         let selected_range = self.state.read(cx).selected_range;
         let visible_range = &prepaint.last_layout.visible_range;
+        let text_align = prepaint.last_layout.text_align;
 
         window.handle_input(
             &focus_handle,
@@ -1302,7 +1319,6 @@ impl Element for TextElement {
                 mask_offset_y = px(2.5);
             }
         }
-
         let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
 
         // Paint active line
@@ -1373,7 +1389,14 @@ impl Element for TextElement {
             );
 
             // Paint the actual line
-            _ = line.paint(p, line_height, window, cx);
+            _ = line.paint(
+                p,
+                line_height,
+                text_align,
+                Some(prepaint.last_layout.content_width),
+                window,
+                cx,
+            );
             offset_y += line.size(line_height).height;
 
             // After the cursor row, paint ghost lines (which shifts subsequent content down)
@@ -1394,7 +1417,14 @@ impl Element for TextElement {
                     window.paint_quad(fill(ghost_bounds, cx.theme().editor_background()));
 
                     // Paint ghost line text
-                    _ = ghost_line.paint(ghost_p, line_height, TextAlign::Left, None, window, cx);
+                    _ = ghost_line.paint(
+                        ghost_p,
+                        line_height,
+                        text_align,
+                        Some(prepaint.last_layout.content_width),
+                        window,
+                        cx,
+                    );
                     offset_y += line_height;
                 }
             }
@@ -1482,7 +1512,7 @@ impl Element for TextElement {
                     window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
 
                     // Paint first line completion text
-                    _ = first_line.paint(p, line_height, TextAlign::Left, None, window, cx);
+                    _ = first_line.paint(p, line_height, text_align, None, window, cx);
                 }
             }
         }

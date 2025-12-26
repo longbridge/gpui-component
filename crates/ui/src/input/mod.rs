@@ -14,9 +14,9 @@ mod otp_input;
 pub(crate) mod popovers;
 mod rope_ext;
 mod search;
+mod selection;
 mod state;
 mod text_wrapper;
-mod selection;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
