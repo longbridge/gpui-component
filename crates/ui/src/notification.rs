@@ -328,10 +328,8 @@ impl Render for Notification {
                 }))
             })
             .child(
-                h_flex()
-                    .absolute()
-                    .top_3p5()
-                    .right_3p5()
+                v_flex()
+                    .h_full()
                     .invisible()
                     .group_hover("", |this| this.visible())
                     .child(
