@@ -302,6 +302,8 @@ pub struct InputState {
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
     pub(super) placeholder: SharedString,
+    /// Whether to show context menu. (default: true)
+    pub(super) context_menu: bool,
 
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
@@ -398,6 +400,7 @@ impl InputState {
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            context_menu: true,
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu: None,
@@ -506,6 +509,12 @@ impl InputState {
                 *max_r = rows;
             }
         }
+        self
+    }
+
+    /// Set whether to show ContextMenu, default is true.
+    pub fn context_menu(mut self, enabled: bool) -> Self {
+        self.context_menu = enabled;
         self
     }
 
@@ -1229,7 +1238,7 @@ impl InputState {
         }
 
         // Show Mouse context menu
-        if event.button == MouseButton::Right {
+        if self.context_menu && event.button == MouseButton::Right {
             self.handle_right_click_menu(event, offset, window, cx);
             return;
         }
