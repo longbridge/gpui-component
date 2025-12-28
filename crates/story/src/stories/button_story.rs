@@ -944,6 +944,11 @@ impl Render for ButtonStory {
                             .primary()
                             .label("8 px")
                             .button_text_size(Size::Size(px(8.0))),
+                    )
+                    .child(
+                        Button::new("button-custom-text-8")
+                            .primary()
+                            .label("Not Specified"),
                     ),
             )
     }
