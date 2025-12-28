@@ -4,7 +4,8 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
+    ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Size, StyleSized,
+    Theme,
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex, v_flex,
@@ -904,6 +905,45 @@ impl Render for ButtonStory {
                             .loading(loading)
                             .when(compact, |this| this.compact())
                             .on_click(Self::on_click),
+                    ),
+            )
+            .child(
+                section("Button with different text size")
+                    .child(
+                        Button::new("button-custom-text-large")
+                            .primary()
+                            .label("Large")
+                            .button_text_size(Size::Large),
+                    )
+                    .child(
+                        Button::new("button-custom-text-medium")
+                            .primary()
+                            .label("Medium")
+                            .button_text_size(Size::Medium),
+                    )
+                    .child(
+                        Button::new("button-custom-text-small")
+                            .primary()
+                            .label("Small")
+                            .button_text_size(Size::Small),
+                    )
+                    .child(
+                        Button::new("button-custom-text-xsmall")
+                            .primary()
+                            .label("XSmall")
+                            .button_text_size(Size::XSmall),
+                    )
+                    .child(
+                        Button::new("button-custom-text-35")
+                            .primary()
+                            .label("35 px")
+                            .button_text_size(Size::Size(px(35.0))),
+                    )
+                    .child(
+                        Button::new("button-custom-text-8")
+                            .primary()
+                            .label("8 px")
+                            .button_text_size(Size::Size(px(8.0))),
                     ),
             )
     }

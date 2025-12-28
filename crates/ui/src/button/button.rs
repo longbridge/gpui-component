@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, IconName, Selectable,
-    Sizable, Size, StyleSized, StyledExt, h_flex, spinner::Spinner, tooltip::Tooltip,
+    Sizable, Size, StyledExt, h_flex, spinner::Spinner, tooltip::Tooltip,
 };
 use gpui::{
     Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
@@ -572,7 +572,6 @@ impl RenderOnce for Button {
                     .w_full()
                     .items_center()
                     .justify_center()
-                    .button_text_size(self.size)
                     .map(|this| match self.size {
                         Size::XSmall => this.gap_1(),
                         Size::Small => this.gap_1(),
