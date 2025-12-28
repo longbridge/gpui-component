@@ -1133,7 +1133,7 @@ impl Element for TextElement {
             px(0.)
         };
 
-        let scroll_size = size(
+        let mut scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
             } else {
@@ -1142,6 +1142,12 @@ impl Element for TextElement {
             (total_wrapped_lines as f32 * line_height + empty_bottom_height + ghost_lines_height)
                 .max(bounds.size.height),
         );
+
+        // TODO: should be add some gap to right, to convenient to focus on boundary position
+        if last_layout.text_align == TextAlign::Right || last_layout.text_align == TextAlign::Center
+        {
+            scroll_size.width = longest_line_width;
+        }
 
         // `position_for_index` for example
         //
@@ -1381,10 +1387,21 @@ impl Element for TextElement {
         let ghost_lines = &prepaint.ghost_lines;
         let has_ghost_lines = !ghost_lines.is_empty();
 
+        // Keep scrollbar offset always be positive，Start from the left position
+        let scroll_offset = if text_align == TextAlign::Right {
+            (prepaint.scroll_size.width - prepaint.bounds.size.width).max(px(0.))
+        } else if text_align == TextAlign::Center {
+            (prepaint.scroll_size.width - prepaint.bounds.size.width)
+                .half()
+                .max(px(0.))
+        } else {
+            px(0.)
+        };
+
         for (ix, line) in prepaint.last_layout.lines.iter().enumerate() {
             let row = visible_range.start + ix;
             let p = point(
-                origin.x + prepaint.last_layout.line_number_width,
+                origin.x + prepaint.last_layout.line_number_width + (scroll_offset),
                 origin.y + offset_y,
             );
 
