@@ -913,7 +913,7 @@ impl Render for ButtonStory {
                         Button::new("button-custom-text-large")
                             .primary()
                             .label("Large")
-                            .button_text_size(Size::Large),
+                            .text_lg(),
                     )
                     .child(
                         Button::new("button-custom-text-medium")
@@ -925,7 +925,7 @@ impl Render for ButtonStory {
                         Button::new("button-custom-text-small")
                             .primary()
                             .label("Small")
-                            .button_text_size(Size::Small),
+                            .text_sm(),
                     )
                     .child(
                         Button::new("button-custom-text-xsmall")
@@ -943,7 +943,7 @@ impl Render for ButtonStory {
                         Button::new("button-custom-text-8")
                             .primary()
                             .label("8 px")
-                            .button_text_size(Size::Size(px(8.0))),
+                            .text_size(px(8.0)),
                     )
                     .child(
                         Button::new("button-custom-text-8")
