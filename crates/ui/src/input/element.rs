@@ -177,11 +177,17 @@ impl TextElement {
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
             if selection_changed && !is_selected_all {
+                let safety_margin = if last_layout.text_align == TextAlign::Left {
+                    RIGHT_MARGIN
+                } else {
+                    CURSOR_WIDTH
+                };
+
                 scroll_offset.x = if scroll_offset.x + cursor_pos.x
-                    > (bounds.size.width - line_number_width - RIGHT_MARGIN)
+                    > (bounds.size.width - line_number_width - safety_margin)
                 {
                     // cursor is out of right
-                    bounds.size.width - line_number_width - RIGHT_MARGIN - cursor_pos.x
+                    bounds.size.width - line_number_width - safety_margin - cursor_pos.x
                 } else if scroll_offset.x + cursor_pos.x < px(0.) {
                     // cursor is out of left
                     scroll_offset.x - cursor_pos.x
@@ -1146,7 +1152,7 @@ impl Element for TextElement {
         // TODO: should be add some gap to right, to convenient to focus on boundary position
         if last_layout.text_align == TextAlign::Right || last_layout.text_align == TextAlign::Center
         {
-            scroll_size.width = longest_line_width;
+            scroll_size.width = longest_line_width + line_number_width;
         }
 
         // `position_for_index` for example

@@ -24,6 +24,7 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
     HoverDefinition, Lsp, Position,
@@ -1337,11 +1338,16 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let mut offset = offset.unwrap_or(self.scroll_handle.offset());
+        let safe_x_offset = if self.text_align == TextAlign::Left {
+            px(0.)
+        } else {
+            -CURSOR_WIDTH
+        };
 
         let safe_y_range =
             (-self.scroll_size.height + self.input_bounds.size.height).min(px(0.0))..px(0.);
-        let safe_x_range =
-            (-self.scroll_size.width + self.input_bounds.size.width).min(px(0.0))..px(0.);
+        let safe_x_range = (-self.scroll_size.width + self.input_bounds.size.width + safe_x_offset)
+            .min(safe_x_offset)..px(0.);
 
         offset.y = if self.mode.is_single_line() {
             px(0.)
@@ -1386,6 +1392,11 @@ impl InputState {
             row_offset_y += wrap_line.height(line_height);
         }
 
+        let safety_margin = if last_layout.text_align == TextAlign::Left {
+            RIGHT_MARGIN
+        } else {
+            CURSOR_WIDTH
+        };
         if let Some(line) = last_layout
             .lines
             .get(row.saturating_sub(last_layout.visible_range.start))
@@ -1395,11 +1406,11 @@ impl InputState {
                 let bounds_width = bounds.size.width - last_layout.line_number_width;
                 let col_offset_x = pos.x;
                 row_offset_y += pos.y;
-                if col_offset_x - RIGHT_MARGIN < -scroll_offset.x {
+                if col_offset_x - safety_margin < -scroll_offset.x {
                     // If the position is out of the visible area, scroll to make it visible
-                    scroll_offset.x = -col_offset_x + RIGHT_MARGIN;
-                } else if col_offset_x + RIGHT_MARGIN > -scroll_offset.x + bounds_width {
-                    scroll_offset.x = -(col_offset_x - bounds_width + RIGHT_MARGIN);
+                    scroll_offset.x = -col_offset_x + safety_margin;
+                } else if col_offset_x + safety_margin > -scroll_offset.x + bounds_width {
+                    scroll_offset.x = -(col_offset_x - bounds_width + safety_margin);
                 }
             }
         }
