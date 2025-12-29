@@ -3,8 +3,8 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, div, point,
-    prelude::FluentBuilder as _, px,
+    ParentElement, RenderOnce, StyleRefinement, Styled, Window, WindowControlArea, anchored, div,
+    point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -37,7 +37,6 @@ pub struct Sheet {
     children: Vec<AnyElement>,
     overlay: bool,
     overlay_closable: bool,
-    overlay_top: Option<Pixels>,
 }
 
 impl Sheet {
@@ -54,8 +53,6 @@ impl Sheet {
             children: Vec::new(),
             overlay: true,
             overlay_closable: true,
-            // Cover the title bar bottom border.
-            overlay_top: Some(TITLE_BAR_HEIGHT - px(1.)),
             on_close: Rc::new(|_, _, _| {}),
         }
     }
@@ -96,14 +93,6 @@ impl Sheet {
         self
     }
 
-    /// Set the top offset of the overlay
-    ///
-    /// When not using [`TitleBar`] set your own value, for System title bar it should be `px(0.0)`.
-    pub fn overlay_top(mut self, overlay_top: impl Into<Pixels>) -> Self {
-        self.overlay_top = Some(overlay_top.into());
-        self
-    }
-
     /// Listen to the close event of the sheet.
     pub fn on_close(
         mut self,
@@ -130,7 +119,10 @@ impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
         let mut window_paddings = crate::window_border::window_paddings(window);
-        window_paddings.top += self.overlay_top.unwrap_or_default();
+        // Only add the title bar height for non-bottom placements.
+        if placement != Placement::Bottom {
+            window_paddings.top += TITLE_BAR_HEIGHT;
+        }
         let size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
@@ -164,11 +156,17 @@ impl RenderOnce for Sheet {
                     .h(size.height)
                     .bg(overlay_color(self.overlay, cx))
                     .when(self.overlay, |this| {
-                        this.on_any_mouse_down({
+                        this.when(placement == Placement::Bottom, |this| {
+                            this.window_control_area(WindowControlArea::Drag)
+                        })
+                        .on_any_mouse_down({
                             let on_close = self.on_close.clone();
                             move |event, window, cx| {
-                                cx.stop_propagation();
+                                if event.position.y < TITLE_BAR_HEIGHT {
+                                    return;
+                                }
 
+                                cx.stop_propagation();
                                 if self.overlay_closable && event.button == MouseButton::Left {
                                     window.close_sheet(cx);
                                     on_close(&ClickEvent::default(), window, cx);
