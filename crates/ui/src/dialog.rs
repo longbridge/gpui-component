@@ -3,8 +3,8 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, anchored, div, hsla,
-    point, prelude::FluentBuilder, px, relative,
+    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, WindowControlArea,
+    anchored, div, hsla, point, prelude::FluentBuilder, px, relative,
 };
 use rust_i18n::t;
 
@@ -85,7 +85,6 @@ pub struct Dialog {
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
-    overlay_top: Option<Pixels>,
 
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     on_ok: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>>,
@@ -132,8 +131,6 @@ impl Dialog {
             button_props: DialogButtonProps::default(),
             close_button: true,
             overlay_closable: true,
-            // Cover the title bar bottom border.
-            overlay_top: Some(TITLE_BAR_HEIGHT - px(1.)),
         }
     }
 
@@ -231,14 +228,6 @@ impl Dialog {
     /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
     pub fn margin_top(mut self, margin_top: impl Into<Pixels>) -> Self {
         self.margin_top = Some(margin_top.into());
-        self
-    }
-
-    /// Set the top offset of the overlay
-    ///
-    /// When not using [`TitleBar`] set your own value, for System title bar it should be `0.0`.
-    pub fn overlay_top(mut self, overlay_top: impl Into<Pixels>) -> Self {
-        self.overlay_top = Some(overlay_top.into());
         self
     }
 
@@ -365,8 +354,7 @@ impl RenderOnce for Dialog {
             }
         });
 
-        let mut window_paddings = crate::window_border::window_paddings(window);
-        window_paddings.top += self.overlay_top.unwrap_or_default();
+        let window_paddings = crate::window_border::window_paddings(window);
         let view_size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
@@ -423,19 +411,23 @@ impl RenderOnce for Dialog {
                             return this;
                         }
 
-                        this.on_any_mouse_down({
-                            let on_cancel = on_cancel.clone();
-                            let on_close = on_close.clone();
-                            move |event, window, cx| {
-                                cx.stop_propagation();
+                        this.window_control_area(WindowControlArea::Drag)
+                            .on_any_mouse_down({
+                                let on_cancel = on_cancel.clone();
+                                let on_close = on_close.clone();
+                                move |event, window, cx| {
+                                    if event.position.y < TITLE_BAR_HEIGHT {
+                                        return;
+                                    }
 
-                                if self.overlay_closable && event.button == MouseButton::Left {
-                                    on_cancel(&ClickEvent::default(), window, cx);
-                                    on_close(&ClickEvent::default(), window, cx);
-                                    window.close_dialog(cx);
+                                    cx.stop_propagation();
+                                    if self.overlay_closable && event.button == MouseButton::Left {
+                                        on_cancel(&ClickEvent::default(), window, cx);
+                                        on_close(&ClickEvent::default(), window, cx);
+                                        window.close_dialog(cx);
+                                    }
                                 }
-                            }
-                        })
+                            })
                     })
                     .child(
                         v_flex()
