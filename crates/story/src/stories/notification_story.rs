@@ -228,7 +228,6 @@ impl Render for NotificationStory {
                                     .id::<TestNotification>()
                                     .title("Uh oh! Something went wrong.")
                                     .message("There was a problem with your request.")
-                                    .autohide(false)
                                     .action(|_, _, cx| {
                                         Button::new("try-again").primary().label("Retry").on_click(
                                             cx.listener(|this, _, window, cx| {

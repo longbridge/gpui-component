@@ -223,11 +223,14 @@ impl Notification {
     }
 
     /// Set the action button of the notification.
+    ///
+    /// When an action is set, the notification will not autohide.
     pub fn action<F>(mut self, action: F) -> Self
     where
         F: Fn(&mut Self, &mut Window, &mut Context<Self>) -> Button + 'static,
     {
         self.action_builder = Some(Rc::new(action));
+        self.autohide = false;
         self
     }
 
@@ -321,17 +324,11 @@ impl Render for Notification {
                     .when_some(content, |this, content| this.child(content)),
             )
             .when_some(action, |this, action| this.child(action))
-            .when_some(self.on_click.clone(), |this, on_click| {
-                this.on_click(cx.listener(move |view, event, window, cx| {
-                    view.dismiss(window, cx);
-                    on_click(event, window, cx);
-                }))
-            })
             .child(
-                h_flex()
+                div()
                     .absolute()
-                    .top_3p5()
-                    .right_3p5()
+                    .top_1()
+                    .right_1()
                     .invisible()
                     .group_hover("", |this| this.visible())
                     .child(
@@ -342,6 +339,12 @@ impl Render for Notification {
                             .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
                     ),
             )
+            .when_some(self.on_click.clone(), |this, on_click| {
+                this.on_click(cx.listener(move |view, event, window, cx| {
+                    view.dismiss(window, cx);
+                    on_click(event, window, cx);
+                }))
+            })
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
                 Animation::new(Duration::from_secs_f64(0.25))
