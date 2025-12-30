@@ -278,7 +278,7 @@ impl SystemMonitor {
         let process_delegate = ProcessTableDelegate::new();
         let process_table = cx.new(|cx| {
             TableState::new(process_delegate, window, cx)
-                .col_resizable(true)
+                .col_selectable(false)
                 .col_movable(false)
         });
 
