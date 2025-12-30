@@ -538,7 +538,6 @@ impl RenderOnce for Dialog {
                                 )
                             })
                             .with_animation("slide-down", animation.clone(), move |this, delta| {
-                                let y_offset = px(0.) + delta * px(30.);
                                 // This is equivalent to `shadow_xl` with an extra opacity.
                                 let shadow = vec![
                                     BoxShadow {
@@ -554,7 +553,7 @@ impl RenderOnce for Dialog {
                                         spread_radius: px(-6.),
                                     },
                                 ];
-                                this.top(y + y_offset).shadow(shadow)
+                                this.top(y * delta).shadow(shadow)
                             }),
                     )
                     .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),
