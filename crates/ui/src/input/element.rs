@@ -110,7 +110,6 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
-        let mut alignment_offset = px(0.);
         for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
             let row = ix;
             let line_origin = point(px(0.), offset_y);
@@ -131,7 +130,6 @@ impl TextElement {
                     if let Some(pos) = line.position_for_index(offset, last_layout) {
                         current_row = Some(row);
                         cursor_pos = Some(line_origin + pos);
-                        alignment_offset = last_layout.alignment_offset(line.longest_width);
                     }
                 }
                 if cursor_start.is_none() {
@@ -177,6 +175,7 @@ impl TextElement {
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
             if selection_changed && !is_selected_all {
+                // Apart from left alignment, just leave enough space for the cursor size on the right side.
                 let safety_margin = if last_layout.text_align == TextAlign::Left {
                     RIGHT_MARGIN
                 } else {

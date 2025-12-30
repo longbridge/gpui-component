@@ -1338,6 +1338,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let mut offset = offset.unwrap_or(self.scroll_handle.offset());
+        // In addition to left alignment, a cursor position will be reserved on the right side
         let safe_x_offset = if self.text_align == TextAlign::Left {
             px(0.)
         } else {
@@ -1392,6 +1393,7 @@ impl InputState {
             row_offset_y += wrap_line.height(line_height);
         }
 
+        // Apart from left alignment, just leave enough space for the cursor size on the right side.
         let safety_margin = if last_layout.text_align == TextAlign::Left {
             RIGHT_MARGIN
         } else {
