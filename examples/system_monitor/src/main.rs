@@ -450,6 +450,7 @@ impl SystemMonitor {
     fn render_system_tab(&self, cx: &Context<Self>) -> impl IntoElement {
         let data: Vec<MetricPoint> = self.data.iter().cloned().collect();
         v_flex()
+            .p_3()
             .gap_4()
             .flex_1()
             .child(self.render_chart("CPU Usage", data.clone(), |d| d.cpu, cx.theme().red, cx))
@@ -463,9 +464,12 @@ impl SystemMonitor {
     }
 
     fn render_processes_tab(&self, _cx: &Context<Self>) -> impl IntoElement {
-        v_flex()
-            .size_full()
-            .child(Table::new(&self.process_table).stripe(true).small())
+        v_flex().size_full().child(
+            Table::new(&self.process_table)
+                .bordered(false)
+                .stripe(true)
+                .small(),
+        )
     }
 
     fn render_status_bar(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -558,6 +562,7 @@ impl Render for SystemMonitor {
                         TabBar::new("monitor-tabs")
                             .mt(px(1.))
                             .segmented()
+                            .px_0()
                             .py(px(2.))
                             .bg(cx.theme().title_bar)
                             .selected_index(active_tab_index)
@@ -583,7 +588,6 @@ impl Render for SystemMonitor {
                 div()
                     .id("tab-content")
                     .flex_1()
-                    .p_3()
                     .overflow_y_scroll()
                     .map(|this| match self.active_tab {
                         MonitorTab::System => this.child(self.render_system_tab(cx)),
