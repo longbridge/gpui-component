@@ -45,8 +45,6 @@ struct MetricPoint {
     time: String,
     cpu: f64,
     memory: f64,
-    gpu: f64,
-    vram: f64,
 }
 
 /// Process info for display
@@ -263,140 +261,10 @@ pub struct SystemMonitor {
     disks: Disks,
     data: VecDeque<MetricPoint>,
     time_index: usize,
-    gpu_available: bool,
     active_tab: MonitorTab,
     process_table: Entity<TableState<ProcessTableDelegate>>,
     disk_info: Vec<DiskInfo>,
     battery_info: Vec<BatteryInfo>,
-    #[cfg(target_os = "macos")]
-    gpu_monitor: Option<MacGpuMonitor>,
-    #[cfg(target_os = "windows")]
-    gpu_monitor: Option<WindowsGpuMonitor>,
-    #[cfg(target_os = "linux")]
-    gpu_monitor: Option<LinuxGpuMonitor>,
-}
-
-// Platform-specific GPU monitoring
-
-#[cfg(target_os = "macos")]
-struct MacGpuMonitor {
-    device: metal::Device,
-}
-
-#[cfg(target_os = "macos")]
-impl MacGpuMonitor {
-    fn new() -> Option<Self> {
-        metal::Device::system_default().map(|device| Self { device })
-    }
-
-    fn get_usage(&self) -> (f64, f64) {
-        let recommended_max = self.device.recommended_max_working_set_size() as f64;
-        let current = self.device.current_allocated_size() as f64;
-        let vram_usage = if recommended_max > 0.0 {
-            (current / recommended_max * 100.0).min(100.0)
-        } else {
-            0.0
-        };
-        (0.0, vram_usage)
-    }
-}
-
-#[cfg(target_os = "windows")]
-struct WindowsGpuMonitor {
-    #[allow(dead_code)]
-    adapter_desc: String,
-}
-
-#[cfg(target_os = "windows")]
-impl WindowsGpuMonitor {
-    fn new() -> Option<Self> {
-        use windows::Win32::Graphics::Dxgi::*;
-
-        unsafe {
-            let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
-            let adapter = factory.EnumAdapters1(0).ok()?;
-            let desc = adapter.GetDesc1().ok()?;
-            let name = String::from_utf16_lossy(
-                &desc.Description[..desc
-                    .Description
-                    .iter()
-                    .position(|&c| c == 0)
-                    .unwrap_or(desc.Description.len())],
-            );
-            Some(Self { adapter_desc: name })
-        }
-    }
-
-    fn get_usage(&self) -> (f64, f64) {
-        use windows::Win32::Graphics::Dxgi::*;
-        use windows::core::Interface;
-
-        unsafe {
-            if let Ok(factory) = CreateDXGIFactory1::<IDXGIFactory4>() {
-                if let Ok(adapter) = factory.EnumAdapters1(0) {
-                    if let Ok(adapter3) = adapter.cast::<IDXGIAdapter3>() {
-                        let mut info = Default::default();
-                        if adapter3
-                            .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
-                            .is_ok()
-                        {
-                            let budget = info.Budget as f64;
-                            let usage = info.CurrentUsage as f64;
-                            if budget > 0.0 {
-                                return (0.0, (usage / budget * 100.0).min(100.0));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        (0.0, 0.0)
-    }
-}
-
-#[cfg(target_os = "linux")]
-struct LinuxGpuMonitor {
-    nvidia_available: bool,
-}
-
-#[cfg(target_os = "linux")]
-impl LinuxGpuMonitor {
-    fn new() -> Option<Self> {
-        let nvidia_available = std::process::Command::new("nvidia-smi")
-            .arg("--version")
-            .output()
-            .is_ok();
-
-        Some(Self { nvidia_available })
-    }
-
-    fn get_usage(&self) -> (f64, f64) {
-        if self.nvidia_available {
-            if let Ok(output) = std::process::Command::new("nvidia-smi")
-                .args([
-                    "--query-gpu=utilization.gpu,memory.used,memory.total",
-                    "--format=csv,noheader,nounits",
-                ])
-                .output()
-            {
-                if let Ok(stdout) = String::from_utf8(output.stdout) {
-                    let parts: Vec<&str> = stdout.trim().split(',').map(|s| s.trim()).collect();
-                    if parts.len() >= 3 {
-                        let gpu_util = parts[0].parse::<f64>().unwrap_or(0.0);
-                        let mem_used = parts[1].parse::<f64>().unwrap_or(0.0);
-                        let mem_total = parts[2].parse::<f64>().unwrap_or(1.0);
-                        let vram_usage = if mem_total > 0.0 {
-                            (mem_used / mem_total * 100.0).min(100.0)
-                        } else {
-                            0.0
-                        };
-                        return (gpu_util, vram_usage);
-                    }
-                }
-            }
-        }
-        (0.0, 0.0)
-    }
 }
 
 impl SystemMonitor {
@@ -406,39 +274,11 @@ impl SystemMonitor {
 
         let disks = Disks::new_with_refreshed_list();
 
-        // Initialize GPU monitor based on platform
-        #[cfg(target_os = "macos")]
-        let (gpu_monitor, gpu_available) = {
-            let monitor = MacGpuMonitor::new();
-            let available = monitor.is_some();
-            (monitor, available)
-        };
-
-        #[cfg(target_os = "windows")]
-        let (gpu_monitor, gpu_available) = {
-            let monitor = WindowsGpuMonitor::new();
-            let available = monitor.is_some();
-            (monitor, available)
-        };
-
-        #[cfg(target_os = "linux")]
-        let (gpu_monitor, gpu_available) = {
-            let monitor = LinuxGpuMonitor::new();
-            let available = monitor
-                .as_ref()
-                .map(|m| m.nvidia_available)
-                .unwrap_or(false);
-            (monitor, available)
-        };
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        let (gpu_monitor, gpu_available): (Option<()>, bool) = (None, false);
-
         // Create process table
         let process_delegate = ProcessTableDelegate::new();
         let process_table = cx.new(|cx| {
             TableState::new(process_delegate, window, cx)
-                .col_resizable(true)
+                .col_selectable(false)
                 .col_movable(false)
         });
 
@@ -447,13 +287,10 @@ impl SystemMonitor {
             disks,
             data: VecDeque::with_capacity(MAX_DATA_POINTS),
             time_index: 0,
-            gpu_available,
             active_tab: MonitorTab::System,
             process_table,
             disk_info: Vec::new(),
             battery_info: Vec::new(),
-            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-            gpu_monitor,
         };
 
         // Collect initial data
@@ -496,16 +333,11 @@ impl SystemMonitor {
             0.0
         };
 
-        // Get GPU metrics
-        let (gpu_usage, vram_usage) = self.get_gpu_metrics();
-
         // Create data point
         let point = MetricPoint {
             time: format!("{}s", self.time_index),
             cpu: cpu_usage,
             memory: memory_usage,
-            gpu: gpu_usage,
-            vram: vram_usage,
         };
 
         // Add to history
@@ -563,25 +395,6 @@ impl SystemMonitor {
         }
     }
 
-    fn get_gpu_metrics(&self) -> (f64, f64) {
-        #[cfg(target_os = "macos")]
-        if let Some(ref monitor) = self.gpu_monitor {
-            return monitor.get_usage();
-        }
-
-        #[cfg(target_os = "windows")]
-        if let Some(ref monitor) = self.gpu_monitor {
-            return monitor.get_usage();
-        }
-
-        #[cfg(target_os = "linux")]
-        if let Some(ref monitor) = self.gpu_monitor {
-            return monitor.get_usage();
-        }
-
-        (0.0, 0.0)
-    }
-
     fn set_active_tab(&mut self, index: usize, _window: &mut Window, cx: &mut Context<Self>) {
         self.active_tab = MonitorTab::from_index(index);
         cx.notify();
@@ -636,9 +449,8 @@ impl SystemMonitor {
 
     fn render_system_tab(&self, cx: &Context<Self>) -> impl IntoElement {
         let data: Vec<MetricPoint> = self.data.iter().cloned().collect();
-        let has_gpu = !cfg!(target_os = "macos");
-
         v_flex()
+            .p_3()
             .gap_4()
             .flex_1()
             .child(self.render_chart("CPU Usage", data.clone(), |d| d.cpu, cx.theme().red, cx))
@@ -649,36 +461,15 @@ impl SystemMonitor {
                 cx.theme().blue,
                 cx,
             ))
-            .when(has_gpu, |this| {
-                this.child(self.render_chart(
-                    if self.gpu_available {
-                        "GPU Usage"
-                    } else {
-                        "GPU Usage (N/A)"
-                    },
-                    data.clone(),
-                    |d| d.gpu,
-                    cx.theme().yellow,
-                    cx,
-                ))
-            })
-            .child(self.render_chart(
-                if self.gpu_available {
-                    "VRAM Usage"
-                } else {
-                    "VRAM Usage (N/A)"
-                },
-                data,
-                |d| d.vram,
-                cx.theme().green,
-                cx,
-            ))
     }
 
     fn render_processes_tab(&self, _cx: &Context<Self>) -> impl IntoElement {
-        v_flex()
-            .size_full()
-            .child(Table::new(&self.process_table).stripe(true).small())
+        v_flex().size_full().child(
+            Table::new(&self.process_table)
+                .bordered(false)
+                .stripe(true)
+                .small(),
+        )
     }
 
     fn render_status_bar(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -771,6 +562,7 @@ impl Render for SystemMonitor {
                         TabBar::new("monitor-tabs")
                             .mt(px(1.))
                             .segmented()
+                            .px_0()
                             .py(px(2.))
                             .bg(cx.theme().title_bar)
                             .selected_index(active_tab_index)
@@ -796,7 +588,6 @@ impl Render for SystemMonitor {
                 div()
                     .id("tab-content")
                     .flex_1()
-                    .p_3()
                     .overflow_y_scroll()
                     .map(|this| match self.active_tab {
                         MonitorTab::System => this.child(self.render_system_tab(cx)),
