@@ -196,6 +196,22 @@ where
         self.selected_index
     }
 
+    /// Set the index of the item that has been right clicked.
+    pub fn set_right_clicked_index(
+        &mut self,
+        ix: Option<IndexPath>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.mouse_right_clicked_index = ix;
+        self.delegate.set_right_clicked_index(ix, window, cx);
+    }
+
+    /// Returns the index of the item that has been right clicked.
+    pub fn right_clicked_index(&self) -> Option<IndexPath> {
+        self.mouse_right_clicked_index
+    }
+
     /// Set a specific list item for measurement.
     pub fn set_item_to_measure_index(
         &mut self,
@@ -456,7 +472,7 @@ where
             }))
             .when(selectable, |this| {
                 this.on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
-                    this.mouse_right_clicked_index = None;
+                    this.set_right_clicked_index(None, window, cx);
                     this.selected_index = Some(ix);
                     this.on_action_confirm(
                         &Confirm {
@@ -468,8 +484,8 @@ where
                 }))
                 .on_mouse_down(
                     MouseButton::Right,
-                    cx.listener(move |this, _, _, cx| {
-                        this.mouse_right_clicked_index = Some(ix);
+                    cx.listener(move |this, _, window, cx| {
+                        this.set_right_clicked_index(Some(ix), window, cx);
                         cx.notify();
                     }),
                 )
@@ -655,8 +671,8 @@ where
                     })
                     // Click out to cancel right clicked row
                     .when(mouse_right_clicked_index.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            this.mouse_right_clicked_index = None;
+                        this.on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                            this.set_right_clicked_index(None, window, cx);
                             cx.notify();
                         }))
                     })

@@ -224,6 +224,15 @@ impl ListDelegate for CompanyListDelegate {
         cx.notify();
     }
 
+    fn set_right_clicked_index(
+        &mut self,
+        ix: Option<IndexPath>,
+        _: &mut Window,
+        _: &mut Context<ListState<Self>>,
+    ) {
+        println!("right_clicked_index: {:?}", ix);
+    }
+
     fn render_section_header(
         &mut self,
         section: usize,
