@@ -42,6 +42,8 @@ pub enum TableEvent {
     /// The first `usize` is the original index of the column,
     /// and the second `usize` is the new index of the column.
     MoveColumn(usize, usize),
+    /// The row has been right clicked.
+    RightClickedRow(Option<usize>),
 }
 
 /// The visible range of the rows and columns.
@@ -241,7 +243,13 @@ where
             );
         }
         cx.emit(TableEvent::SelectRow(row_ix));
+        cx.emit(TableEvent::RightClickedRow(None));
         cx.notify();
+    }
+
+    /// Returns the row that has been right clicked.
+    pub fn right_clicked_row(&self) -> Option<usize> {
+        self.right_clicked_row
     }
 
     /// Returns the selected column index.
@@ -303,11 +311,12 @@ where
     fn on_row_right_click(
         &mut self,
         _: &MouseDownEvent,
-        row_ix: usize,
+        row_ix: Option<usize>,
         _: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
-        self.right_clicked_row = Some(row_ix);
+        self.right_clicked_row = row_ix;
+        cx.emit(TableEvent::RightClickedRow(row_ix));
     }
 
     fn on_row_left_click(
@@ -1099,7 +1108,7 @@ where
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, e, window, cx| {
-                        this.on_row_right_click(e, row_ix, window, cx);
+                        this.on_row_right_click(e, Some(row_ix), window, cx);
                     }),
                 )
                 .on_click(cx.listener(move |this, e, window, cx| {
@@ -1390,8 +1399,8 @@ where
                         &self.horizontal_scroll_handle,
                     ))
                     .when(right_clicked_row.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            this.right_clicked_row = None;
+                        this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
+                            this.on_row_right_click(e, None, window, cx);
                             cx.notify();
                         }))
                     })

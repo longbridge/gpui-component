@@ -118,6 +118,15 @@ pub trait ListDelegate: Sized + 'static {
         cx: &mut Context<ListState<Self>>,
     );
 
+    /// Set the index of the item that has been right clicked.
+    fn set_right_clicked_index(
+        &mut self,
+        ix: Option<IndexPath>,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) {
+    }
+
     /// Set the confirm and give the selected index,
     /// this is means user have clicked the item or pressed Enter.
     ///
