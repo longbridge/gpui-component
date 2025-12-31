@@ -311,12 +311,12 @@ where
     fn on_row_right_click(
         &mut self,
         _: &MouseDownEvent,
-        row_ix: usize,
+        row_ix: Option<usize>,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.right_clicked_row = Some(row_ix);
-        cx.emit(TableEvent::RightClickedRow(Some(row_ix)));
+        self.right_clicked_row = row_ix;
+        cx.emit(TableEvent::RightClickedRow(row_ix));
     }
 
     fn on_row_left_click(
@@ -1108,7 +1108,7 @@ where
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, e, window, cx| {
-                        this.on_row_right_click(e, row_ix, window, cx);
+                        this.on_row_right_click(e, Some(row_ix), window, cx);
                     }),
                 )
                 .on_click(cx.listener(move |this, e, window, cx| {
@@ -1399,9 +1399,8 @@ where
                         &self.horizontal_scroll_handle,
                     ))
                     .when(right_clicked_row.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            this.right_clicked_row = None;
-                            cx.emit(TableEvent::RightClickedRow(None));
+                        this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
+                            this.on_row_right_click(e, None, window, cx);
                             cx.notify();
                         }))
                     })
