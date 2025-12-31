@@ -265,6 +265,12 @@ impl TreeState {
         cx.notify();
     }
 
+    /// Get the currently selected tree item, if any.
+    pub fn selected_item(&self) -> Option<&TreeItem> {
+        self.selected_ix
+            .and_then(|ix| self.entries.get(ix).map(|entry| &entry.item))
+    }
+
     pub fn scroll_to_item(&mut self, ix: usize, strategy: gpui::ScrollStrategy) {
         self.scroll_handle.scroll_to_item(ix, strategy);
     }
@@ -272,12 +278,6 @@ impl TreeState {
     /// Get the currently selected entry, if any.
     pub fn selected_entry(&self) -> Option<&TreeEntry> {
         self.selected_ix.and_then(|ix| self.entries.get(ix))
-    }
-
-    /// Get the currently selected tree item, if any.
-    pub fn selected_item(&self) -> Option<&TreeItem> {
-        self.selected_ix
-            .and_then(|ix| self.entries.get(ix).map(|entry| &entry.item))
     }
 
     fn expand_ancestors(&mut self, target_id: SharedString) {

@@ -8,6 +8,7 @@ use gpui::{
 
 use gpui_component::{
     ActiveTheme as _, IconName, StyledExt as _,
+    button::Button,
     dock::PanelControl,
     h_flex,
     label::Label,
@@ -15,22 +16,20 @@ use gpui_component::{
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
+use rand::seq::SliceRandom as _;
 
 use crate::{Story, section};
 
-actions!(story, [Rename, SelectItem]);
+actions!(story, [Rename]);
 
 const CONTEXT: &str = "TreeStory";
 pub(crate) fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("enter", Rename, Some(CONTEXT)),
-        KeyBinding::new("space", SelectItem, Some(CONTEXT)),
-    ]);
+    cx.bind_keys([KeyBinding::new("enter", Rename, Some(CONTEXT))]);
 }
 
 pub struct TreeStory {
     tree_state: Entity<TreeState>,
-    selected_item: Option<TreeItem>,
+    items: Vec<TreeItem>,
 }
 
 fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
@@ -71,13 +70,18 @@ impl TreeStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
-        cx.spawn(async move |cx| {
+    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut Context<Self>) {
+        cx.spawn(async move |weak_self, cx| {
             let ignorer = Ignorer::new(&path.to_string_lossy());
             let items = build_file_items(&ignorer, &path, &path);
             _ = state.update(cx, |state, cx| {
-                state.set_items(items, cx);
+                state.set_items(items.clone(), cx);
             });
+
+            _ = weak_self.update(cx, |this, cx| {
+                this.items = items;
+                cx.notify();
+            })
         })
         .detach();
     }
@@ -89,19 +93,7 @@ impl TreeStory {
 
         Self {
             tree_state,
-            selected_item: None,
-        }
-    }
-
-    fn on_action_select_item(
-        &mut self,
-        _: &SelectItem,
-        _: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if let Some(entry) = self.tree_state.read(cx).selected_entry() {
-            self.selected_item = Some(entry.item().clone());
-            cx.notify();
+            items: Vec::new(),
         }
     }
 
@@ -139,9 +131,22 @@ impl Render for TreeStory {
             .id("tree-story")
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
-            .on_action(cx.listener(Self::on_action_select_item))
             .gap_5()
             .size_full()
+            .child(
+                h_flex().gap_3().child(
+                    Button::new("select-item")
+                        .outline()
+                        .label("Select Item")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(random_item) = this.items.choose(&mut rand::thread_rng()) {
+                                this.tree_state.update(cx, |state, cx| {
+                                    state.set_selected_item(Some(random_item), cx);
+                                });
+                            }
+                        })),
+                ),
+            )
             .child(
                 section("File tree")
                     .sub_title("Press `space` to select, `enter` to rename.")
@@ -171,9 +176,11 @@ impl Render for TreeStory {
                                         )
                                         .on_click(cx.listener({
                                             let item = item.clone();
-                                            move |this, _, _window, cx| {
-                                                this.selected_item = Some(item.clone());
-                                                cx.notify();
+                                            move |_, _, _window, _| {
+                                                println!(
+                                                    "Clicked on item: {} ({})",
+                                                    item.label, item.id
+                                                );
                                             }
                                         }))
                                 })
@@ -197,8 +204,9 @@ impl Render for TreeStory {
                                     .map(|ix| format!("Selected Index: {}", ix)),
                             )
                             .children(
-                                self.selected_item
-                                    .as_ref()
+                                self.tree_state
+                                    .read(cx)
+                                    .selected_item()
                                     .map(|item| Label::new("Selected:").secondary(item.id.clone())),
                             ),
                     ),
