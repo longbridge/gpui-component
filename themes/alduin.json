@@ -8,7 +8,7 @@
       "name": "Alduin",
       "mode": "dark",
       "colors": {
-        "accent.background": "#2d2a28",
+        "accent.background": "#2e2b29",
         "accent.foreground": "#ebdbb2",
         "background": "#1C1C1C",
         "border": "#3a3a3a",
@@ -27,8 +27,6 @@
         "muted.background": "#1c1816",
         "muted.foreground": "#878787",
         "panel.background": "#282828",
-        "popover.background": "#141414",
-        "popover.foreground": "#ebdbb2",
         "primary.active.background": "#45858899",
         "primary.background": "#458588",
         "primary.foreground": "#F0F0F0",

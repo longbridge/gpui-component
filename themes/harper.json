@@ -8,7 +8,7 @@
       "name": "Harper",
       "mode": "dark",
       "colors": {
-        "accent.background": "#18151B",
+        "accent.background": "#27222c",
         "accent.foreground": "#a8a49d",
         "background": "#010101",
         "border": "#333333",
@@ -27,7 +27,7 @@
         "scrollbar.background": "#003a5b00",
         "scrollbar.thumb.background": "#726E69",
         "secondary.background": "#1b1b1b",
-        "secondary.active.background": "#232323",
+        "secondary.active.background": "#2c2632",
         "secondary.foreground": "#A8A49D",
         "secondary.hover.background": "#23232399",
         "tab.active.background": "#010101",

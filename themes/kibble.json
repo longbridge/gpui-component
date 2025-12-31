@@ -8,7 +8,7 @@
       "name": "Kibble",
       "mode": "dark",
       "colors": {
-        "accent.background": "#22231f",
+        "accent.background": "#252525",
         "accent.foreground": "#f7f7f7",
         "background": "#0e100a",
         "border": "#292a24",
@@ -30,7 +30,7 @@
         "scrollbar.background": "#003a5b00",
         "scrollbar.thumb.background": "#726E69",
         "secondary.background": "#22231f",
-        "secondary.active.background": "#272824",
+        "secondary.active.background": "#292825",
         "secondary.foreground": "#f7f7f7",
         "secondary.hover.background": "#22231f",
         "success.background": "#5c6ee0",
