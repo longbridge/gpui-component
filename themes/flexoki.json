@@ -170,7 +170,7 @@
       "name": "Flexoki Dark",
       "mode": "dark",
       "colors": {
-        "accent.background": "#1f1d1c",
+        "accent.background": "#242221",
         "accent.foreground": "#CECDC3",
         "background": "#100F0F",
         "border": "#282726",
@@ -193,7 +193,7 @@
         "scrollbar.thumb.background": "#282726",
         "scrollbar.thumb.hover.background": "#343331",
         "secondary.background": "#232221",
-        "secondary.active.background": "#262524",
+        "secondary.active.background": "#262423",
         "secondary.foreground": "#CECDC3",
         "secondary.hover.background": "#232221",
         "tab.active.background": "#100F0F",

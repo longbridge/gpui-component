@@ -8,7 +8,7 @@
       "name": "Hybrid Light",
       "mode": "light",
       "colors": {
-        "accent.background": "#d3d8da",
+        "accent.background": "#c8ced1",
         "accent.foreground": "#1c1c1c",
         "background": "#E4E4E4",
         "border": "#CACACA",
@@ -25,9 +25,6 @@
         "list.even.background": "#DFDFDF",
         "muted.background": "#e8e8e8",
         "muted.foreground": "#5f5f5f",
-        "panel.background": "#f7f7f7",
-        "popover.background": "#f7f7f7",
-        "popover.foreground": "#1c1c1c",
         "primary.background": "#005f87",
         "primary.foreground": "#ffffff",
         "scrollbar.background": "#E0E0E000",
@@ -153,7 +150,7 @@
       "name": "Hybrid Dark",
       "mode": "dark",
       "colors": {
-        "accent.background": "#292f30",
+        "accent.background": "#31393a",
         "accent.foreground": "#e8e8e8",
         "background": "#1D1F21",
         "border": "#34373c",

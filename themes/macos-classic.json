@@ -141,7 +141,7 @@
       "mode": "dark",
       "shadow": false,
       "colors": {
-        "accent.background": "#252426",
+        "accent.background": "#282629",
         "accent.foreground": "#CACCCA",
         "background": "#131313",
         "border": "#303030",

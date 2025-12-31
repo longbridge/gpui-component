@@ -8,7 +8,7 @@
       "name": "Gruvbox Light",
       "mode": "light",
       "colors": {
-        "accent.background": "#ebdbb2",
+        "accent.background": "#e6d19e",
         "accent.foreground": "#3c3836",
         "background": "#fbf1c7",
         "border": "#d5c4a1",
@@ -157,7 +157,7 @@
       "name": "Gruvbox Dark",
       "mode": "dark",
       "colors": {
-        "accent.background": "#282828",
+        "accent.background": "#303030",
         "accent.foreground": "#ebdbb2",
         "background": "#1d2021",
         "border": "#3e3936",

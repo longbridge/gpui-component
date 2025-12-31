@@ -8,7 +8,7 @@
       "name": "Solarized Light",
       "mode": "light",
       "colors": {
-        "accent.background": "#EEE8D5",
+        "accent.background": "#ebe4ce",
         "accent.foreground": "#073642",
         "background": "#FDF6E3",
         "border": "#DCD4BC",
@@ -150,7 +150,7 @@
       "url": "https://ethanschoonover.com/solarized",
       "mode": "dark",
       "colors": {
-        "accent.background": "#15333A",
+        "accent.background": "#073945",
         "accent.foreground": "#fdf6e3",
         "background": "#002B36",
         "border": "#103a44",
