@@ -173,6 +173,21 @@ impl TreeItem {
     pub fn is_expanded(&self) -> bool {
         self.state.borrow().expanded
     }
+
+    fn find_ancestors(&self, target_id: &SharedString) -> Option<Vec<TreeItem>> {
+        if self.id == *target_id {
+            return Some(vec![]);
+        }
+
+        for child in &self.children {
+            if let Some(mut path) = child.find_ancestors(target_id) {
+                path.push(self.clone());
+                return Some(path);
+            }
+        }
+
+        None
+    }
 }
 
 /// State for managing tree items.
@@ -228,6 +243,34 @@ impl TreeState {
         cx.notify();
     }
 
+    /// Set the selected index by tree item, or `None` to clear selection.
+    pub fn set_selected_item(&mut self, item: Option<&TreeItem>, cx: &mut Context<Self>) {
+        if let Some(item) = item {
+            let ix = self
+                .entries
+                .iter()
+                .position(|entry| entry.item.id == item.id);
+            if ix.is_some() {
+                self.selected_ix = ix;
+            } else {
+                self.expand_ancestors(item.id.clone());
+                self.selected_ix = self
+                    .entries
+                    .iter()
+                    .position(|entry| entry.item.id == item.id);
+            }
+        } else {
+            self.selected_ix = None;
+        }
+        cx.notify();
+    }
+
+    /// Get the currently selected tree item, if any.
+    pub fn selected_item(&self) -> Option<&TreeItem> {
+        self.selected_ix
+            .and_then(|ix| self.entries.get(ix).map(|entry| &entry.item))
+    }
+
     pub fn scroll_to_item(&mut self, ix: usize, strategy: gpui::ScrollStrategy) {
         self.scroll_handle.scroll_to_item(ix, strategy);
     }
@@ -235,6 +278,27 @@ impl TreeState {
     /// Get the currently selected entry, if any.
     pub fn selected_entry(&self) -> Option<&TreeEntry> {
         self.selected_ix.and_then(|ix| self.entries.get(ix))
+    }
+
+    fn expand_ancestors(&mut self, target_id: SharedString) {
+        let mut ancestors = Vec::new();
+
+        for entry in &self.entries {
+            if let Some(found_ancestors) = entry.item.find_ancestors(&target_id) {
+                ancestors = found_ancestors;
+                break;
+            }
+        }
+
+        if ancestors.is_empty() {
+            return;
+        }
+
+        for ancestor in ancestors {
+            ancestor.state.borrow_mut().expanded = true;
+        }
+
+        self.rebuild_entries();
     }
 
     fn add_entry(&mut self, item: TreeItem, depth: usize) {
