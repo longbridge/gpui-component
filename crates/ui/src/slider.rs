@@ -653,11 +653,7 @@ impl RenderOnce for Slider {
                             ))
                             .on_prepaint({
                                 let state = self.state.clone();
-                                move |bounds, _, cx| {
-                                    state.update(cx, |r, _| {
-                                        r.bounds = bounds;
-                                    })
-                                }
+                                move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
                             }),
                     ),
             )
