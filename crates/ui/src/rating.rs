@@ -102,7 +102,7 @@ impl Disableable for Rating {
 }
 
 impl RenderOnce for Rating {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let id = self.id;
         let size = self.size;
         let disabled = self.disabled;
@@ -111,13 +111,24 @@ impl RenderOnce for Rating {
         let active_color = self.color.unwrap_or(cx.theme().yellow);
         let on_click = self.on_click.clone();
 
+        let hovered_state = window.use_keyed_state(id.clone(), cx, |_, _| 0);
+
         h_flex()
             .id(id)
             .flex_nowrap()
             .refine_style(&self.style)
+            .on_hover(
+                window.listener_for(&hovered_state, move |state, hovered, _, cx| {
+                    if !hovered {
+                        *state = 0;
+                        cx.notify();
+                    }
+                }),
+            )
             .map(|mut this| {
                 for ix in 1..=max {
                     let filled = ix <= value;
+                    let hovered = *hovered_state.read(cx) >= ix;
 
                     this = this.child(
                         div()
@@ -125,7 +136,7 @@ impl RenderOnce for Rating {
                             .p_0p5()
                             .flex_none()
                             .flex_shrink_0()
-                            .when(filled, |this| this.text_color(active_color))
+                            .when(filled || hovered, |this| this.text_color(active_color))
                             .child(
                                 Icon::new(if filled {
                                     IconName::StarFill
@@ -134,6 +145,13 @@ impl RenderOnce for Rating {
                                 })
                                 .with_size(size),
                             )
+                            .on_mouse_move(window.listener_for(
+                                &hovered_state,
+                                move |state, _, _, cx| {
+                                    *state = ix;
+                                    cx.notify();
+                                },
+                            ))
                             .when(!disabled, |this| {
                                 this.on_click({
                                     let on_click = on_click.clone();
