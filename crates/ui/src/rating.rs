@@ -2,11 +2,11 @@ use crate::theme::ActiveTheme;
 use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt};
 use std::rc::Rc;
 
-use gpui::Hsla;
 use gpui::{
-    App, ElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement,
-    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder as _,
 };
+use gpui::{ClickEvent, Hsla, StatefulInteractiveElement};
 
 /// A simple star Rating element.
 #[derive(IntoElement)]
@@ -115,7 +115,7 @@ impl RenderOnce for Rating {
             .id(id)
             .flex()
             .items_center()
-            .gap_1()
+            .flex_nowrap()
             .refine_style(&self.style)
             .map(|mut this| {
                 for ix in 1..=max {
@@ -124,6 +124,7 @@ impl RenderOnce for Rating {
                     this = this.child(
                         div()
                             .id(ix)
+                            .p_0p5()
                             .flex_none()
                             .flex_shrink_0()
                             .when(filled, |this| this.text_color(active_color))
@@ -136,10 +137,15 @@ impl RenderOnce for Rating {
                                 .with_size(size),
                             )
                             .when(!disabled, |this| {
-                                this.on_mouse_down(MouseButton::Left, {
+                                this.on_click({
                                     let on_click = on_click.clone();
-                                    move |_: &MouseDownEvent, window, cx| {
-                                        let new = if value == ix { 0 } else { ix };
+                                    move |_: &ClickEvent, window, cx| {
+                                        let new = if value >= ix {
+                                            ix.saturating_sub(1)
+                                        } else {
+                                            ix
+                                        };
+
                                         if let Some(on_click) = &on_click {
                                             on_click(&new, window, cx);
                                         }
