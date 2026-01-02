@@ -2,7 +2,7 @@ use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Selectable as _, Size,
+    ActiveTheme, IconName, Selectable as _, Sizable as _, Size,
     button::{Button, ButtonGroup},
     h_flex,
     rating::Rating,
@@ -120,6 +120,7 @@ impl Render for RatingStory {
                                 .gap_x_2()
                                 .child(
                                     Button::new("r-dec")
+                                        .small()
                                         .outline()
                                         .icon(IconName::Minus)
                                         .on_click(cx.listener(|this, _, _, cx| {
@@ -130,6 +131,7 @@ impl Render for RatingStory {
                                 )
                                 .child(
                                     Button::new("r-inc")
+                                        .small()
                                         .outline()
                                         .icon(IconName::Plus)
                                         .on_click(cx.listener(|this, _, _, cx| {
@@ -148,24 +150,16 @@ impl Render for RatingStory {
                         .value(2)
                         .color(cx.theme().green)
                         .max(5)
-                        .disabled(true)
-                        .on_click(cx.listener(|this, value: &usize, _, cx| {
-                            this.value = *value;
-                            cx.notify();
-                        })),
+                        .disabled(true),
                 ),
             )
             .child(
                 section("Custom Color").max_w_md().child(
                     Rating::new("rating-3")
-                        .with_size(self.size)
+                        .large()
                         .value(self.value)
                         .color(cx.theme().green)
-                        .max(5)
-                        .on_click(cx.listener(|this, value: &usize, _, cx| {
-                            this.value = *value;
-                            cx.notify();
-                        })),
+                        .max(5),
                 ),
             )
     }

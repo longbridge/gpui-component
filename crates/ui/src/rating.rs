@@ -54,7 +54,7 @@ impl Rating {
         self
     }
 
-    /// Set initial value (0..=max)
+    /// Set initial value (0..=max).
     pub fn value(mut self, value: usize) -> Self {
         self.value = value;
         if self.value > self.max {
@@ -101,34 +101,54 @@ impl Disableable for Rating {
     }
 }
 
+struct RaingState {
+    /// To save the default value on init state, to detect external value changes.
+    default_value: usize,
+    /// To store the current selected value.
+    value: usize,
+    /// To store the currently hovered value.
+    hovered_value: usize,
+}
+
 impl RenderOnce for Rating {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let id = self.id;
         let size = self.size;
         let disabled = self.disabled;
         let max = self.max;
-        let value = self.value;
+        let default_value = self.value;
         let active_color = self.color.unwrap_or(cx.theme().yellow);
         let on_click = self.on_click.clone();
 
-        let hovered_state = window.use_keyed_state(id.clone(), cx, |_, _| 0);
+        let state = window.use_keyed_state(id.clone(), cx, |_, _| RaingState {
+            default_value,
+            value: default_value,
+            hovered_value: 0,
+        });
+
+        // Reset state if outside has changed `value` prop.
+        if state.read(cx).default_value != default_value {
+            state.update(cx, |state, _| {
+                state.default_value = default_value;
+                state.value = default_value;
+            });
+        }
+        let value = state.read(cx).value;
 
         h_flex()
             .id(id)
             .flex_nowrap()
             .refine_style(&self.style)
-            .on_hover(
-                window.listener_for(&hovered_state, move |state, hovered, _, cx| {
-                    if !hovered {
-                        *state = 0;
-                        cx.notify();
-                    }
-                }),
-            )
+            .on_hover(window.listener_for(&state, move |state, hovered, _, cx| {
+                if !hovered {
+                    state.hovered_value = 0;
+                    cx.notify();
+                }
+            }))
             .map(|mut this| {
                 for ix in 1..=max {
                     let filled = ix <= value;
-                    let hovered = *hovered_state.read(cx) >= ix;
+                    let hovered = state.read(cx).hovered_value >= ix;
 
                     this = this.child(
                         div()
@@ -145,15 +165,16 @@ impl RenderOnce for Rating {
                                 })
                                 .with_size(size),
                             )
-                            .on_mouse_move(window.listener_for(
-                                &hovered_state,
-                                move |state, _, _, cx| {
-                                    *state = ix;
-                                    cx.notify();
-                                },
-                            ))
                             .when(!disabled, |this| {
-                                this.on_click({
+                                this.on_mouse_move(window.listener_for(
+                                    &state,
+                                    move |state, _, _, cx| {
+                                        state.hovered_value = ix;
+                                        cx.notify();
+                                    },
+                                ))
+                                .on_click({
+                                    let state = state.clone();
                                     let on_click = on_click.clone();
                                     move |_: &ClickEvent, window, cx| {
                                         let new = if value >= ix {
@@ -161,6 +182,11 @@ impl RenderOnce for Rating {
                                         } else {
                                             ix
                                         };
+
+                                        state.update(cx, |state, cx| {
+                                            state.value = new;
+                                            cx.notify();
+                                        });
 
                                         if let Some(on_click) = &on_click {
                                             on_click(&new, window, cx);

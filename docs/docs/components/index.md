@@ -23,6 +23,7 @@ collapsed: false
 - [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options
+- [Rating](rating) - Interactive star rating component
 - [Skeleton](skeleton) - Loading placeholders
 - [Slider](slider) - Value selection from a range
 - [Spinner](spinner) - Loading and status spinners
