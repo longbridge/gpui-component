@@ -28,8 +28,6 @@ Rating::new("my-rating")
 
 ### Controlled Rating
 
-The [Rating] is a stateless element, you must manage the state by add `on_click` callback to save the state, and bind this value by use [Rating#value] method.
-
 ```rust
 struct MyView {
     rating: usize,
@@ -92,6 +90,7 @@ Rating::new("rating")
 ### Click Behavior
 
 The rating component has special click behavior:
+
 - Clicking on a star that's already filled will reduce the rating by 1
 - Clicking on an unfilled star will set the rating to that star's value
 
@@ -170,4 +169,3 @@ Rating::new("rating")
 [Rating]: https://docs.rs/gpui-component/latest/gpui_component/rating/struct.Rating.html
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html
 [Disableable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Disableable.html
-
