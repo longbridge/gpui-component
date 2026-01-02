@@ -142,8 +142,22 @@ impl Render for RatingStory {
                 ),
             )
             .child(
-                section("Custom Color").max_w_md().child(
+                section("Disabled").max_w_md().child(
                     Rating::new("rating-2")
+                        .with_size(self.size)
+                        .value(2)
+                        .color(cx.theme().green)
+                        .max(5)
+                        .disabled(true)
+                        .on_click(cx.listener(|this, value: &usize, _, cx| {
+                            this.value = *value;
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
+                section("Custom Color").max_w_md().child(
+                    Rating::new("rating-3")
                         .with_size(self.size)
                         .value(self.value)
                         .color(cx.theme().green)

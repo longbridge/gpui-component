@@ -129,16 +129,13 @@ impl RenderOnce for Rating {
             .map(|mut this| {
                 for ix in 1..=max {
                     let filled = ix <= value;
-                    let group_name: SharedString = format!("rating-item-{}", ix).into();
 
                     this = this.child(
                         div()
                             .id(ix)
-                            .group(group_name.clone())
                             .flex_none()
                             .flex_shrink_0()
                             .when(filled, |this| this.text_color(active_color))
-                            .group_hover(group_name, |this| this.text_color(active_color))
                             .child(
                                 Icon::new(if filled {
                                     IconName::StarFill
