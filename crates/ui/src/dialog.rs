@@ -538,7 +538,7 @@ impl RenderOnce for Dialog {
                                 )
                             })
                             .on_any_mouse_down({
-                                move |_, _, cx| {
+                                |_, _, cx| {
                                     cx.stop_propagation();
                                 }
                             })
