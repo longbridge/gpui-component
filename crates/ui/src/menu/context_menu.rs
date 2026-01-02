@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
-    GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, MouseButton,
+    AnyElement, App, Bounds, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
+    GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
     MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled, Subscription, Window,
     anchored, deferred, div, prelude::FluentBuilder, px,
 };
@@ -29,7 +29,7 @@ impl<E: ParentElement + Styled> ContextMenuExt for E {}
 pub struct ContextMenu<E: ParentElement + Styled + Sized> {
     id: ElementId,
     element: Option<E>,
-    menu: Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+    build_menu: Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
     // This is not in use, just for style refinement forwarding.
     _ignore_style: StyleRefinement,
     anchor: Corner,
@@ -41,7 +41,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
         Self {
             id: id.into(),
             element: Some(element),
-            menu: None,
+            build_menu: None,
             anchor: Corner::TopLeft,
             _ignore_style: StyleRefinement::default(),
         }
@@ -53,7 +53,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
     where
         F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     {
-        self.menu = Some(Rc::new(builder));
+        self.build_menu = Some(Rc::new(builder));
         self
     }
 
@@ -141,11 +141,11 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
 
     fn request_layout(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
+        id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    ) -> (LayoutId, Self::RequestLayoutState) {
         let anchor = self.anchor;
 
         self.with_element_state(
@@ -194,7 +194,6 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                         ),
                                 ),
                             )
-                            .with_priority(1)
                             .into_any(),
                         );
                     }
@@ -222,9 +221,9 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
 
     fn prepaint(
         &mut self,
-        _: Option<&gpui::GlobalElementId>,
+        _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
+        _: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
@@ -236,9 +235,9 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
 
     fn paint(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
+        id: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
         window: &mut Window,
@@ -248,9 +247,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
             element.paint(window, cx);
         }
 
-        // Take the builder before setting up element state to avoid borrow issues
-        let builder = self.menu.clone();
-
+        let build_menu = self.build_menu.clone();
         self.with_element_state(
             id.unwrap(),
             window,
@@ -274,36 +271,29 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                             shared_state.open = true;
                         }
 
-                        // Use defer to build the menu in the next frame, avoiding race conditions
-                        window.defer(cx, {
-                            let shared_state = shared_state.clone();
-                            let builder = builder.clone();
-                            move |window, cx| {
-                                let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
-                                    let Some(build) = &builder else {
-                                        return menu;
-                                    };
-                                    build(menu, window, cx)
-                                });
+                        let build_menu = build_menu.clone();
+                        let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                            let Some(build) = &build_menu else {
+                                return menu;
+                            };
+                            build(menu, window, cx)
+                        });
 
-                                // Set up the subscription for dismiss handling
-                                let _subscription = window.subscribe(&menu, cx, {
-                                    let shared_state = shared_state.clone();
-                                    move |_, _: &DismissEvent, window, _cx| {
-                                        shared_state.borrow_mut().open = false;
-                                        window.refresh();
-                                    }
-                                });
-
-                                // Update the shared state with the built menu and subscription
-                                {
-                                    let mut state = shared_state.borrow_mut();
-                                    state.menu_view = Some(menu.clone());
-                                    state._subscription = Some(_subscription);
+                        {
+                            // Set up the subscription for dismiss handling
+                            let _subscription = window.subscribe(&menu, cx, {
+                                let shared_state = shared_state.clone();
+                                move |_, _: &DismissEvent, window, _cx| {
+                                    shared_state.borrow_mut().open = false;
                                     window.refresh();
                                 }
-                            }
-                        });
+                            });
+
+                            let mut state = shared_state.borrow_mut();
+                            state.menu_view = Some(menu.clone());
+                            state._subscription = Some(_subscription);
+                            window.refresh();
+                        }
                     }
                 });
             },

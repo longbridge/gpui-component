@@ -14,6 +14,7 @@ use gpui_component::{
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem, ListState},
+    menu::ContextMenuExt,
     v_flex,
 };
 
@@ -85,12 +86,19 @@ impl RenderOnce for CompanyListItem {
             _ => cx.theme().foreground,
         };
 
+        let company_name = self.company.name.clone();
+
         self.base
             .px_2()
             .py_1()
             .overflow_x_hidden()
             .border_1()
             .rounded(cx.theme().radius)
+            .context_menu(move |menu, _, _| {
+                menu.label(company_name.clone())
+                    .label("Test Item 1")
+                    .label("Test Item 2")
+            })
             .child(
                 h_flex()
                     .items_center()
