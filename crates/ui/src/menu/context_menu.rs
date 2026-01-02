@@ -172,7 +172,9 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                     div()
                                         .w(window.bounds().size.width)
                                         .h(window.bounds().size.height)
-                                        .occlude()
+                                        .on_scroll_wheel(|_, _, cx| {
+                                            cx.stop_propagation();
+                                        })
                                         .child(
                                             anchored()
                                                 .position(position)
