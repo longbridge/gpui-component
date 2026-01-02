@@ -254,6 +254,11 @@ impl RenderOnce for Sheet {
                                         .child(footer),
                                 )
                             })
+                            .on_any_mouse_down({
+                                move |_, _, cx| {
+                                    cx.stop_propagation();
+                                }
+                            })
                             .with_animation(
                                 "slide",
                                 Animation::new(Duration::from_secs_f64(0.15)),
