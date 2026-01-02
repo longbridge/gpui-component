@@ -1,5 +1,5 @@
 use crate::theme::ActiveTheme;
-use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt};
+use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt, h_flex};
 use std::rc::Rc;
 
 use gpui::{
@@ -111,10 +111,8 @@ impl RenderOnce for Rating {
         let active_color = self.color.unwrap_or(cx.theme().yellow);
         let on_click = self.on_click.clone();
 
-        div()
+        h_flex()
             .id(id)
-            .flex()
-            .items_center()
             .flex_nowrap()
             .refine_style(&self.style)
             .map(|mut this| {
