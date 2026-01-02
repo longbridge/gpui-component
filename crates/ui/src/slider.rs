@@ -2,11 +2,11 @@ use std::ops::Range;
 
 use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
 use gpui::{
-    Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners, DragMoveEvent, Empty,
-    Entity, EntityId, EventEmitter, Hsla, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
+    Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners, DefiniteLength,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    prelude::FluentBuilder as _, px, relative,
 };
 
 #[derive(Clone)]
@@ -374,11 +374,6 @@ impl SliderState {
 }
 
 impl EventEmitter<SliderEvent> for SliderState {}
-impl Render for SliderState {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        Empty
-    }
-}
 
 /// A Slider element.
 #[derive(IntoElement)]
@@ -421,7 +416,7 @@ impl Slider {
     #[allow(clippy::too_many_arguments)]
     fn render_thumb(
         &self,
-        start_pos: Pixels,
+        start: DefiniteLength,
         is_start: bool,
         bar_color: Background,
         thumb_color: Hsla,
@@ -441,10 +436,10 @@ impl Slider {
             .id(id)
             .absolute()
             .when(axis.is_horizontal(), |this| {
-                this.top(px(-5.)).left(start_pos).ml(-px(8.))
+                this.top(px(-5.)).left(start).ml(-px(8.))
             })
             .when(axis.is_vertical(), |this| {
-                this.bottom(start_pos).left(px(-5.)).mb(-px(8.))
+                this.bottom(start).left(px(-5.)).mb(-px(8.))
             })
             .flex()
             .items_center()
@@ -505,9 +500,9 @@ impl RenderOnce for Slider {
         let entity_id = self.state.entity_id();
         let state = self.state.read(cx);
         let is_range = state.value().is_range();
-        let bar_size = state.bounds.size.along(axis);
-        let bar_start = state.percentage.start * bar_size;
-        let bar_end = state.percentage.end * bar_size;
+        let percentage = state.percentage.clone();
+        let bar_start = relative(percentage.start);
+        let bar_end = relative(1. - percentage.end);
         let rem_size = window.rem_size();
 
         let bar_color = self
@@ -564,12 +559,15 @@ impl RenderOnce for Slider {
                                 move |state, e: &MouseDownEvent, window, cx| {
                                     let mut is_start = false;
                                     if is_range {
+                                        let bar_size = state.bounds.size.along(axis);
                                         let inner_pos = if axis.is_horizontal() {
                                             e.position.x - state.bounds.left()
                                         } else {
                                             state.bounds.bottom() - e.position.y
                                         };
-                                        let center = (bar_end - bar_start) / 2.0 + bar_start;
+                                        let center = ((percentage.end - percentage.start) / 2.0
+                                            + percentage.start)
+                                            * bar_size;
                                         is_start = inner_pos < center;
                                     }
 
@@ -625,17 +623,17 @@ impl RenderOnce for Slider {
                                 div()
                                     .absolute()
                                     .when(axis.is_horizontal(), |this| {
-                                        this.h_full().left(bar_start).right(bar_size - bar_end)
+                                        this.h_full().left(bar_start).right(bar_end)
                                     })
                                     .when(axis.is_vertical(), |this| {
-                                        this.w_full().bottom(bar_start).top(bar_size - bar_end)
+                                        this.w_full().bottom(bar_start).top(bar_end)
                                     })
                                     .bg(bar_color)
                                     .rounded_full(),
                             )
                             .when(is_range, |this| {
                                 this.child(self.render_thumb(
-                                    bar_start,
+                                    relative(percentage.start),
                                     true,
                                     bar_color,
                                     thumb_color,
@@ -645,7 +643,7 @@ impl RenderOnce for Slider {
                                 ))
                             })
                             .child(self.render_thumb(
-                                bar_end,
+                                relative(percentage.end),
                                 false,
                                 bar_color,
                                 thumb_color,
