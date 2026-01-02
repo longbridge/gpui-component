@@ -2,11 +2,11 @@ use crate::theme::ActiveTheme;
 use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt};
 use std::rc::Rc;
 
+use gpui::Hsla;
 use gpui::{
     App, ElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement,
     RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
-use gpui::{Hsla, SharedString};
 
 /// A simple star Rating element.
 #[derive(IntoElement)]
@@ -15,7 +15,6 @@ pub struct Rating {
     style: StyleRefinement,
     size: Size,
     disabled: bool,
-    allow_clear: bool,
     value: usize,
     max: usize,
     color: Option<Hsla>,
@@ -30,7 +29,6 @@ impl Rating {
             style: StyleRefinement::default(),
             size: Size::Medium,
             disabled: false,
-            allow_clear: true,
             value: 0,
             max: 5,
             color: None,
@@ -47,12 +45,6 @@ impl Rating {
     /// Disable interaction.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
-        self
-    }
-
-    /// Whether clicking the currently selected star clears the rating.
-    pub fn allow_clear(mut self, allow: bool) -> Self {
-        self.allow_clear = allow;
         self
     }
 
@@ -112,7 +104,6 @@ impl Disableable for Rating {
 impl RenderOnce for Rating {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let id = self.id;
-        let allow_clear = self.allow_clear;
         let size = self.size;
         let disabled = self.disabled;
         let max = self.max;
@@ -148,7 +139,7 @@ impl RenderOnce for Rating {
                                 this.on_mouse_down(MouseButton::Left, {
                                     let on_click = on_click.clone();
                                     move |_: &MouseDownEvent, window, cx| {
-                                        let new = if value == ix && allow_clear { 0 } else { ix };
+                                        let new = if value == ix { 0 } else { ix };
                                         if let Some(on_click) = &on_click {
                                             on_click(&new, window, cx);
                                         }
