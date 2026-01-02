@@ -51,6 +51,7 @@ pub mod plot;
 pub mod popover;
 pub mod progress;
 pub mod radio;
+pub mod rating;
 pub mod resizable;
 pub mod scroll;
 pub mod select;

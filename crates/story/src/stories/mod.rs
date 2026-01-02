@@ -33,6 +33,7 @@ mod otp_input_story;
 mod pagination_story;
 mod popover_story;
 mod progress_story;
+mod rating_story;
 mod radio_story;
 mod resizable_story;
 mod scrollbar_story;
@@ -87,6 +88,7 @@ pub use otp_input_story::OtpInputStory;
 pub use pagination_story::PaginationStory;
 pub use popover_story::PopoverStory;
 pub use progress_story::ProgressStory;
+pub use rating_story::RatingStory;
 pub use radio_story::RadioStory;
 pub use resizable_story::ResizableStory;
 pub use scrollbar_story::ScrollbarStory;
@@ -112,6 +114,7 @@ pub use welcome_story::WelcomeStory;
 
 pub(crate) fn init(cx: &mut App) {
     input_story::init(cx);
+    rating_story::init(cx);
     number_input_story::init(cx);
     textarea_story::init(cx);
     select_story::init(cx);
