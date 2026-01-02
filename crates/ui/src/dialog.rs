@@ -478,7 +478,6 @@ impl RenderOnce for Dialog {
                             })
                             // There style is high priority, can't be overridden.
                             .absolute()
-                            .occlude()
                             .relative()
                             .left(x)
                             .top(y)
@@ -536,11 +535,6 @@ impl RenderOnce for Dialog {
                                         .justify_end()
                                         .children(footer(render_ok, render_cancel, window, cx)),
                                 )
-                            })
-                            .on_any_mouse_down({
-                                |_, _, cx| {
-                                    cx.stop_propagation();
-                                }
                             })
                             .with_animation("slide-down", animation.clone(), move |this, delta| {
                                 // This is equivalent to `shadow_xl` with an extra opacity.
