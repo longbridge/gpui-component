@@ -690,7 +690,6 @@ impl TabPanel {
         let tabs_count = self.panels.len();
 
         TabBar::new("tab-bar")
-            .tab_item_top_offset(-px(1.))
             .track_scroll(&self.tab_bar_scroll_handle)
             .when(has_extend_dock_button, |this| {
                 this.prefix(

@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Corner, Div, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _, px,
+    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 use std::rc::Rc;
@@ -26,8 +26,6 @@ pub struct TabBar {
     size: Size,
     menu: bool,
     on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
-    /// Special for internal TabPanel to remove the top border.
-    tab_item_top_offset: Pixels,
 }
 
 impl TabBar {
@@ -46,7 +44,6 @@ impl TabBar {
             selected_index: None,
             on_click: None,
             menu: false,
-            tab_item_top_offset: px(0.),
         }
     }
 
@@ -136,11 +133,6 @@ impl TabBar {
         F: Fn(&usize, &mut Window, &mut App) + 'static,
     {
         self.on_click = Some(Rc::new(on_click));
-        self
-    }
-
-    pub(crate) fn tab_item_top_offset(mut self, offset: impl Into<Pixels>) -> Self {
-        self.tab_item_top_offset = offset.into();
         self
     }
 }
@@ -251,7 +243,6 @@ impl RenderOnce for TabBar {
                         child
                             .ix(ix)
                             .tab_bar_prefix(tab_bar_prefix)
-                            .mt(self.tab_item_top_offset)
                             .with_variant(self.variant)
                             .with_size(self.size)
                             .when_some(self.selected_index, |this, selected_ix| {
