@@ -253,7 +253,7 @@ impl RenderOnce for Input {
         });
 
         let state = self.state.read(cx);
-        let focused = state.focus_handle.is_focused(window);
+        let focused = state.focus_handle.is_focused(window) && !state.disabled;
         let gap_x = match self.size {
             Size::Small => px(4.),
             Size::Large => px(8.),
