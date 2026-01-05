@@ -3,9 +3,11 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, RenderOnce, StyleRefinement, Styled, Window, WindowControlArea, anchored, div,
-    point, prelude::FluentBuilder as _, px,
+    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, WindowControlArea,
+    anchored, div, point, prelude::FluentBuilder as _, px,
 };
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
@@ -21,6 +23,21 @@ use crate::{
 const CONTEXT: &str = "Sheet";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
+}
+
+/// The settings for sheets.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SheetSettings {
+    /// The margin top for the sheet, default is [`TITLE_BAR_HEIGHT`].
+    pub margin_top: Pixels,
+}
+
+impl Default for SheetSettings {
+    fn default() -> Self {
+        Self {
+            margin_top: TITLE_BAR_HEIGHT,
+        }
+    }
 }
 
 /// Sheet component that slides in from the side of the window.
@@ -118,16 +135,13 @@ impl Styled for Sheet {
 impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
-        let mut window_paddings = crate::window_border::window_paddings(window);
-        // Only add the title bar height for non-bottom placements.
-        if placement != Placement::Bottom {
-            window_paddings.top += TITLE_BAR_HEIGHT;
-        }
+        let window_paddings = crate::window_border::window_paddings(window);
         let size = window.viewport_size()
             - gpui::size(
                 window_paddings.left + window_paddings.right,
                 window_paddings.top + window_paddings.bottom,
             );
+        let top = cx.theme().sheet.margin_top;
         let on_close = self.on_close.clone();
 
         let base_size = window.text_style().font_size;
@@ -162,7 +176,7 @@ impl RenderOnce for Sheet {
                         .on_any_mouse_down({
                             let on_close = self.on_close.clone();
                             move |event, window, cx| {
-                                if event.position.y < TITLE_BAR_HEIGHT {
+                                if event.position.y < top {
                                     return;
                                 }
 
@@ -198,18 +212,18 @@ impl RenderOnce for Sheet {
                             .map(|this| {
                                 // Set the size of the sheet.
                                 if placement.is_horizontal() {
-                                    this.h_full().w(self.size)
+                                    this.w(self.size)
                                 } else {
-                                    this.w_full().h(self.size)
+                                    this.h(self.size)
                                 }
                             })
                             .map(|this| match self.placement {
-                                Placement::Top => this.top_0().left_0().right_0().border_b_1(),
-                                Placement::Right => this.top_0().right_0().bottom_0().border_l_1(),
+                                Placement::Top => this.top(top).left_0().right_0().border_b_1(),
+                                Placement::Right => this.top(top).right_0().bottom_0().border_l_1(),
                                 Placement::Bottom => {
                                     this.bottom_0().left_0().right_0().border_t_1()
                                 }
-                                Placement::Left => this.top_0().left_0().bottom_0().border_r_1(),
+                                Placement::Left => this.top(top).left_0().bottom_0().border_r_1(),
                             })
                             .child(
                                 // TitleBar
@@ -265,7 +279,7 @@ impl RenderOnce for Sheet {
                                 move |this, delta| {
                                     let y = px(-100.) + delta * px(100.);
                                     this.map(|this| match placement {
-                                        Placement::Top => this.top(y),
+                                        Placement::Top => this.top(top + y),
                                         Placement::Right => this.right(y),
                                         Placement::Bottom => this.bottom(y),
                                         Placement::Left => this.left(y),

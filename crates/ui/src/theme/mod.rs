@@ -1,5 +1,6 @@
 use crate::{
-    highlighter::HighlightTheme, notification::NotificationSettings, list::ListSettings, scroll::ScrollbarShow,
+    highlighter::HighlightTheme, list::ListSettings, notification::NotificationSettings,
+    scroll::ScrollbarShow, sheet::SheetSettings,
 };
 use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
 use schemars::JsonSchema;
@@ -79,6 +80,8 @@ pub struct Theme {
     pub tile_radius: Pixels,
     /// The list settings.
     pub list: ListSettings,
+    /// The sheet settings.
+    pub sheet: SheetSettings,
 }
 
 impl Default for Theme {
@@ -214,6 +217,7 @@ impl From<&ThemeColor> for Theme {
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),
+            sheet: SheetSettings::default(),
         }
     }
 }
