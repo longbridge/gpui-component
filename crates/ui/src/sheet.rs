@@ -190,6 +190,7 @@ impl RenderOnce for Sheet {
                                 }
                             })
                             .absolute()
+                            .occlude()
                             .bg(cx.theme().background)
                             .border_color(cx.theme().border)
                             .shadow_xl()
@@ -252,6 +253,11 @@ impl RenderOnce for Sheet {
                                         .w_full()
                                         .child(footer),
                                 )
+                            })
+                            .on_any_mouse_down({
+                                |_, _, cx| {
+                                    cx.stop_propagation();
+                                }
                             })
                             .with_animation(
                                 "slide",
