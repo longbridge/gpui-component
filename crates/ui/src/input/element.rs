@@ -193,15 +193,6 @@ impl TextElement {
                 } else {
                     scroll_offset.x
                 };
-                if last_layout.text_align == TextAlign::Right {
-                    println!(
-                        "--- scroll x {}, cursor x: {}, scroll_size: {}, diff: {}",
-                        scroll_offset.x,
-                        cursor_pos.x,
-                        state.scroll_size.width,
-                        scroll_offset.x + cursor_pos.x
-                    );
-                }
 
                 // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
                 // So, here we just adjust offset by `line_height` for move smooth.
