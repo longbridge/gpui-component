@@ -7,6 +7,7 @@
     {
       "name": "Molokai Light",
       "mode": "light",
+      "shadow": false,
       "colors": {
         "accent.background": "#EBE4E1",
         "accent.foreground": "#060606",
@@ -19,7 +20,7 @@
         "list.active.background": "#E1477411",
         "list.active.border": "#E14774AA",
         "list.even.background": "#E4DEDA33",
-        "muted.background": "#f5f5f5",
+        "muted.background": "#f1eded",
         "muted.foreground": "#767676",
         "panel.background": "#FEFAF9",
         "popover.background": "#FEFAF9",

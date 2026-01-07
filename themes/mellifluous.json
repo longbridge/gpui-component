@@ -7,6 +7,7 @@
     {
       "name": "Mellifluous Light",
       "mode": "light",
+      "shadow": false,
       "colors": {
         "accent.background": "#d4d4d4",
         "accent.foreground": "#383a42",
@@ -15,7 +16,6 @@
         "danger.active.background": "#e06c75",
         "danger.hover.background": "#be5046",
         "foreground": "#383a42",
-        "input.border": "#d5d5d5",
         "link.active.foreground": "#5A6599",
         "link.foreground": "#5A6599",
         "link.hover.foreground": "#5A6599",
@@ -23,7 +23,7 @@
         "list.active.background": "#5A659912",
         "list.active.border": "#5A6599",
         "list.even.background": "#F0F0F0",
-        "muted.background": "#e5e5e5",
+        "muted.background": "#E0E0E0",
         "muted.foreground": "#828997",
         "panel.background": "#fafafa",
         "popover.background": "#E4E4E4",
@@ -154,6 +154,7 @@
     {
       "name": "Mellifluous Dark",
       "mode": "dark",
+      "shadow": false,
       "colors": {
         "accent.background": "#2f2f2f",
         "accent.foreground": "#abb2bf",

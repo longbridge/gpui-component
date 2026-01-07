@@ -43,19 +43,30 @@ impl Focusable for KbdStory {
 }
 impl Render for KbdStory {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex().gap_6().child(
-            section("Kbd").child(
-                h_flex()
-                    .gap_2()
-                    .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("cmd--").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("cmd-+").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("escape").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("/").unwrap()))
-                    .child(Kbd::new(Keystroke::parse("enter").unwrap())),
-            ),
-        )
+        v_flex()
+            .gap_6()
+            .child(
+                section("Kbd").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("cmd--").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("cmd-+").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("escape").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("/").unwrap()))
+                        .child(Kbd::new(Keystroke::parse("enter").unwrap())),
+                ),
+            )
+            .child(
+                section("Outline Style").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()).outline())
+                        .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()).outline())
+                        .child(Kbd::new(Keystroke::parse("enter").unwrap()).outline()),
+                ),
+            )
     }
 }
