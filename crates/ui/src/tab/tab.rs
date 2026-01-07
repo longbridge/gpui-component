@@ -55,7 +55,7 @@ impl TabVariant {
             },
             Size::Large => match self {
                 TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(36.),
-                TabVariant::Segmented => px(26.),
+                TabVariant::Segmented => px(28.),
                 TabVariant::Underline => px(32.),
             },
             _ => match self {

@@ -174,7 +174,6 @@ impl RenderOnce for TabBar {
                 let padding_x = match self.size {
                     Size::XSmall => px(2.),
                     Size::Small => px(3.),
-                    Size::Large => px(6.),
                     _ => px(4.),
                 };
                 let padding = Edges {
