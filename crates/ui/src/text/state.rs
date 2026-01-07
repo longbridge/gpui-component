@@ -179,13 +179,11 @@ impl TextViewState {
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
-        let code_block_actions = self.code_block_actions.clone();
         let update_options = UpdateOptions {
             append,
             content: self.parsed_content.clone(),
             pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
-            code_block_actions: code_block_actions.clone(),
         };
 
         // Parse at first time by blocking.
@@ -256,10 +254,12 @@ impl TextViewState {
 impl Render for TextViewState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = cx.entity();
-        let (document, node_cx) = {
+        let (document, mut node_cx) = {
             let content = self.parsed_content.lock().unwrap();
             (content.document.clone(), content.node_cx.clone())
         };
+
+        node_cx.code_block_actions = self.code_block_actions.clone();
 
         v_flex()
             .size_full()
@@ -320,7 +320,6 @@ impl UpdateFuture {
                 pending_text: String::new(),
                 content: Default::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
-                code_block_actions: None,
             },
             timer: Timer::never(),
             rx: Box::pin(rx),
@@ -377,12 +376,10 @@ struct UpdateOptions {
     pending_text: String,
     append: bool,
     highlight_theme: Arc<HighlightTheme>,
-    code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), SharedString> {
     let mut node_cx = NodeContext {
-        code_block_actions: options.code_block_actions.clone(),
         ..NodeContext::default()
     };
 
