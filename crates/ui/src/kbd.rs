@@ -1,6 +1,6 @@
 use gpui::{
-    div, relative, Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke,
-    ParentElement as _, RenderOnce, StyleRefinement, Styled, Window,
+    Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -11,6 +11,7 @@ pub struct Kbd {
     style: StyleRefinement,
     stroke: Keystroke,
     appearance: bool,
+    outline: bool,
 }
 
 impl From<Keystroke> for Kbd {
@@ -19,6 +20,7 @@ impl From<Keystroke> for Kbd {
             style: StyleRefinement::default(),
             stroke,
             appearance: true,
+            outline: false,
         }
     }
 }
@@ -30,12 +32,19 @@ impl Kbd {
             style: StyleRefinement::default(),
             stroke,
             appearance: true,
+            outline: false,
         }
     }
 
     /// Set the appearance of the keybinding, default is `true`.
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
+        self
+    }
+
+    /// Use outline style for the keybinding, default is `false`.
+    pub fn outline(mut self) -> Self {
+        self.outline = true;
         self
     }
 
@@ -212,10 +221,13 @@ impl RenderOnce for Kbd {
         }
 
         div()
-            .border_1()
-            .border_color(cx.theme().border)
             .text_color(cx.theme().muted_foreground)
-            .bg(cx.theme().background)
+            .bg(cx.theme().muted)
+            .when(self.outline, |this| {
+                this.border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().background)
+            })
             .py_0p5()
             .px_1()
             .min_w_5()
