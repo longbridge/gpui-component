@@ -64,6 +64,7 @@ impl RowEntry {
 
 #[derive(Default, Clone)]
 pub(crate) struct RowsCache {
+    /// Only have section's that have rows.
     pub(crate) entities: Rc<Vec<RowEntry>>,
     pub(crate) items_count: usize,
     /// The sections, the item is number of rows in each section.
@@ -94,54 +95,76 @@ impl RowsCache {
             .position(|p| p.is_entry() && p.eq_index_path(path))
     }
 
-    /// Returns the sections count in the cache.
-    pub(crate) fn sections_count(&self) -> usize {
-        self.sections.len()
-    }
-
-    /// Returns the rows count in the given section, if the section does not exist, returns 0.
-    pub(crate) fn rows_count(&self, section: usize) -> usize {
-        self.sections.get(section).cloned().unwrap_or(0)
-    }
-
     /// Return prev row, if the row is the first in the first section, goes to the last row.
+    ///
+    /// Empty rows section are skipped.
     pub(crate) fn prev(&self, path: Option<IndexPath>) -> IndexPath {
-        let mut path = path.unwrap_or_default();
+        let path = path.unwrap_or_default();
+        let Some(pos) = self.position_of(&path) else {
+            return self
+                .entities
+                .iter()
+                .filter(|entry| entry.is_entry())
+                .last()
+                .map(|entry| entry.index())
+                .unwrap_or_default();
+        };
 
-        if path.section == 0 && path.row == 0 {
-            path.section = self.sections_count().saturating_sub(1);
-            path.row = self.rows_count(path.section).saturating_sub(1);
-            return path;
+        if let Some(path) = self
+            .entities
+            .iter()
+            .take(pos)
+            .rev()
+            .filter(|entry| entry.is_entry())
+            .next()
+            .map(|entry| entry.index())
+        {
+            path
+        } else {
+            self.entities
+                .iter()
+                .filter(|entry| entry.is_entry())
+                .last()
+                .map(|entry| entry.index())
+                .unwrap_or_default()
         }
-
-        if path.row > 0 {
-            path.row -= 1;
-        } else if path.section > 0 {
-            path.section -= 1;
-            path.row = self.rows_count(path.section).saturating_sub(1);
-        }
-        path
     }
 
     /// Returns the next row, if the row is the last in the last section, goes to the first row.
+    ///
+    /// Empty rows section are skipped.
     pub(crate) fn next(&self, path: Option<IndexPath>) -> IndexPath {
         let Some(mut path) = path else {
             return IndexPath::default();
         };
 
-        if path.section + 1 == self.sections_count()
-            && path.row + 1 == self.rows_count(path.section)
-        {
-            path.section = 0;
-            path.row = 0;
-            return path;
-        }
+        let Some(pos) = self.position_of(&path) else {
+            return self
+                .entities
+                .iter()
+                .filter(|entry| entry.is_entry())
+                .next()
+                .map(|entry| entry.index())
+                .unwrap_or_default();
+        };
 
-        if path.row + 1 < self.rows_count(path.section) {
-            path.row += 1;
-        } else if path.section + 1 < self.sections_count() {
-            path.section += 1;
-            path.row = 0;
+        if let Some(next_path) = self
+            .entities
+            .iter()
+            .skip(pos + 1)
+            .filter(|entry| entry.is_entry())
+            .next()
+            .map(|entry| entry.index())
+        {
+            path = next_path;
+        } else {
+            path = self
+                .entities
+                .iter()
+                .filter(|entry| entry.is_entry())
+                .next()
+                .map(|entry| entry.index())
+                .unwrap_or_default()
         }
 
         path
@@ -178,6 +201,10 @@ impl RowsCache {
                 .flat_map(|(section, items_count)| {
                     total_items_count += items_count;
                     let mut children = vec![];
+                    if *items_count == 0 {
+                        return children;
+                    }
+
                     children.push(RowEntry::SectionHeader(section));
                     entries_sizes.push(measured_size.section_header_size);
                     for row in 0..*items_count {

@@ -415,8 +415,7 @@ where
     }
 
     fn prepare_items_if_needed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let sections_count = self.delegate.sections_count(cx);
-
+        let sections_count = self.delegate.sections_count(cx).max(1);
         let mut measured_size = MeasuredEntrySize::default();
 
         // Measure the item_height and section header/footer height.

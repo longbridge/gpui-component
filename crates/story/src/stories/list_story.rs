@@ -196,6 +196,11 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn items_count(&self, section: usize, _: &App) -> usize {
+        if matches!(section, 0 | 2 | 3) {
+            // Return some empty sections for testing.
+            return 0;
+        }
+
         self.matched_companies[section].len()
     }
 
@@ -251,7 +256,8 @@ impl ListDelegate for CompanyListDelegate {
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(Icon::new(IconName::Folder))
-                .child(industry.clone()),
+                .child(industry.clone())
+                .child(format!("(section: {})", section)),
         )
     }
 

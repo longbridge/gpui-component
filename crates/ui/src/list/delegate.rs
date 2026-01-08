@@ -22,11 +22,16 @@ pub trait ListDelegate: Sized + 'static {
     }
 
     /// Return the number of sections in the list, default is 1.
+    ///
+    /// Min value is 1.
     fn sections_count(&self, cx: &App) -> usize {
         1
     }
 
     /// Return the number of items in the section at the given index.
+    ///
+    /// NOTE: Only the sections with items_count > 0 will be rendered. If the section has 0 items,
+    /// the section header and footer will also be skipped.
     fn items_count(&self, section: usize, cx: &App) -> usize;
 
     /// Render the item at the given index.
