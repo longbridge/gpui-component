@@ -230,7 +230,34 @@ impl RowsCache {
 mod tests {
     use std::rc::Rc;
 
-    use crate::{IndexPath, list::cache::RowsCache};
+    use crate::{
+        IndexPath,
+        list::cache::{RowEntry, RowsCache},
+    };
+
+    fn build_entities(sections: &[usize]) -> Vec<RowEntry> {
+        sections
+            .iter()
+            .enumerate()
+            .flat_map(|(section, items_count)| {
+                let mut children = vec![];
+                if *items_count == 0 {
+                    return children;
+                }
+
+                children.push(RowEntry::SectionHeader(section));
+                for row in 0..*items_count {
+                    children.push(RowEntry::Entry(IndexPath {
+                        section,
+                        row,
+                        ..Default::default()
+                    }));
+                }
+                children.push(RowEntry::SectionFooter(section));
+                children
+            })
+            .collect()
+    }
 
     #[test]
     fn test_prev_next() {
@@ -248,6 +275,7 @@ mod tests {
         //  row 1
         //  row 2
         row_cache.sections = Rc::new(vec![2, 4, 3]);
+        row_cache.entities = Rc::new(build_entities(&[2, 4, 3]));
 
         assert_eq!(
             row_cache.next(Some(IndexPath::new(0).section(0))),
@@ -301,6 +329,62 @@ mod tests {
         assert_eq!(
             row_cache.prev(Some(IndexPath::new(0).section(2))),
             IndexPath::new(3).section(1)
+        );
+    }
+
+    #[test]
+    fn test_prev_next_with_empty_sections() {
+        let mut row_cache = RowsCache::default();
+        // section 0: 2 items
+        // section 1: 0 items (empty, should be skipped)
+        // section 2: 3 items
+        // section 3: 0 items (empty, should be skipped)
+        // section 4: 1 item
+        row_cache.sections = Rc::new(vec![2, 0, 3, 0, 1]);
+        row_cache.entities = Rc::new(build_entities(&[2, 0, 3, 0, 1]));
+
+        // Test next: should skip empty sections
+        assert_eq!(
+            row_cache.next(Some(IndexPath::new(0).section(0))),
+            IndexPath::new(1).section(0)
+        );
+        assert_eq!(
+            row_cache.next(Some(IndexPath::new(1).section(0))),
+            IndexPath::new(0).section(2) // Skip section 1 (empty)
+        );
+        assert_eq!(
+            row_cache.next(Some(IndexPath::new(0).section(2))),
+            IndexPath::new(1).section(2)
+        );
+        assert_eq!(
+            row_cache.next(Some(IndexPath::new(2).section(2))),
+            IndexPath::new(0).section(4) // Skip section 3 (empty)
+        );
+        assert_eq!(
+            row_cache.next(Some(IndexPath::new(0).section(4))),
+            IndexPath::new(0).section(0) // Wrap around to first item
+        );
+
+        // Test prev: should skip empty sections
+        assert_eq!(
+            row_cache.prev(Some(IndexPath::new(0).section(0))),
+            IndexPath::new(0).section(4) // Wrap around to last item, skip empty sections
+        );
+        assert_eq!(
+            row_cache.prev(Some(IndexPath::new(0).section(2))),
+            IndexPath::new(1).section(0) // Skip section 1 (empty)
+        );
+        assert_eq!(
+            row_cache.prev(Some(IndexPath::new(0).section(4))),
+            IndexPath::new(2).section(2) // Skip section 3 (empty)
+        );
+        assert_eq!(
+            row_cache.prev(Some(IndexPath::new(1).section(2))),
+            IndexPath::new(0).section(2)
+        );
+        assert_eq!(
+            row_cache.prev(Some(IndexPath::new(2).section(2))),
+            IndexPath::new(1).section(2)
         );
     }
 }

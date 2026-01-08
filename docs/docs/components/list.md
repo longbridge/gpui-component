@@ -75,6 +75,8 @@ div().child(List::new(&state))
 
 ### List with Sections
 
+**Note:** Sections with `items_count` of 0 will be automatically hidden (no header or footer will be rendered for empty sections).
+
 ```rust
 impl ListDelegate for MyListDelegate {
     type Item = ListItem;
