@@ -10,7 +10,7 @@ use gpui::{
     ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
     WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
-use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Subscription};
+use gpui::{ClickEvent, Half, MouseButton, MouseUpEvent, OwnedMenuItem, Subscription};
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
@@ -1266,18 +1266,21 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_right))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_down_out(cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                // Do not dismiss, if click inside the parent menu
-                if let Some(parent) = this.parent_menu.as_ref() {
-                    if let Some(parent) = parent.upgrade() {
-                        if parent.read(cx).bounds.contains(&ev.position) {
-                            return;
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, ev: &MouseUpEvent, window, cx| {
+                    // Do not dismiss, if click inside the parent menu
+                    if let Some(parent) = this.parent_menu.as_ref() {
+                        if let Some(parent) = parent.upgrade() {
+                            if parent.read(cx).bounds.contains(&ev.position) {
+                                return;
+                            }
                         }
                     }
-                }
 
-                this.dismiss(&Cancel, window, cx);
-            }))
+                    this.dismiss(&Cancel, window, cx);
+                }),
+            )
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
