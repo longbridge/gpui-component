@@ -104,8 +104,7 @@ impl RowsCache {
             return self
                 .entities
                 .iter()
-                .filter(|entry| entry.is_entry())
-                .last()
+                .rfind(|entry| entry.is_entry())
                 .map(|entry| entry.index())
                 .unwrap_or_default();
         };
@@ -115,16 +114,14 @@ impl RowsCache {
             .iter()
             .take(pos)
             .rev()
-            .filter(|entry| entry.is_entry())
-            .next()
+            .find(|entry| entry.is_entry())
             .map(|entry| entry.index())
         {
             path
         } else {
             self.entities
                 .iter()
-                .filter(|entry| entry.is_entry())
-                .last()
+                .rfind(|entry| entry.is_entry())
                 .map(|entry| entry.index())
                 .unwrap_or_default()
         }
@@ -142,8 +139,7 @@ impl RowsCache {
             return self
                 .entities
                 .iter()
-                .filter(|entry| entry.is_entry())
-                .next()
+                .find(|entry| entry.is_entry())
                 .map(|entry| entry.index())
                 .unwrap_or_default();
         };
@@ -152,8 +148,7 @@ impl RowsCache {
             .entities
             .iter()
             .skip(pos + 1)
-            .filter(|entry| entry.is_entry())
-            .next()
+            .find(|entry| entry.is_entry())
             .map(|entry| entry.index())
         {
             path = next_path;
@@ -161,8 +156,7 @@ impl RowsCache {
             path = self
                 .entities
                 .iter()
-                .filter(|entry| entry.is_entry())
-                .next()
+                .find(|entry| entry.is_entry())
                 .map(|entry| entry.index())
                 .unwrap_or_default()
         }
