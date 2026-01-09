@@ -996,7 +996,7 @@ impl BlockNode {
                                                     }),
                                             )
                                         })
-                                        .child(div().overflow_hidden().child(text)),
+                                        .child(div().flex_1().overflow_hidden().child(text)),
                                 );
                             }
                             BlockNode::List { .. } => {
