@@ -222,6 +222,7 @@ impl DatePickerState {
     }
 
     fn clean(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        cx.stop_propagation();
         match self.date {
             Date::Single(_) => {
                 self.update_date(Date::Single(None), true, window, cx);
