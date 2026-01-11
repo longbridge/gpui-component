@@ -1,10 +1,23 @@
-use crate::{ActiveTheme, StyledExt};
+use crate::{ActiveTheme, PixelsExt, StyledExt};
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
-    relative,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, ElementId, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
+    Styled, Window, canvas, div, prelude::FluentBuilder, px, relative,
 };
+use std::f32::consts::TAU;
 use std::time::Duration;
+
+use crate::plot::shape::{Arc, ArcData};
+
+/// Progress bar display mode.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProgressMode {
+    /// Linear horizontal progress bar (default).
+    #[default]
+    Linear,
+    /// Circular progress indicator.
+    Circle,
+}
 
 /// A Progress bar element.
 #[derive(IntoElement)]
@@ -13,6 +26,7 @@ pub struct Progress {
     style: StyleRefinement,
     color: Option<Hsla>,
     value: f32,
+    mode: ProgressMode,
 }
 
 impl Progress {
@@ -23,6 +37,7 @@ impl Progress {
             value: Default::default(),
             color: None,
             style: StyleRefinement::default().h(px(8.)).rounded(px(4.)),
+            mode: ProgressMode::Linear,
         }
     }
 
@@ -39,6 +54,15 @@ impl Progress {
         self.value = value.clamp(0., 100.);
         self
     }
+
+    /// Set the progress bar to circle mode.
+    ///
+    /// In circle mode, the progress is displayed as a circular arc.
+    /// The size can be controlled using `w()` and `h()` style methods.
+    pub fn circle(mut self) -> Self {
+        self.mode = ProgressMode::Circle;
+        self
+    }
 }
 
 impl Styled for Progress {
@@ -53,12 +77,32 @@ struct ProgressState {
 
 impl RenderOnce for Progress {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let color = self.color.unwrap_or(cx.theme().progress_bar);
+        let value = self.value;
+        let mode = self.mode;
+
+        match mode {
+            ProgressMode::Linear => self
+                .render_linear(window, cx, color, value)
+                .into_any_element(),
+            ProgressMode::Circle => self
+                .render_circle(window, cx, color, value)
+                .into_any_element(),
+        }
+    }
+}
+
+impl Progress {
+    fn render_linear(
+        self,
+        window: &mut Window,
+        cx: &mut App,
+        color: Hsla,
+        value: f32,
+    ) -> impl IntoElement {
         let radius = self.style.corner_radii.clone();
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = radius;
-
-        let color = self.color.unwrap_or(cx.theme().progress_bar);
-        let value = self.value;
 
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
         let prev_value = state.read(cx).value;
@@ -99,8 +143,7 @@ impl RenderOnce for Progress {
                                 "progress-animation",
                                 Animation::new(duration),
                                 move |this, delta| {
-                                    let current_value =
-                                        prev_value + (value - prev_value) * delta;
+                                    let current_value = prev_value + (value - prev_value) * delta;
                                     let relative_w = relative(match current_value {
                                         v if v < 0. => 0.,
                                         v if v > 100. => 1.,
@@ -120,5 +163,113 @@ impl RenderOnce for Progress {
                         }
                     }),
             )
+    }
+
+    fn render_circle(
+        self,
+        window: &mut Window,
+        cx: &mut App,
+        color: Hsla,
+        value: f32,
+    ) -> AnyElement {
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
+
+        // Default size if not specified
+        let default_size = px(64.);
+
+        let id = self.id.clone();
+        let state_clone = state.clone();
+        let color_clone = color;
+        let stroke_width = px(4.);
+        let target_value = value;
+
+        div()
+            .id(id)
+            .w(default_size)
+            .h(default_size)
+            .refine_style(&self.style)
+            .child(
+                canvas(
+                    // Prepaint callback: prepare data
+                    move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
+                        // Update state in prepaint
+                        let current_state_value = state_clone.read(cx).value;
+                        if current_state_value != target_value {
+                            _ = state_clone.update(cx, |this, _| this.value = target_value);
+                        }
+                        let current_value = state_clone.read(cx).value;
+
+                        // Calculate actual size from bounds
+                        let actual_size = bounds.size.width.min(bounds.size.height);
+                        let actual_radius = (actual_size.as_f32() - stroke_width.as_f32()) / 2.;
+                        let actual_inner_radius = actual_radius - stroke_width.as_f32() / 2.;
+                        let actual_outer_radius = actual_radius + stroke_width.as_f32() / 2.;
+
+                        (
+                            current_value,
+                            actual_inner_radius,
+                            actual_outer_radius,
+                            bounds,
+                        )
+                    },
+                    // Paint callback: actually draw
+                    move |_bounds,
+                          (current_value, actual_inner_radius, actual_outer_radius, prepaint_bounds),
+                          window: &mut Window,
+                          _cx: &mut App| {
+                        // Draw background circle
+                        let bg_arc_data = ArcData {
+                            data: &(),
+                            index: 0,
+                            value: 100.,
+                            start_angle: 0.,
+                            end_angle: TAU,
+                            pad_angle: 0.,
+                        };
+
+                        let bg_arc = Arc::new()
+                            .inner_radius(actual_inner_radius)
+                            .outer_radius(actual_outer_radius);
+
+                        bg_arc.paint(
+                            &bg_arc_data,
+                            color_clone.opacity(0.2),
+                            None,
+                            None,
+                            &prepaint_bounds,
+                            window,
+                        );
+
+                        // Draw progress arc
+                        if current_value > 0. {
+                            let progress_angle = (current_value / 100.) * TAU;
+                            let progress_arc_data = ArcData {
+                                data: &(),
+                                index: 1,
+                                value: current_value,
+                                start_angle: 0.,
+                                end_angle: progress_angle,
+                                pad_angle: 0.,
+                            };
+
+                            let progress_arc = Arc::new()
+                                .inner_radius(actual_inner_radius)
+                                .outer_radius(actual_outer_radius);
+
+                            progress_arc.paint(
+                                &progress_arc_data,
+                                color_clone,
+                                None,
+                                None,
+                                &prepaint_bounds,
+                                window,
+                            );
+                        }
+                    },
+                )
+                .absolute()
+                .size_full(),
+            )
+            .into_any_element()
     }
 }
