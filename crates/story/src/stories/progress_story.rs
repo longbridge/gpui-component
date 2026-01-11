@@ -35,7 +35,7 @@ impl ProgressStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            value: 50.,
+            value: 25.,
         }
     }
 
@@ -56,52 +56,58 @@ impl Render for ProgressStory {
             .items_center()
             .gap_y_3()
             .child(
-                section("Progress Bar").max_w_md().child(
-                    v_flex()
-                        .w_full()
-                        .gap_3()
-                        .justify_center()
-                        .items_center()
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .child(Button::new("button-1").small().label("0%").on_click(
-                                    cx.listener(|this, _, _, _| {
-                                        this.set_value(0.);
-                                    }),
-                                ))
-                                .child(Button::new("button-2").small().label("25%").on_click(
-                                    cx.listener(|this, _, _, _| {
-                                        this.set_value(25.);
-                                    }),
-                                ))
-                                .child(Button::new("button-3").small().label("75%").on_click(
-                                    cx.listener(|this, _, _, _| {
-                                        this.set_value(75.);
-                                    }),
-                                ))
-                                .child(Button::new("button-4").small().label("100%").on_click(
-                                    cx.listener(|this, _, _, _| {
-                                        this.set_value(100.);
-                                    }),
-                                )),
-                        )
-                        .child(Progress::new("progress-1").value(self.value))
-                        .child(
-                            h_flex()
-                                .gap_x_2()
-                                .child(Button::new("button-5").icon(IconName::Minus).on_click(
-                                    cx.listener(|this, _, _, _| {
+                v_flex()
+                    .w_full()
+                    .gap_3()
+                    .justify_center()
+                    .items_center()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(Button::new("button-1").small().label("0%").on_click(
+                                cx.listener(|this, _, _, _| {
+                                    this.set_value(0.);
+                                }),
+                            ))
+                            .child(Button::new("button-2").small().label("25%").on_click(
+                                cx.listener(|this, _, _, _| {
+                                    this.set_value(25.);
+                                }),
+                            ))
+                            .child(Button::new("button-3").small().label("75%").on_click(
+                                cx.listener(|this, _, _, _| {
+                                    this.set_value(75.);
+                                }),
+                            ))
+                            .child(Button::new("button-4").small().label("100%").on_click(
+                                cx.listener(|this, _, _, _| {
+                                    this.set_value(100.);
+                                }),
+                            )),
+                    )
+                    .child(
+                        h_flex()
+                            .gap_x_2()
+                            .child(
+                                Button::new("circle-button-5")
+                                    .icon(IconName::Minus)
+                                    .on_click(cx.listener(|this, _, _, _| {
                                         this.set_value((this.value - 1.).max(0.));
-                                    }),
-                                ))
-                                .child(Button::new("button-6").icon(IconName::Plus).on_click(
-                                    cx.listener(|this, _, _, _| {
+                                    })),
+                            )
+                            .child(
+                                Button::new("circle-button-6")
+                                    .icon(IconName::Plus)
+                                    .on_click(cx.listener(|this, _, _, _| {
                                         this.set_value((this.value + 1.).min(100.));
-                                    }),
-                                )),
-                        ),
-                ),
+                                    })),
+                            ),
+                    ),
+            )
+            .child(
+                section("Progress Bar")
+                    .max_w_md()
+                    .child(Progress::new("progress-1").value(self.value)),
             )
             .child(
                 section("Custom Style").max_w_md().child(
@@ -109,156 +115,69 @@ impl Render for ProgressStory {
                         .value(32.)
                         .h(px(16.))
                         .rounded(px(2.))
-                        .bg(cx.theme().green_light)
+                        .color(cx.theme().green_light)
                         .border_2()
                         .border_color(cx.theme().green),
                 ),
             )
             .child(
                 section("Circle Progress").max_w_md().child(
-                    v_flex()
-                        .w_full()
-                        .gap_6()
-                        .justify_center()
-                        .items_center()
+                    Progress::new("circle-progress-1")
+                        .circle()
+                        .value(self.value)
+                        .size_16(),
+                ),
+            )
+            .child(
+                section("With size").max_w_md().child(
+                    h_flex()
+                        .gap_2()
                         .child(
-                            v_flex()
-                                .gap_4()
-                                .items_center()
-                                .child(
-                                    h_flex()
-                                        .gap_2()
-                                        .child(Button::new("circle-button-1").small().label("0%").on_click(
-                                            cx.listener(|this, _, _, _| {
-                                                this.set_value(0.);
-                                            }),
-                                        ))
-                                        .child(Button::new("circle-button-2").small().label("25%").on_click(
-                                            cx.listener(|this, _, _, _| {
-                                                this.set_value(25.);
-                                            }),
-                                        ))
-                                        .child(Button::new("circle-button-3").small().label("75%").on_click(
-                                            cx.listener(|this, _, _, _| {
-                                                this.set_value(75.);
-                                            }),
-                                        ))
-                                        .child(Button::new("circle-button-4").small().label("100%").on_click(
-                                            cx.listener(|this, _, _, _| {
-                                                this.set_value(100.);
-                                            }),
-                                        )),
-                                )
-                                .child(
-                                    Progress::new("circle-progress-1")
-                                        .circle()
-                                        .value(self.value)
-                                        .w(px(120.))
-                                        .h(px(120.)),
-                                )
-                                .child(
-                                    h_flex()
-                                        .gap_x_2()
-                                        .child(Button::new("circle-button-5").icon(IconName::Minus).on_click(
-                                            cx.listener(|this, _, _, _| {
-                                                this.set_value((this.value - 1.).max(0.));
-                                            }),
-                                        ))
-                                        .child(Button::new("circle-button-6").icon(IconName::Plus).on_click(
-                                            cx.listener(|this, _, _, _| {
-                                                this.set_value((this.value + 1.).min(100.));
-                                            }),
-                                        )),
-                                ),
+                            Progress::new("circle-progress-1")
+                                .circle()
+                                .value(self.value)
+                                .large(),
                         )
                         .child(
-                            h_flex()
-                                .gap_6()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    v_flex()
-                                        .gap_2()
-                                        .items_center()
-                                        .child(Progress::new("circle-progress-small")
-                                            .circle()
-                                            .value(25.)
-                                            .w(px(48.))
-                                            .h(px(48.)))
-                                        .child("Small"),
-                                )
-                                .child(
-                                    v_flex()
-                                        .gap_2()
-                                        .items_center()
-                                        .child(Progress::new("circle-progress-medium")
-                                            .circle()
-                                            .value(50.)
-                                            .w(px(64.))
-                                            .h(px(64.)))
-                                        .child("Medium"),
-                                )
-                                .child(
-                                    v_flex()
-                                        .gap_2()
-                                        .items_center()
-                                        .child(Progress::new("circle-progress-large")
-                                            .circle()
-                                            .value(75.)
-                                            .w(px(96.))
-                                            .h(px(96.)))
-                                        .child("Large"),
-                                )
-                                .child(
-                                    v_flex()
-                                        .gap_2()
-                                        .items_center()
-                                        .child(Progress::new("circle-progress-xl")
-                                            .circle()
-                                            .value(100.)
-                                            .w(px(120.))
-                                            .h(px(120.)))
-                                        .child("XLarge"),
-                                ),
+                            Progress::new("circle-progress-1")
+                                .circle()
+                                .value(self.value),
                         )
                         .child(
-                            h_flex()
-                                .gap_6()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    Progress::new("circle-progress-green")
-                                        .circle()
-                                        .value(60.)
-                                        .w(px(80.))
-                                        .h(px(80.))
-                                        .bg(cx.theme().green),
-                                )
-                                .child(
-                                    Progress::new("circle-progress-blue")
-                                        .circle()
-                                        .value(60.)
-                                        .w(px(80.))
-                                        .h(px(80.))
-                                        .bg(cx.theme().blue),
-                                )
-                                .child(
-                                    Progress::new("circle-progress-yellow")
-                                        .circle()
-                                        .value(60.)
-                                        .w(px(80.))
-                                        .h(px(80.))
-                                        .bg(cx.theme().yellow),
-                                )
-                                .child(
-                                    Progress::new("circle-progress-red")
-                                        .circle()
-                                        .value(60.)
-                                        .w(px(80.))
-                                        .h(px(80.))
-                                        .bg(cx.theme().red),
-                                ),
+                            Progress::new("circle-progress-1")
+                                .circle()
+                                .value(self.value)
+                                .small(),
+                        )
+                        .child(
+                            Progress::new("circle-progress-1")
+                                .circle()
+                                .value(self.value)
+                                .xsmall(),
                         ),
+                ),
+            )
+            .child(
+                section("With Label").max_w_md().child(
+                    h_flex()
+                        .gap_2()
+                        .child(
+                            Progress::new("circle-progress-1")
+                                .circle()
+                                .color(cx.theme().primary)
+                                .value(self.value)
+                                .size_4(),
+                        )
+                        .child(format!("Downloading... {}%", self.value as u8)),
+                ),
+            )
+            .child(
+                section("Circle with Color").max_w_md().child(
+                    Progress::new("circle-progress-1")
+                        .circle()
+                        .color(cx.theme().yellow)
+                        .value(self.value)
+                        .size_12(),
                 ),
             )
     }

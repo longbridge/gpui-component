@@ -1,4 +1,4 @@
-use crate::{ActiveTheme, PixelsExt, StyledExt};
+use crate::{ActiveTheme, PixelsExt, Sizable, Size, StyledExt, h_flex};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, ElementId, Hsla,
     InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
@@ -26,6 +26,7 @@ pub struct Progress {
     style: StyleRefinement,
     color: Option<Hsla>,
     value: f32,
+    size: Size,
     mode: ProgressMode,
 }
 
@@ -36,13 +37,14 @@ impl Progress {
             id: id.into(),
             value: Default::default(),
             color: None,
-            style: StyleRefinement::default().h(px(8.)).rounded(px(4.)),
+            style: StyleRefinement::default(),
+            size: Size::default(),
             mode: ProgressMode::Linear,
         }
     }
 
     /// Set the color of the progress bar.
-    pub fn bg(mut self, color: impl Into<Hsla>) -> Self {
+    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
         self.color = Some(color.into());
         self
     }
@@ -68,6 +70,13 @@ impl Progress {
 impl Styled for Progress {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
+    }
+}
+
+impl Sizable for Progress {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
     }
 }
 
@@ -104,6 +113,14 @@ impl Progress {
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = radius;
 
+        let (height, radius) = match self.size {
+            Size::XSmall => (px(4.), px(2.)),
+            Size::Small => (px(6.), px(3.)),
+            Size::Medium => (px(8.), px(4.)),
+            Size::Large => (px(10.), px(5.)),
+            Size::Size(s) => (s, s / 2.),
+        };
+
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
         let prev_value = state.read(cx).value;
 
@@ -112,6 +129,8 @@ impl Progress {
             .w_full()
             .relative()
             .rounded_full()
+            .h(height)
+            .rounded(radius)
             .refine_style(&self.style)
             .bg(color.opacity(0.2))
             .child(
@@ -174,19 +193,22 @@ impl Progress {
     ) -> AnyElement {
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
 
-        // Default size if not specified
-        let default_size = px(64.);
-
         let id = self.id.clone();
         let state_clone = state.clone();
         let color_clone = color;
-        let stroke_width = px(4.);
         let target_value = value;
 
-        div()
+        h_flex()
+            .items_center()
+            .justify_center()
             .id(id)
-            .w(default_size)
-            .h(default_size)
+            .map(|this| match self.size {
+                Size::XSmall => this.size_2(),
+                Size::Small => this.size_3(),
+                Size::Medium => this.size_4(),
+                Size::Large => this.size_5(),
+                Size::Size(s) => this.size(s * 0.75),
+            })
             .refine_style(&self.style)
             .child(
                 canvas(
@@ -198,6 +220,8 @@ impl Progress {
                             _ = state_clone.update(cx, |this, _| this.value = target_value);
                         }
                         let current_value = state_clone.read(cx).value;
+                        // Use 15% of width as stroke width, but max 5px
+                        let stroke_width = (bounds.size.width * 0.15).min(px(5.));
 
                         // Calculate actual size from bounds
                         let actual_size = bounds.size.width.min(bounds.size.height);
@@ -214,7 +238,12 @@ impl Progress {
                     },
                     // Paint callback: actually draw
                     move |_bounds,
-                          (current_value, actual_inner_radius, actual_outer_radius, prepaint_bounds),
+                          (
+                        current_value,
+                        actual_inner_radius,
+                        actual_outer_radius,
+                        prepaint_bounds,
+                    ),
                           window: &mut Window,
                           _cx: &mut App| {
                         // Draw background circle
