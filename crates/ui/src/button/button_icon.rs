@@ -1,4 +1,4 @@
-use crate::{Icon, Sizable, Size, progress::Progress, spinner::Spinner};
+use crate::{Icon, Sizable, Size, progress::ProgressCircle, spinner::Spinner};
 use gpui::{App, IntoElement, RenderOnce, Window, prelude::FluentBuilder};
 
 /// Button icon which can be an Icon, Spinner, or Progress use for `icon` method of Button.
@@ -49,13 +49,13 @@ impl Sizable for ButtonIcon {
     }
 }
 
-/// Button icon which can be an Icon, Spinner, or Progress use for `icon` method of Button.
+/// Button icon which can be an Icon, Spinner, Progress, or ProgressCircle use for `icon` method of Button.
 #[doc(hidden)]
 #[derive(IntoElement)]
 pub enum ButtonIconVariant {
     Icon(Icon),
     Spinner(Spinner),
-    Progress(Progress),
+    Progress(ProgressCircle),
 }
 
 impl<T> From<T> for ButtonIconVariant
@@ -73,8 +73,8 @@ impl From<Spinner> for ButtonIconVariant {
     }
 }
 
-impl From<Progress> for ButtonIconVariant {
-    fn from(progress: Progress) -> Self {
+impl From<ProgressCircle> for ButtonIconVariant {
+    fn from(progress: ProgressCircle) -> Self {
         Self::Progress(progress)
     }
 }
@@ -86,7 +86,7 @@ impl ButtonIconVariant {
         matches!(self, Self::Spinner(_))
     }
 
-    /// Returns true if the ButtonIconKind is a Progress.
+    /// Returns true if the ButtonIconKind is a Progress or ProgressCircle.
     #[inline]
     pub(crate) fn is_progress(&self) -> bool {
         matches!(self, Self::Progress(_))

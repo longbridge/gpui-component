@@ -3,7 +3,7 @@ use gpui::{
     Window, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Sizable, button::Button, h_flex, progress::Progress, v_flex,
+    ActiveTheme, IconName, Sizable, button::Button, h_flex, progress::{Progress, ProgressCircle}, v_flex,
 };
 
 use crate::section;
@@ -122,8 +122,7 @@ impl Render for ProgressStory {
             )
             .child(
                 section("Circle Progress").max_w_md().child(
-                    Progress::new("circle-progress-1")
-                        .circle()
+                    ProgressCircle::new("circle-progress-1")
                         .value(self.value)
                         .size_16(),
                 ),
@@ -133,25 +132,21 @@ impl Render for ProgressStory {
                     h_flex()
                         .gap_2()
                         .child(
-                            Progress::new("circle-progress-1")
-                                .circle()
+                            ProgressCircle::new("circle-progress-1")
                                 .value(self.value)
                                 .large(),
                         )
                         .child(
-                            Progress::new("circle-progress-1")
-                                .circle()
+                            ProgressCircle::new("circle-progress-1")
                                 .value(self.value),
                         )
                         .child(
-                            Progress::new("circle-progress-1")
-                                .circle()
+                            ProgressCircle::new("circle-progress-1")
                                 .value(self.value)
                                 .small(),
                         )
                         .child(
-                            Progress::new("circle-progress-1")
-                                .circle()
+                            ProgressCircle::new("circle-progress-1")
                                 .value(self.value)
                                 .xsmall(),
                         ),
@@ -162,8 +157,7 @@ impl Render for ProgressStory {
                     h_flex()
                         .gap_2()
                         .child(
-                            Progress::new("circle-progress-1")
-                                .circle()
+                            ProgressCircle::new("circle-progress-1")
                                 .color(cx.theme().primary)
                                 .value(self.value)
                                 .size_4(),
@@ -173,8 +167,7 @@ impl Render for ProgressStory {
             )
             .child(
                 section("Circle with Color").max_w_md().child(
-                    Progress::new("circle-progress-1")
-                        .circle()
+                    ProgressCircle::new("circle-progress-1")
                         .color(cx.theme().yellow)
                         .value(self.value)
                         .size_12(),

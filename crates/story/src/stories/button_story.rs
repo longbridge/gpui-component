@@ -8,7 +8,7 @@ use gpui_component::{
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
-    progress::Progress,
+    progress::ProgressCircle,
     v_flex,
 };
 use serde::Deserialize;
@@ -349,8 +349,7 @@ impl Render for ButtonStory {
                                 .primary()
                                 .large()
                                 .icon(
-                                    Progress::new("circle-progress-1")
-                                        .circle()
+                                    ProgressCircle::new("circle-progress-1")
                                         .color(cx.theme().primary_foreground)
                                         .value(25.),
                                 )
@@ -358,19 +357,19 @@ impl Render for ButtonStory {
                         )
                         .child(
                             Button::new("progress-button-2")
-                                .icon(Progress::new("circle-progress-1").circle().value(35.))
+                                .icon(ProgressCircle::new("circle-progress-1").value(35.))
                                 .label("Installing..."),
                         )
                         .child(
                             Button::new("progress-button-3")
                                 .small()
-                                .icon(Progress::new("circle-progress-1").circle().value(68.))
+                                .icon(ProgressCircle::new("circle-progress-1").value(68.))
                                 .label("Installing..."),
                         )
                         .child(
                             Button::new("progress-button-4")
                                 .xsmall()
-                                .icon(Progress::new("circle-progress-1").circle().value(85.))
+                                .icon(ProgressCircle::new("circle-progress-1").value(85.))
                                 .label("Installing..."),
                         ),
                 ),
