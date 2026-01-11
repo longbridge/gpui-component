@@ -55,10 +55,41 @@ impl InputState {
         self.selected_word_range = Some(self.selected_range);
         cx.notify()
     }
+
+    /// Select the line at the given offset on triple-click.
+    ///
+    /// The offset is the UTF-8 offset.
+    pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        if self.mode.is_single_line() {
+            self.selected_range = (0..self.text.len()).into();
+            self.selected_word_range = None;
+            cx.notify();
+            return;
+        }
+
+        let range = TextSelector::line_range(&self.text, offset);
+        self.selected_range = (range.start..range.end).into();
+        self.selected_word_range = None;
+        cx.notify()
+    }
 }
 
 struct TextSelector;
 impl TextSelector {
+    /// Select a line in the given text at the specified offset.
+    ///
+    /// The offset is the UTF-8 offset.
+    ///
+    /// Returns the start and end offsets of the selected line.
+    pub fn line_range(text: &Rope, offset: usize) -> Range<usize> {
+        let offset = text.clip_offset(offset, Bias::Left);
+        let row = text.offset_to_point(offset).row;
+        let start = text.line_start_offset(row);
+        let end = text.line_end_offset(row);
+
+        start..end
+    }
+
     /// Select a word in the given text at the specified offset.
     ///
     /// The offset is the UTF-8 offset.
@@ -165,6 +196,26 @@ mod tests {
             let actual = range.map(|r| rope.slice(r).to_string());
             let expect = expected.map(|s| s.to_string());
             assert_eq!(actual, expect, "line {}, column {}", line, column);
+        }
+    }
+
+    #[test]
+    fn test_line_range() {
+        let rope = Rope::from("first line\nsecond line\nthird");
+        let tests = vec![
+            (0, 0, "first line"),
+            (0, 5, "first line"),
+            (1, 3, "second line"),
+            (2, 1, "third"),
+        ];
+
+        for (line, column, expected) in tests {
+            let line_start_offset = rope.line_start_offset(line);
+            let offset = line_start_offset + column;
+            let range = TextSelector::line_range(&rope, offset);
+
+            let actual = rope.slice(range).to_string();
+            assert_eq!(actual, expected, "line {}, column {}", line, column);
         }
     }
 }

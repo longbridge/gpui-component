@@ -1238,6 +1238,12 @@ impl InputState {
             return;
         }
 
+        // Triple click to select line
+        if event.button == MouseButton::Left && event.click_count >= 3 {
+            self.select_line(offset, window, cx);
+            return;
+        }
+
         // Double click to select word
         if event.button == MouseButton::Left && event.click_count == 2 {
             self.select_word(offset, window, cx);
