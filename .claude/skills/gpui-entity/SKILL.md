@@ -9,7 +9,7 @@ An `Entity<T>` is a handle to state of type `T`. With `thing: Entity<T>`:
 
 * `thing.entity_id()` returns `EntityId`
 * `thing.downgrade()` returns `WeakEntity<T>`
-* `thing.read(cx: &App)` returns `&T`.
+* `thing.read(cx)` returns `&T`.
 * `thing.read_with(cx, |thing: &T, cx: &App| ...)` returns the closure's return value.
 * `thing.update(cx, |thing: &mut T, cx: &mut Context<T>| ...)` allows the closure to mutate the state, and provides a `Context<T>` for interacting with the entity. It returns the closure's return value.
 * `thing.update_in(cx, |thing: &mut T, window: &mut Window, cx: &mut Context<T>| ...)` takes a `AsyncWindowContext` or `VisualTestContext`. It's the same as `update` while also providing the `Window`.
@@ -30,6 +30,44 @@ When  `read_with`, `update`, or `update_in` are used with an async context, the 
 - **`WeakEntity<T>`**: A weak reference that may become invalid if the entity is dropped
 - **`AnyEntity`**: A dynamically-typed entity handle
 - **`AnyWeakEntity`**: A dynamically-typed weak entity handle
+
+### Context Methods for Entities
+
+#### Getting Current Entity
+
+```rust
+// Get the current entity being updated
+let current_entity = cx.entity();
+
+// Get a weak reference to current entity
+let weak_entity = cx.entity().downgrade();
+```
+
+#### Spawning Async Tasks
+
+```rust
+// Spawn foreground task (runs on UI thread)
+cx.spawn(async move |this, cx| {
+    // `this` is WeakEntity<T> of current entity
+    // `cx` is &mut AsyncApp
+
+    let result = some_async_work().await;
+
+    // Update entity safely
+    let _ = this.update(cx, |state, cx| {
+        state.data = result;
+        cx.notify();
+    });
+}).detach();
+
+// Spawn background task (runs on background thread)
+cx.background_spawn(async move {
+    // Long-running computation
+    let result = heavy_computation().await;
+    // Cannot directly update entities here
+    // Must use channels or other mechanisms
+}).detach();
+```
 
 ### Entity Creation
 
@@ -52,10 +90,15 @@ let my_entity = cx.new(|cx| existing_value);
 
 ```rust
 // Read-only access
-let count = my_entity.read(cx, |state, _cx| state.count);
+let count = my_entity.read(cx).count;
 
 // Read with context access
-let (count, theme) = my_entity.read(cx, |state, cx| {
+let count = my_entity.read_with(cx, |state, cx| {
+    state.count
+});
+
+// Read with both state and context
+let (count, theme) = my_entity.read_with(cx, |state, cx| {
     (state.count, cx.theme().clone())
 });
 ```
@@ -207,19 +250,31 @@ impl ParentComponent {
 ```rust
 impl MyComponent {
     fn perform_async_operation(&mut self, cx: &mut Context<Self>) {
-        let entity = cx.weak_entity();
+        let entity = cx.entity().downgrade();
 
         cx.spawn(async move |cx| {
             // Perform async work
             let result = some_async_operation().await;
 
             // Update entity with result
-            if let Some(entity) = entity.upgrade() {
-                entity.update(cx, |state, cx| {
-                    state.result = Some(result);
-                    cx.notify();
-                });
-            }
+            let _ = entity.update(cx, |state, cx| {
+                state.result = Some(result);
+                cx.notify();
+            });
+        }).detach();
+    }
+}
+```
+
+#### Background Tasks
+
+```rust
+impl MyComponent {
+    fn perform_background_task(&mut self, cx: &mut Context<Self>) {
+        cx.background_spawn(async move {
+            // Long-running background work
+            let result = some_background_operation().await;
+            // Handle result (typically by updating an entity)
         }).detach();
     }
 }
@@ -251,13 +306,12 @@ entity2.update(cx, |_, cx| {
 
 ```rust
 // ✅ Good: Use weak references to avoid cycles
-let weak_self = cx.weak_entity();
+let weak_self = cx.entity().downgrade();
 some_callback(move || {
-    if let Some(entity) = weak_self.upgrade() {
-        entity.update(cx, |state, cx| {
-            // Safe update
-        });
-    }
+    let _ = weak_self.update(cx, |state, cx| {
+        // Safe update
+        cx.notify();
+    });
 });
 ```
 
@@ -286,12 +340,37 @@ impl ChildComponent {
 impl MyComponent {
     fn new(cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
-            let entity = cx.weak_entity();
+            let entity = cx.entity();
 
             // Observe self for changes
             cx.observe(&entity, |this, _, cx| {
                 // React to changes
                 println!("Component changed");
+            }).detach();
+
+            Self { /* fields */ }
+        })
+    }
+}
+```
+
+#### Entity Subscription and Events
+
+```rust
+impl MyComponent {
+    fn new(cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| {
+            let entity = cx.entity();
+
+            // Subscribe to events from other entities
+            cx.subscribe(&other_entity, |this, other_entity, event, cx| {
+                // Handle event from other entity
+                match event {
+                    SomeEvent::DataChanged => {
+                        // Update this component based on the event
+                        cx.notify();
+                    }
+                }
             }).detach();
 
             Self { /* fields */ }
@@ -306,6 +385,10 @@ impl MyComponent {
 2. **Shared State**: Use entities to share state between multiple components
 3. **Event Handling**: Use entities to coordinate events between components
 4. **Async State**: Use entities to manage state that changes based on async operations
+5. **Parent-Child Relationships**: Use weak references to avoid circular dependencies
+6. **Observer Pattern**: Use `cx.observe()` to react to entity state changes
+7. **Event Subscription**: Use `cx.subscribe()` to handle events emitted by other entities
+8. **Resource Management**: Use entities for managing external resources with proper cleanup
 
 ### Performance Considerations
 
@@ -313,6 +396,59 @@ impl MyComponent {
 - Use `cx.notify()` judiciously to prevent unnecessary re-renders
 - Consider using `WeakEntity` for long-lived references to prevent memory leaks
 - Batch updates when possible to reduce notification overhead
+- Avoid nested entity updates which can cause borrowing conflicts
+- Use `read_with` instead of separate `read` calls when you need both state and context
+- Prefer `WeakEntity` in event handlers and closures to prevent retain cycles
+- Be mindful of entity lifecycle - entities are dropped when all strong references are gone
+
+### Advanced Patterns
+
+#### Entity Cloning and Sharing
+
+```rust
+impl MyComponent {
+    fn share_entity(&self, cx: &mut Context<Self>) -> Entity<SharedState> {
+        // Clone entity for sharing (increases reference count)
+        self.shared_entity.clone()
+    }
+}
+```
+
+#### Conditional Updates
+
+```rust
+impl MyComponent {
+    fn update_if_needed(&mut self, new_value: T, cx: &mut Context<Self>) {
+        if self.value != new_value {
+            self.value = new_value;
+            cx.notify();
+        }
+    }
+}
+```
+
+#### Entity Collections
+
+```rust
+struct Container {
+    items: Vec<Entity<Item>>,
+    weak_items: Vec<WeakEntity<Item>>, // For avoiding cycles
+}
+
+impl Container {
+    fn add_item(&mut self, item: Entity<Item>, cx: &mut Context<Self>) {
+        self.items.push(item.clone());
+        self.weak_items.push(item.downgrade());
+        cx.notify();
+    }
+
+    fn cleanup_invalid_items(&mut self, cx: &mut Context<Self>) {
+        // Remove items that no longer exist
+        self.weak_items.retain(|weak| weak.upgrade().is_some());
+        cx.notify();
+    }
+}
+```
 
 Entities form the backbone of GPUI's reactive architecture, enabling safe concurrent access to application state while maintaining clear data flow patterns.</content>
 <parameter name="filePath">.claude/skills/entity/SKILL.md
