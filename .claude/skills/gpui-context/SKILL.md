@@ -294,9 +294,6 @@ cx.spawn(async move |cx| {
 ### Global State
 
 ```rust
-// Access theme
-let theme = cx.theme();
-
 // Access global settings
 let settings = cx.global::<MySettings>();
 
@@ -315,11 +312,9 @@ impl Render for MyComponent {
         // cx: &mut Context<Self> - access to entity and app state
 
         let bounds = window.bounds();
-        let theme = cx.theme();
 
         div()
             .size_full()
-            .bg(theme.colors().background)
             .child(format!("Window size: {}x{}", bounds.width, bounds.height))
     }
 }
