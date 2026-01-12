@@ -1,11 +1,12 @@
 use crate::{ActiveTheme, PixelsExt, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    App, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, canvas, px,
+    Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, px,
 };
 use gpui::{Bounds, div};
 use std::f32::consts::TAU;
+use std::time::Duration;
 
 use super::ProgressState;
 use crate::plot::shape::{Arc, ArcData};
@@ -46,15 +47,7 @@ impl ProgressCircle {
         self
     }
 
-    fn render_circle(
-        &self,
-        state: Entity<ProgressState>,
-        _: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        let target_value = self.value;
-        let color = self.color.unwrap_or(cx.theme().progress_bar);
-
+    fn render_circle(&self, current_value: f32, color: Hsla) -> impl IntoElement {
         struct PrepaintState {
             current_value: f32,
             actual_inner_radius: f32,
@@ -64,14 +57,8 @@ impl ProgressCircle {
 
         canvas(
             {
-                let state = state.clone();
-                move |bounds: Bounds<Pixels>, _window: &mut Window, cx: &mut App| {
-                    // Update state in prepaint
-                    let current_value = state.read(cx).value;
-                    if current_value != target_value {
-                        _ = state.update(cx, |this, _| this.value = target_value);
-                    }
-                    let current_value = state.read(cx).value;
+                let display_value = current_value;
+                move |bounds: Bounds<Pixels>, _window: &mut Window, _cx: &mut App| {
                     // Use 15% of width as stroke width, but max 5px
                     let stroke_width = (bounds.size.width * 0.15).min(px(5.));
 
@@ -82,14 +69,14 @@ impl ProgressCircle {
                     let actual_outer_radius = actual_radius + stroke_width.as_f32() / 2.;
 
                     PrepaintState {
-                        current_value,
+                        current_value: display_value,
                         actual_inner_radius,
                         actual_outer_radius,
                         bounds,
                     }
                 }
             },
-            move |_bounds, prepaint, window: &mut Window, _: &mut App| {
+            move |_bounds, prepaint, window: &mut Window, _cx: &mut App| {
                 // Draw background circle
                 let bg_arc_data = ArcData {
                     data: &(),
@@ -162,11 +149,13 @@ impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
+        let prev_value = state.read(cx).value;
 
-        let id = self.id.clone();
+        let color = self.color.unwrap_or(cx.theme().progress_bar);
+        let has_changed = prev_value != value;
 
         div()
-            .id(id)
+            .id(self.id.clone())
             .flex()
             .items_center()
             .justify_center()
@@ -178,6 +167,21 @@ impl RenderOnce for ProgressCircle {
                 Size::Size(s) => this.size(s * 0.75),
             })
             .refine_style(&self.style)
-            .child(self.render_circle(state, window, cx))
+            .map(|this| {
+                if has_changed {
+                    this.with_animation(
+                        format!("progress-circle-{}", prev_value),
+                        Animation::new(Duration::from_secs_f64(0.15)),
+                        move |this, delta| {
+                            let animated_value = prev_value + (value - prev_value) * delta;
+                            this.child(self.render_circle(animated_value, color))
+                        },
+                    )
+                    .into_any_element()
+                } else {
+                    this.child(self.render_circle(value, color))
+                        .into_any_element()
+                }
+            })
     }
 }

@@ -1,16 +1,22 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Task,
     Window, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Sizable, button::Button, h_flex, progress::{Progress, ProgressCircle}, v_flex,
+    ActiveTheme, IconName, Sizable,
+    button::Button,
+    h_flex,
+    progress::{Progress, ProgressCircle},
+    v_flex,
 };
+use std::time::Duration;
 
 use crate::section;
 
 pub struct ProgressStory {
     focus_handle: gpui::FocusHandle,
     value: f32,
+    _task: Option<Task<()>>,
 }
 
 impl super::Story for ProgressStory {
@@ -36,11 +42,42 @@ impl ProgressStory {
         Self {
             focus_handle: cx.focus_handle(),
             value: 25.,
+            _task: None,
         }
     }
 
     pub fn set_value(&mut self, value: f32) {
         self.value = value;
+    }
+
+    fn start_animation(&mut self, cx: &mut Context<Self>) {
+        self.value = 0.;
+
+        self._task = Some(cx.spawn({
+            let entity = cx.entity();
+            async move |_, cx| {
+                loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(15))
+                        .await;
+
+                    let mut need_break = false;
+                    _ = entity.update(cx, |this, cx| {
+                        this.value = (this.value + 2.).min(100.);
+                        cx.notify();
+
+                        if this.value >= 100. {
+                            this._task = None;
+                            need_break = true;
+                        }
+                    });
+
+                    if need_break {
+                        break;
+                    }
+                }
+            }
+        }));
     }
 }
 
@@ -56,11 +93,10 @@ impl Render for ProgressStory {
             .items_center()
             .gap_y_3()
             .child(
-                v_flex()
+                h_flex()
                     .w_full()
                     .gap_3()
-                    .justify_center()
-                    .items_center()
+                    .justify_between()
                     .child(
                         h_flex()
                             .gap_2()
@@ -83,11 +119,19 @@ impl Render for ProgressStory {
                                 cx.listener(|this, _, _, _| {
                                     this.set_value(100.);
                                 }),
-                            )),
+                            ))
+                            .child(
+                                Button::new("circle-animation-button")
+                                    .small()
+                                    .icon(IconName::Play)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.start_animation(cx);
+                                    })),
+                            ),
                     )
                     .child(
                         h_flex()
-                            .gap_x_2()
+                            .gap_2()
                             .child(
                                 Button::new("circle-button-5")
                                     .icon(IconName::Minus)
@@ -136,10 +180,7 @@ impl Render for ProgressStory {
                                 .value(self.value)
                                 .large(),
                         )
-                        .child(
-                            ProgressCircle::new("circle-progress-1")
-                                .value(self.value),
-                        )
+                        .child(ProgressCircle::new("circle-progress-1").value(self.value))
                         .child(
                             ProgressCircle::new("circle-progress-1")
                                 .value(self.value)
@@ -162,7 +203,7 @@ impl Render for ProgressStory {
                                 .value(self.value)
                                 .size_4(),
                         )
-                        .child(format!("Downloading... {}%", self.value as u8)),
+                        .child("Downloading..."),
                 ),
             )
             .child(
