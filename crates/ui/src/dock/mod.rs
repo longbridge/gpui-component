@@ -22,6 +22,8 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::*;
 
+use crate::{Sizable, Size};
+
 pub(crate) fn init(cx: &mut App) {
     PanelRegistry::init(cx);
 }
@@ -66,10 +68,19 @@ pub struct DockArea {
     /// Lock panels layout, but allow to resize.
     locked: bool,
 
+    size: Size,
+
     /// The panel style, default is [`PanelStyle::Default`](PanelStyle::Default).
     pub(crate) panel_style: PanelStyle,
 
     _subscriptions: Vec<Subscription>,
+}
+
+impl Sizable for DockArea {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
@@ -540,6 +551,7 @@ impl DockArea {
             bottom_dock: None,
             locked: false,
             panel_style: PanelStyle::default(),
+            size: Default::default(),
             _subscriptions: vec![],
         };
 

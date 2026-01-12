@@ -1623,6 +1623,11 @@ impl InputState {
         cx.notify()
     }
 
+    pub fn select_all_content(&mut self, cx: &mut Context<Self>) {
+        self.selected_range = (0..self.text.len()).into();
+        cx.notify()
+    }
+
     /// Unselects the currently selected text.
     pub fn unselect(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let offset = self.cursor();

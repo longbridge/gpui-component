@@ -1,7 +1,7 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, Corner, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    AnyElement, App, Corner, Div, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
+    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 use std::rc::Rc;
@@ -9,7 +9,7 @@ use std::rc::Rc;
 use super::{Tab, TabVariant};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 
 /// A TabBar element that contains multiple [`Tab`] items.
 #[derive(IntoElement)]
