@@ -1,4 +1,4 @@
-use crate::{ActiveTheme, PixelsExt, Sizable, Size, StyledExt, v_flex};
+use crate::{ActiveTheme, PixelsExt, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, InteractiveElement as _,
