@@ -15,7 +15,7 @@ The `Element` trait gives you direct control over the three phases of element re
 - **Prepaint**: Prepare for painting (create hitboxes, etc.)
 - **Paint**: Render the element and handle interactions
 
-This SKILL focuses on implementing custom elements using the low-level `Element` trait, based on real examples from `TextView`, `Inline`, and other components.
+This SKILL focuses on implementing custom elements using the low-level `Element` trait.
 
 ## Core Concepts
 
@@ -141,15 +141,26 @@ fn paint(
 
 ## Application Scenarios
 
-### Simple Text Element (Inline)
+### Simple Text Element
 
-Based on the `Inline` element implementation:
+To write a `Element` that we need:
+
+1. Impl `Element` for write low-level rendering control.
+2. Impl `IntoElement` then this can be used as a child directly like elements implemented `RenderOnce` or `Render`.
 
 ```rust
 pub struct SimpleText {
     id: ElementId,
     text: SharedString,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
+}
+
+impl IntoElement for SimpleText {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
 }
 
 impl Element for SimpleText {
@@ -200,7 +211,7 @@ impl Element for SimpleText {
 }
 ```
 
-### Interactive Element with Selection (TextView)
+### Interactive Element with Selection
 
 Based on `TextView` element with selection support:
 
@@ -268,8 +279,6 @@ impl Element for SelectableText {
 ```
 
 ### Complex Element with Child Management
-
-Based on `TextView` with child elements and scrolling:
 
 ```rust
 pub struct ComplexElement {
