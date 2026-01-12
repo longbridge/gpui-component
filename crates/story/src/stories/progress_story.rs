@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Task,
-    Window, px,
+    Window, div, px,
 };
 use gpui_component::{
     ActiveTheme, IconName, Sizable,
@@ -168,7 +168,20 @@ impl Render for ProgressStory {
                 section("Circle Progress").max_w_md().child(
                     ProgressCircle::new("circle-progress-1")
                         .value(self.value)
-                        .size_16(),
+                        .size_20()
+                        .child(
+                            v_flex()
+                                .size_full()
+                                .items_center()
+                                .justify_center()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .child(format!("{}%", self.value))
+                                        .text_color(cx.theme().progress_bar),
+                                )
+                                .child(div().child("Loading").text_xs()),
+                        ),
                 ),
             )
             .child(
