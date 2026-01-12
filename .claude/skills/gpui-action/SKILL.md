@@ -11,7 +11,7 @@ Actions in GPUI provide a declarative way to handle keyboard-driven UI interacti
 
 ### Simple Actions
 
-Use the `actions!` macro for simple actions without data:
+Use the `actions!(:namespace, [Action1, Action2 ...])` macro for simple actions without data:
 
 ```rust
 use gpui::actions;
@@ -27,119 +27,81 @@ This generates:
 - Unit structs for each action (`MoveUp`, `MoveDown`, etc.)
 - Registration with GPUI's action system
 - Automatic `Clone`, `PartialEq`, `Default`, and `Debug` implementations
+- The `namespace` argument used for find Keyings for example `editor::MoveUp`, `editor::Save`, etc. It not a namespace of Rust module just a logical grouping for actions.
 
-### Complex Actions with Data
+Use simple actions for:
 
-Use the `Action` derive macro for actions with parameters:
+- Perfer to named by use verb-noun pattern (e.g., OpenFile, CloseWindow)  
+- Basic commands (Save, Copy, Undo)
+- Navigation actions (MoveUp, MoveDown)
+- Toggle actions (ToggleFullscreen, ToggleSidebar)
+
+### Complex Actions with Parameters
+
+For actions that need to carry data we can define action like this:
 
 ```rust
 use gpui::{Action, actions};
 
-#[derive(Clone, PartialEq, Action)]
+#[derive(Clone, PartialEq, Action, Deserialize)]
 #[action(namespace = editor)]
 pub struct SelectRange {
     pub start: usize,
     pub end: usize,
 }
-
-#[derive(Clone, PartialEq, Action)]
-#[action(namespace = editor)]
-pub struct InsertText {
-    pub text: String,
-    pub replace: bool,
-}
 ```
 
-### Action Traits
-
-Actions automatically implement several traits:
-
-- `Clone` - Actions can be cloned for dispatching
-- `PartialEq` - Actions can be compared for deduplication
-- `Action` - Core action trait for GPUI integration
-
-### Action Metadata
-
-Configure action behavior with attributes:
-
-```rust
-#[derive(Clone, PartialEq, Action)]
-#[action(
-    namespace = editor,
-    name = "custom_name",           // Override action name
-    no_json,                        // Skip JSON serialization
-    deprecated_aliases = ["old_name"], // Old names still work
-    deprecated = "Use new_action instead" // Deprecation warning
-)]
-pub struct MyAction;
-```
-
-## Action Registration
-
-### Automatic Registration
-
-Actions defined with the macros are automatically registered at startup. For manual control:
-
-```rust
-#[derive(Clone, PartialEq)]
-pub struct CustomAction {
-    value: i32,
-}
-
-impl Action for CustomAction {
-    fn build(value: serde_json::Value, _: &App) -> Result<Self> {
-        // Custom deserialization
-        Ok(Self { value: value.as_i64().unwrap_or(0) as i32 })
-    }
-
-    fn name(&self) -> &str {
-        "custom_action"
-    }
-
-    fn namespace(&self) -> &str {
-        "my_app"
-    }
-
-    fn boxed_clone(&self) -> Box<dyn Any> {
-        Box::new(self.clone())
-    }
-}
-```
+The `#[derive(Clone, PartialEq, Action, Deserialize)]\n#[action(namespace = ...)]` is required for complex actions.
 
 ## Keybinding
 
-### Keymap Structure
-
-Keymaps bind keys to actions:
+We can use `cx.bind_keys([...])` to bind keys to actions.
 
 ```rust
-// Keymap entry format: "modifiers-key" -> action
-let keymap = Keymap::new(vec![
-    // Basic bindings
-    ("cmd-n", NewFile),
-    ("cmd-o", OpenFile),
-    ("cmd-s", Save),
-    ("cmd-w", CloseWindow),
+actions!(editor, [Clear, Backspace]);
 
-    // With modifiers
-    ("shift-cmd-s", SaveAs),
-    ("cmd-shift-[", PreviousTab),
-    ("cmd-shift-]", NextTab),
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = editor, no_json)]
+pub struct DigitAction(pub u8);
 
-    // Function keys
-    ("f11", ToggleFullscreen),
+const CONTEXT: &'static str = "MyComponent";
 
-    // Special keys
-    ("escape", Cancel),
-    ("enter", Confirm),
-    ("space", ToggleSelection),
+// Initialize in your init function
+pub fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("c", Clear, Some(CONTEXT)),
+        KeyBinding::new("backspace", Backspace, Some(CONTEXT)),
+        KeyBinding::new("0", DigitAction(0), Some(CONTEXT)),
+        KeyBinding::new("1", DigitAction(1), Some(CONTEXT)),
+        // ... more digit bindings
+    ]);
+}
 
-    // Arrow keys
-    ("up", MoveUp),
-    ("down", MoveDown),
-    ("left", MoveLeft),
-    ("right", MoveRight),
-]);
+
+impl MyComponent {
+    // We perfer to named `on_action_<action_name>` pattern for action handlers
+    pub fn on_action_clear(&mut self, _: &Clear, _: &mut Window, cx: &mut Context<Self>) {
+        // Handle clear action
+        cx.notify();
+    }
+
+    pub fn on_action_digit(&mut self, action: &DigitAction, _: &mut Window, cx: &mut Context<Self>) {
+        // Handle digit input, action.0 contains the digit value
+        cx.notify();
+    }
+}
+
+// In your component's render method
+impl Render for MyComponent {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .key_context(CONTEXT)  // Activate contextual bindings
+            .on_action(cx.listener(Self::on_action_clear))
+            .on_action(cx.listener(Self::on_action_backspace))
+            .on_action(cx.listener(Self::on_action_digit))
+            // ... rest of your UI
+    }
+}
 ```
 
 ### Key Format
@@ -150,64 +112,6 @@ Keys are specified as strings with optional modifiers:
 Modifiers: cmd, ctrl, alt, shift, cmd-ctrl, etc.
 Keys: a-z, 0-9, f1-f12, up, down, left, right, enter, escape, space, tab, backspace, delete, etc.
 Special: -, =, [, ], \, ;, ', ,, ., /, `, etc.
-```
-
-### Context-Aware Bindings
-
-Bindings can be conditional based on context:
-
-```rust
-let keymap = Keymap::new(vec![
-    Binding::new("cmd-c", Copy, "when: editor_focused"),
-    Binding::new("cmd-v", Paste, "when: editor_focused"),
-    Binding::new("cmd-x", Cut, "when: editor_focused"),
-    Binding::new("escape", CloseModal, "when: modal_open"),
-]);
-```
-
-### Keymap Loading
-
-Load keymaps from JSON:
-
-```rust
-// keymap.json
-{
-  "editor": {
-    "cmd-n": "editor::NewFile",
-    "cmd-s": "editor::Save",
-    "up": "editor::MoveUp"
-  },
-  "global": {
-    "cmd-q": "Quit",
-    "cmd-,": "OpenPreferences"
-  }
-}
-```
-
-```rust
-// Load keymap
-let keymap = Keymap::load(fs::read_to_string("keymap.json")?)?;
-```
-
-## Action Handling
-
-### Global Action Handlers
-
-Register handlers for actions anywhere in the app:
-
-```rust
-impl App {
-    fn setup_actions(&mut self) {
-        self.set_action_handler(move |action: &Quit, window, cx| {
-            cx.quit();
-        });
-
-        self.set_action_handler(move |action: &NewFile, window, cx| {
-            // Create new file
-            workspace.new_file(cx);
-        });
-    }
-}
 ```
 
 ### Element-Level Handlers
@@ -239,138 +143,6 @@ window.dispatch_action(MoveUp.boxed_clone(), cx);
 
 // Dispatch to specific focus handle
 focus_handle.dispatch_action(&Save, window, cx);
-```
-
-## Advanced Action Patterns
-
-### Action with State
-
-```rust
-#[derive(Clone, PartialEq, Action)]
-#[action(namespace = editor)]
-pub struct InsertMode {
-    pub mode: String,
-}
-
-impl InsertMode {
-    pub const INSERT: &str = "insert";
-    pub const REPLACE: &str = "replace";
-    pub const APPEND: &str = "append";
-}
-```
-
-### Conditional Actions
-
-```rust
-impl MyEditor {
-    fn handle_action(&mut self, action: &Action, window: &mut Window, cx: &mut Context<Self>) {
-        match action {
-            Action::MoveUp => {
-                if self.can_move_up() {
-                    self.move_cursor(-1, 0);
-                    cx.notify();
-                }
-            }
-            Action::InsertChar(ch) => {
-                if !self.readonly {
-                    self.insert_char(*ch);
-                    cx.notify();
-                }
-            }
-            _ => {}
-        }
-    }
-}
-```
-
-### Action Sequences
-
-```rust
-struct MacroRecorder {
-    recording: bool,
-    actions: Vec<Box<dyn Any>>,
-}
-
-impl MacroRecorder {
-    fn record_action(&mut self, action: &dyn Any) {
-        if self.recording {
-            self.actions.push(action.boxed_clone());
-        }
-    }
-
-    fn play_macro(&self, window: &mut Window, cx: &mut App) {
-        for action in &self.actions {
-            window.dispatch_action(action.boxed_clone(), cx);
-        }
-    }
-}
-```
-
-## Keymap Management
-
-### Multiple Keymaps
-
-GPUI supports layered keymaps:
-
-```rust
-// Base keymap
-let base_keymap = Keymap::new(vec![
-    ("cmd-c", Copy),
-    ("cmd-v", Paste),
-]);
-
-// Mode-specific keymap
-let insert_keymap = Keymap::new(vec![
-    ("escape", ExitInsertMode),
-    ("enter", Newline),
-]);
-
-// Combine keymaps
-let combined = base_keymap.merge(&insert_keymap);
-```
-
-### Keymap Switching
-
-```rust
-struct Editor {
-    normal_mode: Keymap,
-    insert_mode: Keymap,
-    current_mode: EditorMode,
-}
-
-impl Editor {
-    fn switch_mode(&mut self, mode: EditorMode, cx: &mut Context<Self>) {
-        self.current_mode = mode;
-        let keymap = match mode {
-            EditorMode::Normal => &self.normal_mode,
-            EditorMode::Insert => &self.insert_mode,
-        };
-        cx.set_keymap(keymap.clone());
-    }
-}
-```
-
-## Testing Actions
-
-```rust
-#[cfg(test)]
-impl MyComponent {
-    fn test_action_handling(&mut self, cx: &mut TestAppContext) {
-        // Dispatch action
-        cx.dispatch_action(MoveUp, cx.window);
-
-        // Assert state changed
-        assert_eq!(self.cursor_position.row, 0);
-    }
-
-    fn test_keybinding(&mut self, cx: &mut TestAppContext) {
-        // Simulate key press
-        cx.simulate_key_press("up", cx.window);
-
-        // Assert action was triggered
-        assert_eq!(self.cursor_position.row, 0);
-    }
-}
 ```
 
 ## Best Practices
