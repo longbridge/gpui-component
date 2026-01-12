@@ -1,4 +1,4 @@
-use crate::{ActiveTheme, StyledExt};
+use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
     Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement as _, IntoElement,
     ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
@@ -6,13 +6,16 @@ use gpui::{
 };
 use std::time::Duration;
 
-/// A Progress bar element.
+use super::ProgressState;
+
+/// A linear horizontal progress bar element.
 #[derive(IntoElement)]
 pub struct Progress {
     id: ElementId,
     style: StyleRefinement,
     color: Option<Hsla>,
     value: f32,
+    size: Size,
 }
 
 impl Progress {
@@ -22,12 +25,13 @@ impl Progress {
             id: id.into(),
             value: Default::default(),
             color: None,
-            style: StyleRefinement::default().h(px(8.)).rounded(px(4.)),
+            style: StyleRefinement::default(),
+            size: Size::default(),
         }
     }
 
     /// Set the color of the progress bar.
-    pub fn bg(mut self, color: impl Into<Hsla>) -> Self {
+    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
         self.color = Some(color.into());
         self
     }
@@ -47,18 +51,29 @@ impl Styled for Progress {
     }
 }
 
-struct ProgressState {
-    value: f32,
+impl Sizable for Progress {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
 }
 
 impl RenderOnce for Progress {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let color = self.color.unwrap_or(cx.theme().progress_bar);
+        let value = self.value;
+
         let radius = self.style.corner_radii.clone();
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = radius;
 
-        let color = self.color.unwrap_or(cx.theme().progress_bar);
-        let value = self.value;
+        let (height, radius) = match self.size {
+            Size::XSmall => (px(4.), px(2.)),
+            Size::Small => (px(6.), px(3.)),
+            Size::Medium => (px(8.), px(4.)),
+            Size::Large => (px(10.), px(5.)),
+            Size::Size(s) => (s, s / 2.),
+        };
 
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
         let prev_value = state.read(cx).value;
@@ -68,6 +83,8 @@ impl RenderOnce for Progress {
             .w_full()
             .relative()
             .rounded_full()
+            .h(height)
+            .rounded(radius)
             .refine_style(&self.style)
             .bg(color.opacity(0.2))
             .child(
@@ -99,8 +116,7 @@ impl RenderOnce for Progress {
                                 "progress-animation",
                                 Animation::new(duration),
                                 move |this, delta| {
-                                    let current_value =
-                                        prev_value + (value - prev_value) * delta;
+                                    let current_value = prev_value + (value - prev_value) * delta;
                                     let relative_w = relative(match current_value {
                                         v if v < 0. => 0.,
                                         v if v > 100. => 1.,

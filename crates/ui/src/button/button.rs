@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, IconName, Selectable,
-    Sizable, Size, StyleSized, StyledExt, h_flex, spinner::Spinner, tooltip::Tooltip,
+    Sizable, Size, StyleSized, StyledExt, button::ButtonIcon, h_flex, tooltip::Tooltip,
 };
 use gpui::{
     Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
@@ -179,7 +179,7 @@ pub struct Button {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
-    icon: Option<Icon>,
+    icon: Option<ButtonIcon>,
     label: Option<SharedString>,
     children: Vec<AnyElement>,
     disabled: bool,
@@ -275,7 +275,7 @@ impl Button {
     }
 
     /// Set the icon of the button, if the Button have no label, the button well in Icon Button mode.
-    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+    pub fn icon(mut self, icon: impl Into<ButtonIcon>) -> Self {
         self.icon = Some(icon.into());
         self
     }
@@ -578,16 +578,11 @@ impl RenderOnce for Button {
                         Size::Small => this.gap_1(),
                         _ => this.gap_2(),
                     })
-                    .when(!self.loading, |this| {
-                        this.when_some(self.icon, |this, icon| {
-                            this.child(icon.with_size(icon_size))
-                        })
-                    })
-                    .when(self.loading, |this| {
+                    .when_some(self.icon, |this, icon| {
                         this.child(
-                            Spinner::new()
-                                .with_size(self.size)
-                                .when_some(self.loading_icon, |this, icon| this.icon(icon)),
+                            icon.loading_icon(self.loading_icon)
+                                .loading(self.loading)
+                                .with_size(icon_size),
                         )
                     })
                     .when_some(self.label, |this, label| {
