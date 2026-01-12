@@ -1,6 +1,6 @@
 ---
 name: gpui-focus-handle
-description: Describes the role of FocusHandle in GPUI and its relationship with GPUI Actions.
+description: Focus management and keyboard navigation in GPUI. Use when handling focus, focus handles, or keyboard navigation.
 ---
 
 ## Overview

@@ -1,6 +1,6 @@
 ---
 name: gpui-event
-description: Describes the GPUI event system content.
+description: Event handling and subscriptions in GPUI. Use when implementing events, observers, or event-driven patterns.
 ---
 
 ## Overview

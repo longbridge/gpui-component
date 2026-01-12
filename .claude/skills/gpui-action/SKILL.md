@@ -1,6 +1,6 @@
 ---
 name: gpui-action
-description: Describes Action definition and keyboard shortcut binding in GPUI.
+description: Action definitions and keyboard shortcuts in GPUI. Use when implementing actions, keyboard shortcuts, or key bindings.
 ---
 
 ## Overview

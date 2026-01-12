@@ -1,6 +1,6 @@
 ---
 name: gpui-context
-description: Describes context types in GPUI including Window, App, and AsyncApp, covering update, update_in, and Window/App related content.
+description: Context management in GPUI including App, Window, and AsyncApp. Use when working with contexts, entity updates, or window operations.
 ---
 
 ## Overview

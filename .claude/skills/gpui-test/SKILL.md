@@ -1,6 +1,6 @@
 ---
 name: gpui-test
-description: Describes how to write GPUI tests using TestAppContext, VisualTestContext, and various testing patterns.
+description: Writing tests for GPUI applications. Use when testing components, async operations, or UI behavior.
 ---
 
 ## Overview

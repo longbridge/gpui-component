@@ -1,6 +1,6 @@
 ---
 name: gpui-layout-and-style
-description: Describes how GPUI implements layout and styling.
+description: Layout and styling in GPUI. Use when styling components, layout systems, or CSS-like properties.
 ---
 
 ## Overview

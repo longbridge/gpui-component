@@ -1,6 +1,6 @@
 ---
 name: gpui-entity
-description: Describes GPUI Entity usage and application scenarios.
+description: Entity management and state handling in GPUI. Use when working with entities, state management, or entity lifecycles.
 ---
 
 ## Overview

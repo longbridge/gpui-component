@@ -1,6 +1,6 @@
 ---
-name: async
-description: Describes spawn and background executor content in GPUI.
+name: gpui-async
+description: Async operations and background tasks in GPUI. Use when working with async, spawn, background tasks, or concurrent operations.
 ---
 
 ## Overview
