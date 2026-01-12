@@ -98,11 +98,16 @@ impl Render for MyComponent {
             .key_context(CONTEXT)  // Activate contextual bindings
             .on_action(cx.listener(Self::on_action_clear))
             .on_action(cx.listener(Self::on_action_backspace))
-            .on_action(cx.listener(Self::on_action_digit))
+            .on_action(window.listener_for(&cx.entity(), Self::on_action_digit))
             // ... rest of your UI
     }
 }
 ```
+
+In this case:
+
+- `cx.listener` can wrap method to have `&mut Context<Self>` for Component that implemented `Render` trait.
+- For `RenderOnce` trait we can use `window.listener_for` for bind action handlers to a `Entity<T>`.
 
 ### Key Format
 

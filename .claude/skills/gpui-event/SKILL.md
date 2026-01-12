@@ -9,9 +9,15 @@ GPUI's event system enables loose coupling between components through typed even
 
 ## Core Concepts
 
+There have `cx.observe`, `cx.subscribe`, `cx.observe_global` methods in GPUI:
+
+- `cx.observe`: Observe changes to the entity itself, when the entity updates, the observer callback is invoked.
+- `cx.subscribe`: Subscribe to events emitted by entities, if the entity invokes `cx.emit(event)`, all subscribers to that event type will be notified.
+- `cx.observe_global`: Observe global events that are not tied to a specific entity.
+
 ### EventEmitter Trait
 
-Components declare the events they can emit by implementing `EventEmitter`:
+Components declare the events they can call `cx.emit` by implementing `EventEmitter`:
 
 ```rust
 #[derive(Clone)]
@@ -106,59 +112,66 @@ Subscriptions are automatically cleaned up when dropped:
 
 ```rust
 struct ComponentWithSubscriptions {
-    _item_selected_subscription: Subscription,
-    _item_deleted_subscription: Subscription,
+    // We perfer to store subscriptions like this:
+    _subscriptions: Vec<Subscription>,
 }
 
 impl ComponentWithSubscriptions {
     fn new(cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             // Subscriptions stored as fields - cleaned up when component is dropped
-            let item_selected_subscription = cx.subscribe(&other_entity, |this, _, event, cx| {
-                if let ItemSelected { item_id } = event {
-                    this.handle_selection(*item_id, cx);
-                }
-            });
+            let _subscriptions = vec![
+                cx.subscribe(&other_entity, |this, _, event, cx| {
+                    if let ItemSelected { item_id } = event {
+                        this.handle_selection(*item_id, cx);
+                    }
+                }),
+                cx.subscribe(&other_entity, |this, _, event, cx| {
+                    if let ItemDeleted { item_id } = event {
+                        this.handle_deletion(*item_id, cx);
+                    }
+                })
+            ];
 
-            let item_deleted_subscription = cx.subscribe(&other_entity, |this, _, event, cx| {
-                if let ItemDeleted { item_id } = event {
-                    this.handle_deletion(*item_id, cx);
-                }
-            });
-
-            Self {
-                _item_selected_subscription: item_selected_subscription,
-                _item_deleted_subscription: item_deleted_subscription,
-            }
+            Self { _subscriptions }
         })
     }
 }
 ```
 
-### Conditional Subscriptions
-
-Subscribe based on conditions:
+## Observing Entity Updates
 
 ```rust
-impl MyComponent {
-    fn setup_conditional_subscription(&mut self, cx: &mut Context<Self>) {
-        if self.enable_notifications {
-            self.notification_subscription = Some(cx.subscribe(&other_entity, |this, _, event, cx| {
-                // Handle notification
-            }));
-        }
+struct MyState {
+    title: SharedString,
+}
+
+struct MyView {
+    state: Entity<MyState>,
+}
+
+impl MyView {
+    fn new(cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| {
+            let my_state = cx.new(|_| MyState { title: SharedString::default() });
+            
+            // Observe updates to another entity
+            cx.observe(&my_state, |this, my_state, cx| {
+                // React to observed entity update
+                let new_title = my_state.read(cx).title;
+            });
+
+            Self {
+                my_state,
+            }
+        })
     }
 
-    fn toggle_notifications(&mut self, cx: &mut Context<Self>) {
-        self.enable_notifications = !self.enable_notifications;
-
-        if self.enable_notifications {
-            self.setup_conditional_subscription(cx);
-        } else {
-            self.notification_subscription = None; // Drops subscription
-        }
-
-        cx.notify();
+    fn update_title(&mut self, new_title: SharedString, cx: &mut Context<Self>) {
+        my_state.update(cx, |state, cx| {
+            state.title = new_title.clone();
+            cx.notify();
+        });
     }
 }
 ```
@@ -304,67 +317,6 @@ impl EventBufferingComponent {
         }
         self.pending_events.clear();
         self.flush_timer = None;
-    }
-}
-```
-
-## Event System Architecture
-
-### Subscriber Sets
-
-GPUI uses `SubscriberSet` for efficient event routing:
-
-```rust
-// Internal implementation detail
-pub struct SubscriberSet<EntityId, Handler> {
-    subscribers: HashMap<EntityId, Vec<Handler>>,
-}
-
-// Events are routed to specific entity IDs
-cx.emit_to(entity_id, event);
-```
-
-### Event Listener Types
-
-Different types of event listeners:
-
-- **Entity Listeners**: `cx.subscribe(entity, handler)`
-- **Global Listeners**: `cx.observe_global::<Event>(handler)`
-- **Window Listeners**: `cx.observe_window(window, handler)`
-- **New Entity Listeners**: `cx.observe_new_entities::<T>(handler)`
-
-## Testing Events
-
-```rust
-#[cfg(test)]
-impl MyComponent {
-    fn test_event_emission(&mut self, cx: &mut TestAppContext) {
-        // Create subscriber
-        let subscriber = cx.new(|cx| {
-            let mut component = SubscriberComponent::default();
-
-            cx.subscribe(&self.entity(), |subscriber, _, event, cx| {
-                match event {
-                    ItemSelected { item_id } => {
-                        subscriber.received_events.push(*item_id);
-                        cx.notify();
-                    }
-                }
-            });
-
-            component
-        });
-
-        // Trigger event emission
-        self.select_item(42, cx);
-
-        // Run event loop
-        cx.run_until_parked();
-
-        // Assert event was received
-        subscriber.read(cx, |subscriber, _| {
-            assert_eq!(subscriber.received_events, vec![42]);
-        });
     }
 }
 ```

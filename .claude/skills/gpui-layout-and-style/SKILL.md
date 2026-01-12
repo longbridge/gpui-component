@@ -52,9 +52,9 @@ impl Render for MyComponent {
             .items_center()
             .p_4()
             .rounded_md()
-            .bg(cx.theme().colors().surface_background)
+            .bg(cx.theme().background)
             .border_1()
-            .border_color(cx.theme().colors().border)
+            .border_color(cx.theme().border)
             .child(format!("Count: {}", self.count))
             .child(
                 div()

@@ -36,33 +36,30 @@ The background executor runs CPU-intensive tasks on separate threads:
 A `Task<T>` represents an asynchronous operation that will complete with a value of type `T`:
 
 ```rust
-// Create a ready task
-let task = Task::ready(42);
-
-// Check if completed
-if task.is_ready() {
-    // Task has finished
+struct MyView {
+    // We perfer named `_task` if there only 1 task in the struct.
+    _task: Task<()>,
 }
 
-// Detach to run indefinitely
-task.detach();
+impl MyView {
+    fn new(cx: &mut Context<Self>) -> Self {
+        let entity = cx.weak_entity();
+        let _task = cx.spawn(async move |cx| {
+            // Async work here
+            let data = fetch_data().await;
 
-// Await completion
-let result = task.await;
-```
+            // Update entity state
+            entity.update(cx, |state, cx| {
+                state.data = data;
+                cx.notify();
+            });
+            
+            Ok(())
+        });
 
-#### FallibleTask<T>
-
-A variant of `Task` that returns `Option<T>`, returning `None` if cancelled:
-
-```rust
-let fallible_task = task.fallible();
-match fallible_task.await {
-    Some(result) => {
-        // Task completed successfully
-    }
-    None => {
-        // Task was cancelled
+        Self {
+            _task,
+        }
     }
 }
 ```
@@ -71,7 +68,9 @@ match fallible_task.await {
 
 ### Foreground Tasks
 
-Spawn tasks that run on the UI thread and can safely access UI state:
+`cx.spawn` is used to spawn tasks on the foreground executor, allowing safe access to UI state:
+
+If you want to update the UI, we need use `cx.spawn` instead of `cx.background_spawn`.
 
 ```rust
 // Basic spawn
@@ -79,20 +78,22 @@ cx.spawn(async move |cx| {
     // This runs on the foreground thread
     // Can safely update entities and UI state
 
-    entity.update(cx, |state, cx| {
+    let _ = entity.update(cx, |state, cx| {
         state.status = "Loading...";
         cx.notify();
-    }).await;
+    });
 
     // Perform async work
     let result = some_async_operation().await;
 
-    entity.update(cx, |state, cx| {
+    let _ = entity.update(cx, |state, cx| {
         state.data = result;
         state.status = "Complete";
         cx.notify();
-    }).await;
+    });
 }).detach();
+
+// Note: The closure takes only `cx`, not `(this, cx)` as shown in some examples
 
 // Spawn in specific window context
 cx.spawn_in(window, async move |cx| {
@@ -108,7 +109,7 @@ cx.spawn_in(window, async move |cx| {
 
 ### Background Tasks
 
-Spawn CPU-intensive work on background threads:
+Spawn CPU-intensive work on background threads, in this async closure that cannot access UI state directly:
 
 ```rust
 cx.background_spawn(async move {
@@ -359,6 +360,7 @@ impl MyComponent {
 - Use background executor for CPU-intensive work
 - Avoid blocking the foreground thread
 - Use `detach()` for fire-and-forget tasks
+- Avoid `detach()` if this task has a loop or other long-running behavior to avoid memory leaks
 - Cancel unnecessary tasks to free resources
 - Use weak entity references to prevent leaks
 - Batch UI updates to reduce notification overhead

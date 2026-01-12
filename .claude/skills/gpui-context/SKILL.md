@@ -77,7 +77,8 @@ fn handle_click(window: &mut Window, cx: &mut App) {
     // - Direct drawing operations
 
     let bounds = window.bounds();
-    let is_focused = window.is_window_focused();
+    let viewport_size = window.viewport_size()l
+    let is_focused = window.focused(cx);
     let mouse_position = window.mouse_position();
 
     // Dispatch actions
@@ -226,24 +227,26 @@ let task = Task::ready(42);
 
 ```rust
 // Observe entity changes
-cx.observe(&entity, |this, observed_entity, cx| {
+cx.observe(&entity, |this, entity, cx| {
     // React to changes in observed_entity
     this.update_from_other(observed_entity);
 });
 
-// Observe new entities of a type
-cx.observe_new_entities::<MyType>(|entity, cx| {
-    println!("New entity created: {:?}", entity.entity_id());
-}).detach();
+cx.observe_in(&entity, window, |this, entity, window, cx| {
+    // React to changes with window access
+});
 ```
 
 #### Global Observers
 
 ```rust
 // Observe global events
-cx.observe_global::<SomeEvent>(|event, cx| {
+cx.observe_global::<SettingsStore>(|event, cx| {
     // Handle global event
 });
+
+cx.observe_global_in::<SettingsStore>(window, move |picker, window, cx| {
+})
 ```
 
 #### Window Observers

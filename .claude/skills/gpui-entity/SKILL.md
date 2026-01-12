@@ -92,7 +92,7 @@ let my_entity = cx.new(|cx| existing_value);
 // Read-only access
 let count = my_entity.read(cx).count;
 
-// Read with context access
+// Read with context access (use read_with for complex access)
 let count = my_entity.read_with(cx, |state, cx| {
     state.count
 });
@@ -264,6 +264,8 @@ impl MyComponent {
         }).detach();
     }
 }
+
+// Note: cx.weak_entity() does not exist in the current GPUI API
 ```
 
 #### Background Tasks
@@ -351,6 +353,7 @@ impl MyComponent {
             Self { /* fields */ }
         })
     }
+}
 }
 ```
 
