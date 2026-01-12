@@ -1,8 +1,9 @@
 use crate::{ActiveTheme, PixelsExt, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, px,
+    Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, px,
+    relative,
 };
 use gpui::{Bounds, div};
 use std::f32::consts::TAU;
@@ -19,17 +20,19 @@ pub struct ProgressCircle {
     color: Option<Hsla>,
     value: f32,
     size: Size,
+    children: Vec<AnyElement>,
 }
 
 impl ProgressCircle {
     /// Create a new circular progress indicator.
     pub fn new(id: impl Into<ElementId>) -> Self {
-        ProgressCircle {
+        Self {
             id: id.into(),
             value: Default::default(),
             color: None,
             style: StyleRefinement::default(),
             size: Size::default(),
+            children: Vec::new(),
         }
     }
 
@@ -47,7 +50,7 @@ impl ProgressCircle {
         self
     }
 
-    fn render_circle(&self, current_value: f32, color: Hsla) -> impl IntoElement {
+    fn render_circle(current_value: f32, color: Hsla) -> impl IntoElement {
         struct PrepaintState {
             current_value: f32,
             actual_inner_radius: f32,
@@ -145,6 +148,12 @@ impl Sizable for ProgressCircle {
     }
 }
 
+impl ParentElement for ProgressCircle {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
 impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
@@ -159,6 +168,7 @@ impl RenderOnce for ProgressCircle {
             .flex()
             .items_center()
             .justify_center()
+            .line_height(relative(1.))
             .map(|this| match self.size {
                 Size::XSmall => this.size_2(),
                 Size::Small => this.size_3(),
@@ -167,6 +177,7 @@ impl RenderOnce for ProgressCircle {
                 Size::Size(s) => this.size(s * 0.75),
             })
             .refine_style(&self.style)
+            .children(self.children)
             .map(|this| {
                 if has_changed {
                     this.with_animation(
@@ -174,12 +185,12 @@ impl RenderOnce for ProgressCircle {
                         Animation::new(Duration::from_secs_f64(0.15)),
                         move |this, delta| {
                             let animated_value = prev_value + (value - prev_value) * delta;
-                            this.child(self.render_circle(animated_value, color))
+                            this.child(Self::render_circle(animated_value, color))
                         },
                     )
                     .into_any_element()
                 } else {
-                    this.child(self.render_circle(value, color))
+                    this.child(Self::render_circle(value, color))
                         .into_any_element()
                 }
             })

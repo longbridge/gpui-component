@@ -21,7 +21,7 @@ pub struct Progress {
 impl Progress {
     /// Create a new Progress bar.
     pub fn new(id: impl Into<ElementId>) -> Self {
-        Progress {
+        Self {
             id: id.into(),
             value: Default::default(),
             color: None,
