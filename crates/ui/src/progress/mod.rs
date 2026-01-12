@@ -1,8 +1,8 @@
-mod circle;
-mod linear;
+mod progress;
+mod progress_circle;
 
-pub use circle::ProgressCircle;
-pub use linear::Progress;
+pub use progress::Progress;
+pub use progress_circle::ProgressCircle;
 
 /// Shared state for progress components.
 pub(crate) struct ProgressState {
