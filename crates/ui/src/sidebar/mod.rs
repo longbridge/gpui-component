@@ -25,7 +25,12 @@ const DEFAULT_WIDTH: Pixels = px(255.);
 const COLLAPSED_WIDTH: Pixels = px(48.);
 
 pub trait SidebarItem: Collapsible + Clone {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement;
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement;
 }
 
 /// A Sidebar element that can contain collapsible child elements.
@@ -249,7 +254,7 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
                                             this.child(
                                                 group
                                                     .collapsed(self.collapsed)
-                                                    .render(window, cx)
+                                                    .render(ix, window, cx)
                                                     .into_any_element(),
                                             )
                                         })

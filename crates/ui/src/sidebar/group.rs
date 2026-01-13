@@ -1,6 +1,6 @@
 use crate::{ActiveTheme, Collapsible, h_flex, sidebar::SidebarItem, v_flex};
 use gpui::{
-    App, IntoElement, ParentElement, SharedString, Styled as _, Window, div,
+    App, ElementId, IntoElement, ParentElement, SharedString, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
 
@@ -49,7 +49,14 @@ impl<E: SidebarItem> Collapsible for SidebarGroup<E> {
 }
 
 impl<E: SidebarItem> SidebarItem for SidebarGroup<E> {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let id = id.into();
+
         v_flex()
             .relative()
             .when(!self.collapsed, |this| {
@@ -68,10 +75,10 @@ impl<E: SidebarItem> SidebarItem for SidebarGroup<E> {
                 div()
                     .gap_2()
                     .flex_col()
-                    .children(self.children.into_iter().map(|child| {
+                    .children(self.children.into_iter().enumerate().map(|(ix, child)| {
                         child
                             .collapsed(self.collapsed)
-                            .render(window, cx)
+                            .render(format!("{}-{}", id, ix), window, cx)
                             .into_any_element()
                     })),
             )

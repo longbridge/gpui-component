@@ -60,14 +60,21 @@ impl Collapsible for SidebarMenu {
 }
 
 impl SidebarItem for SidebarMenu {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let id = id.into();
+
         v_flex()
             .gap_2()
             .refine_style(&self.style)
             .children(self.items.into_iter().enumerate().map(|(ix, item)| {
-                item.id(ix)
-                    .collapsed(self.collapsed)
-                    .render(window, cx)
+                let id = SharedString::from(format!("{}-{}", id, ix));
+                item.collapsed(self.collapsed)
+                    .render(id, window, cx)
                     .into_any_element()
             }))
     }
@@ -82,7 +89,6 @@ impl Styled for SidebarMenu {
 /// Menu item for the [`SidebarMenu`]
 #[derive(Clone)]
 pub struct SidebarMenuItem {
-    id: ElementId,
     icon: Option<Icon>,
     label: SharedString,
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
@@ -99,7 +105,6 @@ impl SidebarMenuItem {
     /// Create a new [`SidebarMenuItem`] with a label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
-            id: ElementId::Integer(0),
             icon: None,
             label: label.into(),
             handler: Rc::new(|_, _, _| {}),
@@ -181,12 +186,6 @@ impl SidebarMenuItem {
         self
     }
 
-    /// Set id to the menu item.
-    fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = id.into();
-        self
-    }
-
     fn is_submenu(&self) -> bool {
         self.children.len() > 0
     }
@@ -206,10 +205,16 @@ impl Collapsible for SidebarMenuItem {
 }
 
 impl SidebarItem for SidebarMenuItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
         let click_to_open = self.click_to_open;
         let default_open = self.default_open;
-        let open_state = window.use_keyed_state(self.id.clone(), cx, |_, _| default_open);
+        let id = id.into();
+        let open_state = window.use_keyed_state(id.clone(), cx, |_, _| default_open);
 
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
@@ -220,7 +225,7 @@ impl SidebarItem for SidebarMenuItem {
         let is_open = is_submenu && !is_collapsed && *open_state.read(cx);
 
         div()
-            .id(self.id.clone())
+            .id(id.clone())
             .w_full()
             .child(
                 h_flex()
@@ -232,6 +237,7 @@ impl SidebarItem for SidebarMenuItem {
                     .gap_x_2()
                     .rounded(cx.theme().radius)
                     .text_sm()
+                    .child(id.to_string())
                     .when(is_hoverable, |this| {
                         this.hover(|this| {
                             this.bg(cx.theme().sidebar_accent.opacity(0.8))
@@ -324,9 +330,8 @@ impl SidebarItem for SidebarMenuItem {
                         .pl_2p5()
                         .py_0p5()
                         .children(self.children.into_iter().enumerate().map(|(ix, item)| {
-                            item.id(format!("{}-{}", self.id, ix))
-                                .render(window, cx)
-                                .into_any_element()
+                            let id = format!("{}-{}", id, ix);
+                            item.render(id, window, cx).into_any_element()
                         })),
                 )
             })
