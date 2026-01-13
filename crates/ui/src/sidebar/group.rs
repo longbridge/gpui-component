@@ -14,7 +14,7 @@ pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
 }
 
 impl<E: Collapsible + IntoElement> SidebarGroup<E> {
-    /// Create a new [`SidebarGroup`] with the given label.
+    /// Create a new [`SidebarGroup`] with a text label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
             base: div().gap_2().flex_col(),
@@ -24,7 +24,9 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
         }
     }
 
-    /// Add a child to the sidebar group, the child should implement [`Collapsible`] + [`IntoElement`].
+    /// Add a single child to the sidebar group.
+    ///
+    /// The child must implement [`Collapsible`] and [`IntoElement`].
     pub fn child(mut self, child: E) -> Self {
         self.children.push(child);
         self
@@ -32,7 +34,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
 
     /// Add multiple children to the sidebar group.
     ///
-    /// See also [`SidebarGroup::child`].
+    /// See also [`SidebarGroup::child`] for adding a single child.
     pub fn children(mut self, children: impl IntoIterator<Item = E>) -> Self {
         self.children.extend(children);
         self

@@ -9,12 +9,13 @@ use gpui_component::{
     ActiveTheme, Icon, IconName, Side, Sizable,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
+    button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     menu::DropdownMenu,
     sidebar::{
-        Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem,
-        SidebarToggleButton,
+        SectionCollapsedDisplay, Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
+        SidebarMenuItem, SidebarSection, SidebarToggleButton,
     },
     switch::Switch,
     v_flex,
@@ -92,6 +93,8 @@ enum Item {
     DesignEngineering,
     SalesAndMarketing,
     Travel,
+    PostgreSQL,
+    MySQL,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -122,6 +125,8 @@ impl Item {
             Self::DesignEngineering => "Design Engineering",
             Self::SalesAndMarketing => "Sales and Marketing",
             Self::Travel => "Travel",
+            Self::PostgreSQL => "PostgreSQL - Local",
+            Self::MySQL => "MySQL - Production",
         }
     }
 
@@ -141,6 +146,8 @@ impl Item {
             Self::DesignEngineering => IconName::Frame,
             Self::SalesAndMarketing => IconName::ChartPie,
             Self::Travel => IconName::Map,
+            Self::PostgreSQL => IconName::Info,
+            Self::MySQL => IconName::Info,
         }
     }
 
@@ -257,7 +264,7 @@ impl Render for SidebarStory {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let groups: [Vec<Item>; 2] = [
+        let groups: [Vec<Item>; 3] = [
             vec![
                 Item::Playground,
                 Item::Models,
@@ -269,6 +276,7 @@ impl Render for SidebarStory {
                 Item::SalesAndMarketing,
                 Item::Travel,
             ],
+            vec![Item::PostgreSQL, Item::MySQL],
         ];
 
         h_flex()
@@ -278,7 +286,7 @@ impl Render for SidebarStory {
             .h_full()
             .when(self.side.is_right(), |this| this.flex_row_reverse())
             .child(
-                Sidebar::new(self.side)
+                Sidebar::default_content(self.side)
                     .collapsed(self.collapsed)
                     .w(px(220.))
                     .gap_0()
@@ -338,60 +346,135 @@ impl Render for SidebarStory {
                             }),
                     )
                     .child(
-                        SidebarGroup::new("Platform").child(SidebarMenu::new().children(
-                            groups[0].iter().enumerate().map(|(ix, item)| {
-                                let is_active =
-                                    self.last_active_item == *item && self.active_subitem == None;
-                                SidebarMenuItem::new(item.label())
-                                    .icon(item.icon())
-                                    .active(is_active)
-                                    .default_open(ix == 0)
-                                    .click_to_open(self.click_to_open_submenu)
-                                    .children(item.items().into_iter().enumerate().map(
-                                        |(ix, sub_item)| {
-                                            SidebarMenuItem::new(sub_item.label())
-                                                .active(self.active_subitem == Some(sub_item))
-                                                .disable(sub_item.is_disabled())
-                                                .when(ix == 0, |this| {
-                                                    this.suffix(
-                                                        Switch::new("switch")
-                                                            .xsmall()
-                                                            .checked(self.checked)
-                                                            .on_click(cx.listener(
-                                                                |this, checked, _, _| {
-                                                                    this.checked = *checked
-                                                                },
-                                                            )),
-                                                    )
-                                                })
-                                                .on_click(cx.listener(sub_item.handler(&item)))
-                                        },
-                                    ))
-                                    .on_click(cx.listener(item.handler()))
-                            }),
-                        )),
+                        SidebarGroup::new("Platform")
+                            .child(
+                                SidebarMenu::new().children(groups[0].iter().enumerate().map(
+                                    |(ix, item)| {
+                                        let is_active = self.last_active_item == *item
+                                            && self.active_subitem == None;
+                                        SidebarMenuItem::new(item.label())
+                                            .icon(item.icon())
+                                            .active(is_active)
+                                            .default_open(ix == 0)
+                                            .click_to_open(self.click_to_open_submenu)
+                                            .children(item.items().into_iter().enumerate().map(
+                                                |(ix, sub_item)| {
+                                                    SidebarMenuItem::new(sub_item.label())
+                                                        .active(
+                                                            self.active_subitem == Some(sub_item),
+                                                        )
+                                                        .disable(sub_item.is_disabled())
+                                                        .when(ix == 0, |this| {
+                                                            this.suffix(
+                                                                Switch::new("switch")
+                                                                    .xsmall()
+                                                                    .checked(self.checked)
+                                                                    .on_click(cx.listener(
+                                                                        |this, checked, _, _| {
+                                                                            this.checked = *checked
+                                                                        },
+                                                                    )),
+                                                            )
+                                                        })
+                                                        .on_click(
+                                                            cx.listener(sub_item.handler(&item)),
+                                                        )
+                                                },
+                                            ))
+                                            .on_click(cx.listener(item.handler()))
+                                    },
+                                )),
+                            )
+                            .into(),
                     )
                     .child(
-                        SidebarGroup::new("Projects").child(SidebarMenu::new().children(
-                            groups[1].iter().enumerate().map(|(ix, item)| {
-                                let is_active =
-                                    self.last_active_item == *item && self.active_subitem == None;
-                                SidebarMenuItem::new(item.label())
-                                    .icon(item.icon())
-                                    .active(is_active)
-                                    .disable(item.is_disabled())
-                                    .click_to_open(self.click_to_open_submenu)
-                                    .when(ix == 0, |this| {
-                                        this.suffix(
-                                            Badge::new().dot().count(1).child(
-                                                div().p_0p5().child(Icon::new(IconName::Bell)),
-                                            ),
-                                        )
-                                    })
-                                    .when(ix == 1, |this| this.suffix(IconName::Settings2))
-                                    .on_click(cx.listener(item.handler()))
-                            }),
-                        )),
+                        SidebarGroup::new("Projects")
+                            .child(
+                                SidebarMenu::new().children(groups[1].iter().enumerate().map(
+                                    |(ix, item)| {
+                                        let is_active = self.last_active_item == *item
+                                            && self.active_subitem == None;
+                                        SidebarMenuItem::new(item.label())
+                                            .icon(item.icon())
+                                            .active(is_active)
+                                            .disable(item.is_disabled())
+                                            .click_to_open(self.click_to_open_submenu)
+                                            .when(ix == 0, |this| {
+                                                this.suffix(Badge::new().dot().count(1).child(
+                                                    div().p_0p5().child(Icon::new(IconName::Bell)),
+                                                ))
+                                            })
+                                            .when(ix == 1, |this| this.suffix(IconName::Settings2))
+                                            .on_click(cx.listener(item.handler()))
+                                    },
+                                )),
+                            )
+                            .into(),
+                    )
+                    .child(
+                        SidebarSection::new()
+                            .icon(IconName::Database)
+                            .header("Connections")
+                            .action(
+                                Button::new("btn-add-connection")
+                                    .icon(IconName::Plus)
+                                    .xsmall()
+                                    .ghost()
+                                    .tooltip("Add a new database connection"),
+                            )
+                            .separator_before(true)
+                            .child(
+                                SidebarMenu::new().children(groups[2].iter().enumerate().map(
+                                    |(_ix, item)| {
+                                        let is_active = self.last_active_item == *item
+                                            && self.active_subitem == None;
+                                        SidebarMenuItem::new(item.label())
+                                            .icon(item.icon())
+                                            .active(is_active)
+                                            .disable(item.is_disabled())
+                                            .click_to_open(self.click_to_open_submenu)
+                                            .on_click(cx.listener(item.handler()))
+                                    },
+                                )),
+                            )
+                            .into(),
+                    )
+                    .child(
+                        SidebarSection::new()
+                            .icon(IconName::Database)
+                            .header("Connections 2")
+                            .action(
+                                Button::new("btn-add-connection")
+                                    .icon(IconName::Plus)
+                                    .xsmall()
+                                    .ghost()
+                                    .tooltip("Add a new database connection"),
+                            )
+                            .collapsed_header(SectionCollapsedDisplay::Hidden)
+                            .separator_before(true)
+                            .empty_state(
+                                v_flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .py_4()
+                                    .child(
+                                        Icon::new(IconName::DatabaseZap)
+                                            .size_8()
+                                            .text_color(cx.theme().muted_foreground),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("No connections yet"),
+                                    )
+                                    .child(
+                                        Button::new("btn-add-first")
+                                            .child("Add your first connection")
+                                            .small(),
+                                    ),
+                            )
+                            .into(),
                     )
                     .footer(
                         SidebarFooter::new()
