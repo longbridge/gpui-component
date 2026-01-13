@@ -1,8 +1,8 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, DismissEvent, ElementId, EventEmitter, FocusHandle,
-    Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
-    deferred, div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
+    FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px, relative,
 };
 use std::rc::Rc;
 
@@ -288,6 +288,48 @@ impl Render for PopoverState {
 
 impl EventEmitter<DismissEvent> for PopoverState {}
 
+impl Popover {
+    pub(crate) fn render_popover<E>(
+        anchor: Anchor,
+        trigger_bounds: Option<Bounds<Pixels>>,
+        content: E,
+        _: &mut Window,
+        _: &mut App,
+    ) -> Deferred
+    where
+        E: IntoElement + 'static,
+    {
+        deferred(
+            anchored()
+                .snap_to_window_with_margin(px(8.))
+                .anchor(anchor.into())
+                .when_some(trigger_bounds, |this, trigger_bounds| {
+                    this.position(Self::resolved_corner(anchor, trigger_bounds))
+                })
+                .child(div().relative().child(content)),
+        )
+    }
+
+    pub(crate) fn render_popover_content(
+        anchor: Anchor,
+        appearance: bool,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> Stateful<Div> {
+        v_flex()
+            .id("content")
+            .size_full()
+            .occlude()
+            .tab_group()
+            .when(appearance, |this| this.popover_style(cx).p_3())
+            .map(|this| match anchor {
+                Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
+                Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
+            })
+            .when(anchor.is_center(), |this| this.left(-relative(0.5)))
+    }
+}
+
 impl RenderOnce for Popover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let force_open = self.open;
@@ -346,59 +388,35 @@ impl RenderOnce for Popover {
             return el;
         }
 
-        el.child(
-            deferred(
-                anchored()
-                    .snap_to_window_with_margin(px(8.))
-                    .anchor(self.anchor.into())
-                    .when_some(trigger_bounds, |this, trigger_bounds| {
-                        this.position(Self::resolved_corner(self.anchor, trigger_bounds))
+        let popover_content =
+            Self::render_popover_content(self.anchor, self.appearance, window, cx)
+                .track_focus(&focus_handle)
+                .key_context(CONTEXT)
+                .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
+                .when_some(self.content, |this, content| {
+                    this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
+                })
+                .children(self.children)
+                .when(self.overlay_closable, |this| {
+                    this.on_mouse_up_out(MouseButton::Left, {
+                        let state = state.clone();
+                        move |_, window, cx| {
+                            state.update(cx, |state, cx| {
+                                state.dismiss(window, cx);
+                            });
+                            cx.notify(parent_view_id);
+                        }
                     })
-                    .child(
-                        div().relative().child(
-                            v_flex()
-                                .id("content")
-                                .track_focus(&focus_handle)
-                                .key_context(CONTEXT)
-                                .on_action(
-                                    window.listener_for(&state, PopoverState::on_action_cancel),
-                                )
-                                .size_full()
-                                .occlude()
-                                .tab_group()
-                                .when(self.appearance, |this| this.popover_style(cx).p_3())
-                                .map(|this| match self.anchor {
-                                    Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => {
-                                        this.top_1()
-                                    }
-                                    Anchor::BottomLeft
-                                    | Anchor::BottomCenter
-                                    | Anchor::BottomRight => this.bottom_1(),
-                                })
-                                .when(self.anchor.is_center(), |this| this.left(-relative(0.5)))
-                                .when_some(self.content, |this, content| {
-                                    this.child(
-                                        state.update(cx, |state, cx| (content)(state, window, cx)),
-                                    )
-                                })
-                                .children(self.children)
-                                .when(self.overlay_closable, |this| {
-                                    this.on_mouse_up_out(MouseButton::Left, {
-                                        let state = state.clone();
-                                        move |_, window, cx| {
-                                            state.update(cx, |state, cx| {
-                                                state.dismiss(window, cx);
-                                            });
-                                            cx.notify(parent_view_id);
-                                        }
-                                    })
-                                })
-                                .refine_style(&self.style),
-                        ),
-                    ),
-            )
-            .with_priority(1),
-        )
+                })
+                .refine_style(&self.style);
+
+        el.child(Self::render_popover(
+            self.anchor,
+            trigger_bounds,
+            popover_content,
+            window,
+            cx,
+        ))
     }
 }
 
