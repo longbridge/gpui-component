@@ -81,6 +81,15 @@ impl SidebarStory {
                 ),
         )
     }
+
+    fn switch_checked_handler(
+        &mut self,
+        checked: &bool,
+        _: &mut Window,
+        _: &mut Context<SidebarStory>,
+    ) {
+        self.checked = *checked;
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -278,7 +287,8 @@ impl Render for SidebarStory {
             .h_full()
             .when(self.side.is_right(), |this| this.flex_row_reverse())
             .child(
-                Sidebar::new(self.side)
+                Sidebar::new("sidebar-story")
+                    .side(self.side)
                     .collapsed(self.collapsed)
                     .w(px(220.))
                     .gap_0()
@@ -353,16 +363,19 @@ impl Render for SidebarStory {
                                                 .active(self.active_subitem == Some(sub_item))
                                                 .disable(sub_item.is_disabled())
                                                 .when(ix == 0, |this| {
-                                                    this.suffix(
-                                                        Switch::new("switch")
-                                                            .xsmall()
-                                                            .checked(self.checked)
-                                                            .on_click(cx.listener(
-                                                                |this, checked, _, _| {
-                                                                    this.checked = *checked
-                                                                },
-                                                            )),
-                                                    )
+                                                    this.suffix({
+                                                        let checked = self.checked;
+                                                        let view = cx.entity();
+                                                        move |window, _| {
+                                                            Switch::new("switch")
+                                                                .xsmall()
+                                                                .checked(checked)
+                                                                .on_click(window.listener_for(
+                                                                    &view,
+                                                                    Self::switch_checked_handler,
+                                                                ))
+                                                        }
+                                                    })
                                                 })
                                                 .on_click(cx.listener(sub_item.handler(&item)))
                                         },
@@ -382,13 +395,15 @@ impl Render for SidebarStory {
                                     .disable(item.is_disabled())
                                     .click_to_open(self.click_to_open_submenu)
                                     .when(ix == 0, |this| {
-                                        this.suffix(
+                                        this.suffix(|_, _| {
                                             Badge::new().dot().count(1).child(
                                                 div().p_0p5().child(Icon::new(IconName::Bell)),
-                                            ),
-                                        )
+                                            )
+                                        })
                                     })
-                                    .when(ix == 1, |this| this.suffix(IconName::Settings2))
+                                    .when(ix == 1, |this| {
+                                        this.suffix(|_, _| Icon::new(IconName::Settings2))
+                                    })
                                     .on_click(cx.listener(item.handler()))
                             }),
                         )),
@@ -420,7 +435,7 @@ impl Render for SidebarStory {
                                 this.flex_row_reverse().justify_between()
                             })
                             .child(
-                                SidebarToggleButton::left()
+                                SidebarToggleButton::new()
                                     .side(self.side)
                                     .collapsed(self.collapsed)
                                     .on_click(cx.listener(|this, _, _, cx| {

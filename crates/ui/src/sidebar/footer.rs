@@ -1,9 +1,9 @@
 use gpui::{
-    prelude::FluentBuilder as _, Div, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    Styled,
+    Div, InteractiveElement, IntoElement, ParentElement, RenderOnce, Styled,
+    prelude::FluentBuilder as _,
 };
 
-use crate::{h_flex, menu::DropdownMenu, ActiveTheme as _, Collapsible, Selectable};
+use crate::{ActiveTheme as _, Collapsible, Selectable, h_flex, menu::DropdownMenu};
 
 /// Footer for the [`super::Sidebar`].
 #[derive(IntoElement)]

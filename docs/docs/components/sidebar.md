@@ -23,7 +23,7 @@ use gpui_component::sidebar::{
 ```rust
 use gpui_component::{sidebar::*, Side};
 
-Sidebar::new(Side::Left)
+Sidebar::new()
     .header(
         SidebarHeader::new()
             .child("My Application")
@@ -55,7 +55,7 @@ Sidebar::new(Side::Left)
 ```rust
 let mut collapsed = false;
 
-Sidebar::new(Side::Left)
+Sidebar::new()
     .collapsed(collapsed)
     .collapsible(true)
     .header(
@@ -78,7 +78,7 @@ Sidebar::new(Side::Left)
     )
 
 // Toggle button
-SidebarToggleButton::left()
+SidebarToggleButton::new()
     .collapsed(collapsed)
     .on_click(|_, _, _| {
         collapsed = !collapsed;
@@ -109,7 +109,7 @@ SidebarMenuItem::new("Projects")
 ### Multiple Groups
 
 ```rust
-Sidebar::new(Side::Left)
+Sidebar::new()
     .child(
         SidebarGroup::new("Main")
             .child(
@@ -166,7 +166,8 @@ SidebarMenuItem::new("Settings")
 ### Right-Side Placement
 
 ```rust
-Sidebar::new(Side::Right)
+Sidebar::new()
+    .side(Side::Right)
     .width(300)
     .header(
         SidebarHeader::new()
@@ -185,7 +186,7 @@ Sidebar::new(Side::Right)
 ### Custom Width and Styling
 
 ```rust
-Sidebar::new(Side::Left)
+Sidebar::new()
     .width(280)  // Custom width in pixels
     .border_width(2)  // Custom border width
     .header(
@@ -244,7 +245,7 @@ SidebarFooter::new()
 ```rust
 let is_mobile = window_width < 768;
 
-Sidebar::new(Side::Left)
+Sidebar::new()
     .collapsed(is_mobile || manually_collapsed)
     .width(if is_mobile { 60 } else { 240 })
     .header(
@@ -277,7 +278,7 @@ cx.theme().sidebar_primary_foreground // Primary text
 ### File Explorer Sidebar
 
 ```rust
-Sidebar::new(Side::Left)
+Sidebar::new()
     .header(
         SidebarHeader::new()
             .child(
@@ -320,7 +321,7 @@ Sidebar::new(Side::Left)
 ### Admin Dashboard Sidebar
 
 ```rust
-Sidebar::new(Side::Left)
+Sidebar::new()
     .header(
         SidebarHeader::new()
             .child(
@@ -387,7 +388,7 @@ Sidebar::new(Side::Left)
 ### Settings Sidebar
 
 ```rust
-Sidebar::new(Side::Left)
+Sidebar::new()
     .width(300)
     .header(
         SidebarHeader::new()

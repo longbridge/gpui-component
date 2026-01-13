@@ -1,30 +1,28 @@
-use crate::{ActiveTheme, Collapsible, h_flex, v_flex};
+use crate::{ActiveTheme, Collapsible, h_flex, sidebar::SidebarItem, v_flex};
 use gpui::{
-    App, Div, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window, div,
+    App, IntoElement, ParentElement, SharedString, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
 
 /// A group of items in the [`super::Sidebar`].
-#[derive(IntoElement)]
-pub struct SidebarGroup<E: Collapsible + IntoElement + 'static> {
-    base: Div,
+#[derive(Clone)]
+pub struct SidebarGroup<E: SidebarItem + 'static> {
     label: SharedString,
     collapsed: bool,
     children: Vec<E>,
 }
 
-impl<E: Collapsible + IntoElement> SidebarGroup<E> {
+impl<E: SidebarItem> SidebarGroup<E> {
     /// Create a new [`SidebarGroup`] with the given label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
-            base: div().gap_2().flex_col(),
             label: label.into(),
             collapsed: false,
             children: Vec::new(),
         }
     }
 
-    /// Add a child to the sidebar group, the child should implement [`Collapsible`] + [`IntoElement`].
+    /// Add a child to the sidebar group, the child should implement [`SidebarItem`].
     pub fn child(mut self, child: E) -> Self {
         self.children.push(child);
         self
@@ -39,7 +37,7 @@ impl<E: Collapsible + IntoElement> SidebarGroup<E> {
     }
 }
 
-impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
+impl<E: SidebarItem> Collapsible for SidebarGroup<E> {
     fn is_collapsed(&self) -> bool {
         self.collapsed
     }
@@ -50,8 +48,8 @@ impl<E: Collapsible + IntoElement> Collapsible for SidebarGroup<E> {
     }
 }
 
-impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+impl<E: SidebarItem> SidebarItem for SidebarGroup<E> {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .relative()
             .when(!self.collapsed, |this| {
@@ -67,11 +65,15 @@ impl<E: Collapsible + IntoElement> RenderOnce for SidebarGroup<E> {
                 )
             })
             .child(
-                self.base.children(
-                    self.children
-                        .into_iter()
-                        .map(|child| child.collapsed(self.collapsed)),
-                ),
+                div()
+                    .gap_2()
+                    .flex_col()
+                    .children(self.children.into_iter().map(|child| {
+                        child
+                            .collapsed(self.collapsed)
+                            .render(window, cx)
+                            .into_any_element()
+                    })),
             )
     }
 }
