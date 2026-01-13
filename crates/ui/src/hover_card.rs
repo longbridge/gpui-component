@@ -1,12 +1,12 @@
 use gpui::{
     AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
-    Task, Timer, Window, anchored, deferred, div, prelude::FluentBuilder as _, px, relative,
+    Task, Timer, Window, div, prelude::FluentBuilder as _,
 };
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::{Anchor, ElementExt, StyledExt as _, popover::Popover, v_flex};
+use crate::{Anchor, ElementExt, StyledExt as _, popover::Popover};
 
 /// A hover card element that displays content when hovering over a trigger element.
 ///
@@ -317,46 +317,24 @@ impl RenderOnce for HoverCard {
             return root;
         }
 
-        // When open, add the content
-        root.child(
-            deferred(
-                anchored()
-                    .snap_to_window_with_margin(px(8.))
-                    .anchor(self.anchor.into())
-                    .when_some(trigger_bounds, |this, bounds| {
-                        this.position(Popover::resolved_corner(self.anchor, bounds))
-                    })
-                    .child(
-                        div().relative().child(
-                            v_flex()
-                                .id("content")
-                                .occlude()
-                                .overflow_hidden()
-                                .line_height(relative(1.))
-                                .on_hover(window.listener_for(&state, |state, hovered, _, cx| {
-                                    state.on_content_hover(*hovered, cx);
-                                }))
-                                .when(self.appearance, |this| this.popover_style(cx).p_3())
-                                .map(|this| match self.anchor {
-                                    Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => {
-                                        this.top_1()
-                                    }
-                                    Anchor::BottomLeft
-                                    | Anchor::BottomCenter
-                                    | Anchor::BottomRight => this.bottom_1(),
-                                })
-                                .when(self.anchor.is_center(), |this| this.left(-relative(0.5)))
-                                .when_some(self.content, |this, content| {
-                                    this.child(
-                                        state.update(cx, |state, cx| (content)(state, window, cx)),
-                                    )
-                                })
-                                .children(self.children)
-                                .refine_style(&self.style),
-                        ),
-                    ),
-            )
-            .with_priority(1),
-        )
+        let popover_content =
+            Popover::render_popover_content(self.anchor, self.appearance, window, cx)
+                .overflow_hidden()
+                .on_hover(window.listener_for(&state, |state, hovered, _, cx| {
+                    state.on_content_hover(*hovered, cx);
+                }))
+                .when_some(self.content, |this, content| {
+                    this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
+                })
+                .children(self.children)
+                .refine_style(&self.style);
+
+        root.child(Popover::render_popover(
+            self.anchor,
+            trigger_bounds,
+            popover_content,
+            window,
+            cx,
+        ))
     }
 }
