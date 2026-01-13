@@ -1,12 +1,12 @@
 use gpui::{
-    div, img, prelude::FluentBuilder, App, Div, Hsla, ImageSource, InteractiveElement,
-    Interactivity, IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement,
-    Styled, Window,
+    App, Div, Hsla, ImageSource, InteractiveElement, Interactivity, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div, img,
+    prelude::FluentBuilder,
 };
 
 use crate::{
-    avatar::{avatar_size, AvatarSized as _},
     ActiveTheme, Colorize, Icon, IconName, Sizable, Size, StyledExt,
+    avatar::{AvatarSized as _, avatar_size},
 };
 
 /// User avatar element.
@@ -161,8 +161,8 @@ mod tests {
             .placeholder(Icon::new(IconName::User))
             .large();
 
-        assert_eq!(avatar.name, Some("Jason Lee".into()));
-        assert_eq!(avatar.short_name, "JL".into());
+        assert_eq!(avatar.name, Some(SharedString::from("Jason Lee")));
+        assert_eq!(avatar.short_name, SharedString::from("JL"));
         assert_eq!(avatar.size, Size::Large);
     }
 }
