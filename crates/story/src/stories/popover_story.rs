@@ -1,10 +1,10 @@
 use gpui::{
-    Action, App, AppContext, Context, Corner, DismissEvent, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _,
-    Render, Styled as _, Window, actions, div, px,
+    Action, App, AppContext, Context,DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render,
+    Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme, StyledExt, WindowExt,
+    ActiveTheme, Anchor, StyledExt, WindowExt,
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,
@@ -339,7 +339,7 @@ impl Render for PopoverStory {
             )
             .child(
                 section("Popover Anchor")
-                    .min_h(px(320.))
+                    .min_h(px(360.))
                     .v_flex()
                     .child(
                         div().absolute().top_0().left_0().w_full().h_10().child(
@@ -347,14 +347,22 @@ impl Render for PopoverStory {
                                 .items_center()
                                 .justify_between()
                                 .child(
-                                    Popover::new("anchor0")
+                                    Popover::new("anchor-top-left")
                                         .max_w(px(600.))
+                                        .anchor(Anchor::TopLeft)
                                         .trigger(Button::new("btn").outline().label("TopLeft"))
                                         .child("This is a Popover on the Top Left."),
                                 )
                                 .child(
-                                    Popover::new("anchor1")
-                                        .anchor(Corner::TopRight)
+                                    Popover::new("anchor-top-center")
+                                        .max_w(px(600.))
+                                        .anchor(Anchor::TopCenter)
+                                        .trigger(Button::new("btn").outline().label("TopCenter"))
+                                        .child("This is a Popover on the Top Center."),
+                                )
+                                .child(
+                                    Popover::new("anchor-top-right")
+                                        .anchor(Anchor::TopRight)
                                         .trigger(Button::new("btn").outline().label("TopRight"))
                                         .child("This is a Popover on the Top Right."),
                                 ),
@@ -366,14 +374,20 @@ impl Render for PopoverStory {
                                 .items_center()
                                 .justify_between()
                                 .child(
-                                    Popover::new("anchor2")
+                                    Popover::new("anchor-bottom-left")
                                         .trigger(Button::new("btn").outline().label("BottomLeft"))
-                                        .anchor(Corner::BottomLeft)
+                                        .anchor(Anchor::BottomLeft)
                                         .child("This is a Popover on the Bottom Left."),
                                 )
                                 .child(
-                                    Popover::new("anchor3")
-                                        .anchor(Corner::BottomRight)
+                                    Popover::new("anchor-bottom-center")
+                                        .trigger(Button::new("btn").outline().label("BottomCenter"))
+                                        .anchor(Anchor::BottomCenter)
+                                        .child("This is a Popover on the Bottom Center."),
+                                )
+                                .child(
+                                    Popover::new("anchor-bottom-right")
+                                        .anchor(Anchor::BottomRight)
                                         .trigger(Button::new("btn").outline().label("BottomRight"))
                                         .child("This is a Popover on the Bottom Right."),
                                 ),
