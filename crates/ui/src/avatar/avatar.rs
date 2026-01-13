@@ -153,4 +153,16 @@ mod tests {
         assert_eq!(extract_text_initials(&"Foo Bar Dar"), "FB".to_string());
         assert_eq!(extract_text_initials(&"huacnlee"), "HU".to_string());
     }
+
+    #[gpui::test]
+    fn test_avatar_builder(_cx: &mut gpui::TestAppContext) {
+        let avatar = Avatar::new()
+            .name("Jason Lee")
+            .placeholder(Icon::new(IconName::User))
+            .large();
+
+        assert_eq!(avatar.name, Some("Jason Lee".into()));
+        assert_eq!(avatar.short_name, "JL".into());
+        assert_eq!(avatar.size, Size::Large);
+    }
 }
