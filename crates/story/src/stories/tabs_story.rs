@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    IconName, Selectable as _, Sizable, Size,
+    ActiveTheme as _, IconName, Selectable as _, Sizable, Size,
     button::{Button, ButtonGroup, ButtonVariants},
     checkbox::Checkbox,
     h_flex,
@@ -128,6 +128,8 @@ impl Render for TabsStory {
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
                         }))
+                        .border_t_1()
+                        .border_color(cx.theme().border)
                         .prefix(
                             h_flex()
                                 .mx_1()

@@ -130,7 +130,6 @@ impl TabVariant {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
-                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -175,7 +174,6 @@ impl TabVariant {
                 fg: cx.theme().tab_foreground,
                 bg: cx.theme().transparent,
                 borders: Edges {
-                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -225,7 +223,6 @@ impl TabVariant {
                 fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().tab_active,
                 borders: Edges {
-                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
@@ -276,7 +273,6 @@ impl TabVariant {
                     cx.theme().transparent
                 },
                 borders: Edges {
-                    top: px(1.),
                     left: px(1.),
                     right: px(1.),
                     ..Default::default()
