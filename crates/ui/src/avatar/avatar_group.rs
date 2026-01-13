@@ -107,3 +107,25 @@ impl RenderOnce for AvatarGroup {
             )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn test_avatar_group_builder(_cx: &mut gpui::TestAppContext) {
+        let group = AvatarGroup::new()
+            .child(Avatar::new().name("Alice"))
+            .child(Avatar::new().name("Bob"))
+            .child(Avatar::new().name("Charlie"))
+            .child(Avatar::new().name("David"))
+            .large()
+            .limit(3)
+            .ellipsis();
+
+        assert_eq!(group.avatars.len(), 4);
+        assert_eq!(group.size, Size::Large);
+        assert_eq!(group.limit, 3);
+        assert!(group.ellipsis);
+    }
+}

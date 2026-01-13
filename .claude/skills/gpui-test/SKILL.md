@@ -7,6 +7,10 @@ description: Writing tests for GPUI applications. Use when testing components, a
 
 GPUI provides a comprehensive testing framework that allows you to test UI components, async operations, and distributed systems. Tests run on a single-threaded executor that provides deterministic execution and the ability to test complex async scenarios. GPUI tests use the `#[gpui::test]` attribute and work with `TestAppContext` for basic testing and `VisualTestContext` for window-dependent tests.
 
+### Rules
+
+- If test does not require windows or rendering, we can avoid use `[gpui::test]` and `TestAppContext`, just write simple rust test.
+
 ## Core Testing Infrastructure
 
 ### Test Attributes

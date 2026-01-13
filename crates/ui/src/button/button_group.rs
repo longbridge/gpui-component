@@ -252,3 +252,35 @@ impl RenderOnce for ButtonGroup {
             )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::Axis;
+
+    #[gpui::test]
+    fn test_button_group_builder(_cx: &mut gpui::TestAppContext) {
+        let group = ButtonGroup::new("complex-group")
+            .child(Button::new("btn1").label("One"))
+            .child(Button::new("btn2").label("Two"))
+            .child(Button::new("btn3").label("Three"))
+            .primary()
+            .large()
+            .outline()
+            .compact()
+            .multiple(true)
+            .layout(Axis::Vertical)
+            .disabled(false)
+            .on_click(|_, _, _| {});
+
+        assert_eq!(group.children.len(), 3);
+        assert_eq!(group.variant, Some(ButtonVariant::Primary));
+        assert_eq!(group.size, Some(Size::Large));
+        assert!(group.outline);
+        assert!(group.compact);
+        assert!(group.multiple);
+        assert_eq!(group.layout, Axis::Vertical);
+        assert!(!group.disabled);
+        assert!(group.on_click.is_some());
+    }
+}
