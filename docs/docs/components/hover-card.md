@@ -7,6 +7,8 @@ description: A floating overlay that displays rich content when hovering over a 
 
 HoverCard component for displaying rich content that appears when the mouse hovers over a trigger element. Ideal for previewing user profiles, link previews, and other contextual information without requiring a click. Features configurable delays for both opening and closing to prevent flickering during quick mouse movements.
 
+This is most like the [Popover] component, but triggered by hover instead of click, and with timing controls for a smoother user experience.
+
 ## Import
 
 ```rust
@@ -18,16 +20,33 @@ use gpui_component::hover_card::HoverCard;
 ### Basic HoverCard
 
 ```rust
-use gpui::ParentElement as _;
-use gpui_component::hover_card::HoverCard;
+use gpui::{ParentElement as _, Styled as _};
+use gpui_component::{hover_card::HoverCard, v_flex};
 
 HoverCard::new("basic")
     .trigger(
         div()
             .child("Hover over me")
+            .text_color(cx.theme().primary)
             .cursor_pointer()
+            .text_sm()
     )
-    .child("This content appears on hover")
+    .child(
+        v_flex()
+            .gap_2()
+            .child(
+                div()
+                    .child("This is a hover card")
+                    .font_semibold()
+                    .text_sm()
+            )
+            .child(
+                div()
+                    .child("You can display rich content when hovering over a trigger element.")
+                    .text_color(cx.theme().muted_foreground)
+                    .text_sm()
+            )
+    )
 ```
 
 ### User Profile Preview
@@ -35,57 +54,50 @@ HoverCard::new("basic")
 A common use case is showing user profiles when hovering over a username, similar to GitHub or Twitter:
 
 ```rust
+use gpui::{px, relative, Styled as _};
 use gpui_component::{
     avatar::Avatar,
     hover_card::HoverCard,
-    Anchor,
+    h_flex,
+    v_flex,
 };
 
-HoverCard::new("user-profile")
-    .anchor(Anchor::BottomCenter)
-    .trigger(
-        div()
-            .child("@username")
-            .text_color(cx.theme().primary)
-            .cursor_pointer()
-    )
+h_flex()
+    .child("Hover over ")
+    .text_sm()
     .child(
-        h_flex()
-            .gap_4()
-            .child(Avatar::new().with_size(px(48.)))
+        HoverCard::new("user-profile")
+            .trigger(
+                div()
+                    .child("@huacnlee")
+                    .cursor_pointer()
+                    .text_color(cx.theme().link)
+            )
             .child(
-                v_flex()
-                    .gap_1()
-                    .child(div().child("Display Name").font_semibold())
-                    .child(div().child("@username").text_xs())
-                    .child(div().child("User bio goes here..."))
+                h_flex()
+                    .w(px(320.))
+                    .gap_4()
+                    .items_start()
+                    .child(
+                        Avatar::new()
+                            .src("https://avatars.githubusercontent.com/u/5518?s=64")
+                    )
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .line_height(relative(1.))
+                            .child(div().child("Jason Lee").font_semibold())
+                            .child(
+                                div()
+                                    .child("@huacnlee")
+                                    .text_color(cx.theme().muted_foreground)
+                                    .text_sm()
+                            )
+                            .child("The author of GPUI Component.")
+                    )
             )
     )
-```
-
-### Link Preview
-
-Display a preview of a link's content when hovering over it:
-
-```rust
-HoverCard::new("link-preview")
-    .anchor(Anchor::BottomCenter)
-    .open_delay(500)  // Open faster for links
-    .close_delay(200)
-    .trigger(
-        div()
-            .child("example.com")
-            .text_color(cx.theme().link)
-            .underline()
-            .cursor_pointer()
-    )
-    .child(
-        v_flex()
-            .gap_2()
-            .w(px(300.))
-            .child(div().child("Page Title").font_bold())
-            .child(div().child("Page description...").text_sm())
-    )
+    .child(" to see their profile")
 ```
 
 ### Custom Timing
@@ -93,54 +105,89 @@ HoverCard::new("link-preview")
 Adjust the opening and closing delays to suit your needs:
 
 ```rust
-HoverCard::new("custom-timing")
-    .open_delay(200)   // Open after 200ms (default is 700ms)
-    .close_delay(100)  // Close after 100ms (default is 300ms)
-    .trigger(Button::new("fast").label("Fast Response"))
-    .child("This opens and closes quickly")
+use std::time::Duration;
+use gpui::Styled as _;
+use gpui_component::{
+    button::{Button, ButtonVariants as _},
+    h_flex,
+};
+
+h_flex()
+    .gap_4()
+    .child(
+        HoverCard::new("fast-open")
+            .open_delay(Duration::from_millis(200))
+            .close_delay(Duration::from_millis(100))
+            .trigger(Button::new("fast").label("Fast Open (200ms)").outline())
+            .child(div().child("This hover card opens after 200ms").text_sm())
+    )
+    .child(
+        HoverCard::new("slow-open")
+            .open_delay(Duration::from_secs(1))
+            .close_delay(Duration::from_secs_f32(0.5))
+            .trigger(Button::new("slow").label("Slow Open (1000ms)").outline())
+            .child(div().child("This hover card opens after 1000ms").text_sm())
+    )
 ```
 
 ### Positioning
 
-HoverCard supports 6 positioning options using the `Anchor` type:
+HoverCard supports 6 positioning options using the [Anchor] type:
+
+- TopLeft
+- TopCenter
+- TopRight
+- BottomLeft
+- BottomCenter
+- BottomRight
+
+### Controlled Open State
+
+You can control the `open` state externally, when you want to manage the visibility yourself, you also need to handle the `on_open_change` event to keep your state in sync:
 
 ```rust
-use gpui_component::Anchor;
+use gpui::Styled as _;
+use gpui_component::{
+    Anchor,
+    button::{Button, ButtonVariants as _},
+};
 
-// Top positions
-HoverCard::new("top-left").anchor(Anchor::TopLeft)
-HoverCard::new("top-center").anchor(Anchor::TopCenter)
-HoverCard::new("top-right").anchor(Anchor::TopRight)
-
-// Bottom positions (default)
-HoverCard::new("bottom-left").anchor(Anchor::BottomLeft)
-HoverCard::new("bottom-center").anchor(Anchor::BottomCenter)
-HoverCard::new("bottom-right").anchor(Anchor::BottomRight)
-```
-
-### Controlled Mode
-
-You can control the open state externally:
-
-```rust
 struct MyView {
-    card_open: bool,
+    controlled_open: bool,
 }
 
-HoverCard::new("controlled")
-    .open(self.card_open)
-    .on_open_change(cx.listener(|this, open, _, cx| {
-        this.card_open = *open;
-        println!("Card is now: {}", if *open { "open" } else { "closed" });
-        cx.notify();
-    }))
-    .trigger(Button::new("btn").label("Hover"))
-    .child("Controlled content")
+// In the render method:
+section("Controlled Mode")
+    .v_flex()
+    .child(
+        Button::new("toggle-open")
+            .label("Toggle Open State")
+            .primary()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.controlled_open = !this.controlled_open;
+                cx.notify();
+            }))
+    )
+    .child(
+        HoverCard::new("controlled")
+            .anchor(Anchor::BottomCenter)
+            .open(self.controlled_open)
+            .on_open_change(cx.listener(|this, open, _, cx| {
+                this.controlled_open = *open;
+                cx.notify();
+            }))
+            .trigger(Button::new("trigger").label("Controlled Trigger").outline())
+            .content(|_, _, _| {
+                div()
+                    .child("This hover card's state is controlled externally")
+                    .text_sm()
+            })
+    )
 ```
 
 ### Custom Content Builder
 
-For more complex content that needs access to the HoverCard state:
+For performance optimization, you can provide a content builder function for more complex case, which only calls when the HoverCard is opened:
 
 ```rust
 HoverCard::new("complex")
@@ -186,12 +233,12 @@ HoverCard::new("custom-styled")
 
 - `new(id: impl Into<ElementId>)` - Create a new HoverCard with a unique ID
 - `trigger<T: IntoElement>(trigger: T)` - Set the element that triggers the hover
-- `content<F>(content: F)` - Set a content builder function
-- `open_delay(ms: u64)` - Set delay before showing (default: 700ms)
-- `close_delay(ms: u64)` - Set delay before hiding (default: 300ms)
-- `anchor(anchor: impl Into<Anchor>)` - Set positioning (default: TopLeft)
+- `content<F>(content: F)` - Set a content builder function that receives `(&mut HoverCardState, &mut Window, &mut Context<HoverCardState>)`
+- `open_delay(duration: Duration)` - Set delay before showing (default: 700ms)
+- `close_delay(duration: Duration)` - Set delay before hiding (default: 300ms)
+- `anchor(anchor: impl Into<Anchor>)` - Set positioning (default: TopCenter)
 - `open(open: bool)` - Force open state (controlled mode)
-- `on_open_change<F>(callback: F)` - Callback when open state changes
+- `on_open_change<F>(callback: F)` - Callback when open state changes, receives `(&bool, &mut Window, &mut App)`
 - `appearance(appearance: bool)` - Enable/disable default styling (default: true)
 
 ### HoverCardState Methods
@@ -230,19 +277,20 @@ The HoverCard uses a sophisticated timing system to provide a smooth user experi
 
 5. **Avoid nested HoverCards**: They can create confusing user experiences
 
-## Differences from Popover
+## Differences from [Popover]
 
-| Feature | HoverCard | Popover |
-|---------|-----------|---------|
-| Trigger | Mouse hover | Click/right-click |
-| Keyboard navigation | No | Yes (with focus) |
-| Dismiss on outside click | No | Yes (configurable) |
-| Timing delays | Yes (open/close) | No |
-| Primary use case | Previews | Actions/forms |
+| Feature                  | HoverCard        | Popover            |
+| ------------------------ | ---------------- | ------------------ |
+| Trigger                  | Mouse hover      | Click/right-click  |
+| Keyboard navigation      | No               | Yes (with focus)   |
+| Dismiss on outside click | No               | Yes (configurable) |
+| Timing delays            | Yes (open/close) | No                 |
+| Primary use case         | Previews         | Actions/forms      |
 
 ## Examples
 
 See the [HoverCard Story](../../story) for interactive examples demonstrating:
+
 - Basic hover cards
 - User profile previews
 - Link previews
@@ -250,8 +298,6 @@ See the [HoverCard Story](../../story) for interactive examples demonstrating:
 - All positioning options
 - Controlled mode
 
-## Related Components
-
-- [Popover](./popover.md) - Click-triggered overlay for actions and forms
-- [Tooltip](./tooltip.md) - Simple text hints on hover
-- [Avatar](./avatar.md) - User profile images (often used in HoverCard content)
+[Popover]: ./popover.md
+[Anchor]: https://docs.rs/gpui-component/latest/gpui_component/enum.Anchor.html
+[Avatar]: ./avatar.md
