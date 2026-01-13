@@ -401,3 +401,87 @@ impl RenderOnce for Popover {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::MouseButton;
+
+    #[test]
+    fn test_popover_builder_chaining() {
+        let popover = Popover::new("test")
+            .anchor(Anchor::BottomCenter)
+            .mouse_button(MouseButton::Right)
+            .default_open(true)
+            .appearance(false)
+            .overlay_closable(false);
+
+        assert_eq!(popover.anchor, Anchor::BottomCenter);
+        assert_eq!(popover.mouse_button, MouseButton::Right);
+        assert!(popover.default_open);
+        assert!(!popover.appearance);
+        assert!(!popover.overlay_closable);
+    }
+
+    #[test]
+    fn test_resolved_corner_top_positions() {
+        use gpui::px;
+
+        let bounds = Bounds {
+            origin: Point {
+                x: px(100.),
+                y: px(100.),
+            },
+            size: gpui::Size {
+                width: px(200.),
+                height: px(50.),
+            },
+        };
+
+        // TopLeft should position at bottom-left of trigger
+        let pos = Popover::resolved_corner(Anchor::TopLeft, bounds);
+        assert_eq!(pos.x, px(100.)); // Left edge
+        assert_eq!(pos.y, px(100.)); // Top of trigger - height = bottom edge shifted up
+
+        // TopCenter should position at bottom-center of trigger
+        let pos = Popover::resolved_corner(Anchor::TopCenter, bounds);
+        assert_eq!(pos.x, px(200.)); // Center (100 + 200/2)
+        assert_eq!(pos.y, px(100.));
+
+        // TopRight should position at bottom-right of trigger
+        let pos = Popover::resolved_corner(Anchor::TopRight, bounds);
+        assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
+        assert_eq!(pos.y, px(100.));
+    }
+
+    #[test]
+    fn test_resolved_corner_bottom_positions() {
+        use gpui::px;
+
+        let bounds = Bounds {
+            origin: Point {
+                x: px(100.),
+                y: px(100.),
+            },
+            size: gpui::Size {
+                width: px(200.),
+                height: px(50.),
+            },
+        };
+
+        // BottomLeft should position at top-left of trigger
+        let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds);
+        assert_eq!(pos.x, px(100.)); // Left edge
+        assert_eq!(pos.y, px(50.)); // Top of trigger (100 - 50)
+
+        // BottomCenter should position at top-center of trigger
+        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds);
+        assert_eq!(pos.x, px(200.)); // Center (100 + 200/2)
+        assert_eq!(pos.y, px(50.));
+
+        // BottomRight should position at top-right of trigger
+        let pos = Popover::resolved_corner(Anchor::BottomRight, bounds);
+        assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
+        assert_eq!(pos.y, px(50.));
+    }
+}
