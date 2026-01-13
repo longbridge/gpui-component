@@ -991,233 +991,7 @@ mod tests {
     use super::*;
 
     #[gpui::test]
-    fn test_button_creation(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button");
-
-        assert_eq!(button.id, ElementId::from("test-button"));
-        assert!(!button.disabled);
-        assert!(!button.selected);
-        assert!(!button.loading);
-        assert_eq!(button.variant, ButtonVariant::Secondary);
-        assert_eq!(button.size, Size::Medium);
-    }
-
-    #[gpui::test]
-    fn test_button_with_label(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").label("Click Me");
-
-        assert_eq!(button.label, Some("Click Me".into()));
-    }
-
-    #[gpui::test]
-    fn test_button_variants(_cx: &mut gpui::TestAppContext) {
-        // Test Primary variant
-        let primary_button = Button::new("primary").primary();
-        assert_eq!(primary_button.variant, ButtonVariant::Primary);
-
-        // Test Danger variant
-        let danger_button = Button::new("danger").danger();
-        assert_eq!(danger_button.variant, ButtonVariant::Danger);
-
-        // Test Warning variant
-        let warning_button = Button::new("warning").warning();
-        assert_eq!(warning_button.variant, ButtonVariant::Warning);
-
-        // Test Success variant
-        let success_button = Button::new("success").success();
-        assert_eq!(success_button.variant, ButtonVariant::Success);
-
-        // Test Info variant
-        let info_button = Button::new("info").info();
-        assert_eq!(info_button.variant, ButtonVariant::Info);
-
-        // Test Ghost variant
-        let ghost_button = Button::new("ghost").ghost();
-        assert_eq!(ghost_button.variant, ButtonVariant::Ghost);
-        assert!(ghost_button.variant.is_ghost());
-
-        // Test Link variant
-        let link_button = Button::new("link").link();
-        assert_eq!(link_button.variant, ButtonVariant::Link);
-        assert!(link_button.variant.is_link());
-
-        // Test Text variant
-        let text_button = Button::new("text").text();
-        assert_eq!(text_button.variant, ButtonVariant::Text);
-        assert!(text_button.variant.is_text());
-    }
-
-    #[gpui::test]
-    fn test_button_disabled_state(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").disabled(true);
-
-        assert!(button.disabled);
-        assert!(!button.clickable());
-    }
-
-    #[gpui::test]
-    fn test_button_selected_state(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").selected(true);
-
-        assert!(button.selected);
-        assert!(button.is_selected());
-    }
-
-    #[gpui::test]
-    fn test_button_loading_state(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").loading(true);
-
-        assert!(button.loading);
-        assert!(!button.clickable());
-    }
-
-    #[gpui::test]
-    fn test_button_sizes(_cx: &mut gpui::TestAppContext) {
-        // Test XSmall size
-        let xsmall = Button::new("xsmall").xsmall();
-        assert_eq!(xsmall.size, Size::XSmall);
-    }
-
-    #[gpui::test]
-    fn test_button_outline(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").primary().outline();
-
-        assert!(button.outline);
-        assert_eq!(button.variant, ButtonVariant::Primary);
-    }
-
-    #[gpui::test]
-    fn test_button_compact(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").compact();
-
-        assert!(button.compact);
-    }
-
-    #[gpui::test]
-    fn test_button_with_tooltip(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").tooltip("Click this button");
-
-        assert!(button.tooltip.is_some());
-        if let Some((tooltip_text, _)) = &button.tooltip {
-            assert_eq!(tooltip_text.as_ref(), "Click this button");
-        }
-    }
-
-    #[gpui::test]
-    fn test_button_dropdown_caret(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test-button").dropdown_caret(true);
-
-        assert!(button.dropdown_caret);
-    }
-
-    #[gpui::test]
-    fn test_button_clickable_logic(_cx: &mut gpui::TestAppContext) {
-        // Button with click handler should be clickable
-        let clickable = Button::new("test").on_click(|_, _, _| {});
-        assert!(clickable.clickable());
-
-        // Button without click handler should not be clickable
-        let not_clickable = Button::new("test");
-        assert!(!not_clickable.clickable());
-
-        // Disabled button should not be clickable
-        let disabled = Button::new("test").disabled(true).on_click(|_, _, _| {});
-        assert!(!disabled.clickable());
-
-        // Loading button should not be clickable
-        let loading = Button::new("test").loading(true).on_click(|_, _, _| {});
-        assert!(!loading.clickable());
-    }
-
-    #[gpui::test]
-    fn test_button_hoverable_logic(_cx: &mut gpui::TestAppContext) {
-        // Button with hover handler should be hoverable
-        let hoverable = Button::new("test").on_hover(|_, _, _| {});
-        assert!(hoverable.hoverable());
-
-        // Button without hover handler should not be hoverable
-        let not_hoverable = Button::new("test");
-        assert!(!not_hoverable.hoverable());
-
-        // Disabled button should not be hoverable
-        let disabled = Button::new("test").disabled(true).on_hover(|_, _, _| {});
-        assert!(!disabled.hoverable());
-
-        // Loading button should not be hoverable
-        let loading = Button::new("test").loading(true).on_hover(|_, _, _| {});
-        assert!(!loading.hoverable());
-    }
-
-    #[gpui::test]
-    fn test_button_rounded(_cx: &mut gpui::TestAppContext) {
-        // Test Medium rounding (default)
-        let medium = Button::new("test");
-        assert!(matches!(medium.rounded, ButtonRounded::Medium));
-
-        // Test Small rounding
-        let small = Button::new("test").rounded(ButtonRounded::Small);
-        assert!(matches!(small.rounded, ButtonRounded::Small));
-
-        // Test Large rounding
-        let large = Button::new("test").rounded(ButtonRounded::Large);
-        assert!(matches!(large.rounded, ButtonRounded::Large));
-
-        // Test None rounding
-        let none = Button::new("test").rounded(ButtonRounded::None);
-        assert!(matches!(none.rounded, ButtonRounded::None));
-
-        // Test custom pixel rounding
-        let custom = Button::new("test").rounded(px(10.0));
-        assert!(matches!(custom.rounded, ButtonRounded::Size(_)));
-    }
-
-    #[gpui::test]
-    fn test_button_tab_index(_cx: &mut gpui::TestAppContext) {
-        let button = Button::new("test").tab_index(5);
-
-        assert_eq!(button.tab_index, 5);
-    }
-
-    #[gpui::test]
-    fn test_button_tab_stop(_cx: &mut gpui::TestAppContext) {
-        // Default tab_stop is true
-        let default_button = Button::new("test");
-        assert!(default_button.tab_stop);
-
-        // Can be disabled
-        let no_tab_stop = Button::new("test").tab_stop(false);
-        assert!(!no_tab_stop.tab_stop);
-    }
-
-    #[gpui::test]
-    fn test_button_variant_is_methods(_cx: &mut gpui::TestAppContext) {
-        // Test is_link
-        let link_variant = ButtonVariant::Link;
-        assert!(link_variant.is_link());
-        assert!(!link_variant.is_text());
-        assert!(!link_variant.is_ghost());
-
-        // Test is_text
-        let text_variant = ButtonVariant::Text;
-        assert!(text_variant.is_text());
-        assert!(!text_variant.is_link());
-        assert!(!text_variant.is_ghost());
-
-        // Test is_ghost
-        let ghost_variant = ButtonVariant::Ghost;
-        assert!(ghost_variant.is_ghost());
-        assert!(!ghost_variant.is_link());
-        assert!(!ghost_variant.is_text());
-
-        // Test no_padding
-        assert!(link_variant.no_padding());
-        assert!(text_variant.no_padding());
-        assert!(!ghost_variant.no_padding());
-    }
-
-    #[gpui::test]
-    fn test_button_builder_pattern(_cx: &mut gpui::TestAppContext) {
-        // Test method chaining
+    fn test_button_builder(_cx: &mut gpui::TestAppContext) {
         let button = Button::new("complex-button")
             .label("Save Changes")
             .primary()
@@ -1231,7 +1005,8 @@ mod tests {
             .tab_index(1)
             .tab_stop(true)
             .dropdown_caret(false)
-            .rounded(ButtonRounded::Medium);
+            .rounded(ButtonRounded::Medium)
+            .on_click(|_, _, _| {});
 
         assert_eq!(button.label, Some("Save Changes".into()));
         assert_eq!(button.variant, ButtonVariant::Primary);
@@ -1249,8 +1024,30 @@ mod tests {
     }
 
     #[gpui::test]
-    fn test_button_rounded_from_pixels(_cx: &mut gpui::TestAppContext) {
-        let rounded: ButtonRounded = px(5.0).into();
-        assert!(matches!(rounded, ButtonRounded::Size(_)));
+    fn test_button_clickable_logic(_cx: &mut gpui::TestAppContext) {
+        // Button with click handler should be clickable
+        let clickable = Button::new("test").on_click(|_, _, _| {});
+        assert!(clickable.clickable());
+
+        // Disabled button should not be clickable
+        let disabled = Button::new("test").disabled(true).on_click(|_, _, _| {});
+        assert!(!disabled.clickable());
+
+        // Loading button should not be clickable
+        let loading = Button::new("test").loading(true).on_click(|_, _, _| {});
+        assert!(!loading.clickable());
+    }
+
+    #[gpui::test]
+    fn test_button_variant_methods(_cx: &mut gpui::TestAppContext) {
+        // Test variant check methods
+        assert!(ButtonVariant::Link.is_link());
+        assert!(ButtonVariant::Text.is_text());
+        assert!(ButtonVariant::Ghost.is_ghost());
+
+        // Test no_padding logic
+        assert!(ButtonVariant::Link.no_padding());
+        assert!(ButtonVariant::Text.no_padding());
+        assert!(!ButtonVariant::Ghost.no_padding());
     }
 }

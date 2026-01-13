@@ -203,3 +203,37 @@ impl RenderOnce for DropdownButton {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::Corner;
+
+    #[gpui::test]
+    fn test_dropdown_button_builder(_cx: &mut gpui::TestAppContext) {
+        let button = Button::new("inner").label("Action");
+        let dropdown = DropdownButton::new("complex-dropdown")
+            .button(button)
+            .primary()
+            .outline()
+            .large()
+            .compact()
+            .loading(false)
+            .disabled(false)
+            .selected(false)
+            .rounded(ButtonRounded::Medium)
+            .dropdown_menu_with_anchor(Corner::BottomLeft, |menu, _, _| menu);
+
+        assert!(dropdown.button.is_some());
+        assert_eq!(dropdown.variant, ButtonVariant::Primary);
+        assert!(dropdown.outline);
+        assert_eq!(dropdown.size, Size::Large);
+        assert!(dropdown.compact);
+        assert!(!dropdown.loading);
+        assert!(!dropdown.disabled);
+        assert!(!dropdown.selected);
+        assert!(matches!(dropdown.rounded, ButtonRounded::Medium));
+        assert!(dropdown.menu.is_some());
+        assert_eq!(dropdown.anchor, Corner::BottomLeft);
+    }
+}
