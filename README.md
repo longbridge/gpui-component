@@ -28,7 +28,7 @@ Here is the first application: [Longbridge Pro](https://longbridge.com/desktop),
 
 ```toml
 gpui = "0.2.2"
-gpui-component = "0.4.0"
+gpui-component = "0.5.0"
 ```
 
 ### Basic Example
@@ -138,9 +138,9 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 [^2]: [Reducing Binary Size of Qt Applications](https://www.qt.io/blog/reducing-binary-size-of-qt-applications-part-3-more-platforms)
 
-[^3]: Iced Editor: https://github.com/iced-rs/iced/blob/db5a1f6353b9f8520c4f9633d1cdc90242c2afe1/graphics/src/text/editor.rs#L65-L68
+[^3]: Iced Editor: <https://github.com/iced-rs/iced/blob/db5a1f6353b9f8520c4f9633d1cdc90242c2afe1/graphics/src/text/editor.rs#L65-L68>
 
-[^4]: egui TextBuffer: https://github.com/emilk/egui/blob/0a81372cfd3a4deda640acdecbbaf24bf78bb6a2/crates/egui/src/widgets/text_edit/text_buffer.rs#L20
+[^4]: egui TextBuffer: <https://github.com/emilk/egui/blob/0a81372cfd3a4deda640acdecbbaf24bf78bb6a2/crates/egui/src/widgets/text_edit/text_buffer.rs#L20>
 
 ## License
 
