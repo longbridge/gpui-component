@@ -167,7 +167,7 @@ impl Popover {
         self
     }
 
-    fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
+    pub(crate) fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
         let offset = match anchor {
             Anchor::TopCenter | Anchor::BottomCenter => Point {
                 x: trigger_bounds.size.width.half(),

@@ -1,0 +1,238 @@
+use gpui::{
+    App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, Styled as _,
+    Window, div, px, relative,
+};
+use gpui_component::{
+    ActiveTheme, Anchor, StyledExt,
+    avatar::Avatar,
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    hover_card::HoverCard,
+    v_flex,
+};
+use std::time::Duration;
+
+use crate::{Story, section};
+
+pub struct HoverCardStory {
+    controlled_open: bool,
+}
+
+impl HoverCardStory {
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
+        Self {
+            controlled_open: false,
+        }
+    }
+
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new(window, cx))
+    }
+}
+
+impl Render for HoverCardStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .gap_6()
+            .child(self.render_basic_example(cx))
+            .child(self.render_user_profile_example(cx))
+            .child(self.render_custom_timing_example(cx))
+            .child(self.render_positioning_examples(cx))
+            .child(self.render_controlled_example(cx))
+    }
+}
+
+impl HoverCardStory {
+    /// Basic hover card example
+    fn render_basic_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        section("Basic").child(
+            HoverCard::new("basic")
+                .trigger(
+                    div()
+                        .child("Hover over me")
+                        .text_color(cx.theme().primary)
+                        .cursor_pointer()
+                        .text_sm(),
+                )
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            div()
+                                .child("This is a hover card")
+                                .font_semibold()
+                                .text_sm(),
+                        )
+                        .child(
+                            div()
+                                .child("You can display rich content when hovering over a trigger element.")
+                                .text_color(cx.theme().muted_foreground)
+                                .text_sm(),
+                        ),
+                ),
+        )
+    }
+
+    /// User profile preview example (similar to GitHub)
+    fn render_user_profile_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        section("User Profile Preview").child(
+            h_flex()
+                .child("Hover over ")
+                .text_sm()
+                .child(
+                    HoverCard::new("user-profile")
+                        .trigger(
+                            div()
+                                .child("@huacnlee")
+                                .cursor_pointer()
+                                .text_color(cx.theme().link),
+                        )
+                        .child(
+                            h_flex()
+                                .w(px(320.))
+                                .gap_4()
+                                .items_start()
+                                .child(
+                                    Avatar::new()
+                                        .src("https://avatars.githubusercontent.com/u/5518?s=64"),
+                                )
+                                .child(
+                                    v_flex()
+                                        .gap_1()
+                                        .line_height(relative(1.))
+                                        .child(div().child("Jason Lee").font_semibold())
+                                        .child(
+                                            div()
+                                                .child("@huacnlee")
+                                                .text_color(cx.theme().muted_foreground)
+                                                .text_sm(),
+                                        )
+                                        .child("The author of GPUI Component."),
+                                ),
+                        ),
+                )
+                .child(" to see their profile"),
+        )
+    }
+
+    /// Custom timing configuration example
+    fn render_custom_timing_example(&self, _: &mut Context<Self>) -> impl IntoElement {
+        section("Custom Timing").child(
+            h_flex()
+                .gap_4()
+                .child(
+                    HoverCard::new("fast-open")
+                        .open_delay(Duration::from_millis(200))
+                        .close_delay(Duration::from_millis(100))
+                        .trigger(Button::new("fast").label("Fast Open (200ms)").outline())
+                        .child(div().child("This hover card opens after 200ms").text_sm()),
+                )
+                .child(
+                    HoverCard::new("slow-open")
+                        .open_delay(Duration::from_secs(1))
+                        .close_delay(Duration::from_secs_f32(0.5))
+                        .trigger(Button::new("slow").label("Slow Open (1000ms)").outline())
+                        .child(div().child("This hover card opens after 1000ms").text_sm()),
+                ),
+        )
+    }
+
+    /// All positioning options
+    fn render_positioning_examples(&self, _: &mut Context<Self>) -> impl IntoElement {
+        section("Positioning").child(
+            v_flex()
+                .gap_4()
+                .items_center()
+                .justify_center()
+                .child(
+                    h_flex()
+                        .gap_4()
+                        .child(
+                            HoverCard::new("anchor-top-left")
+                                .anchor(Anchor::TopLeft)
+                                .trigger(Button::new("tl").label("Top Left").outline())
+                                .child(div().child("Positioned at Top Left").text_sm()),
+                        )
+                        .child(
+                            HoverCard::new("anchor-top-center")
+                                .anchor(Anchor::TopCenter)
+                                .trigger(Button::new("tc").label("Top Center").outline())
+                                .child(div().child("Positioned at Top Center").text_sm()),
+                        )
+                        .child(
+                            HoverCard::new("anchor-top-right")
+                                .anchor(Anchor::TopRight)
+                                .trigger(Button::new("tr").label("Top Right").outline())
+                                .child(div().child("Positioned at Top Right").text_sm()),
+                        ),
+                )
+                // Bottom row
+                .child(
+                    h_flex()
+                        .gap_4()
+                        .child(
+                            HoverCard::new("anchor-bottom-left")
+                                .anchor(Anchor::BottomLeft)
+                                .trigger(Button::new("bl").label("Bottom Left").outline())
+                                .child(div().child("Positioned at Bottom Left").text_sm()),
+                        )
+                        .child(
+                            HoverCard::new("anchor-bottom-center")
+                                .anchor(Anchor::BottomCenter)
+                                .trigger(Button::new("bc").label("Bottom Center").outline())
+                                .child(div().child("Positioned at Bottom Center").text_sm()),
+                        )
+                        .child(
+                            HoverCard::new("anchor-bottom-right")
+                                .anchor(Anchor::BottomRight)
+                                .trigger(Button::new("br").label("Bottom Right").outline())
+                                .child(div().child("Positioned at Bottom Right").text_sm()),
+                        ),
+                ),
+        )
+    }
+
+    /// Controlled mode example
+    fn render_controlled_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        section("Controlled Mode")
+            .v_flex()
+            .child(
+                Button::new("toggle-open")
+                    .label("Toggle Open State")
+                    .primary()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.controlled_open = !this.controlled_open;
+                        cx.notify();
+                    })),
+            )
+            .child(
+                HoverCard::new("controlled")
+                    .anchor(Anchor::BottomCenter)
+                    .open(self.controlled_open)
+                    .on_open_change(cx.listener(|this, open, _, cx| {
+                        this.controlled_open = *open;
+                        cx.notify();
+                    }))
+                    .trigger(Button::new("trigger").label("Controlled Trigger").outline())
+                    .content(|_, _, _| {
+                        div()
+                            .child("This hover card's state is controlled externally")
+                            .text_sm()
+                    }),
+            )
+    }
+}
+
+impl Story for HoverCardStory {
+    fn title() -> &'static str {
+        "HoverCard"
+    }
+
+    fn description() -> &'static str {
+        "A hover card displays content when hovering over a trigger element, with configurable delays."
+    }
+
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
+        Self::view(window, cx)
+    }
+}
