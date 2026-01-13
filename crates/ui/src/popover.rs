@@ -167,13 +167,13 @@ impl Popover {
         self
     }
 
-    pub(crate) fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
+    fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
         let offset = match anchor {
             Anchor::TopCenter | Anchor::BottomCenter => Point {
                 x: trigger_bounds.size.width.half(),
                 y: px(0.),
             },
-            _ => Point::new(px(0.), px(0.)),
+            _ => Point::default(),
         };
 
         trigger_bounds.corner(anchor.swap_vertical().into())
@@ -306,7 +306,7 @@ impl Popover {
                 .when_some(trigger_bounds, |this, trigger_bounds| {
                     this.position(Self::resolved_corner(anchor, trigger_bounds))
                 })
-                .child(div().relative().child(content)),
+                .child(div().relative().debug_green().child(content)),
         )
     }
 
@@ -318,7 +318,6 @@ impl Popover {
     ) -> Stateful<Div> {
         v_flex()
             .id("content")
-            .size_full()
             .occlude()
             .tab_group()
             .when(appearance, |this| this.popover_style(cx).p_3())

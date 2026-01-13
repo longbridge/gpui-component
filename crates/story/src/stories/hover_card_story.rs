@@ -3,26 +3,18 @@ use gpui::{
     Window, div, px, relative,
 };
 use gpui_component::{
-    ActiveTheme, Anchor, StyledExt,
-    avatar::Avatar,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    hover_card::HoverCard,
+    ActiveTheme, Anchor, StyledExt, avatar::Avatar, button::Button, h_flex, hover_card::HoverCard,
     v_flex,
 };
 use std::time::Duration;
 
 use crate::{Story, section};
 
-pub struct HoverCardStory {
-    controlled_open: bool,
-}
+pub struct HoverCardStory {}
 
 impl HoverCardStory {
     fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
-        Self {
-            controlled_open: false,
-        }
+        Self {}
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -38,7 +30,6 @@ impl Render for HoverCardStory {
             .child(self.render_user_profile_example(cx))
             .child(self.render_custom_timing_example(cx))
             .child(self.render_positioning_examples(cx))
-            .child(self.render_controlled_example(cx))
     }
 }
 
@@ -56,7 +47,8 @@ impl HoverCardStory {
                 )
                 .child(
                     v_flex()
-                        .gap_2()
+                        .gap_1()
+                        .w(px(450.))
                         .child(
                             div()
                                 .child("This is a hover card")
@@ -73,12 +65,10 @@ impl HoverCardStory {
         )
     }
 
-    /// User profile preview example (similar to GitHub)
     fn render_user_profile_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
         section("User Profile Preview").child(
             h_flex()
                 .child("Hover over ")
-                .text_sm()
                 .child(
                     HoverCard::new("user-profile")
                         .trigger(
@@ -87,10 +77,10 @@ impl HoverCardStory {
                                 .cursor_pointer()
                                 .text_color(cx.theme().link),
                         )
-                        .child(
+                        .content(|_, _, cx| {
                             h_flex()
                                 .w(px(320.))
-                                .gap_4()
+                                .gap_3()
                                 .items_start()
                                 .child(
                                     Avatar::new()
@@ -104,12 +94,12 @@ impl HoverCardStory {
                                         .child(
                                             div()
                                                 .child("@huacnlee")
-                                                .text_color(cx.theme().muted_foreground)
+                                                .text_color(cx.theme().link)
                                                 .text_sm(),
                                         )
-                                        .child("The author of GPUI Component."),
-                                ),
-                        ),
+                                        .child(div().mt_1().child("The author of GPUI Component.")),
+                                )
+                        }),
                 )
                 .child(" to see their profile"),
         )
@@ -190,36 +180,6 @@ impl HoverCardStory {
                         ),
                 ),
         )
-    }
-
-    /// Controlled mode example
-    fn render_controlled_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        section("Controlled Mode")
-            .v_flex()
-            .child(
-                Button::new("toggle-open")
-                    .label("Toggle Open State")
-                    .primary()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.controlled_open = !this.controlled_open;
-                        cx.notify();
-                    })),
-            )
-            .child(
-                HoverCard::new("controlled")
-                    .anchor(Anchor::BottomCenter)
-                    .open(self.controlled_open)
-                    .on_open_change(cx.listener(|this, open, _, cx| {
-                        this.controlled_open = *open;
-                        cx.notify();
-                    }))
-                    .trigger(Button::new("trigger").label("Controlled Trigger").outline())
-                    .content(|_, _, _| {
-                        div()
-                            .child("This hover card's state is controlled externally")
-                            .text_sm()
-                    }),
-            )
     }
 }
 

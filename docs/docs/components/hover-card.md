@@ -141,50 +141,6 @@ HoverCard supports 6 positioning options using the [Anchor] type:
 - BottomCenter
 - BottomRight
 
-### Controlled Open State
-
-You can control the `open` state externally, when you want to manage the visibility yourself, you also need to handle the `on_open_change` event to keep your state in sync:
-
-```rust
-use gpui::Styled as _;
-use gpui_component::{
-    Anchor,
-    button::{Button, ButtonVariants as _},
-};
-
-struct MyView {
-    controlled_open: bool,
-}
-
-// In the render method:
-section("Controlled Mode")
-    .v_flex()
-    .child(
-        Button::new("toggle-open")
-            .label("Toggle Open State")
-            .primary()
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.controlled_open = !this.controlled_open;
-                cx.notify();
-            }))
-    )
-    .child(
-        HoverCard::new("controlled")
-            .anchor(Anchor::BottomCenter)
-            .open(self.controlled_open)
-            .on_open_change(cx.listener(|this, open, _, cx| {
-                this.controlled_open = *open;
-                cx.notify();
-            }))
-            .trigger(Button::new("trigger").label("Controlled Trigger").outline())
-            .content(|_, _, _| {
-                div()
-                    .child("This hover card's state is controlled externally")
-                    .text_sm()
-            })
-    )
-```
-
 ### Custom Content Builder
 
 For performance optimization, you can provide a content builder function for more complex case, which only calls when the HoverCard is opened:
@@ -237,7 +193,6 @@ HoverCard::new("custom-styled")
 - `open_delay(duration: Duration)` - Set delay before showing (default: 700ms)
 - `close_delay(duration: Duration)` - Set delay before hiding (default: 300ms)
 - `anchor(anchor: impl Into<Anchor>)` - Set positioning (default: TopCenter)
-- `open(open: bool)` - Force open state (controlled mode)
 - `on_open_change<F>(callback: F)` - Callback when open state changes, receives `(&bool, &mut Window, &mut App)`
 - `appearance(appearance: bool)` - Enable/disable default styling (default: true)
 

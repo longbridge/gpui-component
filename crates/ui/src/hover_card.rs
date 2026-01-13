@@ -28,7 +28,6 @@ pub struct HoverCard {
     open_delay: Duration,
     close_delay: Duration,
     appearance: bool,
-    open: Option<bool>,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
@@ -45,7 +44,6 @@ impl HoverCard {
             open_delay: Duration::from_secs_f64(0.7),
             close_delay: Duration::from_secs_f64(0.3),
             appearance: true,
-            open: None,
             on_open_change: None,
         }
     }
@@ -97,15 +95,6 @@ impl HoverCard {
         self
     }
 
-    /// Force set the open state of the hover card.
-    ///
-    /// Use this for controlled mode. When set, the hover card will ignore internal hover state
-    /// and use this value instead.
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
     /// Set a callback to be called when the open state changes.
     pub fn on_open_change<F>(mut self, callback: F) -> Self
     where
@@ -149,7 +138,7 @@ pub struct HoverCardState {
 }
 
 impl HoverCardState {
-    pub fn new(open_delay: Duration, close_delay: Duration) -> Self {
+    fn new(open_delay: Duration, close_delay: Duration) -> Self {
         Self {
             open: false,
             trigger_bounds: None,
@@ -225,7 +214,7 @@ impl HoverCardState {
     }
 
     /// Handle hover state change on the trigger element.
-    pub fn on_trigger_hover(&mut self, hovering: bool, cx: &mut Context<Self>) {
+    fn on_trigger_hover(&mut self, hovering: bool, cx: &mut Context<Self>) {
         self.is_hovering_trigger = hovering;
 
         if hovering {
@@ -239,7 +228,7 @@ impl HoverCardState {
     }
 
     /// Handle hover state change on the content element.
-    pub fn on_content_hover(&mut self, hovered: bool, cx: &mut Context<Self>) {
+    fn on_content_hover(&mut self, hovered: bool, cx: &mut Context<Self>) {
         self.is_hovering_content = hovered;
 
         if hovered {
@@ -271,12 +260,6 @@ impl RenderOnce for HoverCard {
             state.open_delay = self.open_delay;
             state.close_delay = self.close_delay;
             state.on_open_change = self.on_open_change.clone();
-
-            // Controlled mode: directly set open state
-            if let Some(force_open) = self.open {
-                state.open = force_open;
-                state.cancel_tasks();
-            }
         });
 
         let open = state.read(cx).open;
@@ -292,9 +275,6 @@ impl RenderOnce for HoverCard {
         let Some(trigger) = self.trigger else {
             return div().id("empty");
         };
-
-        // Trigger element with hover detection
-        // Wrapped in a container to detect mouse leaving
 
         let root = div().id(self.id).child(
             div()
