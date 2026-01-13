@@ -35,7 +35,9 @@ Popover::new("basic-popover")
 
 ### Popover with Custom Positioning
 
-The `anchor` method allows you to specify where the popover appears relative to the trigger element using `Corner` type, which supports four corners: TopLeft, TopRight, BottomLeft, BottomRight.
+The `anchor` method allows you to specify where the popover appears relative to the trigger element. It accepts both `Corner` and `Anchor` types.
+
+**Using `Corner` type** (4 corner positions):
 
 ```rust
 use gpui::Corner;
@@ -46,40 +48,42 @@ Popover::new("positioned-popover")
     .child("This popover appears at the top right")
 ```
 
-For more precise positioning, you can use the `anchor_position` method with the `Anchor` type, which supports six positions including center positions:
+**Using `Anchor` type** (6 positions including center):
+
+The `Anchor` type provides more positioning options, including center positions:
 
 ```rust
 use gpui_component::Anchor;
 
 // Top positions
 Popover::new("top-left")
-    .anchor_position(Anchor::TopLeft)
+    .anchor(Anchor::TopLeft)
     .trigger(Button::new("btn").label("Top Left").outline())
     .child("Anchored to top left")
 
 Popover::new("top-center")
-    .anchor_position(Anchor::TopCenter)
+    .anchor(Anchor::TopCenter)
     .trigger(Button::new("btn").label("Top Center").outline())
     .child("Anchored to top center")
 
 Popover::new("top-right")
-    .anchor_position(Anchor::TopRight)
+    .anchor(Anchor::TopRight)
     .trigger(Button::new("btn").label("Top Right").outline())
     .child("Anchored to top right")
 
 // Bottom positions
 Popover::new("bottom-left")
-    .anchor_position(Anchor::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("btn").label("Bottom Left").outline())
     .child("Anchored to bottom left")
 
 Popover::new("bottom-center")
-    .anchor_position(Anchor::BottomCenter)
+    .anchor(Anchor::BottomCenter)
     .trigger(Button::new("btn").label("Bottom Center").outline())
     .child("Anchored to bottom center")
 
 Popover::new("bottom-right")
-    .anchor_position(Anchor::BottomRight)
+    .anchor(Anchor::BottomRight)
     .trigger(Button::new("btn").label("Bottom Right").outline())
     .child("Anchored to bottom right")
 ```
