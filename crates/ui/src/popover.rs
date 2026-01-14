@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
     FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
     ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
-    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px, relative,
+    Subscription, Window, anchored, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
@@ -200,7 +200,8 @@ impl Styled for Popover {
 pub struct PopoverState {
     focus_handle: FocusHandle,
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
-    trigger_bounds: Option<Bounds<Pixels>>,
+    trigger_bounds: Bounds<Pixels>,
+    content_bounds: Bounds<Pixels>,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
@@ -212,7 +213,8 @@ impl PopoverState {
         Self {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
-            trigger_bounds: None,
+            trigger_bounds: Bounds::default(),
+            content_bounds: Bounds::default(),
             open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
@@ -291,7 +293,8 @@ impl EventEmitter<DismissEvent> for PopoverState {}
 impl Popover {
     pub(crate) fn render_popover<E>(
         anchor: Anchor,
-        trigger_bounds: Option<Bounds<Pixels>>,
+        trigger_bounds: Bounds<Pixels>,
+        content_bounds: Bounds<Pixels>,
         content: E,
         _: &mut Window,
         _: &mut App,
@@ -299,14 +302,18 @@ impl Popover {
     where
         E: IntoElement + 'static,
     {
+        let center_offset = if anchor.is_center() {
+            point(-content_bounds.size.width.half(), px(0.))
+        } else {
+            Point::default()
+        };
+
         deferred(
             anchored()
                 .snap_to_window_with_margin(px(8.))
                 .anchor(anchor.into())
-                .when_some(trigger_bounds, |this, trigger_bounds| {
-                    this.position(Self::resolved_corner(anchor, trigger_bounds))
-                })
-                .child(div().relative().debug_green().child(content)),
+                .position(Self::resolved_corner(anchor, trigger_bounds) + center_offset)
+                .child(div().relative().child(content)),
         )
     }
 
@@ -325,7 +332,6 @@ impl Popover {
                 Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
                 Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
             })
-            .when(anchor.is_center(), |this| this.left(-relative(0.5)))
     }
 }
 
@@ -351,6 +357,7 @@ impl RenderOnce for Popover {
         let open = state.read(cx).open;
         let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
+        let content_bounds = state.read(cx).content_bounds;
 
         let Some(trigger) = self.trigger else {
             return div().id("empty");
@@ -378,7 +385,7 @@ impl RenderOnce for Popover {
                 let state = state.clone();
                 move |bounds, _, cx| {
                     state.update(cx, |state, _| {
-                        state.trigger_bounds = Some(bounds);
+                        state.trigger_bounds = bounds;
                     })
                 }
             });
@@ -396,6 +403,15 @@ impl RenderOnce for Popover {
                     this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
                 })
                 .children(self.children)
+                .when(content_bounds.is_empty(), |this| this.invisible())
+                .on_prepaint({
+                    let state = state.clone();
+                    move |bounds, _, cx| {
+                        state.update(cx, |state, _| {
+                            state.content_bounds = bounds;
+                        })
+                    }
+                })
                 .when(self.overlay_closable, |this| {
                     this.on_mouse_up_out(MouseButton::Left, {
                         let state = state.clone();
@@ -412,6 +428,7 @@ impl RenderOnce for Popover {
         el.child(Self::render_popover(
             self.anchor,
             trigger_bounds,
+            content_bounds,
             popover_content,
             window,
             cx,

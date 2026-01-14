@@ -190,7 +190,7 @@ HoverCard::new("custom-styled")
 - `new(id: impl Into<ElementId>)` - Create a new HoverCard with a unique ID
 - `trigger<T: IntoElement>(trigger: T)` - Set the element that triggers the hover
 - `content<F>(content: F)` - Set a content builder function that receives `(&mut HoverCardState, &mut Window, &mut Context<HoverCardState>)`
-- `open_delay(duration: Duration)` - Set delay before showing (default: 700ms)
+- `open_delay(duration: Duration)` - Set delay before showing (default: 600ms)
 - `close_delay(duration: Duration)` - Set delay before hiding (default: 300ms)
 - `anchor(anchor: impl Into<Anchor>)` - Set positioning (default: TopCenter)
 - `on_open_change<F>(callback: F)` - Callback when open state changes, receives `(&bool, &mut Window, &mut App)`
@@ -206,7 +206,7 @@ HoverCard::new("custom-styled")
 
 The HoverCard uses a sophisticated timing system to provide a smooth user experience:
 
-1. **Open Delay (700ms default)**: Prevents the card from flickering when the mouse quickly passes over the trigger
+1. **Open Delay (600ms default)**: Prevents the card from flickering when the mouse quickly passes over the trigger
 2. **Close Delay (300ms default)**: Gives users time to move their mouse from the trigger to the content area without the card closing
 3. **Interactive Content**: Users can move their mouse into the content area, and the card will remain open as long as the mouse is either on the trigger or in the content
 
@@ -220,7 +220,7 @@ The HoverCard uses a sophisticated timing system to provide a smooth user experi
 ## Best Practices
 
 1. **Use appropriate delays**:
-   - Standard content: 700ms open, 300ms close
+   - Standard content: 600ms open, 300ms close
    - Quick previews: 500ms open, 200ms close
    - Tooltips: 300ms open, 100ms close
 
