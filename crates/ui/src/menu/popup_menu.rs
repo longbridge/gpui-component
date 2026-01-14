@@ -10,7 +10,9 @@ use gpui::{
     ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
     WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
-use gpui::{ClickEvent, Half, MouseButton, MouseUpEvent, OwnedMenuItem, Subscription};
+use gpui::{
+    ClickEvent, Half, MouseButton, MouseDownEvent, MouseUpEvent, OwnedMenuItem, Point, Subscription,
+};
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
@@ -944,6 +946,37 @@ impl PopupMenu {
         });
     }
 
+    fn handle_dismiss(
+        &mut self,
+        position: &Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Do not dismiss, if click inside the parent menu
+        if let Some(parent) = self.parent_menu.as_ref() {
+            if let Some(parent) = parent.upgrade() {
+                if parent.read(cx).bounds.contains(position) {
+                    return;
+                }
+            }
+        }
+
+        self.dismiss(&Cancel, window, cx);
+    }
+
+    fn on_mouse_up_out(&mut self, e: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.handle_dismiss(&e.position, window, cx);
+    }
+
+    fn on_mouse_down_out(
+        &mut self,
+        e: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.handle_dismiss(&e.position, window, cx);
+    }
+
     fn render_key_binding(
         &self,
         action: Option<Box<dyn Action>>,
@@ -1266,21 +1299,8 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_right))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_up_out(
-                MouseButton::Left,
-                cx.listener(|this, ev: &MouseUpEvent, window, cx| {
-                    // Do not dismiss, if click inside the parent menu
-                    if let Some(parent) = this.parent_menu.as_ref() {
-                        if let Some(parent) = parent.upgrade() {
-                            if parent.read(cx).bounds.contains(&ev.position) {
-                                return;
-                            }
-                        }
-                    }
-
-                    this.dismiss(&Cancel, window, cx);
-                }),
-            )
+            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up_out))
+            .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
