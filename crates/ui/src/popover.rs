@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
     FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
     ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
-    Subscription, Window, anchored, deferred, div, point, prelude::FluentBuilder as _, px,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
