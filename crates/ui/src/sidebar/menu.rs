@@ -1,16 +1,19 @@
 use crate::{
+    ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
+    h_flex,
+    sidebar::SidebarItem,
+    v_flex,
 };
 use gpui::{
-    div, percentage, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId,
-    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, percentage, prelude::FluentBuilder,
 };
 use std::rc::Rc;
 
 /// Menu for the [`super::Sidebar`]
-#[derive(IntoElement)]
+#[derive(Clone)]
 pub struct SidebarMenu {
     style: StyleRefinement,
     collapsed: bool,
@@ -56,27 +59,36 @@ impl Collapsible for SidebarMenu {
     }
 }
 
+impl SidebarItem for SidebarMenu {
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let id = id.into();
+
+        v_flex()
+            .gap_2()
+            .refine_style(&self.style)
+            .children(self.items.into_iter().enumerate().map(|(ix, item)| {
+                let id = SharedString::from(format!("{}-{}", id, ix));
+                item.collapsed(self.collapsed)
+                    .render(id, window, cx)
+                    .into_any_element()
+            }))
+    }
+}
+
 impl Styled for SidebarMenu {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for SidebarMenu {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        v_flex().gap_2().refine_style(&self.style).children(
-            self.items
-                .into_iter()
-                .enumerate()
-                .map(|(ix, item)| item.id(ix).collapsed(self.collapsed)),
-        )
-    }
-}
-
 /// Menu item for the [`SidebarMenu`]
-#[derive(IntoElement)]
+#[derive(Clone)]
 pub struct SidebarMenuItem {
-    id: ElementId,
     icon: Option<Icon>,
     label: SharedString,
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
@@ -85,7 +97,7 @@ pub struct SidebarMenuItem {
     click_to_open: bool,
     collapsed: bool,
     children: Vec<Self>,
-    suffix: Option<AnyElement>,
+    suffix: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     disabled: bool,
 }
 
@@ -93,7 +105,6 @@ impl SidebarMenuItem {
     /// Create a new [`SidebarMenuItem`] with a label.
     pub fn new(label: impl Into<SharedString>) -> Self {
         Self {
-            id: ElementId::Integer(0),
             icon: None,
             label: label.into(),
             handler: Rc::new(|_, _, _| {}),
@@ -158,8 +169,14 @@ impl SidebarMenuItem {
     }
 
     /// Set the suffix for the menu item.
-    pub fn suffix(mut self, suffix: impl IntoElement) -> Self {
-        self.suffix = Some(suffix.into_any_element());
+    pub fn suffix<F, E>(mut self, builder: F) -> Self
+    where
+        F: Fn(&mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        self.suffix = Some(Rc::new(move |window, cx| {
+            builder(window, cx).into_any_element()
+        }));
         self
     }
 
@@ -169,22 +186,35 @@ impl SidebarMenuItem {
         self
     }
 
-    /// Set id to the menu item.
-    fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = id.into();
-        self
-    }
-
     fn is_submenu(&self) -> bool {
         self.children.len() > 0
     }
 }
 
-impl RenderOnce for SidebarMenuItem {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+impl FluentBuilder for SidebarMenuItem {}
+
+impl Collapsible for SidebarMenuItem {
+    fn is_collapsed(&self) -> bool {
+        self.collapsed
+    }
+
+    fn collapsed(mut self, collapsed: bool) -> Self {
+        self.collapsed = collapsed;
+        self
+    }
+}
+
+impl SidebarItem for SidebarMenuItem {
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
         let click_to_open = self.click_to_open;
         let default_open = self.default_open;
-        let open_state = window.use_keyed_state(self.id.clone(), cx, |_, _| default_open);
+        let id = id.into();
+        let open_state = window.use_keyed_state(id.clone(), cx, |_, _| default_open);
 
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
@@ -195,7 +225,7 @@ impl RenderOnce for SidebarMenuItem {
         let is_open = is_submenu && !is_collapsed && *open_state.read(cx);
 
         div()
-            .id(self.id.clone())
+            .id(id.clone())
             .w_full()
             .child(
                 h_flex()
@@ -239,7 +269,9 @@ impl RenderOnce for SidebarMenuItem {
                                             .overflow_x_hidden()
                                             .child(self.label.clone()),
                                     )
-                                    .when_some(self.suffix, |this, suffix| this.child(suffix)),
+                                    .when_some(self.suffix.clone(), |this, suffix| {
+                                        this.child(suffix(window, cx).into_any_element())
+                                    }),
                             )
                             .when(is_submenu, |this| {
                                 this.child(
@@ -296,12 +328,10 @@ impl RenderOnce for SidebarMenuItem {
                         .ml_3p5()
                         .pl_2p5()
                         .py_0p5()
-                        .children(
-                            self.children
-                                .into_iter()
-                                .enumerate()
-                                .map(|(ix, item)| item.id(ix)),
-                        ),
+                        .children(self.children.into_iter().enumerate().map(|(ix, item)| {
+                            let id = format!("{}-{}", id, ix);
+                            item.render(id, window, cx).into_any_element()
+                        })),
                 )
             })
     }
