@@ -1304,6 +1304,7 @@ impl Render for PopupMenu {
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
+            .occlude()
             .child(
                 v_flex()
                     .id("items")
