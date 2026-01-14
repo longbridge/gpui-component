@@ -48,13 +48,13 @@ pub struct DockArea {
     pub(crate) bounds: Bounds<Pixels>,
 
     /// The center view of the dock_area.
-    pub center: DockItem,
+    center: DockItem,
     /// The left dock of the dock_area.
-    pub left_dock: Option<Entity<Dock>>,
+    left_dock: Option<Entity<Dock>>,
     /// The bottom dock of the dock_area.
-    pub bottom_dock: Option<Entity<Dock>>,
+    bottom_dock: Option<Entity<Dock>>,
     /// The right dock of the dock_area.
-    pub right_dock: Option<Entity<Dock>>,
+    right_dock: Option<Entity<Dock>>,
 
     /// The entity_id of the [`TabPanel`](TabPanel) where each toggle button should be displayed,
     toggle_button_panels: Edges<Option<EntityId>>,
@@ -585,10 +585,39 @@ impl DockArea {
         cx.notify();
     }
 
-    // FIXME: Remove this method after 2025-01-01
-    #[deprecated(note = "Use `set_center` instead")]
-    pub fn set_root(&mut self, item: DockItem, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_center(item, window, cx);
+    /// Return the center dock item.
+    pub fn center(&self) -> &DockItem {
+        &self.center
+    }
+
+    /// Return the left dock item.
+    pub fn left_dock(&self) -> Option<&Entity<Dock>> {
+        self.left_dock.as_ref()
+    }
+
+    /// Return the bottom dock item.
+    pub fn bottom_dock(&self) -> Option<&Entity<Dock>> {
+        self.bottom_dock.as_ref()
+    }
+
+    /// Return the right dock item.
+    pub fn right_dock(&self) -> Option<&Entity<Dock>> {
+        self.right_dock.as_ref()
+    }
+
+    /// Remove the left dock.
+    pub fn remove_left_dock(&mut self, _: &mut Window, _: &mut Context<Self>) {
+        self.left_dock = None;
+    }
+
+    /// Remove the bottom dock.
+    pub fn remove_bottom_dock(&mut self, _: &mut Window, _: &mut Context<Self>) {
+        self.bottom_dock = None;
+    }
+
+    /// Remove the right dock.
+    pub fn remove_right_dock(&mut self, _: &mut Window, _: &mut Context<Self>) {
+        self.right_dock = None;
     }
 
     /// The the DockItem as the center of the dock area.
