@@ -79,9 +79,10 @@ impl InputState {
                 menu.action_context = Some(action_context);
                 cx.notify();
             });
-            this.open = true;
-
-            cx.notify();
+            cx.defer_in(window, |this, _, cx| {
+                this.open = true;
+                cx.notify();
+            });
         });
     }
 }
