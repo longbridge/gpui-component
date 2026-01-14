@@ -174,7 +174,7 @@ impl Popover {
     ) -> Point<Pixels> {
         let offset = match anchor {
             Anchor::TopCenter | Anchor::BottomCenter => Point {
-                x: trigger_bounds.size.width.half() + content_bounds.size.width.half(),
+                x: -(content_bounds.size.width.half() - trigger_bounds.size.width.half()),
                 y: px(0.),
             },
             _ => Point::default(),
@@ -485,34 +485,28 @@ mod tests {
             },
         };
 
-        // TopLeft should position at bottom-left of trigger
         let pos = Popover::resolved_corner(Anchor::TopLeft, bounds, content_bounds);
-        assert_eq!(pos.x, px(100.)); // Left edge
-        assert_eq!(pos.y, px(100.)); // Top of trigger - height = bottom edge shifted up
+        assert_eq!(pos.x, px(100.));
+        assert_eq!(pos.y, px(100.));
 
-        // TopCenter should position at bottom-center of trigger
         let pos = Popover::resolved_corner(Anchor::TopCenter, bounds, content_bounds);
-        assert_eq!(pos.x, px(200.) + px(110.)); // Center (100 + 200/2)
+        assert_eq!(pos.x, px(90.));
         assert_eq!(pos.y, px(100.));
 
-        // TopRight should position at bottom-right of trigger
         let pos = Popover::resolved_corner(Anchor::TopRight, bounds, content_bounds);
-        assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
+        assert_eq!(pos.x, px(300.));
         assert_eq!(pos.y, px(100.));
 
-        // BottomLeft should position at top-left of trigger
         let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds, content_bounds);
-        assert_eq!(pos.x, px(100.)); // Left edge
-        assert_eq!(pos.y, px(50.)); // Top of trigger (100 - 50)
-
-        // BottomCenter should position at top-center of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds, content_bounds);
-        assert_eq!(pos.x, px(200.) + px(110.)); // Center (100 + 200/2)
+        assert_eq!(pos.x, px(100.));
         assert_eq!(pos.y, px(50.));
 
-        // BottomRight should position at top-right of trigger
+        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds, content_bounds);
+        assert_eq!(pos.x, px(90.));
+        assert_eq!(pos.y, px(50.));
+
         let pos = Popover::resolved_corner(Anchor::BottomRight, bounds, content_bounds);
-        assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
+        assert_eq!(pos.x, px(300.));
         assert_eq!(pos.y, px(50.));
     }
 }
