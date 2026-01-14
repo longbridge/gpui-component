@@ -357,6 +357,16 @@ impl Render for SidebarStory {
                                     .active(is_active)
                                     .default_open(ix == 0)
                                     .click_to_open(self.click_to_open_submenu)
+                                    .when(ix == 0, |this| {
+                                        this.context_menu({
+                                            move |this, _, _| {
+                                                this.link(
+                                                    "About",
+                                                    "https://github.com/longbridge/gpui-component",
+                                                )
+                                            }
+                                        })
+                                    })
                                     .children(item.items().into_iter().enumerate().map(
                                         |(ix, sub_item)| {
                                             SidebarMenuItem::new(sub_item.label())
@@ -374,6 +384,11 @@ impl Render for SidebarStory {
                                                                     &view,
                                                                     Self::switch_checked_handler,
                                                                 ))
+                                                        }
+                                                    })
+                                                    .context_menu({
+                                                        move |this, _, _| {
+                                                            this.label("This is a label")
                                                         }
                                                     })
                                                 })

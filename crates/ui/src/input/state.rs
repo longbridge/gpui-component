@@ -1244,12 +1244,6 @@ impl InputState {
             return;
         }
 
-        // Show Mouse context menu
-        if event.button == MouseButton::Right {
-            self.handle_right_click_menu(event, offset, window, cx);
-            return;
-        }
-
         if event.modifiers.shift {
             self.select_to(offset, cx);
         } else {
@@ -1259,15 +1253,22 @@ impl InputState {
 
     pub(super) fn on_mouse_up(
         &mut self,
-        _: &MouseUpEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
+        event: &MouseUpEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         if self.selected_range.is_empty() {
             self.selection_reversed = false;
         }
         self.selecting = false;
         self.selected_word_range = None;
+
+        // Show Mouse context menu
+        if event.button == MouseButton::Right {
+            let offset = self.index_for_mouse_position(event.position);
+            self.handle_right_click_menu(event, offset, window, cx);
+            return;
+        }
     }
 
     pub(super) fn on_mouse_move(

@@ -2,6 +2,7 @@ use crate::{
     ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex,
+    menu::{ContextMenuExt, PopupMenu},
     sidebar::SidebarItem,
     v_flex,
 };
@@ -99,6 +100,7 @@ pub struct SidebarMenuItem {
     children: Vec<Self>,
     suffix: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     disabled: bool,
+    context_menu: Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut App) -> PopupMenu + 'static>>,
 }
 
 impl SidebarMenuItem {
@@ -115,6 +117,7 @@ impl SidebarMenuItem {
             children: Vec::new(),
             suffix: None,
             disabled: false,
+            context_menu: None,
         }
     }
 
@@ -189,6 +192,15 @@ impl SidebarMenuItem {
     fn is_submenu(&self) -> bool {
         self.children.len() > 0
     }
+
+    /// Set the context menu for the menu item.
+    pub fn context_menu(
+        mut self,
+        f: impl Fn(PopupMenu, &mut Window, &mut App) -> PopupMenu + 'static,
+    ) -> Self {
+        self.context_menu = Some(Rc::new(f));
+        self
+    }
 }
 
 impl FluentBuilder for SidebarMenuItem {}
@@ -215,7 +227,6 @@ impl SidebarItem for SidebarMenuItem {
         let default_open = self.default_open;
         let id = id.into();
         let open_state = window.use_keyed_state(id.clone(), cx, |_, _| default_open);
-
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
         let is_active = self.active;
@@ -316,6 +327,16 @@ impl SidebarItem for SidebarMenuItem {
                                 handler(ev, window, cx)
                             }
                         })
+                    })
+                    .map(|this| {
+                        if let Some(context_menu) = self.context_menu {
+                            this.context_menu(move |menu, window, cx| {
+                                context_menu(menu, window, cx)
+                            })
+                            .into_any_element()
+                        } else {
+                            this.into_any_element()
+                        }
                     }),
             )
             .when(is_open, |this| {

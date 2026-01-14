@@ -5,7 +5,7 @@ description: Write a description to description GitHub Pull Request.
 
 ## Description
 
-We less than 150 words description for a PR changes, including new features, bug fixes, and improvements. And if there have APIs break changes (Only `crates/ui` changes) we should have a section called `## Break Changes` to list them clearly.
+We less than 150 words description for a PR changes, including new features, bug fixes, and improvements. And if there have APIs break changes (Only `crates/ui` changes) we should have a section called `## Breaking Changes` to list them clearly.
 
 ## Breaking changes description
 

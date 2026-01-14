@@ -1,5 +1,5 @@
 use gpui::{
-    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseDownEvent,
+    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseUpEvent,
     ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
     div, prelude::FluentBuilder as _, px,
 };
@@ -24,7 +24,7 @@ pub(crate) struct MouseContextMenu {
 impl InputState {
     pub(crate) fn handle_right_click_menu(
         &mut self,
-        event: &MouseDownEvent,
+        event: &MouseUpEvent,
         offset: usize,
         window: &mut Window,
         cx: &mut Context<Self>,

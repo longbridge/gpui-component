@@ -944,6 +944,19 @@ impl PopupMenu {
         });
     }
 
+    fn on_mouse_up_out(&mut self, e: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
+        // Do not dismiss, if click inside the parent menu
+        if let Some(parent) = self.parent_menu.as_ref() {
+            if let Some(parent) = parent.upgrade() {
+                if parent.read(cx).bounds.contains(&e.position) {
+                    return;
+                }
+            }
+        }
+
+        self.dismiss(&Cancel, window, cx);
+    }
+
     fn render_key_binding(
         &self,
         action: Option<Box<dyn Action>>,
@@ -1266,21 +1279,8 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_right))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_up_out(
-                MouseButton::Left,
-                cx.listener(|this, ev: &MouseUpEvent, window, cx| {
-                    // Do not dismiss, if click inside the parent menu
-                    if let Some(parent) = this.parent_menu.as_ref() {
-                        if let Some(parent) = parent.upgrade() {
-                            if parent.read(cx).bounds.contains(&ev.position) {
-                                return;
-                            }
-                        }
-                    }
-
-                    this.dismiss(&Cancel, window, cx);
-                }),
-            )
+            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up_out))
+            .on_mouse_up_out(MouseButton::Right, cx.listener(Self::on_mouse_up_out))
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
             .relative()
