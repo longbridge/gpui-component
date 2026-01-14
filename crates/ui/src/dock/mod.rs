@@ -693,6 +693,35 @@ impl DockArea {
         }
     }
 
+    /// Remove the dock at the given placement.
+    pub fn remove_dock(&mut self, placement: DockPlacement, _: &mut Window, _: &mut Context<Self>) {
+        match placement {
+            DockPlacement::Left => self.left_dock = None,
+            DockPlacement::Bottom => self.bottom_dock = None,
+            DockPlacement::Right => self.right_dock = None,
+            _ => {}
+        }
+    }
+
+    /// Get the dock item at the given placement.
+    pub fn dock_item(&self, placement: DockPlacement, cx: &App) -> Option<DockItem> {
+        match placement {
+            DockPlacement::Left => self
+                .left_dock
+                .as_ref()
+                .map(|dock| dock.read(cx).panel.clone()),
+            DockPlacement::Bottom => self
+                .bottom_dock
+                .as_ref()
+                .map(|dock| dock.read(cx).panel.clone()),
+            DockPlacement::Right => self
+                .right_dock
+                .as_ref()
+                .map(|dock| dock.read(cx).panel.clone()),
+            DockPlacement::Center => Some(self.items.clone()),
+        }
+    }
+
     /// Determine if the dock at the given placement is open.
     pub fn is_dock_open(&self, placement: DockPlacement, cx: &App) -> bool {
         match placement {
