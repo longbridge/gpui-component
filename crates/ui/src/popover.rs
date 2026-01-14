@@ -1,8 +1,8 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, DismissEvent, ElementId, EventEmitter, FocusHandle,
-    Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
-    deferred, div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
+    FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
@@ -167,13 +167,17 @@ impl Popover {
         self
     }
 
-    fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
+    fn resolved_corner(
+        anchor: Anchor,
+        trigger_bounds: Bounds<Pixels>,
+        content_bounds: Bounds<Pixels>,
+    ) -> Point<Pixels> {
         let offset = match anchor {
             Anchor::TopCenter | Anchor::BottomCenter => Point {
-                x: trigger_bounds.size.width.half(),
+                x: -(content_bounds.size.width.half() - trigger_bounds.size.width.half()),
                 y: px(0.),
             },
-            _ => Point::new(px(0.), px(0.)),
+            _ => Point::default(),
         };
 
         trigger_bounds.corner(anchor.swap_vertical().into())
@@ -200,7 +204,8 @@ impl Styled for Popover {
 pub struct PopoverState {
     focus_handle: FocusHandle,
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
-    trigger_bounds: Option<Bounds<Pixels>>,
+    trigger_bounds: Bounds<Pixels>,
+    content_bounds: Bounds<Pixels>,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
@@ -212,7 +217,8 @@ impl PopoverState {
         Self {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
-            trigger_bounds: None,
+            trigger_bounds: Bounds::default(),
+            content_bounds: Bounds::default(),
             open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
@@ -288,6 +294,49 @@ impl Render for PopoverState {
 
 impl EventEmitter<DismissEvent> for PopoverState {}
 
+impl Popover {
+    pub(crate) fn render_popover<E>(
+        anchor: Anchor,
+        trigger_bounds: Bounds<Pixels>,
+        content_bounds: Bounds<Pixels>,
+        content: E,
+        _: &mut Window,
+        _: &mut App,
+    ) -> Deferred
+    where
+        E: IntoElement + 'static,
+    {
+        deferred(
+            anchored()
+                .snap_to_window_with_margin(px(8.))
+                .anchor(anchor.into())
+                .position(Self::resolved_corner(
+                    anchor,
+                    trigger_bounds,
+                    content_bounds,
+                ))
+                .child(div().relative().child(content)),
+        )
+    }
+
+    pub(crate) fn render_popover_content(
+        anchor: Anchor,
+        appearance: bool,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> Stateful<Div> {
+        v_flex()
+            .id("content")
+            .occlude()
+            .tab_group()
+            .when(appearance, |this| this.popover_style(cx).p_3())
+            .map(|this| match anchor {
+                Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
+                Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
+            })
+    }
+}
+
 impl RenderOnce for Popover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let force_open = self.open;
@@ -310,6 +359,7 @@ impl RenderOnce for Popover {
         let open = state.read(cx).open;
         let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
+        let content_bounds = state.read(cx).content_bounds;
 
         let Some(trigger) = self.trigger else {
             return div().id("empty");
@@ -337,7 +387,7 @@ impl RenderOnce for Popover {
                 let state = state.clone();
                 move |bounds, _, cx| {
                     state.update(cx, |state, _| {
-                        state.trigger_bounds = Some(bounds);
+                        state.trigger_bounds = bounds;
                     })
                 }
             });
@@ -346,59 +396,45 @@ impl RenderOnce for Popover {
             return el;
         }
 
-        el.child(
-            deferred(
-                anchored()
-                    .snap_to_window_with_margin(px(8.))
-                    .anchor(self.anchor.into())
-                    .when_some(trigger_bounds, |this, trigger_bounds| {
-                        this.position(Self::resolved_corner(self.anchor, trigger_bounds))
+        let popover_content =
+            Self::render_popover_content(self.anchor, self.appearance, window, cx)
+                .track_focus(&focus_handle)
+                .key_context(CONTEXT)
+                .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
+                .when_some(self.content, |this, content| {
+                    this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
+                })
+                .children(self.children)
+                .when(content_bounds.is_empty(), |this| this.invisible())
+                .on_prepaint({
+                    let state = state.clone();
+                    move |bounds, _, cx| {
+                        state.update(cx, |state, _| {
+                            state.content_bounds = bounds;
+                        })
+                    }
+                })
+                .when(self.overlay_closable, |this| {
+                    this.on_mouse_up_out(MouseButton::Left, {
+                        let state = state.clone();
+                        move |_, window, cx| {
+                            state.update(cx, |state, cx| {
+                                state.dismiss(window, cx);
+                            });
+                            cx.notify(parent_view_id);
+                        }
                     })
-                    .child(
-                        div().relative().child(
-                            v_flex()
-                                .id("content")
-                                .track_focus(&focus_handle)
-                                .key_context(CONTEXT)
-                                .on_action(
-                                    window.listener_for(&state, PopoverState::on_action_cancel),
-                                )
-                                .size_full()
-                                .occlude()
-                                .tab_group()
-                                .when(self.appearance, |this| this.popover_style(cx).p_3())
-                                .map(|this| match self.anchor {
-                                    Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => {
-                                        this.top_1()
-                                    }
-                                    Anchor::BottomLeft
-                                    | Anchor::BottomCenter
-                                    | Anchor::BottomRight => this.bottom_1(),
-                                })
-                                .when(self.anchor.is_center(), |this| this.left(-relative(0.5)))
-                                .when_some(self.content, |this, content| {
-                                    this.child(
-                                        state.update(cx, |state, cx| (content)(state, window, cx)),
-                                    )
-                                })
-                                .children(self.children)
-                                .when(self.overlay_closable, |this| {
-                                    this.on_mouse_up_out(MouseButton::Left, {
-                                        let state = state.clone();
-                                        move |_, window, cx| {
-                                            state.update(cx, |state, cx| {
-                                                state.dismiss(window, cx);
-                                            });
-                                            cx.notify(parent_view_id);
-                                        }
-                                    })
-                                })
-                                .refine_style(&self.style),
-                        ),
-                    ),
-            )
-            .with_priority(1),
-        )
+                })
+                .refine_style(&self.style);
+
+        el.child(Self::render_popover(
+            self.anchor,
+            trigger_bounds,
+            content_bounds,
+            popover_content,
+            window,
+            cx,
+        ))
     }
 }
 
@@ -438,50 +474,39 @@ mod tests {
             },
         };
 
-        // TopLeft should position at bottom-left of trigger
-        let pos = Popover::resolved_corner(Anchor::TopLeft, bounds);
-        assert_eq!(pos.x, px(100.)); // Left edge
-        assert_eq!(pos.y, px(100.)); // Top of trigger - height = bottom edge shifted up
-
-        // TopCenter should position at bottom-center of trigger
-        let pos = Popover::resolved_corner(Anchor::TopCenter, bounds);
-        assert_eq!(pos.x, px(200.)); // Center (100 + 200/2)
-        assert_eq!(pos.y, px(100.));
-
-        // TopRight should position at bottom-right of trigger
-        let pos = Popover::resolved_corner(Anchor::TopRight, bounds);
-        assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
-        assert_eq!(pos.y, px(100.));
-    }
-
-    #[test]
-    fn test_resolved_corner_bottom_positions() {
-        use gpui::px;
-
-        let bounds = Bounds {
+        let content_bounds = Bounds {
             origin: Point {
-                x: px(100.),
-                y: px(100.),
+                x: px(0.),
+                y: px(0.),
             },
             size: gpui::Size {
-                width: px(200.),
-                height: px(50.),
+                width: px(220.),
+                height: px(100.),
             },
         };
 
-        // BottomLeft should position at top-left of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds);
-        assert_eq!(pos.x, px(100.)); // Left edge
-        assert_eq!(pos.y, px(50.)); // Top of trigger (100 - 50)
+        let pos = Popover::resolved_corner(Anchor::TopLeft, bounds, content_bounds);
+        assert_eq!(pos.x, px(100.));
+        assert_eq!(pos.y, px(100.));
 
-        // BottomCenter should position at top-center of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds);
-        assert_eq!(pos.x, px(200.)); // Center (100 + 200/2)
+        let pos = Popover::resolved_corner(Anchor::TopCenter, bounds, content_bounds);
+        assert_eq!(pos.x, px(90.));
+        assert_eq!(pos.y, px(100.));
+
+        let pos = Popover::resolved_corner(Anchor::TopRight, bounds, content_bounds);
+        assert_eq!(pos.x, px(300.));
+        assert_eq!(pos.y, px(100.));
+
+        let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds, content_bounds);
+        assert_eq!(pos.x, px(100.));
         assert_eq!(pos.y, px(50.));
 
-        // BottomRight should position at top-right of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomRight, bounds);
-        assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
+        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds, content_bounds);
+        assert_eq!(pos.x, px(90.));
+        assert_eq!(pos.y, px(50.));
+
+        let pos = Popover::resolved_corner(Anchor::BottomRight, bounds, content_bounds);
+        assert_eq!(pos.x, px(300.));
         assert_eq!(pos.y, px(50.));
     }
 }
