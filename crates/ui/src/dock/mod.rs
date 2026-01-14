@@ -47,20 +47,20 @@ pub struct DockArea {
     version: Option<usize>,
     pub(crate) bounds: Bounds<Pixels>,
 
-    /// The center view of the dockarea.
-    items: DockItem,
-
-    /// The entity_id of the [`TabPanel`](TabPanel) where each toggle button should be displayed,
-    toggle_button_panels: Edges<Option<EntityId>>,
-
-    /// Whether to show the toggle button.
-    toggle_button_visible: bool,
+    /// The center view of the dock_area.
+    center: DockItem,
     /// The left dock of the dock_area.
     left_dock: Option<Entity<Dock>>,
     /// The bottom dock of the dock_area.
     bottom_dock: Option<Entity<Dock>>,
     /// The right dock of the dock_area.
     right_dock: Option<Entity<Dock>>,
+
+    /// The entity_id of the [`TabPanel`](TabPanel) where each toggle button should be displayed,
+    toggle_button_panels: Edges<Option<EntityId>>,
+
+    /// Whether to show the toggle button.
+    toggle_button_visible: bool,
     /// The top zoom view of the dock_area, if any.
     zoom_view: Option<AnyView>,
 
@@ -537,13 +537,13 @@ impl DockArea {
             id: id.into(),
             version,
             bounds: Bounds::default(),
-            items: dock_item,
-            zoom_view: None,
-            toggle_button_panels: Edges::default(),
-            toggle_button_visible: true,
+            center: dock_item,
             left_dock: None,
             right_dock: None,
             bottom_dock: None,
+            zoom_view: None,
+            toggle_button_panels: Edges::default(),
+            toggle_button_visible: true,
             locked: false,
             panel_style: PanelStyle::default(),
             _subscriptions: vec![],
@@ -557,11 +557,6 @@ impl DockArea {
     /// Return the bounds of the dock area.
     pub fn bounds(&self) -> Bounds<Pixels> {
         self.bounds
-    }
-
-    /// Return the items of the dock area.
-    pub fn items(&self) -> &DockItem {
-        &self.items
     }
 
     /// Subscribe to the tiles item drag item drop event
@@ -590,18 +585,47 @@ impl DockArea {
         cx.notify();
     }
 
-    // FIXME: Remove this method after 2025-01-01
-    #[deprecated(note = "Use `set_center` instead")]
-    pub fn set_root(&mut self, item: DockItem, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_center(item, window, cx);
+    /// Return the center dock item.
+    pub fn center(&self) -> &DockItem {
+        &self.center
+    }
+
+    /// Return the left dock item.
+    pub fn left_dock(&self) -> Option<&Entity<Dock>> {
+        self.left_dock.as_ref()
+    }
+
+    /// Return the bottom dock item.
+    pub fn bottom_dock(&self) -> Option<&Entity<Dock>> {
+        self.bottom_dock.as_ref()
+    }
+
+    /// Return the right dock item.
+    pub fn right_dock(&self) -> Option<&Entity<Dock>> {
+        self.right_dock.as_ref()
+    }
+
+    /// Remove the left dock.
+    pub fn remove_left_dock(&mut self, _: &mut Window, _: &mut Context<Self>) {
+        self.left_dock = None;
+    }
+
+    /// Remove the bottom dock.
+    pub fn remove_bottom_dock(&mut self, _: &mut Window, _: &mut Context<Self>) {
+        self.bottom_dock = None;
+    }
+
+    /// Remove the right dock.
+    pub fn remove_right_dock(&mut self, _: &mut Window, _: &mut Context<Self>) {
+        self.right_dock = None;
     }
 
     /// The the DockItem as the center of the dock area.
     ///
     /// This is used to render at the Center of the DockArea.
-    pub fn set_center(&mut self, item: DockItem, window: &mut Window, cx: &mut Context<Self>) {
-        self.subscribe_item(&item, window, cx);
-        self.items = item;
+    pub fn set_center(&mut self, center: DockItem, window: &mut Window, cx: &mut Context<Self>) {
+        self.subscribe_item(&center, window, cx);
+        self.center = center;
         self.update_toggle_button_tab_panels(window, cx);
         cx.notify();
     }
@@ -842,7 +866,7 @@ impl DockArea {
                 }
             }
             DockPlacement::Center => {
-                self.items
+                self.center
                     .add_panel(panel, &cx.entity().downgrade(), bounds, window, cx);
             }
         }
@@ -879,7 +903,7 @@ impl DockArea {
                 }
             }
             DockPlacement::Center => {
-                self.items.remove_panel(panel, window, cx);
+                self.center.remove_panel(panel, window, cx);
             }
         }
         cx.notify();
@@ -922,7 +946,7 @@ impl DockArea {
             self.bottom_dock = Some(bottom_dock_state.to_dock(weak_self.clone(), window, cx));
         }
 
-        self.items = state.center.to_item(weak_self, window, cx);
+        self.center = state.center.to_item(weak_self, window, cx);
         self.update_toggle_button_tab_panels(window, cx);
         Ok(())
     }
@@ -931,7 +955,7 @@ impl DockArea {
     ///
     /// See also [DockArea::load].
     pub fn dump(&self, cx: &App) -> DockAreaState {
-        let root = self.items.view();
+        let root = self.center.view();
         let center = root.dump(cx);
 
         let left_dock = self
@@ -1059,7 +1083,7 @@ impl DockArea {
     }
 
     fn render_items(&self, _window: &mut Window, _cx: &mut Context<Self>) -> AnyElement {
-        match &self.items {
+        match &self.center {
             DockItem::Split { view, .. } => view.clone().into_any_element(),
             DockItem::Tabs { view, .. } => view.clone().into_any_element(),
             DockItem::Tiles { view, .. } => view.clone().into_any_element(),
@@ -1070,13 +1094,13 @@ impl DockArea {
     pub fn update_toggle_button_tab_panels(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         // Left toggle button
         self.toggle_button_panels.left = self
-            .items
+            .center
             .left_top_tab_panel(cx)
             .map(|view| view.entity_id());
 
         // Right toggle button
         self.toggle_button_panels.right = self
-            .items
+            .center
             .right_top_tab_panel(cx)
             .map(|view| view.entity_id());
 
@@ -1103,7 +1127,7 @@ impl Render for DockArea {
                 if let Some(zoom_view) = self.zoom_view.clone() {
                     this.child(zoom_view)
                 } else {
-                    match &self.items {
+                    match &self.center {
                         DockItem::Tiles { view, .. } => {
                             // render tiles
                             this.child(view.clone())

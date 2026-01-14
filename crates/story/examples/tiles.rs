@@ -242,7 +242,7 @@ impl StoryTiles {
     }
 
     fn set_scrollbar_show(dock_area: &mut DockArea, cx: &mut App) {
-        match dock_area.items() {
+        match dock_area.center() {
             DockItem::Tiles { view, .. } => {
                 view.update(cx, |this, cx| {
                     this.set_scrollbar_show(Some(ScrollbarShow::Always), cx);
