@@ -183,6 +183,54 @@ Sidebar::new()
     )
 ```
 
+### Context Menus
+
+Add right-click context menus to sidebar menu items for additional actions:
+
+```rust
+use gpui_component::menu::PopupMenu;
+
+SidebarMenuItem::new("Project Files")
+    .icon(IconName::Folder)
+    .context_menu(|menu, _, _| {
+        menu.link("Open in Editor", "https://editor.example.com")
+            .separator()
+            .menu_with_description("Rename", "Rename this project", Box::new(RenameAction))
+            .menu_with_description("Delete", "Delete this project", Box::new(DeleteAction))
+            .separator()
+            .submenu("Share", |submenu| {
+                submenu.menu("Copy Link", Box::new(CopyLinkAction))
+                       .menu("Send via Email", Box::new(EmailAction))
+            })
+    })
+
+// Multiple items with context menus
+SidebarMenu::new()
+    .child(
+        SidebarMenuItem::new("Documentation")
+            .icon(IconName::BookOpen)
+            .context_menu(|menu, _, _| {
+                menu.menu("View Online", Box::new(ViewOnlineAction))
+                    .menu("Download PDF", Box::new(DownloadPdfAction))
+            })
+    )
+    .child(
+        SidebarMenuItem::new("Settings")
+            .icon(IconName::Settings)
+            .children([
+                SidebarMenuItem::new("General")
+                    .context_menu(|menu, _, _| {
+                        menu.menu("Reset to Defaults", Box::new(ResetAction))
+                    }),
+                SidebarMenuItem::new("Advanced")
+                    .context_menu(|menu, _, _| {
+                        menu.menu("Export Settings", Box::new(ExportAction))
+                            .menu("Import Settings", Box::new(ImportAction))
+                    })
+            ])
+    )
+```
+
 ### Custom Width and Styling
 
 ```rust
