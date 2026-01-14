@@ -3,8 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use gpui::{
     AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
     GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
-    MouseButton, MouseUpEvent, ParentElement, Pixels, Point, StyleRefinement, Styled, Subscription,
-    Window, anchored, deferred, div, prelude::FluentBuilder, px,
+    MouseButton, MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
 };
 
 use crate::menu::PopupMenu;
@@ -261,7 +261,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
 
                 let hitbox = hitbox.clone();
                 // When right mouse click, to build content menu, and show it at the mouse position.
-                window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+                window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                     if phase.bubble()
                         && event.button == MouseButton::Right
                         && hitbox.is_hovered(window)
