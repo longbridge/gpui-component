@@ -242,17 +242,6 @@ The HoverCard uses a sophisticated timing system to provide a smooth user experi
 | Timing delays            | Yes (open/close) | No                 |
 | Primary use case         | Previews         | Actions/forms      |
 
-## Examples
-
-See the [HoverCard Story](../../story) for interactive examples demonstrating:
-
-- Basic hover cards
-- User profile previews
-- Link previews
-- Custom timing configurations
-- All positioning options
-- Controlled mode
-
 [Popover]: ./popover.md
 [Anchor]: https://docs.rs/gpui-component/latest/gpui_component/enum.Anchor.html
 [Avatar]: ./avatar.md

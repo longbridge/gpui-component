@@ -167,10 +167,14 @@ impl Popover {
         self
     }
 
-    fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
+    fn resolved_corner(
+        anchor: Anchor,
+        trigger_bounds: Bounds<Pixels>,
+        content_bounds: Bounds<Pixels>,
+    ) -> Point<Pixels> {
         let offset = match anchor {
             Anchor::TopCenter | Anchor::BottomCenter => Point {
-                x: trigger_bounds.size.width.half(),
+                x: trigger_bounds.size.width.half() + content_bounds.size.width.half(),
                 y: px(0.),
             },
             _ => Point::default(),
@@ -302,17 +306,15 @@ impl Popover {
     where
         E: IntoElement + 'static,
     {
-        let center_offset = if anchor.is_center() {
-            point(-content_bounds.size.width.half(), px(0.))
-        } else {
-            Point::default()
-        };
-
         deferred(
             anchored()
                 .snap_to_window_with_margin(px(8.))
                 .anchor(anchor.into())
-                .position(Self::resolved_corner(anchor, trigger_bounds) + center_offset)
+                .position(Self::resolved_corner(
+                    anchor,
+                    trigger_bounds,
+                    content_bounds,
+                ))
                 .child(div().relative().child(content)),
         )
     }
@@ -472,49 +474,44 @@ mod tests {
             },
         };
 
+        let content_bounds = Bounds {
+            origin: Point {
+                x: px(0.),
+                y: px(0.),
+            },
+            size: gpui::Size {
+                width: px(220.),
+                height: px(100.),
+            },
+        };
+
         // TopLeft should position at bottom-left of trigger
-        let pos = Popover::resolved_corner(Anchor::TopLeft, bounds);
+        let pos = Popover::resolved_corner(Anchor::TopLeft, bounds, content_bounds);
         assert_eq!(pos.x, px(100.)); // Left edge
         assert_eq!(pos.y, px(100.)); // Top of trigger - height = bottom edge shifted up
 
         // TopCenter should position at bottom-center of trigger
-        let pos = Popover::resolved_corner(Anchor::TopCenter, bounds);
-        assert_eq!(pos.x, px(200.)); // Center (100 + 200/2)
+        let pos = Popover::resolved_corner(Anchor::TopCenter, bounds, content_bounds);
+        assert_eq!(pos.x, px(200.) + px(110.)); // Center (100 + 200/2)
         assert_eq!(pos.y, px(100.));
 
         // TopRight should position at bottom-right of trigger
-        let pos = Popover::resolved_corner(Anchor::TopRight, bounds);
+        let pos = Popover::resolved_corner(Anchor::TopRight, bounds, content_bounds);
         assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
         assert_eq!(pos.y, px(100.));
-    }
-
-    #[test]
-    fn test_resolved_corner_bottom_positions() {
-        use gpui::px;
-
-        let bounds = Bounds {
-            origin: Point {
-                x: px(100.),
-                y: px(100.),
-            },
-            size: gpui::Size {
-                width: px(200.),
-                height: px(50.),
-            },
-        };
 
         // BottomLeft should position at top-left of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds);
+        let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds, content_bounds);
         assert_eq!(pos.x, px(100.)); // Left edge
         assert_eq!(pos.y, px(50.)); // Top of trigger (100 - 50)
 
         // BottomCenter should position at top-center of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds);
-        assert_eq!(pos.x, px(200.)); // Center (100 + 200/2)
+        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds, content_bounds);
+        assert_eq!(pos.x, px(200.) + px(110.)); // Center (100 + 200/2)
         assert_eq!(pos.y, px(50.));
 
         // BottomRight should position at top-right of trigger
-        let pos = Popover::resolved_corner(Anchor::BottomRight, bounds);
+        let pos = Popover::resolved_corner(Anchor::BottomRight, bounds, content_bounds);
         assert_eq!(pos.x, px(300.)); // Right edge (100 + 200)
         assert_eq!(pos.y, px(50.));
     }
