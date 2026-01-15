@@ -329,6 +329,7 @@ impl Popover {
                 ))
                 .child(div().relative().child(content)),
         )
+        .with_priority(1)
     }
 
     pub(crate) fn render_popover_content(
