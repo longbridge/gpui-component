@@ -215,7 +215,9 @@ impl StoryTiles {
     ) {
         let dock_area = dock_area.clone();
         self._save_layout_task = Some(cx.spawn(async move |this, cx| {
-            Timer::after(Duration::from_secs(10)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs(10))
+                .await;
 
             let _ = cx.update(|cx| {
                 let dock_area = dock_area.read(cx);

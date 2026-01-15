@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
-    Task, Timer, Window, div, prelude::FluentBuilder as _,
+    Task, Window, div, prelude::FluentBuilder as _,
 };
 use std::rc::Rc;
 use std::time::Duration;
@@ -167,7 +167,7 @@ impl HoverCardState {
         let delay = self.open_delay;
 
         self.open_task = Some(cx.spawn(async move |this, cx| {
-            Timer::after(delay).await;
+            cx.background_executor().timer(delay).await;
 
             let _ = this.update(cx, |state, cx| {
                 if state.epoch == epoch {
@@ -184,7 +184,7 @@ impl HoverCardState {
         let delay = self.close_delay;
 
         self.close_task = Some(cx.spawn(async move |this, cx| {
-            Timer::after(delay).await;
+            cx.background_executor().timer(delay).await;
 
             let _ = this.update(cx, |state, cx| {
                 if state.epoch == epoch && !state.is_hovering_trigger && !state.is_hovering_content

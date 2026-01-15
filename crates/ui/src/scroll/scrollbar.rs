@@ -11,8 +11,8 @@ use gpui::{
     App, Axis, BorderStyle, Bounds, ContentMask, Corner, CursorStyle, Edges, Element, ElementId,
     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, IsZero,
     LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
-    Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
-    fill, point, px, relative, size,
+    Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window, fill,
+    point, px, relative, size,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -650,7 +650,7 @@ impl Element for Scrollbar {
                                 let next_delay = Duration::from_secs_f32(FADE_OUT_DELAY - elapsed);
                                 window
                                     .spawn(cx, async move |cx| {
-                                        Timer::after(next_delay).await;
+                                        cx.background_executor().timer(next_delay).await;
                                         state.set(state.get().with_idle_timer_scheduled(false));
                                         cx.update(|_, cx| cx.notify(current_view)).ok();
                                     })
