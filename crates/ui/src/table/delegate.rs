@@ -189,4 +189,12 @@ pub trait TableDelegate: Sized + 'static {
         cx: &mut Context<TableState<Self>>,
     ) {
     }
+
+    /// Get the text representation of a cell for export purposes (e.g., CSV export).
+    ///
+    /// Returns an empty string by default. Implement this method to support export.
+    /// The text should be formatted as it should appear in the exported data.
+    fn cell_text(&self, row_ix: usize, col_ix: usize, cx: &App) -> String {
+        String::new()
+    }
 }
