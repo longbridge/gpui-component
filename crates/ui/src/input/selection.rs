@@ -60,13 +60,6 @@ impl InputState {
     ///
     /// The offset is the UTF-8 offset.
     pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        if self.mode.is_single_line() {
-            self.selected_range = (0..self.text.len()).into();
-            self.selected_word_range = None;
-            cx.notify();
-            return;
-        }
-
         let range = TextSelector::line_range(&self.text, offset);
         self.selected_range = (range.start..range.end).into();
         self.selected_word_range = None;
