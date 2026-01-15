@@ -974,6 +974,9 @@ impl PopupMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if e.button == MouseButton::Left {
+            return;
+        }
         self.handle_dismiss(&e.position, window, cx);
     }
 
