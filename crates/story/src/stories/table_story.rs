@@ -8,7 +8,7 @@ use fake::Fake;
 use gpui::{
     Action, AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
-    StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Timer, Window, div,
+    StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Window, div,
     prelude::FluentBuilder as _,
 };
 use gpui_component::{
@@ -589,7 +589,7 @@ impl TableDelegate for StockTableDelegate {
 
         self._load_task = cx.spawn(async move |view, cx| {
             // Simulate network request, delay 1s to load data.
-            Timer::after(Duration::from_secs(1)).await;
+            cx.background_executor().timer(Duration::from_secs(1)).await;
 
             _ = cx.update(|cx| {
                 let _ = view.update(cx, |view, _| {
@@ -681,7 +681,9 @@ impl TableStory {
 
         let _load_task = cx.spawn(async move |this, cx| {
             loop {
-                Timer::after(time::Duration::from_millis(33)).await;
+                cx.background_executor()
+                    .timer(time::Duration::from_millis(33))
+                    .await;
 
                 this.update(cx, |this, cx| {
                     if !this.refresh_data {

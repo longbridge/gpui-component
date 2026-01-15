@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use fake::Fake;
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement, Render, SharedString, Styled, Task, Timer, WeakEntity, Window, div,
+    ParentElement, Render, SharedString, Styled, Task, WeakEntity, Window, div,
     prelude::FluentBuilder as _, px,
 };
 
@@ -46,7 +46,9 @@ impl ListDelegate for ListItemDeletegate {
         cx.spawn(async move |this, cx| {
             // Simulate a slow search.
             let sleep = (0.05..0.1).fake();
-            Timer::after(Duration::from_secs_f64(sleep)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs_f64(sleep))
+                .await;
 
             this.update(cx, |this, cx| {
                 this.delegate_mut().matches = this
