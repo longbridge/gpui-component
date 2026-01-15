@@ -129,6 +129,7 @@ impl ThemeRegistry {
         themes.sort_by(|a, b| {
             b.is_default
                 .cmp(&a.is_default)
+                .then(a.mode.cmp(&b.mode))
                 .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         });
         themes
