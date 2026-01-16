@@ -155,11 +155,14 @@ impl<T> Area<T> {
             StrokeStyle::StepAfter => {
                 area_builder.move_to(points[0]);
                 line_builder.move_to(points[0]);
-                for p in points.windows(2) {
+                for (i, p) in points.windows(2).enumerate() {
                     area_builder.line_to(Point::new(p[1].x, p[0].y));
-                    area_builder.line_to(Point::new(p[1].x, p[1].y));
                     line_builder.line_to(Point::new(p[1].x, p[0].y));
-                    line_builder.line_to(Point::new(p[1].x, p[1].y));
+                    // Don't draw the vertical line for the last point
+                    if i < points.len() - 2 {
+                        area_builder.line_to(p[1]);
+                        line_builder.line_to(p[1]);
+                    }
                 }
             }
         }
