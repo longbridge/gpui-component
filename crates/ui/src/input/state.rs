@@ -1497,11 +1497,13 @@ impl InputState {
             return;
         }
 
+        let range =
+            text.clip_offset(range.start, Bias::Left)..text.clip_offset(range.end, Bias::Right);
         let old_text = text.slice(range.clone()).to_string();
         let new_range = range.start..range.start + new_text.len();
 
         self.history
-            .push(Change::new(range.clone(), &old_text, new_range, new_text));
+            .push(Change::new(range, &old_text, new_range, new_text));
     }
 
     pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
