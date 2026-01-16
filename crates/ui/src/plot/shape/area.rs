@@ -1,8 +1,8 @@
 // @reference: https://d3js.org/d3-shape/area
 
-use gpui::{px, Background, Bounds, Path, PathBuilder, Pixels, Point, Window};
+use gpui::{Background, Bounds, Path, PathBuilder, Pixels, Point, Window, px};
 
-use crate::plot::{origin_point, StrokeStyle};
+use crate::plot::{StrokeStyle, origin_point};
 
 #[allow(clippy::type_complexity)]
 pub struct Area<T> {
@@ -92,7 +92,15 @@ impl<T> Area<T> {
 
         let mut points = vec![];
 
-        for v in self.data.iter() {
+        let mut first_x_tick = None;
+        let mut last_x_tick = None;
+        for (index, v) in self.data.iter().enumerate() {
+            if index == 0 {
+                first_x_tick = (self.x)(v);
+            }
+            if index == self.data.len() - 1 {
+                last_x_tick = (self.x)(v);
+            }
             let x_tick = (self.x)(v);
             let y_tick = (self.y1)(v);
 
@@ -157,13 +165,10 @@ impl<T> Area<T> {
         }
 
         // Close path
-        if let Some(last) = self.data.last() {
-            let x_tick = (self.x)(last);
-            if let (Some(x), Some(y)) = (x_tick, self.y0) {
-                area_builder.line_to(origin_point(px(x), px(y), bounds.origin));
-                area_builder.line_to(origin_point(px(0.), px(y), bounds.origin));
-                area_builder.close();
-            }
+        if let (Some(first), Some(last), Some(y)) = (first_x_tick, last_x_tick, self.y0) {
+            area_builder.line_to(origin_point(px(last), px(y), bounds.origin));
+            area_builder.line_to(origin_point(px(first), px(y), bounds.origin));
+            area_builder.close();
         }
 
         (area_builder.build().ok(), line_builder.build().ok())
