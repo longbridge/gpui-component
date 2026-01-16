@@ -283,6 +283,32 @@ where
         &self.visible_range
     }
 
+    /// Dump table data.
+    ///
+    /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
+    pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
+        // Get header row
+        let columns_count = self.delegate.columns_count(cx);
+        let mut headers = Vec::with_capacity(columns_count);
+        for col_ix in 0..columns_count {
+            let column = self.delegate.column(col_ix, cx);
+            headers.push(column.name.to_string());
+        }
+
+        // Get data rows
+        let rows_count = self.delegate.rows_count(cx);
+        let mut rows = Vec::with_capacity(rows_count);
+        for row_ix in 0..rows_count {
+            let mut row = Vec::with_capacity(columns_count);
+            for col_ix in 0..columns_count {
+                row.push(self.delegate.cell_text(row_ix, col_ix, cx));
+            }
+            rows.push(row);
+        }
+
+        (headers, rows)
+    }
+
     fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
         self.col_groups = (0..self.delegate.columns_count(cx))
             .map(|col_ix| {
