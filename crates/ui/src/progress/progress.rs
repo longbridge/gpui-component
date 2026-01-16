@@ -94,6 +94,7 @@ impl RenderOnce for Progress {
                     .left_0()
                     .h_full()
                     .bg(color)
+                    .rounded(radius)
                     .refine_style(&inner_style)
                     .map(|this| match value {
                         v if v >= 100. => this,
