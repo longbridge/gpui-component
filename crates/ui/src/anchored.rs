@@ -311,20 +311,20 @@ impl AnchoredPositionMode {
                 y: origin.y,
             },
             Anchor::TopRight => Point {
-                x: origin.x - size.width.clone(),
+                x: origin.x - size.width,
                 y: origin.y,
             },
             Anchor::BottomLeft => Point {
                 x: origin.x,
-                y: origin.y - size.height.clone(),
+                y: origin.y - size.height,
             },
             Anchor::BottomCenter => Point {
                 x: origin.x - size.width.half(),
-                y: origin.y - size.height.clone(),
+                y: origin.y - size.height,
             },
             Anchor::BottomRight => Point {
-                x: origin.x - size.width.clone(),
-                y: origin.y - size.height.clone(),
+                x: origin.x - size.width,
+                y: origin.y - size.height,
             },
         };
 
