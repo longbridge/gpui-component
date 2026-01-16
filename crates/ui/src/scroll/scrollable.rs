@@ -1,6 +1,6 @@
 use std::{panic::Location, rc::Rc};
 
-use crate::scroll::ScrollbarHandle;
+use crate::{StyledExt, scroll::ScrollbarHandle};
 
 use super::{Scrollbar, ScrollbarAxis};
 use gpui::{
@@ -112,15 +112,22 @@ impl<E> RenderOnce for Scrollable<E>
 where
     E: InteractiveElement + Styled + ParentElement + Element + 'static,
 {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let scroll_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, _| ScrollHandle::default())
             .read(cx)
             .clone();
 
+        // Inherit the size from the element style.
+        let style = StyleRefinement {
+            size: self.element.style().size.clone(),
+            ..Default::default()
+        };
+
         div()
             .id(self.id)
             .size_full()
+            .refine_style(&style)
             .relative()
             .child(
                 div()
