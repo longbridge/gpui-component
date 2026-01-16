@@ -1,6 +1,7 @@
 use gpui::{App, SharedString};
 use std::ops::Deref;
 
+mod anchored;
 mod element_ext;
 mod event;
 mod geometry;
@@ -73,6 +74,7 @@ pub mod tooltip;
 pub mod tree;
 
 pub use crate::Disableable;
+pub(crate) use anchored::*;
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
 pub use geometry::*;

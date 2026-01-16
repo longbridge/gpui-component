@@ -144,6 +144,27 @@ impl Anchor {
             Anchor::BottomRight => Anchor::BottomLeft,
         }
     }
+
+    pub(crate) fn other_side_corner_along(&self, axis: Axis) -> Anchor {
+        match axis {
+            Axis::Vertical => match self {
+                Self::TopLeft => Self::BottomLeft,
+                Self::TopCenter => Self::BottomCenter,
+                Self::TopRight => Self::BottomRight,
+                Self::BottomLeft => Self::TopLeft,
+                Self::BottomCenter => Self::TopCenter,
+                Self::BottomRight => Self::TopRight,
+            },
+            Axis::Horizontal => match self {
+                Self::TopLeft => Self::TopRight,
+                Self::TopCenter => Self::TopCenter,
+                Self::TopRight => Self::TopLeft,
+                Self::BottomLeft => Self::BottomRight,
+                Self::BottomCenter => Self::BottomCenter,
+                Self::BottomRight => Self::BottomLeft,
+            },
+        }
+    }
 }
 
 impl From<Corner> for Anchor {
@@ -502,10 +523,7 @@ mod tests {
         assert_eq!(Anchor::TopCenter.swap_horizontal(), Anchor::TopCenter);
         assert_eq!(Anchor::TopRight.swap_horizontal(), Anchor::TopLeft);
         assert_eq!(Anchor::BottomLeft.swap_horizontal(), Anchor::BottomRight);
-        assert_eq!(
-            Anchor::BottomCenter.swap_horizontal(),
-            Anchor::BottomCenter
-        );
+        assert_eq!(Anchor::BottomCenter.swap_horizontal(), Anchor::BottomCenter);
         assert_eq!(Anchor::BottomRight.swap_horizontal(), Anchor::BottomLeft);
 
         // Test double swap returns to original
@@ -518,14 +536,8 @@ mod tests {
             Anchor::BottomRight
         );
         // Center positions should remain unchanged
-        assert_eq!(
-            Anchor::TopCenter.swap_horizontal(),
-            Anchor::TopCenter
-        );
-        assert_eq!(
-            Anchor::BottomCenter.swap_horizontal(),
-            Anchor::BottomCenter
-        );
+        assert_eq!(Anchor::TopCenter.swap_horizontal(), Anchor::TopCenter);
+        assert_eq!(Anchor::BottomCenter.swap_horizontal(), Anchor::BottomCenter);
     }
 
     #[test]
