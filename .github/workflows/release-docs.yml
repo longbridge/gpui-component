@@ -1,8 +1,9 @@
 name: Release Docs
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows: ["Release Crate"]
+    types:
+      - completed
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,9 +13,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: oven-sh/setup-bun@v1
       - name: Install
         working-directory: docs
