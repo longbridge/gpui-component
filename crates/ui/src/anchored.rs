@@ -38,6 +38,7 @@ pub(crate) fn anchored() -> Anchored {
     }
 }
 
+#[allow(dead_code)]
 impl Anchored {
     /// Sets which corner of the anchored element should be anchored to the current position.
     pub fn anchor(mut self, anchor: Anchor) -> Self {
@@ -246,6 +247,7 @@ impl IntoElement for Anchored {
 }
 
 /// Which algorithm to use when fitting the anchored element to be inside the window.
+#[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum AnchoredFitMode {
     /// Snap the anchored element to the window edge.
@@ -257,6 +259,7 @@ pub enum AnchoredFitMode {
 }
 
 /// Which algorithm to use when positioning the anchored element.
+#[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum AnchoredPositionMode {
     /// Position the anchored element relative to the window.

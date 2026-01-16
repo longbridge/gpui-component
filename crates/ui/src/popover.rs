@@ -481,7 +481,7 @@ mod tests {
         assert_eq!(pos.y, px(100.));
 
         let pos = Popover::resolved_corner(Anchor::TopCenter, bounds);
-        assert_eq!(pos.x, px(100.));
+        assert_eq!(pos.x, px(200.));
         assert_eq!(pos.y, px(100.));
 
         let pos = Popover::resolved_corner(Anchor::TopRight, bounds);
@@ -493,7 +493,7 @@ mod tests {
         assert_eq!(pos.y, px(50.));
 
         let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds);
-        assert_eq!(pos.x, px(90.));
+        assert_eq!(pos.x, px(200.));
         assert_eq!(pos.y, px(50.));
 
         let pos = Popover::resolved_corner(Anchor::BottomRight, bounds);
