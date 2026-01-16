@@ -1,22 +1,23 @@
 use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_component::{scroll::ScrollableElement, *};
 
 pub struct Example;
 impl Render for Example {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .v_flex()
-            .gap_2()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .child("Hello, World!")
-            .child(
-                Button::new("ok")
-                    .primary()
-                    .label("Let's Go!")
-                    .on_click(|_, _, _| println!("Clicked!")),
-            )
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .size(px(500.))
+            .id("scrollable-container")
+            .overflow_y_scrollbar()
+            .gap_4()
+            .p_4()
+            .child("Scrollable Content")
+            .children((0..100).map(|i| {
+                div()
+                    .h(px(40.))
+                    .w_full()
+                    .bg(cx.theme().secondary)
+                    .child(format!("Item {}", i))
+            }))
     }
 }
 
