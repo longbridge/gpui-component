@@ -121,7 +121,6 @@ impl ParentElement for HoverCard {
 pub struct HoverCardState {
     open: bool,
     trigger_bounds: Bounds<Pixels>,
-    content_bounds: Bounds<Pixels>,
     open_delay: Duration,
     close_delay: Duration,
 
@@ -143,7 +142,6 @@ impl HoverCardState {
         Self {
             open: false,
             trigger_bounds: Bounds::default(),
-            content_bounds: Bounds::default(),
             open_delay,
             close_delay,
             open_task: None,
@@ -266,7 +264,6 @@ impl RenderOnce for HoverCard {
 
         let open = state.read(cx).open;
         let trigger_bounds = state.read(cx).trigger_bounds;
-        let content_bounds = state.read(cx).content_bounds;
 
         // Trigger callback if state changed in controlled mode
         if prev_open != open {
@@ -309,22 +306,12 @@ impl RenderOnce for HoverCard {
                 .when_some(self.content, |this, content| {
                     this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
                 })
-                .when(content_bounds.is_empty(), |this| this.invisible())
                 .children(self.children)
-                .refine_style(&self.style)
-                .on_prepaint({
-                    let state = state.clone();
-                    move |bounds, _, cx| {
-                        state.update(cx, |state, _| {
-                            state.content_bounds = bounds;
-                        })
-                    }
-                });
+                .refine_style(&self.style);
 
         root.child(Popover::render_popover(
             self.anchor,
             trigger_bounds,
-            content_bounds,
             popover_content,
             window,
             cx,
