@@ -19,9 +19,9 @@ use gpui_component::description_list::{DescriptionList, DescriptionItem, Descrip
 
 ```rust
 DescriptionList::new()
-    .child("Name", "GPUI Component", 1)
-    .child("Version", "0.1.0", 1)
-    .child("License", "Apache-2.0", 1)
+    .item("Name", "GPUI Component", 1)
+    .item("Version", "0.1.0", 1)
+    .item("License", "Apache-2.0", 1)
 ```
 
 ### Using DescriptionItem Builder

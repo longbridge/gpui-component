@@ -89,22 +89,138 @@ Button::new("btn").large().label("Large")
 
 ### With Icons
 
+The `icon` method supports multiple types, allowing you to use different visual indicators:
+
+- **[Icon] / [IconName]** - Static icons for actions and visual cues
+- **[Spinner]** - Animated loading indicator for async operations
+- **[ProgressCircle]** - Circular progress indicator showing completion percentage
+
+All icon types automatically adapt to the button's size and can be customized with colors and other properties.
+
+#### Icon Types
+
 ```rust
 use gpui_component::{Icon, IconName};
 
-// Icon before label
+// Using IconName (simplest)
 Button::new("btn")
     .icon(IconName::Check)
     .label("Confirm")
 
-// Icon only
-Button::new("btn")
-    .icon(IconName::Search)
-
-// Custom icon size
+// Using Icon with custom size
 Button::new("btn")
     .icon(Icon::new(IconName::Heart))
     .label("Like")
+
+// Icon only (no label)
+Button::new("btn")
+    .icon(IconName::Search)
+```
+
+#### Spinner Icon
+
+Use a [Spinner] to indicate loading or processing state:
+
+```rust
+use gpui_component::spinner::Spinner;
+
+// Basic spinner
+Button::new("btn")
+    .icon(Spinner::new())
+    .label("Loading...")
+
+// Spinner with custom color
+Button::new("btn")
+    .icon(Spinner::new().color(cx.theme().blue))
+    .label("Processing")
+
+// Spinner with icon
+Button::new("btn")
+    .icon(Spinner::new().icon(IconName::LoaderCircle))
+    .label("Syncing")
+```
+
+#### ProgressCircle Icon
+
+Use a [ProgressCircle] to show progress percentage:
+
+```rust
+use gpui_component::progress::ProgressCircle;
+
+// Basic progress circle
+Button::new("btn")
+    .icon(ProgressCircle::new("install-progress").value(45.0))
+    .label("Installing...")
+
+// Progress circle with custom color
+Button::new("btn")
+    .primary()
+    .icon(
+        ProgressCircle::new("download-progress")
+            .value(75.0)
+            .color(cx.theme().primary_foreground)
+    )
+    .label("Downloading")
+
+// Different sizes
+Button::new("btn")
+    .small()
+    .icon(ProgressCircle::new("progress-1").value(60.0))
+    .label("Installing...")
+
+Button::new("btn")
+    .large()
+    .icon(ProgressCircle::new("progress-2").value(80.0))
+    .label("Installing...")
+```
+
+#### Dynamic Icon Updates
+
+Icons can be updated dynamically based on component state:
+
+```rust
+struct InstallButton {
+    progress: f32,
+    is_installing: bool,
+}
+
+impl InstallButton {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let button = Button::new("install-btn")
+            .label(if self.is_installing {
+                "Installing..."
+            } else {
+                "Install"
+            });
+
+        if self.is_installing {
+            button.icon(
+                ProgressCircle::new("install-progress")
+                    .value(self.progress)
+            )
+        } else {
+            button.icon(IconName::Download)
+        }
+    }
+}
+```
+
+#### Loading State with Icons
+
+When a button is in loading state, it automatically handles icon transitions:
+
+```rust
+// If icon is already a Spinner or ProgressCircle, it will be shown during loading
+Button::new("btn")
+    .icon(Spinner::new())
+    .label("Processing")
+    .loading(true) // Spinner will continue to show
+
+// If icon is a regular Icon, it will be replaced with a Spinner during loading
+Button::new("btn")
+    .icon(IconName::Save)
+    .label("Saving")
+    .loading(true) // Icon will be replaced with Spinner
 ```
 
 ### With a dropdown caret icon
@@ -211,3 +327,7 @@ Button::new("btn")
 [ButtonGroup]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonGroup.html
 [ButtonCustomVariant]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonCustomVariant.html
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html
+[Spinner]: https://docs.rs/gpui-component/latest/gpui_component/spinner/struct.Spinner.html
+[ProgressCircle]: https://docs.rs/gpui-component/latest/gpui_component/progress/struct.ProgressCircle.html
+[Icon]: https://docs.rs/gpui-component/latest/gpui_component/icon/struct.Icon.html
+[IconName]: https://docs.rs/gpui-component/latest/gpui_component/icon/enum.IconName.html

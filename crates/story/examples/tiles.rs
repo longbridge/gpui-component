@@ -215,7 +215,9 @@ impl StoryTiles {
     ) {
         let dock_area = dock_area.clone();
         self._save_layout_task = Some(cx.spawn(async move |this, cx| {
-            Timer::after(Duration::from_secs(10)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs(10))
+                .await;
 
             let _ = cx.update(|cx| {
                 let dock_area = dock_area.read(cx);
@@ -242,7 +244,7 @@ impl StoryTiles {
     }
 
     fn set_scrollbar_show(dock_area: &mut DockArea, cx: &mut App) {
-        match dock_area.items() {
+        match dock_area.center() {
             DockItem::Tiles { view, .. } => {
                 view.update(cx, |this, cx| {
                     this.set_scrollbar_show(Some(ScrollbarShow::Always), cx);

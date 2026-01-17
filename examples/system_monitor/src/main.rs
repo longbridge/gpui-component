@@ -371,26 +371,26 @@ impl SystemMonitor {
     fn update_battery_info(&mut self) {
         self.battery_info.clear();
 
-        if let Ok(manager) = battery::Manager::new() {
-            if let Ok(batteries) = manager.batteries() {
-                for battery in batteries.flatten() {
-                    let icon = match battery.state() {
-                        battery::State::Charging => IconName::BatteryCharging,
-                        battery::State::Discharging => IconName::BatteryMedium,
-                        battery::State::Full => IconName::BatteryFull,
-                        battery::State::Empty => IconName::Battery,
-                        _ => IconName::Battery,
-                    };
+        if let Ok(manager) = battery::Manager::new()
+            && let Ok(batteries) = manager.batteries()
+        {
+            for battery in batteries.flatten() {
+                let icon = match battery.state() {
+                    battery::State::Charging => IconName::BatteryCharging,
+                    battery::State::Discharging => IconName::BatteryMedium,
+                    battery::State::Full => IconName::BatteryFull,
+                    battery::State::Empty => IconName::Battery,
+                    _ => IconName::Battery,
+                };
 
-                    self.battery_info.push(BatteryInfo {
-                        model: battery
-                            .model()
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| "Battery".to_string()),
-                        icon,
-                        percentage: battery.state_of_charge().value * 100.0,
-                    });
-                }
+                self.battery_info.push(BatteryInfo {
+                    model: battery
+                        .model()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "Battery".to_string()),
+                    icon,
+                    percentage: battery.state_of_charge().value * 100.0,
+                });
             }
         }
     }
@@ -426,7 +426,7 @@ impl SystemMonitor {
                             .child(title.to_string()),
                     )
                     .child({
-                        let current_value = data.last().map(|p| value_fn(p)).unwrap_or(0.0);
+                        let current_value = data.last().map(&value_fn).unwrap_or(0.0);
                         div()
                             .text_sm()
                             .text_color(color)

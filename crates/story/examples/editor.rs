@@ -31,7 +31,6 @@ use lsp_types::{
     InsertReplaceEdit, InsertTextFormat, TextEdit, WorkspaceEdit,
 };
 
-
 enum Lang {
     BuiltIn(Language),
     External(&'static str),
@@ -142,8 +141,8 @@ fn completion_item(
         kind: Some(lsp_types::CompletionItemKind::FUNCTION),
         text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
             new_text: replace_text.to_string(),
-            insert: replace_range.clone(),
-            replace: replace_range.clone(),
+            insert: *replace_range,
+            replace: *replace_range,
         })),
         documentation: Some(lsp_types::Documentation::String(documentation.to_string())),
         insert_text: None,
@@ -295,13 +294,13 @@ impl CodeActionProvider for ExampleLspStore {
             return Task::ready(Ok(()));
         };
 
-        let changes = if let Some(changes) = edit.changes {
+        let Some((_, text_edits)) = if let Some(changes) = edit.changes {
             changes
         } else {
             return Task::ready(Ok(()));
-        };
-
-        let Some((_, text_edits)) = changes.into_iter().next() else {
+        }
+        .into_iter()
+        .next() else {
             return Task::ready(Ok(()));
         };
 
@@ -463,7 +462,6 @@ impl CodeActionProvider for TextConvertor {
                         vec![TextEdit {
                             range,
                             new_text: old_text.to_uppercase(),
-                            ..Default::default()
                         }],
                     ))
                     .collect(),
@@ -481,9 +479,8 @@ impl CodeActionProvider for TextConvertor {
                     std::iter::once((
                         document_uri.clone(),
                         vec![TextEdit {
-                            range: range.clone(),
+                            range,
                             new_text: old_text.to_lowercase(),
-                            ..Default::default()
                         }],
                     ))
                     .collect(),
@@ -501,7 +498,7 @@ impl CodeActionProvider for TextConvertor {
                     std::iter::once((
                         document_uri.clone(),
                         vec![TextEdit {
-                            range: range.clone(),
+                            range,
                             new_text: old_text
                                 .split_whitespace()
                                 .map(|word| {
@@ -514,7 +511,6 @@ impl CodeActionProvider for TextConvertor {
                                 })
                                 .collect::<Vec<_>>()
                                 .join(" "),
-                            ..Default::default()
                         }],
                     ))
                     .collect(),
@@ -544,7 +540,6 @@ impl CodeActionProvider for TextConvertor {
                                     }
                                 })
                                 .collect(),
-                            ..Default::default()
                         }],
                     ))
                     .collect(),
@@ -579,7 +574,6 @@ impl CodeActionProvider for TextConvertor {
                                     }
                                 })
                                 .collect(),
-                            ..Default::default()
                         }],
                     ))
                     .collect(),
@@ -604,13 +598,13 @@ impl CodeActionProvider for TextConvertor {
             return Task::ready(Ok(()));
         };
 
-        let changes = if let Some(changes) = edit.changes {
+        let Some((_, text_edits)) = if let Some(changes) = edit.changes {
             changes
         } else {
             return Task::ready(Ok(()));
-        };
-
-        let Some((_, text_edits)) = changes.into_iter().next() else {
+        }
+        .into_iter()
+        .next() else {
             return Task::ready(Ok(()));
         };
 
@@ -831,7 +825,6 @@ impl Example {
                 let text_edit = TextEdit {
                     range: lsp_types::Range { start, end },
                     new_text: item.new.clone(),
-                    ..Default::default()
                 };
 
                 let edit = WorkspaceEdit {
@@ -1036,7 +1029,7 @@ impl Render for Example {
         if self.lsp_store.is_dirty() {
             let diagnostics = self.lsp_store.diagnostics();
             self.editor.update(cx, |state, cx| {
-                state.diagnostics_mut().map(|set| {
+                _ = state.diagnostics_mut().map(|set| {
                     set.clear();
                     set.extend(diagnostics);
                 });

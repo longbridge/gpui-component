@@ -56,6 +56,7 @@ impl Gallery {
                     StoryContainer::panel::<DropdownButtonStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<GroupBoxStory>(window, cx),
+                    StoryContainer::panel::<HoverCardStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
                     StoryContainer::panel::<ImageStory>(window, cx),
                     StoryContainer::panel::<InputStory>(window, cx),
@@ -162,7 +163,7 @@ impl Render for Gallery {
                     .size(px(255.))
                     .size_range(px(200.)..px(320.))
                     .child(
-                        Sidebar::left()
+                        Sidebar::new("gallery-sidebar")
                             .w(relative(1.))
                             .border_0()
                             .collapsed(self.collapsed)

@@ -143,7 +143,7 @@ impl Settings {
         let selected_index = state.read(cx).selected_index;
         let search_input = state.read(cx).search_input.clone();
 
-        Sidebar::left()
+        Sidebar::new("settings-sidebar")
             .w(relative(1.))
             .border_0()
             .refine_style(&self.sidebar_style)

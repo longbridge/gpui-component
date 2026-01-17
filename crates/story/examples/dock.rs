@@ -183,7 +183,10 @@ impl StoryWorkspace {
     ) {
         let dock_area = dock_area.clone();
         self._save_layout_task = Some(cx.spawn_in(window, async move |story, window| {
-            Timer::after(Duration::from_secs(10)).await;
+            window
+                .background_executor()
+                .timer(Duration::from_secs(10))
+                .await;
 
             _ = story.update_in(window, move |this, _, cx| {
                 let dock_area = dock_area.read(cx);

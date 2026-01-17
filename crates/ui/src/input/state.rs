@@ -1238,6 +1238,12 @@ impl InputState {
             return;
         }
 
+        // Triple click to select line
+        if event.button == MouseButton::Left && event.click_count >= 3 {
+            self.select_line(offset, window, cx);
+            return;
+        }
+
         // Double click to select word
         if event.button == MouseButton::Left && event.click_count == 2 {
             self.select_word(offset, window, cx);
@@ -1491,11 +1497,13 @@ impl InputState {
             return;
         }
 
+        let range =
+            text.clip_offset(range.start, Bias::Left)..text.clip_offset(range.end, Bias::Right);
         let old_text = text.slice(range.clone()).to_string();
         let new_range = range.start..range.start + new_text.len();
 
         self.history
-            .push(Change::new(range.clone(), &old_text, new_range, new_text));
+            .push(Change::new(range, &old_text, new_range, new_text));
     }
 
     pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {

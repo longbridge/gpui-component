@@ -1,13 +1,13 @@
 // @reference: https://d3js.org/d3-shape/line
 
 use gpui::{
-    px, quad, size, Background, BorderStyle, Bounds, Hsla, PaintQuad, Path, PathBuilder, Pixels,
-    Point, Window,
+    Background, BorderStyle, Bounds, Hsla, PaintQuad, Path, PathBuilder, Pixels, Point, Window, px,
+    quad, size,
 };
 
 use crate::{
-    plot::{origin_point, StrokeStyle},
     PixelsExt,
+    plot::{StrokeStyle, origin_point},
 };
 
 #[allow(clippy::type_complexity)]
@@ -184,9 +184,12 @@ impl<T> Line<T> {
             }
             StrokeStyle::StepAfter => {
                 builder.move_to(dots[0]);
-                for d in dots.windows(2) {
-                    builder.line_to(Point::new(d[1].x, d[0].y));
-                    builder.line_to(Point::new(d[1].x, d[1].y));
+                for (i, p) in dots.windows(2).enumerate() {
+                    builder.line_to(Point::new(p[1].x, p[0].y));
+                    // Don't draw the vertical line for the last point
+                    if i < dots.len() - 2 {
+                        builder.line_to(p[1]);
+                    }
                 }
             }
         }
@@ -210,7 +213,7 @@ impl<T> Line<T> {
 mod tests {
     use super::*;
 
-    use gpui::{point, px, Bounds};
+    use gpui::{Bounds, point, px};
 
     #[test]
     fn test_line_path() {

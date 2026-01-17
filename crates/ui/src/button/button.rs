@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, IconName, Selectable,
-    Sizable, Size, StyleSized, StyledExt, h_flex, spinner::Spinner, tooltip::Tooltip,
+    Sizable, Size, StyleSized, StyledExt, button::ButtonIcon, h_flex, tooltip::Tooltip,
 };
 use gpui::{
     Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
@@ -27,7 +27,7 @@ impl From<Pixels> for ButtonRounded {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ButtonCustomVariant {
     color: Hsla,
     foreground: Hsla,
@@ -136,7 +136,7 @@ impl ButtonCustomVariant {
 }
 
 /// The variant of the Button.
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum ButtonVariant {
     Primary,
     #[default]
@@ -179,7 +179,7 @@ pub struct Button {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
-    icon: Option<Icon>,
+    icon: Option<ButtonIcon>,
     label: Option<SharedString>,
     children: Vec<AnyElement>,
     disabled: bool,
@@ -275,7 +275,7 @@ impl Button {
     }
 
     /// Set the icon of the button, if the Button have no label, the button well in Icon Button mode.
-    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+    pub fn icon(mut self, icon: impl Into<ButtonIcon>) -> Self {
         self.icon = Some(icon.into());
         self
     }
@@ -578,16 +578,11 @@ impl RenderOnce for Button {
                         Size::Small => this.gap_1(),
                         _ => this.gap_2(),
                     })
-                    .when(!self.loading, |this| {
-                        this.when_some(self.icon, |this, icon| {
-                            this.child(icon.with_size(icon_size))
-                        })
-                    })
-                    .when(self.loading, |this| {
+                    .when_some(self.icon, |this, icon| {
                         this.child(
-                            Spinner::new()
-                                .with_size(self.size)
-                                .when_some(self.loading_icon, |this, icon| this.icon(icon)),
+                            icon.loading_icon(self.loading_icon)
+                                .loading(self.loading)
+                                .with_size(icon_size),
                         )
                     })
                     .when_some(self.label, |this, label| {
@@ -988,5 +983,71 @@ impl ButtonVariant {
             underline,
             shadow,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn test_button_builder(_cx: &mut gpui::TestAppContext) {
+        let button = Button::new("complex-button")
+            .label("Save Changes")
+            .primary()
+            .outline()
+            .large()
+            .tooltip("Click to save")
+            .compact()
+            .loading(false)
+            .disabled(false)
+            .selected(false)
+            .tab_index(1)
+            .tab_stop(true)
+            .dropdown_caret(false)
+            .rounded(ButtonRounded::Medium)
+            .on_click(|_, _, _| {});
+
+        assert_eq!(button.label, Some("Save Changes".into()));
+        assert_eq!(button.variant, ButtonVariant::Primary);
+        assert!(button.outline);
+        assert_eq!(button.size, Size::Large);
+        assert!(button.tooltip.is_some());
+        assert!(button.compact);
+        assert!(!button.loading);
+        assert!(!button.disabled);
+        assert!(!button.selected);
+        assert_eq!(button.tab_index, 1);
+        assert!(button.tab_stop);
+        assert!(!button.dropdown_caret);
+        assert!(matches!(button.rounded, ButtonRounded::Medium));
+    }
+
+    #[gpui::test]
+    fn test_button_clickable_logic(_cx: &mut gpui::TestAppContext) {
+        // Button with click handler should be clickable
+        let clickable = Button::new("test").on_click(|_, _, _| {});
+        assert!(clickable.clickable());
+
+        // Disabled button should not be clickable
+        let disabled = Button::new("test").disabled(true).on_click(|_, _, _| {});
+        assert!(!disabled.clickable());
+
+        // Loading button should not be clickable
+        let loading = Button::new("test").loading(true).on_click(|_, _, _| {});
+        assert!(!loading.clickable());
+    }
+
+    #[gpui::test]
+    fn test_button_variant_methods(_cx: &mut gpui::TestAppContext) {
+        // Test variant check methods
+        assert!(ButtonVariant::Link.is_link());
+        assert!(ButtonVariant::Text.is_text());
+        assert!(ButtonVariant::Ghost.is_ghost());
+
+        // Test no_padding logic
+        assert!(ButtonVariant::Link.no_padding());
+        assert!(ButtonVariant::Text.no_padding());
+        assert!(!ButtonVariant::Ghost.no_padding());
     }
 }

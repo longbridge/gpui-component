@@ -118,8 +118,11 @@ where
             .read(cx)
             .clone();
 
-        let style = self.element.style().clone();
-        *self.element.style() = StyleRefinement::default();
+        // Inherit the size from the element style.
+        let style = StyleRefinement {
+            size: self.element.style().size.clone(),
+            ..Default::default()
+        };
 
         div()
             .id(self.id)
@@ -137,7 +140,12 @@ where
                         ScrollbarAxis::Horizontal => this.flex_row().overflow_x_scroll(),
                         ScrollbarAxis::Both => this.overflow_scroll(),
                     })
-                    .child(self.element.flex_1()),
+                    .child(
+                        self.element
+                            // Refine element size to `flex_1`.
+                            .size_auto()
+                            .flex_1(),
+                    ),
             )
             .child(render_scrollbar(
                 "scrollbar",

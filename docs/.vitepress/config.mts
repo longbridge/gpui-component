@@ -62,6 +62,8 @@ const config: UserConfig = {
         |
         <a href="/gpui-component/contributors">Contributors</a>
         |
+        <a href="/gpui-component/skills" target="_blank">Skills</a>
+        |
         <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>
         |
         <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">Report Bug</a>

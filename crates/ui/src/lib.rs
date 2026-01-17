@@ -1,6 +1,7 @@
 use gpui::{App, SharedString};
 use std::ops::Deref;
 
+mod anchored;
 mod element_ext;
 mod event;
 mod geometry;
@@ -39,6 +40,7 @@ pub mod form;
 pub mod group_box;
 pub mod highlighter;
 pub mod history;
+pub mod hover_card;
 pub mod input;
 pub mod kbd;
 pub mod label;
@@ -72,6 +74,7 @@ pub mod tooltip;
 pub mod tree;
 
 pub use crate::Disableable;
+pub(crate) use anchored::*;
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
 pub use geometry::*;

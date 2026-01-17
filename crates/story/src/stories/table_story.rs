@@ -8,7 +8,7 @@ use fake::Fake;
 use gpui::{
     Action, AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
-    StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Timer, Window, div,
+    StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Window, div,
     prelude::FluentBuilder as _,
 };
 use gpui_component::{
@@ -589,7 +589,7 @@ impl TableDelegate for StockTableDelegate {
 
         self._load_task = cx.spawn(async move |view, cx| {
             // Simulate network request, delay 1s to load data.
-            Timer::after(Duration::from_secs(1)).await;
+            cx.background_executor().timer(Duration::from_secs(1)).await;
 
             _ = cx.update(|cx| {
                 let _ = view.update(cx, |view, _| {
@@ -617,6 +617,64 @@ impl TableDelegate for StockTableDelegate {
         _: &mut Context<TableState<Self>>,
     ) {
         self.visible_cols = visible_range;
+    }
+
+    fn cell_text(&self, row_ix: usize, col_ix: usize, _cx: &App) -> String {
+        let Some(stock) = self.stocks.get(row_ix) else {
+            return String::new();
+        };
+        let Some(col) = self.columns.get(col_ix) else {
+            return String::new();
+        };
+
+        match col.key.as_ref() {
+            "id" => stock.id.to_string(),
+            "market" => stock.counter.market.to_string(),
+            "symbol" => stock.counter.symbol_code().to_string(),
+            "name" => stock.counter.name.to_string(),
+            "price" => format!("{:.3}", stock.price),
+            "change" => format!("{:.3}", stock.change),
+            "change_percent" => format!("{:.2}%", stock.change_percent * 100.),
+            "volume" => format!("{:.3}", stock.volume),
+            "turnover" => format!("{:.3}", stock.turnover),
+            "market_cap" => format!("{:.3}", stock.market_cap),
+            "ttm" => format!("{:.3}", stock.ttm),
+            "five_mins_ranking" => format!("{:.3}", stock.five_mins_ranking),
+            "th60_days_ranking" => stock.th60_days_ranking.floor().to_string(),
+            "year_change_percent" => format!("{:.2}%", stock.year_change_percent * 100.),
+            "bid" => format!("{:.3}", stock.bid),
+            "bid_volume" => format!("{:.3}", stock.bid_volume),
+            "ask" => format!("{:.3}", stock.ask),
+            "ask_volume" => format!("{:.3}", stock.ask_volume),
+            "open" => format!("{:.3}", stock.open),
+            "prev_close" => format!("{:.3}", stock.prev_close),
+            "high" => format!("{:.3}", stock.high),
+            "low" => format!("{:.3}", stock.low),
+            "turnover_rate" => format!("{:.0}", stock.turnover_rate * 100.),
+            "rise_rate" => format!("{:.0}", stock.rise_rate * 100.),
+            "amplitude" => format!("{:.0}", stock.amplitude * 100.),
+            "pe_status" => stock.pe_status.floor().to_string(),
+            "pb_status" => stock.pb_status.floor().to_string(),
+            "volume_ratio" => format!("{:.3}", stock.volume_ratio),
+            "bid_ask_ratio" => format!("{:.3}", stock.bid_ask_ratio),
+            "latest_pre_close" => stock.latest_pre_close.floor().to_string(),
+            "latest_post_close" => stock.latest_post_close.floor().to_string(),
+            "pre_market_cap" => stock.pre_market_cap.floor().to_string(),
+            "pre_market_percent" => format!("{:.2}%", stock.pre_market_percent * 100.),
+            "pre_market_change" => stock.pre_market_change.floor().to_string(),
+            "post_market_cap" => stock.post_market_cap.floor().to_string(),
+            "post_market_percent" => format!("{:.2}%", stock.post_market_percent * 100.),
+            "post_market_change" => stock.post_market_change.floor().to_string(),
+            "float_cap" => stock.float_cap.floor().to_string(),
+            "shares" => stock.shares.to_string(),
+            "shares_float" => stock.shares_float.to_string(),
+            "day_5_ranking" => stock.day_5_ranking.floor().to_string(),
+            "day_10_ranking" => stock.day_10_ranking.floor().to_string(),
+            "day_30_ranking" => stock.day_30_ranking.floor().to_string(),
+            "day_120_ranking" => stock.day_120_ranking.floor().to_string(),
+            "day_250_ranking" => stock.day_250_ranking.floor().to_string(),
+            _ => String::new(),
+        }
     }
 }
 
@@ -681,7 +739,9 @@ impl TableStory {
 
         let _load_task = cx.spawn(async move |this, cx| {
             loop {
-                Timer::after(time::Duration::from_millis(33)).await;
+                cx.background_executor()
+                    .timer(time::Duration::from_millis(33))
+                    .await;
 
                 this.update(cx, |this, cx| {
                     if !this.refresh_data {
@@ -827,6 +887,58 @@ impl TableStory {
             TableEvent::RightClickedRow(ix) => println!("Right clicked row: {:?}", ix),
         }
     }
+
+    fn dump_csv(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match self.write_csv(cx) {
+            Ok(csv_content) => {
+                let Some(path) = dirs::download_dir() else {
+                    eprintln!("Failed to get download directory");
+                    return;
+                };
+                let receiver = cx.prompt_for_new_path(&path, Some("export.csv"));
+                cx.spawn_in(window, async move |_, _| {
+                    if let Some(path) = receiver.await.ok().into_iter().flatten().flatten().next() {
+                        match std::fs::write(&path, csv_content) {
+                            Ok(_) => {
+                                println!("CSV exported successfully to: {:?}", path);
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to save CSV file: {}", e);
+                            }
+                        }
+                    } else {
+                        println!("CSV export cancelled by user");
+                    };
+                })
+                .detach();
+            }
+            Err(e) => {
+                eprintln!("Failed to export CSV: {}", e);
+            }
+        }
+    }
+
+    fn write_csv(&mut self, cx: &mut Context<Self>) -> anyhow::Result<String> {
+        let (headers, rows) = self.table.update(cx, |table, cx| table.dump(cx));
+
+        // Convert to CSV format using rust-csv
+        let mut wtr = csv::Writer::from_writer(vec![]);
+
+        // Write header
+        wtr.write_record(&headers)?;
+
+        // Write data rows
+        for row in rows {
+            wtr.write_record(&row)?;
+        }
+
+        // Flush and get the CSV data
+        wtr.flush()?;
+        let data = wtr.into_inner().map_err(csv::IntoInnerError::into_error)?;
+        let csv_content = String::from_utf8(data)?;
+
+        Ok(csv_content)
+    }
 }
 
 impl Render for TableStory {
@@ -964,26 +1076,14 @@ impl Render for TableStory {
                                     table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);
                                 })
                             })),
-                    ), // .child(
-                       //     Button::new("scroll-first-col")
-                       //         .child("Scroll to First Column")
-                       //         .small()
-                       //         .on_click(cx.listener(|this, _, window, cx| {
-                       //             this.table.update(cx, |table, cx| {
-                       //                 table.scroll_to_col(0, cx);
-                       //             })
-                       //         })),
-                       // )
-                       // .child(
-                       //     Button::new("scroll-last-col")
-                       //         .child("Scroll to Last Column")
-                       //         .small()
-                       //         .on_click(cx.listener(|this, _, window, cx| {
-                       //             this.table.update(cx, |table, cx| {
-                       //                 table.scroll_to_col(table.delegate().columns_count(cx), cx);
-                       //             })
-                       //         })),
-                       // ),
+                    )
+                    .child(
+                        Button::new("dump-csv")
+                            .outline()
+                            .small()
+                            .label("Dump CSV")
+                            .on_click(cx.listener(Self::dump_csv)),
+                    ),
             )
             .child(
                 h_flex().items_center().gap_2().child(

@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Display, Formatter};
 
-use gpui::{AbsoluteLength, Axis, Length, Pixels};
+use gpui::{AbsoluteLength, Axis, Corner, Length, Pixels};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -119,6 +119,75 @@ impl Anchor {
     #[inline]
     pub fn is_center(&self) -> bool {
         matches!(self, Self::TopCenter | Self::BottomCenter)
+    }
+
+    /// Swaps the vertical position of the anchor.
+    pub fn swap_vertical(&self) -> Self {
+        match self {
+            Anchor::TopLeft => Anchor::BottomLeft,
+            Anchor::TopCenter => Anchor::BottomCenter,
+            Anchor::TopRight => Anchor::BottomRight,
+            Anchor::BottomLeft => Anchor::TopLeft,
+            Anchor::BottomCenter => Anchor::TopCenter,
+            Anchor::BottomRight => Anchor::TopRight,
+        }
+    }
+
+    /// Swaps the horizontal position of the anchor.
+    pub fn swap_horizontal(&self) -> Self {
+        match self {
+            Anchor::TopLeft => Anchor::TopRight,
+            Anchor::TopCenter => Anchor::TopCenter,
+            Anchor::TopRight => Anchor::TopLeft,
+            Anchor::BottomLeft => Anchor::BottomRight,
+            Anchor::BottomCenter => Anchor::BottomCenter,
+            Anchor::BottomRight => Anchor::BottomLeft,
+        }
+    }
+
+    pub(crate) fn other_side_corner_along(&self, axis: Axis) -> Anchor {
+        match axis {
+            Axis::Vertical => match self {
+                Self::TopLeft => Self::BottomLeft,
+                Self::TopCenter => Self::BottomCenter,
+                Self::TopRight => Self::BottomRight,
+                Self::BottomLeft => Self::TopLeft,
+                Self::BottomCenter => Self::TopCenter,
+                Self::BottomRight => Self::TopRight,
+            },
+            Axis::Horizontal => match self {
+                Self::TopLeft => Self::TopRight,
+                Self::TopCenter => Self::TopCenter,
+                Self::TopRight => Self::TopLeft,
+                Self::BottomLeft => Self::BottomRight,
+                Self::BottomCenter => Self::BottomCenter,
+                Self::BottomRight => Self::BottomLeft,
+            },
+        }
+    }
+}
+
+impl From<Corner> for Anchor {
+    fn from(corner: Corner) -> Self {
+        match corner {
+            Corner::TopLeft => Anchor::TopLeft,
+            Corner::TopRight => Anchor::TopRight,
+            Corner::BottomLeft => Anchor::BottomLeft,
+            Corner::BottomRight => Anchor::BottomRight,
+        }
+    }
+}
+
+impl From<Anchor> for Corner {
+    fn from(anchor: Anchor) -> Self {
+        match anchor {
+            Anchor::TopLeft => Corner::TopLeft,
+            Anchor::TopRight => Corner::TopRight,
+            Anchor::BottomLeft => Corner::BottomLeft,
+            Anchor::BottomRight => Corner::BottomRight,
+            Anchor::TopCenter => Corner::TopLeft,
+            Anchor::BottomCenter => Corner::BottomLeft,
+        }
     }
 }
 
@@ -416,6 +485,104 @@ mod tests {
         assert!(!Anchor::TopRight.is_center());
         assert!(!Anchor::BottomLeft.is_center());
         assert!(!Anchor::BottomRight.is_center());
+    }
+
+    #[test]
+    fn test_anchor_swap_vertical() {
+        use super::Anchor;
+
+        // Test swap_vertical
+        assert_eq!(Anchor::TopLeft.swap_vertical(), Anchor::BottomLeft);
+        assert_eq!(Anchor::TopCenter.swap_vertical(), Anchor::BottomCenter);
+        assert_eq!(Anchor::TopRight.swap_vertical(), Anchor::BottomRight);
+        assert_eq!(Anchor::BottomLeft.swap_vertical(), Anchor::TopLeft);
+        assert_eq!(Anchor::BottomCenter.swap_vertical(), Anchor::TopCenter);
+        assert_eq!(Anchor::BottomRight.swap_vertical(), Anchor::TopRight);
+
+        // Test double swap returns to original
+        assert_eq!(
+            Anchor::TopLeft.swap_vertical().swap_vertical(),
+            Anchor::TopLeft
+        );
+        assert_eq!(
+            Anchor::TopCenter.swap_vertical().swap_vertical(),
+            Anchor::TopCenter
+        );
+        assert_eq!(
+            Anchor::BottomRight.swap_vertical().swap_vertical(),
+            Anchor::BottomRight
+        );
+    }
+
+    #[test]
+    fn test_anchor_swap_horizontal() {
+        use super::Anchor;
+
+        // Test swap_horizontal
+        assert_eq!(Anchor::TopLeft.swap_horizontal(), Anchor::TopRight);
+        assert_eq!(Anchor::TopCenter.swap_horizontal(), Anchor::TopCenter);
+        assert_eq!(Anchor::TopRight.swap_horizontal(), Anchor::TopLeft);
+        assert_eq!(Anchor::BottomLeft.swap_horizontal(), Anchor::BottomRight);
+        assert_eq!(Anchor::BottomCenter.swap_horizontal(), Anchor::BottomCenter);
+        assert_eq!(Anchor::BottomRight.swap_horizontal(), Anchor::BottomLeft);
+
+        // Test double swap returns to original
+        assert_eq!(
+            Anchor::TopLeft.swap_horizontal().swap_horizontal(),
+            Anchor::TopLeft
+        );
+        assert_eq!(
+            Anchor::BottomRight.swap_horizontal().swap_horizontal(),
+            Anchor::BottomRight
+        );
+        // Center positions should remain unchanged
+        assert_eq!(Anchor::TopCenter.swap_horizontal(), Anchor::TopCenter);
+        assert_eq!(Anchor::BottomCenter.swap_horizontal(), Anchor::BottomCenter);
+    }
+
+    #[test]
+    fn test_anchor_from_corner() {
+        use super::Anchor;
+        use gpui::Corner;
+
+        // Test From<Corner> for Anchor
+        assert_eq!(Anchor::from(Corner::TopLeft), Anchor::TopLeft);
+        assert_eq!(Anchor::from(Corner::TopRight), Anchor::TopRight);
+        assert_eq!(Anchor::from(Corner::BottomLeft), Anchor::BottomLeft);
+        assert_eq!(Anchor::from(Corner::BottomRight), Anchor::BottomRight);
+
+        // Test using into()
+        let anchor: Anchor = Corner::TopLeft.into();
+        assert_eq!(anchor, Anchor::TopLeft);
+
+        let anchor: Anchor = Corner::BottomRight.into();
+        assert_eq!(anchor, Anchor::BottomRight);
+    }
+
+    #[test]
+    fn test_anchor_to_corner() {
+        use super::Anchor;
+        use gpui::Corner;
+
+        // Test From<Anchor> for Corner (i.e., Into<Corner>)
+        assert_eq!(Corner::from(Anchor::TopLeft), Corner::TopLeft);
+        assert_eq!(Corner::from(Anchor::TopRight), Corner::TopRight);
+        assert_eq!(Corner::from(Anchor::BottomLeft), Corner::BottomLeft);
+        assert_eq!(Corner::from(Anchor::BottomRight), Corner::BottomRight);
+
+        // Test center anchors map to their respective corners
+        assert_eq!(Corner::from(Anchor::TopCenter), Corner::TopLeft);
+        assert_eq!(Corner::from(Anchor::BottomCenter), Corner::BottomLeft);
+
+        // Test using into()
+        let corner: Corner = Anchor::TopLeft.into();
+        assert_eq!(corner, Corner::TopLeft);
+
+        let corner: Corner = Anchor::TopCenter.into();
+        assert_eq!(corner, Corner::TopLeft);
+
+        let corner: Corner = Anchor::BottomRight.into();
+        assert_eq!(corner, Corner::BottomRight);
     }
 
     #[test]

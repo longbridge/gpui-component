@@ -7,7 +7,9 @@ use gpui_component::{
     ActiveTheme, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Theme,
     button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _},
     checkbox::Checkbox,
-    h_flex, v_flex,
+    h_flex,
+    progress::ProgressCircle,
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -337,6 +339,40 @@ impl Render for ButtonStory {
                             .when(compact, |this| this.compact())
                             .on_click(Self::on_click),
                     ),
+            )
+            .child(
+                section("With Progress").child(
+                    h_flex()
+                        .gap_4()
+                        .child(
+                            Button::new("progress-button-1")
+                                .primary()
+                                .large()
+                                .icon(
+                                    ProgressCircle::new("circle-progress-1")
+                                        .color(cx.theme().primary_foreground)
+                                        .value(25.),
+                                )
+                                .label("Installing..."),
+                        )
+                        .child(
+                            Button::new("progress-button-2")
+                                .icon(ProgressCircle::new("circle-progress-1").value(35.))
+                                .label("Installing..."),
+                        )
+                        .child(
+                            Button::new("progress-button-3")
+                                .small()
+                                .icon(ProgressCircle::new("circle-progress-1").value(68.))
+                                .label("Installing..."),
+                        )
+                        .child(
+                            Button::new("progress-button-4")
+                                .xsmall()
+                                .icon(ProgressCircle::new("circle-progress-1").value(85.))
+                                .label("Installing..."),
+                        ),
+                ),
             )
             .child(
                 section("Outline Button")
