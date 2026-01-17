@@ -119,9 +119,9 @@ where
     D: TableDelegate,
 {
     /// Create a new TableState with the given delegate.
-    pub fn new(delegate: D, _: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(delegate: D, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
-            focus_handle: cx.focus_handle(),
+            focus_handle: cx.focus_handle().tab_stop(true),
             options: TableOptions::default(),
             delegate,
             col_groups: Vec::new(),
@@ -147,6 +147,7 @@ where
         };
 
         this.prepare_col_groups(cx);
+        cx.on_focus(&this.focus_handle, window, Self::on_focus);
         this
     }
 
@@ -445,6 +446,14 @@ where
         };
 
         self.set_selected_row(selected_row, cx);
+    }
+
+
+    /// Handle focus event - auto-select first row if none selected
+    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if self.selected_row.is_none() && self.delegate.rows_count(cx) > 0 {
+            self.set_selected_row(0, cx);
+        }
     }
 
     pub(super) fn action_select_first(
