@@ -1,14 +1,15 @@
 use crate::{
+    Selectable, Sizable,
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     h_flex,
     menu::PopupMenu,
-    Selectable, Sizable,
 };
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder, px, App, AppContext as _, ClickEvent, Context,
-    DismissEvent, Entity, Focusable, InteractiveElement as _, IntoElement, KeyBinding, OwnedMenu,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window,
+    App, AppContext as _, ClickEvent, Context, DismissEvent, Entity, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, OwnedMenu, ParentElement,
+    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window, anchored,
+    deferred, div, prelude::FluentBuilder, px,
 };
 
 const CONTEXT: &str = "AppMenuBar";
@@ -23,67 +24,74 @@ pub fn init(cx: &mut App) {
 /// The application menu bar, for Windows and Linux.
 pub struct AppMenuBar {
     menus: Vec<Entity<AppMenu>>,
-    selected_ix: Option<usize>,
+    selected_index: Option<usize>,
 }
 
 impl AppMenuBar {
     /// Create a new app menu bar.
-    pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn new(cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
-            let menu_bar = cx.entity();
-            let menus = cx
-                .get_menus()
-                .unwrap_or_default()
-                .iter()
-                .enumerate()
-                .map(|(ix, menu)| AppMenu::new(ix, menu, menu_bar.clone(), window, cx))
-                .collect();
-
-            Self {
-                selected_ix: None,
-                menus,
-            }
+            let mut this = Self {
+                selected_index: None,
+                menus: Vec::new(),
+            };
+            this.reload(cx);
+            this
         })
     }
 
+    /// Reload the menus from the app.
+    pub fn reload(&mut self, cx: &mut Context<Self>) {
+        let menu_bar = cx.entity();
+        self.menus = cx
+            .get_menus()
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .map(|(ix, menu)| AppMenu::new(ix, menu, menu_bar.clone(), cx))
+            .collect();
+        self.selected_index = None;
+        cx.notify();
+    }
+
     fn on_move_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(selected_ix) = self.selected_ix else {
+        let Some(selected_index) = self.selected_index else {
             return;
         };
 
-        let new_ix = if selected_ix == 0 {
+        let new_ix = if selected_index == 0 {
             self.menus.len().saturating_sub(1)
         } else {
-            selected_ix.saturating_sub(1)
+            selected_index.saturating_sub(1)
         };
-        self.set_selected_ix(Some(new_ix), window, cx);
+        self.set_selected_index(Some(new_ix), window, cx);
     }
 
     fn on_move_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(selected_ix) = self.selected_ix else {
+        let Some(selected_index) = self.selected_index else {
             return;
         };
 
-        let new_ix = if selected_ix + 1 >= self.menus.len() {
+        let new_ix = if selected_index + 1 >= self.menus.len() {
             0
         } else {
-            selected_ix + 1
+            selected_index + 1
         };
-        self.set_selected_ix(Some(new_ix), window, cx);
+        self.set_selected_index(Some(new_ix), window, cx);
     }
 
     fn on_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_selected_ix(None, window, cx);
+        self.set_selected_index(None, window, cx);
     }
 
-    fn set_selected_ix(&mut self, ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>) {
-        self.selected_ix = ix;
+    fn set_selected_index(&mut self, ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>) {
+        self.selected_index = ix;
         cx.notify();
     }
 
     #[inline]
     fn has_activated_menu(&self) -> bool {
-        self.selected_ix.is_some()
+        self.selected_index.is_some()
     }
 }
 
@@ -118,7 +126,6 @@ impl AppMenu {
         ix: usize,
         menu: &OwnedMenu,
         menu_bar: Entity<AppMenuBar>,
-        _: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
         let name = menu.name.clone();
@@ -146,7 +153,7 @@ impl AppMenu {
                     })
                     .with_menu_items(items, window, cx)
                 });
-                popup_menu.read(cx).focus_handle(cx).focus(window);
+                popup_menu.read(cx).focus_handle(cx).focus(window, cx);
                 self._subscription =
                     Some(cx.subscribe_in(&popup_menu, window, Self::handle_dismiss));
                 self.popup_menu = Some(popup_menu.clone());
@@ -158,7 +165,7 @@ impl AppMenu {
 
         let focus_handle = popup_menu.read(cx).focus_handle(cx);
         if !focus_handle.contains_focused(window, cx) {
-            focus_handle.focus(window);
+            focus_handle.focus(window, cx);
         }
 
         popup_menu
@@ -184,11 +191,11 @@ impl AppMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let is_selected = self.menu_bar.read(cx).selected_ix == Some(self.ix);
+        let is_selected = self.menu_bar.read(cx).selected_index == Some(self.ix);
 
         _ = self.menu_bar.update(cx, |state, cx| {
             let new_ix = if is_selected { None } else { Some(self.ix) };
-            state.set_selected_ix(new_ix, window, cx);
+            state.set_selected_index(new_ix, window, cx);
         });
     }
 
@@ -203,7 +210,7 @@ impl AppMenu {
         }
 
         _ = self.menu_bar.update(cx, |state, cx| {
-            state.set_selected_ix(Some(self.ix), window, cx);
+            state.set_selected_index(Some(self.ix), window, cx);
         });
     }
 }
@@ -211,7 +218,7 @@ impl AppMenu {
 impl Render for AppMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let menu_bar = self.menu_bar.read(cx);
-        let is_selected = menu_bar.selected_ix == Some(self.ix);
+        let is_selected = menu_bar.selected_index == Some(self.ix);
 
         div()
             .id(self.ix)
@@ -224,6 +231,11 @@ impl Render for AppMenu {
                     .ghost()
                     .label(self.name.clone())
                     .selected(is_selected)
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                        // Stop propagation to avoid dragging the window.
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
                     .on_click(cx.listener(Self::handle_trigger_click)),
             )
             .on_hover(cx.listener(Self::handle_hover))

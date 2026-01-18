@@ -41,6 +41,7 @@ impl Gallery {
                     StoryContainer::panel::<AlertStory>(window, cx),
                     StoryContainer::panel::<AvatarStory>(window, cx),
                     StoryContainer::panel::<BadgeStory>(window, cx),
+                    StoryContainer::panel::<BreadcrumbStory>(window, cx),
                     StoryContainer::panel::<ButtonStory>(window, cx),
                     StoryContainer::panel::<CalendarStory>(window, cx),
                     StoryContainer::panel::<ChartStory>(window, cx),
@@ -51,9 +52,11 @@ impl Gallery {
                     StoryContainer::panel::<DatePickerStory>(window, cx),
                     StoryContainer::panel::<DescriptionListStory>(window, cx),
                     StoryContainer::panel::<DialogStory>(window, cx),
+                    StoryContainer::panel::<DividerStory>(window, cx),
                     StoryContainer::panel::<DropdownButtonStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<GroupBoxStory>(window, cx),
+                    StoryContainer::panel::<HoverCardStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
                     StoryContainer::panel::<ImageStory>(window, cx),
                     StoryContainer::panel::<InputStory>(window, cx),
@@ -65,11 +68,13 @@ impl Gallery {
                     StoryContainer::panel::<NotificationStory>(window, cx),
                     StoryContainer::panel::<NumberInputStory>(window, cx),
                     StoryContainer::panel::<OtpInputStory>(window, cx),
+                    StoryContainer::panel::<PaginationStory>(window, cx),
                     StoryContainer::panel::<PopoverStory>(window, cx),
                     StoryContainer::panel::<ProgressStory>(window, cx),
                     StoryContainer::panel::<RadioStory>(window, cx),
+                    StoryContainer::panel::<RatingStory>(window, cx),
                     StoryContainer::panel::<ResizableStory>(window, cx),
-                    StoryContainer::panel::<ScrollableStory>(window, cx),
+                    StoryContainer::panel::<ScrollbarStory>(window, cx),
                     StoryContainer::panel::<SelectStory>(window, cx),
                     StoryContainer::panel::<SettingsStory>(window, cx),
                     StoryContainer::panel::<SheetStory>(window, cx),
@@ -77,6 +82,7 @@ impl Gallery {
                     StoryContainer::panel::<SkeletonStory>(window, cx),
                     StoryContainer::panel::<SliderStory>(window, cx),
                     StoryContainer::panel::<SpinnerStory>(window, cx),
+                    StoryContainer::panel::<StepperStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<TableStory>(window, cx),
                     StoryContainer::panel::<TabsStory>(window, cx),
@@ -158,7 +164,7 @@ impl Render for Gallery {
                     .size(px(255.))
                     .size_range(px(200.)..px(320.))
                     .child(
-                        Sidebar::left()
+                        Sidebar::new("gallery-sidebar")
                             .w(relative(1.))
                             .border_0()
                             .collapsed(self.collapsed)

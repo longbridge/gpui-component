@@ -96,7 +96,7 @@ impl SettingPage {
         let groups = self
             .groups
             .iter()
-            .filter(|group| group.is_match(&query))
+            .filter(|group| group.is_match(&query, cx))
             .cloned()
             .collect::<Vec<_>>();
         let groups_count = groups.len();
@@ -167,11 +167,20 @@ impl SettingPage {
                         list(list_state.clone(), {
                             let query = query.clone();
                             let options = *options;
-                            move |ix, window, cx| {
-                                let group = groups[ix].clone();
+                            move |group_ix, window, cx| {
+                                let group = groups[group_ix].clone();
                                 group
                                     .py_4()
-                                    .render(ix, &query, &options, window, cx)
+                                    .render(
+                                        &query,
+                                        &RenderOptions {
+                                            page_ix: ix,
+                                            group_ix,
+                                            ..options
+                                        },
+                                        window,
+                                        cx,
+                                    )
                                     .into_any_element()
                             }
                         })

@@ -1,9 +1,8 @@
 use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Task, Window};
 
 use crate::{
-    h_flex,
-    list::{loading::Loading, ListState},
-    ActiveTheme as _, Icon, IconName, IndexPath, Selectable,
+    ActiveTheme as _, Icon, IconName, IndexPath, Selectable, h_flex,
+    list::{ListState, loading::Loading},
 };
 
 /// A delegate for the List.
@@ -23,11 +22,16 @@ pub trait ListDelegate: Sized + 'static {
     }
 
     /// Return the number of sections in the list, default is 1.
+    ///
+    /// Min value is 1.
     fn sections_count(&self, cx: &App) -> usize {
         1
     }
 
     /// Return the number of items in the section at the given index.
+    ///
+    /// NOTE: Only the sections with items_count > 0 will be rendered. If the section has 0 items,
+    /// the section header and footer will also be skipped.
     fn items_count(&self, section: usize, cx: &App) -> usize;
 
     /// Render the item at the given index.
@@ -35,16 +39,21 @@ pub trait ListDelegate: Sized + 'static {
     /// Return None will skip the item.
     ///
     /// NOTE: Every item should have same height.
-    fn render_item(&self, ix: IndexPath, window: &mut Window, cx: &mut App) -> Option<Self::Item>;
+    fn render_item(
+        &mut self,
+        ix: IndexPath,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item>;
 
     /// Render the section header at the given index, default is None.
     ///
     /// NOTE: Every header should have same height.
     fn render_section_header(
-        &self,
+        &mut self,
         section: usize,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         None::<AnyElement>
     }
@@ -53,16 +62,20 @@ pub trait ListDelegate: Sized + 'static {
     ///
     /// NOTE: Every footer should have same height.
     fn render_section_footer(
-        &self,
+        &mut self,
         section: usize,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         None::<AnyElement>
     }
 
     /// Return a Element to show when list is empty.
-    fn render_empty(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_empty(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
         h_flex()
             .size_full()
             .justify_center()
@@ -79,7 +92,11 @@ pub trait ListDelegate: Sized + 'static {
     /// For example: The last search results, or the last selected item.
     ///
     /// Default is None, that means no initial state.
-    fn render_initial(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    fn render_initial(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> Option<AnyElement> {
         None
     }
 
@@ -90,7 +107,11 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Returns a Element to show when loading, default is built-in Skeleton
     /// loading view.
-    fn render_loading(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_loading(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) -> impl IntoElement {
         Loading
     }
 
@@ -101,6 +122,15 @@ pub trait ListDelegate: Sized + 'static {
         window: &mut Window,
         cx: &mut Context<ListState<Self>>,
     );
+
+    /// Set the index of the item that has been right clicked.
+    fn set_right_clicked_index(
+        &mut self,
+        ix: Option<IndexPath>,
+        window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) {
+    }
 
     /// Set the confirm and give the selected index,
     /// this is means user have clicked the item or pressed Enter.
@@ -114,9 +144,9 @@ pub trait ListDelegate: Sized + 'static {
 
     /// Return true to enable load more data when scrolling to the bottom.
     ///
-    /// Default: true
-    fn is_eof(&self, cx: &App) -> bool {
-        true
+    /// Default: false
+    fn has_more(&self, cx: &App) -> bool {
+        false
     }
 
     /// Returns a threshold value (n entities), of course,

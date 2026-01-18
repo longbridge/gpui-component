@@ -1,19 +1,18 @@
 [workspace]
-default-members = [
-    "crates/ui",
-    "crates/story",
-    "crates/assets"
-]
+default-members = ["crates/ui", "crates/story", "crates/assets"]
 members = [
     "crates/macros",
     "crates/story",
     "crates/ui",
     "crates/assets",
+    "crates/webview",
     "examples/app_assets",
     "examples/hello_world",
     "examples/input",
     "examples/window_title",
     "examples/dialog_overlay",
+    "examples/webview",
+    "examples/system_monitor",
 ]
 resolver = "2"
 
@@ -22,19 +21,28 @@ publish = false
 edition = "2024"
 
 [workspace.dependencies]
-gpui-component = { path = "crates/ui", version = "0.5.0-preview0" }
-gpui-component-macros = { path = "crates/macros", version = "0.5.0-preview0" }
-gpui-component-assets = { path = "crates/assets", version = "0.5.0-preview0" }
+gpui-component = { path = "crates/ui", version = "0.5.0" }
+gpui-component-macros = { path = "crates/macros", version = "0.5.0" }
+gpui-component-assets = { path = "crates/assets", version = "0.5.0" }
 story = { path = "crates/story" }
 
-gpui = "0.2.2"
+gpui = { git = "https://github.com/zed-industries/zed" }
 gpui-macros = "0.2.2"
-reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
+# reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
+reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", default-features = false, features = [
+    "charset",
+    "http2",
+    "macos-system-configuration",
+    "multipart",
+    "rustls-tls-native-roots",
+    "socks",
+    "stream",
+], package = "zed-reqwest", version = "0.12.15-zed" }
 
 anyhow = "1"
 log = "0.4"
-lsp-types = "0.97.0"
+lsp-types = { version = "0.97.0", features = ["proposed"] }
 notify = "7.0.0"
 raw-window-handle = "0.6.2"
 ropey = { version = "=2.0.0-beta.1", features = [

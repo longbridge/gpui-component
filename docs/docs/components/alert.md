@@ -115,18 +115,15 @@ We can use `TextView` to render formatted (Markdown or HTML) text within the ale
 for displaying lists, bold text, links, etc.
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_component::text::markdown;
 
 Alert::error(
     "error-with-markdown",
-    TextView::markdown(
-        "error-message",
+    markdown(
         "Please verify your billing information and try again.\n\
         - Check your card details\n\
         - Ensure sufficient funds\n\
-        - Verify billing address",
-        window,
-        cx,
+        - Verify billing address"
     ),
 )
 .title("Payment Failed")
@@ -196,18 +193,17 @@ Alert::info("update-available", "A new version of the application is available."
 ### Multi-line Content with Formatting
 
 ```rust
+use gpui_component::text::markdown;
+
 Alert::warning(
     "security-alert",
-    TextView::markdown(
-        "security-content",
+    markdown(
         "**Security Notice**: Unusual activity detected on your account.\n\n\
         Recent activity:\n\
         - Login from new device (Chrome on Windows)\n\
         - Location: San Francisco, CA\n\
         - Time: Today at 2:30 PM\n\n\
-        If this wasn't you, please [change your password](/) immediately.",
-        window,
-        cx,
+        If this wasn't you, please [change your password](/) immediately."
     )
 )
 .title("Security Alert")

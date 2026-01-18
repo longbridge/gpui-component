@@ -5,12 +5,12 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
     App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Pixels, Render, Styled,
-    Subscription, Window, actions, canvas, div, prelude::FluentBuilder as _,
+    Subscription, Window, actions, div, prelude::FluentBuilder as _,
 };
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme, Disableable, IconName, Selectable, Sizable,
+    ActiveTheme, Disableable, ElementExt, IconName, Selectable, Sizable,
     actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
@@ -258,7 +258,11 @@ impl SearchPanel {
         cx: &mut Context<Self>,
     ) {
         self.open = true;
-        self.search_input.read(cx).focus_handle.focus(window);
+        self.search_input
+            .read(cx)
+            .focus_handle
+            .clone()
+            .focus(window, cx);
 
         self.search_input.update(cx, |this, cx| {
             if selected_text.len() > 0 {
@@ -290,7 +294,7 @@ impl SearchPanel {
 
     pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = false;
-        self.editor.read(cx).focus_handle.focus(window);
+        self.editor.read(cx).focus_handle.clone().focus(window, cx);
         cx.notify();
     }
 
@@ -307,7 +311,7 @@ impl SearchPanel {
     }
 
     fn on_action_tab(&mut self, _: &IndentInline, window: &mut Window, cx: &mut Context<Self>) {
-        self.editor.focus_handle(cx).focus(window);
+        self.editor.focus_handle(cx).focus(window, cx);
     }
 
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
@@ -456,21 +460,12 @@ impl Render for SearchPanel {
                                     .w_full()
                                     .shadow_none(),
                             )
-                            .child(
-                                canvas(
-                                    {
-                                        let view = cx.entity();
-                                        move |bounds, _, cx| {
-                                            view.update(cx, |r, _| {
-                                                r.input_width = bounds.size.width
-                                            })
-                                        }
-                                    },
-                                    |_, _, _, _| {},
-                                )
-                                .absolute()
-                                .size_full(),
-                            ),
+                            .on_prepaint({
+                                let view = cx.entity();
+                                move |bounds, _, cx| {
+                                    view.update(cx, |r, _| r.input_width = bounds.size.width)
+                                }
+                            }),
                     )
                     .child(
                         Button::new("replace-mode")
@@ -481,9 +476,17 @@ impl Render for SearchPanel {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.replace_mode = !this.replace_mode;
                                 if this.replace_mode {
-                                    this.replace_input.read(cx).focus_handle.focus(window);
+                                    this.replace_input
+                                        .read(cx)
+                                        .focus_handle
+                                        .clone()
+                                        .focus(window, cx);
                                 } else {
-                                    this.search_input.read(cx).focus_handle.focus(window);
+                                    this.search_input
+                                        .read(cx)
+                                        .focus_handle
+                                        .clone()
+                                        .focus(window, cx);
                                 }
                                 cx.notify();
                             })),

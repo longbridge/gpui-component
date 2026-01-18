@@ -19,9 +19,9 @@ use gpui_component::description_list::{DescriptionList, DescriptionItem, Descrip
 
 ```rust
 DescriptionList::new()
-    .child("Name", "GPUI Component", 1)
-    .child("Version", "0.1.0", 1)
-    .child("License", "Apache-2.0", 1)
+    .item("Name", "GPUI Component", 1)
+    .item("Version", "0.1.0", 1)
+    .item("License", "Apache-2.0", 1)
 ```
 
 ### Using DescriptionItem Builder
@@ -119,18 +119,15 @@ DescriptionList::horizontal()
 ### Rich Content with Custom Elements
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_component::text::markdown;
 
 DescriptionList::new()
     .columns(2)
     .children([
         DescriptionItem::new("Name").value("GPUI Component"),
         DescriptionItem::new("Description").value(
-            TextView::markdown(
-                0,
+            markdown(
                 "UI components for building **fantastic** desktop applications.",
-                window,
-                cx
             ).into_any_element()
         ),
     ])

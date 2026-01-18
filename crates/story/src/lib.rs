@@ -1,119 +1,10 @@
-mod accordion_story;
-mod alert_story;
-mod app_menus;
-mod avatar_story;
-mod badge_story;
-mod button_story;
-mod calendar_story;
-mod chart_story;
-mod checkbox_story;
-mod clipboard_story;
-mod collapsible_story;
-mod color_picker_story;
-mod date_picker_story;
-mod description_list_story;
-mod dialog_story;
-mod dropdown_button_story;
-mod form_story;
-mod group_box_story;
-mod icon_story;
-mod image_story;
-mod input_story;
-mod input_group_story;
-mod kbd_story;
-mod label_story;
-mod list_story;
-mod menu_story;
-mod notification_story;
-mod number_input_story;
-mod otp_input_story;
-mod popover_story;
-mod progress_story;
-mod radio_story;
-mod resizable_story;
-mod scrollable_story;
-mod select_story;
-mod settings_story;
-mod sheet_story;
-mod sidebar_story;
-mod skeleton_story;
-mod slider_story;
-mod spinner_story;
-mod switch_story;
-mod table_story;
-mod tabs_story;
-mod tag_story;
-mod textarea_story;
-mod themes;
-mod title_bar;
-mod toggle_story;
-mod tooltip_story;
-mod tree_story;
-mod virtual_list_story;
-mod webview_story;
-mod welcome_story;
-
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
-    Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
-    Render, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window, WindowBounds,
-    WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems, size,
+    FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window,
+    WindowBounds, WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems,
+    size,
 };
-
-pub use accordion_story::AccordionStory;
-pub use alert_story::AlertStory;
-pub use avatar_story::AvatarStory;
-pub use badge_story::BadgeStory;
-pub use button_story::ButtonStory;
-pub use calendar_story::CalendarStory;
-pub use chart_story::ChartStory;
-pub use checkbox_story::CheckboxStory;
-pub use clipboard_story::ClipboardStory;
-pub use collapsible_story::CollapsibleStory;
-pub use color_picker_story::ColorPickerStory;
-pub use date_picker_story::DatePickerStory;
-pub use description_list_story::DescriptionListStory;
-pub use dialog_story::DialogStory;
-pub use dropdown_button_story::DropdownButtonStory;
-pub use form_story::FormStory;
-pub use group_box_story::GroupBoxStory;
-pub use icon_story::IconStory;
-pub use image_story::ImageStory;
-pub use input_story::InputStory;
-pub use input_group_story::InputGroupStory;
-pub use kbd_story::KbdStory;
-pub use label_story::LabelStory;
-pub use list_story::ListStory;
-pub use menu_story::MenuStory;
-pub use notification_story::NotificationStory;
-pub use number_input_story::NumberInputStory;
-pub use otp_input_story::OtpInputStory;
-pub use popover_story::PopoverStory;
-pub use progress_story::ProgressStory;
-pub use radio_story::RadioStory;
-pub use resizable_story::ResizableStory;
-pub use scrollable_story::ScrollableStory;
-pub use select_story::SelectStory;
-use serde::{Deserialize, Serialize};
-pub use settings_story::SettingsStory;
-pub use sheet_story::SheetStory;
-pub use sidebar_story::SidebarStory;
-pub use skeleton_story::SkeletonStory;
-pub use slider_story::SliderStory;
-pub use spinner_story::SpinnerStory;
-pub use switch_story::SwitchStory;
-pub use table_story::TableStory;
-pub use tabs_story::TabsStory;
-pub use tag_story::TagStory;
-pub use textarea_story::TextareaStory;
-pub use title_bar::AppTitleBar;
-pub use toggle_story::ToggleStory;
-pub use tooltip_story::TooltipStory;
-pub use tree_story::TreeStory;
-pub use virtual_list_story::VirtualListStory;
-pub use webview_story::WebViewStory;
-pub use welcome_story::WelcomeStory;
-
 use gpui_component::{
     ActiveTheme, IconName, Root, TitleBar, WindowExt,
     button::Button,
@@ -125,7 +16,15 @@ use gpui_component::{
     scroll::{ScrollableElement as _, ScrollbarShow},
     v_flex,
 };
+use serde::{Deserialize, Serialize};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+
+mod app_menus;
+mod stories;
+mod themes;
+mod title_bar;
+pub use crate::title_bar::AppTitleBar;
+pub use stories::*;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -149,12 +48,12 @@ actions!(
         About,
         Open,
         Quit,
-        CloseWindow,
         ToggleSearch,
         TestAction,
         Tab,
         TabPrev,
-        ShowPanelInfo
+        ShowPanelInfo,
+        ToggleListActiveHighlight
     ]
 );
 
@@ -225,9 +124,15 @@ pub fn create_new_window_with_size<F, E>(
         let window = cx
             .open_window(options, |window, cx| {
                 let view = crate_view_fn(window, cx);
-                let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
+                let story_root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
-                cx.new(|cx| Root::new(root, window, cx))
+                // Set focus to the StoryRoot to enable it's actions.
+                let focus_handle = story_root.focus_handle(cx);
+                window.defer(cx, move |window, cx| {
+                    focus_handle.focus(window, cx);
+                });
+
+                cx.new(|cx| Root::new(story_root, window, cx))
             })
             .expect("failed to open window");
 
@@ -241,46 +146,6 @@ pub fn create_new_window_with_size<F, E>(
         Ok::<_, anyhow::Error>(())
     })
     .detach();
-}
-
-struct StoryRoot {
-    title_bar: Entity<AppTitleBar>,
-    view: AnyView,
-}
-
-impl StoryRoot {
-    pub fn new(
-        title: impl Into<SharedString>,
-        view: impl Into<AnyView>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
-        Self {
-            title_bar,
-            view: view.into(),
-        }
-    }
-}
-
-impl Render for StoryRoot {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sheet_layer = Root::render_sheet_layer(window, cx);
-        let dialog_layer = Root::render_dialog_layer(window, cx);
-        let notification_layer = Root::render_notification_layer(window, cx);
-
-        div()
-            .size_full()
-            .child(
-                v_flex()
-                    .size_full()
-                    .child(self.title_bar.clone())
-                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
-            )
-            .children(sheet_layer)
-            .children(dialog_layer)
-            .children(notification_layer)
-    }
 }
 
 impl Global for AppState {}
@@ -297,17 +162,7 @@ pub fn init(cx: &mut App) {
     gpui_component::init(cx);
     AppState::init(cx);
     themes::init(cx);
-    input_story::init(cx);
-    input_group_story::init(cx);
-    number_input_story::init(cx);
-    textarea_story::init(cx);
-    select_story::init(cx);
-    popover_story::init(cx);
-    menu_story::init(cx);
-    webview_story::init(cx);
-    tooltip_story::init(cx);
-    otp_input_story::init(cx);
-    tree_story::init(cx);
+    stories::init(cx);
 
     let http_client = std::sync::Arc::new(
         reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
@@ -328,6 +183,22 @@ pub fn init(cx: &mut App) {
 
     cx.on_action(|_: &Quit, cx: &mut App| {
         cx.quit();
+    });
+
+    cx.on_action(|_: &About, cx: &mut App| {
+        if let Some(window) = cx.active_window().and_then(|w| w.downcast::<Root>()) {
+            cx.defer(move |cx| {
+                window
+                    .update(cx, |root, window, cx| {
+                        root.push_notification(
+                            "GPUI Component Storybook\nVersion 0.1.0",
+                            window,
+                            cx,
+                        );
+                    })
+                    .unwrap();
+            });
+        }
     });
 
     register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
@@ -475,53 +346,6 @@ pub enum ContainerEvent {
     Close,
 }
 
-pub trait Story: Render + Sized {
-    fn klass() -> &'static str {
-        std::any::type_name::<Self>().split("::").last().unwrap()
-    }
-
-    fn title() -> &'static str;
-
-    fn description() -> &'static str {
-        ""
-    }
-
-    fn closable() -> bool {
-        true
-    }
-
-    fn zoomable() -> Option<PanelControl> {
-        Some(PanelControl::default())
-    }
-
-    fn title_bg() -> Option<Hsla> {
-        None
-    }
-
-    fn paddings() -> Pixels {
-        px(16.)
-    }
-
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
-
-    fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
-        let _ = active;
-        let _ = window;
-        let _ = cx;
-    }
-
-    fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
-    where
-        Self: 'static,
-    {
-        if let Some(story) = view.downcast::<Self>().ok() {
-            cx.update_entity(&story, |story, cx| {
-                story.on_active(active, window, cx);
-            });
-        }
-    }
-}
-
 impl EventEmitter<ContainerEvent> for StoryContainer {}
 
 impl StoryContainer {
@@ -587,37 +411,6 @@ impl StoryContainer {
         self.on_active = Some(on_active);
         self
     }
-
-    fn on_action_panel_info(
-        &mut self,
-        _: &ShowPanelInfo,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        struct Info;
-        let note = Notification::new()
-            .message(format!("You have clicked panel info on: {}", self.name))
-            .id::<Info>();
-        window.push_notification(note, cx);
-    }
-
-    fn on_action_toggle_search(
-        &mut self,
-        _: &ToggleSearch,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        cx.propagate();
-        if window.has_focused_input(cx) {
-            return;
-        }
-
-        struct Search;
-        let note = Notification::new()
-            .message(format!("You have toggled search on: {}", self.name))
-            .id::<Search>();
-        window.push_notification(note, cx);
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -662,6 +455,7 @@ impl StoryState {
         }
 
         match self.story_klass.to_string().as_str() {
+            "BreadcrumbStory" => story!(BreadcrumbStory),
             "ButtonStory" => story!(ButtonStory),
             "CalendarStory" => story!(CalendarStory),
             "SelectStory" => story!(SelectStory),
@@ -670,15 +464,15 @@ impl StoryState {
             "InputStory" => story!(InputStory),
             "ListStory" => story!(ListStory),
             "DialogStory" => story!(DialogStory),
+            "DividerStory" => story!(DividerStory),
             "PopoverStory" => story!(PopoverStory),
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
-            "ScrollableStory" => story!(ScrollableStory),
+            "ScrollbarStory" => story!(ScrollbarStory),
             "SwitchStory" => story!(SwitchStory),
             "TableStory" => story!(TableStory),
             "LabelStory" => story!(LabelStory),
             "TooltipStory" => story!(TooltipStory),
-            "WebViewStory" => story!(WebViewStory),
             "AccordionStory" => story!(AccordionStory),
             "SidebarStory" => story!(SidebarStory),
             "FormStory" => story!(FormStory),
@@ -695,7 +489,7 @@ impl Panel for StoryContainer {
         "StoryContainer"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.name.clone().into_any_element()
     }
 
@@ -725,11 +519,11 @@ impl Panel for StoryContainer {
             .contains(&self.name)
     }
 
-    fn set_zoomed(&mut self, zoomed: bool, _window: &mut Window, _cx: &mut App) {
+    fn set_zoomed(&mut self, zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {
         println!("panel: {} zoomed: {}", self.name, zoomed);
     }
 
-    fn set_active(&mut self, active: bool, _window: &mut Window, cx: &mut App) {
+    fn set_active(&mut self, active: bool, _window: &mut Window, cx: &mut Context<Self>) {
         println!("panel: {} active: {}", self.name, active);
         if let Some(on_active) = self.on_active {
             if let Some(story) = self.story.clone() {
@@ -738,11 +532,20 @@ impl Panel for StoryContainer {
         }
     }
 
-    fn dropdown_menu(&self, menu: PopupMenu, _window: &Window, _cx: &App) -> PopupMenu {
+    fn dropdown_menu(
+        &mut self,
+        menu: PopupMenu,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> PopupMenu {
         menu.menu("Info", Box::new(ShowPanelInfo))
     }
 
-    fn toolbar_buttons(&self, _window: &mut Window, _cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Vec<Button>> {
         Some(vec![
             Button::new("info")
                 .icon(IconName::Info)
@@ -774,15 +577,102 @@ impl Focusable for StoryContainer {
     }
 }
 impl Render for StoryContainer {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("story-container")
             .size_full()
             .overflow_y_scrollbar()
-            .p(self.paddings)
             .track_focus(&self.focus_handle)
+            .when_some(self.story.clone(), |this, story| {
+                this.child(div().size_full().p(self.paddings).child(story))
+            })
+    }
+}
+
+struct StoryRoot {
+    focus_handle: FocusHandle,
+    title_bar: Entity<AppTitleBar>,
+    view: AnyView,
+}
+
+impl StoryRoot {
+    pub fn new(
+        title: impl Into<SharedString>,
+        view: impl Into<AnyView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
+        Self {
+            focus_handle: cx.focus_handle(),
+            title_bar,
+            view: view.into(),
+        }
+    }
+
+    fn on_action_panel_info(
+        &mut self,
+        _: &ShowPanelInfo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        struct Info;
+        let note = Notification::new()
+            .message("You have clicked panel info.")
+            .id::<Info>();
+        window.push_notification(note, cx);
+    }
+
+    fn on_action_toggle_search(
+        &mut self,
+        _: &ToggleSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.propagate();
+        if window.has_focused_input(cx) {
+            return;
+        }
+
+        struct Search;
+        let note = Notification::new()
+            .message("You have toggled search.")
+            .id::<Search>();
+        window.push_notification(note, cx);
+    }
+}
+
+impl Focusable for StoryRoot {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for StoryRoot {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let sheet_layer = Root::render_sheet_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
+
+        div()
+            .id("story-root")
             .on_action(cx.listener(Self::on_action_panel_info))
             .on_action(cx.listener(Self::on_action_toggle_search))
-            .when_some(self.story.clone(), |this, story| this.child(story))
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(self.title_bar.clone())
+                    .child(
+                        div()
+                            .track_focus(&self.focus_handle)
+                            .flex_1()
+                            .overflow_hidden()
+                            .child(self.view.clone()),
+                    )
+                    .children(sheet_layer)
+                    .children(dialog_layer)
+                    .children(notification_layer),
+            )
     }
 }

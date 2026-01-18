@@ -209,18 +209,13 @@ SettingItem::new(
 ### With Markdown Description
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_component::text::markdown;
 
 SettingItem::new(
     "Documentation",
     SettingField::element(...)
 )
-.description(TextView::markdown(
-    "desc",
-    "Rust doc for the `gpui-component` crate.",
-    window,
-    cx,
-))
+.description(markdown("Rust doc for the `gpui-component` crate."))
 ```
 
 ## Setting Fields

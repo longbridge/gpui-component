@@ -1,5 +1,8 @@
-use crate::{highlighter::HighlightTheme, scroll::ScrollbarShow};
-use gpui::{px, App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance};
+use crate::{
+    highlighter::HighlightTheme, list::ListSettings, notification::NotificationSettings,
+    scroll::ScrollbarShow, sheet::SheetSettings,
+};
+use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -67,12 +70,18 @@ pub struct Theme {
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
     pub scrollbar_show: ScrollbarShow,
+    /// The notification setting.
+    pub notification: NotificationSettings,
     /// Tile grid size, default is 4px.
     pub tile_grid_size: Pixels,
     /// The shadow of the tile panel.
     pub tile_shadow: bool,
     /// The border radius of the tile panel, default is 0px.
     pub tile_radius: Pixels,
+    /// The list settings.
+    pub list: ListSettings,
+    /// The sheet settings.
+    pub sheet: SheetSettings,
 }
 
 impl Default for Theme {
@@ -199,19 +208,22 @@ impl From<&ThemeColor> for Theme {
             radius_lg: px(8.),
             shadow: true,
             scrollbar_show: ScrollbarShow::default(),
+            notification: NotificationSettings::default(),
             tile_grid_size: px(8.),
             tile_shadow: true,
             tile_radius: px(0.),
+            list: ListSettings::default(),
             colors: *colors,
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),
+            sheet: SheetSettings::default(),
         }
     }
 }
 
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Hash, Serialize, Deserialize, JsonSchema,
+    Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {

@@ -26,7 +26,7 @@ impl InputState {
             return;
         };
 
-        let Some(pos) = line.position_for_index(point.column, last_layout.line_height) else {
+        let Some(pos) = line.position_for_index(point.column, last_layout) else {
             self.preferred_column = None;
             return;
         };
@@ -51,6 +51,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
         self.hide_context_menu(cx);
+        self.clear_inline_completion(cx);
         cx.notify()
     }
 
@@ -92,7 +93,7 @@ impl InputState {
                         x: preferred_x,
                         y: next_display_point.local_row * last_layout.line_height,
                     },
-                    last_layout.line_height,
+                    last_layout,
                 ) {
                     new_offset = line_start_offset + x;
                 }

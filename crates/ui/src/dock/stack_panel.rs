@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
+    ActiveTheme, AxisExt as _, Placement,
     dock::PanelInfo,
     h_flex,
     resizable::{
-        resizable_panel, ResizablePanelEvent, ResizablePanelGroup, ResizablePanelState,
-        ResizableState, PANEL_MIN_SIZE,
+        PANEL_MIN_SIZE, ResizablePanelEvent, ResizablePanelGroup, ResizablePanelState,
+        ResizableState, resizable_panel,
     },
-    ActiveTheme, AxisExt as _, Placement,
 };
 
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
@@ -32,10 +32,11 @@ impl Panel for StackPanel {
         "StackPanel"
     }
 
-    fn title(&self, _window: &gpui::Window, _cx: &gpui::App) -> gpui::AnyElement {
-        "StackPanel".into_any_element()
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        "StackPanel"
     }
-    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
+
+    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
         for panel in &self.panels {
             panel.set_active(active, window, cx);
         }

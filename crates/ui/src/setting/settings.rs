@@ -1,14 +1,14 @@
 use crate::{
+    IconName, Sizable, Size, StyledExt,
     group_box::GroupBoxVariant,
     input::{Input, InputState},
     resizable::{h_resizable, resizable_panel},
     setting::{SettingGroup, SettingPage},
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
-    IconName, Sizable, Size, StyledExt,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, App, AppContext as _, Axis, ElementId, Entity,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, StyleRefinement, Styled, Window,
+    App, AppContext as _, Axis, ElementId, Entity, IntoElement, ParentElement as _, Pixels,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use rust_i18n::t;
 
@@ -79,7 +79,7 @@ impl Settings {
         self
     }
 
-    fn filtered_pages(&self, query: &str) -> Vec<SettingPage> {
+    fn filtered_pages(&self, query: &str, cx: &App) -> Vec<SettingPage> {
         self.pages
             .iter()
             .filter_map(|page| {
@@ -91,7 +91,7 @@ impl Settings {
                         group.items = group
                             .items
                             .iter()
-                            .filter(|item| item.is_match(&query))
+                            .filter(|item| item.is_match(&query, cx))
                             .cloned()
                             .collect();
                         if group.items.is_empty() {
@@ -143,7 +143,7 @@ impl Settings {
         let selected_index = state.read(cx).selected_index;
         let search_input = state.read(cx).search_input.clone();
 
-        Sidebar::left()
+        Sidebar::new("settings-sidebar")
             .w(relative(1.))
             .border_0()
             .refine_style(&self.sidebar_style)
@@ -221,6 +221,9 @@ pub(super) struct SettingsState {
 /// Options for rendering setting item.
 #[derive(Clone, Copy)]
 pub struct RenderOptions {
+    pub page_ix: usize,
+    pub group_ix: usize,
+    pub item_ix: usize,
     pub size: Size,
     pub group_variant: GroupBoxVariant,
     pub layout: Axis,
@@ -249,8 +252,11 @@ impl RenderOnce for Settings {
         });
 
         let query = state.read(cx).search_input.read(cx).value();
-        let filtered_pages = self.filtered_pages(&query);
+        let filtered_pages = self.filtered_pages(&query, cx);
         let options = RenderOptions {
+            page_ix: 0,
+            group_ix: 0,
+            item_ix: 0,
             size: self.size,
             group_variant: self.group_variant,
             layout: Axis::Horizontal,

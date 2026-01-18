@@ -1,6 +1,6 @@
 [package]
 name = "input"
-version = "0.5.0-preview0"
+version = "0.5.0"
 publish = false
 edition.workspace = true
 

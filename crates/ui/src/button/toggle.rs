@@ -1,13 +1,13 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, AnyElement, App, ElementId, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Window,
+    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
-use crate::{h_flex, ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt, h_flex};
 
 #[derive(Default, Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToggleVariant {
@@ -276,5 +276,48 @@ impl RenderOnce for ToggleGroup {
                     })
                 })
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::IconName;
+
+    #[gpui::test]
+    fn test_toggle_builder(_cx: &mut gpui::TestAppContext) {
+        let toggle = Toggle::new("complex-toggle")
+            .label("Enable Feature")
+            .icon(IconName::Check)
+            .checked(true)
+            .outline()
+            .large()
+            .disabled(false)
+            .on_click(|_, _, _| {});
+
+        assert_eq!(toggle.children.len(), 2); // label + icon
+        assert!(toggle.checked);
+        assert_eq!(toggle.variant, ToggleVariant::Outline);
+        assert_eq!(toggle.size, Size::Large);
+        assert!(!toggle.disabled);
+        assert!(toggle.on_click.is_some());
+    }
+
+    #[gpui::test]
+    fn test_toggle_group_builder(_cx: &mut gpui::TestAppContext) {
+        let group = ToggleGroup::new("complex-group")
+            .child(Toggle::new("toggle1").label("Option 1"))
+            .child(Toggle::new("toggle2").label("Option 2").checked(true))
+            .child(Toggle::new("toggle3").label("Option 3"))
+            .outline()
+            .large()
+            .disabled(false)
+            .on_click(|_, _, _| {});
+
+        assert_eq!(group.items.len(), 3);
+        assert_eq!(group.variant, ToggleVariant::Outline);
+        assert_eq!(group.size, Size::Large);
+        assert!(!group.disabled);
+        assert!(group.on_click.is_some());
     }
 }

@@ -11,8 +11,8 @@ use gpui_component_assets::Assets;
 use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
     IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
-    PopoverStory, ProgressStory, ResizableStory, ScrollableStory, SelectStory, SidebarStory,
-    StoryContainer, SwitchStory, TableStory, TooltipStory, WebViewStory,
+    PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
+    StoryContainer, SwitchStory, TableStory, TooltipStory,
 };
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
@@ -183,7 +183,10 @@ impl StoryWorkspace {
     ) {
         let dock_area = dock_area.clone();
         self._save_layout_task = Some(cx.spawn_in(window, async move |story, window| {
-            Timer::after(Duration::from_secs(10)).await;
+            window
+                .background_executor()
+                .timer(Duration::from_secs(10))
+                .await;
 
             _ = story.update_in(window, move |this, _, cx| {
                 let dock_area = dock_area.read(cx);
@@ -258,8 +261,7 @@ impl StoryWorkspace {
     fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App) {
         let dock_item = Self::init_default_layout(&dock_area, window, cx);
 
-        let left_panels = DockItem::split_with_sizes(
-            Axis::Vertical,
+        let left_panels = DockItem::v_split(
             vec![
                 DockItem::tab(
                     StoryContainer::panel::<ListStory>(window, cx),
@@ -269,41 +271,36 @@ impl StoryWorkspace {
                 ),
                 DockItem::tabs(
                     vec![
-                        Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+                        Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
                         Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     ],
-                    None,
                     &dock_area,
                     window,
                     cx,
-                ),
+                )
+                .size(px(360.)),
             ],
-            vec![None, Some(px(360.))],
             &dock_area,
             window,
             cx,
         );
 
-        let bottom_panels = DockItem::split_with_sizes(
-            Axis::Vertical,
+        let bottom_panels = DockItem::v_split(
             vec![DockItem::tabs(
                 vec![
                     Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
                 ],
-                None,
                 &dock_area,
                 window,
                 cx,
             )],
-            vec![None],
             &dock_area,
             window,
             cx,
         );
 
-        let right_panels = DockItem::split_with_sizes(
-            Axis::Vertical,
+        let right_panels = DockItem::v_split(
             vec![
                 DockItem::tab(
                     StoryContainer::panel::<ImageStory>(window, cx),
@@ -318,7 +315,6 @@ impl StoryWorkspace {
                     cx,
                 ),
             ],
-            vec![None],
             &dock_area,
             window,
             cx,
@@ -340,8 +336,7 @@ impl StoryWorkspace {
         window: &mut Window,
         cx: &mut App,
     ) -> DockItem {
-        DockItem::split_with_sizes(
-            Axis::Vertical,
+        DockItem::v_split(
             vec![DockItem::tabs(
                 vec![
                     Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
@@ -358,18 +353,16 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SidebarStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<FormStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<NotificationStory>(window, cx)),
                 ],
-                None,
                 &dock_area,
                 window,
                 cx,
             )],
-            vec![None],
             &dock_area,
             window,
             cx,
@@ -447,9 +440,8 @@ impl StoryWorkspace {
             12 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
             13 => Arc::new(StoryContainer::panel::<CalendarStory>(window, cx)),
             14 => Arc::new(StoryContainer::panel::<ResizableStory>(window, cx)),
-            15 => Arc::new(StoryContainer::panel::<ScrollableStory>(window, cx)),
+            15 => Arc::new(StoryContainer::panel::<ScrollbarStory>(window, cx)),
             16 => Arc::new(StoryContainer::panel::<AccordionStory>(window, cx)),
-            17 => Arc::new(StoryContainer::panel::<WebViewStory>(window, cx)),
             _ => Arc::new(StoryContainer::panel::<ButtonStory>(window, cx)),
         };
 

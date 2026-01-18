@@ -10,8 +10,10 @@ A toast notification system for displaying temporary messages to users. Notifica
 ## Import
 
 ```rust
-use gpui_component::notification::{Notification, NotificationType};
-use gpui_component::WindowExt;
+use gpui_component::{
+    notification::{Notification, NotificationType},
+    WindowExt
+};
 ```
 
 ## Usage
@@ -23,16 +25,13 @@ You need to set up your application's root view to render the notification layer
 The [Root::render_notification_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_notification_layer) function handles rendering any active modals on top of your app content.
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_component::{TitleBar, Root};
 
-struct MyApp {
-    view: AnyView,
-}
+struct Example {}
 
-impl Render for MyApp {
+impl Render for Example {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let notification_layer = Root::render_notification_layer(window, cx);
-
 
         div()
             .size_full()
@@ -40,7 +39,7 @@ impl Render for MyApp {
                 v_flex()
                     .size_full()
                     .child(TitleBar::new())
-                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+                    .child(div().flex_1().child("Hello world!")),
             )
             // Render the notification layer on top of the app content
             .children(notification_layer)
@@ -145,7 +144,7 @@ Notification::new()
 ### Custom Content
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_component::text::markdown;
 
 let markdown_content = r#"
 ## Custom Notification
@@ -156,13 +155,7 @@ let markdown_content = r#"
 
 Notification::new()
     .content(|_, window, cx| {
-        TextView::markdown(
-            "custom-content",
-            markdown_content,
-            window,
-            cx,
-        )
-        .into_any_element()
+        markdown(markdown_content).into_any_element()
     })
 ```
 
@@ -263,7 +256,7 @@ Notification::warning("System maintenance will begin in 30 minutes.")
 ### Batch Operation Results
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_component::text::markdown;
 
 let results_content = r#"
 ## Batch Operation Complete
@@ -278,8 +271,7 @@ let results_content = r#"
 Notification::success("Batch operation completed with some failures.")
     .title("Operation Results")
     .content(|window, cx| {
-        TextView::markdown("results", results_content, window, cx)
-            .into_any_element()
+        markdown(results_content).into_any_element()
     })
     .autohide(false)
 ```
@@ -309,63 +301,3 @@ Notification::new()
         cx.notify();
     }))
 ```
-
-## Positioning
-
-Notifications appear in a fixed position at the top right of the window:
-
-- **Position**: `absolute().top_4().right_4()`
-- **Stacking**: Newer notifications appear below existing ones
-- **Max visible**: Up to 10 notifications shown at once
-- **Animation**: Slide down on show, slide right on dismiss
-- **Hover expand**: List expands when hovering over notification area
-
-## Animation and Timing
-
-### Show Animation
-
-- **Duration**: 0.25 seconds
-- **Easing**: Cubic bezier (0.4, 0, 0.2, 1)
-- **Effect**: Slides down and fades in
-
-### Dismiss Animation
-
-- **Duration**: 0.15 seconds
-- **Easing**: Cubic bezier (0.4, 0, 0.2, 1)
-- **Effect**: Slides right and fades out
-
-### Auto-hide Timing
-
-- **Default delay**: 5 seconds after show
-- **Hover pause**: Timer pauses while hovering over notification area
-- **Manual dismiss**: Immediate when close button clicked
-
-## Best Practices
-
-### Content Guidelines
-
-- Keep titles concise and descriptive (1-3 words)
-- Write clear, actionable messages
-- Use appropriate notification types for content
-- Provide specific error messages with next steps
-
-### UX Guidelines
-
-- Use auto-hide for confirmations and status updates
-- Disable auto-hide for errors requiring user action
-- Include action buttons for actionable notifications
-- Avoid showing too many notifications simultaneously
-
-### Performance Considerations
-
-- Unique IDs prevent duplicate notifications
-- Auto-dismiss reduces notification buildup
-- Limit notification frequency to avoid overwhelming users
-- Clean up notification subscriptions properly
-
-### Timing Recommendations
-
-- **Success/Info**: Auto-hide after 5 seconds (default)
-- **Warnings**: Auto-hide after 7-10 seconds or require action
-- **Errors**: Disable auto-hide, require user acknowledgment
-- **Progress updates**: Disable auto-hide, update in place

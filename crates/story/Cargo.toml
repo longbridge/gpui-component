@@ -1,6 +1,6 @@
 [package]
 name = "gpui-component-story"
-version = "0.5.0-preview0"
+version = "0.5.0"
 publish = false
 edition.workspace = true
 
@@ -12,7 +12,6 @@ anyhow.workspace = true
 gpui.workspace = true
 gpui-component = { workspace = true, features = [
   "tree-sitter-languages",
-  "webview",
 ] }
 gpui-component-assets.workspace = true
 reqwest_client = { path = "../reqwest_client" }
@@ -20,19 +19,21 @@ reqwest_client = { path = "../reqwest_client" }
 autocorrect = "2.14.2"
 chrono = "0.4"
 color-lsp = "0.2.0"
+csv = "1.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 itertools = "0.14.0"
 lsp-types.workspace = true
 rand = "0.8"
-raw-window-handle = { version = "0.6", features = ["std"] }
 regex = "1"
 serde = "1"
 serde_json = "1"
 smol.workspace = true
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 tree-sitter-navi = "0.2.2"
 unindent = "0.2.3"
+rust-i18n.workspace = true
+dirs = "6.0.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

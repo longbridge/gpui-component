@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Entity, IntoElement,
-    SharedString, StyleRefinement, Styled, Window,
+    AnyElement, App, AppContext as _, Entity, IntoElement, SharedString, StyleRefinement, Styled,
+    Window, prelude::FluentBuilder as _,
 };
 
 use crate::{
+    AxisExt as _, Sizable, StyledExt,
     input::{Input, InputEvent, InputState},
     setting::{
-        fields::{get_value, set_value, SettingFieldRender},
         AnySettingField, RenderOptions,
+        fields::{SettingFieldRender, get_value, set_value},
     },
-    AxisExt as _, Sizable, StyledExt,
 };
 
 pub(crate) struct StringField<T> {
@@ -47,23 +47,30 @@ where
         let set_value = set_value::<T>(&field, cx);
 
         let state = window
-            .use_keyed_state("string-state", cx, |window, cx| {
-                let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
-                let _subscription = cx.subscribe(&input, {
-                    move |_, input, event: &InputEvent, cx| match event {
-                        InputEvent::Change => {
-                            let value = input.read(cx).value();
-                            set_value(value.into(), cx);
+            .use_keyed_state(
+                SharedString::from(format!(
+                    "string-state-{}-{}-{}",
+                    options.page_ix, options.group_ix, options.item_ix
+                )),
+                cx,
+                |window, cx| {
+                    let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
+                    let _subscription = cx.subscribe(&input, {
+                        move |_, input, event: &InputEvent, cx| match event {
+                            InputEvent::Change => {
+                                let value = input.read(cx).value();
+                                set_value(value.into(), cx);
+                            }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                });
+                    });
 
-                State {
-                    input,
-                    _subscription,
-                }
-            })
+                    State {
+                        input,
+                        _subscription,
+                    }
+                },
+            )
             .read(cx);
 
         Input::new(&state.input)

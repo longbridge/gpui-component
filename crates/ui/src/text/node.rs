@@ -5,10 +5,10 @@ use std::{
 };
 
 use gpui::{
-    AnyElement, App, DefiniteLength, Div, Element, ElementId, FontStyle, FontWeight, Half,
-    HighlightStyle, InteractiveElement as _, IntoElement, Length, ListState, ObjectFit,
-    ParentElement, SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _,
-    Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
+    AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
+    InteractiveElement as _, IntoElement, Length, ObjectFit, ParentElement, SharedString,
+    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div, img,
+    prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
@@ -16,12 +16,186 @@ use ropey::Rope;
 use crate::{
     ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, SyntaxHighlighter},
-    text::inline::{Inline, InlineState},
+    text::{
+        CodeBlockActionsFn,
+        document::NodeRenderOptions,
+        inline::{Inline, InlineState},
+    },
     tooltip::Tooltip,
     v_flex,
 };
 
 use super::{TextViewStyle, utils::list_item_prefix};
+
+/// The block-level nodes.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum BlockNode {
+    /// Something like a Div container in HTML.
+    Root {
+        children: Vec<BlockNode>,
+        span: Option<Span>,
+    },
+    Paragraph(Paragraph),
+    Heading {
+        level: u8,
+        children: Paragraph,
+        span: Option<Span>,
+    },
+    Blockquote {
+        children: Vec<BlockNode>,
+        span: Option<Span>,
+    },
+    List {
+        /// Only contains ListItem, others will be ignored
+        children: Vec<BlockNode>,
+        ordered: bool,
+        span: Option<Span>,
+    },
+    ListItem {
+        children: Vec<BlockNode>,
+        spread: bool,
+        /// Whether the list item is checked, if None, it's not a checkbox
+        checked: Option<bool>,
+        span: Option<Span>,
+    },
+    CodeBlock(CodeBlock),
+    Table(Table),
+    Break {
+        html: bool,
+        span: Option<Span>,
+    },
+    Divider {
+        span: Option<Span>,
+    },
+    /// Use for to_markdown get raw definition
+    Definition {
+        identifier: SharedString,
+        url: SharedString,
+        title: Option<SharedString>,
+        span: Option<Span>,
+    },
+    Unknown,
+}
+
+impl BlockNode {
+    pub(super) fn is_list_item(&self) -> bool {
+        matches!(self, Self::ListItem { .. })
+    }
+
+    pub(super) fn is_break(&self) -> bool {
+        matches!(self, Self::Break { .. })
+    }
+
+    /// Combine all children, omitting the empt parent nodes.
+    pub(super) fn compact(self) -> BlockNode {
+        match self {
+            Self::Root { mut children, .. } if children.len() == 1 => children.remove(0).compact(),
+            _ => self,
+        }
+    }
+
+    /// Get the span of the node.
+    pub(super) fn span(&self) -> Option<Span> {
+        match self {
+            BlockNode::Root { span, .. } => *span,
+            BlockNode::Paragraph(paragraph) => paragraph.span,
+            BlockNode::Heading { span, .. } => *span,
+            BlockNode::Blockquote { span, .. } => *span,
+            BlockNode::List { span, .. } => *span,
+            BlockNode::ListItem { span, .. } => *span,
+            BlockNode::CodeBlock(code_block) => code_block.span,
+            BlockNode::Table(table) => table.span,
+            BlockNode::Break { span, .. } => *span,
+            BlockNode::Divider { span, .. } => *span,
+            BlockNode::Definition { span, .. } => *span,
+            BlockNode::Unknown { .. } => None,
+        }
+    }
+
+    pub(super) fn selected_text(&self) -> String {
+        let mut text = String::new();
+        match self {
+            BlockNode::Root { children, .. } => {
+                let mut block_text = String::new();
+                for c in children.iter() {
+                    block_text.push_str(&c.selected_text());
+                }
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            BlockNode::Paragraph(paragraph) => {
+                let mut block_text = String::new();
+                block_text.push_str(&paragraph.selected_text());
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            BlockNode::Heading { children, .. } => {
+                let mut block_text = String::new();
+                block_text.push_str(&children.selected_text());
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            BlockNode::List { children, .. } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            BlockNode::ListItem { children, .. } => {
+                for c in children.iter() {
+                    text.push_str(&c.selected_text());
+                }
+            }
+            BlockNode::Blockquote { children, .. } => {
+                let mut block_text = String::new();
+                for c in children.iter() {
+                    block_text.push_str(&c.selected_text());
+                }
+
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            BlockNode::Table(table) => {
+                let mut block_text = String::new();
+                for row in table.children.iter() {
+                    let mut row_texts = vec![];
+                    for cell in row.children.iter() {
+                        row_texts.push(cell.children.selected_text());
+                    }
+                    if !row_texts.is_empty() {
+                        block_text.push_str(&row_texts.join(" "));
+                        block_text.push('\n');
+                    }
+                }
+
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            BlockNode::CodeBlock(code_block) => {
+                let block_text = code_block.selected_text();
+                if !block_text.is_empty() {
+                    text.push_str(&block_text);
+                    text.push('\n');
+                }
+            }
+            BlockNode::Definition { .. }
+            | BlockNode::Break { .. }
+            | BlockNode::Divider { .. }
+            | BlockNode::Unknown { .. } => {}
+        }
+
+        text
+    }
+}
 
 #[allow(unused)]
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -68,6 +242,7 @@ impl TextMark {
     }
 }
 
+/// The bytes
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Span {
     pub start: usize,
@@ -207,8 +382,9 @@ impl Paragraph {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Table {
-    pub children: Vec<TableRow>,
-    pub column_aligns: Vec<ColumnumnAlign>,
+    pub(crate) children: Vec<TableRow>,
+    pub(crate) column_aligns: Vec<ColumnumnAlign>,
+    pub(crate) span: Option<Span>,
 }
 
 impl Table {
@@ -304,10 +480,11 @@ impl Paragraph {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CodeBlock {
+pub struct CodeBlock {
     lang: Option<SharedString>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
     state: Arc<Mutex<InlineState>>,
+    pub span: Option<Span>,
 }
 
 impl PartialEq for CodeBlock {
@@ -317,11 +494,21 @@ impl PartialEq for CodeBlock {
 }
 
 impl CodeBlock {
+    /// Get the language of the code block.
+    pub fn lang(&self) -> Option<SharedString> {
+        self.lang.clone()
+    }
+
+    /// Get the code content of the code block.
+    pub fn code(&self) -> SharedString {
+        self.state.lock().unwrap().text.clone()
+    }
+
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
-        _: &TextViewStyle,
         highlight_theme: &HighlightTheme,
+        span: Option<impl Into<Span>>,
     ) -> Self {
         let mut styles = vec![];
         if let Some(lang) = &lang {
@@ -337,11 +524,8 @@ impl CodeBlock {
             lang,
             styles,
             state,
+            span: span.map(|s| s.into()),
         }
-    }
-
-    fn code(&self) -> SharedString {
-        self.state.lock().unwrap().text.clone()
     }
 
     pub(super) fn selected_text(&self) -> String {
@@ -358,7 +542,7 @@ impl CodeBlock {
         &self,
         options: &NodeRenderOptions,
         node_cx: &NodeContext,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         let style = &node_cx.style;
@@ -367,7 +551,7 @@ impl CodeBlock {
             .when(!options.is_last, |this| this.pb(style.paragraph_gap))
             .child(
                 div()
-                    .id("codeblock")
+                    .id(("codeblock", options.ix))
                     .p_3()
                     .rounded(cx.theme().radius)
                     .bg(cx.theme().muted)
@@ -380,17 +564,33 @@ impl CodeBlock {
                         self.state.clone(),
                         vec![],
                         self.styles.clone(),
-                    )),
+                    ))
+                    .when_some(node_cx.code_block_actions.clone(), |this, actions| {
+                        this.child(
+                            div()
+                                .id("actions")
+                                .absolute()
+                                .top_2()
+                                .right_2()
+                                .bg(cx.theme().muted)
+                                .rounded(cx.theme().radius)
+                                .child(actions(&self, window, cx)),
+                        )
+                    }),
             )
             .into_any_element()
     }
 }
 
 /// A context for rendering nodes, contains link references.
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone)]
 pub(crate) struct NodeContext {
+    /// The byte offset of the node in the original markdown text.
+    /// Used for incremental updates.
+    pub(crate) offset: usize,
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
+    pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
 }
 
 impl NodeContext {
@@ -399,142 +599,10 @@ impl NodeContext {
     }
 }
 
-/// The AST Node of the rich text.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Node {
-    Root {
-        children: Vec<Node>,
-    },
-    Paragraph(Paragraph),
-    Heading {
-        level: u8,
-        children: Paragraph,
-    },
-    Blockquote {
-        children: Vec<Node>,
-    },
-    List {
-        /// Only contains ListItem, others will be ignored
-        children: Vec<Node>,
-        ordered: bool,
-    },
-    ListItem {
-        children: Vec<Node>,
-        spread: bool,
-        /// Whether the list item is checked, if None, it's not a checkbox
-        checked: Option<bool>,
-    },
-    CodeBlock(CodeBlock),
-    Table(Table),
-    Break {
-        html: bool,
-    },
-    Divider,
-    /// Use for to_markdown get raw definition
-    Definition {
-        identifier: SharedString,
-        url: SharedString,
-        title: Option<SharedString>,
-    },
-    Unknown,
-}
-
-impl Node {
-    pub(super) fn is_list_item(&self) -> bool {
-        matches!(self, Self::ListItem { .. })
-    }
-
-    pub(super) fn is_break(&self) -> bool {
-        matches!(self, Self::Break { .. })
-    }
-
-    /// Combine all children, omitting the empt parent nodes.
-    pub(super) fn compact(self) -> Node {
-        match self {
-            Self::Root { mut children } if children.len() == 1 => children.remove(0).compact(),
-            _ => self,
-        }
-    }
-
-    pub(super) fn selected_text(&self) -> String {
-        let mut text = String::new();
-        match self {
-            Node::Root { children } => {
-                let mut block_text = String::new();
-                for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
-                }
-            }
-            Node::Paragraph(paragraph) => {
-                let mut block_text = String::new();
-                block_text.push_str(&paragraph.selected_text());
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
-                }
-            }
-            Node::Heading { children, .. } => {
-                let mut block_text = String::new();
-                block_text.push_str(&children.selected_text());
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
-                }
-            }
-            Node::List { children, .. } => {
-                for c in children.iter() {
-                    text.push_str(&c.selected_text());
-                }
-            }
-            Node::ListItem { children, .. } => {
-                for c in children.iter() {
-                    text.push_str(&c.selected_text());
-                }
-            }
-            Node::Blockquote { children } => {
-                let mut block_text = String::new();
-                for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
-
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
-                }
-            }
-            Node::Table(table) => {
-                let mut block_text = String::new();
-                for row in table.children.iter() {
-                    let mut row_texts = vec![];
-                    for cell in row.children.iter() {
-                        row_texts.push(cell.children.selected_text());
-                    }
-                    if !row_texts.is_empty() {
-                        block_text.push_str(&row_texts.join(" "));
-                        block_text.push('\n');
-                    }
-                }
-
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
-                }
-            }
-            Node::CodeBlock(code_block) => {
-                let block_text = code_block.selected_text();
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
-                }
-            }
-            Node::Definition { .. } | Node::Break { .. } | Node::Divider | Node::Unknown => {}
-        }
-
-        text
+impl PartialEq for NodeContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.link_refs == other.link_refs && self.style == other.style
+        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
     }
 }
 
@@ -660,22 +728,6 @@ impl Paragraph {
     }
 }
 
-#[derive(Default, Clone, Copy)]
-struct NodeRenderOptions {
-    in_list: bool,
-    todo: bool,
-    ordered: bool,
-    depth: usize,
-    is_last: bool,
-}
-
-impl NodeRenderOptions {
-    fn is_last(mut self, is_last: bool) -> Self {
-        self.is_last = is_last;
-        self
-    }
-}
-
 impl Paragraph {
     fn to_markdown(&self) -> String {
         let mut text = self
@@ -720,24 +772,26 @@ impl Paragraph {
     }
 }
 
-impl Node {
+impl BlockNode {
     /// Converts the node to markdown format.
     ///
     /// This is used to generate markdown for test.
     #[allow(dead_code)]
     pub(crate) fn to_markdown(&self) -> String {
         match self {
-            Node::Root { children } => children
+            BlockNode::Root { children, .. } => children
                 .iter()
                 .map(|child| child.to_markdown())
                 .collect::<Vec<_>>()
                 .join("\n\n"),
-            Node::Paragraph(paragraph) => paragraph.to_markdown(),
-            Node::Heading { level, children } => {
+            BlockNode::Paragraph(paragraph) => paragraph.to_markdown(),
+            BlockNode::Heading {
+                level, children, ..
+            } => {
                 let hashes = "#".repeat(*level as usize);
                 format!("{} {}", hashes, children.to_markdown())
             }
-            Node::Blockquote { children } => {
+            BlockNode::Blockquote { children, .. } => {
                 let content = children
                     .iter()
                     .map(|child| child.to_markdown())
@@ -750,7 +804,9 @@ impl Node {
                     .collect::<Vec<_>>()
                     .join("\n")
             }
-            Node::List { children, ordered } => children
+            BlockNode::List {
+                children, ordered, ..
+            } => children
                 .iter()
                 .enumerate()
                 .map(|(i, child)| {
@@ -763,7 +819,7 @@ impl Node {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            Node::ListItem {
+            BlockNode::ListItem {
                 children, checked, ..
             } => {
                 let checkbox = if let Some(checked) = checked {
@@ -781,14 +837,14 @@ impl Node {
                         .join("\n")
                 )
             }
-            Node::CodeBlock(code_block) => {
+            BlockNode::CodeBlock(code_block) => {
                 format!(
                     "```{}\n{}\n```",
                     code_block.lang.clone().unwrap_or_default(),
                     code_block.code()
                 )
             }
-            Node::Table(table) => {
+            BlockNode::Table(table) => {
                 let header = table
                     .children
                     .first()
@@ -828,18 +884,19 @@ impl Node {
                     .join("\n");
                 format!("{}\n{}\n{}", header, alignments, rows)
             }
-            Node::Break { html } => {
+            BlockNode::Break { html, .. } => {
                 if *html {
                     "<br>".to_string()
                 } else {
                     "\n".to_string()
                 }
             }
-            Node::Divider => "---".to_string(),
-            Node::Definition {
+            BlockNode::Divider { .. } => "---".to_string(),
+            BlockNode::Definition {
                 identifier,
                 url,
                 title,
+                ..
             } => {
                 if let Some(title) = title {
                     format!("[{}]: {} \"{}\"", identifier, url, title)
@@ -847,16 +904,16 @@ impl Node {
                     format!("[{}]: {}", identifier, url)
                 }
             }
-            Node::Unknown => "".to_string(),
+            BlockNode::Unknown { .. } => "".to_string(),
         }
         .trim()
         .to_string()
     }
 }
 
-impl Node {
+impl BlockNode {
     fn render_list_item(
-        item: &Node,
+        item: &BlockNode,
         ix: usize,
         options: NodeRenderOptions,
         node_cx: &NodeContext,
@@ -864,21 +921,22 @@ impl Node {
         cx: &mut App,
     ) -> AnyElement {
         match item {
-            Node::ListItem {
+            BlockNode::ListItem {
                 children,
                 spread,
                 checked,
+                ..
             } => v_flex()
-                .id("li")
+                .id(("li", options.ix))
                 .when(*spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
 
                     for (child_ix, child) in children.iter().enumerate() {
                         match child {
-                            Node::Paragraph(_) => {
+                            BlockNode::Paragraph { .. } => {
                                 let last_not_list = child_ix > 0
-                                    && !matches!(children[child_ix - 1], Node::List { .. });
+                                    && !matches!(children[child_ix - 1], BlockNode::List { .. });
 
                                 let text = child.render_block(
                                     NodeRenderOptions {
@@ -938,10 +996,10 @@ impl Node {
                                                     }),
                                             )
                                         })
-                                        .child(div().overflow_hidden().child(text)),
+                                        .child(div().flex_1().overflow_hidden().child(text)),
                                 );
                             }
-                            Node::List { .. } => {
+                            BlockNode::List { .. } => {
                                 items.push(div().ml(rems(1.)).child(child.render_block(
                                     NodeRenderOptions {
                                         depth: options.depth + 1,
@@ -965,7 +1023,8 @@ impl Node {
     }
 
     fn render_table(
-        item: &Node,
+        item: &BlockNode,
+        options: &NodeRenderOptions,
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
@@ -973,7 +1032,7 @@ impl Node {
         const DEFAULT_LENGTH: usize = 5;
         const MAX_LENGTH: usize = 150;
         let col_lens = match item {
-            Node::Table(table) => {
+            BlockNode::Table(table) => {
                 let mut col_lens = vec![];
                 for row in table.children.iter() {
                     for (ix, cell) in row.children.iter().enumerate() {
@@ -993,12 +1052,12 @@ impl Node {
         };
 
         match item {
-            Node::Table(table) => div()
+            BlockNode::Table(table) => div()
                 .pb(rems(1.))
                 .w_full()
                 .child(
                     div()
-                        .id("table")
+                        .id(("table", options.ix))
                         .w_full()
                         .border_1()
                         .border_color(cx.theme().border)
@@ -1065,53 +1124,14 @@ impl Node {
         }
     }
 
-    pub(super) fn render_root(
-        &self,
-        list_state: Option<ListState>,
-        node_cx: &NodeContext,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        let options = NodeRenderOptions {
-            is_last: true,
-            ..Default::default()
-        };
-
-        let Some(list_state) = list_state else {
-            return self
-                .render_block(options, node_cx, window, cx)
-                .into_any_element();
-        };
-
-        let children = match self {
-            Node::Root { children } => children,
-            _ => return div().into_any_element(),
-        };
-
-        let children = children.clone();
-        let node_cx = node_cx.clone();
-
-        if list_state.item_count() != children.len() {
-            list_state.reset(children.len());
-        }
-
-        gpui::list(list_state, move |ix, window, cx| {
-            let is_last = ix + 1 == children.len();
-            children[ix]
-                .render_block(options.is_last(is_last), &node_cx, window, cx)
-                .into_any_element()
-        })
-        .size_full()
-        .into_any()
-    }
-
-    fn render_block(
+    pub(crate) fn render_block(
         &self,
         options: NodeRenderOptions,
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
+        let ix = options.ix;
         let mb = if options.in_list || options.is_last {
             rems(0.)
         } else {
@@ -1119,20 +1139,20 @@ impl Node {
         };
 
         match self {
-            Node::Root { children } => div()
-                .id("div")
-                .children(
-                    children
-                        .into_iter()
-                        .map(move |node| node.render_block(options, node_cx, window, cx)),
-                )
+            BlockNode::Root { children, .. } => div()
+                .id(("div", ix))
+                .children(children.into_iter().enumerate().map(move |(ix, node)| {
+                    node.render_block(NodeRenderOptions { ix, ..options }, node_cx, window, cx)
+                }))
                 .into_any_element(),
-            Node::Paragraph(paragraph) => div()
-                .id("p")
+            BlockNode::Paragraph(paragraph) => div()
+                .id(("p", ix))
                 .pb(mb)
                 .child(paragraph.render(node_cx, window, cx))
                 .into_any_element(),
-            Node::Heading { level, children } => {
+            BlockNode::Heading {
+                level, children, ..
+            } => {
                 let (text_size, font_weight) = match level {
                     1 => (rems(2.), FontWeight::BOLD),
                     2 => (rems(1.5), FontWeight::SEMIBOLD),
@@ -1149,7 +1169,7 @@ impl Node {
                 }
 
                 h_flex()
-                    .id(("h", *level as usize))
+                    .id(SharedString::from(format!("h{}-{}", level, ix)))
                     .pb(rems(0.3))
                     .whitespace_normal()
                     .text_size(text_size)
@@ -1157,12 +1177,12 @@ impl Node {
                     .child(children.render(node_cx, window, cx))
                     .into_any_element()
             }
-            Node::Blockquote { children } => div()
+            BlockNode::Blockquote { children, .. } => div()
                 .w_full()
                 .pb(mb)
                 .child(
                     div()
-                        .id("blockquote")
+                        .id(("blockquote", ix))
                         .w_full()
                         .text_color(cx.theme().muted_foreground)
                         .border_l_3()
@@ -1177,19 +1197,22 @@ impl Node {
                         }),
                 )
                 .into_any_element(),
-            Node::List { children, ordered } => v_flex()
-                .id(if *ordered { "ol" } else { "ul" })
+            BlockNode::List {
+                children, ordered, ..
+            } => v_flex()
+                .id((if *ordered { "ol" } else { "ul" }, ix))
                 .pb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
-                    let mut ix = 0;
-                    for item in children.into_iter() {
+                    let mut item_index = 0;
+                    for (ix, item) in children.into_iter().enumerate() {
                         let is_item = item.is_list_item();
 
                         items.push(Self::render_list_item(
                             item,
-                            ix,
+                            item_index,
                             NodeRenderOptions {
+                                ix,
                                 ordered: *ordered,
                                 ..options
                             },
@@ -1199,20 +1222,22 @@ impl Node {
                         ));
 
                         if is_item {
-                            ix += 1;
+                            item_index += 1;
                         }
                     }
                     items
                 })
                 .into_any_element(),
-            Node::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
-            Node::Table { .. } => Self::render_table(self, node_cx, window, cx).into_any_element(),
-            Node::Divider => div()
+            BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
+            BlockNode::Table { .. } => {
+                Self::render_table(self, &options, node_cx, window, cx).into_any_element()
+            }
+            BlockNode::Divider { .. } => div()
                 .pb(mb)
                 .child(div().id("divider").bg(cx.theme().border).h(px(2.)))
                 .into_any_element(),
-            Node::Break { .. } => div().id("break").into_any_element(),
-            Node::Unknown | Node::Definition { .. } => div().into_any_element(),
+            BlockNode::Break { .. } => div().id("break").into_any_element(),
+            BlockNode::Unknown { .. } | BlockNode::Definition { .. } => div().into_any_element(),
             _ => {
                 if cfg!(debug_assertions) {
                     tracing::warn!("unknown implementation: {:?}", self);

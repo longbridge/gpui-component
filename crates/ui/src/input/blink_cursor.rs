@@ -1,9 +1,14 @@
 use std::time::Duration;
 
-use gpui::{px, Context, Pixels, Task, Timer};
+use gpui::{Context, Pixels, Task, px};
 
 static INTERVAL: Duration = Duration::from_millis(500);
 static PAUSE_DELAY: Duration = Duration::from_millis(300);
+
+// On Windows, Linux, we should use integer to avoid blurry cursor.
+#[cfg(not(target_os = "macos"))]
+pub(super) const CURSOR_WIDTH: Pixels = px(2.);
+#[cfg(target_os = "macos")]
 pub(super) const CURSOR_WIDTH: Pixels = px(1.5);
 
 /// To manage the Input cursor blinking.
@@ -57,9 +62,9 @@ impl BlinkCursor {
         // Schedule the next blink
         let epoch = self.next_epoch();
         self._task = cx.spawn(async move |this, cx| {
-            Timer::after(INTERVAL).await;
+            cx.background_executor().timer(INTERVAL).await;
             if let Some(this) = this.upgrade() {
-                this.update(cx, |this, cx| this.blink(epoch, cx)).ok();
+                this.update(cx, |this, cx| this.blink(epoch, cx));
             }
         });
     }
@@ -78,14 +83,13 @@ impl BlinkCursor {
         // delay 500ms to start the blinking
         let epoch = self.next_epoch();
         self._task = cx.spawn(async move |this, cx| {
-            Timer::after(PAUSE_DELAY).await;
+            cx.background_executor().timer(PAUSE_DELAY).await;
 
             if let Some(this) = this.upgrade() {
                 this.update(cx, |this, cx| {
                     this.paused = false;
                     this.blink(epoch, cx);
-                })
-                .ok();
+                });
             }
         });
     }

@@ -1,24 +1,27 @@
 ---
 title: Progress
-description: Displays an indicator showing the completion progress of a task, typically displayed as a progress bar.
+description: Displays an indicator showing the completion progress of a task, typically displayed as a progress bar or circular indicator.
 ---
 
 # Progress
 
-A linear progress bar component that visually represents the completion percentage of a task. The progress bar features smooth animations, customizable colors, and automatic styling that adapts to the current theme.
+Progress components visually represent the completion percentage of a task. The library provides two variants:
 
-## Import
+- **[Progress](#progress)** - A linear horizontal progress bar
+- **[ProgressCircle](#progresscircle)** - A circular progress indicator
+
+Both components feature smooth animations, customizable colors, and automatic styling that adapts to the current theme.
+
+## Progress
 
 ```rust
-use gpui_component::progress::Progress;
+use gpui_component::progress::{Progress, ProgressCircle};
 ```
 
-## Usage
-
-### Basic Progress Bar
+### Usage
 
 ```rust
-Progress::new()
+Progress::new("my-progress")
     .value(50.0) // 50% complete
 ```
 
@@ -26,19 +29,19 @@ Progress::new()
 
 ```rust
 // Starting state (0%)
-Progress::new()
+Progress::new("progress-0")
     .value(0.0)
 
 // Partially complete (25%)
-Progress::new()
+Progress::new("progress-25")
     .value(25.0)
 
 // Nearly complete (75%)
-Progress::new()
+Progress::new("progress-75")
     .value(75.0)
 
 // Complete (100%)
-Progress::new()
+Progress::new("progress-100")
     .value(100.0)
 ```
 
@@ -46,11 +49,11 @@ Progress::new()
 
 ```rust
 // For unknown progress duration
-Progress::new()
+Progress::new("indeterminate")
     .value(-1.0) // Any negative value shows as 0%
 
 // Or explicitly set to 0 for starting state
-Progress::new()
+Progress::new("starting")
     .value(0.0)
 ```
 
@@ -83,7 +86,7 @@ impl MyComponent {
                         })
                     ))
             )
-            .child(Progress::new().value(self.progress_value))
+            .child(Progress::new("progress").value(self.progress_value))
             .child(format!("{}%", self.progress_value as i32))
     }
 }
@@ -110,7 +113,7 @@ impl FileUpload {
         v_flex()
             .gap_2()
             .child("Uploading file...")
-            .child(Progress::new().value(self.progress_percentage()))
+            .child(Progress::new("upload-progress").value(self.progress_percentage()))
             .child(format!(
                 "{} / {} bytes",
                 self.bytes_uploaded,
@@ -134,11 +137,11 @@ impl LoadingComponent {
             .gap_3()
             .when(self.is_loading, |this| {
                 this.child("Loading...")
-                    .child(Progress::new().value(self.progress))
+                    .child(Progress::new("loading-progress").value(self.progress))
             })
             .when(!self.is_loading, |this| {
                 this.child("Task completed!")
-                    .child(Progress::new().value(100.0))
+                    .child(Progress::new("loading-progress").value(100.0))
             })
     }
 }
@@ -184,10 +187,96 @@ impl MultiStepProcess {
                 ProcessStep::Finalizing => "Finalizing...",
                 ProcessStep::Complete => "Complete!",
             })
-            .child(Progress::new().value(self.overall_progress()))
+            .child(Progress::new("overall-progress").value(self.overall_progress()))
             .child(format!("{:.1}% complete", self.overall_progress()))
     }
 }
+```
+
+## ProgressCircle
+
+A circular progress indicator component that displays progress as an arc around a circle. Perfect for compact spaces, button icons, or when you want a more modern, space-efficient progress display.
+
+```rust
+use gpui_component::progress::ProgressCircle;
+```
+
+### Basic ProgressCircle
+
+```rust
+ProgressCircle::new("my-progress-circle")
+    .value(50.0) // 50% complete
+```
+
+### Different Sizes
+
+ProgressCircle supports different sizes through the `Sizable` trait:
+
+```rust
+// Extra small
+ProgressCircle::new("progress-xs")
+    .value(25.0)
+    .xsmall()
+
+// Small
+ProgressCircle::new("progress-sm")
+    .value(50.0)
+    .small()
+
+// Medium (default)
+ProgressCircle::new("progress-md")
+    .value(75.0)
+    .medium()
+
+// Large
+ProgressCircle::new("progress-lg")
+    .value(100.0)
+    .large()
+
+// Custom size
+ProgressCircle::new("progress-custom")
+    .value(60.0)
+    .size(px(80.))
+```
+
+### Custom Colors
+
+```rust
+// Use theme colors (default)
+ProgressCircle::new("progress-default")
+    .value(50.0)
+
+// Custom color
+ProgressCircle::new("progress-green")
+    .value(75.0)
+    .color(cx.theme().green)
+
+// Different color variants
+ProgressCircle::new("progress-blue")
+    .value(60.0)
+    .color(cx.theme().blue)
+
+ProgressCircle::new("progress-yellow")
+    .value(40.0)
+    .color(cx.theme().yellow)
+
+ProgressCircle::new("progress-red")
+    .value(80.0)
+    .color(cx.theme().red)
+```
+
+### With Labels
+
+```rust
+h_flex()
+    .gap_2()
+    .items_center()
+    .child(
+        ProgressCircle::new("download-progress")
+            .value(65.0)
+            .size_4()
+    )
+    .child("Downloading... 65%")
 ```
 
 ## Examples
@@ -218,7 +307,7 @@ impl TaskProgress {
                     .child("Task Progress")
                     .child(format!("{}/{}", self.completed_tasks, self.total_tasks))
             )
-            .child(Progress::new().value(self.progress_value()))
+            .child(Progress::new("task-progress").value(self.progress_value()))
             .when(self.completed_tasks == self.total_tasks, |this| {
                 this.child("All tasks completed!")
             })
@@ -256,7 +345,7 @@ impl DownloadProgress {
                     .child("Downloading...")
                     .child(format!("{:.1}%", progress))
             )
-            .child(Progress::new().value(progress))
+            .child(Progress::new("download-progress").value(progress))
             .child(
                 h_flex()
                     .justify_between()
@@ -303,13 +392,13 @@ impl InstallationProgress {
                             .child(format!("Overall Progress"))
                             .child(format!("{}/{}", self.package_index + 1, self.total_packages))
                     )
-                    .child(Progress::new().value(self.overall_progress()))
+                    .child(Progress::new("overall-progress").value(self.overall_progress()))
             )
             .child(
                 v_flex()
                     .gap_2()
                     .child(format!("Installing: {}", self.current_package))
-                    .child(Progress::new().value(self.package_progress))
+                    .child(Progress::new("package-progress").value(self.package_progress))
             )
     }
 }
@@ -327,35 +416,5 @@ The Progress component automatically adapts to the current theme:
 // Fill: theme.progress_bar at full opacity
 
 // These colors adapt to light/dark theme automatically
-Progress::new().value(75.0) // Uses theme colors
+Progress::new("themed-progress").value(75.0) // Uses theme colors
 ```
-
-### Visual Properties
-
-- **Height**: 8px by default
-- **Border Radius**: Matches theme radius (up to half the height)
-- **Background**: Semi-transparent theme progress bar color (20% opacity)
-- **Fill**: Full opacity theme progress bar color
-- **Animation**: Smooth transitions when value changes
-- **Corners**: Rounded on completion, left-rounded during progress
-
-## Behavior Notes
-
-- Values less than 0 are clamped to 0%
-- Values greater than 100 are clamped to 100%
-- Progress bar fills from left to right
-- Border radius adjusts based on completion state:
-  - Partial progress: Left side rounded only
-  - Complete progress: Both sides rounded
-- Background color is always a semi-transparent version of the fill color
-- Height and radius adapt to theme settings automatically
-
-## Best Practices
-
-1. **Always provide text indicators** alongside the visual progress bar
-2. **Use meaningful labels** to describe what is progressing
-3. **Update progress regularly** but not too frequently to avoid performance issues
-4. **Consider showing ETA or completion time** for long-running tasks
-5. **Provide cancel/pause options** for lengthy operations
-6. **Show final status** when progress reaches 100%
-7. **Handle error states** gracefully with appropriate messaging

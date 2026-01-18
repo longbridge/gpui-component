@@ -91,7 +91,7 @@ impl Panel for TabPanel {
         "TabPanel"
     }
 
-    fn title(&self, window: &Window, cx: &App) -> gpui::AnyElement {
+    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.active_panel(cx)
             .map(|panel| panel.title(window, cx))
             .unwrap_or("Empty Tab".into_any_element())
@@ -121,7 +121,12 @@ impl Panel for TabPanel {
         self.visible_panels(cx).next().is_some()
     }
 
-    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn dropdown_menu(
+        &mut self,
+        menu: PopupMenu,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> PopupMenu {
         if let Some(panel) = self.active_panel(cx) {
             panel.dropdown_menu(menu, window, cx)
         } else {
@@ -129,7 +134,11 @@ impl Panel for TabPanel {
         }
     }
 
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Vec<Button>> {
         self.active_panel(cx)
             .and_then(|panel| panel.toolbar_buttons(window, cx))
     }
@@ -194,6 +203,10 @@ impl TabPanel {
         } else {
             None
         }
+    }
+
+    pub fn active_ix(&self) -> usize {
+        self.active_ix
     }
 
     fn set_active_ix(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -422,7 +435,7 @@ impl TabPanel {
     }
 
     fn render_toolbar(
-        &self,
+        &mut self,
         state: &TabState,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -481,23 +494,24 @@ impl TabPanel {
                         let zoomable = state.zoomable.map_or(false, |v| v.menu_visible());
                         let closable = state.closable;
 
-                        move |this, window, cx| {
-                            view.read(cx)
-                                .dropdown_menu(this, window, cx)
-                                .separator()
-                                .menu_with_disabled(
-                                    if zoomed {
-                                        t!("Dock.Zoom Out")
-                                    } else {
-                                        t!("Dock.Zoom In")
-                                    },
-                                    Box::new(ToggleZoom),
-                                    !zoomable,
-                                )
-                                .when(closable, |this| {
-                                    this.separator()
-                                        .menu(t!("Dock.Close"), Box::new(ClosePanel))
-                                })
+                        move |menu, window, cx| {
+                            view.update(cx, |this, cx| {
+                                this.dropdown_menu(menu, window, cx)
+                                    .separator()
+                                    .menu_with_disabled(
+                                        if zoomed {
+                                            t!("Dock.Zoom Out")
+                                        } else {
+                                            t!("Dock.Zoom In")
+                                        },
+                                        Box::new(ToggleZoom),
+                                        !zoomable,
+                                    )
+                                    .when(closable, |this| {
+                                        this.separator()
+                                            .menu(t!("Dock.Close"), Box::new(ClosePanel))
+                                    })
+                            })
                         }
                     })
                     .anchor(Corner::TopRight),
@@ -591,7 +605,7 @@ impl TabPanel {
     }
 
     fn render_title_bar(
-        &self,
+        &mut self,
         state: &TabState,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -605,6 +619,7 @@ impl TabPanel {
         let left_dock_button = self.render_dock_toggle_button(DockPlacement::Left, window, cx);
         let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
         let right_dock_button = self.render_dock_toggle_button(DockPlacement::Right, window, cx);
+        let has_extend_dock_button = left_dock_button.is_some() || bottom_dock_button.is_some();
 
         let is_bottom_dock = bottom_dock_button.is_some();
 
@@ -632,19 +647,16 @@ impl TabPanel {
                 .when_some(title_style, |this, theme| {
                     this.bg(theme.background).text_color(theme.foreground)
                 })
-                .when(
-                    left_dock_button.is_some() || bottom_dock_button.is_some(),
-                    |this| {
-                        this.child(
-                            h_flex()
-                                .flex_shrink_0()
-                                .mr_1()
-                                .gap_1()
-                                .children(left_dock_button)
-                                .children(bottom_dock_button),
-                        )
-                    },
-                )
+                .when(has_extend_dock_button, |this| {
+                    this.child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .mr_1()
+                            .gap_1()
+                            .children(left_dock_button)
+                            .children(bottom_dock_button),
+                    )
+                })
                 .child(
                     div()
                         .id("tab")
@@ -682,28 +694,24 @@ impl TabPanel {
         let tabs_count = self.panels.len();
 
         TabBar::new("tab-bar")
-            .tab_item_top_offset(-px(1.))
             .track_scroll(&self.tab_bar_scroll_handle)
-            .when(
-                left_dock_button.is_some() || bottom_dock_button.is_some(),
-                |this| {
-                    this.prefix(
-                        h_flex()
-                            .items_center()
-                            .top_0()
-                            // Right -1 for avoid border overlap with the first tab
-                            .right(-px(1.))
-                            .border_r_1()
-                            .border_b_1()
-                            .h_full()
-                            .border_color(cx.theme().border)
-                            .bg(cx.theme().tab_bar)
-                            .px_2()
-                            .children(left_dock_button)
-                            .children(bottom_dock_button),
-                    )
-                },
-            )
+            .when(has_extend_dock_button, |this| {
+                this.prefix(
+                    h_flex()
+                        .items_center()
+                        .top_0()
+                        // Right -1 for avoid border overlap with the first tab
+                        .right(-px(1.))
+                        .border_r_1()
+                        .border_b_1()
+                        .h_full()
+                        .border_color(cx.theme().border)
+                        .bg(cx.theme().tab_bar)
+                        .px_2()
+                        .children(left_dock_button)
+                        .children(bottom_dock_button),
+                )
+            })
             .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
                 let mut active = state.active_panel.as_ref() == Some(panel);
                 let droppable = self.collapsed;
@@ -718,7 +726,9 @@ impl TabPanel {
                 }
 
                 Some(
-                    Tab::default()
+                    Tab::new()
+                        .ix(ix)
+                        .tab_bar_prefix(has_extend_dock_button)
                         .map(|this| {
                             if let Some(tab_name) = panel.tab_name(cx) {
                                 this.child(tab_name)
@@ -1083,7 +1093,7 @@ impl TabPanel {
 
     fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(active_panel) = self.active_panel(cx) {
-            active_panel.focus_handle(cx).focus(window);
+            active_panel.focus_handle(cx).focus(window, cx);
         }
     }
 

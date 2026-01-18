@@ -1,15 +1,15 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Div, Edges,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, anchored, div, hsla,
-    point, prelude::FluentBuilder, px, relative,
+    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, WindowControlArea,
+    anchored, div, hsla, point, prelude::FluentBuilder, px, relative,
 };
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
+    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, TITLE_BAR_HEIGHT, WindowExt as _,
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -81,7 +81,7 @@ pub struct Dialog {
     style: StyleRefinement,
     title: Option<AnyElement>,
     footer: Option<FooterFn>,
-    content: Div,
+    children: Vec<AnyElement>,
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
@@ -117,7 +117,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             title: None,
             footer: None,
-            content: v_flex(),
+            children: Vec::new(),
             margin_top: None,
             width: px(480.),
             max_width: None,
@@ -226,28 +226,28 @@ impl Dialog {
     }
 
     /// Set the top offset of the dialog, defaults to None, will use the 1/10 of the viewport height.
-    pub fn margin_top(mut self, margin_top: Pixels) -> Self {
-        self.margin_top = Some(margin_top);
+    pub fn margin_top(mut self, margin_top: impl Into<Pixels>) -> Self {
+        self.margin_top = Some(margin_top.into());
         self
     }
 
     /// Sets the width of the dialog, defaults to 480px.
     ///
     /// See also [`Self::width`]
-    pub fn w(mut self, width: Pixels) -> Self {
-        self.width = width;
+    pub fn w(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = width.into();
         self
     }
 
     /// Sets the width of the dialog, defaults to 480px.
-    pub fn width(mut self, width: Pixels) -> Self {
-        self.width = width;
+    pub fn width(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = width.into();
         self
     }
 
     /// Set the maximum width of the dialog, defaults to `None`.
-    pub fn max_w(mut self, max_width: Pixels) -> Self {
-        self.max_width = Some(max_width);
+    pub fn max_w(mut self, max_width: impl Into<Pixels>) -> Self {
+        self.max_width = Some(max_width.into());
         self
     }
 
@@ -278,7 +278,7 @@ impl Dialog {
 
 impl ParentElement for Dialog {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.content.extend(elements);
+        self.children.extend(elements);
     }
 }
 
@@ -294,6 +294,7 @@ impl RenderOnce for Dialog {
         let on_close = self.on_close.clone();
         let on_ok = self.on_ok.clone();
         let on_cancel = self.on_cancel.clone();
+        let has_title = self.title.is_some();
 
         let render_ok: RenderButtonFn = Box::new({
             let on_ok = on_ok.clone();
@@ -318,8 +319,8 @@ impl RenderOnce for Dialog {
                                 }
                             }
 
-                            on_close(&ClickEvent::default(), window, cx);
                             window.close_dialog(cx);
+                            on_close(&ClickEvent::default(), window, cx);
                         }
                     })
                     .into_any_element()
@@ -345,8 +346,8 @@ impl RenderOnce for Dialog {
                                 return;
                             }
 
-                            on_close(&ClickEvent::default(), window, cx);
                             window.close_dialog(cx);
+                            on_close(&ClickEvent::default(), window, cx);
                         }
                     })
                     .into_any_element()
@@ -384,6 +385,11 @@ impl RenderOnce for Dialog {
             paddings.bottom = pb.to_pixels(base_size, rem_size);
         }
 
+        if !has_title {
+            // When no title, reduce the top padding to fix line-height effect.
+            paddings.top -= px(6.);
+        }
+
         let animation = Animation::new(Duration::from_secs_f64(0.25))
             .with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
 
@@ -405,19 +411,23 @@ impl RenderOnce for Dialog {
                             return this;
                         }
 
-                        this.on_any_mouse_down({
-                            let on_cancel = on_cancel.clone();
-                            let on_close = on_close.clone();
-                            move |event, window, cx| {
-                                cx.stop_propagation();
+                        this.window_control_area(WindowControlArea::Drag)
+                            .on_any_mouse_down({
+                                let on_cancel = on_cancel.clone();
+                                let on_close = on_close.clone();
+                                move |event, window, cx| {
+                                    if event.position.y < TITLE_BAR_HEIGHT {
+                                        return;
+                                    }
 
-                                if self.overlay_closable && event.button == MouseButton::Left {
-                                    on_cancel(&ClickEvent::default(), window, cx);
-                                    on_close(&ClickEvent::default(), window, cx);
-                                    window.close_dialog(cx);
+                                    cx.stop_propagation();
+                                    if self.overlay_closable && event.button == MouseButton::Left {
+                                        on_cancel(&ClickEvent::default(), window, cx);
+                                        on_close(&ClickEvent::default(), window, cx);
+                                        window.close_dialog(cx);
+                                    }
                                 }
-                            }
-                        })
+                            })
                     })
                     .child(
                         v_flex()
@@ -440,13 +450,13 @@ impl RenderOnce for Dialog {
                                     let on_cancel = on_cancel.clone();
                                     let on_close = on_close.clone();
                                     move |_: &Cancel, window, cx| {
+                                        window.close_dialog(cx);
                                         // FIXME:
                                         //
                                         // Here some Dialog have no focus_handle, so it will not work will Escape key.
                                         // But by now, we `cx.close_dialog()` going to close the last active model, so the Escape is unexpected to work.
                                         on_cancel(&ClickEvent::default(), window, cx);
                                         on_close(&ClickEvent::default(), window, cx);
-                                        window.close_dialog(cx);
                                     }
                                 })
                                 .on_action({
@@ -456,11 +466,12 @@ impl RenderOnce for Dialog {
                                     move |_: &Confirm, window, cx| {
                                         if let Some(on_ok) = &on_ok {
                                             if on_ok(&ClickEvent::default(), window, cx) {
-                                                on_close(&ClickEvent::default(), window, cx);
                                                 window.close_dialog(cx);
+                                                on_close(&ClickEvent::default(), window, cx);
                                             }
                                         } else if has_footer {
                                             window.close_dialog(cx);
+                                            on_close(&ClickEvent::default(), window, cx);
                                         }
                                     }
                                 })
@@ -498,20 +509,21 @@ impl RenderOnce for Dialog {
                                         let on_cancel = self.on_cancel.clone();
                                         let on_close = self.on_close.clone();
                                         move |_, window, cx| {
+                                            window.close_dialog(cx);
                                             on_cancel(&ClickEvent::default(), window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
-                                            window.close_dialog(cx);
                                         }
                                     })
                             }))
                             .child(
-                                div().w_full().flex_1().overflow_hidden().child(
+                                div().flex_1().overflow_hidden().child(
+                                    // Body
                                     v_flex()
-                                        .id("contents")
+                                        .size_full()
+                                        .overflow_y_scrollbar()
                                         .pl(paddings.left)
                                         .pr(paddings.right)
-                                        .overflow_y_scrollbar()
-                                        .child(self.content),
+                                        .children(self.children),
                                 ),
                             )
                             .when_some(self.footer, |this, footer| {
@@ -525,8 +537,12 @@ impl RenderOnce for Dialog {
                                         .children(footer(render_ok, render_cancel, window, cx)),
                                 )
                             })
+                            .on_any_mouse_down({
+                                |_, _, cx| {
+                                    cx.stop_propagation();
+                                }
+                            })
                             .with_animation("slide-down", animation.clone(), move |this, delta| {
-                                let y_offset = px(0.) + delta * px(30.);
                                 // This is equivalent to `shadow_xl` with an extra opacity.
                                 let shadow = vec![
                                     BoxShadow {
@@ -542,7 +558,7 @@ impl RenderOnce for Dialog {
                                         spread_radius: px(-6.),
                                     },
                                 ];
-                                this.top(y + y_offset).shadow(shadow)
+                                this.top(y * delta).shadow(shadow)
                             }),
                     )
                     .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),

@@ -20,11 +20,14 @@ collapsed: false
 - [Image](image) - Image display with fallbacks
 - [Kbd](kbd) - Keyboard shortcut display
 - [Label](label) - Text labels for form elements
+- [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options
+- [Rating](rating) - Interactive star rating component
 - [Skeleton](skeleton) - Loading placeholders
 - [Slider](slider) - Value selection from a range
 - [Spinner](spinner) - Loading and status spinners
+- [Stepper](stepper) - Step-by-step progress indicator
 - [Switch](switch) - Toggle on/off control
 - [Tag](tag) - Labels and categories
 - [Toggle](toggle) - Toggle button states
@@ -56,7 +59,7 @@ collapsed: false
 ### Advanced Components
 
 - [Calendar](calendar) - Calendar display and navigation
-- [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie)
+- [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie, Candlestick)
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.
 - [Settings](settings) - Settings UI
@@ -64,4 +67,3 @@ collapsed: false
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display
 - [VirtualList](virtual-list) - Virtualized list for large datasets
-- [WebView](webview) - Embedded web browser

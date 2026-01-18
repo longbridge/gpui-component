@@ -1,7 +1,7 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, Corner, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    AnyElement, App, Corner, Div, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 use std::rc::Rc;
@@ -9,7 +9,7 @@ use std::rc::Rc;
 use super::{Tab, TabVariant};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{h_flex, ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 
 /// A TabBar element that contains multiple [`Tab`] items.
 #[derive(IntoElement)]
@@ -26,8 +26,6 @@ pub struct TabBar {
     size: Size,
     menu: bool,
     on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
-    /// Special for internal TabPanel to remove the top border.
-    tab_item_top_offset: Pixels,
 }
 
 impl TabBar {
@@ -46,7 +44,6 @@ impl TabBar {
             selected_index: None,
             on_click: None,
             menu: false,
-            tab_item_top_offset: px(0.),
         }
     }
 
@@ -138,11 +135,6 @@ impl TabBar {
         self.on_click = Some(Rc::new(on_click));
         self
     }
-
-    pub(crate) fn tab_item_top_offset(mut self, offset: impl Into<Pixels>) -> Self {
-        self.tab_item_top_offset = offset.into();
-        self
-    }
 }
 
 impl Styled for TabBar {
@@ -181,9 +173,8 @@ impl RenderOnce for TabBar {
             TabVariant::Segmented => {
                 let padding_x = match self.size {
                     Size::XSmall => px(2.),
-                    Size::Small => px(2.),
-                    Size::Large => px(6.),
-                    _ => px(5.),
+                    Size::Small => px(3.),
+                    _ => px(4.),
                 };
                 let padding = Edges {
                     left: padding_x,
@@ -232,10 +223,7 @@ impl RenderOnce for TabBar {
                     )
                 },
             )
-            .when(
-                self.variant == TabVariant::Pill || self.variant == TabVariant::Segmented,
-                |this| this.rounded(cx.theme().radius),
-            )
+            .rounded(self.variant.tab_bar_radius(self.size, cx))
             .paddings(paddings)
             .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
@@ -250,9 +238,10 @@ impl RenderOnce for TabBar {
                     .gap(gap)
                     .children(self.children.into_iter().enumerate().map(|(ix, child)| {
                         item_labels.push((child.label.clone(), child.disabled));
+                        let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
                         child
-                            .id(ix)
-                            .mt(self.tab_item_top_offset)
+                            .ix(ix)
+                            .tab_bar_prefix(tab_bar_prefix)
                             .with_variant(self.variant)
                             .with_size(self.size)
                             .when_some(self.selected_index, |this, selected_ix| {

@@ -116,7 +116,7 @@ impl DatePickerState {
             |this, _, ev: &CalendarEvent, window, cx| match ev {
                 CalendarEvent::Selected(date) => {
                     this.update_date(*date, true, window, cx);
-                    this.focus_handle.focus(window);
+                    this.focus_handle.focus(window, cx);
                 }
             },
         )];
@@ -216,12 +216,13 @@ impl DatePickerState {
 
         if let Some(focused) = window.focused(cx) {
             if focused.contains(&self.focus_handle, window) {
-                self.focus_handle.focus(window);
+                self.focus_handle.focus(window, cx);
             }
         }
     }
 
     fn clean(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        cx.stop_propagation();
         match self.date {
             Date::Single(_) => {
                 self.update_date(Date::Single(None), true, window, cx);
@@ -414,7 +415,15 @@ impl RenderOnce for DatePicker {
                             .items_center()
                             .justify_between()
                             .gap_1()
-                            .child(div().w_full().overflow_hidden().child(display_title))
+                            .child(
+                                div()
+                                    .w_full()
+                                    .overflow_hidden()
+                                    .when(!state.date.is_some(), |this| {
+                                        this.text_color(cx.theme().muted_foreground)
+                                    })
+                                    .child(display_title),
+                            )
                             .when(!self.disabled, |this| {
                                 this.when(show_clean, |this| {
                                     this.child(clear_button(cx).on_click(

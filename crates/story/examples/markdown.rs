@@ -1,10 +1,13 @@
-use gpui::*;
+use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _,
+    ActiveTheme as _, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    clipboard::Clipboard,
+    h_flex,
     highlighter::Language,
     input::{Input, InputEvent, InputState, TabSize},
     resizable::{h_resizable, resizable_panel},
-    text::TextView,
+    text::markdown,
 };
 use gpui_component_assets::Assets;
 use gpui_component_story::Open;
@@ -72,7 +75,7 @@ impl Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("editor")
             .size_full()
@@ -97,16 +100,39 @@ impl Render for Example {
                     )
                     .child(
                         resizable_panel().child(
-                            TextView::markdown(
-                                "preview",
-                                self.input_state.read(cx).value().clone(),
-                                window,
-                                cx,
-                            )
-                            .flex_none()
-                            .p_5()
-                            .scrollable(true)
-                            .selectable(true),
+                            markdown(self.input_state.read(cx).value().clone())
+                                .code_block_actions(|code_block, _window, _cx| {
+                                    let code = code_block.code();
+                                    let lang = code_block.lang();
+
+                                    h_flex()
+                                        .gap_1()
+                                        .child(Clipboard::new("copy").value(code.clone()))
+                                        .when_some(lang, |this, lang| {
+                                            // Only show run terminal button for certain languages
+                                            if lang.as_ref() == "rust" || lang.as_ref() == "python"
+                                            {
+                                                this.child(
+                                                    Button::new("run-terminal")
+                                                        .icon(IconName::SquareTerminal)
+                                                        .ghost()
+                                                        .xsmall()
+                                                        .on_click(move |_, _, _cx| {
+                                                            println!(
+                                                                "Running {} code: {}",
+                                                                lang, code
+                                                            );
+                                                        }),
+                                                )
+                                            } else {
+                                                this
+                                            }
+                                        })
+                                })
+                                .flex_none()
+                                .p_5()
+                                .scrollable(true)
+                                .selectable(true),
                         ),
                     ),
             )

@@ -1,26 +1,29 @@
 use gpui::{
-    App, AppContext, Bounds, ClickEvent, Context, Corner, Div, ElementId, Entity, EventEmitter,
-    FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, anchored,
-    canvas, deferred, div, prelude::FluentBuilder as _, px, relative,
+    App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
+    Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
+    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
+    Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::{
-    ActiveTheme as _, Colorize as _, FocusableExt as _, Icon, Selectable as _, Sizable, Size,
-    StyleSized, StyledExt,
-    actions::{Cancel, Confirm},
+    ActiveTheme as _, Colorize as _, Icon, Sizable, Size, StyleSized,
+    actions::Confirm,
     button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{Input, InputEvent, InputState},
+    popover::Popover,
     tooltip::Tooltip,
     v_flex,
 };
 
 const CONTEXT: &'static str = "ColorPicker";
-pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([KeyBinding::new(
+        "enter",
+        Confirm { secondary: false },
+        Some(CONTEXT),
+    )])
 }
 
 /// Events emitted by the [`ColorPicker`].
@@ -64,14 +67,15 @@ pub struct ColorPickerState {
     hovered_color: Option<Hsla>,
     state: Entity<InputState>,
     open: bool,
-    bounds: Bounds<Pixels>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl ColorPickerState {
     /// Create a new [`ColorPickerState`].
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let state = cx.new(|cx| InputState::new(window, cx));
+        let state = cx.new(|cx| {
+            InputState::new(window, cx).pattern(regex::Regex::new(r"^#[0-9a-fA-F]{0,8}$").unwrap())
+        });
 
         let _subscriptions = vec![cx.subscribe_in(
             &state,
@@ -100,7 +104,6 @@ impl ColorPickerState {
             hovered_color: None,
             state,
             open: false,
-            bounds: Bounds::default(),
             _subscriptions,
         }
     }
@@ -126,30 +129,7 @@ impl ColorPickerState {
         self.value
     }
 
-    fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.open {
-            cx.propagate();
-        }
-
-        self.open = false;
-        if self.hovered_color != self.value {
-            let color = self.value;
-            self.hovered_color = color;
-            if let Some(color) = color {
-                self.state.update(cx, |input, cx| {
-                    input.set_value(color.to_hex(), window, cx);
-                });
-            }
-        }
-        cx.notify();
-    }
-
     fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
-        self.open = !self.open;
-        cx.notify();
-    }
-
-    fn toggle_picker(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
     }
@@ -285,8 +265,8 @@ impl ColorPicker {
                 .on_click(window.listener_for(
                     &state,
                     move |state, _, window, cx| {
-                        state.update_value(Some(color), true, window, cx);
                         state.open = false;
+                        state.update_value(Some(color), true, window, cx);
                         cx.notify();
                     },
                 ))
@@ -309,20 +289,8 @@ impl ColorPicker {
             cx.theme().magenta_light,
         ]);
 
-        let state = self.state.clone();
-        // If the input value is empty, fill it with the current value.
-        let input_value = state.read(cx).state.read(cx).value();
-        if input_value.is_empty()
-            && let Some(value) = state.read(cx).value
-        {
-            state.update(cx, |state, cx| {
-                state.state.update(cx, |input, cx| {
-                    input.set_value(value.to_hex(), window, cx);
-                });
-            });
-        }
-
         v_flex()
+            .p_0p5()
             .gap_3()
             .child(
                 h_flex().gap_1().children(
@@ -344,7 +312,7 @@ impl ColorPicker {
                         )
                     })),
             )
-            .when_some(state.read(cx).hovered_color, |this, hovered_color| {
+            .when_some(self.state.read(cx).hovered_color, |this, hovered_color| {
                 this.child(Divider::horizontal()).child(
                     h_flex()
                         .gap_2()
@@ -358,18 +326,9 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(Input::new(&state.read(cx).state).small()),
+                        .child(Input::new(&self.state.read(cx).state).small()),
                 )
             })
-    }
-
-    fn resolved_corner(&self, bounds: Bounds<Pixels>) -> Point<Pixels> {
-        bounds.corner(match self.anchor {
-            Corner::TopLeft => Corner::BottomLeft,
-            Corner::TopRight => Corner::BottomRight,
-            Corner::BottomLeft => Corner::TopLeft,
-            Corner::BottomRight => Corner::TopRight,
-        })
     }
 }
 
@@ -395,7 +354,6 @@ impl Styled for ColorPicker {
 impl RenderOnce for ColorPicker {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = self.state.read(cx);
-        let bounds = state.bounds;
         let display_title: SharedString = if let Some(value) = state.value {
             value.to_hex()
         } else {
@@ -403,107 +361,57 @@ impl RenderOnce for ColorPicker {
         }
         .into();
 
-        let is_focused = state.focus_handle.is_focused(window);
         let focus_handle = state.focus_handle.clone().tab_stop(true);
 
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
             .track_focus(&focus_handle)
-            .on_action(window.listener_for(&self.state, ColorPickerState::on_escape))
             .on_action(window.listener_for(&self.state, ColorPickerState::on_confirm))
             .child(
-                h_flex()
-                    .id("color-picker-input")
-                    .gap_2()
-                    .items_center()
-                    .input_text_size(self.size)
-                    .line_height(relative(1.))
-                    .rounded(cx.theme().radius)
-                    .refine_style(&self.style)
-                    .when_some(self.icon.clone(), |this, icon| {
-                        this.child(
-                            Button::new("btn")
-                                .track_focus(&focus_handle)
-                                .ghost()
-                                .selected(state.open)
-                                .with_size(self.size)
-                                .icon(icon.clone()),
-                        )
-                    })
-                    .when_none(&self.icon, |this| {
-                        this.child(
-                            div()
-                                .id("color-picker-square")
-                                .bg(cx.theme().background)
-                                .border_1()
-                                .m_1()
-                                .border_color(cx.theme().input)
-                                .shadow_xs()
-                                .rounded(cx.theme().radius)
-                                .overflow_hidden()
-                                .size_with(self.size)
-                                .when_some(state.value, |this, value| {
-                                    this.bg(value)
-                                        .border_color(value.darken(0.3))
-                                        .when(state.open, |this| this.border_2())
-                                })
-                                .when(!display_title.is_empty(), |this| {
-                                    this.tooltip(move |_, cx| {
-                                        cx.new(|_| Tooltip::new(display_title.clone())).into()
-                                    })
-                                }),
-                        )
-                        .focus_ring(is_focused, px(0.), window, cx)
-                    })
-                    .when_some(self.label.clone(), |this, label| this.child(label))
-                    .on_click(window.listener_for(&self.state, ColorPickerState::toggle_picker))
-                    .child(
-                        canvas(
-                            {
-                                let state = self.state.clone();
-                                move |bounds, _, cx| state.update(cx, |r, _| r.bounds = bounds)
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full(),
-                    ),
-            )
-            .when(state.open, |this| {
-                this.child(
-                    deferred(
-                        anchored()
-                            .anchor(self.anchor)
-                            .snap_to_window_with_margin(px(8.))
-                            .position(self.resolved_corner(bounds))
-                            .child(
-                                div()
-                                    .occlude()
-                                    .map(|this| match self.anchor {
-                                        Corner::TopLeft | Corner::TopRight => this.mt_1p5(),
-                                        Corner::BottomLeft | Corner::BottomRight => this.mb_1p5(),
-                                    })
-                                    .w_72()
-                                    .overflow_hidden()
-                                    .rounded(cx.theme().radius)
-                                    .p_3()
-                                    .border_1()
-                                    .border_color(cx.theme().border)
-                                    .shadow_lg()
-                                    .bg(cx.theme().popover)
-                                    .text_color(cx.theme().popover_foreground)
-                                    .child(self.render_colors(window, cx))
-                                    .on_mouse_up_out(
-                                        MouseButton::Left,
-                                        window.listener_for(&self.state, |state, _, window, cx| {
-                                            state.on_escape(&Cancel, window, cx)
-                                        }),
-                                    ),
-                            ),
+                Popover::new("popover")
+                    .open(state.open)
+                    .w_72()
+                    .on_open_change(
+                        window.listener_for(&self.state, |this, open: &bool, _, cx| {
+                            this.open = *open;
+                            cx.notify();
+                        }),
                     )
-                    .with_priority(1),
-                )
-            })
+                    .trigger(
+                        Button::new("trigger")
+                            .with_size(self.size)
+                            .text()
+                            .when_some(self.icon.clone(), |this, icon| this.icon(icon.clone()))
+                            .when_none(&self.icon, |this| {
+                                this.p_0().child(
+                                    div()
+                                        .id("square")
+                                        .bg(cx.theme().background)
+                                        .m_1()
+                                        .border_1()
+                                        .m_1()
+                                        .border_color(cx.theme().input)
+                                        .when(cx.theme().shadow, |this| this.shadow_xs())
+                                        .rounded(cx.theme().radius)
+                                        .overflow_hidden()
+                                        .size_with(self.size)
+                                        .when_some(state.value, |this, value| {
+                                            this.bg(value)
+                                                .border_color(value.darken(0.3))
+                                                .when(state.open, |this| this.border_2())
+                                        })
+                                        .when(!display_title.is_empty(), |this| {
+                                            this.tooltip(move |_, cx| {
+                                                cx.new(|_| Tooltip::new(display_title.clone()))
+                                                    .into()
+                                            })
+                                        }),
+                                )
+                            })
+                            .when_some(self.label.clone(), |this, label| this.child(label)),
+                    )
+                    .child(self.render_colors(window, cx)),
+            )
     }
 }

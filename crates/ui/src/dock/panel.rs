@@ -1,12 +1,10 @@
-use std::{collections::HashMap, sync::Arc};
-
 use crate::{button::Button, dock::TabPanel, menu::PopupMenu};
 use gpui::{
-    AnyElement, AnyView, App, AppContext as _, Entity, EntityId, EventEmitter, FocusHandle,
-    Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
+    AnyElement, AnyView, App, AppContext as _, Context, Entity, EntityId, EventEmitter,
+    FocusHandle, Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
 };
-
 use rust_i18n::t;
+use std::{collections::HashMap, sync::Arc};
 
 use super::{DockArea, PanelInfo, PanelState, invalid_panel::InvalidPanel};
 
@@ -68,8 +66,8 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     }
 
     /// The title of the panel
-    fn title(&self, window: &Window, cx: &App) -> AnyElement {
-        SharedString::from(t!("Dock.Unnamed")).into_any_element()
+    fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        SharedString::from(t!("Dock.Unnamed"))
     }
 
     /// The theme of the panel title, default is `None`.
@@ -80,8 +78,12 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// The suffix of the panel title, default is `None`.
     ///
     /// This is used to add a suffix element to the panel title.
-    fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-        None
+    fn title_suffix(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        None::<gpui::Div>
     }
 
     /// Whether the panel can be closed, default is `true`.
@@ -110,28 +112,43 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// This method will be called when the panel is active or inactive.
     ///
     /// The last_active_panel and current_active_panel will be touched when the panel is active.
-    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {}
+    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {}
 
     /// Set zoomed state of the panel.
     ///
     /// This method will be called when the panel is zoomed or unzoomed.
     ///
     /// Only current Panel will touch this method.
-    fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut App) {}
+    fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut Context<Self>) {}
 
     /// When this Panel is added to a TabPanel, this will be called.
-    fn on_added_to(&mut self, tab_panel: WeakEntity<TabPanel>, window: &mut Window, cx: &mut App) {}
+    fn on_added_to(
+        &mut self,
+        tab_panel: WeakEntity<TabPanel>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+    }
 
     /// When this Panel is removed from a TabPanel, this will be called.
-    fn on_removed(&mut self, window: &mut Window, cx: &mut App) {}
+    fn on_removed(&mut self, window: &mut Window, cx: &mut Context<Self>) {}
 
     /// The addition dropdown menu of the panel, default is `None`.
-    fn dropdown_menu(&self, this: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
+    fn dropdown_menu(
+        &mut self,
+        this: PopupMenu,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> PopupMenu {
         this
     }
 
     /// The addition toolbar buttons of the panel used to show in the right of the title bar, default is `None`.
-    fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {
+    fn toolbar_buttons(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Vec<Button>> {
         None
     }
 
@@ -152,7 +169,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn panel_name(&self, cx: &App) -> &'static str;
     fn panel_id(&self, cx: &App) -> EntityId;
     fn tab_name(&self, cx: &App) -> Option<SharedString>;
-    fn title(&self, window: &Window, cx: &App) -> AnyElement;
+    fn title(&self, window: &mut Window, cx: &mut App) -> AnyElement;
     fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
     fn title_style(&self, cx: &App) -> Option<TitleStyle>;
     fn closable(&self, cx: &App) -> bool;
@@ -162,7 +179,7 @@ pub trait PanelView: 'static + Send + Sync {
     fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App);
     fn on_added_to(&self, tab_panel: WeakEntity<TabPanel>, window: &mut Window, cx: &mut App);
     fn on_removed(&self, window: &mut Window, cx: &mut App);
-    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu;
+    fn dropdown_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu;
     fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>>;
     fn view(&self) -> AnyView;
     fn focus_handle(&self, cx: &App) -> FocusHandle;
@@ -183,12 +200,15 @@ impl<T: Panel> PanelView for Entity<T> {
         self.read(cx).tab_name(cx)
     }
 
-    fn title(&self, window: &Window, cx: &App) -> AnyElement {
-        self.read(cx).title(window, cx)
+    fn title(&self, window: &mut Window, cx: &mut App) -> AnyElement {
+        self.update(cx, |this, cx| this.title(window, cx).into_any_element())
     }
 
     fn title_suffix(&self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-        self.update(cx, |this, cx| this.title_suffix(window, cx))
+        self.update(cx, |this, cx| {
+            this.title_suffix(window, cx)
+                .map(|el| el.into_any_element())
+        })
     }
 
     fn title_style(&self, cx: &App) -> Option<TitleStyle> {
@@ -227,8 +247,8 @@ impl<T: Panel> PanelView for Entity<T> {
         self.update(cx, |this, cx| this.on_removed(window, cx));
     }
 
-    fn dropdown_menu(&self, menu: PopupMenu, window: &Window, cx: &App) -> PopupMenu {
-        self.read(cx).dropdown_menu(menu, window, cx)
+    fn dropdown_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu {
+        self.update(cx, |this, cx| this.dropdown_menu(menu, window, cx))
     }
 
     fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {

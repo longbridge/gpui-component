@@ -66,6 +66,8 @@ impl Default for ListOptions {
 }
 
 /// The state for List.
+///
+/// List required all items has the same height.
 pub struct ListState<D: ListDelegate> {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) query_input: Entity<InputState>,
@@ -153,7 +155,7 @@ where
 
     /// Focus the list, if the list is searchable, focus the search input.
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
-        self.focus_handle(cx).focus(window);
+        self.focus_handle(cx).focus(window, cx);
     }
 
     /// Return true if either the list or the search input is focused.
@@ -192,6 +194,22 @@ where
 
     pub fn selected_index(&self) -> Option<IndexPath> {
         self.selected_index
+    }
+
+    /// Set the index of the item that has been right clicked.
+    pub fn set_right_clicked_index(
+        &mut self,
+        ix: Option<IndexPath>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.mouse_right_clicked_index = ix;
+        self.delegate.set_right_clicked_index(ix, window, cx);
+    }
+
+    /// Returns the index of the item that has been right clicked.
+    pub fn right_clicked_index(&self) -> Option<IndexPath> {
+        self.mouse_right_clicked_index
     }
 
     /// Set a specific list item for measurement.
@@ -307,7 +325,7 @@ where
         // Securely handle subtract logic to prevent attempt
         // to subtract with overflow
         if visible_end >= entities_count.saturating_sub(threshold) {
-            if !self.delegate.is_eof(cx) {
+            if !self.delegate.has_more(cx) {
                 return;
             }
 
@@ -397,8 +415,7 @@ where
     }
 
     fn prepare_items_if_needed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let sections_count = self.delegate.sections_count(cx);
-
+        let sections_count = self.delegate.sections_count(cx).max(1);
         let mut measured_size = MeasuredEntrySize::default();
 
         // Measure the item_height and section header/footer height.
@@ -430,7 +447,7 @@ where
     }
 
     fn render_list_item(
-        &self,
+        &mut self,
         ix: IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -447,13 +464,14 @@ where
             .id(id)
             .w_full()
             .relative()
+            .overflow_hidden()
             .children(self.delegate.render_item(ix, window, cx).map(|item| {
                 item.selected(selected)
                     .secondary_selected(mouse_right_clicked)
             }))
             .when(selectable, |this| {
                 this.on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
-                    this.mouse_right_clicked_index = None;
+                    this.set_right_clicked_index(None, window, cx);
                     this.selected_index = Some(ix);
                     this.on_action_confirm(
                         &Confirm {
@@ -465,8 +483,8 @@ where
                 }))
                 .on_mouse_down(
                     MouseButton::Right,
-                    cx.listener(move |this, _, _, cx| {
-                        this.mouse_right_clicked_index = Some(ix);
+                    cx.listener(move |this, _, window, cx| {
+                        this.set_right_clicked_index(Some(ix), window, cx);
                         cx.notify();
                     }),
                 )
@@ -474,7 +492,7 @@ where
     }
 
     fn render_items(
-        &self,
+        &mut self,
         items_count: usize,
         entities_count: usize,
         window: &mut Window,
@@ -483,13 +501,11 @@ where
         let rows_cache = self.rows_cache.clone();
         let scrollbar_visible = self.options.scrollbar_visible;
         let scroll_handle = self.scroll_handle.clone();
-        let measured_size = rows_cache.measured_size();
 
         v_flex()
             .flex_grow()
             .relative()
-            .h_full()
-            .min_w(measured_size.item_size.width)
+            .size_full()
             .when_some(self.options.max_height, |this, h| this.max_h(h))
             .overflow_hidden()
             .when(items_count == 0, |this| {
@@ -526,11 +542,11 @@ where
                                                     .into_any_element(),
                                             ),
                                             RowEntry::SectionHeader(section_ix) => list
-                                                .delegate()
+                                                .delegate_mut()
                                                 .render_section_header(section_ix, window, cx)
                                                 .map(|r| r.into_any_element()),
                                             RowEntry::SectionFooter(section_ix) => list
-                                                .delegate()
+                                                .delegate_mut()
                                                 .render_section_footer(section_ix, window, cx)
                                                 .map(|r| r.into_any_element()),
                                         })
@@ -654,8 +670,8 @@ where
                     })
                     // Click out to cancel right clicked row
                     .when(mouse_right_clicked_index.is_some(), |this| {
-                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            this.mouse_right_clicked_index = None;
+                        this.on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                            this.set_right_clicked_index(None, window, cx);
                             cx.notify();
                         }))
                     })

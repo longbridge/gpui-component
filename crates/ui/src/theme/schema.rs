@@ -1,13 +1,13 @@
 use std::{rc::Rc, sync::Arc};
 
-use anyhow::Result;
-use gpui::{Hsla, SharedString, px};
+use gpui::{SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     Colorize, Theme, ThemeColor, ThemeMode,
     highlighter::{HighlightTheme, HighlightThemeStyle},
+    try_parse_color,
 };
 
 /// Represents a theme configuration.
@@ -281,6 +281,12 @@ pub struct ThemeConfigColors {
     /// Success active background color.
     #[serde(rename = "success.active.background")]
     pub success_active: Option<SharedString>,
+    /// Bullish color for candlestick charts (upward price movement).
+    #[serde(rename = "bullish.background")]
+    pub bullish: Option<SharedString>,
+    /// Bearish color for candlestick charts (downward price movement).
+    #[serde(rename = "bearish.background")]
+    pub bearish: Option<SharedString>,
     /// Switch background color.
     #[serde(rename = "switch.background")]
     pub switch: Option<SharedString>,
@@ -398,12 +404,6 @@ pub struct ThemeConfigColors {
     yellow_light: Option<String>,
 }
 
-/// Try to parse HEX color, `#RRGGBB` or `#RRGGBBAA`
-fn try_parse_color(color: &str) -> Result<Hsla> {
-    let rgba = gpui::Rgba::try_from(color)?;
-    Ok(rgba.into())
-}
-
 impl ThemeColor {
     /// Create a new `ThemeColor` from a `ThemeConfig`.
     pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &ThemeColor) {
@@ -508,6 +508,8 @@ impl ThemeColor {
             success_active,
             fallback = self.success.darken(active_darken)
         );
+        apply_color!(bullish, fallback = self.green);
+        apply_color!(bearish, fallback = self.red);
         apply_color!(info, fallback = self.cyan);
         apply_color!(info_foreground, fallback = self.primary_foreground);
         apply_color!(
@@ -579,7 +581,7 @@ impl ThemeColor {
         );
         apply_color!(list_even, fallback = self.list);
         apply_color!(list_head, fallback = self.list);
-        apply_color!(list_hover, fallback = self.secondary_hover);
+        apply_color!(list_hover, fallback = self.accent.opacity(0.6));
         apply_color!(popover, fallback = self.background);
         apply_color!(popover_foreground, fallback = self.foreground);
         apply_color!(progress_bar, fallback = self.primary);
@@ -588,7 +590,10 @@ impl ThemeColor {
         apply_color!(scrollbar_thumb, fallback = self.accent);
         apply_color!(scrollbar_thumb_hover, fallback = self.scrollbar_thumb);
         apply_color!(selection, fallback = self.primary);
-        apply_color!(sidebar, fallback = self.background);
+        apply_color!(
+            sidebar,
+            fallback = self.background.blend(self.border.opacity(0.15))
+        );
         apply_color!(sidebar_accent, fallback = self.accent);
         apply_color!(sidebar_accent_foreground, fallback = self.accent_foreground);
         apply_color!(sidebar_border, fallback = self.border);
@@ -601,7 +606,7 @@ impl ThemeColor {
         apply_color!(skeleton, fallback = self.secondary);
         apply_color!(slider_bar, fallback = self.primary);
         apply_color!(slider_thumb, fallback = self.primary_foreground);
-        apply_color!(switch, fallback = self.secondary);
+        apply_color!(switch, fallback = self.secondary_active);
         apply_color!(switch_thumb, fallback = self.background);
         apply_color!(tab, fallback = self.background);
         apply_color!(tab_active, fallback = self.background);
@@ -693,23 +698,5 @@ impl Theme {
 
         self.colors.apply_config(&config, &default_theme.colors);
         self.mode = config.mode;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::try_parse_color;
-    use gpui::hsla;
-
-    #[test]
-    fn test_try_parse_color() {
-        assert_eq!(
-            try_parse_color("#F2F200").ok(),
-            Some(hsla(0.16666667, 1., 0.4745098, 1.0))
-        );
-        assert_eq!(
-            try_parse_color("#00f21888").ok(),
-            Some(hsla(0.34986225, 1.0, 0.4745098, 0.53333336))
-        );
     }
 }

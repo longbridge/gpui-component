@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder, px, AnyElement, App, Context, Corner,
-    DismissEvent, Element, ElementId, Entity, Focusable, GlobalElementId, InspectorElementId,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,
-    StyleRefinement, Styled, Subscription, Window,
+    AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
+    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
 };
 
 use crate::menu::PopupMenu;
@@ -129,7 +129,7 @@ impl Default for ContextMenuState {
 
 impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<E> {
     type RequestLayoutState = ContextMenuState;
-    type PrepaintState = ();
+    type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -168,18 +168,31 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                     if has_menu_item {
                         menu_element = Some(
                             deferred(
-                                anchored()
-                                    .position(position)
-                                    .snap_to_window_with_margin(px(8.))
-                                    .anchor(anchor)
-                                    .when_some(menu_view, |this, menu| {
-                                        // Focus the menu, so that can be handle the action.
-                                        if !menu.focus_handle(cx).contains_focused(window, cx) {
-                                            menu.focus_handle(cx).focus(window);
-                                        }
+                                anchored().child(
+                                    div()
+                                        .w(window.bounds().size.width)
+                                        .h(window.bounds().size.height)
+                                        .on_scroll_wheel(|_, _, cx| {
+                                            cx.stop_propagation();
+                                        })
+                                        .child(
+                                            anchored()
+                                                .position(position)
+                                                .snap_to_window_with_margin(px(8.))
+                                                .anchor(anchor)
+                                                .when_some(menu_view, |this, menu| {
+                                                    // Focus the menu, so that can be handle the action.
+                                                    if !menu
+                                                        .focus_handle(cx)
+                                                        .contains_focused(window, cx)
+                                                    {
+                                                        menu.focus_handle(cx).focus(window, cx);
+                                                    }
 
-                                        this.child(div().occlude().child(menu.clone()))
-                                    }),
+                                                    this.child(menu.clone())
+                                                }),
+                                        ),
+                                ),
                             )
                             .with_priority(1)
                             .into_any(),
@@ -211,7 +224,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
         &mut self,
         _: Option<&gpui::GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _: gpui::Bounds<gpui::Pixels>,
+        bounds: gpui::Bounds<gpui::Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
@@ -219,15 +232,16 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
         if let Some(element) = &mut request_layout.element {
             element.prepaint(window, cx);
         }
+        window.insert_hitbox(bounds, HitboxBehavior::Normal)
     }
 
     fn paint(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
         _: Option<&InspectorElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
+        _: gpui::Bounds<gpui::Pixels>,
         request_layout: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
+        hitbox: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -245,11 +259,12 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
             |_view, state: &mut ContextMenuState, window, _| {
                 let shared_state = state.shared_state.clone();
 
+                let hitbox = hitbox.clone();
                 // When right mouse click, to build content menu, and show it at the mouse position.
                 window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                     if phase.bubble()
                         && event.button == MouseButton::Right
-                        && bounds.contains(&event.position)
+                        && hitbox.is_hovered(window)
                     {
                         {
                             let mut shared_state = shared_state.borrow_mut();

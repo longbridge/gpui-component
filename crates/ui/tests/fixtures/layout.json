@@ -136,7 +136,7 @@
             "children": [],
             "info": {
               "panel": {
-                "story_klass": "ScrollableStory"
+                "story_klass": "ScrollbarStory"
               }
             }
           }

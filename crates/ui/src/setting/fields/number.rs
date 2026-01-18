@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::FluentBuilder as _, AnyElement, App, AppContext as _, Entity, IntoElement,
-    SharedString, StyleRefinement, Styled, Window,
+    AnyElement, App, AppContext as _, Entity, IntoElement, SharedString, StyleRefinement, Styled,
+    Subscription, Window, prelude::FluentBuilder as _,
 };
 
 use crate::{
-    input::{InputState, NumberInput, NumberInputEvent},
-    setting::{
-        fields::{get_value, set_value, SettingFieldRender},
-        AnySettingField, RenderOptions,
-    },
     AxisExt, Sizable, StyledExt,
+    input::{InputEvent, InputState, NumberInput, NumberInputEvent, StepAction},
+    setting::{
+        AnySettingField, RenderOptions,
+        fields::{SettingFieldRender, get_value, set_value},
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -48,7 +48,8 @@ impl NumberField {
 
 struct State {
     input: Entity<InputState>,
-    _subscription: gpui::Subscription,
+    initial_value: f64,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl SettingFieldRender for NumberField {
@@ -65,35 +66,74 @@ impl SettingFieldRender for NumberField {
         let num_options = self.options.clone();
 
         let state = window
-            .use_keyed_state("number-state", cx, |window, cx| {
-                let input =
-                    cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
-                let _subscription = cx.subscribe_in(&input, window, {
-                    move |_, input, event: &NumberInputEvent, window, cx| match event {
-                        NumberInputEvent::Step(action) => input.update(cx, |input, cx| {
-                            let value = input.value();
-                            if let Ok(value) = value.parse::<f64>() {
-                                let new_value = if *action == crate::input::StepAction::Increment {
-                                    (value + num_options.step).min(num_options.max)
-                                } else {
-                                    (value - num_options.step).max(num_options.min)
-                                };
-                                set_value(new_value, cx);
-                                input.set_value(
-                                    SharedString::from(new_value.to_string()),
-                                    window,
-                                    cx,
-                                );
+            .use_keyed_state(
+                SharedString::from(format!(
+                    "number-state-{}-{}-{}",
+                    options.page_ix, options.group_ix, options.item_ix
+                )),
+                cx,
+                |window, cx| {
+                    let input =
+                        cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
+                    let _subscriptions = vec![
+                        cx.subscribe_in(&input, window, {
+                            move |_, input, event: &NumberInputEvent, window, cx| match event {
+                                NumberInputEvent::Step(action) => input.update(cx, |input, cx| {
+                                    let value = input.value();
+                                    if let Ok(value) = value.parse::<f64>() {
+                                        let new_value = if *action == StepAction::Increment {
+                                            value + num_options.step
+                                        } else {
+                                            value - num_options.step
+                                        };
+                                        input.set_value(
+                                            SharedString::from(new_value.to_string()),
+                                            window,
+                                            cx,
+                                        );
+                                    }
+                                }),
                             }
                         }),
-                    }
-                });
+                        cx.subscribe_in(&input, window, {
+                            move |state: &mut State, input, event: &InputEvent, window, cx| {
+                                match event {
+                                    InputEvent::Change => {
+                                        input.update(cx, |input, cx| {
+                                            let value = input.value();
+                                            if value == state.initial_value.to_string() {
+                                                return;
+                                            }
 
-                State {
-                    input,
-                    _subscription,
-                }
-            })
+                                            if let Ok(value) = value.parse::<f64>() {
+                                                let clamp_value =
+                                                    value.clamp(num_options.min, num_options.max);
+
+                                                set_value(clamp_value, cx);
+                                                state.initial_value = clamp_value;
+                                                if clamp_value != value {
+                                                    input.set_value(
+                                                        SharedString::from(clamp_value.to_string()),
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                            }
+                                        });
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }),
+                    ];
+
+                    State {
+                        input,
+                        initial_value: value,
+                        _subscriptions,
+                    }
+                },
+            )
             .read(cx);
 
         NumberInput::new(&state.input)

@@ -16,6 +16,7 @@ gpui = "{{ GPUI_VERSION }}"
 gpui-component = "{{ VERSION }}"
 # Optional, for default bundled assets
 gpui-component-assets = "{{ VERSION }}"
+anyhow = "1.0"
 ```
 
 :::tip

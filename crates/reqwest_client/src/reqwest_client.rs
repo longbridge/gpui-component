@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::sync::{LazyLock, OnceLock};
-use std::{any::type_name, borrow::Cow, mem, pin::Pin, task::Poll, time::Duration};
+use std::{borrow::Cow, mem, pin::Pin, task::Poll, time::Duration};
 
 use anyhow::anyhow;
 use bytes::{BufMut, Bytes, BytesMut};
@@ -217,10 +217,6 @@ impl http_client::HttpClient for ReqwestClient {
         self.proxy.as_ref()
     }
 
-    fn type_name(&self) -> &'static str {
-        type_name::<Self>()
-    }
-
     fn user_agent(&self) -> Option<&HeaderValue> {
         self.user_agent.as_ref()
     }
@@ -273,26 +269,6 @@ impl http_client::HttpClient for ReqwestClient {
             builder.body(body).map_err(|e| anyhow!(e))
         }
         .boxed()
-    }
-
-    fn send_multipart_form<'a>(
-        &'a self,
-        url: &str,
-        form: reqwest::multipart::Form,
-    ) -> futures::future::BoxFuture<'a, anyhow::Result<http_client::Response<http_client::AsyncBody>>>
-    {
-        let response = self.client.post(url).multipart(form).send();
-        self.handle
-            .spawn(async move {
-                let response = response.await?;
-                let mut builder = http::response::Builder::new().status(response.status());
-                for (k, v) in response.headers() {
-                    builder = builder.header(k, v)
-                }
-                Ok(builder.body(response.bytes().await?.into())?)
-            })
-            .map(|e| e?)
-            .boxed()
     }
 }
 

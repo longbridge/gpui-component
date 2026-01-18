@@ -1,12 +1,11 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, Context, Corner, Corners, Edges, ElementId,
-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled,
-    Window,
+    App, Context, Corner, Corners, Edges, ElementId, InteractiveElement as _, IntoElement,
+    ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
 use crate::{
+    Disableable, IconName, Selectable, Sizable, Size, StyledExt as _,
     menu::{DropdownMenu, PopupMenu},
-    Disableable, Selectable, Sizable, Size, StyledExt as _,
 };
 
 use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
@@ -178,7 +177,7 @@ impl RenderOnce for DropdownButton {
                 .when_some(self.menu, |this, menu| {
                     this.child(
                         Button::new("popup")
-                            .dropdown_caret(true)
+                            .icon(IconName::ChevronDown)
                             .rounded(self.rounded)
                             .border_edges(Edges {
                                 left: rounded,
@@ -202,5 +201,39 @@ impl RenderOnce for DropdownButton {
                     )
                 })
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::Corner;
+
+    #[gpui::test]
+    fn test_dropdown_button_builder(_cx: &mut gpui::TestAppContext) {
+        let button = Button::new("inner").label("Action");
+        let dropdown = DropdownButton::new("complex-dropdown")
+            .button(button)
+            .primary()
+            .outline()
+            .large()
+            .compact()
+            .loading(false)
+            .disabled(false)
+            .selected(false)
+            .rounded(ButtonRounded::Medium)
+            .dropdown_menu_with_anchor(Corner::BottomLeft, |menu, _, _| menu);
+
+        assert!(dropdown.button.is_some());
+        assert_eq!(dropdown.variant, ButtonVariant::Primary);
+        assert!(dropdown.outline);
+        assert_eq!(dropdown.size, Size::Large);
+        assert!(dropdown.compact);
+        assert!(!dropdown.loading);
+        assert!(!dropdown.disabled);
+        assert!(!dropdown.selected);
+        assert!(matches!(dropdown.rounded, ButtonRounded::Medium));
+        assert!(dropdown.menu.is_some());
+        assert_eq!(dropdown.anchor, Corner::BottomLeft);
     }
 }
