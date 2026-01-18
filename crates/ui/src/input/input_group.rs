@@ -29,21 +29,21 @@ impl InputGroupAlign {
     /// Returns (left, right, top, bottom) padding in pixels.
         #[inline]
     const fn padding(&self) -> (Pixels, Pixels, Pixels, Pixels) {
-        let pading: Pixels = px(12.);
+        let padding: Pixels = px(12.);
         match self {
-            Self::InlineStart => (pading, px(0.), px(0.), px(0.)),
-            Self::InlineEnd => (px(0.), pading, px(0.), px(0.)),
+            Self::InlineStart => (padding, px(0.), px(0.), px(0.)),
+            Self::InlineEnd => (px(0.), padding, px(0.), px(0.)),
             Self::BlockStart => (
-                pading,
-                pading,
-                pading,
+                padding,
+                padding,
+                padding,
                 px(0.),
             ),
             Self::BlockEnd => (
-                pading,
-                pading,
+                padding,
+                padding,
                 px(0.),
-                pading,
+                padding,
             ),
         }
     }
