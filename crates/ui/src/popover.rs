@@ -1,8 +1,8 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, Entity, EntityId,
-    EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement,
-    Styled, Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
+    AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
+    FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
+    Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
@@ -270,18 +270,6 @@ impl PopoverState {
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         self.dismiss(window, cx);
     }
-
-    fn handle_overlay_click(
-        this: Entity<Self>,
-        parent_view_id: EntityId,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        this.update(cx, |state, cx| {
-            state.dismiss(window, cx);
-        });
-        cx.notify(parent_view_id);
-    }
 }
 
 impl Focusable for PopoverState {
@@ -369,7 +357,7 @@ impl RenderOnce for Popover {
         let el = div()
             .id(self.id)
             .child((trigger)(open, window, cx))
-            .on_mouse_up(self.mouse_button, {
+            .on_mouse_down(self.mouse_button, {
                 let state = state.clone();
                 move |_, window, cx| {
                     cx.stop_propagation();
@@ -405,26 +393,13 @@ impl RenderOnce for Popover {
                 })
                 .children(self.children)
                 .when(self.overlay_closable, |this| {
-                    this.on_mouse_up_out(MouseButton::Left, {
+                    this.on_mouse_down_out({
                         let state = state.clone();
                         move |_, window, cx| {
-                            PopoverState::handle_overlay_click(
-                                state.clone(),
-                                parent_view_id,
-                                window,
-                                cx,
-                            )
-                        }
-                    })
-                    .on_mouse_up_out(MouseButton::Right, {
-                        let state = state.clone();
-                        move |_, window, cx| {
-                            PopoverState::handle_overlay_click(
-                                state.clone(),
-                                parent_view_id,
-                                window,
-                                cx,
-                            )
+                            state.update(cx, |state, cx| {
+                                state.dismiss(window, cx);
+                            });
+                            cx.notify(parent_view_id);
                         }
                     })
                 })

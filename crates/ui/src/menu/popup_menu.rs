@@ -10,9 +10,7 @@ use gpui::{
     ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
     WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
-use gpui::{
-    ClickEvent, Half, MouseButton, MouseDownEvent, MouseUpEvent, OwnedMenuItem, Point, Subscription,
-};
+use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Point, Subscription};
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
@@ -964,19 +962,12 @@ impl PopupMenu {
         self.dismiss(&Cancel, window, cx);
     }
 
-    fn on_mouse_up_out(&mut self, e: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
-        self.handle_dismiss(&e.position, window, cx);
-    }
-
     fn on_mouse_down_out(
         &mut self,
         e: &MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if e.button == MouseButton::Left {
-            return;
-        }
         self.handle_dismiss(&e.position, window, cx);
     }
 
@@ -1302,7 +1293,6 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::select_right))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up_out))
             .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
             .popover_style(cx)
             .text_color(cx.theme().popover_foreground)
