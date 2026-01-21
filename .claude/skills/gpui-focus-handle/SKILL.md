@@ -1,393 +1,232 @@
 ---
 name: gpui-focus-handle
-description: Focus management and keyboard navigation in GPUI. Use when handling focus, focus handles, or keyboard navigation.
+description: Focus management and keyboard navigation in GPUI. Use when handling focus, focus handles, or keyboard navigation. Enables keyboard-driven interfaces with proper focus tracking and navigation between focusable elements.
 ---
 
 ## Overview
 
-FocusHandle in GPUI manages keyboard focus within the UI hierarchy. It provides a way to programmatically control which element receives keyboard input and coordinates with GPUI's action system to dispatch keyboard-driven commands. Focus handles create a focus tree that mirrors the UI element hierarchy, enabling predictable keyboard navigation and action routing.
+GPUI's focus system enables keyboard navigation and focus management.
 
-## Core Concepts
+**Key Concepts:**
+- **FocusHandle**: Reference to focusable element
+- **Focus tracking**: Current focused element
+- **Keyboard navigation**: Tab/Shift-Tab between elements
+- **Focus events**: on_focus, on_blur
 
-### FocusHandle
+## Quick Start
 
-A `FocusHandle` represents a focusable element in the UI tree:
-
-```rust
-// Create focus handle
-let focus_handle = cx.focus_handle();
-
-// Check focus state
-let is_focused = focus_handle.is_focused(window);
-
-// Set focus
-focus_handle.focus(window);
-
-// Get containing focus handle
-let parent_handle = focus_handle.parent(window);
-```
-
-### Focus Tree
-
-GPUI maintains a focus tree that mirrors the element hierarchy:
-
-- **Root**: The window itself
-- **Branches**: Container elements that can contain focusable children
-- **Leaves**: Individual focusable elements (buttons, inputs, etc.)
+### Creating Focus Handles
 
 ```rust
-// Focus tree structure
-Window (root)
-├── Container A
-│   ├── Focusable Element 1
-│   └── Focusable Element 2
-└── Container B
-    └── Focusable Element 3
-```
-
-## Focus Management
-
-### Creating Focusable Elements
-
-Elements become focusable by requesting a focus handle:
-
-```rust
-struct FocusableButton {
+struct FocusableComponent {
     focus_handle: FocusHandle,
-    label: String,
 }
 
-impl FocusableButton {
+impl FocusableComponent {
     fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            label: "Click me".to_string(),
         }
     }
 }
+```
 
-impl Render for FocusableButton {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+### Making Elements Focusable
+
+```rust
+impl Render for FocusableComponent {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .track_focus(&self.focus_handle)
-            .bg(if self.focus_handle.is_focused(cx.window) {
-                rgb(0x007acc)
-            } else {
-                rgb(0xcccccc)
+            .on_action(cx.listener(Self::on_enter))
+            .child("Focusable content")
+    }
+
+    fn on_enter(&mut self, _: &Enter, cx: &mut Context<Self>) {
+        // Handle Enter key when focused
+        cx.notify();
+    }
+}
+```
+
+### Focus Management
+
+```rust
+impl MyComponent {
+    fn focus(&mut self, cx: &mut Context<Self>) {
+        self.focus_handle.focus(cx);
+    }
+
+    fn is_focused(&self, cx: &App) -> bool {
+        self.focus_handle.is_focused(cx)
+    }
+
+    fn blur(&mut self, cx: &mut Context<Self>) {
+        cx.blur();
+    }
+}
+```
+
+## Focus Events
+
+### Handling Focus Changes
+
+```rust
+impl Render for MyInput {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_focused = self.focus_handle.is_focused(cx);
+
+        div()
+            .track_focus(&self.focus_handle)
+            .on_focus(cx.listener(|this, _event, cx| {
+                this.on_focus(cx);
+            }))
+            .on_blur(cx.listener(|this, _event, cx| {
+                this.on_blur(cx);
+            }))
+            .when(is_focused, |el| {
+                el.bg(cx.theme().focused_background)
             })
-            .child(&self.label)
+            .child(self.render_content())
+    }
+}
+
+impl MyInput {
+    fn on_focus(&mut self, cx: &mut Context<Self>) {
+        // Handle focus gained
+        cx.notify();
+    }
+
+    fn on_blur(&mut self, cx: &mut Context<Self>) {
+        // Handle focus lost
+        cx.notify();
     }
 }
 ```
 
-### Focus Navigation
+## Keyboard Navigation
 
-#### Programmatic Focus Control
+### Tab Order
 
-```rust
-impl MyComponent {
-    fn focus_next_element(&mut self, cx: &mut Context<Self>) {
-        // Focus next sibling
-        if let Some(next_focus) = self.focus_handle.next_focusable(cx.window) {
-            next_focus.focus(cx.window);
-        }
-    }
-
-    fn focus_previous_element(&mut self, cx: &mut Context<Self>) {
-        // Focus previous sibling
-        if let Some(prev_focus) = self.focus_handle.previous_focusable(cx.window) {
-            prev_focus.focus(cx.window);
-        }
-    }
-}
-```
-
-#### Keyboard Navigation
-
-GPUI provides default keyboard navigation (Tab/Shift+Tab):
+Elements with `track_focus()` automatically participate in Tab navigation.
 
 ```rust
-// Elements automatically participate in tab order
-// unless explicitly configured otherwise
-
 div()
-    .track_focus(&focus_handle)
-    .tab_index(0) // Default tab index
-    .child("Focusable content")
+    .child(
+        input1.track_focus(&focus1)  // Tab order: 1
+    )
+    .child(
+        input2.track_focus(&focus2)  // Tab order: 2
+    )
+    .child(
+        input3.track_focus(&focus3)  // Tab order: 3
+    )
 ```
 
-### Focus Events
-
-Respond to focus changes:
+### Focus Within Containers
 
 ```rust
-impl FocusableButton {
+impl Container {
+    fn focus_first(&mut self, cx: &mut Context<Self>) {
+        if let Some(first) = self.children.first() {
+            first.update(cx, |child, cx| {
+                child.focus_handle.focus(cx);
+            });
+        }
+    }
+
+    fn focus_next(&mut self, cx: &mut Context<Self>) {
+        // Custom focus navigation logic
+    }
+}
+```
+
+## Common Patterns
+
+### 1. Auto-focus on Mount
+
+```rust
+impl MyDialog {
     fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        // Observe focus changes
-        cx.on_focus(&focus_handle, window, |this, cx| {
-            // Gained focus
-            this.on_focus_gained(cx);
-        });
+        // Focus when created
+        focus_handle.focus(cx);
 
-        cx.on_blur(&focus_handle, window, |this, cx| {
-            // Lost focus
-            this.on_focus_lost(cx);
-        });
-
-        Self {
-            focus_handle,
-            label: "Click me".to_string(),
-        }
-    }
-
-    fn on_focus_gained(&mut self, cx: &mut Context<Self>) {
-        self.is_focused = true;
-        cx.notify();
-    }
-
-    fn on_focus_lost(&mut self, cx: &mut Context<Self>) {
-        self.is_focused = false;
-        cx.notify();
+        Self { focus_handle }
     }
 }
 ```
 
-## Relationship with Actions
-
-### Action Dispatching
-
-Focus handles route actions to focused elements:
-
-```rust
-// Dispatch action to focused element
-focus_handle.dispatch_action(&MyAction::default(), window, cx);
-
-// Global action dispatch (routes to focused element)
-window.dispatch_action(MyAction.boxed_clone(), cx);
-```
-
-### Action Context
-
-Actions receive focus context:
-
-```rust
-#[derive(Clone, PartialEq)]
-struct MoveCursor {
-    direction: Direction,
-}
-
-impl_actions!(editor, [MoveCursor]);
-
-// Action handler receives focus information
-fn move_cursor(action: &MoveCursor, window: &mut Window, cx: &mut App) {
-    // Action dispatched to focused element
-    if let Some(focused) = window.focused_element() {
-        // Handle action based on focused element
-    }
-}
-```
-
-### Focus-Aware Actions
-
-Actions can be conditional based on focus:
-
-```rust
-impl MyComponent {
-    fn handle_action(&mut self, action: &MyAction, window: &mut Window, cx: &mut Context<Self>) {
-        // Only handle if this element is focused
-        if self.focus_handle.is_focused(window) {
-            // Handle action
-            match action {
-                MyAction::Activate => self.activate(cx),
-                MyAction::Deactivate => self.deactivate(cx),
-            }
-        }
-    }
-}
-```
-
-### Action Registration
-
-Register action handlers on elements:
-
-```rust
-impl Render for MyComponent {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::handle_action))
-            .child("Focusable element")
-    }
-}
-```
-
-## Focus Scopes
-
-### Modal Focus
-
-Create focus scopes for modal dialogs:
-
-```rust
-struct Modal {
-    focus_handle: FocusHandle,
-    content: Entity<ModalContent>,
-}
-
-impl Modal {
-    fn new(cx: &mut Context<Self>) -> Self {
-        let focus_handle = cx.focus_handle();
-
-        // Create focus scope
-        focus_handle.set_focus_scope(window, cx);
-
-        Self {
-            focus_handle,
-            content: cx.new(|_| ModalContent::new()),
-        }
-    }
-}
-
-impl Render for Modal {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(Self::handle_escape))
-            .child(self.content.clone())
-    }
-}
-```
-
-### Focus Trapping
-
-Prevent focus from escaping a component:
+### 2. Focus Trap (Modal)
 
 ```rust
 impl Modal {
-    fn handle_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        // Keep focus within modal
-        let focusables = self.focus_handle.focusable_children(window);
-        if focusables.is_empty() {
-            return;
-        }
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, cx| {
+                if event.key == Key::Tab {
+                    // Keep focus within modal
+                    this.focus_next_in_modal(cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .child(self.render_content())
+    }
+}
+```
 
-        let current_index = focusables
-            .iter()
-            .position(|fh| fh.is_focused(window))
-            .unwrap_or(0);
+### 3. Conditional Focus
 
-        let next_index = if window.modifiers().shift {
-            // Shift+Tab: previous
-            if current_index == 0 {
-                focusables.len() - 1
-            } else {
-                current_index - 1
-            }
-        } else {
-            // Tab: next
-            (current_index + 1) % focusables.len()
-        };
-
-        focusables[next_index].focus(window);
+```rust
+impl Searchable {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .track_focus(&self.focus_handle)
+            .when(self.search_active, |el| {
+                el.on_mount(cx.listener(|this, _, cx| {
+                    this.focus_handle.focus(cx);
+                }))
+            })
+            .child(self.search_input())
     }
 }
 ```
 
 ## Best Practices
 
-### Focus Indicator Visibility
-
-Always provide visible focus indicators:
+### ✅ Track Focus on Interactive Elements
 
 ```rust
+// ✅ Good: Track focus for keyboard interaction
+input()
+    .track_focus(&self.focus_handle)
+    .on_action(cx.listener(Self::on_enter))
+```
+
+### ✅ Provide Visual Focus Indicators
+
+```rust
+let is_focused = self.focus_handle.is_focused(cx);
+
 div()
-    .track_focus(&focus_handle)
-    .when(focus_handle.is_focused(cx.window), |el| {
-        el.border_2()
-            .border_color(rgb(0x007acc))
-            .outline_2()
-            .outline_color(rgb(0x007acc))
+    .when(is_focused, |el| {
+        el.border_color(cx.theme().focused_border)
     })
-    .child("Focusable content")
 ```
 
-### Logical Tab Order
-
-Ensure tab order matches visual layout:
+### ❌ Don't: Forget to Track Focus
 
 ```rust
-// Use tab_index for custom ordering
+// ❌ Bad: No track_focus, keyboard navigation won't work
 div()
-    .track_focus(&focus_handle)
-    .tab_index(1)
-    .child("First in tab order")
-
-div()
-    .track_focus(&other_handle)
-    .tab_index(2)
-    .child("Second in tab order")
+    .on_action(cx.listener(Self::on_enter))
 ```
 
-### Focus Management in Lists
+## Reference Documentation
 
-```rust
-struct ListItem {
-    focus_handle: FocusHandle,
-    index: usize,
-}
-
-impl ListItem {
-    fn handle_arrow_keys(&mut self, action: &ArrowKey, window: &mut Window, cx: &mut Context<Self>) {
-        match action.direction {
-            Direction::Up => {
-                if self.index > 0 {
-                    // Focus previous item
-                    self.parent_list.focus_item(self.index - 1, window);
-                }
-            }
-            Direction::Down => {
-                // Focus next item
-                self.parent_list.focus_item(self.index + 1, window);
-            }
-            _ => {}
-        }
-    }
-}
-```
-
-### Testing Focus Behavior
-
-```rust
-#[cfg(test)]
-impl MyComponent {
-    fn test_focus_navigation(&mut self, cx: &mut TestAppContext) {
-        // Set initial focus
-        self.focus_handle.focus(cx.window);
-
-        // Simulate tab
-        cx.dispatch_action(Tab, cx.window);
-
-        // Assert focus moved to expected element
-        assert!(self.next_element.focus_handle.is_focused(cx.window));
-    }
-}
-```
-
-### Accessibility Considerations
-
-- Provide clear focus indicators
-- Ensure keyboard navigation works without mouse
-- Test with screen readers
-- Avoid focus traps unless intentional (modals)
-- Maintain logical tab order
-
-### Performance Considerations
-
-- Focus handles are lightweight
-- Focus queries are fast
-- Avoid excessive focus observers
-- Cache focus state when possible
-
-FocusHandle coordinates with GPUI's action system to create a cohesive keyboard-driven interface. Proper focus management ensures accessibility and provides users with predictable keyboard navigation patterns.</content>
-<parameter name="filePath">.claude/skills/focus-handle/SKILL.md
+- **API Reference**: See [api-reference.md](references/api-reference.md)
+  - FocusHandle API, focus management
+  - Events, keyboard navigation
+  - Best practices
