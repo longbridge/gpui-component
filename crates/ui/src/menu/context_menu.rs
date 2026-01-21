@@ -106,6 +106,7 @@ struct ContextMenuSharedState {
     open: bool,
     position: Point<Pixels>,
     _subscription: Option<Subscription>,
+    window_bounds: gpui::Bounds<Pixels>,
 }
 
 pub struct ContextMenuState {
@@ -122,6 +123,7 @@ impl Default for ContextMenuState {
                 open: false,
                 position: Default::default(),
                 _subscription: None,
+                window_bounds: Default::default(),
             })),
         }
     }
@@ -153,6 +155,25 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
             window,
             cx,
             |this, state: &mut ContextMenuState, window, cx| {
+                // Check if window bounds have changed
+                let current_bounds = window.bounds();
+                let bounds_changed = {
+                    let mut shared_state = state.shared_state.borrow_mut();
+                    let changed = shared_state.open && shared_state.window_bounds != current_bounds;
+                    if changed {
+                        // Close the menu if window was resized
+                        shared_state.open = false;
+                        shared_state.menu_view = None;
+                        shared_state._subscription = None;
+                    }
+                    shared_state.window_bounds = current_bounds;
+                    changed
+                };
+                
+                if bounds_changed {
+                    window.refresh();
+                }
+
                 let (position, open) = {
                     let shared_state = state.shared_state.borrow();
                     (shared_state.position, shared_state.open)
@@ -172,6 +193,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                     div()
                                         .w(window.bounds().size.width)
                                         .h(window.bounds().size.height)
+                                        .bg(gpui::transparent_black())
                                         .on_scroll_wheel(|_, _, cx| {
                                             cx.stop_propagation();
                                         })
