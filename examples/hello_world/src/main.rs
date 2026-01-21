@@ -31,7 +31,10 @@ fn main() {
             cx.open_window(WindowOptions::default(), |window, cx| {
                 let view = cx.new(|_| Example);
                 // This first level on the window, should be a Root.
-                cx.new(|cx| Root::new(view, window, cx))
+                cx.new(|cx| {
+                    // You can refine the root view style by yourself.
+                    Root::new(view, window, cx).bg(cx.theme().background)
+                })
             })?;
 
             Ok::<_, anyhow::Error>(())
