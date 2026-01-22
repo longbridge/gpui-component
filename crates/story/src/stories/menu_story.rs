@@ -305,6 +305,69 @@ impl Render for MenuStory {
                     ),
             )
             .child(
+                section("Context Menu - Resize Test")
+                    .v_flex()
+                    .gap_4()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(
+                                "This section tests the context menu fixes: \
+                                 1) No shadow blob on the overlay, \
+                                 2) Menu closes when window is resized.",
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .w_full()
+                            .p_8()
+                            .items_center()
+                            .justify_center()
+                            .min_h(px(200.))
+                            .rounded_lg()
+                            .border_2()
+                            .border_color(cx.theme().border)
+                            .bg(cx.theme().background)
+                            .child(
+                                v_flex()
+                                    .gap_4()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_lg()
+                                            .font_semibold()
+                                            .child("Right-click to test context menu"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("✓ Overlay should have no shadow blob"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("✓ Menu should close when window is resized"),
+                                    ),
+                            )
+                            .context_menu({
+                                move |this, _, _| {
+                                    this.menu("Copy", Box::new(Copy))
+                                        .menu("Cut", Box::new(Cut))
+                                        .menu("Paste", Box::new(Paste))
+                                        .separator()
+                                        .menu("Search All", Box::new(SearchAll))
+                                        .separator()
+                                        .label("Test Instructions:")
+                                        .label("1. Check overlay transparency")
+                                        .label("2. Resize window to verify menu closes")
+                                }
+                            }),
+                    ),
+            )
+            .child(
                 section("Menu with scrollbar")
                     .child(
                         Button::new("dropdown-menu-scrollable-1")
