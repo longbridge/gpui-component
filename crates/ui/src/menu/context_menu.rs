@@ -295,6 +295,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                             shared_state.menu_view = None;
                             shared_state._subscription = None;
                             shared_state.position = event.position;
+                            shared_state.window_bounds = window.bounds();
                             shared_state.open = true;
                         }
 
