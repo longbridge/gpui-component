@@ -428,7 +428,7 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<I> {
         self.matched_items = self
             .items
             .iter()
-            .filter(|item| item.title().to_lowercase().contains(&query.to_lowercase()))
+            .filter(|item| item.matches(query))
             .cloned()
             .collect();
 
