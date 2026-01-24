@@ -302,6 +302,31 @@ impl Render for MenuStory {
                                     .menu("Item 1", Box::new(Info(1)))
                                 }
                             }),
+                    )
+                    .child(
+                        div()
+                            .id("other1")
+                            .flex()
+                            .w_full()
+                            .p_4()
+                            .items_center()
+                            .justify_center()
+                            .min_h_20()
+                            .rounded_lg()
+                            .border_2()
+                            .border_dashed()
+                            .border_color(cx.theme().border)
+                            .child("ContextMenu area 1")
+                            .context_menu({
+                                move |this, _, _| {
+                                    this.link(
+                                        "About",
+                                        "https://github.com/longbridge/gpui-component",
+                                    )
+                                    .separator()
+                                    .menu("Item 1", Box::new(Info(1)))
+                                }
+                            }),
                     ),
             )
             .child(

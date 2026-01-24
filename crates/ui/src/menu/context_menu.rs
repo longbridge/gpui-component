@@ -18,8 +18,14 @@ pub trait ContextMenuExt: ParentElement + Styled {
     fn context_menu(
         self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> ContextMenu<Self> {
-        ContextMenu::new("context-menu", self).menu(f)
+    ) -> ContextMenu<Self>
+    where
+        Self: Sized,
+    {
+        // Generate a unique ID based on the element's memory address to ensure
+        // each context menu has its own state and doesn't share with others
+        let id = format!("context-menu-{:p}", &self as *const _);
+        ContextMenu::new(id, self).menu(f)
     }
 }
 
