@@ -442,7 +442,7 @@ impl Render for TreeState {
             })
             .flex_grow()
             .size_full()
-            .track_scroll(&self.scroll_handle)
+            .track_scroll(self.scroll_handle.clone())
             .with_sizing_behavior(ListSizingBehavior::Auto)
             .into_any_element(),
         )

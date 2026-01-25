@@ -24,8 +24,7 @@ pub trait ContextMenuExt: ParentElement + Styled {
     {
         // Generate a unique ID based on the element's memory address to ensure
         // each context menu has its own state and doesn't share with others
-        let id = format!("context-menu-{:p}", &self as *const _);
-        ContextMenu::new(id, self).menu(f)
+        ContextMenu::new(("context-menu", &self as *const _ as usize), self).menu(f)
     }
 }
 
@@ -192,7 +191,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                                         .focus_handle(cx)
                                                         .contains_focused(window, cx)
                                                     {
-                                                        menu.focus_handle(cx).focus(window, cx);
+                                                        menu.focus_handle(cx).focus(window);
                                                     }
 
                                                     this.child(menu.clone())

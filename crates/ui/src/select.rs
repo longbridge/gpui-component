@@ -645,7 +645,7 @@ where
 
     /// Focus the select input.
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
-        self.focus_handle.focus(window, cx);
+        self.focus_handle.focus(window);
     }
 
     fn update_selected_value(&mut self, _: &Window, cx: &App) {
@@ -679,7 +679,7 @@ where
             self.open = true;
         }
 
-        self.list.focus_handle(cx).focus(window, cx);
+        self.list.focus_handle(cx).focus(window);
         cx.propagate();
     }
 
@@ -688,7 +688,7 @@ where
             self.open = true;
         }
 
-        self.list.focus_handle(cx).focus(window, cx);
+        self.list.focus_handle(cx).focus(window);
         cx.propagate();
     }
 
@@ -701,7 +701,7 @@ where
             cx.notify();
         }
 
-        self.list.focus_handle(cx).focus(window, cx);
+        self.list.focus_handle(cx).focus(window);
     }
 
     fn toggle_menu(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -709,7 +709,7 @@ where
 
         self.open = !self.open;
         if self.open {
-            self.list.focus_handle(cx).focus(window, cx);
+            self.list.focus_handle(cx).focus(window);
         }
         cx.notify();
     }

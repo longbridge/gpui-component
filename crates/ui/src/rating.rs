@@ -3,7 +3,7 @@ use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt, h_flex};
 use std::rc::Rc;
 
 use gpui::{
-    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, StyleRefinement,
+    App, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, StyleRefinement,
     Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui::{ClickEvent, Hsla, StatefulInteractiveElement};
@@ -108,6 +108,12 @@ struct RaingState {
     value: usize,
     /// To store the currently hovered value.
     hovered_value: usize,
+}
+
+impl Render for RaingState {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
 }
 
 impl RenderOnce for Rating {

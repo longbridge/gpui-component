@@ -677,9 +677,8 @@ impl PopupMenu {
                 OwnedMenuItem::Action {
                     name,
                     action,
-                    checked,
                     ..
-                } => self = self.menu_with_check(name, checked, action.boxed_clone()),
+                } => self = self.menu_with_check(name, false, action.boxed_clone()),
                 OwnedMenuItem::Separator => {
                     self = self.separator();
                 }
@@ -770,7 +769,7 @@ impl PopupMenu {
         cx: &mut Context<Self>,
     ) {
         if let Some(context) = self.action_context.as_ref() {
-            context.focus(window, cx);
+            context.focus(window);
         }
 
         window.dispatch_action(action.boxed_clone(), cx);
@@ -870,7 +869,7 @@ impl PopupMenu {
             // Focus the submenu, so that can be handle the action.
             active_submenu.update(cx, |view, cx| {
                 view.set_selected_index(0, cx);
-                view.focus_handle.focus(window, cx);
+                view.focus_handle.focus(window);
             });
             cx.notify();
             return true;
@@ -901,7 +900,7 @@ impl PopupMenu {
 
         self.selected_index = None;
         parent.update(cx, |view, cx| {
-            view.focus_handle.focus(window, cx);
+            view.focus_handle.focus(window);
             cx.notify();
         });
     }
@@ -930,7 +929,7 @@ impl PopupMenu {
 
         // Focus back to the previous focused handle.
         if let Some(action_context) = self.action_context.as_ref() {
-            window.focus(action_context, cx);
+            window.focus(action_context);
         }
 
         let Some(parent_menu) = self.parent_menu.clone() else {

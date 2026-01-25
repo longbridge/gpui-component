@@ -241,7 +241,7 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
+        let text_align = self.style.text.as_ref().and_then(|t| t.text_align).unwrap_or(TextAlign::Left);
 
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;

@@ -95,7 +95,7 @@ impl TextElement {
         let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let top_bottom_margin = if state.mode.is_auto_grow() {
+        let top_bottom_margin = if state.mode.should_auto_grow() {
             line_height
         } else if visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
             line_height
@@ -910,7 +910,7 @@ impl Element for TextElement {
         if state.mode.is_multi_line() {
             style.flex_grow = 1.0;
             style.size.height = relative(1.).into();
-            if state.mode.is_auto_grow() {
+            if state.mode.should_auto_grow() {
                 // Auto grow to let height match to rows, but not exceed max rows.
                 let rows = state.mode.max_rows().min(state.mode.rows());
                 style.min_size.height = (rows * line_height).into();
@@ -1438,8 +1438,6 @@ impl Element for TextElement {
                     _ = ghost_line.paint(
                         ghost_p,
                         line_height,
-                        text_align,
-                        Some(prepaint.last_layout.content_width),
                         window,
                         cx,
                     );
@@ -1490,7 +1488,7 @@ impl Element for TextElement {
                 }
 
                 for line in lines {
-                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+                    _ = line.paint(p, line_height, window, cx);
                     offset_y += line_height;
                 }
 
@@ -1530,7 +1528,7 @@ impl Element for TextElement {
                     window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
 
                     // Paint first line completion text
-                    _ = first_line.paint(p, line_height, text_align, None, window, cx);
+                    _ = first_line.paint(p, line_height, window, cx);
                 }
             }
         }

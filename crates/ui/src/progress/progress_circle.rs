@@ -181,7 +181,7 @@ impl RenderOnce for ProgressCircle {
             .map(|this| {
                 if has_changed {
                     this.with_animation(
-                        format!("progress-circle-{}", prev_value),
+                        ("progress-circle", (prev_value * 1000.0) as usize),
                         Animation::new(Duration::from_secs_f64(0.15)),
                         move |this, delta| {
                             let animated_value = prev_value + (value - prev_value) * delta;
@@ -189,7 +189,7 @@ impl RenderOnce for ProgressCircle {
                         },
                     )
                     .into_any_element()
-                } else {
+                } else{
                     this.child(Self::render_circle(value, color))
                         .into_any_element()
                 }

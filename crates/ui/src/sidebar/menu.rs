@@ -350,8 +350,7 @@ impl SidebarItem for SidebarMenuItem {
                         .pl_2p5()
                         .py_0p5()
                         .children(self.children.into_iter().enumerate().map(|(ix, item)| {
-                            let id = format!("{}-{}", id, ix);
-                            item.render(id, window, cx).into_any_element()
+                            item.render(SharedString::from(format!("{:?}-{}", id, ix)), window, cx).into_any_element()
                         })),
                 )
             })

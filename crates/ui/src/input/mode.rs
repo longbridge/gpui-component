@@ -29,6 +29,8 @@ pub(crate) enum InputMode {
         multi_line: bool,
         tab: TabSize,
         rows: usize,
+        min_rows: usize,
+        max_rows: usize,
         /// Show line number
         line_number: bool,
         language: SharedString,
@@ -59,6 +61,8 @@ impl InputMode {
     pub(super) fn code_editor(language: impl Into<SharedString>) -> Self {
         InputMode::CodeEditor {
             rows: 2,
+            min_rows: 1,
+            max_rows: 9999,
             multi_line: true,
             tab: TabSize::default(),
             language: language.into(),
@@ -102,6 +106,13 @@ impl InputMode {
         matches!(self, InputMode::AutoGrow { .. })
     }
 
+    /// Returns true if this mode should auto-grow its height based on content.
+    /// This includes both AutoGrow mode and CodeEditor mode.
+    #[inline]
+    pub(super) fn should_auto_grow(&self) -> bool {
+        matches!(self, InputMode::AutoGrow { .. } | InputMode::CodeEditor { .. })
+    }
+
     #[inline]
     pub(super) fn is_multi_line(&self) -> bool {
         match self {
@@ -116,8 +127,13 @@ impl InputMode {
             InputMode::PlainText { rows, .. } => {
                 *rows = new_rows;
             }
-            InputMode::CodeEditor { rows, .. } => {
-                *rows = new_rows;
+            InputMode::CodeEditor {
+                rows,
+                min_rows,
+                max_rows,
+                ..
+            } => {
+                *rows = new_rows.clamp(*min_rows, *max_rows);
             }
             InputMode::AutoGrow {
                 rows,
@@ -157,6 +173,7 @@ impl InputMode {
     pub(super) fn min_rows(&self) -> usize {
         match self {
             InputMode::AutoGrow { min_rows, .. } => *min_rows,
+            InputMode::CodeEditor { min_rows, .. } => *min_rows,
             _ => 1,
         }
         .max(1)
@@ -170,6 +187,7 @@ impl InputMode {
 
         match self {
             InputMode::AutoGrow { max_rows, .. } => *max_rows,
+            InputMode::CodeEditor { max_rows, .. } => *max_rows,
             _ => usize::MAX,
         }
     }

@@ -78,7 +78,7 @@ impl<E: SidebarItem> SidebarItem for SidebarGroup<E> {
                     .children(self.children.into_iter().enumerate().map(|(ix, child)| {
                         child
                             .collapsed(self.collapsed)
-                            .render(format!("{}-{}", id, ix), window, cx)
+                            .render(SharedString::from(format!("{:?}-{}", id, ix)), window, cx)
                             .into_any_element()
                     })),
             )
