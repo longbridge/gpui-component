@@ -34,8 +34,8 @@ mod otp_input_story;
 mod pagination_story;
 mod popover_story;
 mod progress_story;
-mod rating_story;
 mod radio_story;
+mod rating_story;
 mod resizable_story;
 mod scrollbar_story;
 mod select_story;
@@ -90,8 +90,8 @@ pub use otp_input_story::OtpInputStory;
 pub use pagination_story::PaginationStory;
 pub use popover_story::PopoverStory;
 pub use progress_story::ProgressStory;
-pub use rating_story::RatingStory;
 pub use radio_story::RadioStory;
+pub use rating_story::RatingStory;
 pub use resizable_story::ResizableStory;
 pub use scrollbar_story::ScrollbarStory;
 pub use select_story::SelectStory;
@@ -115,61 +115,61 @@ pub use virtual_list_story::VirtualListStory;
 pub use welcome_story::WelcomeStory;
 
 pub(crate) fn init(cx: &mut App) {
-    input_story::init(cx);
-    rating_story::init(cx);
-    number_input_story::init(cx);
-    textarea_story::init(cx);
-    select_story::init(cx);
-    popover_story::init(cx);
-    menu_story::init(cx);
-    tooltip_story::init(cx);
-    otp_input_story::init(cx);
-    tree_story::init(cx);
+  input_story::init(cx);
+  rating_story::init(cx);
+  number_input_story::init(cx);
+  textarea_story::init(cx);
+  select_story::init(cx);
+  popover_story::init(cx);
+  menu_story::init(cx);
+  tooltip_story::init(cx);
+  otp_input_story::init(cx);
+  tree_story::init(cx);
 }
 
 pub trait Story: Render + Sized {
-    fn klass() -> &'static str {
-        std::any::type_name::<Self>().split("::").last().unwrap()
+  fn klass() -> &'static str {
+    std::any::type_name::<Self>().split("::").last().unwrap()
+  }
+
+  fn title() -> &'static str;
+
+  fn description() -> &'static str {
+    ""
+  }
+
+  fn closable() -> bool {
+    true
+  }
+
+  fn zoomable() -> Option<PanelControl> {
+    Some(PanelControl::default())
+  }
+
+  fn title_bg() -> Option<Hsla> {
+    None
+  }
+
+  fn paddings() -> Pixels {
+    px(16.)
+  }
+
+  fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
+
+  fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
+    let _ = active;
+    let _ = window;
+    let _ = cx;
+  }
+
+  fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
+  where
+    Self: 'static,
+  {
+    if let Some(story) = view.downcast::<Self>().ok() {
+      cx.update_entity(&story, |story, cx| {
+        story.on_active(active, window, cx);
+      });
     }
-
-    fn title() -> &'static str;
-
-    fn description() -> &'static str {
-        ""
-    }
-
-    fn closable() -> bool {
-        true
-    }
-
-    fn zoomable() -> Option<PanelControl> {
-        Some(PanelControl::default())
-    }
-
-    fn title_bg() -> Option<Hsla> {
-        None
-    }
-
-    fn paddings() -> Pixels {
-        px(16.)
-    }
-
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render>;
-
-    fn on_active(&mut self, active: bool, window: &mut Window, cx: &mut App) {
-        let _ = active;
-        let _ = window;
-        let _ = cx;
-    }
-
-    fn on_active_any(view: AnyView, active: bool, window: &mut Window, cx: &mut App)
-    where
-        Self: 'static,
-    {
-        if let Some(story) = view.downcast::<Self>().ok() {
-            cx.update_entity(&story, |story, cx| {
-                story.on_active(active, window, cx);
-            });
-        }
-    }
+  }
 }

@@ -12,6 +12,6 @@ pub use dropdown_menu::DropdownMenu;
 pub use popup_menu::{PopupMenu, PopupMenuItem};
 
 pub(crate) fn init(cx: &mut App) {
-    app_menu_bar::init(cx);
-    popup_menu::init(cx);
+  app_menu_bar::init(cx);
+  popup_menu::init(cx);
 }

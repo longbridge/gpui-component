@@ -15,14 +15,14 @@ use serde::{Deserialize, Serialize};
 /// Settings for List.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ListSettings {
-    /// Whether to use active highlight style on ListItem, default
-    pub active_highlight: bool,
+  /// Whether to use active highlight style on ListItem, default
+  pub active_highlight: bool,
 }
 
 impl Default for ListSettings {
-    fn default() -> Self {
-        Self {
-            active_highlight: true,
-        }
+  fn default() -> Self {
+    Self {
+      active_highlight: true,
     }
+  }
 }

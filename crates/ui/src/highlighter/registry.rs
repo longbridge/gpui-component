@@ -3,87 +3,87 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::{Arc, LazyLock, Mutex},
+  collections::HashMap,
+  ops::Deref,
+  sync::{Arc, LazyLock, Mutex},
 };
 
 use crate::{
-    highlighter::{languages, Language},
-    ActiveTheme, ThemeMode, DEFAULT_THEME_COLORS,
+  ActiveTheme, DEFAULT_THEME_COLORS, ThemeMode,
+  highlighter::{Language, languages},
 };
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
-    "attribute",
-    "boolean",
-    "comment",
-    "comment.doc",
-    "constant",
-    "constructor",
-    "embedded",
-    "emphasis",
-    "emphasis.strong",
-    "enum",
-    "function",
-    "hint",
-    "keyword",
-    "label",
-    "link_text",
-    "link_uri",
-    "number",
-    "operator",
-    "predictive",
-    "preproc",
-    "primary",
-    "property",
-    "punctuation",
-    "punctuation.bracket",
-    "punctuation.delimiter",
-    "punctuation.list_marker",
-    "punctuation.special",
-    "string",
-    "string.escape",
-    "string.regex",
-    "string.special",
-    "string.special.symbol",
-    "tag",
-    "tag.doctype",
-    "text.literal",
-    "title",
-    "type",
-    "variable",
-    "variable.special",
-    "variant",
+  "attribute",
+  "boolean",
+  "comment",
+  "comment.doc",
+  "constant",
+  "constructor",
+  "embedded",
+  "emphasis",
+  "emphasis.strong",
+  "enum",
+  "function",
+  "hint",
+  "keyword",
+  "label",
+  "link_text",
+  "link_uri",
+  "number",
+  "operator",
+  "predictive",
+  "preproc",
+  "primary",
+  "property",
+  "punctuation",
+  "punctuation.bracket",
+  "punctuation.delimiter",
+  "punctuation.list_marker",
+  "punctuation.special",
+  "string",
+  "string.escape",
+  "string.regex",
+  "string.special",
+  "string.special.symbol",
+  "tag",
+  "tag.doctype",
+  "text.literal",
+  "title",
+  "type",
+  "variable",
+  "variable.special",
+  "variant",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageConfig {
-    pub name: SharedString,
-    pub language: tree_sitter::Language,
-    pub injection_languages: Vec<SharedString>,
-    pub highlights: SharedString,
-    pub injections: SharedString,
-    pub locals: SharedString,
+  pub name: SharedString,
+  pub language: tree_sitter::Language,
+  pub injection_languages: Vec<SharedString>,
+  pub highlights: SharedString,
+  pub injections: SharedString,
+  pub locals: SharedString,
 }
 
 impl LanguageConfig {
-    pub fn new(
-        name: impl Into<SharedString>,
-        language: tree_sitter::Language,
-        injection_languages: Vec<SharedString>,
-        highlights: &str,
-        injections: &str,
-        locals: &str,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            language,
-            injection_languages,
-            highlights: SharedString::from(highlights.to_string()),
-            injections: SharedString::from(injections.to_string()),
-            locals: SharedString::from(locals.to_string()),
-        }
+  pub fn new(
+    name: impl Into<SharedString>,
+    language: tree_sitter::Language,
+    injection_languages: Vec<SharedString>,
+    highlights: &str,
+    injections: &str,
+    locals: &str,
+  ) -> Self {
+    Self {
+      name: name.into(),
+      language,
+      injection_languages,
+      highlights: SharedString::from(highlights.to_string()),
+      injections: SharedString::from(injections.to_string()),
+      locals: SharedString::from(locals.to_string()),
     }
+  }
 }
 
 /// Theme for Tree-sitter Highlight
@@ -91,340 +91,345 @@ impl LanguageConfig {
 /// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct SyntaxColors {
-    pub attribute: Option<ThemeStyle>,
-    pub boolean: Option<ThemeStyle>,
-    pub comment: Option<ThemeStyle>,
-    pub comment_doc: Option<ThemeStyle>,
-    pub constant: Option<ThemeStyle>,
-    pub constructor: Option<ThemeStyle>,
-    pub embedded: Option<ThemeStyle>,
-    pub emphasis: Option<ThemeStyle>,
-    #[serde(rename = "emphasis.strong")]
-    pub emphasis_strong: Option<ThemeStyle>,
-    #[serde(rename = "enum")]
-    pub enum_: Option<ThemeStyle>,
-    pub function: Option<ThemeStyle>,
-    pub hint: Option<ThemeStyle>,
-    pub keyword: Option<ThemeStyle>,
-    pub label: Option<ThemeStyle>,
-    #[serde(rename = "link_text")]
-    pub link_text: Option<ThemeStyle>,
-    #[serde(rename = "link_uri")]
-    pub link_uri: Option<ThemeStyle>,
-    pub number: Option<ThemeStyle>,
-    pub operator: Option<ThemeStyle>,
-    pub predictive: Option<ThemeStyle>,
-    pub preproc: Option<ThemeStyle>,
-    pub primary: Option<ThemeStyle>,
-    pub property: Option<ThemeStyle>,
-    pub punctuation: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.bracket")]
-    pub punctuation_bracket: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.delimiter")]
-    pub punctuation_delimiter: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.list_marker")]
-    pub punctuation_list_marker: Option<ThemeStyle>,
-    #[serde(rename = "punctuation.special")]
-    pub punctuation_special: Option<ThemeStyle>,
-    pub string: Option<ThemeStyle>,
-    #[serde(rename = "string.escape")]
-    pub string_escape: Option<ThemeStyle>,
-    #[serde(rename = "string.regex")]
-    pub string_regex: Option<ThemeStyle>,
-    #[serde(rename = "string.special")]
-    pub string_special: Option<ThemeStyle>,
-    #[serde(rename = "string.special.symbol")]
-    pub string_special_symbol: Option<ThemeStyle>,
-    pub tag: Option<ThemeStyle>,
-    #[serde(rename = "tag.doctype")]
-    pub tag_doctype: Option<ThemeStyle>,
-    #[serde(rename = "text.literal")]
-    pub text_literal: Option<ThemeStyle>,
-    pub title: Option<ThemeStyle>,
-    #[serde(rename = "type")]
-    pub type_: Option<ThemeStyle>,
-    pub variable: Option<ThemeStyle>,
-    #[serde(rename = "variable.special")]
-    pub variable_special: Option<ThemeStyle>,
-    pub variant: Option<ThemeStyle>,
+  pub attribute: Option<ThemeStyle>,
+  pub boolean: Option<ThemeStyle>,
+  pub comment: Option<ThemeStyle>,
+  pub comment_doc: Option<ThemeStyle>,
+  pub constant: Option<ThemeStyle>,
+  pub constructor: Option<ThemeStyle>,
+  pub embedded: Option<ThemeStyle>,
+  pub emphasis: Option<ThemeStyle>,
+  #[serde(rename = "emphasis.strong")]
+  pub emphasis_strong: Option<ThemeStyle>,
+  #[serde(rename = "enum")]
+  pub enum_: Option<ThemeStyle>,
+  pub function: Option<ThemeStyle>,
+  pub hint: Option<ThemeStyle>,
+  pub keyword: Option<ThemeStyle>,
+  pub label: Option<ThemeStyle>,
+  #[serde(rename = "link_text")]
+  pub link_text: Option<ThemeStyle>,
+  #[serde(rename = "link_uri")]
+  pub link_uri: Option<ThemeStyle>,
+  pub number: Option<ThemeStyle>,
+  pub operator: Option<ThemeStyle>,
+  pub predictive: Option<ThemeStyle>,
+  pub preproc: Option<ThemeStyle>,
+  pub primary: Option<ThemeStyle>,
+  pub property: Option<ThemeStyle>,
+  pub punctuation: Option<ThemeStyle>,
+  #[serde(rename = "punctuation.bracket")]
+  pub punctuation_bracket: Option<ThemeStyle>,
+  #[serde(rename = "punctuation.delimiter")]
+  pub punctuation_delimiter: Option<ThemeStyle>,
+  #[serde(rename = "punctuation.list_marker")]
+  pub punctuation_list_marker: Option<ThemeStyle>,
+  #[serde(rename = "punctuation.special")]
+  pub punctuation_special: Option<ThemeStyle>,
+  pub string: Option<ThemeStyle>,
+  #[serde(rename = "string.escape")]
+  pub string_escape: Option<ThemeStyle>,
+  #[serde(rename = "string.regex")]
+  pub string_regex: Option<ThemeStyle>,
+  #[serde(rename = "string.special")]
+  pub string_special: Option<ThemeStyle>,
+  #[serde(rename = "string.special.symbol")]
+  pub string_special_symbol: Option<ThemeStyle>,
+  pub tag: Option<ThemeStyle>,
+  #[serde(rename = "tag.doctype")]
+  pub tag_doctype: Option<ThemeStyle>,
+  #[serde(rename = "text.literal")]
+  pub text_literal: Option<ThemeStyle>,
+  pub title: Option<ThemeStyle>,
+  #[serde(rename = "type")]
+  pub type_: Option<ThemeStyle>,
+  pub variable: Option<ThemeStyle>,
+  #[serde(rename = "variable.special")]
+  pub variable_special: Option<ThemeStyle>,
+  pub variant: Option<ThemeStyle>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FontStyle {
-    Normal,
-    Italic,
-    Underline,
+  Normal,
+  Italic,
+  Underline,
 }
 
 impl From<FontStyle> for gpui::FontStyle {
-    fn from(style: FontStyle) -> Self {
-        match style {
-            FontStyle::Normal => gpui::FontStyle::Normal,
-            FontStyle::Italic => gpui::FontStyle::Italic,
-            FontStyle::Underline => gpui::FontStyle::Normal,
-        }
+  fn from(style: FontStyle) -> Self {
+    match style {
+      FontStyle::Normal => gpui::FontStyle::Normal,
+      FontStyle::Italic => gpui::FontStyle::Italic,
+      FontStyle::Underline => gpui::FontStyle::Normal,
     }
+  }
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize_repr, Deserialize_repr, JsonSchema)]
 #[repr(u16)]
 pub enum FontWeightContent {
-    Thin = 100,
-    ExtraLight = 200,
-    Light = 300,
-    Normal = 400,
-    Medium = 500,
-    Semibold = 600,
-    Bold = 700,
-    ExtraBold = 800,
-    Black = 900,
+  Thin = 100,
+  ExtraLight = 200,
+  Light = 300,
+  Normal = 400,
+  Medium = 500,
+  Semibold = 600,
+  Bold = 700,
+  ExtraBold = 800,
+  Black = 900,
 }
 
 impl From<FontWeightContent> for FontWeight {
-    fn from(value: FontWeightContent) -> Self {
-        match value {
-            FontWeightContent::Thin => FontWeight::THIN,
-            FontWeightContent::ExtraLight => FontWeight::EXTRA_LIGHT,
-            FontWeightContent::Light => FontWeight::LIGHT,
-            FontWeightContent::Normal => FontWeight::NORMAL,
-            FontWeightContent::Medium => FontWeight::MEDIUM,
-            FontWeightContent::Semibold => FontWeight::SEMIBOLD,
-            FontWeightContent::Bold => FontWeight::BOLD,
-            FontWeightContent::ExtraBold => FontWeight::EXTRA_BOLD,
-            FontWeightContent::Black => FontWeight::BLACK,
-        }
+  fn from(value: FontWeightContent) -> Self {
+    match value {
+      FontWeightContent::Thin => FontWeight::THIN,
+      FontWeightContent::ExtraLight => FontWeight::EXTRA_LIGHT,
+      FontWeightContent::Light => FontWeight::LIGHT,
+      FontWeightContent::Normal => FontWeight::NORMAL,
+      FontWeightContent::Medium => FontWeight::MEDIUM,
+      FontWeightContent::Semibold => FontWeight::SEMIBOLD,
+      FontWeightContent::Bold => FontWeight::BOLD,
+      FontWeightContent::ExtraBold => FontWeight::EXTRA_BOLD,
+      FontWeightContent::Black => FontWeight::BLACK,
     }
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct ThemeStyle {
-    color: Option<Hsla>,
-    font_style: Option<FontStyle>,
-    font_weight: Option<FontWeightContent>,
+  color: Option<Hsla>,
+  font_style: Option<FontStyle>,
+  font_weight: Option<FontWeightContent>,
 }
 
 impl From<ThemeStyle> for HighlightStyle {
-    fn from(style: ThemeStyle) -> Self {
-        HighlightStyle {
-            color: style.color,
-            font_weight: style.font_weight.map(Into::into),
-            font_style: style.font_style.map(Into::into),
-            ..Default::default()
-        }
+  fn from(style: ThemeStyle) -> Self {
+    HighlightStyle {
+      color: style.color,
+      font_weight: style.font_weight.map(Into::into),
+      font_style: style.font_style.map(Into::into),
+      ..Default::default()
     }
+  }
 }
 
 impl SyntaxColors {
-    pub fn style(&self, name: &str) -> Option<HighlightStyle> {
-        if name.is_empty() {
-            return None;
-        }
-
-        let style = match name {
-            "attribute" => self.attribute,
-            "boolean" => self.boolean,
-            "comment" => self.comment,
-            "comment.doc" => self.comment_doc,
-            "constant" => self.constant,
-            "constructor" => self.constructor,
-            "embedded" => self.embedded,
-            "emphasis" => self.emphasis,
-            "emphasis.strong" => self.emphasis_strong,
-            "enum" => self.enum_,
-            "function" => self.function,
-            "hint" => self.hint,
-            "keyword" => self.keyword,
-            "label" => self.label,
-            "link_text" => self.link_text,
-            "link_uri" => self.link_uri,
-            "number" => self.number,
-            "operator" => self.operator,
-            "predictive" => self.predictive,
-            "preproc" => self.preproc,
-            "primary" => self.primary,
-            "property" => self.property,
-            "punctuation" => self.punctuation,
-            "punctuation.bracket" => self.punctuation_bracket,
-            "punctuation.delimiter" => self.punctuation_delimiter,
-            "punctuation.list_marker" => self.punctuation_list_marker,
-            "punctuation.special" => self.punctuation_special,
-            "string" => self.string,
-            "string.escape" => self.string_escape,
-            "string.regex" => self.string_regex,
-            "string.special" => self.string_special,
-            "string.special.symbol" => self.string_special_symbol,
-            "tag" => self.tag,
-            "tag.doctype" => self.tag_doctype,
-            "text.literal" => self.text_literal,
-            "title" => self.title,
-            "type" => self.type_,
-            "variable" => self.variable,
-            "variable.special" => self.variable_special,
-            "variant" => self.variant,
-            _ => None,
-        }
-        .map(|s| s.into());
-
-        if style.is_some() {
-            style
-        } else {
-            // Fallback `keyword.modifier` to `keyword`
-            if name.contains(".") {
-                if let Some(prefix) = name.split(".").next() {
-                    return self.style(prefix);
-                }
-
-                None
-            } else {
-                None
-            }
-        }
+  pub fn style(&self, name: &str) -> Option<HighlightStyle> {
+    if name.is_empty() {
+      return None;
     }
 
-    #[inline]
-    pub fn style_for_index(&self, index: usize) -> Option<HighlightStyle> {
-        HIGHLIGHT_NAMES.get(index).and_then(|name| self.style(name))
+    let style = match name {
+      "attribute" => self.attribute,
+      "boolean" => self.boolean,
+      "comment" => self.comment,
+      "comment.doc" => self.comment_doc,
+      "constant" => self.constant,
+      "constructor" => self.constructor,
+      "embedded" => self.embedded,
+      "emphasis" => self.emphasis,
+      "emphasis.strong" => self.emphasis_strong,
+      "enum" => self.enum_,
+      "function" => self.function,
+      "hint" => self.hint,
+      "keyword" => self.keyword,
+      "label" => self.label,
+      "link_text" => self.link_text,
+      "link_uri" => self.link_uri,
+      "number" => self.number,
+      "operator" => self.operator,
+      "predictive" => self.predictive,
+      "preproc" => self.preproc,
+      "primary" => self.primary,
+      "property" => self.property,
+      "punctuation" => self.punctuation,
+      "punctuation.bracket" => self.punctuation_bracket,
+      "punctuation.delimiter" => self.punctuation_delimiter,
+      "punctuation.list_marker" => self.punctuation_list_marker,
+      "punctuation.special" => self.punctuation_special,
+      "string" => self.string,
+      "string.escape" => self.string_escape,
+      "string.regex" => self.string_regex,
+      "string.special" => self.string_special,
+      "string.special.symbol" => self.string_special_symbol,
+      "tag" => self.tag,
+      "tag.doctype" => self.tag_doctype,
+      "text.literal" => self.text_literal,
+      "title" => self.title,
+      "type" => self.type_,
+      "variable" => self.variable,
+      "variable.special" => self.variable_special,
+      "variant" => self.variant,
+      _ => None,
     }
+    .map(|s| s.into());
+
+    if style.is_some() {
+      style
+    } else {
+      // Fallback `keyword.modifier` to `keyword`
+      if name.contains(".") {
+        if let Some(prefix) = name.split(".").next() {
+          return self.style(prefix);
+        }
+
+        None
+      } else {
+        None
+      }
+    }
+  }
+
+  #[inline]
+  pub fn style_for_index(&self, index: usize) -> Option<HighlightStyle> {
+    HIGHLIGHT_NAMES.get(index).and_then(|name| self.style(name))
+  }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct StatusColors {
-    #[serde(rename = "error")]
-    error: Option<Hsla>,
-    #[serde(rename = "error.background")]
-    error_background: Option<Hsla>,
-    #[serde(rename = "error.border")]
-    error_border: Option<Hsla>,
-    #[serde(rename = "warning")]
-    warning: Option<Hsla>,
-    #[serde(rename = "warning.background")]
-    warning_background: Option<Hsla>,
-    #[serde(rename = "warning.border")]
-    warning_border: Option<Hsla>,
-    #[serde(rename = "info")]
-    info: Option<Hsla>,
-    #[serde(rename = "info.background")]
-    info_background: Option<Hsla>,
-    #[serde(rename = "info.border")]
-    info_border: Option<Hsla>,
-    #[serde(rename = "success")]
-    success: Option<Hsla>,
-    #[serde(rename = "success.background")]
-    success_background: Option<Hsla>,
-    #[serde(rename = "success.border")]
-    success_border: Option<Hsla>,
-    #[serde(rename = "hint")]
-    hint: Option<Hsla>,
-    #[serde(rename = "hint.background")]
-    hint_background: Option<Hsla>,
-    #[serde(rename = "hint.border")]
-    hint_border: Option<Hsla>,
+  #[serde(rename = "error")]
+  error: Option<Hsla>,
+  #[serde(rename = "error.background")]
+  error_background: Option<Hsla>,
+  #[serde(rename = "error.border")]
+  error_border: Option<Hsla>,
+  #[serde(rename = "warning")]
+  warning: Option<Hsla>,
+  #[serde(rename = "warning.background")]
+  warning_background: Option<Hsla>,
+  #[serde(rename = "warning.border")]
+  warning_border: Option<Hsla>,
+  #[serde(rename = "info")]
+  info: Option<Hsla>,
+  #[serde(rename = "info.background")]
+  info_background: Option<Hsla>,
+  #[serde(rename = "info.border")]
+  info_border: Option<Hsla>,
+  #[serde(rename = "success")]
+  success: Option<Hsla>,
+  #[serde(rename = "success.background")]
+  success_background: Option<Hsla>,
+  #[serde(rename = "success.border")]
+  success_border: Option<Hsla>,
+  #[serde(rename = "hint")]
+  hint: Option<Hsla>,
+  #[serde(rename = "hint.background")]
+  hint_background: Option<Hsla>,
+  #[serde(rename = "hint.border")]
+  hint_border: Option<Hsla>,
 }
 
 impl StatusColors {
-    #[inline]
-    pub fn error(&self, cx: &App) -> Hsla {
-        self.error.unwrap_or(cx.theme().red)
-    }
+  #[inline]
+  pub fn error(&self, cx: &App) -> Hsla {
+    self.error.unwrap_or(cx.theme().red)
+  }
 
-    #[inline]
-    pub fn error_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
-        self.error_background
-            .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
-    }
+  #[inline]
+  pub fn error_background(&self, cx: &App) -> Hsla {
+    let bg = cx.theme().background;
+    self
+      .error_background
+      .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
+  }
 
-    #[inline]
-    pub fn error_border(&self, cx: &App) -> Hsla {
-        self.error_border.unwrap_or(self.error(cx))
-    }
+  #[inline]
+  pub fn error_border(&self, cx: &App) -> Hsla {
+    self.error_border.unwrap_or(self.error(cx))
+  }
 
-    #[inline]
-    pub fn warning(&self, cx: &App) -> Hsla {
-        self.warning.unwrap_or(cx.theme().yellow)
-    }
+  #[inline]
+  pub fn warning(&self, cx: &App) -> Hsla {
+    self.warning.unwrap_or(cx.theme().yellow)
+  }
 
-    #[inline]
-    pub fn warning_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
-        self.warning_background
-            .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
-    }
+  #[inline]
+  pub fn warning_background(&self, cx: &App) -> Hsla {
+    let bg = cx.theme().background;
+    self
+      .warning_background
+      .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
+  }
 
-    #[inline]
-    pub fn warning_border(&self, cx: &App) -> Hsla {
-        self.warning_border.unwrap_or(self.warning(cx))
-    }
+  #[inline]
+  pub fn warning_border(&self, cx: &App) -> Hsla {
+    self.warning_border.unwrap_or(self.warning(cx))
+  }
 
-    #[inline]
-    pub fn info(&self, cx: &App) -> Hsla {
-        self.info.unwrap_or(cx.theme().blue)
-    }
+  #[inline]
+  pub fn info(&self, cx: &App) -> Hsla {
+    self.info.unwrap_or(cx.theme().blue)
+  }
 
-    #[inline]
-    pub fn info_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
-        self.info_background
-            .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
-    }
+  #[inline]
+  pub fn info_background(&self, cx: &App) -> Hsla {
+    let bg = cx.theme().background;
+    self
+      .info_background
+      .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
+  }
 
-    #[inline]
-    pub fn info_border(&self, cx: &App) -> Hsla {
-        self.info_border.unwrap_or(self.info(cx))
-    }
+  #[inline]
+  pub fn info_border(&self, cx: &App) -> Hsla {
+    self.info_border.unwrap_or(self.info(cx))
+  }
 
-    #[inline]
-    pub fn success(&self, cx: &App) -> Hsla {
-        self.success.unwrap_or(cx.theme().green)
-    }
+  #[inline]
+  pub fn success(&self, cx: &App) -> Hsla {
+    self.success.unwrap_or(cx.theme().green)
+  }
 
-    #[inline]
-    pub fn success_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
-        self.success_background
-            .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
-    }
+  #[inline]
+  pub fn success_background(&self, cx: &App) -> Hsla {
+    let bg = cx.theme().background;
+    self
+      .success_background
+      .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
+  }
 
-    #[inline]
-    pub fn success_border(&self, cx: &App) -> Hsla {
-        self.success_border.unwrap_or(self.success(cx))
-    }
+  #[inline]
+  pub fn success_border(&self, cx: &App) -> Hsla {
+    self.success_border.unwrap_or(self.success(cx))
+  }
 
-    #[inline]
-    pub fn hint(&self, cx: &App) -> Hsla {
-        self.hint.unwrap_or(cx.theme().cyan)
-    }
+  #[inline]
+  pub fn hint(&self, cx: &App) -> Hsla {
+    self.hint.unwrap_or(cx.theme().cyan)
+  }
 
-    #[inline]
-    pub fn hint_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
-        self.hint_background
-            .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
-    }
+  #[inline]
+  pub fn hint_background(&self, cx: &App) -> Hsla {
+    let bg = cx.theme().background;
+    self
+      .hint_background
+      .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
+  }
 
-    #[inline]
-    pub fn hint_border(&self, cx: &App) -> Hsla {
-        self.hint_border.unwrap_or(self.hint(cx))
-    }
+  #[inline]
+  pub fn hint_border(&self, cx: &App) -> Hsla {
+    self.hint_border.unwrap_or(self.hint(cx))
+  }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightThemeStyle {
-    #[serde(rename = "editor.background")]
-    pub editor_background: Option<Hsla>,
-    #[serde(rename = "editor.foreground")]
-    pub editor_foreground: Option<Hsla>,
-    #[serde(rename = "editor.active_line.background")]
-    pub editor_active_line: Option<Hsla>,
-    #[serde(rename = "editor.line_number")]
-    pub editor_line_number: Option<Hsla>,
-    #[serde(rename = "editor.active_line_number")]
-    pub editor_active_line_number: Option<Hsla>,
-    #[serde(flatten)]
-    pub status: StatusColors,
-    #[serde(rename = "syntax")]
-    pub syntax: SyntaxColors,
+  #[serde(rename = "editor.background")]
+  pub editor_background: Option<Hsla>,
+  #[serde(rename = "editor.foreground")]
+  pub editor_foreground: Option<Hsla>,
+  #[serde(rename = "editor.active_line.background")]
+  pub editor_active_line: Option<Hsla>,
+  #[serde(rename = "editor.line_number")]
+  pub editor_line_number: Option<Hsla>,
+  #[serde(rename = "editor.active_line_number")]
+  pub editor_active_line_number: Option<Hsla>,
+  #[serde(flatten)]
+  pub status: StatusColors,
+  #[serde(rename = "syntax")]
+  pub syntax: SyntaxColors,
 }
 
 /// Theme for Tree-sitter Highlight from JSON theme file.
@@ -434,91 +439,92 @@ pub struct HighlightThemeStyle {
 /// https://zed.dev/docs/extensions/languages#syntax-highlighting
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct HighlightTheme {
-    pub name: String,
-    #[serde(default)]
-    pub appearance: ThemeMode,
-    pub style: HighlightThemeStyle,
+  pub name: String,
+  #[serde(default)]
+  pub appearance: ThemeMode,
+  pub style: HighlightThemeStyle,
 }
 
 impl Deref for HighlightTheme {
-    type Target = SyntaxColors;
+  type Target = SyntaxColors;
 
-    fn deref(&self) -> &Self::Target {
-        &self.style.syntax
-    }
+  fn deref(&self) -> &Self::Target {
+    &self.style.syntax
+  }
 }
 
 impl HighlightTheme {
-    pub fn default_dark() -> Arc<Self> {
-        DEFAULT_THEME_COLORS[&ThemeMode::Dark].1.clone()
-    }
+  pub fn default_dark() -> Arc<Self> {
+    DEFAULT_THEME_COLORS[&ThemeMode::Dark].1.clone()
+  }
 
-    pub fn default_light() -> Arc<Self> {
-        DEFAULT_THEME_COLORS[&ThemeMode::Light].1.clone()
-    }
+  pub fn default_light() -> Arc<Self> {
+    DEFAULT_THEME_COLORS[&ThemeMode::Light].1.clone()
+  }
 }
 
 /// Registry for code highlighter languages.
 pub struct LanguageRegistry {
-    languages: Mutex<HashMap<SharedString, LanguageConfig>>,
+  languages: Mutex<HashMap<SharedString, LanguageConfig>>,
 }
 
 impl LanguageRegistry {
-    /// Returns the singleton instance of the `LanguageRegistry` with default languages and themes.
-    pub fn singleton() -> &'static LazyLock<LanguageRegistry> {
-        static INSTANCE: LazyLock<LanguageRegistry> = LazyLock::new(|| LanguageRegistry {
-            languages: Mutex::new(
-                languages::Language::all()
-                    .map(|language| (language.name().into(), language.config()))
-                    .collect(),
-            ),
-        });
-        &INSTANCE
-    }
+  /// Returns the singleton instance of the `LanguageRegistry` with default languages and themes.
+  pub fn singleton() -> &'static LazyLock<LanguageRegistry> {
+    static INSTANCE: LazyLock<LanguageRegistry> = LazyLock::new(|| LanguageRegistry {
+      languages: Mutex::new(
+        languages::Language::all()
+          .map(|language| (language.name().into(), language.config()))
+          .collect(),
+      ),
+    });
+    &INSTANCE
+  }
 
-    /// Registers a new language configuration to the registry.
-    pub fn register(&self, lang: &str, config: &LanguageConfig) {
-        self.languages
-            .lock()
-            .unwrap()
-            .insert(lang.to_string().into(), config.clone());
-    }
+  /// Registers a new language configuration to the registry.
+  pub fn register(&self, lang: &str, config: &LanguageConfig) {
+    self
+      .languages
+      .lock()
+      .unwrap()
+      .insert(lang.to_string().into(), config.clone());
+  }
 
-    /// Returns a list of all registered language names.
-    pub fn languages(&self) -> Vec<SharedString> {
-        self.languages.lock().unwrap().keys().cloned().collect()
-    }
+  /// Returns a list of all registered language names.
+  pub fn languages(&self) -> Vec<SharedString> {
+    self.languages.lock().unwrap().keys().cloned().collect()
+  }
 
-    /// Returns the language configuration for the given language name.
-    pub fn language(&self, name: &str) -> Option<LanguageConfig> {
-        // Try to get by name first, there may have a custom language registered
-        // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
-        let languages = self.languages.lock().unwrap();
-        languages
-            .get(name)
-            .or_else(|| languages.get(Language::from_str(name).name()))
-            .cloned()
-    }
+  /// Returns the language configuration for the given language name.
+  pub fn language(&self, name: &str) -> Option<LanguageConfig> {
+    // Try to get by name first, there may have a custom language registered
+    // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
+    let languages = self.languages.lock().unwrap();
+    languages
+      .get(name)
+      .or_else(|| languages.get(Language::from_str(name).name()))
+      .cloned()
+  }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::highlighter::LanguageConfig;
+  use crate::highlighter::LanguageConfig;
 
-    #[test]
-    fn test_registry() {
-        use super::LanguageRegistry;
-        let registry = LanguageRegistry::singleton();
+  #[test]
+  fn test_registry() {
+    use super::LanguageRegistry;
+    let registry = LanguageRegistry::singleton();
 
-        registry.register(
-            "foo",
-            &LanguageConfig::new("foo", tree_sitter_json::LANGUAGE.into(), vec![], "", "", ""),
-        );
+    registry.register(
+      "foo",
+      &LanguageConfig::new("foo", tree_sitter_json::LANGUAGE.into(), vec![], "", "", ""),
+    );
 
-        assert!(registry.language("foo").is_some());
-        assert!(registry.language("rust").is_some());
-        assert!(registry.language("rs").is_some());
-        assert!(registry.language("javascript").is_some());
-        assert!(registry.language("js").is_some());
-    }
+    assert!(registry.language("foo").is_some());
+    assert!(registry.language("rust").is_some());
+    assert!(registry.language("rs").is_some());
+    assert!(registry.language("javascript").is_some());
+    assert!(registry.language("js").is_some());
+  }
 }

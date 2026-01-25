@@ -1,17 +1,17 @@
-use gpui::*;
 use gpui::{
-    Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+  Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
+  ParentElement, Render, Styled, Window, *,
 };
-use gpui_component::{AxisExt, h_flex, menu::DropdownMenu as _};
 use gpui_component::{
-    Sizable as _, Size,
-    button::Button,
-    checkbox::Checkbox,
-    description_list::{DescriptionItem, DescriptionList},
-    dock::PanelControl,
-    text::TextView,
-    v_flex,
+  AxisExt, Sizable as _, Size,
+  button::Button,
+  checkbox::Checkbox,
+  description_list::{DescriptionItem, DescriptionList},
+  dock::PanelControl,
+  h_flex,
+  menu::DropdownMenu as _,
+  text::TextView,
+  v_flex,
 };
 use serde::Deserialize;
 
@@ -20,16 +20,16 @@ use serde::Deserialize;
 struct ChangeSize(Size);
 
 pub struct DescriptionListStory {
-    focus_handle: FocusHandle,
-    layout: Axis,
-    bordered: bool,
-    size: Size,
-    items: Vec<(&'static str, &'static str, usize)>,
+  focus_handle: FocusHandle,
+  layout: Axis,
+  bordered: bool,
+  size: Size,
+  items: Vec<(&'static str, &'static str, usize)>,
 }
 
 impl DescriptionListStory {
-    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let items = vec![
+  fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+    let items = vec![
             ("Name", "GPUI Component", 1),
             (
                 "Description",
@@ -62,135 +62,136 @@ impl DescriptionListStory {
             ),
         ];
 
-        Self {
-            items,
-            bordered: true,
-            size: Size::default(),
-            layout: Axis::Horizontal,
-            focus_handle: cx.focus_handle(),
-        }
+    Self {
+      items,
+      bordered: true,
+      size: Size::default(),
+      layout: Axis::Horizontal,
+      focus_handle: cx.focus_handle(),
     }
+  }
 
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
-    }
+  pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+    cx.new(|cx| Self::new(window, cx))
+  }
 
-    fn set_layout(&mut self, layout: Axis, cx: &mut Context<Self>) {
-        self.layout = layout;
-        cx.notify();
-    }
+  fn set_layout(&mut self, layout: Axis, cx: &mut Context<Self>) {
+    self.layout = layout;
+    cx.notify();
+  }
 
-    fn set_bordered(&mut self, bordered: bool, cx: &mut Context<Self>) {
-        self.bordered = bordered;
-        cx.notify();
-    }
+  fn set_bordered(&mut self, bordered: bool, cx: &mut Context<Self>) {
+    self.bordered = bordered;
+    cx.notify();
+  }
 
-    fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = a.0;
-        cx.notify();
-    }
+  fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
+    self.size = a.0;
+    cx.notify();
+  }
 }
 
 impl super::Story for DescriptionListStory {
-    fn title() -> &'static str {
-        "DescriptionList"
-    }
+  fn title() -> &'static str {
+    "DescriptionList"
+  }
 
-    fn description() -> &'static str {
-        "Use to display details with a tidy layout."
-    }
+  fn description() -> &'static str {
+    "Use to display details with a tidy layout."
+  }
 
-    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
-        Self::view(window, cx)
-    }
+  fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
+    Self::view(window, cx)
+  }
 
-    fn zoomable() -> Option<PanelControl> {
-        None
-    }
+  fn zoomable() -> Option<PanelControl> {
+    None
+  }
 }
 
 impl Focusable for DescriptionListStory {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
+  fn focus_handle(&self, _: &App) -> FocusHandle {
+    self.focus_handle.clone()
+  }
 }
 
 impl Render for DescriptionListStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .id("example")
-            .on_action(cx.listener(Self::on_change_size))
-            .p_4()
-            .size_full()
-            .gap_2()
-            .child(
-                h_flex()
-                    .gap_3()
-                    .child(
-                        Checkbox::new("layout")
-                            .checked(self.layout.is_vertical())
-                            .label("Vertical Layout")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                let new_layout = if *checked {
-                                    Axis::Vertical
-                                } else {
-                                    Axis::Horizontal
-                                };
-                                this.set_layout(new_layout, cx);
-                            })),
+  fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    v_flex()
+      .id("example")
+      .on_action(cx.listener(Self::on_change_size))
+      .p_4()
+      .size_full()
+      .gap_2()
+      .child(
+        h_flex()
+          .gap_3()
+          .child(
+            Checkbox::new("layout")
+              .checked(self.layout.is_vertical())
+              .label("Vertical Layout")
+              .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                let new_layout = if *checked {
+                  Axis::Vertical
+                } else {
+                  Axis::Horizontal
+                };
+                this.set_layout(new_layout, cx);
+              })),
+          )
+          .child(
+            Checkbox::new("bordered")
+              .checked(self.bordered)
+              .label("Bordered")
+              .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                this.set_bordered(*checked, cx);
+              })),
+          )
+          .child(
+            Button::new("size")
+              .small()
+              .outline()
+              .label(format!("size: {:?}", self.size))
+              .dropdown_menu({
+                let size = self.size;
+                move |menu, _, _| {
+                  menu
+                    .menu_with_check(
+                      "Large",
+                      size == Size::Large,
+                      Box::new(ChangeSize(Size::Large)),
                     )
-                    .child(
-                        Checkbox::new("bordered")
-                            .checked(self.bordered)
-                            .label("Bordered")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.set_bordered(*checked, cx);
-                            })),
+                    .menu_with_check(
+                      "Medium",
+                      size == Size::Medium,
+                      Box::new(ChangeSize(Size::Medium)),
                     )
-                    .child(
-                        Button::new("size")
-                            .small()
-                            .outline()
-                            .label(format!("size: {:?}", self.size))
-                            .dropdown_menu({
-                                let size = self.size;
-                                move |menu, _, _| {
-                                    menu.menu_with_check(
-                                        "Large",
-                                        size == Size::Large,
-                                        Box::new(ChangeSize(Size::Large)),
-                                    )
-                                    .menu_with_check(
-                                        "Medium",
-                                        size == Size::Medium,
-                                        Box::new(ChangeSize(Size::Medium)),
-                                    )
-                                    .menu_with_check(
-                                        "Small",
-                                        size == Size::Small,
-                                        Box::new(ChangeSize(Size::Small)),
-                                    )
-                                }
-                            }),
-                    ),
-            )
-            .child(
-                DescriptionList::new()
-                    .columns(3)
-                    .layout(self.layout)
-                    .bordered(self.bordered)
-                    .with_size(self.size)
-                    .children(self.items.clone().into_iter().enumerate().map(
-                        |(ix, (label, value, span))| {
-                            if label == "--" {
-                                return DescriptionItem::Divider;
-                            }
+                    .menu_with_check(
+                      "Small",
+                      size == Size::Small,
+                      Box::new(ChangeSize(Size::Small)),
+                    )
+                }
+              }),
+          ),
+      )
+      .child(
+        DescriptionList::new()
+          .columns(3)
+          .layout(self.layout)
+          .bordered(self.bordered)
+          .with_size(self.size)
+          .children(self.items.clone().into_iter().enumerate().map(
+            |(ix, (label, value, span))| {
+              if label == "--" {
+                return DescriptionItem::Divider;
+              }
 
-                            DescriptionItem::new(label)
-                                .value(TextView::markdown(ix, value).into_any_element())
-                                .span(span)
-                        },
-                    )),
-            )
-    }
+              DescriptionItem::new(label)
+                .value(TextView::markdown(ix, value).into_any_element())
+                .span(span)
+            },
+          )),
+      )
+  }
 }

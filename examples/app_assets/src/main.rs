@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use gpui::*;
-use gpui_component::{v_flex, IconName, Root};
+use gpui_component::{IconName, Root, v_flex};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 
@@ -11,54 +11,56 @@ use std::borrow::Cow;
 pub struct Assets;
 
 impl AssetSource for Assets {
-    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if path.is_empty() {
-            return Ok(None);
-        }
-
-        Self::get(path)
-            .map(|f| Some(f.data))
-            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
+  fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+    if path.is_empty() {
+      return Ok(None);
     }
 
-    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(Self::iter()
-            .filter_map(|p| p.starts_with(path).then(|| p.into()))
-            .collect())
-    }
+    Self::get(path)
+      .map(|f| Some(f.data))
+      .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
+  }
+
+  fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+    Ok(
+      Self::iter()
+        .filter_map(|p| p.starts_with(path).then(|| p.into()))
+        .collect(),
+    )
+  }
 }
 
 pub struct Example;
 impl Render for Example {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .text_center()
-            .child(IconName::Inbox)
-            .child(IconName::Bot)
-    }
+  fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    v_flex()
+      .gap_2()
+      .size_full()
+      .items_center()
+      .justify_center()
+      .text_center()
+      .child(IconName::Inbox)
+      .child(IconName::Bot)
+  }
 }
 
 fn main() {
-    // Register Assets to GPUI application.
-    let app = Application::new().with_assets(Assets);
+  // Register Assets to GPUI application.
+  let app = Application::new().with_assets(Assets);
 
-    app.run(move |cx| {
-        // We must initialize gpui_component before using it.
-        gpui_component::init(cx);
+  app.run(move |cx| {
+    // We must initialize gpui_component before using it.
+    gpui_component::init(cx);
 
-        cx.spawn(async move |cx| {
-            cx.open_window(WindowOptions::default(), |window, cx| {
-                let view = cx.new(|_| Example);
-                // The first level on the window must be Root.
-                cx.new(|cx| Root::new(view, window, cx))
-            })?;
+    cx.spawn(async move |cx| {
+      cx.open_window(WindowOptions::default(), |window, cx| {
+        let view = cx.new(|_| Example);
+        // The first level on the window must be Root.
+        cx.new(|cx| Root::new(view, window, cx))
+      })?;
 
-            Ok::<_, anyhow::Error>(())
-        })
-        .detach();
-    });
+      Ok::<_, anyhow::Error>(())
+    })
+    .detach();
+  });
 }

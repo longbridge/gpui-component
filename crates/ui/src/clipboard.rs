@@ -1,116 +1,116 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    prelude::FluentBuilder, App, ClipboardItem, ElementId, IntoElement, RenderOnce, SharedString,
-    Window,
+  App, ClipboardItem, ElementId, IntoElement, RenderOnce, SharedString, Window,
+  prelude::FluentBuilder,
 };
 
 use crate::{
-    button::{Button, ButtonVariants as _},
-    IconName, Sizable as _,
+  IconName, Sizable as _,
+  button::{Button, ButtonVariants as _},
 };
 
 /// An element that provides clipboard copy functionality.
 #[derive(IntoElement)]
 pub struct Clipboard {
-    id: ElementId,
-    value: SharedString,
-    value_fn: Option<Rc<dyn Fn(&mut Window, &mut App) -> SharedString>>,
-    on_copied: Option<Rc<dyn Fn(SharedString, &mut Window, &mut App)>>,
+  id: ElementId,
+  value: SharedString,
+  value_fn: Option<Rc<dyn Fn(&mut Window, &mut App) -> SharedString>>,
+  on_copied: Option<Rc<dyn Fn(SharedString, &mut Window, &mut App)>>,
 }
 
 impl Clipboard {
-    /// Create a new Clipboard element with the given ID.
-    pub fn new(id: impl Into<ElementId>) -> Self {
-        Self {
-            id: id.into(),
-            value: SharedString::default(),
-            value_fn: None,
-            on_copied: None,
-        }
+  /// Create a new Clipboard element with the given ID.
+  pub fn new(id: impl Into<ElementId>) -> Self {
+    Self {
+      id: id.into(),
+      value: SharedString::default(),
+      value_fn: None,
+      on_copied: None,
     }
+  }
 
-    /// Set the value for copying to the clipboard. Default is an empty string.
-    pub fn value(mut self, value: impl Into<SharedString>) -> Self {
-        self.value = value.into();
-        self
-    }
+  /// Set the value for copying to the clipboard. Default is an empty string.
+  pub fn value(mut self, value: impl Into<SharedString>) -> Self {
+    self.value = value.into();
+    self
+  }
 
-    /// Set the value of the clipboard to the result of the given function. Default is None.
-    ///
-    /// When used this, the copy value will use the result of the function.
-    pub fn value_fn(
-        mut self,
-        value: impl Fn(&mut Window, &mut App) -> SharedString + 'static,
-    ) -> Self {
-        self.value_fn = Some(Rc::new(value));
-        self
-    }
+  /// Set the value of the clipboard to the result of the given function. Default is None.
+  ///
+  /// When used this, the copy value will use the result of the function.
+  pub fn value_fn(
+    mut self,
+    value: impl Fn(&mut Window, &mut App) -> SharedString + 'static,
+  ) -> Self {
+    self.value_fn = Some(Rc::new(value));
+    self
+  }
 
-    /// Set a callback to be invoked when the content is copied to the clipboard.
-    pub fn on_copied<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(SharedString, &mut Window, &mut App) + 'static,
-    {
-        self.on_copied = Some(Rc::new(handler));
-        self
-    }
+  /// Set a callback to be invoked when the content is copied to the clipboard.
+  pub fn on_copied<F>(mut self, handler: F) -> Self
+  where
+    F: Fn(SharedString, &mut Window, &mut App) + 'static,
+  {
+    self.on_copied = Some(Rc::new(handler));
+    self
+  }
 }
 
 impl RenderOnce for Clipboard {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ClipboardState::default());
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ClipboardState::default());
 
-        let value = self.value.clone();
-        let clipboard_id = self.id.clone();
-        let copied = state.read(cx).copied;
-        let value_fn = self.value_fn.clone();
+    let value = self.value.clone();
+    let clipboard_id = self.id.clone();
+    let copied = state.read(cx).copied;
+    let value_fn = self.value_fn.clone();
 
-        Button::new(clipboard_id)
-            .icon(if copied {
-                IconName::Check
-            } else {
-                IconName::Copy
+    Button::new(clipboard_id)
+      .icon(if copied {
+        IconName::Check
+      } else {
+        IconName::Copy
+      })
+      .ghost()
+      .xsmall()
+      .when(!copied, |this| {
+        this.on_click({
+          let state = state.clone();
+          let on_copied = self.on_copied.clone();
+          move |_, window, cx| {
+            cx.stop_propagation();
+            let value = value_fn
+              .as_ref()
+              .map(|f| f(window, cx))
+              .unwrap_or_else(|| value.clone());
+            cx.write_to_clipboard(ClipboardItem::new_string(value.to_string()));
+            state.update(cx, |state, cx| {
+              state.copied = true;
+              cx.notify();
+            });
+
+            let state = state.clone();
+            cx.spawn(async move |cx| {
+              cx.background_executor().timer(Duration::from_secs(2)).await;
+              _ = state.update(cx, |state, cx| {
+                state.copied = false;
+                cx.notify();
+              });
             })
-            .ghost()
-            .xsmall()
-            .when(!copied, |this| {
-                this.on_click({
-                    let state = state.clone();
-                    let on_copied = self.on_copied.clone();
-                    move |_, window, cx| {
-                        cx.stop_propagation();
-                        let value = value_fn
-                            .as_ref()
-                            .map(|f| f(window, cx))
-                            .unwrap_or_else(|| value.clone());
-                        cx.write_to_clipboard(ClipboardItem::new_string(value.to_string()));
-                        state.update(cx, |state, cx| {
-                            state.copied = true;
-                            cx.notify();
-                        });
+            .detach();
 
-                        let state = state.clone();
-                        cx.spawn(async move |cx| {
-                            cx.background_executor().timer(Duration::from_secs(2)).await;
-                            _ = state.update(cx, |state, cx| {
-                                state.copied = false;
-                                cx.notify();
-                            });
-                        })
-                        .detach();
-
-                        if let Some(on_copied) = &on_copied {
-                            on_copied(value.clone(), window, cx);
-                        }
-                    }
-                })
-            })
-    }
+            if let Some(on_copied) = &on_copied {
+              on_copied(value.clone(), window, cx);
+            }
+          }
+        })
+      })
+  }
 }
 
 #[doc(hidden)]
 #[derive(Default)]
 struct ClipboardState {
-    copied: bool,
+  copied: bool,
 }
