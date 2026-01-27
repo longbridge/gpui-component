@@ -25,9 +25,9 @@ impl Render for Example {
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("按 Tab 键在按钮间导航。注意焦点如何在不同区域循环。"),
+                    .child("Press Tab to navigate between buttons. Notice how focus cycles within different areas."),
             )
-            // 外部按钮 - 不在 focus trap 内
+            // Outside buttons - not in focus trap
             .child(
                 v_flex()
                     .gap_3()
@@ -35,21 +35,21 @@ impl Render for Example {
                         div()
                             .text_base()
                             .font_semibold()
-                            .child("外部区域 (无 focus trap)"),
+                            .child("Outside Area (No Focus Trap)"),
                     )
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(Button::new("outside-1").label("外部按钮 1"))
-                            .child(Button::new("outside-2").label("外部按钮 2"))
-                            .child(Button::new("outside-3").label("外部按钮 3")),
+                            .child(Button::new("outside-1").label("Outside Button 1"))
+                            .child(Button::new("outside-2").label("Outside Button 2"))
+                            .child(Button::new("outside-3").label("Outside Button 3")),
                     ),
             )
-            // Focus trap 区域 1
+            // Focus trap area 1
             .child(
                 v_flex()
                     .gap_3()
-                    .child(div().text_base().font_semibold().child("Focus Trap 区域 1"))
+                    .child(div().text_base().font_semibold().child("Focus Trap Area 1"))
                     .child(
                         h_flex()
                             .gap_2()
@@ -60,17 +60,17 @@ impl Render for Example {
                             .border_color(cx.theme().border)
                             .child(
                                 Button::new("trap1-1")
-                                    .label("Trap 1 - 按钮 1")
+                                    .label("Trap 1 - Button 1")
                                     .on_click(|_, _, _| println!("Trap 1 - Button 1 clicked")),
                             )
                             .child(
                                 Button::new("trap1-2")
-                                    .label("Trap 1 - 按钮 2")
+                                    .label("Trap 1 - Button 2")
                                     .on_click(|_, _, _| println!("Trap 1 - Button 2 clicked")),
                             )
                             .child(
                                 Button::new("trap1-3")
-                                    .label("Trap 1 - 按钮 3")
+                                    .label("Trap 1 - Button 3")
                                     .on_click(|_, _, _| println!("Trap 1 - Button 3 clicked")),
                             )
                             .focus_trap("trap1", self.trap1_handle.clone()),
@@ -79,10 +79,10 @@ impl Render for Example {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("→ 在此区域内按 Tab，焦点会在 3 个按钮间循环，不会跳出"),
+                            .child("→ Press Tab in this area, focus cycles through 3 buttons without escaping"),
                     ),
             )
-            // 中间的外部按钮
+            // Middle outside buttons
             .child(
                 v_flex()
                     .gap_3()
@@ -90,20 +90,20 @@ impl Render for Example {
                         div()
                             .text_base()
                             .font_semibold()
-                            .child("外部区域 (无 focus trap)"),
+                            .child("Outside Area (No Focus Trap)"),
                     )
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(Button::new("outside-4").label("外部按钮 4"))
-                            .child(Button::new("outside-5").label("外部按钮 5")),
+                            .child(Button::new("outside-4").label("Outside Button 4"))
+                            .child(Button::new("outside-5").label("Outside Button 5")),
                     ),
             )
-            // Focus trap 区域 2
+            // Focus trap area 2
             .child(
                 v_flex()
                     .gap_3()
-                    .child(div().text_base().font_semibold().child("Focus Trap 区域 2"))
+                    .child(div().text_base().font_semibold().child("Focus Trap Area 2"))
                     .child(
                         v_flex()
                             .gap_2()
@@ -115,16 +115,16 @@ impl Render for Example {
                             .child(
                                 h_flex()
                                     .gap_2()
-                                    .child(Button::new("trap2-1").label("Trap 2 - 按钮 1"))
-                                    .child(Button::new("trap2-2").label("Trap 2 - 按钮 2")),
+                                    .child(Button::new("trap2-1").label("Trap 2 - Button 1"))
+                                    .child(Button::new("trap2-2").label("Trap 2 - Button 2")),
                             )
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .child(
-                                        Button::new("trap2-3").label("Trap 2 - 按钮 3").primary(),
+                                        Button::new("trap2-3").label("Trap 2 - Button 3").primary(),
                                     )
-                                    .child(Button::new("trap2-4").label("Trap 2 - 按钮 4")),
+                                    .child(Button::new("trap2-4").label("Trap 2 - Button 4")),
                             )
                             .focus_trap("trap2", self.trap2_handle.clone()),
                     )
@@ -132,7 +132,7 @@ impl Render for Example {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("→ 在此区域内按 Tab，焦点会在 4 个按钮间循环，不会跳出"),
+                            .child("→ Press Tab in this area, focus cycles through 4 buttons without escaping"),
                     ),
             )
     }
