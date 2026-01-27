@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme, Anchor, ElementExt, Placement,
+    ActiveTheme, Anchor, ElementExt, Placement, StyledExt,
     dialog::Dialog,
     input::InputState,
     notification::{Notification, NotificationList},
@@ -8,8 +8,8 @@ use crate::{
 };
 use gpui::{
     AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, Styled, WeakFocusHandle, Window, actions,
-    div, prelude::FluentBuilder as _,
+    IntoElement, KeyBinding, ParentElement as _, Render, StyleRefinement, Styled, WeakFocusHandle,
+    Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -33,6 +33,7 @@ pub struct Root {
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
     view: AnyView,
+    style: StyleRefinement,
 }
 
 #[derive(Clone)]
@@ -76,6 +77,7 @@ impl Root {
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
             view: view.into(),
+            style: StyleRefinement::default(),
         }
     }
 
@@ -343,6 +345,12 @@ impl Root {
     }
 }
 
+impl Styled for Root {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
@@ -358,6 +366,7 @@ impl Render for Root {
                 .font_family(cx.theme().font_family.clone())
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
+                .refine_style(&self.style)
                 .child(self.view.clone()),
         )
     }
