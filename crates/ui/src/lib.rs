@@ -4,6 +4,7 @@ use std::ops::Deref;
 mod anchored;
 mod element_ext;
 mod event;
+mod focus_trap;
 mod geometry;
 mod global_state;
 mod icon;
@@ -98,6 +99,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 ///
 /// You must initialize the components at your application's entry point.
 pub fn init(cx: &mut App) {
+    focus_trap::init_focus_trap_manager(cx);
     theme::init(cx);
     global_state::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]

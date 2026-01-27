@@ -13,6 +13,7 @@ members = [
     "examples/dialog_overlay",
     "examples/webview",
     "examples/system_monitor",
+    "examples/focus_trap",
 ]
 resolver = "2"
 
