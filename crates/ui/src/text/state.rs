@@ -260,6 +260,7 @@ impl Render for TextViewState {
         };
 
         node_cx.code_block_actions = self.code_block_actions.clone();
+        node_cx.style = self.text_view_style.clone();
 
         v_flex()
             .size_full()
