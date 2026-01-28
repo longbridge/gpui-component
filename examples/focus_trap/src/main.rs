@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{ElementExt, button::*, h_flex, v_flex, *};
+use gpui_component::{button::*, h_flex, v_flex, *};
 
 pub struct Example {
     trap1_handle: FocusHandle,
@@ -106,6 +106,7 @@ impl Render for Example {
                     .child(div().text_base().font_semibold().child("Focus Trap Area 2"))
                     .child(
                         v_flex()
+                            .focus_trap("trap2", &self.trap2_handle)
                             .gap_2()
                             .p_4()
                             .grid()
@@ -120,7 +121,6 @@ impl Render for Example {
                                 Button::new("trap2-3").label("Trap 2 - Button 3"),
                             )
                             .child(Button::new("trap2-4").label("Trap 2 - Button 4"))
-                            .focus_trap("trap2", &self.trap2_handle),
                     )
                     .child(
                         div()

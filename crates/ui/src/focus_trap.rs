@@ -1,9 +1,52 @@
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, FocusHandle, Global, GlobalElementId,
-    InteractiveElement, IntoElement, LayoutId, ParentElement as _, Pixels, WeakFocusHandle, Window,
-    div,
+    InteractiveElement, Interactivity, IntoElement, LayoutId, ParentElement, Pixels,
+    StatefulInteractiveElement, StyleRefinement, Styled, WeakFocusHandle, Window,
 };
 use std::collections::HashMap;
+
+/// Initialize the focus trap manager as a global
+pub(crate) fn init(cx: &mut App) {
+    cx.set_global(FocusTrapManager::new());
+}
+
+pub trait FocusTrapableElement: InteractiveElement + Sized {
+    /// Enable focus trap for this element.
+    ///
+    /// When enabled, focus will automatically cycle within this container
+    /// instead of escaping to parent elements. This is useful for modal dialogs,
+    /// sheets, and other overlay components.
+    ///
+    /// The focus trap works by:
+    /// 1. Registering this element as a focus trap container
+    /// 2. When Tab/Shift-Tab is pressed, Root intercepts the event
+    /// 3. If focus would leave the container, it cycles back to the beginning/end
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// v_flex()
+    ///     .child(Button::new("btn1").label("Button 1"))
+    ///     .child(Button::new("btn2").label("Button 2"))
+    ///     .child(Button::new("btn3").label("Button 3"))
+    ///     .focus_trap("trap1", &self.container_focus_handle)
+    /// // Pressing Tab will cycle: btn1 -> btn2 -> btn3 -> btn1
+    /// // Focus will not escape to elements outside this container
+    /// ```
+    ///
+    /// See also: <https://github.com/focus-trap/focus-trap-react>
+    fn focus_trap(
+        self,
+        id: impl Into<ElementId>,
+        focus_handle: &FocusHandle,
+    ) -> FocusTrapElement<Self>
+    where
+        Self: ParentElement + Styled + Element + 'static,
+    {
+        FocusTrapElement::new(id, focus_handle.clone(), self)
+    }
+}
+impl<T: InteractiveElement + Sized> FocusTrapableElement for T {}
 
 /// Global state to manage all focus trap containers
 pub(crate) struct FocusTrapManager {
@@ -62,46 +105,62 @@ impl Default for FocusTrapManager {
     }
 }
 
-/// Initialize the focus trap manager as a global
-pub(crate) fn init_focus_trap_manager(cx: &mut App) {
-    cx.set_global(FocusTrapManager::new());
-}
-
 /// A wrapper element that implements focus trap behavior.
 ///
 /// This element wraps another element and registers it as a focus trap container.
 /// Focus will automatically cycle within the container when Tab/Shift-Tab is pressed.
-pub struct FocusTrapElement {
+pub struct FocusTrapElement<E: InteractiveElement + ParentElement + Styled + Element> {
     id: ElementId,
     focus_handle: FocusHandle,
-    child: Option<AnyElement>,
+    base: E,
 }
 
-impl FocusTrapElement {
-    pub(crate) fn new<E: IntoElement>(
-        id: impl Into<ElementId>,
-        focus_handle: FocusHandle,
-        child: E,
-    ) -> Self {
+impl<E: InteractiveElement + ParentElement + Styled + Element> FocusTrapElement<E> {
+    pub(crate) fn new(id: impl Into<ElementId>, focus_handle: FocusHandle, child: E) -> Self {
         Self {
             id: id.into(),
+            base: child.track_focus(&focus_handle),
             focus_handle,
-            child: Some(child.into_any_element()),
         }
     }
 }
 
-impl IntoElement for FocusTrapElement {
+impl<E: InteractiveElement + ParentElement + Styled + Element> IntoElement for FocusTrapElement<E> {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
         self
     }
 }
+impl<E: InteractiveElement + ParentElement + Styled + Element> ParentElement
+    for FocusTrapElement<E>
+{
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.base.extend(elements);
+    }
+}
+impl<E: InteractiveElement + ParentElement + Styled + Element> InteractiveElement
+    for FocusTrapElement<E>
+{
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+impl<E: InteractiveElement + ParentElement + Styled + Element> StatefulInteractiveElement
+    for FocusTrapElement<E>
+{
+}
+impl<E: InteractiveElement + ParentElement + Styled + Element> Styled for FocusTrapElement<E> {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
 
-impl Element for FocusTrapElement {
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ();
+impl<E: InteractiveElement + ParentElement + Styled + Element + 'static> Element
+    for FocusTrapElement<E>
+{
+    type RequestLayoutState = E::RequestLayoutState;
+    type PrepaintState = E::PrepaintState;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -121,37 +180,40 @@ impl Element for FocusTrapElement {
         // Register this focus trap with the manager
         FocusTrapManager::register_trap(global_id.unwrap(), self.focus_handle.downgrade(), cx);
 
-        let mut el = div()
-            .track_focus(&self.focus_handle)
-            .children(self.child.take())
-            .into_any_element();
-        let layout_id = el.request_layout(window, cx);
-        (layout_id, el)
+        self.base.request_layout(global_id, None, window, cx)
     }
 
     fn prepaint(
         &mut self,
-        _global_id: Option<&gpui::GlobalElementId>,
-        _inspector_id: Option<&gpui::InspectorElementId>,
-        _bounds: Bounds<Pixels>,
-        child_element: &mut Self::RequestLayoutState,
+        global_id: Option<&gpui::GlobalElementId>,
+        inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        // Prepaint the child
-        child_element.prepaint(window, cx);
+        self.base
+            .prepaint(global_id, inspector_id, bounds, request_layout, window, cx)
     }
 
     fn paint(
         &mut self,
-        _global_id: Option<&gpui::GlobalElementId>,
-        _inspector_id: Option<&gpui::InspectorElementId>,
-        _bounds: Bounds<Pixels>,
-        child_element: &mut Self::RequestLayoutState,
-        _prepaint_state: &mut Self::PrepaintState,
+        global_id: Option<&gpui::GlobalElementId>,
+        inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
-        child_element.paint(window, cx);
+        self.base.paint(
+            global_id,
+            inspector_id,
+            bounds,
+            request_layout,
+            prepaint,
+            window,
+            cx,
+        )
     }
 }

@@ -10,7 +10,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
+    ActiveTheme, FocusTrapableElement as _, IconName, Placement, Sizable, StyledExt as _,
+    WindowExt as _,
     actions::Cancel,
     button::{Button, ButtonVariants as _},
     dialog::overlay_color,
@@ -191,9 +192,9 @@ impl RenderOnce for Sheet {
                     .child(
                         v_flex()
                             .id("sheet")
-                            .tab_group()
                             .key_context(CONTEXT)
                             .track_focus(&self.focus_handle)
+                            .focus_trap("sheet", &self.focus_handle)
                             .on_action({
                                 let on_close = self.on_close.clone();
                                 move |_: &Cancel, window, cx| {

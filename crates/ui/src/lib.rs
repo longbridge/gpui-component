@@ -78,6 +78,7 @@ pub use crate::Disableable;
 pub(crate) use anchored::*;
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
+pub use focus_trap::FocusTrapableElement;
 pub use geometry::*;
 pub use icon::*;
 pub use index_path::IndexPath;
@@ -99,12 +100,12 @@ rust_i18n::i18n!("locales", fallback = "en");
 ///
 /// You must initialize the components at your application's entry point.
 pub fn init(cx: &mut App) {
-    focus_trap::init_focus_trap_manager(cx);
     theme::init(cx);
     global_state::init(cx);
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
     root::init(cx);
+    focus_trap::init(cx);
     color_picker::init(cx);
     date_picker::init(cx);
     dock::init(cx);

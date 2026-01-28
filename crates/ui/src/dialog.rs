@@ -9,7 +9,8 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, TITLE_BAR_HEIGHT, WindowExt as _,
+    ActiveTheme as _, FocusTrapableElement as _, IconName, Root, Sizable as _, StyledExt,
+    TITLE_BAR_HEIGHT, WindowExt as _,
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
@@ -432,6 +433,8 @@ impl RenderOnce for Dialog {
                     .child(
                         v_flex()
                             .id(layer_ix)
+                            .track_focus(&self.focus_handle)
+                            .focus_trap("dialog", &self.focus_handle)
                             .bg(cx.theme().background)
                             .border_1()
                             .border_color(cx.theme().border)
@@ -443,8 +446,6 @@ impl RenderOnce for Dialog {
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
-                            .track_focus(&self.focus_handle)
-                            .tab_group()
                             .when(self.keyboard, |this| {
                                 this.on_action({
                                     let on_cancel = on_cancel.clone();
