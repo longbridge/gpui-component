@@ -9,7 +9,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, FocusTrapableElement as _, IconName, Root, Sizable as _, StyledExt,
+    ActiveTheme as _, FocusTrapElement as _, IconName, Root, Sizable as _, StyledExt,
     TITLE_BAR_HEIGHT, WindowExt as _,
     actions::{Cancel, Confirm},
     animation::cubic_bezier,

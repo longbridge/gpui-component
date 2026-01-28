@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActiveTheme, FocusTrapableElement as _, IconName, Placement, Sizable, StyledExt as _,
+    ActiveTheme, FocusTrapElement as _, IconName, Placement, Sizable, StyledExt as _,
     WindowExt as _,
     actions::Cancel,
     button::{Button, ButtonVariants as _},

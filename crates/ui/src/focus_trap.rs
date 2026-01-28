@@ -10,7 +10,8 @@ pub(crate) fn init(cx: &mut App) {
     cx.set_global(FocusTrapManager::new());
 }
 
-pub trait FocusTrapableElement: InteractiveElement + Sized {
+/// An extension trait to add `focus_trap` functionality to interactive elements.
+pub trait FocusTrapElement: InteractiveElement + Sized {
     /// Enable focus trap for this element.
     ///
     /// When enabled, focus will automatically cycle within this container
@@ -39,14 +40,14 @@ pub trait FocusTrapableElement: InteractiveElement + Sized {
         self,
         id: impl Into<ElementId>,
         focus_handle: &FocusHandle,
-    ) -> FocusTrapElement<Self>
+    ) -> FocusTrapContainer<Self>
     where
         Self: ParentElement + Styled + Element + 'static,
     {
-        FocusTrapElement::new(id, focus_handle.clone(), self)
+        FocusTrapContainer::new(id, focus_handle.clone(), self)
     }
 }
-impl<T: InteractiveElement + Sized> FocusTrapableElement for T {}
+impl<T: InteractiveElement + Sized> FocusTrapElement for T {}
 
 /// Global state to manage all focus trap containers
 pub(crate) struct FocusTrapManager {
@@ -109,13 +110,13 @@ impl Default for FocusTrapManager {
 ///
 /// This element wraps another element and registers it as a focus trap container.
 /// Focus will automatically cycle within the container when Tab/Shift-Tab is pressed.
-pub struct FocusTrapElement<E: InteractiveElement + ParentElement + Styled + Element> {
+pub struct FocusTrapContainer<E: InteractiveElement + ParentElement + Styled + Element> {
     id: ElementId,
     focus_handle: FocusHandle,
     base: E,
 }
 
-impl<E: InteractiveElement + ParentElement + Styled + Element> FocusTrapElement<E> {
+impl<E: InteractiveElement + ParentElement + Styled + Element> FocusTrapContainer<E> {
     pub(crate) fn new(id: impl Into<ElementId>, focus_handle: FocusHandle, child: E) -> Self {
         Self {
             id: id.into(),
@@ -125,7 +126,9 @@ impl<E: InteractiveElement + ParentElement + Styled + Element> FocusTrapElement<
     }
 }
 
-impl<E: InteractiveElement + ParentElement + Styled + Element> IntoElement for FocusTrapElement<E> {
+impl<E: InteractiveElement + ParentElement + Styled + Element> IntoElement
+    for FocusTrapContainer<E>
+{
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -133,31 +136,31 @@ impl<E: InteractiveElement + ParentElement + Styled + Element> IntoElement for F
     }
 }
 impl<E: InteractiveElement + ParentElement + Styled + Element> ParentElement
-    for FocusTrapElement<E>
+    for FocusTrapContainer<E>
 {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.base.extend(elements);
     }
 }
 impl<E: InteractiveElement + ParentElement + Styled + Element> InteractiveElement
-    for FocusTrapElement<E>
+    for FocusTrapContainer<E>
 {
     fn interactivity(&mut self) -> &mut Interactivity {
         self.base.interactivity()
     }
 }
 impl<E: InteractiveElement + ParentElement + Styled + Element> StatefulInteractiveElement
-    for FocusTrapElement<E>
+    for FocusTrapContainer<E>
 {
 }
-impl<E: InteractiveElement + ParentElement + Styled + Element> Styled for FocusTrapElement<E> {
+impl<E: InteractiveElement + ParentElement + Styled + Element> Styled for FocusTrapContainer<E> {
     fn style(&mut self) -> &mut StyleRefinement {
         self.base.style()
     }
 }
 
 impl<E: InteractiveElement + ParentElement + Styled + Element + 'static> Element
-    for FocusTrapElement<E>
+    for FocusTrapContainer<E>
 {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = E::PrepaintState;
