@@ -73,7 +73,7 @@ impl Render for Example {
                                     .label("Trap 1 - Button 3")
                                     .on_click(|_, _, _| println!("Trap 1 - Button 3 clicked")),
                             )
-                            .focus_trap("trap1", self.trap1_handle.clone()),
+                            .focus_trap("trap1", &self.trap1_handle),
                     )
                     .child(
                         div()
@@ -108,25 +108,19 @@ impl Render for Example {
                         v_flex()
                             .gap_2()
                             .p_4()
+                            .grid()
+                            .grid_cols(4)
                             .bg(cx.theme().accent.opacity(0.1))
                             .rounded(cx.theme().radius)
                             .border_1()
                             .border_color(cx.theme().accent)
+                            .child(Button::new("trap2-1").label("Trap 2 - Button 1"))
+                            .child(Button::new("trap2-2").label("Trap 2 - Button 2"))
                             .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(Button::new("trap2-1").label("Trap 2 - Button 1"))
-                                    .child(Button::new("trap2-2").label("Trap 2 - Button 2")),
+                                Button::new("trap2-3").label("Trap 2 - Button 3"),
                             )
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(
-                                        Button::new("trap2-3").label("Trap 2 - Button 3").primary(),
-                                    )
-                                    .child(Button::new("trap2-4").label("Trap 2 - Button 4")),
-                            )
-                            .focus_trap("trap2", self.trap2_handle.clone()),
+                            .child(Button::new("trap2-4").label("Trap 2 - Button 4"))
+                            .focus_trap("trap2", &self.trap2_handle),
                     )
                     .child(
                         div()
@@ -144,8 +138,13 @@ fn main() {
     app.run(move |cx| {
         gpui_component::init(cx);
 
+        let window_options = WindowOptions {
+            window_bounds: Some(WindowBounds::centered(size(px(800.), px(600.)), cx)),
+            ..Default::default()
+        };
+
         cx.spawn(async move |cx| {
-            cx.open_window(WindowOptions::default(), |window, cx| {
+            cx.open_window(window_options, |window, cx| {
                 let view = cx.new(|cx| Example::new(cx));
                 cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
             })?;

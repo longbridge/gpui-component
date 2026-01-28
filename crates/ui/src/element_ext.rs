@@ -1,8 +1,9 @@
-use crate::focus_trap::FocusTrapElement;
 use gpui::{
     App, Bounds, ElementId, FocusHandle, IntoElement, ParentElement, Pixels, Styled as _, Window,
     canvas,
 };
+
+use crate::focus_trap::FocusTrapElement;
 
 /// A trait to extend [`gpui::Element`] with additional functionality.
 pub trait ElementExt: ParentElement + Sized {
@@ -38,11 +39,6 @@ pub trait ElementExt: ParentElement + Sized {
     /// 2. When Tab/Shift-Tab is pressed, Root intercepts the event
     /// 3. If focus would leave the container, it cycles back to the beginning/end
     ///
-    /// # Arguments
-    ///
-    /// * `id` - A unique identifier for this focus trap
-    /// * `cx` - The context to create a focus handle for the container
-    ///
     /// # Example
     ///
     /// ```ignore
@@ -50,17 +46,17 @@ pub trait ElementExt: ParentElement + Sized {
     ///     .child(Button::new("btn1").label("Button 1"))
     ///     .child(Button::new("btn2").label("Button 2"))
     ///     .child(Button::new("btn3").label("Button 3"))
-    ///     .focus_trap("my-trap", self.trap_handle.clone())
+    ///     .focus_trap("trap1", &self.container_focus_handle)
     /// // Pressing Tab will cycle: btn1 -> btn2 -> btn3 -> btn1
     /// // Focus will not escape to elements outside this container
     /// ```
     ///
     /// See also: <https://github.com/focus-trap/focus-trap-react>
-    fn focus_trap(self, id: impl Into<ElementId>, handle: FocusHandle) -> FocusTrapElement
+    fn focus_trap(self, id: impl Into<ElementId>, focus_handle: &FocusHandle) -> FocusTrapElement
     where
         Self: IntoElement,
     {
-        FocusTrapElement::new(id, handle, self)
+        FocusTrapElement::new(id, focus_handle.clone(), self)
     }
 }
 

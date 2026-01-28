@@ -1,13 +1,14 @@
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, FocusHandle, Global, InteractiveElement,
-    IntoElement, LayoutId, ParentElement as _, Pixels, WeakFocusHandle, Window, div,
+    AnyElement, App, Bounds, Element, ElementId, FocusHandle, Global, GlobalElementId,
+    InteractiveElement, IntoElement, LayoutId, ParentElement as _, Pixels, WeakFocusHandle, Window,
+    div,
 };
 use std::collections::HashMap;
 
 /// Global state to manage all focus trap containers
 pub(crate) struct FocusTrapManager {
     /// Map from container element ID to its focus trap info
-    traps: HashMap<ElementId, WeakFocusHandle>,
+    traps: HashMap<GlobalElementId, WeakFocusHandle>,
 }
 
 impl Global for FocusTrapManager {}
@@ -24,13 +25,15 @@ impl FocusTrapManager {
         cx.global::<FocusTrapManager>()
     }
 
-    pub(crate) fn global_mut(cx: &mut App) -> &mut Self {
+    fn global_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<FocusTrapManager>()
     }
 
     /// Register a focus trap container
-    fn register_trap(id: ElementId, container_handle: WeakFocusHandle, cx: &mut App) {
-        Self::global_mut(cx).traps.insert(id, container_handle);
+    fn register_trap(id: &GlobalElementId, container_handle: WeakFocusHandle, cx: &mut App) {
+        Self::global_mut(cx)
+            .traps
+            .insert(id.clone(), container_handle);
     }
 
     /// Find which focus trap contains the currently focused element
@@ -105,13 +108,13 @@ impl Element for FocusTrapElement {
 
     fn request_layout(
         &mut self,
-        _global_id: Option<&gpui::GlobalElementId>,
+        global_id: Option<&gpui::GlobalElementId>,
         _inspector_id: Option<&gpui::InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         // Register this focus trap with the manager
-        FocusTrapManager::register_trap(self.id.clone(), self.focus_handle.downgrade(), cx);
+        FocusTrapManager::register_trap(global_id.unwrap(), self.focus_handle.downgrade(), cx);
 
         let mut el = div()
             .track_focus(&self.focus_handle)
