@@ -12,7 +12,7 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-use super::StackedBarChart;
+use super::{SankeyChart, StackedBarChart};
 use crate::Story;
 
 #[derive(Clone, Deserialize)]
@@ -395,5 +395,12 @@ impl Render for ChartStory {
                         cx,
                     )),
             )
+            .child(Divider::horizontal())
+            .child(h_flex().flex_wrap().gap_4().child(chart_container(
+                "Sankey Diagram",
+                SankeyChart::new(),
+                false,
+                cx,
+            )))
     }
 }

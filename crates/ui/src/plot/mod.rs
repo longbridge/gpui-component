@@ -2,10 +2,12 @@ mod axis;
 mod grid;
 pub mod label;
 pub mod scale;
+mod sankey;
 pub mod shape;
 pub mod tooltip;
 
 pub use gpui_component_macros::IntoPlot;
+pub use sankey::{Sankey, SankeyLink, SankeyLinkData, SankeyNode};
 
 use std::{fmt::Debug, ops::Add};
 
