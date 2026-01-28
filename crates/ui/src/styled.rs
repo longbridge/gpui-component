@@ -536,7 +536,7 @@ impl<T: Styled> StyleSized<T> for T {
     }
 }
 
-pub(crate) trait FocusableExt<T: ParentElement + Styled + Sized> {
+pub trait FocusableExt<T: ParentElement + Styled + Sized> {
     /// Add focus ring to the element.
     fn focus_ring(self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self;
 }
