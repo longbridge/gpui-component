@@ -31,9 +31,9 @@ impl FocusTrapManager {
 
     /// Register a focus trap container
     fn register_trap(id: &GlobalElementId, container_handle: WeakFocusHandle, cx: &mut App) {
-        Self::global_mut(cx)
-            .traps
-            .insert(id.clone(), container_handle);
+        let this = Self::global_mut(cx);
+        this.traps.insert(id.clone(), container_handle);
+        this.cleanup();
     }
 
     /// Find which focus trap contains the currently focused element
@@ -48,6 +48,11 @@ impl FocusTrapManager {
             }
         }
         None
+    }
+
+    /// Cleanup any traps with dropped handles
+    fn cleanup(&mut self) {
+        self.traps.retain(|_, handle| handle.upgrade().is_some());
     }
 }
 
