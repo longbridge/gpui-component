@@ -306,6 +306,7 @@ pub struct InputState {
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) soft_wrap: bool,
+    pub(super) show_whitespace: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -400,6 +401,7 @@ impl InputState {
             masked: false,
             clean_on_escape: false,
             soft_wrap: true,
+            show_whitespace: false,
             loading: false,
             pattern: None,
             validate: None,
@@ -724,6 +726,12 @@ impl InputState {
         self
     }
 
+    /// Set whether to show whitespace characters.
+    pub fn show_whitespace(mut self, show: bool) -> Self {
+        self.show_whitespace = show;
+        self
+    }
+
     /// Update the soft wrap mode for multi-line input, default is true.
     pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
         debug_assert!(self.mode.is_multi_line());
@@ -744,6 +752,12 @@ impl InputState {
         } else {
             self.text_wrapper.set_wrap_width(None, cx);
         }
+        cx.notify();
+    }
+
+    /// Update whether to show whitespace characters.
+    pub fn set_show_whitespace(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.show_whitespace = show;
         cx.notify();
     }
 

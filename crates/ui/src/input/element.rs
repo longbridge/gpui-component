@@ -658,6 +658,7 @@ impl TextElement {
         (first_line, ghost_lines)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn layout_lines(
         state: &InputState,
         display_text: &Rope,
@@ -665,6 +666,8 @@ impl TextElement {
         font_size: Pixels,
         runs: &[TextRun],
         bg_segments: &[(Range<usize>, Hsla)],
+        space_invisible: Option<ShapedLine>,
+        tab_invisible: Option<ShapedLine>,
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
@@ -680,7 +683,11 @@ impl TextElement {
                 None,
             );
 
-            return vec![LineLayout::new().lines(smallvec::smallvec![shaped_line])];
+            let mut line_layout = LineLayout::new().lines(smallvec::smallvec![shaped_line]);
+            if let (Some(space), Some(tab)) = (space_invisible.as_ref(), tab_invisible.as_ref()) {
+                line_layout = line_layout.with_whitespace(space.clone(), tab.clone());
+            }
+            return vec![line_layout];
         }
 
         // Empty to use placeholder, the placeholder is not in the text_wrapper map.
@@ -695,7 +702,13 @@ impl TextElement {
                         &runs,
                         None,
                     );
-                    LineLayout::new().lines(smallvec::smallvec![shaped_line])
+                    let mut line_layout = LineLayout::new().lines(smallvec::smallvec![shaped_line]);
+                    if let (Some(space), Some(tab)) =
+                        (space_invisible.as_ref(), tab_invisible.as_ref())
+                    {
+                        line_layout = line_layout.with_whitespace(space.clone(), tab.clone());
+                    }
+                    line_layout
                 })
                 .collect();
         }
@@ -714,7 +727,6 @@ impl TextElement {
 
             debug_assert_eq!(line_item.len(), line.len());
 
-            let mut line_layout = LineLayout::new();
             let mut wrapped_lines = SmallVec::with_capacity(1);
 
             for range in &line_item.wrapped_lines {
@@ -737,7 +749,10 @@ impl TextElement {
                 wrapped_lines.push(shaped_line);
             }
 
-            line_layout.set_wrapped_lines(wrapped_lines);
+            let mut line_layout = LineLayout::new().lines(wrapped_lines);
+            if let (Some(space), Some(tab)) = (space_invisible.as_ref(), tab_invisible.as_ref()) {
+                line_layout = line_layout.with_whitespace(space.clone(), tab.clone());
+            }
             lines.push(line_layout);
 
             // +1 for the `\n`
@@ -1078,6 +1093,52 @@ impl Element for TextElement {
         let document_colors = state
             .lsp
             .document_colors_for_range(&text, &last_layout.visible_range);
+
+        // Create shaped lines for whitespace indicators before layout
+        let (space_invisible, tab_invisible) = if state.show_whitespace {
+            let invisible_color = cx
+                .theme()
+                .highlight_theme
+                .style
+                .editor_invisible
+                .unwrap_or(cx.theme().muted_foreground);
+
+            let space_font_size = text_size / 2.0;
+            let tab_font_size = text_size;
+
+            let space_invisible = window.text_system().shape_line(
+                "•".into(),
+                space_font_size,
+                &[TextRun {
+                    len: 1,
+                    font: style.font(),
+                    color: invisible_color,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+
+            let tab_invisible = window.text_system().shape_line(
+                "→".into(),
+                tab_font_size,
+                &[TextRun {
+                    len: 1,
+                    font: style.font(),
+                    color: invisible_color,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+
+            (Some(space_invisible), Some(tab_invisible))
+        } else {
+            (None, None)
+        };
+
         let lines = Self::layout_lines(
             &state,
             &display_text,
@@ -1085,6 +1146,8 @@ impl Element for TextElement {
             text_size,
             &runs,
             &document_colors,
+            space_invisible,
+            tab_invisible,
             window,
         );
 
