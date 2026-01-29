@@ -1106,11 +1106,12 @@ impl Element for TextElement {
             let space_font_size = text_size / 2.0;
             let tab_font_size = text_size;
 
+            let space_text = SharedString::new_static("•");
             let space_invisible = window.text_system().shape_line(
-                "•".into(),
+                space_text.clone(),
                 space_font_size,
                 &[TextRun {
-                    len: 1,
+                    len: space_text.len(),
                     font: style.font(),
                     color: invisible_color,
                     background_color: None,
@@ -1120,11 +1121,12 @@ impl Element for TextElement {
                 None,
             );
 
+            let tab_text = SharedString::new_static("→");
             let tab_invisible = window.text_system().shape_line(
-                "→".into(),
+                tab_text.clone(),
                 tab_font_size,
                 &[TextRun {
-                    len: 1,
+                    len: tab_text.len(),
                     font: style.font(),
                     color: invisible_color,
                     background_color: None,

@@ -398,7 +398,7 @@ impl LineLayout {
                     let x_position = if c == ' ' {
                         (start_x + end_x) / 2.0 - space_indicator_offset
                     } else {
-                        px(0.)
+                        start_x
                     };
 
                     self.whitespace_chars
