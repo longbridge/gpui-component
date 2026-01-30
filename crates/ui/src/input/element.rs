@@ -1399,11 +1399,15 @@ impl Element for TextElement {
             px(0.)
         };
 
+        // Track the y-position of the cursor row for positioning the first line suffix
+        let mut cursor_row_y = None;
+
         for (ix, line) in prepaint.last_layout.lines.iter().enumerate() {
             let row = visible_range.start + ix;
+            let line_y = origin.y + offset_y;
             let p = point(
                 origin.x + prepaint.last_layout.line_number_width + (scroll_offset),
-                origin.y + offset_y,
+                line_y,
             );
 
             // Paint the actual line
@@ -1416,6 +1420,10 @@ impl Element for TextElement {
                 cx,
             );
             offset_y += line.size(line_height).height;
+
+            if Some(row) == prepaint.current_row {
+                cursor_row_y = Some(line_y);
+            }
 
             // After the cursor row, paint ghost lines (which shifts subsequent content down)
             if has_ghost_lines && Some(row) == prepaint.current_row {
@@ -1521,9 +1529,11 @@ impl Element for TextElement {
         // Paint inline completion first line suffix (after cursor on same line)
         if focused {
             if let Some(first_line) = &prepaint.ghost_first_line {
-                if let Some(cursor_bounds) = prepaint.cursor_bounds_with_scroll() {
+                if let (Some(cursor_bounds), Some(cursor_row_y)) =
+                    (prepaint.cursor_bounds_with_scroll(), cursor_row_y)
+                {
                     let first_line_x = cursor_bounds.origin.x + cursor_bounds.size.width;
-                    let p = point(first_line_x, cursor_bounds.origin.y);
+                    let p = point(first_line_x, cursor_row_y);
 
                     // Paint background to cover any existing text
                     let bg_bounds = Bounds::new(p, size(first_line.width + px(4.), line_height));
