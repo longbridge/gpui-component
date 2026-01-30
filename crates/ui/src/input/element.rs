@@ -1495,7 +1495,7 @@ impl Element for TextElement {
                 }
 
                 // Add ghost line height after cursor row for line numbers alignment
-                if !prepaint.ghost_lines.is_empty() && prepaint.current_row.is_some() {
+                if !prepaint.ghost_lines.is_empty() && prepaint.current_row == Some(row) {
                     offset_y += prepaint.ghost_lines_height;
                 }
             }
