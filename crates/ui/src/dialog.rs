@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Duration};
+use std::{rc::Rc, sync::LazyLock, time::Duration};
 
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
@@ -19,6 +19,7 @@ use crate::{
     v_flex,
 };
 
+pub static ANIMATION_DURATION: LazyLock<Duration> = LazyLock::new(|| Duration::from_secs_f64(0.25));
 const CONTEXT: &str = "Dialog";
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
@@ -275,6 +276,12 @@ impl Dialog {
     pub(crate) fn has_overlay(&self) -> bool {
         self.overlay
     }
+
+    fn defer_close_dialog(window: &mut Window, cx: &mut App) {
+        Root::update(window, cx, |root, window, cx| {
+            root.defer_close_dialog(window, cx);
+        });
+    }
 }
 
 impl ParentElement for Dialog {
@@ -391,8 +398,8 @@ impl RenderOnce for Dialog {
             paddings.top -= px(6.);
         }
 
-        let animation = Animation::new(Duration::from_secs_f64(0.25))
-            .with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
+        let animation =
+            Animation::new(*ANIMATION_DURATION).with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
@@ -467,11 +474,11 @@ impl RenderOnce for Dialog {
                                     move |_: &Confirm, window, cx| {
                                         if let Some(on_ok) = &on_ok {
                                             if on_ok(&ClickEvent::default(), window, cx) {
-                                                window.close_dialog(cx);
+                                                Self::defer_close_dialog(window, cx);
                                                 on_close(&ClickEvent::default(), window, cx);
                                             }
                                         } else if has_footer {
-                                            window.close_dialog(cx);
+                                            Self::defer_close_dialog(window, cx);
                                             on_close(&ClickEvent::default(), window, cx);
                                         }
                                     }

@@ -1,6 +1,6 @@
 use crate::{
     ActiveTheme, Anchor, ElementExt, Placement, StyledExt,
-    dialog::Dialog,
+    dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
     input::InputState,
     notification::{Notification, NotificationList},
@@ -241,15 +241,31 @@ impl Root {
         cx.notify();
     }
 
-    pub fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+    fn close_dialog_internal(&mut self) -> Option<FocusHandle> {
         self.focused_input = None;
-        if let Some(handle) = self
-            .active_dialogs
+        self.active_dialogs
             .pop()
             .and_then(|d| d.previous_focused_handle)
             .and_then(|h| h.upgrade())
-        {
+    }
+
+    pub fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+        if let Some(handle) = self.close_dialog_internal() {
             window.focus(&handle, cx);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn defer_close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
+        if let Some(handle) = self.close_dialog_internal() {
+            window
+                .spawn(cx, async move |cx| {
+                    cx.background_executor().timer(*ANIMATION_DURATION).await;
+                    _ = cx.update(|window, cx| {
+                        window.focus(&handle, cx);
+                    });
+                })
+                .detach();
         }
         cx.notify();
     }
