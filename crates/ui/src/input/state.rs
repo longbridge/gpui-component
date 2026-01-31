@@ -7,8 +7,9 @@ use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
+    Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _,
+    px,
 };
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
@@ -222,6 +223,15 @@ pub(crate) fn init(cx: &mut App) {
 
     search::init(cx);
     number_input::init(cx);
+}
+
+/// Whitespace indicators for rendering spaces and tabs.
+#[derive(Clone, Default)]
+pub(crate) struct WhitespaceIndicators {
+    /// Shaped line for space character indicator (•)
+    pub space: ShapedLine,
+    /// Shaped line for tab character indicator (→)
+    pub tab: ShapedLine,
 }
 
 #[derive(Clone)]

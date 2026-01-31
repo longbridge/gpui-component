@@ -14,7 +14,7 @@ use crate::{
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout},
 };
 
-use super::{InputState, LastLayout, mode::InputMode};
+use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
 
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
@@ -573,6 +573,63 @@ impl TextElement {
         (line_number_width, line_number_len)
     }
 
+    /// Layout shaped lines for whitespace indicators (space and tab).
+    ///
+    /// Returns `WhitespaceIndicators` with shaped lines for space and tab characters.
+    fn layout_whitespace_indicators(
+        state: &InputState,
+        text_size: Pixels,
+        style: &TextStyle,
+        window: &mut Window,
+        cx: &App,
+    ) -> WhitespaceIndicators {
+        if !state.show_whitespaces {
+            return WhitespaceIndicators::default();
+        }
+
+        let invisible_color = cx
+            .theme()
+            .highlight_theme
+            .style
+            .editor_invisible
+            .unwrap_or(cx.theme().muted_foreground);
+
+        let space_font_size = text_size.half();
+        let tab_font_size = text_size;
+
+        let space_text = SharedString::new_static("•");
+        let space = window.text_system().shape_line(
+            space_text.clone(),
+            space_font_size,
+            &[TextRun {
+                len: space_text.len(),
+                font: style.font(),
+                color: invisible_color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }],
+            None,
+        );
+
+        let tab_text = SharedString::new_static("→");
+        let tab = window.text_system().shape_line(
+            tab_text.clone(),
+            tab_font_size,
+            &[TextRun {
+                len: tab_text.len(),
+                font: style.font(),
+                color: invisible_color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }],
+            None,
+        );
+
+        WhitespaceIndicators { space, tab }
+    }
+
     /// Compute inline completion ghost lines for rendering.
     ///
     /// Returns (first_line, ghost_lines) where:
@@ -666,8 +723,7 @@ impl TextElement {
         font_size: Pixels,
         runs: &[TextRun],
         bg_segments: &[(Range<usize>, Hsla)],
-        space_invisible: Option<ShapedLine>,
-        tab_invisible: Option<ShapedLine>,
+        whitespace_indicators: &WhitespaceIndicators,
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
@@ -683,10 +739,9 @@ impl TextElement {
                 None,
             );
 
-            let mut line_layout = LineLayout::new().lines(smallvec::smallvec![shaped_line]);
-            if let (Some(space), Some(tab)) = (space_invisible.as_ref(), tab_invisible.as_ref()) {
-                line_layout = line_layout.with_whitespace(space.clone(), tab.clone());
-            }
+            let line_layout = LineLayout::new()
+                .lines(smallvec::smallvec![shaped_line])
+                .with_whitespaces(whitespace_indicators.clone());
             return vec![line_layout];
         }
 
@@ -702,13 +757,9 @@ impl TextElement {
                         &runs,
                         None,
                     );
-                    let mut line_layout = LineLayout::new().lines(smallvec::smallvec![shaped_line]);
-                    if let (Some(space), Some(tab)) =
-                        (space_invisible.as_ref(), tab_invisible.as_ref())
-                    {
-                        line_layout = line_layout.with_whitespace(space.clone(), tab.clone());
-                    }
-                    line_layout
+                    LineLayout::new()
+                        .lines(smallvec::smallvec![shaped_line])
+                        .with_whitespaces(whitespace_indicators.clone())
                 })
                 .collect();
         }
@@ -749,10 +800,9 @@ impl TextElement {
                 wrapped_lines.push(shaped_line);
             }
 
-            let mut line_layout = LineLayout::new().lines(wrapped_lines);
-            if let (Some(space), Some(tab)) = (space_invisible.as_ref(), tab_invisible.as_ref()) {
-                line_layout = line_layout.with_whitespace(space.clone(), tab.clone());
-            }
+            let line_layout = LineLayout::new()
+                .lines(wrapped_lines)
+                .with_whitespaces(whitespace_indicators.clone());
             lines.push(line_layout);
 
             // +1 for the `\n`
@@ -1095,51 +1145,8 @@ impl Element for TextElement {
             .document_colors_for_range(&text, &last_layout.visible_range);
 
         // Create shaped lines for whitespace indicators before layout
-        let (space_invisible, tab_invisible) = if state.show_whitespaces {
-            let invisible_color = cx
-                .theme()
-                .highlight_theme
-                .style
-                .editor_invisible
-                .unwrap_or(cx.theme().muted_foreground);
-
-            let space_font_size = text_size.half();
-            let tab_font_size = text_size;
-
-            let space_text = SharedString::new_static("•");
-            let space_invisible = window.text_system().shape_line(
-                space_text.clone(),
-                space_font_size,
-                &[TextRun {
-                    len: space_text.len(),
-                    font: style.font(),
-                    color: invisible_color,
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                }],
-                None,
-            );
-
-            let tab_text = SharedString::new_static("→");
-            let tab_invisible = window.text_system().shape_line(
-                tab_text.clone(),
-                tab_font_size,
-                &[TextRun {
-                    len: tab_text.len(),
-                    font: style.font(),
-                    color: invisible_color,
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                }],
-                None,
-            );
-
-            (Some(space_invisible), Some(tab_invisible))
-        } else {
-            (None, None)
-        };
+        let whitespace_indicators =
+            Self::layout_whitespace_indicators(&state, text_size, &text_style, window, cx);
 
         let lines = Self::layout_lines(
             &state,
@@ -1148,8 +1155,7 @@ impl Element for TextElement {
             text_size,
             &runs,
             &document_colors,
-            space_invisible,
-            tab_invisible,
+            &whitespace_indicators,
             window,
         );
 

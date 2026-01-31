@@ -1,12 +1,13 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Font, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px, size,
+    App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
+    size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 
-use crate::input::{LastLayout, RopeExt};
+use crate::input::{LastLayout, RopeExt, WhitespaceIndicators};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
@@ -380,14 +381,10 @@ impl LineLayout {
         self.wrapped_lines = wrapped_lines;
     }
 
-    pub(crate) fn with_whitespace(
-        mut self,
-        space_invisible: ShapedLine,
-        tab_invisible: ShapedLine,
-    ) -> Self {
-        let space_indicator_offset = space_invisible.width / 2.0;
-        self.space_invisible = Some(space_invisible);
-        self.tab_invisible = Some(tab_invisible);
+    pub(crate) fn with_whitespaces(mut self, indicators: WhitespaceIndicators) -> Self {
+        let space_indicator_offset = indicators.space.width.half();
+        self.space_invisible = Some(indicators.space);
+        self.tab_invisible = Some(indicators.tab);
 
         for (line_index, wrapped_line) in self.wrapped_lines.iter().enumerate() {
             for (relative_offset, c) in wrapped_line.text.char_indices() {
