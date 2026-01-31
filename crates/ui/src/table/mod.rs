@@ -1,9 +1,9 @@
 use crate::{
-    actions::{Cancel, SelectDown, SelectUp},
+    actions::{Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown, SelectPageUp, SelectPrevColumn, SelectUp},
     ActiveTheme, Sizable, Size,
 };
 use gpui::{
-    actions, div, prelude::FluentBuilder, App, Edges, Entity, Focusable, InteractiveElement,
+    div, prelude::FluentBuilder, App, Edges, Entity, Focusable, InteractiveElement,
     IntoElement, KeyBinding, ParentElement, RenderOnce, Styled, Window,
 };
 
@@ -16,7 +16,7 @@ pub use column::*;
 pub use delegate::*;
 pub use state::*;
 
-actions!(table, [SelectPrevColumn, SelectNextColumn]);
+
 
 const CONTEXT: &'static str = "Table";
 pub(crate) fn init(cx: &mut App) {
@@ -26,6 +26,12 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("left", SelectPrevColumn, Some(CONTEXT)),
         KeyBinding::new("right", SelectNextColumn, Some(CONTEXT)),
+        KeyBinding::new("home", SelectFirst, Some(CONTEXT)),
+        KeyBinding::new("end", SelectLast, Some(CONTEXT)),
+        KeyBinding::new("pageup", SelectPageUp, Some(CONTEXT)),
+        KeyBinding::new("pagedown", SelectPageDown, Some(CONTEXT)),
+        KeyBinding::new("tab", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", SelectUp, Some(CONTEXT)),
     ]);
 }
 
@@ -123,6 +129,10 @@ where
             .on_action(window.listener_for(&self.state, TableState::action_select_prev))
             .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
             .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
+            .on_action(window.listener_for(&self.state, TableState::action_select_first))
+            .on_action(window.listener_for(&self.state, TableState::action_select_last))
+            .on_action(window.listener_for(&self.state, TableState::action_select_page_up))
+            .on_action(window.listener_for(&self.state, TableState::action_select_page_down))
             .bg(cx.theme().table)
             .when(bordered, |this| {
                 this.rounded(cx.theme().radius)
