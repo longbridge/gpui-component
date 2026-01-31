@@ -652,10 +652,13 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let was_disabled = self.disabled;
+        self.disabled = false;
         let text: SharedString = text.into();
         let range_utf16 = self.range_to_utf16(&(self.cursor()..self.cursor()));
         self.replace_text_in_range_silent(Some(range_utf16), &text, window, cx);
         self.selected_range = (self.selected_range.end..self.selected_range.end).into();
+        self.disabled = was_disabled;
     }
 
     /// Replace text at the current cursor position.
