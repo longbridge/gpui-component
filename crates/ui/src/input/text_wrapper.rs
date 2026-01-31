@@ -345,10 +345,7 @@ pub(crate) struct LineLayout {
     /// The soft wrapped lines of this line (Include the first line).
     pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
     pub(crate) longest_width: Pixels,
-    /// Pre-shaped space character indicator (from WhitespaceIndicators)
-    pub(crate) space_invisible: Option<ShapedLine>,
-    /// Pre-shaped tab character indicator (from WhitespaceIndicators)
-    pub(crate) tab_invisible: Option<ShapedLine>,
+    pub(crate) whitespace_indicators: Option<WhitespaceIndicators>,
     /// Whitespace indicators: (line_index, x_position, is_tab)
     pub(crate) whitespace_chars: Vec<(usize, Pixels, bool)>,
 }
@@ -360,8 +357,7 @@ impl LineLayout {
             longest_width: px(0.),
             wrapped_lines: SmallVec::new(),
             whitespace_chars: Vec::new(),
-            space_invisible: None,
-            tab_invisible: None,
+            whitespace_indicators: None,
         }
     }
 
@@ -381,10 +377,13 @@ impl LineLayout {
         self.wrapped_lines = wrapped_lines;
     }
 
-    pub(crate) fn with_whitespaces(mut self, indicators: WhitespaceIndicators) -> Self {
+    pub(crate) fn with_whitespaces(mut self, indicators: Option<WhitespaceIndicators>) -> Self {
+        self.whitespace_indicators = indicators;
+        let Some(indicators) = self.whitespace_indicators.as_ref() else {
+            return self;
+        };
+
         let space_indicator_offset = indicators.space.width.half();
-        self.space_invisible = Some(indicators.space);
-        self.tab_invisible = Some(indicators.tab);
 
         for (line_index, wrapped_line) in self.wrapped_lines.iter().enumerate() {
             for (relative_offset, c) in wrapped_line.text.char_indices() {
@@ -544,24 +543,21 @@ impl LineLayout {
         }
 
         // Paint whitespace indicators
-        let (space_invisible, tab_invisible) = match (&self.space_invisible, &self.tab_invisible) {
-            (Some(space), Some(tab)) => (space, tab),
-            _ => return,
-        };
+        if let Some(indicators) = self.whitespace_indicators.as_ref() {
+            for (line_index, x_position, is_tab) in &self.whitespace_chars {
+                let invisible = if *is_tab {
+                    indicators.tab.clone()
+                } else {
+                    indicators.space.clone()
+                };
 
-        for (line_index, x_position, is_tab) in &self.whitespace_chars {
-            let invisible = if *is_tab {
-                tab_invisible
-            } else {
-                space_invisible
-            };
+                let origin = point(
+                    pos.x + *x_position,
+                    pos.y + *line_index as f32 * line_height,
+                );
 
-            let origin = point(
-                pos.x + *x_position,
-                pos.y + *line_index as f32 * line_height,
-            );
-
-            _ = invisible.paint(origin, line_height, text_align, align_width, window, cx);
+                _ = invisible.paint(origin, line_height, text_align, align_width, window, cx);
+            }
         }
     }
 }

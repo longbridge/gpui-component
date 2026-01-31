@@ -229,9 +229,9 @@ pub(crate) fn init(cx: &mut App) {
 #[derive(Clone, Default)]
 pub(crate) struct WhitespaceIndicators {
     /// Shaped line for space character indicator (•)
-    pub space: ShapedLine,
+    pub(crate) space: ShapedLine,
     /// Shaped line for tab character indicator (→)
-    pub tab: ShapedLine,
+    pub(crate) tab: ShapedLine,
 }
 
 #[derive(Clone)]

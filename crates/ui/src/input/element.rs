@@ -582,9 +582,9 @@ impl TextElement {
         style: &TextStyle,
         window: &mut Window,
         cx: &App,
-    ) -> WhitespaceIndicators {
+    ) -> Option<WhitespaceIndicators> {
         if !state.show_whitespaces {
-            return WhitespaceIndicators::default();
+            return None;
         }
 
         let invisible_color = cx
@@ -627,7 +627,7 @@ impl TextElement {
             None,
         );
 
-        WhitespaceIndicators { space, tab }
+        Some(WhitespaceIndicators { space, tab })
     }
 
     /// Compute inline completion ghost lines for rendering.
@@ -723,7 +723,7 @@ impl TextElement {
         font_size: Pixels,
         runs: &[TextRun],
         bg_segments: &[(Range<usize>, Hsla)],
-        whitespace_indicators: &WhitespaceIndicators,
+        whitespace_indicators: Option<WhitespaceIndicators>,
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
@@ -741,7 +741,7 @@ impl TextElement {
 
             let line_layout = LineLayout::new()
                 .lines(smallvec::smallvec![shaped_line])
-                .with_whitespaces(whitespace_indicators.clone());
+                .with_whitespaces(whitespace_indicators);
             return vec![line_layout];
         }
 
@@ -1155,7 +1155,7 @@ impl Element for TextElement {
             text_size,
             &runs,
             &document_colors,
-            &whitespace_indicators,
+            whitespace_indicators,
             window,
         );
 
