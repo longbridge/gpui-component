@@ -670,9 +670,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let was_disabled = self.disabled;
+        self.disabled = false;
         let text: SharedString = text.into();
         self.replace_text_in_range_silent(None, &text, window, cx);
         self.selected_range = (self.selected_range.end..self.selected_range.end).into();
+        self.disabled = was_disabled;
     }
 
     fn replace_text(
@@ -681,10 +684,13 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let was_disabled = self.disabled;
+        self.disabled = false;
         let text: SharedString = text.into();
         let range = 0..self.text.chars().map(|c| c.len_utf16()).sum();
         self.replace_text_in_range_silent(Some(range), &text, window, cx);
         self.reset_highlighter(cx);
+        self.disabled = was_disabled;
     }
 
     /// Set with disabled mode.
