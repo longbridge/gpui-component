@@ -345,9 +345,9 @@ pub(crate) struct LineLayout {
     /// The soft wrapped lines of this line (Include the first line).
     pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
     pub(crate) longest_width: Pixels,
-    /// Pre-shaped space character
+    /// Pre-shaped space character indicator (from WhitespaceIndicators)
     pub(crate) space_invisible: Option<ShapedLine>,
-    /// Pre-shaped tab character
+    /// Pre-shaped tab character indicator (from WhitespaceIndicators)
     pub(crate) tab_invisible: Option<ShapedLine>,
     /// Whitespace indicators: (line_index, x_position, is_tab)
     pub(crate) whitespace_chars: Vec<(usize, Pixels, bool)>,
@@ -388,18 +388,18 @@ impl LineLayout {
 
         for (line_index, wrapped_line) in self.wrapped_lines.iter().enumerate() {
             for (relative_offset, c) in wrapped_line.text.char_indices() {
-                if c == ' ' || c == '\t' {
+                if matches!(c, ' ' | '\t') {
+                    let is_tab = c == '\t';
                     let start_x = wrapped_line.x_for_index(relative_offset);
                     let end_x = wrapped_line.x_for_index(relative_offset + c.len_utf8());
                     // Center the indicator in the actual character's space
                     let x_position = if c == ' ' {
-                        (start_x + end_x) / 2.0 - space_indicator_offset
+                        (start_x + end_x).half() - space_indicator_offset
                     } else {
                         start_x
                     };
 
-                    self.whitespace_chars
-                        .push((line_index, x_position, c == '\t'));
+                    self.whitespace_chars.push((line_index, x_position, is_tab));
                 }
             }
         }
