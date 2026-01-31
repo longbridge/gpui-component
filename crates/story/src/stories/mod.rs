@@ -24,6 +24,7 @@ mod hover_card_story;
 mod icon_story;
 mod image_story;
 mod input_story;
+mod input_group_story;
 mod kbd_story;
 mod label_story;
 mod list_story;
@@ -80,6 +81,7 @@ pub use hover_card_story::HoverCardStory;
 pub use icon_story::IconStory;
 pub use image_story::ImageStory;
 pub use input_story::InputStory;
+pub use input_group_story::InputGroupStory;
 pub use kbd_story::KbdStory;
 pub use label_story::LabelStory;
 pub use list_story::ListStory;
@@ -116,6 +118,7 @@ pub use welcome_story::WelcomeStory;
 
 pub(crate) fn init(cx: &mut App) {
     input_story::init(cx);
+    input_group_story::init(cx);
     rating_story::init(cx);
     number_input_story::init(cx);
     textarea_story::init(cx);
