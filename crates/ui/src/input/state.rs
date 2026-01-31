@@ -619,10 +619,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.history.ignore = true;
-        let was_disabled = self.disabled;
-        self.disabled = false;
         self.replace_text(value, window, cx);
-        self.disabled = was_disabled;
         self.history.ignore = false;
 
         // Ensure cursor to start when set text
