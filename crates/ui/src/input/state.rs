@@ -7,8 +7,9 @@ use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
+    Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _,
+    px,
 };
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
@@ -224,6 +225,15 @@ pub(crate) fn init(cx: &mut App) {
     number_input::init(cx);
 }
 
+/// Whitespace indicators for rendering spaces and tabs.
+#[derive(Clone, Default)]
+pub(crate) struct WhitespaceIndicators {
+    /// Shaped line for space character indicator (•)
+    pub(crate) space: ShapedLine,
+    /// Shaped line for tab character indicator (→)
+    pub(crate) tab: ShapedLine,
+}
+
 #[derive(Clone)]
 pub(super) struct LastLayout {
     /// The visible range (no wrap) of lines in the viewport, the value is row (0-based) index.
@@ -306,6 +316,7 @@ pub struct InputState {
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) soft_wrap: bool,
+    pub(super) show_whitespaces: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -400,6 +411,7 @@ impl InputState {
             masked: false,
             clean_on_escape: false,
             soft_wrap: true,
+            show_whitespaces: false,
             loading: false,
             pattern: None,
             validate: None,
@@ -724,6 +736,12 @@ impl InputState {
         self
     }
 
+    /// Set whether to show whitespace characters.
+    pub fn show_whitespaces(mut self, show: bool) -> Self {
+        self.show_whitespaces = show;
+        self
+    }
+
     /// Update the soft wrap mode for multi-line input, default is true.
     pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
         debug_assert!(self.mode.is_multi_line());
@@ -744,6 +762,12 @@ impl InputState {
         } else {
             self.text_wrapper.set_wrap_width(None, cx);
         }
+        cx.notify();
+    }
+
+    /// Update whether to show whitespace characters.
+    pub fn set_show_whitespaces(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.show_whitespaces = show;
         cx.notify();
     }
 

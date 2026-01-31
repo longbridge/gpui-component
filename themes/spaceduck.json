@@ -51,6 +51,7 @@
         "editor.active_line.background": "#1c1d39",
         "editor.line_number": "#4b6479",
         "editor.active_line_number": "#ecf0c1",
+        "editor.invisible": "#4b647966",
         "conflict": "#e33400",
         "created": "#5ccc96",
         "deleted": "#e33400",

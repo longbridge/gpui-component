@@ -55,6 +55,7 @@
         "editor.background": "#000000",
         "editor.active_line.background": "#1e1e1e",
         "editor.line_number": "#828282",
+        "editor.invisible": "#82828266",
         "warning.border": "#720202",
         "syntax": {
           "attribute": {

@@ -1,12 +1,13 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Font, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px, size,
+    App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
+    size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 
-use crate::input::{LastLayout, RopeExt};
+use crate::input::{LastLayout, RopeExt, WhitespaceIndicators};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
@@ -344,6 +345,9 @@ pub(crate) struct LineLayout {
     /// The soft wrapped lines of this line (Include the first line).
     pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
     pub(crate) longest_width: Pixels,
+    pub(crate) whitespace_indicators: Option<WhitespaceIndicators>,
+    /// Whitespace indicators: (line_index, x_position, is_tab)
+    pub(crate) whitespace_chars: Vec<(usize, Pixels, bool)>,
 }
 
 impl LineLayout {
@@ -352,6 +356,8 @@ impl LineLayout {
             len: 0,
             longest_width: px(0.),
             wrapped_lines: SmallVec::new(),
+            whitespace_chars: Vec::new(),
+            whitespace_indicators: None,
         }
     }
 
@@ -369,6 +375,34 @@ impl LineLayout {
             .unwrap_or_default();
         self.longest_width = width;
         self.wrapped_lines = wrapped_lines;
+    }
+
+    pub(crate) fn with_whitespaces(mut self, indicators: Option<WhitespaceIndicators>) -> Self {
+        self.whitespace_indicators = indicators;
+        let Some(indicators) = self.whitespace_indicators.as_ref() else {
+            return self;
+        };
+
+        let space_indicator_offset = indicators.space.width.half();
+
+        for (line_index, wrapped_line) in self.wrapped_lines.iter().enumerate() {
+            for (relative_offset, c) in wrapped_line.text.char_indices() {
+                if matches!(c, ' ' | '\t') {
+                    let is_tab = c == '\t';
+                    let start_x = wrapped_line.x_for_index(relative_offset);
+                    let end_x = wrapped_line.x_for_index(relative_offset + c.len_utf8());
+                    // Center the indicator in the actual character's space
+                    let x_position = if c == ' ' {
+                        (start_x + end_x).half() - space_indicator_offset
+                    } else {
+                        start_x
+                    };
+
+                    self.whitespace_chars.push((line_index, x_position, is_tab));
+                }
+            }
+        }
+        self
     }
 
     #[inline]
@@ -506,6 +540,24 @@ impl LineLayout {
                 window,
                 cx,
             );
+        }
+
+        // Paint whitespace indicators
+        if let Some(indicators) = self.whitespace_indicators.as_ref() {
+            for (line_index, x_position, is_tab) in &self.whitespace_chars {
+                let invisible = if *is_tab {
+                    indicators.tab.clone()
+                } else {
+                    indicators.space.clone()
+                };
+
+                let origin = point(
+                    pos.x + *x_position,
+                    pos.y + *line_index as f32 * line_height,
+                );
+
+                _ = invisible.paint(origin, line_height, text_align, align_width, window, cx);
+            }
         }
     }
 }

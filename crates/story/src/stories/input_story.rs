@@ -98,6 +98,7 @@ impl InputStory {
             InputState::new(window, cx)
                 .code_editor("json")
                 .multi_line(false)
+                .show_whitespaces(true)
                 .default_value(CODE_EXAMPLE)
         });
 

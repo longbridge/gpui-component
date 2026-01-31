@@ -9,8 +9,8 @@ use std::{
 };
 
 use crate::{
-    highlighter::{languages, Language},
-    ActiveTheme, ThemeMode, DEFAULT_THEME_COLORS,
+    ActiveTheme, DEFAULT_THEME_COLORS, ThemeMode,
+    highlighter::{Language, languages},
 };
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
@@ -421,6 +421,8 @@ pub struct HighlightThemeStyle {
     pub editor_line_number: Option<Hsla>,
     #[serde(rename = "editor.active_line_number")]
     pub editor_active_line_number: Option<Hsla>,
+    #[serde(rename = "editor.invisible")]
+    pub editor_invisible: Option<Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]

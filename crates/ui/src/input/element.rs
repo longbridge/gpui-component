@@ -14,7 +14,7 @@ use crate::{
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout},
 };
 
-use super::{InputState, LastLayout, mode::InputMode};
+use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
 
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
@@ -573,6 +573,63 @@ impl TextElement {
         (line_number_width, line_number_len)
     }
 
+    /// Layout shaped lines for whitespace indicators (space and tab).
+    ///
+    /// Returns `WhitespaceIndicators` with shaped lines for space and tab characters.
+    fn layout_whitespace_indicators(
+        state: &InputState,
+        text_size: Pixels,
+        style: &TextStyle,
+        window: &mut Window,
+        cx: &App,
+    ) -> Option<WhitespaceIndicators> {
+        if !state.show_whitespaces {
+            return None;
+        }
+
+        let invisible_color = cx
+            .theme()
+            .highlight_theme
+            .style
+            .editor_invisible
+            .unwrap_or(cx.theme().muted_foreground);
+
+        let space_font_size = text_size.half();
+        let tab_font_size = text_size;
+
+        let space_text = SharedString::new_static("•");
+        let space = window.text_system().shape_line(
+            space_text.clone(),
+            space_font_size,
+            &[TextRun {
+                len: space_text.len(),
+                font: style.font(),
+                color: invisible_color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }],
+            None,
+        );
+
+        let tab_text = SharedString::new_static("→");
+        let tab = window.text_system().shape_line(
+            tab_text.clone(),
+            tab_font_size,
+            &[TextRun {
+                len: tab_text.len(),
+                font: style.font(),
+                color: invisible_color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }],
+            None,
+        );
+
+        Some(WhitespaceIndicators { space, tab })
+    }
+
     /// Compute inline completion ghost lines for rendering.
     ///
     /// Returns (first_line, ghost_lines) where:
@@ -658,6 +715,7 @@ impl TextElement {
         (first_line, ghost_lines)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn layout_lines(
         state: &InputState,
         display_text: &Rope,
@@ -665,6 +723,7 @@ impl TextElement {
         font_size: Pixels,
         runs: &[TextRun],
         bg_segments: &[(Range<usize>, Hsla)],
+        whitespace_indicators: Option<WhitespaceIndicators>,
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
@@ -680,7 +739,10 @@ impl TextElement {
                 None,
             );
 
-            return vec![LineLayout::new().lines(smallvec::smallvec![shaped_line])];
+            let line_layout = LineLayout::new()
+                .lines(smallvec::smallvec![shaped_line])
+                .with_whitespaces(whitespace_indicators);
+            return vec![line_layout];
         }
 
         // Empty to use placeholder, the placeholder is not in the text_wrapper map.
@@ -695,7 +757,9 @@ impl TextElement {
                         &runs,
                         None,
                     );
-                    LineLayout::new().lines(smallvec::smallvec![shaped_line])
+                    LineLayout::new()
+                        .lines(smallvec::smallvec![shaped_line])
+                        .with_whitespaces(whitespace_indicators.clone())
                 })
                 .collect();
         }
@@ -714,7 +778,6 @@ impl TextElement {
 
             debug_assert_eq!(line_item.len(), line.len());
 
-            let mut line_layout = LineLayout::new();
             let mut wrapped_lines = SmallVec::with_capacity(1);
 
             for range in &line_item.wrapped_lines {
@@ -737,7 +800,9 @@ impl TextElement {
                 wrapped_lines.push(shaped_line);
             }
 
-            line_layout.set_wrapped_lines(wrapped_lines);
+            let line_layout = LineLayout::new()
+                .lines(wrapped_lines)
+                .with_whitespaces(whitespace_indicators.clone());
             lines.push(line_layout);
 
             // +1 for the `\n`
@@ -1078,6 +1143,11 @@ impl Element for TextElement {
         let document_colors = state
             .lsp
             .document_colors_for_range(&text, &last_layout.visible_range);
+
+        // Create shaped lines for whitespace indicators before layout
+        let whitespace_indicators =
+            Self::layout_whitespace_indicators(&state, text_size, &text_style, window, cx);
+
         let lines = Self::layout_lines(
             &state,
             &display_text,
@@ -1085,6 +1155,7 @@ impl Element for TextElement {
             text_size,
             &runs,
             &document_colors,
+            whitespace_indicators,
             window,
         );
 
