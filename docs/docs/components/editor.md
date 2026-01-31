@@ -66,7 +66,7 @@ let state = cx.new(|cx|
         .code_editor("rust") // Language for syntax highlighting
         .line_number(true) // Show line numbers
         .searchable(true) // Enable search functionality
-        .show_whitespace(true) // Show whitespace characters
+        .show_whitespaces(true) // Show whitespace characters
         .default_value("fn main() {\n    println!(\"Hello, world!\");\n}")
 );
 

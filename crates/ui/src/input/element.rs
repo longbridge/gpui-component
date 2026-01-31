@@ -1095,7 +1095,7 @@ impl Element for TextElement {
             .document_colors_for_range(&text, &last_layout.visible_range);
 
         // Create shaped lines for whitespace indicators before layout
-        let (space_invisible, tab_invisible) = if state.show_whitespace {
+        let (space_invisible, tab_invisible) = if state.show_whitespaces {
             let invisible_color = cx
                 .theme()
                 .highlight_theme
@@ -1103,7 +1103,7 @@ impl Element for TextElement {
                 .editor_invisible
                 .unwrap_or(cx.theme().muted_foreground);
 
-            let space_font_size = text_size / 2.0;
+            let space_font_size = text_size.half();
             let tab_font_size = text_size;
 
             let space_text = SharedString::new_static("•");

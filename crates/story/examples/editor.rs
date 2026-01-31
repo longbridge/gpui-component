@@ -74,7 +74,7 @@ pub struct Example {
     line_number: bool,
     indent_guides: bool,
     soft_wrap: bool,
-    show_whitespace: bool,
+    show_whitespaces: bool,
     lsp_store: ExampleLspStore,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
@@ -729,7 +729,7 @@ impl Example {
             line_number: true,
             indent_guides: true,
             soft_wrap: false,
-            show_whitespace: false,
+            show_whitespaces: false,
             lsp_store,
             _subscriptions,
             _lint_task: Task::ready(()),
@@ -989,7 +989,7 @@ impl Example {
             }))
     }
 
-    fn render_show_whitespace_button(
+    fn render_show_whitespaces_button(
         &self,
         _: &mut Window,
         cx: &mut Context<Self>,
@@ -997,12 +997,12 @@ impl Example {
         Button::new("show-whitespace")
             .ghost()
             .xsmall()
-            .when(self.show_whitespace, |this| this.icon(IconName::Check))
-            .label("Show Whitespace")
+            .when(self.show_whitespaces, |this| this.icon(IconName::Check))
+            .label("Show Whitespaces")
             .on_click(cx.listener(|this, _, window, cx| {
-                this.show_whitespace = !this.show_whitespace;
+                this.show_whitespaces = !this.show_whitespaces;
                 this.editor.update(cx, |state, cx| {
-                    state.set_show_whitespace(this.show_whitespace, window, cx);
+                    state.set_show_whitespaces(this.show_whitespaces, window, cx);
                 });
                 cx.notify();
             }))
@@ -1100,7 +1100,7 @@ impl Render for Example {
                                     .gap_3()
                                     .child(self.render_line_number_button(window, cx))
                                     .child(self.render_soft_wrap_button(window, cx))
-                                    .child(self.render_show_whitespace_button(window, cx))
+                                    .child(self.render_show_whitespaces_button(window, cx))
                                     .child(self.render_indent_guides_button(window, cx)),
                             )
                             .child(self.render_go_to_line_button(window, cx)),

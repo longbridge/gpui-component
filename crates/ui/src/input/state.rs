@@ -306,7 +306,7 @@ pub struct InputState {
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) soft_wrap: bool,
-    pub(super) show_whitespace: bool,
+    pub(super) show_whitespaces: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -401,7 +401,7 @@ impl InputState {
             masked: false,
             clean_on_escape: false,
             soft_wrap: true,
-            show_whitespace: false,
+            show_whitespaces: false,
             loading: false,
             pattern: None,
             validate: None,
@@ -727,8 +727,8 @@ impl InputState {
     }
 
     /// Set whether to show whitespace characters.
-    pub fn show_whitespace(mut self, show: bool) -> Self {
-        self.show_whitespace = show;
+    pub fn show_whitespaces(mut self, show: bool) -> Self {
+        self.show_whitespaces = show;
         self
     }
 
@@ -756,8 +756,8 @@ impl InputState {
     }
 
     /// Update whether to show whitespace characters.
-    pub fn set_show_whitespace(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.show_whitespace = show;
+    pub fn set_show_whitespaces(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.show_whitespaces = show;
         cx.notify();
     }
 
