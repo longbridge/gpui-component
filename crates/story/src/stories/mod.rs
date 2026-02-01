@@ -56,6 +56,7 @@ mod tooltip_story;
 mod tree_story;
 mod virtual_list_story;
 mod welcome_story;
+mod theme_story;
 
 pub use accordion_story::AccordionStory;
 pub use alert_story::AlertStory;
@@ -111,6 +112,7 @@ pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 pub use tree_story::TreeStory;
 pub use virtual_list_story::VirtualListStory;
+pub use theme_story::ThemeColorsStory;
 
 pub use welcome_story::WelcomeStory;
 
