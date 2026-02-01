@@ -24,7 +24,7 @@
 ///
 /// 4. **Delete this file**:
 ///    Remove `mapper.rs` and its module declaration in `mod.rs`.
-
+///
 /// Represents a parsed theme key with a category, a display name, and a canonical dot-notation key.
 pub struct ParsedKey {
     pub category: String,
