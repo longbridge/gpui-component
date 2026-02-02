@@ -512,7 +512,6 @@ impl ThemeColorsStory {
                         .size_full()
                         .overflow_hidden()
                         .rounded_lg()
-                        .gap_4()
                         .px_4()
                         .child(
                             list(list_state.clone(), {
@@ -521,15 +520,14 @@ impl ThemeColorsStory {
                                         name: category_name,
                                         entries: colors,
                                     } = categories[ix].clone();
-                                    let is_first = ix == 0;
                                     let is_last = categories_count > 0
                                         && ix == categories_count.saturating_sub(1);
 
                                     v_flex()
                                         .w_full()
                                         .gap_3()
-                                        .when(is_first, |this| this.pt_3())
-                                        .when(is_last, |this| this.mb_3())
+                                        .pt_4()
+                                        .when(is_last, |this| this.pb_4())
                                         .child(
                                             div()
                                                 .text_base()
