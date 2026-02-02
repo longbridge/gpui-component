@@ -5,8 +5,9 @@ use gpui_component::{
     h_flex,
     input::{Input, InputEvent, InputState},
     menu::PopupMenuItem,
+    scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectItem, SelectState},
-    sidebar::{SidebarItem as _, SidebarMenu, SidebarMenuItem},
+    sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
     switch::Switch,
     v_flex,
 };
@@ -284,13 +285,11 @@ impl ThemeColorsStory {
     }
 
     fn render_color_swatch(
-        &self,
         name: String,
         color: Hsla,
         hex: String,
         is_explicit: bool,
         isolated_theme: &ThemeColor,
-        _cx: &Context<Self>,
     ) -> impl IntoElement {
         use gpui_component::{WindowExt as _, clipboard::Clipboard};
 
@@ -369,13 +368,13 @@ impl ThemeColorsStory {
             )
     }
 
-    fn render_left_panel(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_left_panel(&self, _: &mut Window, cx: &mut Context<Self>) -> Sidebar<SidebarMenu> {
         let categories = &self.categories;
         let is_filtering = self.filter_by_value.is_some();
         let entity_ref = cx.entity().clone();
 
         let expand_all = Rc::new(cx.listener(
-            |this: &mut Self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>| {
+            |this: &mut Self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>| {
                 this.sidebar_render_key += 1;
                 this.force_open_state = Some(true);
                 cx.notify();
@@ -383,175 +382,182 @@ impl ThemeColorsStory {
         ));
 
         let collapse_all = Rc::new(cx.listener(
-            |this: &mut Self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>| {
+            |this: &mut Self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>| {
                 this.sidebar_render_key += 1;
                 this.force_open_state = Some(false);
                 cx.notify();
             },
         ));
 
-        v_flex()
-            .w(px(320.))
-            .gap_2()
-            .p_4()
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded_lg()
+        Sidebar::new(format!("color-theme-sidebar-{}", self.sidebar_render_key))
+            .w(px(300.))
+            .border_0()
+            .header(Input::new(&self.filter_input).prefix(IconName::Search))
             .child(
-                div()
-                    .mb_4()
-                    .bg(cx.theme().sidebar_accent)
-                    .rounded_md()
-                    .px_1()
-                    .child(
-                        Input::new(&self.filter_input)
-                            .appearance(false)
-                            .cleanable(true),
-                    ),
-            )
-            .child(
-                SidebarMenu::new()
-                    .children(categories.iter().enumerate().map(
-                        |(
-                            idx,
-                            ColorCategory {
-                                name: category_name,
-                                entries: colors,
-                            },
-                        )| {
-                            let is_open = self.force_open_state.unwrap_or_else(|| idx == 0);
-
-                            SidebarMenuItem::new(category_name.clone())
-                                .default_open(is_open)
-                                .click_to_open(true)
-                                .context_menu({
-                                    let expand_all = expand_all.clone();
-                                    let collapse_all = collapse_all.clone();
-                                    move |menu, _, _| {
-                                        menu.item(PopupMenuItem::new("Expand All").on_click({
-                                            let expand_all = expand_all.clone();
-                                            move |ev, window, cx| (expand_all)(ev, window, cx)
-                                        }))
-                                        .item(
-                                            PopupMenuItem::new("Collapse All").on_click({
-                                                let collapse_all = collapse_all.clone();
-                                                move |ev, window, cx| (collapse_all)(ev, window, cx)
-                                            }),
-                                        )
-                                    }
-                                })
-                                .children(colors.iter().map(|entry| {
-                                    let color_value = entry.color;
-                                    let is_explicit = entry.is_explicit;
-                                    let color_view = entity_ref.clone();
-                                    SidebarMenuItem::new(entry.name.clone())
-                                        .suffix(move |_, cx| {
-                                            h_flex()
-                                                .gap_2()
-                                                .items_center()
-                                                .when(!is_explicit, |this| {
-                                                    this.child(
-                                                        div()
-                                                            .size_1p5()
-                                                            .rounded_full()
-                                                            .bg(cx.theme().foreground),
-                                                    )
-                                                })
-                                                .child(
-                                                    div()
-                                                        .size_4()
-                                                        .rounded_sm()
-                                                        .bg(color_value)
-                                                        .border_1()
-                                                        .border_color(cx.theme().border)
-                                                        .flex_shrink_0(),
-                                                )
-                                        })
-                                        .context_menu(move |menu, _, _| {
-                                            let menu_view = color_view.clone();
-                                            if is_filtering {
-                                                menu.item(
-                                                    PopupMenuItem::new("Show All Values").on_click(
-                                                        move |_, _, cx| {
-                                                            menu_view.update(cx, |this, cx| {
-                                                                this.filter_by_value = None;
-                                                                this.compute_categories(cx);
-                                                                cx.notify();
-                                                            })
-                                                        },
-                                                    ),
-                                                )
-                                            } else {
-                                                menu.item(
-                                                    PopupMenuItem::new("Filter By Value").on_click(
-                                                        move |_, _, cx| {
-                                                            menu_view.update(cx, |this, cx| {
-                                                                this.filter_by_value =
-                                                                    Some(color_value);
-                                                                this.compute_categories(cx);
-                                                                cx.notify();
-                                                            })
-                                                        },
-                                                    ),
-                                                )
-                                            }
-                                        })
-                                }))
+                SidebarMenu::new().children(categories.iter().enumerate().map(
+                    |(
+                        idx,
+                        ColorCategory {
+                            name: category_name,
+                            entries: colors,
                         },
-                    ))
-                    .render(
-                        format!("color-categories-{}", self.sidebar_render_key),
-                        window,
-                        cx,
-                    ),
+                    )| {
+                        let is_open = self.force_open_state.unwrap_or_else(|| idx == 0);
+
+                        SidebarMenuItem::new(category_name.clone())
+                            .default_open(is_open)
+                            .click_to_open(true)
+                            .context_menu({
+                                let expand_all = expand_all.clone();
+                                let collapse_all = collapse_all.clone();
+                                move |menu, _, _| {
+                                    menu.item(PopupMenuItem::new("Expand All").on_click({
+                                        let expand_all = expand_all.clone();
+                                        move |ev, window, cx| (expand_all)(ev, window, cx)
+                                    }))
+                                    .item(
+                                        PopupMenuItem::new("Collapse All").on_click({
+                                            let collapse_all = collapse_all.clone();
+                                            move |ev, window, cx| (collapse_all)(ev, window, cx)
+                                        }),
+                                    )
+                                }
+                            })
+                            .children(colors.iter().map(|entry| {
+                                let color_value = entry.color;
+                                let is_explicit = entry.is_explicit;
+                                let color_view = entity_ref.clone();
+                                SidebarMenuItem::new(entry.name.clone())
+                                    .suffix(move |_, cx| {
+                                        h_flex()
+                                            .gap_2()
+                                            .items_center()
+                                            .when(!is_explicit, |this| {
+                                                this.child(
+                                                    div()
+                                                        .size_1p5()
+                                                        .rounded_full()
+                                                        .bg(cx.theme().foreground),
+                                                )
+                                            })
+                                            .child(
+                                                div()
+                                                    .size_4()
+                                                    .rounded_sm()
+                                                    .bg(color_value)
+                                                    .border_1()
+                                                    .border_color(cx.theme().border)
+                                                    .flex_shrink_0(),
+                                            )
+                                    })
+                                    .context_menu(move |menu, _, _| {
+                                        let menu_view = color_view.clone();
+                                        if is_filtering {
+                                            menu.item(
+                                                PopupMenuItem::new("Show All Values").on_click(
+                                                    move |_, _, cx| {
+                                                        menu_view.update(cx, |this, cx| {
+                                                            this.filter_by_value = None;
+                                                            this.compute_categories(cx);
+                                                            cx.notify();
+                                                        })
+                                                    },
+                                                ),
+                                            )
+                                        } else {
+                                            menu.item(
+                                                PopupMenuItem::new("Filter By Value").on_click(
+                                                    move |_, _, cx| {
+                                                        menu_view.update(cx, |this, cx| {
+                                                            this.filter_by_value =
+                                                                Some(color_value);
+                                                            this.compute_categories(cx);
+                                                            cx.notify();
+                                                        })
+                                                    },
+                                                ),
+                                            )
+                                        }
+                                    })
+                            }))
+                    },
+                )),
             )
     }
 
-    fn render_right_panel(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn render_right_panel(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (isolated_theme, is_dark) = self.get_isolated_theme(cx);
 
-        v_flex()
-            .flex_1()
+        let categories = self.categories.clone();
+        let categories_count = categories.len();
+        let list_state = window
+            .use_keyed_state("color-theme-right-panel-list-state", cx, |_, _| {
+                ListState::new(19, ListAlignment::Top, px(1000.))
+            })
+            .read(cx)
+            .clone();
+        if list_state.item_count() != categories_count {
+            list_state.reset(categories_count);
+        }
+
+        div()
             .border_1()
             .border_color(isolated_theme.border)
             .rounded_lg()
+            .size_full()
             .overflow_hidden()
             .child(
-                Checkerboard::new(is_dark).child(v_flex().size_full().gap_4().p_4().children(
-                    self.categories.iter().map(
-                        |ColorCategory {
-                             name: category_name,
-                             entries: colors,
-                         }| {
-                            v_flex()
-                                .w_full()
-                                .gap_3()
-                                .child(
-                                    div()
-                                        .text_base()
-                                        .font_semibold()
-                                        .pb_2()
-                                        .border_b_1()
-                                        .border_color(isolated_theme.border)
-                                        .text_color(isolated_theme.foreground)
-                                        .child(category_name.clone()),
-                                )
-                                .child(div().flex().flex_wrap().gap_4().children(
-                                    colors.iter().map(|entry| {
-                                        div().w(px(220.)).child(self.render_color_swatch(
-                                            entry.name.to_string(),
-                                            entry.color,
-                                            entry.hex.clone(),
-                                            entry.is_explicit,
-                                            &isolated_theme,
-                                            cx,
+                Checkerboard::new(is_dark).child(
+                    v_flex()
+                        .size_full()
+                        .overflow_hidden()
+                        .rounded_lg()
+                        .gap_4()
+                        .px_4()
+                        .child(
+                            list(list_state.clone(), {
+                                move |ix, _, _| {
+                                    let ColorCategory {
+                                        name: category_name,
+                                        entries: colors,
+                                    } = categories[ix].clone();
+                                    let is_first = ix == 0;
+                                    let is_last = categories_count > 0
+                                        && ix == categories_count.saturating_sub(1);
+
+                                    v_flex()
+                                        .w_full()
+                                        .gap_3()
+                                        .when(is_first, |this| this.pt_3())
+                                        .when(is_last, |this| this.mb_3())
+                                        .child(
+                                            div()
+                                                .text_base()
+                                                .font_semibold()
+                                                .pb_2()
+                                                .border_b_1()
+                                                .border_color(isolated_theme.border)
+                                                .text_color(isolated_theme.foreground)
+                                                .child(category_name.clone()),
+                                        )
+                                        .child(div().flex().flex_wrap().gap_4().children(
+                                            colors.iter().map(|entry| {
+                                                div().w(px(220.)).child(Self::render_color_swatch(
+                                                    entry.name.to_string(),
+                                                    entry.color,
+                                                    entry.hex.clone(),
+                                                    entry.is_explicit,
+                                                    &isolated_theme,
+                                                ))
+                                            }),
                                         ))
-                                    }),
-                                ))
-                        },
-                    ),
-                )),
+                                        .into_any_element()
+                                }
+                            })
+                            .size_full(),
+                        )
+                        .vertical_scrollbar(&list_state),
+                ),
             )
     }
 }
@@ -691,18 +697,13 @@ fn filter_categories(
 impl Render for ThemeColorsStory {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .size_full()
             .gap_4()
+            .size_full()
+            .overflow_hidden()
             .child(
                 // Theme selector at the top
                 h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap_4()
-                    .p_2()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded_lg()
+                    .gap_x_3()
                     .child(div().w(px(300.)).child(Select::new(&self.select_state)))
                     .child(
                         Button::new("set_theme")
@@ -784,9 +785,8 @@ impl Render for ThemeColorsStory {
                     .flex_1()
                     .items_start()
                     .gap_4()
-                    .overflow_hidden()
                     .child(self.render_left_panel(window, cx))
-                    .child(self.render_right_panel(cx)),
+                    .child(self.render_right_panel(window, cx)),
             )
     }
 }

@@ -34,8 +34,10 @@ impl RenderOnce for Checkerboard {
         };
 
         div()
-            .size_full()
             .bg(c1)
+            .rounded_lg()
+            .overflow_hidden()
+            .size_full()
             .child(
                 gpui::canvas(
                     move |_, _, _| (),
