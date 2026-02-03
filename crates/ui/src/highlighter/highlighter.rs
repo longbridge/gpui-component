@@ -394,27 +394,33 @@ impl SyntaxHighlighter {
             while let Some(query_match) = matches.next() {
                 // Extract language name from property settings
                 let mut language_name: Option<SharedString> = None;
-                for prop in combined_query.property_settings(query_match.pattern_index) {
-                    if prop.key.as_ref() == "injection.language" {
-                        language_name = prop
-                            .value
-                            .as_ref()
-                            .map(|v| SharedString::from(v.to_string()));
-                    }
+
+                if let Some(prop) = combined_query
+                    .property_settings(query_match.pattern_index)
+                    .iter()
+                    .find(|prop| prop.key.as_ref() == "injection.language")
+                {
+                    language_name = prop
+                        .value
+                        .as_ref()
+                        .map(|v| SharedString::from(v.to_string()));
                 }
+
                 let Some(language_name) = language_name else {
                     continue;
                 };
 
                 // Collect content node ranges
-                for capture in query_match.captures {
-                    if Some(capture.index) == self.combined_injection_content_capture_index {
-                        let node = capture.node;
-                        combined_ranges
-                            .entry(language_name.clone())
-                            .or_default()
-                            .push(node.range());
-                    }
+                for capture in query_match
+                    .captures
+                    .iter()
+                    .filter(|cap| Some(cap.index) == self.combined_injection_content_capture_index)
+                {
+                    let node = capture.node;
+                    combined_ranges
+                        .entry(language_name.clone())
+                        .or_default()
+                        .push(node.range());
                 }
             }
 
