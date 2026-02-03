@@ -731,17 +731,12 @@ where
 
     /// Returns the title element for the select input.
     fn display_title(&mut self, _: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let default_title = div()
-            .text_color(cx.theme().accent_foreground)
-            .child(
-                self.options
-                    .placeholder
-                    .clone()
-                    .unwrap_or_else(|| t!("Select.placeholder").into()),
-            )
-            .when(self.options.disabled, |this| {
-                this.text_color(cx.theme().muted_foreground)
-            });
+        let default_title = div().text_color(cx.theme().muted_foreground).child(
+            self.options
+                .placeholder
+                .clone()
+                .unwrap_or_else(|| t!("Select.placeholder").into()),
+        );
 
         let Some(selected_index) = &self.selected_index(cx) else {
             return default_title;
