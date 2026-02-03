@@ -92,3 +92,6 @@ ttf-parser = { opt-level = 3 }
 
 [workspace.metadata.typos]
 files.extend-exclude = ["**/fixtures/*"]
+
+[workspace.metadata.typos.default.extend-identifiers]
+consts = "consts"
