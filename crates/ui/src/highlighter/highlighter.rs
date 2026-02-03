@@ -9,7 +9,7 @@ use std::{
     ops::Range,
     usize,
 };
-use tree_sitter::{InputEdit, Node, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
+use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
