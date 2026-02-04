@@ -3,7 +3,7 @@ use gpui::{App, Context, Hsla, MouseMoveEvent, Task, Window};
 use ropey::Rope;
 use std::rc::Rc;
 
-use crate::input::{popovers::ContextMenu, InputState, RopeExt};
+use crate::input::{InputState, RopeExt, popovers::ContextMenu};
 
 mod code_actions;
 mod completions;
@@ -34,7 +34,7 @@ pub struct Lsp {
 
     document_colors: Vec<(lsp_types::Range, Hsla)>,
     _hover_task: Task<Result<()>>,
-    _document_color_task: Task<Result<()>>,
+    _document_color_task: Task<()>,
 }
 
 impl Default for Lsp {
@@ -47,7 +47,7 @@ impl Default for Lsp {
             document_color_provider: None,
             document_colors: vec![],
             _hover_task: Task::ready(Ok(())),
-            _document_color_task: Task::ready(Ok(())),
+            _document_color_task: Task::ready(()),
         }
     }
 }
@@ -67,7 +67,7 @@ impl Lsp {
     pub(crate) fn reset(&mut self) {
         self.document_colors.clear();
         self._hover_task = Task::ready(Ok(()));
-        self._document_color_task = Task::ready(Ok(()));
+        self._document_color_task = Task::ready(());
     }
 }
 
