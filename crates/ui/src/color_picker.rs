@@ -481,7 +481,7 @@ impl ColorPicker {
         slider_color: Hsla,
         cx: &mut App,
     ) -> impl IntoElement {
-        let steps = 48usize;
+        let steps = 96usize;
         let hue_colors = (0..steps)
             .map(|ix| {
                 let h = ix as f32 / (steps.saturating_sub(1)) as f32;
@@ -490,8 +490,12 @@ impl ColorPicker {
             .collect::<Vec<_>>();
         let saturation_start = hsla(slider_color.h, 0.0, slider_color.l, 1.0);
         let saturation_end = hsla(slider_color.h, 1.0, slider_color.l, 1.0);
-        let lightness_start = hsla(slider_color.h, slider_color.s, 0.0, 1.0);
-        let lightness_end = hsla(slider_color.h, slider_color.s, 1.0, 1.0);
+        let lightness_colors = (0..steps)
+            .map(|ix| {
+                let l = ix as f32 / (steps.saturating_sub(1)) as f32;
+                hsla(slider_color.h, 1.0, l, 1.0)
+            })
+            .collect::<Vec<_>>();
         let alpha_start = hsla(slider_color.h, slider_color.s, slider_color.l, 0.0);
         let alpha_end = hsla(slider_color.h, slider_color.s, slider_color.l, 1.0);
 
@@ -587,11 +591,7 @@ impl ColorPicker {
                             .items_center()
                             .flex_1()
                             .h_8()
-                            .child(self.render_slider_track_gradient(
-                                lightness_start,
-                                lightness_end,
-                                cx,
-                            ))
+                            .child(self.render_slider_track(lightness_colors, cx))
                             .child(
                                 Slider::new(&slider_hsl[2])
                                     .flex_1()
