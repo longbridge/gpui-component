@@ -90,7 +90,8 @@ impl RenderOnce for CompletionMenuItem {
             .filter_text
             .as_ref()
             .map(|s| s.len())
-            .unwrap_or(self.highlight_prefix.len());
+            .unwrap_or(self.highlight_prefix.len())
+            .min(item.label.len());
 
         let highlights = vec![(
             0..matched_len,
