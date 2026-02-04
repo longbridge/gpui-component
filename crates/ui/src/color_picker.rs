@@ -2,7 +2,7 @@ use gpui::{
     App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
     Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
     SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
-    Window, div, hsla, prelude::FluentBuilder as _,
+    Window, div, hsla, linear_color_stop, linear_gradient, prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -481,6 +481,20 @@ impl ColorPicker {
         slider_color: Hsla,
         cx: &mut App,
     ) -> impl IntoElement {
+        let steps = 48usize;
+        let hue_colors = (0..steps)
+            .map(|ix| {
+                let h = ix as f32 / (steps.saturating_sub(1)) as f32;
+                hsla(h, 1.0, 0.5, 1.0)
+            })
+            .collect::<Vec<_>>();
+        let saturation_start = hsla(slider_color.h, 0.0, slider_color.l, 1.0);
+        let saturation_end = hsla(slider_color.h, 1.0, slider_color.l, 1.0);
+        let lightness_start = hsla(slider_color.h, slider_color.s, 0.0, 1.0);
+        let lightness_end = hsla(slider_color.h, slider_color.s, 1.0, 1.0);
+        let alpha_start = hsla(slider_color.h, slider_color.s, slider_color.l, 0.0);
+        let alpha_end = hsla(slider_color.h, slider_color.s, slider_color.l, 1.0);
+
         let label_color = cx.theme().foreground.opacity(0.7);
 
         v_flex()
@@ -496,7 +510,20 @@ impl ColorPicker {
                             .text_color(label_color)
                             .child("Hue"),
                     )
-                    .child(Slider::new(&slider_hsl[0]).flex_1())
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .items_center()
+                            .flex_1()
+                            .h_8()
+                            .child(self.render_slider_track(hue_colors, cx))
+                            .child(
+                                Slider::new(&slider_hsl[0])
+                                    .flex_1()
+                                    .bg(cx.theme().transparent),
+                            ),
+                    )
                     .child(
                         div()
                             .w_10()
@@ -516,7 +543,24 @@ impl ColorPicker {
                             .text_color(label_color)
                             .child("Saturation"),
                     )
-                    .child(Slider::new(&slider_hsl[1]).flex_1())
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .items_center()
+                            .flex_1()
+                            .h_8()
+                            .child(self.render_slider_track_gradient(
+                                saturation_start,
+                                saturation_end,
+                                cx,
+                            ))
+                            .child(
+                                Slider::new(&slider_hsl[1])
+                                    .flex_1()
+                                    .bg(cx.theme().transparent),
+                            ),
+                    )
                     .child(
                         div()
                             .w_10()
@@ -536,7 +580,24 @@ impl ColorPicker {
                             .text_color(label_color)
                             .child("Lightness"),
                     )
-                    .child(Slider::new(&slider_hsl[2]).flex_1())
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .items_center()
+                            .flex_1()
+                            .h_8()
+                            .child(self.render_slider_track_gradient(
+                                lightness_start,
+                                lightness_end,
+                                cx,
+                            ))
+                            .child(
+                                Slider::new(&slider_hsl[2])
+                                    .flex_1()
+                                    .bg(cx.theme().transparent),
+                            ),
+                    )
                     .child(
                         div()
                             .w_10()
@@ -556,7 +617,20 @@ impl ColorPicker {
                             .text_color(label_color)
                             .child("Alpha"),
                     )
-                    .child(Slider::new(&slider_hsl[3]).flex_1())
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .items_center()
+                            .flex_1()
+                            .h_8()
+                            .child(self.render_slider_track_gradient(alpha_start, alpha_end, cx))
+                            .child(
+                                Slider::new(&slider_hsl[3])
+                                    .flex_1()
+                                    .bg(cx.theme().transparent),
+                            ),
+                    )
                     .child(
                         div()
                             .w_10()
@@ -565,6 +639,37 @@ impl ColorPicker {
                             .child(format!("{:.0}", slider_color.a * 100.)),
                     ),
             )
+    }
+
+    fn render_slider_track(&self, colors: Vec<Hsla>, _: &App) -> impl IntoElement {
+        h_flex()
+            .absolute()
+            .left_0()
+            .right_0()
+            .h_2_5()
+            .overflow_hidden()
+            .children(colors.into_iter().map(|color| {
+                div().flex_1().h_full().bg(color)
+            }))
+    }
+
+    fn render_slider_track_gradient(
+        &self,
+        start: Hsla,
+        end: Hsla,
+        _: &App,
+    ) -> impl IntoElement {
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .h_2_5()
+            .overflow_hidden()
+            .bg(linear_gradient(
+                90.,
+                linear_color_stop(start, 0.),
+                linear_color_stop(end, 1.),
+            ))
     }
 }
 
