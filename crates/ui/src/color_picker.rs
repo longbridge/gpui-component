@@ -2,7 +2,8 @@ use gpui::{
     App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
     Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
     SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
-    Window, div, hsla, linear_color_stop, linear_gradient, prelude::FluentBuilder as _,
+    TextAlign, Window, div, hsla, linear_color_stop, linear_gradient,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -533,6 +534,7 @@ impl ColorPicker {
                             .w_10()
                             .text_xs()
                             .text_color(label_color)
+                            .text_align(TextAlign::Right)
                             .child(format!("{:.0}", slider_color.h * 360.)),
                     ),
             )
@@ -570,6 +572,7 @@ impl ColorPicker {
                             .w_10()
                             .text_xs()
                             .text_color(label_color)
+                            .text_align(TextAlign::Right)
                             .child(format!("{:.0}", slider_color.s * 100.)),
                     ),
             )
@@ -603,6 +606,7 @@ impl ColorPicker {
                             .w_10()
                             .text_xs()
                             .text_color(label_color)
+                            .text_align(TextAlign::Right)
                             .child(format!("{:.0}", slider_color.l * 100.)),
                     ),
             )
@@ -636,6 +640,7 @@ impl ColorPicker {
                             .w_10()
                             .text_xs()
                             .text_color(label_color)
+                            .text_align(TextAlign::Right)
                             .child(format!("{:.0}", slider_color.a * 100.)),
                     ),
             )
