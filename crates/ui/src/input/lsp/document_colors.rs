@@ -1,4 +1,5 @@
 use std::ops::Range;
+use std::time::Duration;
 
 use anyhow::Result;
 use gpui::{App, Context, Hsla, Task, Window};
@@ -57,35 +58,46 @@ impl Lsp {
             return;
         };
 
-        let task = provider.document_colors(text, window, cx);
-        self._hover_task = cx.spawn_in(window, async move |editor, cx| {
-            let colors = task.await?;
+        let provider = provider.clone();
+        let text = text.clone();
+        let input_state = cx.entity();
 
-            editor.update(cx, |editor, cx| {
-                let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
-                    .iter()
-                    .map(|info| {
-                        let color = gpui::Rgba {
-                            r: info.color.red,
-                            g: info.color.green,
-                            b: info.color.blue,
-                            a: info.color.alpha,
+        // debounce timer 100ms
+        self._document_color_task = cx.spawn_in(window, async move |_, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(100))
+                .await;
+
+            let task_result = cx
+                .update(|window, cx| provider.document_colors(&text, window, cx))
+                .ok();
+
+            if let Some(task) = task_result {
+                if let Ok(colors) = task.await {
+                    let _ = input_state.update(cx, |input_state, cx| {
+                        let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
+                            .iter()
+                            .map(|info| {
+                                let color = gpui::Rgba {
+                                    r: info.color.red,
+                                    g: info.color.green,
+                                    b: info.color.blue,
+                                    a: info.color.alpha,
+                                }
+                                .into();
+
+                                (info.range, color)
+                            })
+                            .collect();
+                        document_colors.sort_by_key(|(range, _)| range.start);
+
+                        if document_colors != input_state.lsp.document_colors {
+                            input_state.lsp.document_colors = document_colors;
+                            cx.notify();
                         }
-                        .into();
-
-                        (info.range, color)
-                    })
-                    .collect();
-                document_colors.sort_by_key(|(range, _)| range.start);
-
-                if document_colors == editor.lsp.document_colors {
-                    return;
+                    });
                 }
-                editor.lsp.document_colors = document_colors;
-                cx.notify();
-            })?;
-
-            Ok(())
+            }
         });
     }
 }
