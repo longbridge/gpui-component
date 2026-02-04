@@ -1,10 +1,11 @@
 use gpui::{
-    prelude::FluentBuilder as _, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement,
-    ParentElement as _, Render, Styled as _, Subscription, Window,
+    App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement as _, Render,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
+    ActiveTheme as _, Colorize, Sizable,
     color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
-    v_flex, ActiveTheme as _, Colorize, Sizable,
+    v_flex,
 };
 
 use crate::section;
@@ -41,7 +42,6 @@ impl ColorPickerStory {
         let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, _| match ev {
             ColorPickerEvent::Change(color) => {
                 this.selected_color = *color;
-                println!("Color changed to: {:?}", color);
             }
         })];
 
@@ -66,7 +66,7 @@ impl Render for ColorPickerStory {
                 .max_w_md()
                 .child(ColorPicker::new(&self.color).small())
                 .when_some(self.selected_color, |this, color| {
-                    this.child(color.to_hex())
+                    this.child(div().w_24().child(color.to_hex()))
                 }),
         )
     }
