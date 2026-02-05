@@ -441,7 +441,7 @@ impl RenderOnce for Dialog {
                         v_flex()
                             .id(layer_ix)
                             .track_focus(&self.focus_handle)
-                            .focus_trap("dialog", &self.focus_handle)
+                            .focus_trap(format!("dialog-{}", layer_ix), &self.focus_handle)
                             .bg(cx.theme().background)
                             .border_1()
                             .border_color(cx.theme().border)
