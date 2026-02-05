@@ -28,7 +28,7 @@ Here is the first application: [Longbridge Pro](https://longbridge.com/desktop),
 
 ```toml
 gpui = "0.2.2"
-gpui-component = "0.5.0"
+gpui-component = "0.5.1"
 ```
 
 ### Basic Example
