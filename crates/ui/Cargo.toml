@@ -127,6 +127,9 @@ tree-sitter-typescript = { version = "0.23.2", optional = true }
 tree-sitter-yaml = { version = "0.7.1", optional = true }
 tree-sitter-zig = { version = "1.1.2", optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-text = "=21.0.0"
+
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 indoc = "2"

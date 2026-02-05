@@ -484,7 +484,7 @@ impl TextView {
     pub fn style(mut self, style: TextViewStyle) -> Self {
         if let Some(init_state) = &mut self.init_state {
             match init_state {
-                InitState::Initializing { style: s, .. } => *s = Box::new(style),
+                InitState::Initializing { style: s, .. } => **s = style,
                 InitState::Initialized { tx } => {
                     let _ = tx.try_send(Update::Style(Box::new(style)));
                 }

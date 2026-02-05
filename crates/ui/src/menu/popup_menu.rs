@@ -1232,13 +1232,10 @@ impl Render for PopupMenu {
         let view = cx.entity().clone();
         let items_count = self.menu_items.len();
 
-        let max_height = self.max_height.map_or_else(
-            || {
-                let window_half_height = window.window_bounds().get_bounds().size.height * 0.5;
-                window_half_height.min(px(450.))
-            },
-            |height| height,
-        );
+        let max_height = self.max_height.unwrap_or_else(|| {
+            let window_half_height = window.window_bounds().get_bounds().size.height * 0.5;
+            window_half_height.min(px(450.))
+        });
 
         let has_left_icon = self
             .menu_items

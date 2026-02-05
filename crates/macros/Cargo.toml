@@ -18,4 +18,4 @@ quote = "1.0"
 syn = "2.0"
 
 [package.metadata.cargo-machete]
-ignored = ["proc-macro2"]
+ignored = ["proc-macro2", "core-text"]

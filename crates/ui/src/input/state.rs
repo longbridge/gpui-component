@@ -925,8 +925,7 @@ impl InputState {
         let left_part = self.text.slice(0..offset).to_string();
 
         UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
-            .filter(|(_, s)| !s.trim_start().is_empty())
-            .next_back()
+            .rfind(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, _)| i)
             .unwrap_or(0)
     }

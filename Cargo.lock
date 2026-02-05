@@ -2833,6 +2833,7 @@ dependencies = [
  "aho-corasick",
  "anyhow",
  "chrono",
+ "core-text",
  "enum-iterator",
  "gpui",
  "gpui-component-macros",
