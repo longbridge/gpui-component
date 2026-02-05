@@ -469,6 +469,7 @@ impl StoryState {
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),
             "ScrollbarStory" => story!(ScrollbarStory),
+            "CardStory" => story!(CardStory),
             "SwitchStory" => story!(SwitchStory),
             "TableStory" => story!(TableStory),
             "LabelStory" => story!(LabelStory),

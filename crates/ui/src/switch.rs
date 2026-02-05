@@ -1,10 +1,10 @@
 use crate::{
-    h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
+    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, h_flex, text::Text, tooltip::Tooltip,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, App, ElementId,
-    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    Animation, AnimationExt as _, App, ElementId, InteractiveElement, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -197,6 +197,7 @@ impl RenderOnce for Switch {
                     ))
                 })
                 .when_some(
+                    // QA: 这一段写法是什么意思？和我下面注释掉的写法有什么区别？
                     on_click
                         .as_ref()
                         .map(|c| c.clone())
@@ -210,6 +211,17 @@ impl RenderOnce for Switch {
                         })
                     },
                 ),
+            // .when_some(on_click, |this, on_click| {
+            //     if self.disabled {
+            //         return this;
+            //     }
+            //     let toggle_state = toggle_state.clone();
+            //     this.on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+            //         cx.stop_propagation();
+            //         _ = toggle_state.update(cx, |this, _| *this = checked);
+            //         on_click(&!checked, window, cx);
+            //     })
+            // })
         )
     }
 }

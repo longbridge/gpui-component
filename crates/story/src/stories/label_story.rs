@@ -13,6 +13,7 @@ use gpui_component::{
     v_flex,
 };
 
+// QA: 这个 section 是什么作用？
 use crate::section;
 
 pub struct LabelStory {
@@ -115,7 +116,7 @@ impl Render for LabelStory {
                         .child(Label::new("This is a label").highlights(ht.clone()))
                         // This case for test match CJK with ASCII, it was has a crash bug before.
                         // Try to input "AA" to see the highlights effect.
-                        .child(Label::new("AAA中文BB").highlights(ht.clone())),
+                        .child(Label::new("AAA 中文 BB").highlights(ht.clone())),
                 ),
             )
             .child(

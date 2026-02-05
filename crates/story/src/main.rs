@@ -44,6 +44,7 @@ impl Gallery {
                     StoryContainer::panel::<BreadcrumbStory>(window, cx),
                     StoryContainer::panel::<ButtonStory>(window, cx),
                     StoryContainer::panel::<CalendarStory>(window, cx),
+                    StoryContainer::panel::<CardStory>(window, cx),
                     StoryContainer::panel::<ChartStory>(window, cx),
                     StoryContainer::panel::<CheckboxStory>(window, cx),
                     StoryContainer::panel::<ClipboardStory>(window, cx),

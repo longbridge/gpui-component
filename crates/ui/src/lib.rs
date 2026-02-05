@@ -28,6 +28,7 @@ pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
 pub mod button;
+pub mod card;
 pub mod chart;
 pub mod checkbox;
 pub mod clipboard;

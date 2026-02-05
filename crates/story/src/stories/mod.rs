@@ -8,6 +8,7 @@ mod badge_story;
 mod breadcrumb_story;
 mod button_story;
 mod calendar_story;
+mod card_story;
 mod chart_story;
 mod checkbox_story;
 mod clipboard_story;
@@ -34,8 +35,8 @@ mod otp_input_story;
 mod pagination_story;
 mod popover_story;
 mod progress_story;
-mod rating_story;
 mod radio_story;
+mod rating_story;
 mod resizable_story;
 mod scrollbar_story;
 mod select_story;
@@ -64,6 +65,7 @@ pub use badge_story::BadgeStory;
 pub use breadcrumb_story::BreadcrumbStory;
 pub use button_story::ButtonStory;
 pub use calendar_story::CalendarStory;
+pub use card_story::CardStory;
 pub use chart_story::ChartStory;
 pub use checkbox_story::CheckboxStory;
 pub use clipboard_story::ClipboardStory;
@@ -90,8 +92,8 @@ pub use otp_input_story::OtpInputStory;
 pub use pagination_story::PaginationStory;
 pub use popover_story::PopoverStory;
 pub use progress_story::ProgressStory;
-pub use rating_story::RatingStory;
 pub use radio_story::RadioStory;
+pub use rating_story::RatingStory;
 pub use resizable_story::ResizableStory;
 pub use scrollbar_story::ScrollbarStory;
 pub use select_story::SelectStory;
@@ -114,6 +116,7 @@ pub use virtual_list_story::VirtualListStory;
 
 pub use welcome_story::WelcomeStory;
 
+// QA: 这个 pub(crate) 是什么意思？
 pub(crate) fn init(cx: &mut App) {
     input_story::init(cx);
     rating_story::init(cx);
@@ -127,7 +130,9 @@ pub(crate) fn init(cx: &mut App) {
     tree_story::init(cx);
 }
 
+// QA: 这个 trait Sized 是什么作用？
 pub trait Story: Render + Sized {
+    // QA: 这个 klass 是什么作用？
     fn klass() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
