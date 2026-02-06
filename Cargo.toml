@@ -14,6 +14,7 @@ members = [
     "examples/webview",
     "examples/system_monitor",
     "examples/focus_trap",
+    "examples/iconify",
 ]
 resolver = "2"
 

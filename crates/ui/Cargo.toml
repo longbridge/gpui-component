@@ -125,6 +125,10 @@ tree-sitter-typescript = { version = "0.23.2", optional = true }
 tree-sitter-yaml = { version = "0.7.1", optional = true }
 tree-sitter-zig = { version = "1.1.2", optional = true }
 
+# Iconify
+blake3 = "1.8.3"
+directories = "6.0.0"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "=21.0.0"
 

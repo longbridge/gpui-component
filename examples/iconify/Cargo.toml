@@ -1,0 +1,16 @@
+[package]
+name = "iconify"
+description = "Example to load icons from assets folder or Iconify."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component = { workspace = true }
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+reqwest_client = { path = "../../crates/reqwest_client" }
+
+[lints]
+workspace = true

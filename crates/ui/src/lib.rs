@@ -8,6 +8,7 @@ mod focus_trap;
 mod geometry;
 mod global_state;
 mod icon;
+mod iconify;
 mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
@@ -81,6 +82,7 @@ pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;
 pub use geometry::*;
 pub use icon::*;
+pub use iconify::*;
 pub use index_path::IndexPath;
 pub use input::{Rope, RopeExt, RopeLines};
 #[cfg(any(feature = "inspector", debug_assertions))]
