@@ -32,7 +32,7 @@ pub struct Settings {
     size: Size,
     sidebar_width: Pixels,
     sidebar_style: StyleRefinement,
-    selected_index: SelectIndex,
+    default_selected_index: SelectIndex,
 }
 
 impl Settings {
@@ -45,7 +45,7 @@ impl Settings {
             size: Size::default(),
             sidebar_width: px(250.0),
             sidebar_style: StyleRefinement::default(),
-            selected_index: SelectIndex::default(),
+            default_selected_index: SelectIndex::default(),
         }
     }
 
@@ -81,9 +81,9 @@ impl Settings {
         self
     }
 
-    /// Set the index of the page to be selected.
-    pub fn selected_index(mut self, index: SelectIndex) -> Self {
-        self.selected_index = index;
+    /// Set the default index of the page to be selected.
+    pub fn default_selected_index(mut self, index: SelectIndex) -> Self {
+        self.default_selected_index = index;
         self
     }
 
@@ -254,7 +254,7 @@ impl RenderOnce for Settings {
 
             SettingsState {
                 search_input,
-                selected_index: self.selected_index,
+                selected_index: self.default_selected_index,
                 deferred_scroll_group_ix: None,
             }
         });
