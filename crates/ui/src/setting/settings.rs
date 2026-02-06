@@ -239,8 +239,8 @@ pub struct RenderOptions {
 
 #[derive(Clone, Copy, Default)]
 pub struct SelectIndex {
-    page_ix: usize,
-    group_ix: Option<usize>,
+    pub page_ix: usize,
+    pub group_ix: Option<usize>,
 }
 
 impl RenderOnce for Settings {
