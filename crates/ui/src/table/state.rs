@@ -2,7 +2,10 @@ use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     ActiveTheme, ElementExt, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
-    actions::{Cancel, SelectDown, SelectUp},
+    actions::{
+        Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown,
+        SelectPageUp, SelectPrevColumn, SelectUp,
+    },
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
     scroll::{ScrollableMask, Scrollbar},
@@ -121,7 +124,7 @@ where
     /// Create a new TableState with the given delegate.
     pub fn new(delegate: D, _: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
-            focus_handle: cx.focus_handle(),
+            focus_handle: cx.focus_handle().tab_stop(true),
             options: TableOptions::default(),
             delegate,
             col_groups: Vec::new(),
@@ -334,6 +337,13 @@ where
             .count()
     }
 
+    fn page_item_count(&self) -> usize {
+        let row_height = self.options.size.table_row_height();
+        let height = self.bounds.size.height;
+        let count = (height / row_height).floor() as usize;
+        count.saturating_sub(1).max(1)
+    }
+
     fn on_row_right_click(
         &mut self,
         _: &MouseDownEvent,
@@ -438,6 +448,55 @@ where
         };
 
         self.set_selected_row(selected_row, cx);
+    }
+
+    pub(super) fn action_select_first_column(
+        &mut self,
+        _: &SelectFirst,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.set_selected_col(0, cx);
+    }
+
+    pub(super) fn action_select_last_column(
+        &mut self,
+        _: &SelectLast,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let columns_count = self.delegate.columns_count(cx);
+        self.set_selected_col(columns_count.saturating_sub(1), cx);
+    }
+
+    pub(super) fn action_select_page_up(
+        &mut self,
+        _: &SelectPageUp,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let step = self.page_item_count();
+        let current = self.selected_row.unwrap_or(0);
+        let target = current.saturating_sub(step);
+        self.set_selected_row(target, cx);
+    }
+
+    pub(super) fn action_select_page_down(
+        &mut self,
+        _: &SelectPageDown,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let rows_count = self.delegate.rows_count(cx);
+        if rows_count == 0 {
+            return;
+        }
+
+        let step = self.page_item_count();
+        let current = self.selected_row.unwrap_or(0);
+        let max_row = rows_count.saturating_sub(1);
+        let target = (current + step).min(max_row);
+        self.set_selected_row(target, cx);
     }
 
     pub(super) fn action_select_prev_col(
