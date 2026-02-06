@@ -32,8 +32,7 @@ pub struct Settings {
     size: Size,
     sidebar_width: Pixels,
     sidebar_style: StyleRefinement,
-    page_ix: usize,
-    group_ix: Option<usize>,
+    selected_index: SelectIndex,
 }
 
 impl Settings {
@@ -46,8 +45,7 @@ impl Settings {
             size: Size::default(),
             sidebar_width: px(250.0),
             sidebar_style: StyleRefinement::default(),
-            page_ix: 0,
-            group_ix: None,
+            selected_index: SelectIndex::default(),
         }
     }
 
@@ -84,15 +82,9 @@ impl Settings {
     }
 
     /// Set the index of the page to be selected.
-    pub fn page_ix(mut self, ix: usize) -> Self {
-       self.page_ix = ix;
-       self
-    }
-
-    /// Set the index of the group to be selected.
-    pub fn group_ix(mut self, ix: usize) -> Self {
-       self.group_ix = Some(ix);
-       self
+    pub fn selected_index(mut self, index: SelectIndex) -> Self {
+        self.selected_index = index;
+        self
     }
 
     fn filtered_pages(&self, query: &str, cx: &App) -> Vec<SettingPage> {
@@ -246,7 +238,7 @@ pub struct RenderOptions {
 }
 
 #[derive(Clone, Copy, Default)]
-pub(super) struct SelectIndex {
+pub struct SelectIndex {
     page_ix: usize,
     group_ix: Option<usize>,
 }
@@ -262,10 +254,7 @@ impl RenderOnce for Settings {
 
             SettingsState {
                 search_input,
-                selected_index: SelectIndex {
-                    page_ix: self.page_ix,
-                    group_ix: self.group_ix,
-                },
+                selected_index: self.selected_index,
                 deferred_scroll_group_ix: None,
             }
         });
