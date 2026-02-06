@@ -32,6 +32,8 @@ pub struct Settings {
     size: Size,
     sidebar_width: Pixels,
     sidebar_style: StyleRefinement,
+    page_ix: usize,
+    group_ix: Option<usize>,
 }
 
 impl Settings {
@@ -44,6 +46,8 @@ impl Settings {
             size: Size::default(),
             sidebar_width: px(250.0),
             sidebar_style: StyleRefinement::default(),
+            page_ix: 0,
+            group_ix: None,
         }
     }
 
@@ -77,6 +81,18 @@ impl Settings {
     pub fn sidebar_style(mut self, style: &StyleRefinement) -> Self {
         self.sidebar_style = style.clone();
         self
+    }
+
+    /// Set the index of the page to be selected.
+    pub fn page_ix(mut self, ix: usize) -> Self {
+       self.page_ix = ix;
+       self
+    }
+
+    /// Set the index of the group to be selected.
+    pub fn group_ix(mut self, ix: usize) -> Self {
+       self.group_ix = Some(ix);
+       self
     }
 
     fn filtered_pages(&self, query: &str, cx: &App) -> Vec<SettingPage> {
@@ -246,7 +262,10 @@ impl RenderOnce for Settings {
 
             SettingsState {
                 search_input,
-                selected_index: SelectIndex::default(),
+                selected_index: SelectIndex {
+                    page_ix: self.page_ix,
+                    group_ix: self.group_ix,
+                },
                 deferred_scroll_group_ix: None,
             }
         });
