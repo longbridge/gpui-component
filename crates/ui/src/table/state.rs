@@ -2,7 +2,10 @@ use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     ActiveTheme, ElementExt, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
-    actions::{Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown, SelectPageUp, SelectPrevColumn, SelectUp},
+    actions::{
+        Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown,
+        SelectPageUp, SelectPrevColumn, SelectUp,
+    },
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
     scroll::{ScrollableMask, Scrollbar},
@@ -447,28 +450,23 @@ where
         self.set_selected_row(selected_row, cx);
     }
 
-
-    pub(super) fn action_select_first(
+    pub(super) fn action_select_first_column(
         &mut self,
         _: &SelectFirst,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.delegate.rows_count(cx) > 0 {
-            self.set_selected_row(0, cx);
-        }
+        self.set_selected_col(0, cx);
     }
 
-    pub(super) fn action_select_last(
+    pub(super) fn action_select_last_column(
         &mut self,
         _: &SelectLast,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let rows_count = self.delegate.rows_count(cx);
-        if rows_count > 0 {
-            self.set_selected_row(rows_count - 1, cx);
-        }
+        let columns_count = self.delegate.columns_count(cx);
+        self.set_selected_col(columns_count.saturating_sub(1), cx);
     }
 
     pub(super) fn action_select_page_up(

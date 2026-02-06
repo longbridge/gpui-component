@@ -1,10 +1,13 @@
 use crate::{
-    actions::{Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown, SelectPageUp, SelectPrevColumn, SelectUp},
     ActiveTheme, Sizable, Size,
+    actions::{
+        Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown,
+        SelectPageUp, SelectPrevColumn, SelectUp,
+    },
 };
 use gpui::{
-    div, prelude::FluentBuilder, App, Edges, Entity, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement, RenderOnce, Styled, Window,
+    App, Edges, Entity, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement,
+    RenderOnce, Styled, Window, div, prelude::FluentBuilder,
 };
 
 mod column;
@@ -15,8 +18,6 @@ mod state;
 pub use column::*;
 pub use delegate::*;
 pub use state::*;
-
-
 
 const CONTEXT: &'static str = "Table";
 pub(crate) fn init(cx: &mut App) {
@@ -30,8 +31,8 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("end", SelectLast, Some(CONTEXT)),
         KeyBinding::new("pageup", SelectPageUp, Some(CONTEXT)),
         KeyBinding::new("pagedown", SelectPageDown, Some(CONTEXT)),
-        KeyBinding::new("tab", SelectDown, Some(CONTEXT)),
-        KeyBinding::new("shift-tab", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("tab", SelectNextColumn, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", SelectPrevColumn, Some(CONTEXT)),
     ]);
 }
 
@@ -129,8 +130,8 @@ where
             .on_action(window.listener_for(&self.state, TableState::action_select_prev))
             .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
             .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
-            .on_action(window.listener_for(&self.state, TableState::action_select_first))
-            .on_action(window.listener_for(&self.state, TableState::action_select_last))
+            .on_action(window.listener_for(&self.state, TableState::action_select_first_column))
+            .on_action(window.listener_for(&self.state, TableState::action_select_last_column))
             .on_action(window.listener_for(&self.state, TableState::action_select_page_up))
             .on_action(window.listener_for(&self.state, TableState::action_select_page_down))
             .bg(cx.theme().table)
