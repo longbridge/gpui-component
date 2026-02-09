@@ -33,6 +33,7 @@ pub struct Settings {
     sidebar_width: Pixels,
     sidebar_style: StyleRefinement,
     default_selected_index: SelectIndex,
+    header_style: StyleRefinement,
 }
 
 impl Settings {
@@ -46,6 +47,7 @@ impl Settings {
             sidebar_width: px(250.0),
             sidebar_style: StyleRefinement::default(),
             default_selected_index: SelectIndex::default(),
+            header_style: StyleRefinement::default(),
         }
     }
 
@@ -84,6 +86,12 @@ impl Settings {
     /// Set the default index of the page to be selected.
     pub fn default_selected_index(mut self, index: SelectIndex) -> Self {
         self.default_selected_index = index;
+        self
+    }
+
+    /// Set the style refinement for the header.
+    pub fn header_style(mut self, style: &StyleRefinement) -> Self {
+        self.header_style = style.clone();
         self
     }
 
@@ -159,6 +167,7 @@ impl Settings {
             .header(
                 div()
                     .w_full()
+                    .refine_style(&self.header_style)
                     .child(Input::new(&search_input).prefix(IconName::Search)),
             )
             .child(
