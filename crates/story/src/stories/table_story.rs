@@ -210,7 +210,8 @@ impl StockTableDelegate {
                     .fixed(ColumnFixed::Left)
                     .resizable(true)
                     .min_width(40.)
-                    .max_width(100.),
+                    .max_width(100.)
+                    .text_center(),
                 Column::new("market", "Market")
                     .width(60.)
                     .fixed(ColumnFixed::Left)
@@ -373,6 +374,9 @@ impl TableDelegate for StockTableDelegate {
             .when(col_ix >= 3 && col_ix <= 10, |this| {
                 this.table_cell_size(self.size)
             })
+            .when(col.align == TextAlign::Center, |this| {
+                this.h_flex().w_full().justify_center()
+            })
             .when(col.align == TextAlign::Right, |this| {
                 this.h_flex().w_full().justify_end()
             })
@@ -434,7 +438,10 @@ impl TableDelegate for StockTableDelegate {
         let col = self.columns.get(col_ix).unwrap();
 
         match col.key.as_ref() {
-            "id" => stock.id.to_string().into_any_element(),
+            "id" => div()
+                .child(stock.id.to_string())
+                .when(col.align == TextAlign::Center, |this| this.text_center())
+                .into_any_element(),
             "market" => div()
                 .map(|this| {
                     if stock.counter.market == "US" {

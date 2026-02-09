@@ -99,6 +99,12 @@ impl Column {
         self
     }
 
+    /// Set the text alignment of the column to center.
+    pub fn text_center(mut self) -> Self {
+        self.align = TextAlign::Center;
+        self
+    }
+
     /// Set the alignment of the column text, default is left.
     ///
     /// Only `text_left`, `text_right` is supported.
