@@ -4,7 +4,7 @@ use gpui::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use crate::{input::InputState, RopeExt as _};
+use crate::{RopeExt as _, input::InputState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CharType {
@@ -18,11 +18,34 @@ enum CharType {
     Other,
 }
 
+/// Implementation based on <https://github.com/zed-industries/zed/blob/main/crates/gpui/src/text_system/line_wrapper.rs>
+fn is_word_char(c: char) -> bool {
+    matches!(c, '_' ) ||
+    // ASCII alphanumeric characters, for English, numbers: `Hello123`, etc.
+    c.is_ascii_alphanumeric() ||
+    // Latin script in Unicode for French, German, Spanish, etc.
+    // Latin-1 Supplement
+    // https://en.wikipedia.org/wiki/Latin-1_Supplement
+    matches!(c, '\u{00C0}'..='\u{00FF}') ||
+    // Latin Extended-A
+    // https://en.wikipedia.org/wiki/Latin_Extended-A
+    matches!(c, '\u{0100}'..='\u{017F}') ||
+    // Latin Extended-B
+    // https://en.wikipedia.org/wiki/Latin_Extended-B
+    matches!(c, '\u{0180}'..='\u{024F}') ||
+    // Cyrillic for Russian, Ukrainian, etc.
+    // https://en.wikipedia.org/wiki/Cyrillic_script_in_Unicode
+    matches!(c, '\u{0400}'..='\u{04FF}') ||
+
+    // Vietnamese (https://vietunicode.sourceforge.net/charset/)
+    matches!(c, '\u{1E00}'..='\u{1EFF}') || // Latin Extended Additional
+    matches!(c, '\u{0300}'..='\u{036F}') // Combining Diacritical Marks
+}
+
 impl From<char> for CharType {
     fn from(c: char) -> Self {
         match c {
-            '_' => CharType::Word,
-            c if c.is_ascii_alphanumeric() => CharType::Word,
+            c if is_word_char(c) => CharType::Word,
             c if c == '\n' || c == '\r' => CharType::Newline,
             c if c.is_whitespace() => CharType::Whitespace,
             _ => CharType::Other,
@@ -144,7 +167,13 @@ mod tests {
         assert_eq!(CharType::from('\n'), CharType::Newline);
         assert_eq!(CharType::from('\r'), CharType::Newline);
         assert_eq!(CharType::from('汉'), CharType::Other);
-        assert_eq!(CharType::from('é'), CharType::Other);
+        // European letters
+        assert_eq!(CharType::from('é'), CharType::Word);
+        assert_eq!(CharType::from('ä'), CharType::Word);
+        assert_eq!(CharType::from('ö'), CharType::Word);
+        assert_eq!(CharType::from('ü'), CharType::Word);
+        //Cyrillic letters
+        assert_eq!(CharType::from('д'), CharType::Word);
     }
 
     #[test]
@@ -158,6 +187,8 @@ mod tests {
             hello[()]
             test_connector ____
             Rope
+            rök
+            grande île
             "#
         });
 
@@ -179,6 +210,8 @@ mod tests {
             (3, 14, Some(" ")),
             (3, 16, Some("____")),
             (4, 0, Some("Rope")),
+            (5, 0, Some("rök")),
+            (6, 8, Some("île")),
         ];
 
         for (line, column, expected) in tests {
