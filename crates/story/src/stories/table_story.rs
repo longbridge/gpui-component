@@ -902,6 +902,9 @@ impl TableStory {
                 println!("Move col index: {} -> {}", origin_idx, target_idx);
             }
             TableEvent::RightClickedRow(ix) => println!("Right clicked row: {:?}", ix),
+            TableEvent::RightClickedCell(row_ix, col_ix) => {
+                println!("Right clicked cell: row={}, col={}", row_ix, col_ix)
+            }
         }
     }
 
