@@ -5,12 +5,28 @@ description: High-performance data table with virtual scrolling, sorting, filter
 
 # Table
 
-A comprehensive data table component designed for handling large datasets with high performance. Features virtual scrolling, column configuration, sorting, filtering, row selection, and custom cell rendering. Perfect for displaying tabular data with thousands of rows while maintaining smooth performance.
+A comprehensive data table component designed for handling large datasets with high performance. Features virtual scrolling, column configuration, sorting, filtering, row/column/cell selection, and custom cell rendering. Perfect for displaying tabular data with thousands of rows while maintaining smooth performance.
+
+## Key Features
+
+- **Multiple Selection Modes**: Row, column, and individual cell selection
+- **Virtual Scrolling**: Handle thousands of rows with smooth performance
+- **Column Management**: Resizable, movable, and fixed columns
+- **Sorting**: Built-in column sorting support
+- **Keyboard Navigation**: Full keyboard support for all selection modes
+- **Custom Cell Rendering**: Render any content in table cells
+- **Context Menus**: Right-click support for rows and cells
+- **Infinite Loading**: Load more data as user scrolls
+- **Events**: Comprehensive event system for user interactions
 
 ## Import
 
 ```rust
-use gpui_component::table::{Table, TableState, TableDelegate, Column, ColumnSort, ColumnFixed, TableEvent};
+use gpui_component::table::{
+    Table, TableState, TableDelegate,
+    Column, ColumnSort, ColumnFixed,
+    TableEvent
+};
 ```
 
 ## Usage
@@ -279,6 +295,36 @@ impl TableDelegate for MyTableDelegate {
 }
 ```
 
+### Selection Modes
+
+The table supports three distinct selection modes:
+
+```rust
+// Row selection mode (default)
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
+        .row_selectable(true)  // Enable row selection
+        .col_selectable(false)
+        .cell_selectable(false)
+});
+
+// Column selection mode
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
+        .row_selectable(false)
+        .col_selectable(true)  // Enable column selection
+        .cell_selectable(false)
+});
+
+// Cell selection mode
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
+        .row_selectable(true)   // Keep row selection for row selector column
+        .col_selectable(false)
+        .cell_selectable(true)  // Enable cell selection
+});
+```
+
 ### Column Resizing and Moving
 
 Enable dynamic column management:
@@ -436,9 +482,192 @@ impl UserTableDelegate {
 }
 ```
 
-## Keyboard shortcuts
+### Cell Selection
+
+Enable individual cell selection for more granular control:
+
+```rust
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
+        .cell_selectable(true)  // Enable cell selection
+        .row_selectable(true)   // Also allow row selection
+});
+
+// Listen for cell events
+cx.subscribe_in(&state, window, |view, table, event, _, cx| {
+    match event {
+        TableEvent::SelectCell(row_ix, col_ix) => {
+            println!("Selected cell: ({}, {})", row_ix, col_ix);
+        }
+        TableEvent::DoubleClickedCell(row_ix, col_ix) => {
+            // Open editor or detail view
+            open_cell_editor(row_ix, col_ix);
+        }
+        TableEvent::RightClickedCell(row_ix, col_ix) => {
+            // Show cell-specific context menu
+            show_cell_context_menu(row_ix, col_ix);
+        }
+        _ => {}
+    }
+}).detach();
+```
+
+#### Cell Selection Features
+
+When cell selection is enabled:
+
+- **Click to select**: Click on any cell to select it
+- **Row selector column**: A dedicated column appears on the left for selecting entire rows
+- **Keyboard navigation**: Arrow keys navigate between cells (not rows/columns)
+- **Double-click support**: Trigger actions like editing by double-clicking cells
+- **Right-click support**: Show context menus specific to cell content
+- **Visual feedback**: Selected cells show highlight with border
+
+#### Programmatic Cell Selection
+
+```rust
+// Get the currently selected cell
+if let Some((row_ix, col_ix)) = state.read(cx).selected_cell() {
+    println!("Current cell: ({}, {})", row_ix, col_ix);
+}
+
+// Select a specific cell programmatically
+state.update(cx, |state, cx| {
+    state.set_selected_cell(5, 3, cx);  // Select row 5, column 3
+});
+
+// Clear all selections
+state.update(cx, |state, cx| {
+    state.clear_selection(cx);
+});
+```
+
+#### Non-selectable Columns
+
+Prevent specific columns from being selected (useful for action columns):
+
+```rust
+Column::new("actions", "Actions")
+    .width(100.)
+    .selectable(false)  // This column's cells cannot be selected
+    .resizable(false)
+```
+
+#### Cell Selection with Custom Rendering
+
+```rust
+impl TableDelegate for MyTableDelegate {
+    fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, cx: &mut Context<TableState<Self>>) -> impl IntoElement {
+        let row = &self.data[row_ix];
+        let col = &self.columns[col_ix];
+
+        // Render different content based on whether cell is selected
+        let is_selected = cx.entity().read(cx).selected_cell() == Some((row_ix, col_ix));
+
+        match col.key.as_ref() {
+            "editable_field" => {
+                if is_selected {
+                    // Show input when selected
+                    Input::new(format!("cell-{}-{}", row_ix, col_ix))
+                        .value(row.field_value.clone())
+                        .into_any_element()
+                } else {
+                    // Show plain text when not selected
+                    div().child(row.field_value.clone()).into_any_element()
+                }
+            }
+            _ => div().child(row.get_value(col.key.as_ref())).into_any_element()
+        }
+    }
+}
+```
+
+## Keyboard Shortcuts
+
+### Row Selection Mode (default)
 
 - `↑/↓` - Navigate rows
 - `←/→` - Navigate columns
-- `Enter/Space` - Select row/column
+- `Home` - Jump to first row/column
+- `End` - Jump to last row/column
+- `PageUp/PageDown` - Navigate by page
 - `Escape` - Clear selection
+
+### Cell Selection Mode
+
+- `↑/↓` - Navigate up/down within current column
+- `←/→` - Navigate left/right within current row
+- `Tab` - Move to next cell (right, then next row)
+- `Shift+Tab` - Move to previous cell
+- `Home` - Jump to first cell in current row
+- `End` - Jump to last cell in current row
+- `PageUp/PageDown` - Navigate by page within current column
+- `Escape` - Clear selection
+
+## API Reference
+
+### Core Types
+
+- [Table] - The table component
+- [TableState] - Table state management
+- [TableDelegate] - Trait for implementing table data source
+- [Column] - Column configuration
+- [TableEvent] - Table events (selection, clicks, etc.)
+
+### Column Types
+
+- [ColumnSort] - Column sort direction enum
+- [ColumnFixed] - Column fixed position enum
+
+### Methods
+
+#### TableState
+
+- `new(delegate, window, cx)` - Create a new table state
+- `cell_selectable(bool)` - Enable/disable cell selection
+- `row_selectable(bool)` - Enable/disable row selection
+- `col_selectable(bool)` - Enable/disable column selection
+- `selected_cell()` - Get currently selected cell
+- `set_selected_cell(row_ix, col_ix, cx)` - Select a specific cell
+- `selected_row()` - Get currently selected row
+- `selected_col()` - Get currently selected column
+- `clear_selection(cx)` - Clear all selections
+- `scroll_to_row(row_ix, cx)` - Scroll to specific row
+- `scroll_to_col(col_ix, cx)` - Scroll to specific column
+
+#### Column
+
+- `new(key, name)` - Create a new column
+- `width(pixels)` - Set column width
+- `sortable()` - Make column sortable
+- `ascending()` - Set default sort to ascending
+- `descending()` - Set default sort to descending
+- `text_right()` - Right-align column text
+- `text_center()` - Center-align column text
+- `fixed(ColumnFixed)` - Pin column to left
+- `resizable(bool)` - Enable/disable column resizing
+- `movable(bool)` - Enable/disable column moving
+- `selectable(bool)` - Enable/disable column/cell selection
+- `paddings(edges)` - Set custom padding
+- `min_width(pixels)` - Set minimum width
+- `max_width(pixels)` - Set maximum width
+
+### Events
+
+- `SelectRow(usize)` - Row selected
+- `DoubleClickedRow(usize)` - Row double-clicked
+- `SelectColumn(usize)` - Column selected
+- `SelectCell(usize, usize)` - Cell selected (row_ix, col_ix)
+- `DoubleClickedCell(usize, usize)` - Cell double-clicked (row_ix, col_ix)
+- `RightClickedCell(usize, usize)` - Cell right-clicked (row_ix, col_ix)
+- `RightClickedRow(Option<usize>)` - Row right-clicked
+- `ColumnWidthsChanged(Vec<Pixels>)` - Column widths changed
+- `MoveColumn(usize, usize)` - Column moved (from_ix, to_ix)
+
+[Table]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.Table.html
+[TableState]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.TableState.html
+[TableDelegate]: https://docs.rs/gpui-component/latest/gpui_component/table/trait.TableDelegate.html
+[Column]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.Column.html
+[TableEvent]: https://docs.rs/gpui-component/latest/gpui_component/table/enum.TableEvent.html
+[ColumnSort]: https://docs.rs/gpui-component/latest/gpui_component/table/enum.ColumnSort.html
+[ColumnFixed]: https://docs.rs/gpui-component/latest/gpui_component/table/enum.ColumnFixed.html

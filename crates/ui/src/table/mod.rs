@@ -57,7 +57,42 @@ impl Default for TableOptions {
     }
 }
 
-/// A table element.
+/// A table element with support for row, column, and cell selection.
+///
+/// # Features
+///
+/// - **Multiple Selection Modes**: Support for row, column, and cell selection
+/// - **Cell Selection**: Click to select individual cells, with keyboard navigation
+/// - **Virtual Scrolling**: Efficient rendering of large datasets
+/// - **Resizable Columns**: Drag column borders to resize
+/// - **Movable Columns**: Drag column headers to reorder
+/// - **Fixed Columns**: Pin columns to the left side
+/// - **Sortable Columns**: Click column headers to sort
+/// - **Context Menus**: Right-click support for rows and cells
+///
+/// # Cell Selection Mode
+///
+/// When cell selection is enabled via [`TableState::cell_selectable()`]:
+/// - Click on cells to select them
+/// - A row selector column appears on the left for selecting entire rows
+/// - Keyboard navigation (arrow keys, Tab, Home, End, PageUp, PageDown) works at cell level
+/// - Right-click and double-click events are supported
+///
+/// See [`TableState`] for more details on cell selection.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let table_state = cx.new(|cx| {
+///     TableState::new(delegate, cx)
+///         .cell_selectable(true)
+///         .row_selectable(true)
+/// });
+///
+/// Table::new(&table_state)
+///     .stripe(true)
+///     .bordered(true)
+/// ```
 #[derive(IntoElement)]
 pub struct Table<D: TableDelegate> {
     state: Entity<TableState<D>>,
