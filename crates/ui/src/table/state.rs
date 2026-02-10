@@ -298,7 +298,8 @@ where
         self.selected_cell = Some((row_ix, col_ix));
 
         // Scroll to the cell
-        self.vertical_scroll_handle.scroll_to_item(row_ix, ScrollStrategy::Center);
+        self.vertical_scroll_handle
+            .scroll_to_item(row_ix, ScrollStrategy::Center);
         self.scroll_to_col(col_ix, cx);
 
         cx.emit(TableEvent::SelectCell(row_ix, col_ix));
@@ -435,6 +436,7 @@ where
             return;
         }
 
+        cx.stop_propagation();
         self.set_selected_cell(row_ix, col_ix, cx);
     }
 
@@ -1030,6 +1032,32 @@ where
             .into_any_element()
     }
 
+    /// Render the row selector cell (when cell_selectable is enabled)
+    fn render_row_selector_cell(
+        &self,
+        row_ix: usize,
+        is_head: bool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        div()
+            .id(("row-selector", row_ix))
+            .w_3()
+            .h_full()
+            .border_r_1()
+            .border_color(cx.theme().table_row_border)
+            .flex_shrink_0()
+            .table_cell_size(self.options.size)
+            .when(!is_head, |this| {
+                this.when(self.row_selectable, |this| {
+                    this.on_click(cx.listener(move |table, _, _window, cx| {
+                        cx.stop_propagation();
+                        table.set_selected_row(row_ix, cx);
+                    }))
+                })
+            })
+    }
+
     fn render_sort_icon(
         &self,
         col_ix: usize,
@@ -1173,6 +1201,9 @@ where
             .border_color(cx.theme().border)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&style)
+            .when(self.cell_selectable, |this| {
+                this.child(self.render_row_selector_cell(0, true, window, cx))
+            })
             .when(left_columns_count > 0, |this| {
                 let view = view.clone();
                 // Render left fixed columns
@@ -1273,6 +1304,9 @@ where
                         this.bg(cx.theme().table_hover)
                     }
                 })
+                .when(self.cell_selectable, |this| {
+                    this.child(self.render_row_selector_cell(row_ix, false, window, cx))
+                })
                 .when(left_columns_count > 0, |this| {
                     // Left fixed columns
                     this.child(
@@ -1297,11 +1331,9 @@ where
                                                 self.render_cell(Some(row_ix), col_ix, window, cx)
                                                     .id(("table-cell", cell_id))
                                                     .relative()
-                                                    .child(
-                                                        self.measure_render_td(
-                                                            row_ix, col_ix, window, cx,
-                                                        ),
-                                                    )
+                                                    .child(self.measure_render_td(
+                                                        row_ix, col_ix, window, cx,
+                                                    ))
                                                     .when(is_cell_selected, |this| {
                                                         this.child(
                                                             div()
@@ -1317,7 +1349,6 @@ where
                                                     .when(self.cell_selectable, |this| {
                                                         this.on_click(cx.listener(
                                                             move |table, _, window, cx| {
-                                                                cx.stop_propagation();
                                                                 table.on_cell_click(
                                                                     row_ix, col_ix, window, cx,
                                                                 );
@@ -1375,22 +1406,24 @@ where
                                                 == Some((row_ix, col_ix))
                                                 && table.selection_state == SelectionState::Cell;
 
-                                            // Create unique cell id: row_ix * 1000000 + col_ix
-                                            // This assumes we won't have more than 1,000,000 columns
-                                            let cell_id = row_ix * 1_000_000 + col_ix;
-
                                             let el = table
                                                 .render_col_wrap(Some(row_ix), col_ix, window, cx)
                                                 .child(
                                                     table
-                                                        .render_cell(Some(row_ix), col_ix, window, cx)
-                                                        .id(("table-cell", cell_id))
-                                                        .relative()
-                                                        .child(
-                                                            table.measure_render_td(
-                                                                row_ix, col_ix, window, cx,
-                                                            ),
+                                                        .render_cell(
+                                                            Some(row_ix),
+                                                            col_ix,
+                                                            window,
+                                                            cx,
                                                         )
+                                                        .id(format!(
+                                                            "table-cell-{}:{}",
+                                                            row_ix, col_ix
+                                                        ))
+                                                        .relative()
+                                                        .child(table.measure_render_td(
+                                                            row_ix, col_ix, window, cx,
+                                                        ))
                                                         .when(is_cell_selected, |this| {
                                                             this.child(
                                                                 div()
@@ -1485,6 +1518,16 @@ where
                 .border_b_1()
                 .border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .when(self.cell_selectable, |this| {
+                    // Render empty row selector cell for fake rows
+                    this.child(
+                        div()
+                            .w(px(40.))
+                            .h_full()
+                            .flex_shrink_0()
+                            .table_cell_size(self.options.size),
+                    )
+                })
                 .children((0..columns_count).map(|col_ix| {
                     h_flex()
                         .left(horizontal_scroll_handle.offset().x)
