@@ -54,13 +54,19 @@ pub enum TableEvent {
     DoubleClickedRow(usize),
     /// Selected column.
     SelectColumn(usize),
-    /// Selected cell.
+    /// A cell has been selected (clicked or navigated to via keyboard).
     ///
+    /// Emitted when a cell is selected in cell selection mode.
     /// The first `usize` is the row index, and the second `usize` is the column index.
+    ///
+    /// This event is also emitted when navigating between cells using keyboard shortcuts.
     SelectCell(usize, usize),
-    /// Double click on the cell.
+    /// A cell has been double-clicked.
     ///
+    /// Emitted when a cell is double-clicked in cell selection mode.
     /// The first `usize` is the row index, and the second `usize` is the column index.
+    ///
+    /// Use this event to trigger actions like opening a detail view or editing the cell content.
     DoubleClickedCell(usize, usize),
     /// The column widths have changed.
     ///
@@ -71,11 +77,18 @@ pub enum TableEvent {
     /// The first `usize` is the original index of the column,
     /// and the second `usize` is the new index of the column.
     MoveColumn(usize, usize),
-    /// The row has been right clicked.
-    RightClickedRow(Option<usize>),
-    /// The cell has been right clicked.
+    /// A row has been right-clicked.
     ///
+    /// Contains the row index, or `None` if right-clicked on an empty area.
+    /// Use this event to show context menus for rows.
+    RightClickedRow(Option<usize>),
+    /// A cell has been right-clicked.
+    ///
+    /// Emitted when a cell is right-clicked in cell selection mode.
     /// The first `usize` is the row index, and the second `usize` is the column index.
+    ///
+    /// Use this event to show context menus specific to the cell content.
+    /// The right-clicked cell is highlighted with a subtle border until another cell is clicked.
     RightClickedCell(usize, usize),
 }
 
@@ -101,6 +114,54 @@ impl TableVisibleRange {
 }
 
 /// The state for [`Table`].
+///
+/// # Selection Modes
+///
+/// The table supports three selection modes:
+/// - **Row Selection**: Select entire rows (default mode)
+/// - **Column Selection**: Select entire columns
+/// - **Cell Selection**: Select individual cells
+///
+/// ## Cell Selection
+///
+/// When `cell_selectable` is enabled, users can:
+/// - Click on cells to select them
+/// - Right-click on cells to mark them for context menus
+/// - Double-click on cells to trigger actions
+/// - Navigate between cells using keyboard (arrow keys, Home, End, PageUp, PageDown, Tab)
+///
+/// When in cell selection mode, a row selector column appears on the left side,
+/// allowing users to select entire rows by clicking on it.
+///
+/// # Events
+///
+/// The table emits the following events related to cell selection:
+/// - [`TableEvent::SelectCell`]: Emitted when a cell is selected
+/// - [`TableEvent::DoubleClickedCell`]: Emitted when a cell is double-clicked
+/// - [`TableEvent::RightClickedCell`]: Emitted when a cell is right-clicked
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let table_state = cx.new(|cx| {
+///     TableState::new(delegate, cx)
+///         .cell_selectable(true)
+///         .row_selectable(true)
+/// });
+///
+/// // Subscribe to cell events
+/// cx.subscribe(&table_state, |this, table, event, cx| {
+///     match event {
+///         TableEvent::SelectCell(row_ix, col_ix) => {
+///             println!("Selected cell: ({}, {})", row_ix, col_ix);
+///         }
+///         TableEvent::DoubleClickedCell(row_ix, col_ix) => {
+///             println!("Double-clicked cell: ({}, {})", row_ix, col_ix);
+///         }
+///         _ => {}
+///     }
+/// });
+/// ```
 pub struct TableState<D: TableDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
@@ -120,7 +181,13 @@ pub struct TableState<D: TableDelegate> {
     pub col_selectable: bool,
     /// Whether the table can select row.
     pub row_selectable: bool,
-    /// Whether the table can select cell.
+    /// Whether the table can select cell, default is true.
+    ///
+    /// When enabled:
+    /// - Users can click on individual cells to select them
+    /// - A row selector column appears on the left for selecting entire rows
+    /// - Keyboard navigation works at the cell level (arrow keys move between cells)
+    /// - Right-click and double-click events are supported for cells
     pub cell_selectable: bool,
     /// Whether the table can sort.
     pub sortable: bool,
@@ -236,7 +303,23 @@ where
         self
     }
 
-    /// Set to enable/disable cell selectable, default true
+    /// Set to enable/disable cell selection, default is true.
+    ///
+    /// When enabled:
+    /// - Individual cells become selectable by clicking
+    /// - A row selector column appears on the left side
+    /// - Keyboard navigation operates at the cell level
+    /// - Cell-specific events (SelectCell, DoubleClickedCell, RightClickedCell) are emitted
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let table_state = cx.new(|cx| {
+    ///     TableState::new(delegate, cx)
+    ///         .cell_selectable(true)  // Enable cell selection
+    ///         .row_selectable(true)   // Also allow row selection via row selector
+    /// });
+    /// ```
     pub fn cell_selectable(mut self, cell_selectable: bool) -> Self {
         self.cell_selectable = cell_selectable;
         self
@@ -315,12 +398,36 @@ where
         cx.notify();
     }
 
-    /// Returns the selected cell as (row_ix, col_ix).
+    /// Returns the selected cell as `(row_ix, col_ix)`.
+    ///
+    /// Returns `None` if no cell is currently selected or if the table is in row/column selection mode.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// if let Some((row_ix, col_ix)) = table_state.read(cx).selected_cell() {
+    ///     println!("Selected cell: ({}, {})", row_ix, col_ix);
+    /// }
+    /// ```
     pub fn selected_cell(&self) -> Option<(usize, usize)> {
         self.selected_cell
     }
 
     /// Sets the selected cell to the given row and column indices.
+    ///
+    /// This method:
+    /// - Switches the table to cell selection mode
+    /// - Scrolls to make the cell visible (centered vertically)
+    /// - Emits a [`TableEvent::SelectCell`] event
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Select the cell at row 5, column 3
+    /// table_state.update(cx, |state, cx| {
+    ///     state.set_selected_cell(5, 3, cx);
+    /// });
+    /// ```
     pub fn set_selected_cell(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
         self.selection_mode = SelectionMode::Cell;
         self.selected_cell = Some((row_ix, col_ix));

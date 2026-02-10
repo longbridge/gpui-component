@@ -34,7 +34,15 @@ pub struct Column {
     pub resizable: bool,
     /// Whether the column is movable.
     pub movable: bool,
-    /// Whether the column is selectable, if true this column's cells can be selected in column selection mode.
+    /// Whether the column is selectable.
+    ///
+    /// When `true`:
+    /// - In column selection mode: The entire column can be selected
+    /// - In cell selection mode: Individual cells in this column can be selected
+    ///
+    /// When `false`:
+    /// - The column and its cells cannot be selected
+    /// - Useful for action columns (e.g., buttons, checkboxes) that shouldn't participate in selection
     pub selectable: bool,
     /// The minimum width of the column.
     pub min_width: Pixels,
@@ -156,6 +164,21 @@ impl Column {
     }
 
     /// Set whether the column is selectable, default is true.
+    ///
+    /// When `false`, this column and its cells will not participate in selection:
+    /// - In column selection mode: The column header cannot be clicked to select
+    /// - In cell selection mode: Cells in this column cannot be selected
+    ///
+    /// This is useful for action columns (e.g., with buttons or checkboxes) that
+    /// should not be part of the selection system.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// Column::new("actions", "Actions")
+    ///     .width(px(100.))
+    ///     .selectable(false)  // Prevent selection of action buttons
+    /// ```
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
         self
