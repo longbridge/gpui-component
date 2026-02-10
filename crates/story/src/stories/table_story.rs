@@ -1183,15 +1183,7 @@ impl Render for TableStory {
                                 .child(format!("Visible Rows: {:?}", delegate.visible_rows))
                                 .child(format!("Visible Cols: {:?}", delegate.visible_cols))
                                 .when_some(table.selected_cell(), |this, (row, col)| {
-                                    this.child(
-                                        div()
-                                            .px_2()
-                                            .py_1()
-                                            .rounded(cx.theme().radius)
-                                            .bg(cx.theme().accent)
-                                            .text_color(cx.theme().accent_foreground)
-                                            .child(format!("Selected Cell: ({}, {})", row, col)),
-                                    )
+                                    this.child(format!("Selected Cell: ({}, {})", row, col))
                                 })
                                 .when(delegate.eof, |this| this.child("All data loaded.")),
                         ),
