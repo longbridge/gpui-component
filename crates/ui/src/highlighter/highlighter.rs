@@ -43,7 +43,9 @@ pub struct SyntaxHighlighter {
 struct TextProvider<'a>(&'a Rope);
 struct ByteChunks<'a> {
     cursor: ChunkCursor<'a>,
-    end: usize,
+    node_start: usize,
+    node_end: usize,
+    at_first: bool,
 }
 impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
     type I = ByteChunks<'a>;
@@ -54,7 +56,9 @@ impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
 
         ByteChunks {
             cursor,
-            end: range.end,
+            node_start: range.start,
+            node_end: range.end,
+            at_first: true,
         }
     }
 }
@@ -63,14 +67,29 @@ impl<'a> Iterator for ByteChunks<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cursor = &mut self.cursor;
-        let end = self.end;
-
-        if cursor.next() && cursor.byte_offset() < end {
-            Some(cursor.chunk().as_bytes())
-        } else {
-            None
+        if !self.at_first {
+            if !self.cursor.next() {
+                return None;
+            }
         }
+        self.at_first = false;
+
+        let chunk_byte_start = self.cursor.byte_offset();
+        if chunk_byte_start >= self.node_end {
+            return None;
+        }
+
+        let chunk = self.cursor.chunk().as_bytes();
+
+        // Slice the chunk to only include bytes within the node's range.
+        let start_in_chunk = self.node_start.saturating_sub(chunk_byte_start);
+        let end_in_chunk = (self.node_end - chunk_byte_start).min(chunk.len());
+
+        if start_in_chunk >= end_in_chunk {
+            return None;
+        }
+
+        Some(&chunk[start_in_chunk..end_in_chunk])
     }
 }
 
@@ -452,14 +471,7 @@ impl SyntaxHighlighter {
                 let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
                 let last_highlight_name = last_item.map(|item| item.name.clone());
 
-                if last_range.end <= node_range.start
-                    && last_highlight_name.as_ref() == Some(&highlight_name)
-                {
-                    highlights.push(HighlightItem::new(
-                        last_range.start..node_range.end,
-                        highlight_name.clone(),
-                    ));
-                } else if last_range == &node_range {
+                if last_range == &node_range {
                     // case:
                     // last_range: 213..220, last_highlight_name: Some("property")
                     // last_range: 213..220, last_highlight_name: Some("string")
