@@ -896,6 +896,9 @@ impl TableStory {
             TableEvent::SelectCell(row_ix, col_ix) => {
                 println!("Select cell: row={}, col={}", row_ix, col_ix)
             }
+            TableEvent::DoubleClickedCell(row_ix, col_ix) => {
+                println!("Double clicked cell: row={}, col={}", row_ix, col_ix)
+            }
             TableEvent::DoubleClickedRow(ix) => println!("Double clicked row: {}", ix),
             TableEvent::SelectRow(ix) => println!("Select row: {}", ix),
             TableEvent::MoveColumn(origin_idx, target_idx) => {

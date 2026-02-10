@@ -58,6 +58,10 @@ pub enum TableEvent {
     ///
     /// The first `usize` is the row index, and the second `usize` is the column index.
     SelectCell(usize, usize),
+    /// Double click on the cell.
+    ///
+    /// The first `usize` is the row index, and the second `usize` is the column index.
+    DoubleClickedCell(usize, usize),
     /// The column widths have changed.
     ///
     /// The `Vec<Pixels>` contains the new widths of all columns.
@@ -470,6 +474,7 @@ where
 
     fn on_cell_click(
         &mut self,
+        e: &ClickEvent,
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
@@ -481,6 +486,10 @@ where
 
         cx.stop_propagation();
         self.set_selected_cell(row_ix, col_ix, cx);
+
+        if e.click_count() == 2 {
+            cx.emit(TableEvent::DoubleClickedCell(row_ix, col_ix));
+        }
     }
 
     fn has_selection(&self) -> bool {
@@ -1401,9 +1410,9 @@ where
                                                     )
                                                     .when(self.cell_selectable, |this| {
                                                         this.on_click(cx.listener(
-                                                            move |table, _, window, cx| {
+                                                            move |table, e, window, cx| {
                                                                 table.on_cell_click(
-                                                                    row_ix, col_ix, window, cx,
+                                                                    e, row_ix, col_ix, window, cx,
                                                                 );
                                                             },
                                                         ))
@@ -1522,10 +1531,10 @@ where
                                                         )
                                                         .when(table.cell_selectable, |this| {
                                                             this.on_click(cx.listener(
-                                                                move |table, _, window, cx| {
+                                                                move |table, e, window, cx| {
                                                                     cx.stop_propagation();
                                                                     table.on_cell_click(
-                                                                        row_ix, col_ix, window, cx,
+                                                                        e, row_ix, col_ix, window, cx,
                                                                     );
                                                                 },
                                                             ))
