@@ -341,6 +341,10 @@ impl Render for MenuStory {
                                     .max_h(px(300.))
                                     .label(format!("Total {} items", 100));
                                 for i in 0..100 {
+                                    if i % 5 == 0 {
+                                        this = this.separator();
+                                    }
+
                                     this = this.menu(
                                         SharedString::from(format!("Item {}", i)),
                                         Box::new(Info(i)),
