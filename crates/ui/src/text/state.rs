@@ -204,26 +204,17 @@ impl TextViewState {
     }
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>, scroll_offset: Point<Pixels>) {
-        // Store content coordinates (relative to entire content, not affected by scrolling)
-        // viewport_coord = window_coord - bounds.origin
-        // content_coord = viewport_coord - scroll_offset (scroll_offset sign is inverted)
-        let viewport_coord = pos - self.bounds.origin;
-        let content_coord = Point::new(
-            viewport_coord.x - scroll_offset.x,
-            viewport_coord.y - scroll_offset.y,
-        );
-        self.selection_positions = (Some(content_coord), Some(content_coord));
+        // Store content coordinates (not affected by scrolling)
+        // content_coord = (window_coord - bounds.origin) - scroll_offset
+        let pos = pos - self.bounds.origin - scroll_offset;
+        self.selection_positions = (Some(pos), Some(pos));
         self.is_selecting = true;
     }
 
     pub(super) fn update_selection(&mut self, pos: Point<Pixels>, scroll_offset: Point<Pixels>) {
-        let viewport_coord = pos - self.bounds.origin;
-        let content_coord = Point::new(
-            viewport_coord.x - scroll_offset.x,
-            viewport_coord.y - scroll_offset.y,
-        );
+        let pos = pos - self.bounds.origin - scroll_offset;
         if let (Some(start), Some(_)) = self.selection_positions {
-            self.selection_positions = (Some(start), Some(content_coord))
+            self.selection_positions = (Some(start), Some(pos))
         }
     }
 
@@ -441,24 +432,17 @@ fn selection_bounds(
     scroll_offset: Point<Pixels>,
 ) -> Bounds<Pixels> {
     if let (Some(start), Some(end)) = (start, end) {
-        // start and end are in content coordinates
-        // Convert to window coordinates: content_coord + scroll_offset + bounds.origin
-        let start_window = Point::new(
-            start.x + scroll_offset.x + bounds.origin.x,
-            start.y + scroll_offset.y + bounds.origin.y,
-        );
-        let end_window = Point::new(
-            end.x + scroll_offset.x + bounds.origin.x,
-            end.y + scroll_offset.y + bounds.origin.y,
-        );
+        // Convert content coordinates to window coordinates
+        let start = start + scroll_offset + bounds.origin;
+        let end = end + scroll_offset + bounds.origin;
 
         let origin = Point {
-            x: start_window.x.min(end_window.x),
-            y: start_window.y.min(end_window.y),
+            x: start.x.min(end.x),
+            y: start.y.min(end.y),
         };
         let size = Size {
-            width: (start_window.x - end_window.x).abs(),
-            height: (start_window.y - end_window.y).abs(),
+            width: (start.x - end.x).abs(),
+            height: (start.y - end.y).abs(),
         };
 
         return Bounds { origin, size };
