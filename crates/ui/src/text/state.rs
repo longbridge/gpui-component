@@ -204,13 +204,24 @@ impl TextViewState {
     }
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
-        let pos = pos - self.bounds.origin;
+        // Store content coordinates (not affected by scrolling)
+        let scroll_offset = if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        };
+        let pos = pos - self.bounds.origin - scroll_offset;
         self.selection_positions = (Some(pos), Some(pos));
         self.is_selecting = true;
     }
 
     pub(super) fn update_selection(&mut self, pos: Point<Pixels>) {
-        let pos = pos - self.bounds.origin;
+        let scroll_offset = if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        };
+        let pos = pos - self.bounds.origin - scroll_offset;
         if let (Some(start), Some(_)) = self.selection_positions {
             self.selection_positions = (Some(start), Some(pos))
         }
@@ -230,10 +241,17 @@ impl TextViewState {
 
     /// Return the bounds of the selection in window coordinates.
     pub(crate) fn selection_bounds(&self) -> Bounds<Pixels> {
+        let scroll_offset = if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        };
+
         selection_bounds(
             self.selection_positions.0,
             self.selection_positions.1,
             self.bounds,
+            scroll_offset,
         )
     }
 
@@ -420,10 +438,12 @@ fn selection_bounds(
     start: Option<Point<Pixels>>,
     end: Option<Point<Pixels>>,
     bounds: Bounds<Pixels>,
+    scroll_offset: Point<Pixels>,
 ) -> Bounds<Pixels> {
     if let (Some(start), Some(end)) = (start, end) {
-        let start = start + bounds.origin;
-        let end = end + bounds.origin;
+        // Convert content coordinates to window coordinates
+        let start = start + scroll_offset + bounds.origin;
+        let end = end + scroll_offset + bounds.origin;
 
         let origin = Point {
             x: start.x.min(end.x),
@@ -448,15 +468,25 @@ mod tests {
     #[test]
     fn test_text_view_state_selection_bounds() {
         assert_eq!(
-            selection_bounds(None, None, Default::default()),
+            selection_bounds(None, None, Default::default(), Point::default()),
             Bounds::default()
         );
         assert_eq!(
-            selection_bounds(None, Some(point(px(10.), px(20.))), Default::default()),
+            selection_bounds(
+                None,
+                Some(point(px(10.), px(20.))),
+                Default::default(),
+                Point::default()
+            ),
             Bounds::default()
         );
         assert_eq!(
-            selection_bounds(Some(point(px(10.), px(20.))), None, Default::default()),
+            selection_bounds(
+                Some(point(px(10.), px(20.))),
+                None,
+                Default::default(),
+                Point::default()
+            ),
             Bounds::default()
         );
 
@@ -469,7 +499,8 @@ mod tests {
             selection_bounds(
                 Some(point(px(10.), px(10.))),
                 Some(point(px(50.), px(50.))),
-                Default::default()
+                Default::default(),
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -485,7 +516,8 @@ mod tests {
             selection_bounds(
                 Some(point(px(50.), px(50.))),
                 Some(point(px(10.), px(10.))),
-                Default::default()
+                Default::default(),
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -501,7 +533,8 @@ mod tests {
             selection_bounds(
                 Some(point(px(50.), px(10.))),
                 Some(point(px(10.), px(50.))),
-                Default::default()
+                Default::default(),
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -517,7 +550,8 @@ mod tests {
             selection_bounds(
                 Some(point(px(10.), px(50.))),
                 Some(point(px(50.), px(10.))),
-                Default::default()
+                Default::default(),
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
