@@ -203,15 +203,24 @@ impl TextViewState {
         self.is_selecting = false;
     }
 
-    pub(super) fn start_selection(&mut self, pos: Point<Pixels>, scroll_offset: Point<Pixels>) {
+    pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
         // Store content coordinates (not affected by scrolling)
-        // content_coord = (window_coord - bounds.origin) - scroll_offset
+        let scroll_offset = if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        };
         let pos = pos - self.bounds.origin - scroll_offset;
         self.selection_positions = (Some(pos), Some(pos));
         self.is_selecting = true;
     }
 
-    pub(super) fn update_selection(&mut self, pos: Point<Pixels>, scroll_offset: Point<Pixels>) {
+    pub(super) fn update_selection(&mut self, pos: Point<Pixels>) {
+        let scroll_offset = if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        };
         let pos = pos - self.bounds.origin - scroll_offset;
         if let (Some(start), Some(_)) = self.selection_positions {
             self.selection_positions = (Some(start), Some(pos))
