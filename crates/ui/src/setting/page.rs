@@ -1,11 +1,11 @@
 use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState, StyleRefinement,
     ParentElement as _, SharedString, Styled, Window, div, list, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme, IconName, Sizable,
+    ActiveTheme, IconName, Sizable, StyledExt,
     button::{Button, ButtonVariants},
     h_flex,
     label::Label,
@@ -22,6 +22,7 @@ pub struct SettingPage {
     pub(super) title: SharedString,
     pub(super) description: Option<SharedString>,
     pub(super) groups: Vec<SettingGroup>,
+    pub(super) header_style: StyleRefinement,
 }
 
 impl SettingPage {
@@ -32,6 +33,7 @@ impl SettingPage {
             title: title.into(),
             description: None,
             groups: Vec::new(),
+            header_style: StyleRefinement::default(),
         }
     }
 
@@ -70,6 +72,12 @@ impl SettingPage {
     /// Add multiple setting groups to the page.
     pub fn groups(mut self, groups: impl IntoIterator<Item = SettingGroup>) -> Self {
         self.groups.extend(groups);
+        self
+    }
+
+    /// Set the style refinement for the header of the setting page.
+    pub fn header_style(mut self, style: &StyleRefinement) -> Self {
+        self.header_style = style.clone();
         self
     }
 
@@ -131,6 +139,7 @@ impl SettingPage {
                     .gap_3()
                     .border_b_1()
                     .border_color(cx.theme().border)
+                    .refine_style(&self.header_style)
                     .child(h_flex().justify_between().child(self.title.clone()).when(
                         self.is_resettable(cx),
                         |this| {
