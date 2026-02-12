@@ -4,7 +4,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, InspectorElementId,
     InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    ParentElement, Pixels, Point, SharedString, StyleRefinement, Styled, Window, div,
 };
 
 use crate::StyledExt;
@@ -249,6 +249,7 @@ impl Element for TextView {
         cx: &mut App,
     ) {
         let state = &request_layout.state;
+
         GlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
@@ -259,17 +260,26 @@ impl Element for TextView {
             let is_selecting = state.read(cx).is_selecting;
             let has_selection = state.read(cx).has_selection();
             let parent_view_id = window.current_view();
+            let scrollable = self.scrollable;
+            let list_state = state.read(cx).list_state.clone();
 
             window.on_mouse_event({
                 let state = state.clone();
+                let list_state = list_state.clone();
 
                 move |event: &MouseDownEvent, phase, _, cx| {
                     if !bounds.contains(&event.position) || !phase.bubble() {
                         return;
                     }
 
+                    let scroll_offset = if scrollable {
+                        list_state.scroll_px_offset_for_scrollbar()
+                    } else {
+                        Point::default()
+                    };
+
                     state.update(cx, |state, _| {
-                        state.start_selection(event.position);
+                        state.start_selection(event.position, scroll_offset);
                     });
                     cx.notify(parent_view_id);
                 }
@@ -279,13 +289,20 @@ impl Element for TextView {
                 // move to update end position.
                 window.on_mouse_event({
                     let state = state.clone();
+                    let list_state = list_state.clone();
                     move |event: &MouseMoveEvent, phase, _, cx| {
                         if !phase.bubble() {
                             return;
                         }
 
+                        let scroll_offset = if scrollable {
+                            list_state.scroll_px_offset_for_scrollbar()
+                        } else {
+                            Point::default()
+                        };
+
                         state.update(cx, |state, _| {
-                            state.update_selection(event.position);
+                            state.update_selection(event.position, scroll_offset);
                         });
                         cx.notify(parent_view_id);
                     }
