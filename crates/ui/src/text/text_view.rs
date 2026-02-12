@@ -249,7 +249,6 @@ impl Element for TextView {
         cx: &mut App,
     ) {
         let state = &request_layout.state;
-
         GlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
