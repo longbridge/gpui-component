@@ -8,15 +8,15 @@
       "name": "Asciinema",
       "mode": "dark",
       "colors": {
-        "accent.background": "#1a1b1c",
+        "accent.background": "#262829",
         "accent.foreground": "#cccccc",
         "background": "#121314",
-        "border": "#2a2a2a",
+        "border": "#3a3a3a",
         "danger.background": "#dd3c69",
         "danger.active.background": "#dd3c69",
         "danger.hover.background": "#e94f7a",
         "foreground": "#cccccc",
-        "input.border": "#2a2a2a",
+        "input.border": "#3a3a3a",
         "link.active.foreground": "#26b0d7",
         "link.foreground": "#26b0d7",
         "link.hover.foreground": "#3cc0e7",
@@ -25,7 +25,7 @@
         "list.even.background": "#1a1b1c",
         "list.head.background": "#121314",
         "muted.background": "#1a1b1c",
-        "muted.foreground": "#4d4d4d",
+        "muted.foreground": "#6d6d6d",
         "panel.background": "#181919",
         "primary.active.background": "#26b0d799",
         "primary.background": "#26b0d7",
@@ -40,11 +40,11 @@
         "tab.active.background": "#121314",
         "tab.active.foreground": "#cccccc",
         "tab.background": "#12131400",
-        "tab.foreground": "#4d4d4d",
+        "tab.foreground": "#6d6d6d",
         "table.row.border": "#2a2a2a70",
         "title_bar.background": "#1a1b1c",
-        "title_bar.border": "#2a2a2a",
-        "ring": "#cccccc",
+        "title_bar.border": "#3a3a3a",
+        "ring": "#5d5d5d",
         "base.blue": "#26b0d7",
         "base.cyan": "#54e1b9",
         "base.green": "#4ebf22",
@@ -56,13 +56,13 @@
         "editor.foreground": "#cccccc",
         "editor.background": "#121314",
         "editor.active_line.background": "#1a1b1c",
-        "editor.line_number": "#4d4d4d",
+        "editor.line_number": "#6d6d6d",
         "editor.active_line_number": "#cccccc",
-        "editor.invisible": "#4d4d4d66",
+        "editor.invisible": "#6d6d6d66",
         "conflict": "#dd3c69",
         "created": "#4ebf22",
         "error": "#dd3c69",
-        "hidden": "#4d4d4d",
+        "hidden": "#6d6d6d",
         "hint": "#b954e1",
         "info": "#26b0d7",
         "modified": "#ddaf3c",
@@ -75,10 +75,10 @@
             "color": "#b954e1"
           },
           "comment": {
-            "color": "#4d4d4d"
+            "color": "#5d5d5d"
           },
           "comment.doc": {
-            "color": "#4d4d4d"
+            "color": "#5d5d5d"
           },
           "constant": {
             "color": "#b954e1"
@@ -90,7 +90,7 @@
             "color": "#cccccc"
           },
           "function": {
-            "color": "#26b0d7"
+            "color": "#54e1b9"
           },
           "keyword": {
             "color": "#dd3c69"
