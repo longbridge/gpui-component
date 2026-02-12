@@ -467,17 +467,26 @@ mod tests {
 
     #[test]
     fn test_text_view_state_selection_bounds() {
-        let no_scroll = Point::default();
         assert_eq!(
-            selection_bounds(None, None, Default::default(), no_scroll),
+            selection_bounds(None, None, Default::default(), Point::default()),
             Bounds::default()
         );
         assert_eq!(
-            selection_bounds(None, Some(point(px(10.), px(20.))), Default::default(), no_scroll),
+            selection_bounds(
+                None,
+                Some(point(px(10.), px(20.))),
+                Default::default(),
+                Point::default()
+            ),
             Bounds::default()
         );
         assert_eq!(
-            selection_bounds(Some(point(px(10.), px(20.))), None, Default::default(), no_scroll),
+            selection_bounds(
+                Some(point(px(10.), px(20.))),
+                None,
+                Default::default(),
+                Point::default()
+            ),
             Bounds::default()
         );
 
@@ -491,7 +500,7 @@ mod tests {
                 Some(point(px(10.), px(10.))),
                 Some(point(px(50.), px(50.))),
                 Default::default(),
-                no_scroll
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -508,7 +517,7 @@ mod tests {
                 Some(point(px(50.), px(50.))),
                 Some(point(px(10.), px(10.))),
                 Default::default(),
-                no_scroll
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -525,7 +534,7 @@ mod tests {
                 Some(point(px(50.), px(10.))),
                 Some(point(px(10.), px(50.))),
                 Default::default(),
-                no_scroll
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -542,7 +551,7 @@ mod tests {
                 Some(point(px(10.), px(50.))),
                 Some(point(px(50.), px(10.))),
                 Default::default(),
-                no_scroll
+                Point::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
