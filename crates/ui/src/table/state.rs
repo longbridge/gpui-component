@@ -1346,11 +1346,18 @@ where
 
         let mut header = self.delegate_mut().render_header(window, cx);
         let style = header.style().clone();
+        let row_height = self.options.size.table_row_height();
+        let item_sizes = self
+            .col_groups
+            .iter()
+            .skip(left_columns_count)
+            .map(|col| gpui::Size::new(col.width, row_height))
+            .collect();
 
         header
             .h_flex()
             .w_full()
-            .h(self.options.size.table_row_height())
+            .h(row_height)
             .flex_shrink_0()
             .border_b_1()
             .border_color(cx.theme().border)
@@ -1396,26 +1403,34 @@ where
                 // Columns
                 h_flex()
                     .id("table-head")
-                    .size_full()
-                    .overflow_scroll()
-                    .relative()
-                    .track_scroll(&horizontal_scroll_handle)
+                    .flex_1()
+                    .h_full()
                     .bg(cx.theme().table_head)
                     .child(
-                        h_flex()
-                            .relative()
-                            .children(
-                                self.col_groups
-                                    .clone()
-                                    .into_iter()
-                                    .skip(left_columns_count)
-                                    .enumerate()
-                                    .map(|(col_ix, _)| {
-                                        self.render_th(left_columns_count + col_ix, window, cx)
-                                    }),
+                        div().size_full().overflow_hidden().relative().child(
+                            crate::virtual_list::virtual_list(
+                                view,
+                                "table-head-list",
+                                Axis::Horizontal,
+                                Rc::new(item_sizes),
+                                {
+                                    move |table, visible_range: Range<usize>, window, cx| {
+                                        visible_range
+                                            .map(|col_ix| {
+                                                table.render_th(
+                                                    left_columns_count + col_ix,
+                                                    window,
+                                                    cx,
+                                                )
+                                            })
+                                            .collect()
+                                    }
+                                },
                             )
-                            .child(self.delegate.render_last_empty_col(window, cx)),
-                    ),
+                            .with_scroll_handle(&horizontal_scroll_handle),
+                        ),
+                    )
+                    .child(self.delegate.render_last_empty_col(window, cx)),
             )
     }
 
