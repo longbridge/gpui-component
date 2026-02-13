@@ -874,7 +874,7 @@ impl InputState {
 
     /// Focus the input field.
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        self.focus_handle.focus(window, cx);
+        self.focus_handle.focus(window);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });

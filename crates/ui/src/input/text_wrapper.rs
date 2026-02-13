@@ -526,8 +526,6 @@ impl LineLayout {
         &self,
         pos: Point<Pixels>,
         line_height: Pixels,
-        text_align: TextAlign,
-        align_width: Option<Pixels>,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -535,8 +533,6 @@ impl LineLayout {
             _ = line.paint(
                 pos + point(px(0.), ix * line_height),
                 line_height,
-                text_align,
-                align_width,
                 window,
                 cx,
             );
@@ -556,7 +552,7 @@ impl LineLayout {
                     pos.y + *line_index as f32 * line_height,
                 );
 
-                _ = invisible.paint(origin, line_height, text_align, align_width, window, cx);
+                _ = invisible.paint(origin, line_height, window, cx);
             }
         }
     }

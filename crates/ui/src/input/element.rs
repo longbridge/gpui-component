@@ -1485,8 +1485,6 @@ impl Element for TextElement {
             _ = line.paint(
                 p,
                 line_height,
-                text_align,
-                Some(prepaint.last_layout.content_width),
                 window,
                 cx,
             );
@@ -1517,8 +1515,6 @@ impl Element for TextElement {
                     _ = ghost_line.paint(
                         ghost_p,
                         line_height,
-                        text_align,
-                        Some(prepaint.last_layout.content_width),
                         window,
                         cx,
                     );
@@ -1569,7 +1565,7 @@ impl Element for TextElement {
                 }
 
                 for line in lines {
-                    _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+                    _ = line.paint(p, line_height, window, cx);
                     offset_y += line_height;
                 }
 
@@ -1611,7 +1607,7 @@ impl Element for TextElement {
                     window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
 
                     // Paint first line completion text
-                    _ = first_line.paint(p, line_height, text_align, None, window, cx);
+                    _ = first_line.paint(p, line_height, window, cx);
                 }
             }
         }

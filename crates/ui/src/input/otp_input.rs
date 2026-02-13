@@ -87,7 +87,7 @@ impl OtpState {
 
     /// Focus the OTP Input.
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        self.focus_handle.focus(window, cx);
+        self.focus_handle.focus(window);
     }
 
     fn on_input_mouse_down(
@@ -96,7 +96,7 @@ impl OtpState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.focus(&self.focus_handle, cx);
+        window.focus(&self.focus_handle);
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {

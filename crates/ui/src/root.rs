@@ -231,7 +231,7 @@ impl Root {
     {
         let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
         let focus_handle = cx.focus_handle();
-        focus_handle.focus(window, cx);
+        focus_handle.focus(window);
 
         self.active_dialogs.push(ActiveDialog::new(
             focus_handle,
@@ -251,7 +251,7 @@ impl Root {
 
     pub fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         if let Some(handle) = self.close_dialog_internal() {
-            window.focus(&handle, cx);
+            window.focus(&handle);
         }
         cx.notify();
     }
@@ -261,8 +261,8 @@ impl Root {
             window
                 .spawn(cx, async move |cx| {
                     cx.background_executor().timer(*ANIMATION_DURATION).await;
-                    _ = cx.update(|window, cx| {
-                        window.focus(&handle, cx);
+                    _ = cx.update(|window, _cx| {
+                        window.focus(&handle);
                     });
                 })
                 .detach();
@@ -278,7 +278,7 @@ impl Root {
             .and_then(|d| d.previous_focused_handle.clone());
         self.active_dialogs.clear();
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
-            window.focus(&handle, cx);
+            window.focus(&handle);
         }
         cx.notify();
     }
@@ -295,7 +295,7 @@ impl Root {
         let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
 
         let focus_handle = cx.focus_handle();
-        focus_handle.focus(window, cx);
+        focus_handle.focus(window);
         self.active_sheet = Some(ActiveSheet {
             focus_handle,
             previous_focused_handle,
@@ -313,7 +313,7 @@ impl Root {
             .and_then(|s| s.previous_focused_handle.as_ref())
             .and_then(|h| h.upgrade())
         {
-            window.focus(&previous_handle, cx);
+            window.focus(&previous_handle);
         }
         self.active_sheet = None;
         cx.notify();
@@ -360,7 +360,7 @@ impl Root {
             let before_focus = window.focused(cx);
 
             // Try normal focus navigation
-            window.focus_next(cx);
+            window.focus_next();
 
             // Check if we're still in the trap
             if !container_focus_handle.contains_focused(window, cx) {
@@ -372,7 +372,7 @@ impl Root {
                 while !container_focus_handle.contains_focused(window, cx)
                     && attempts < MAX_ATTEMPTS
                 {
-                    window.focus_next(cx);
+                    window.focus_next();
                     attempts += 1;
 
                     // If we cycled back to where we started, restore original focus
@@ -385,7 +385,7 @@ impl Root {
         }
 
         // Normal tab navigation
-        window.focus_next(cx);
+        window.focus_next();
     }
 
     fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
@@ -395,7 +395,7 @@ impl Root {
             let before_focus = window.focused(cx);
 
             // Try normal focus navigation
-            window.focus_prev(cx);
+            window.focus_prev();
 
             // Check if we're still in the trap
             if !container_focus_handle.contains_focused(window, cx) {
@@ -407,7 +407,7 @@ impl Root {
                 while !container_focus_handle.contains_focused(window, cx)
                     && attempts < MAX_ATTEMPTS
                 {
-                    window.focus_prev(cx);
+                    window.focus_prev();
                     attempts += 1;
 
                     // If we cycled back to where we started, restore original focus
@@ -420,7 +420,7 @@ impl Root {
         }
 
         // Normal tab navigation
-        window.focus_prev(cx);
+        window.focus_prev();
     }
 }
 

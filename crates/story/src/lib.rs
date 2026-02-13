@@ -129,7 +129,7 @@ pub fn create_new_window_with_size<F, E>(
                 // Set focus to the StoryRoot to enable it's actions.
                 let focus_handle = story_root.focus_handle(cx);
                 window.defer(cx, move |window, cx| {
-                    focus_handle.focus(window, cx);
+                    focus_handle.focus(window);
                 });
 
                 cx.new(|cx| Root::new(story_root, window, cx))

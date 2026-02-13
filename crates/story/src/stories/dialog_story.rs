@@ -210,7 +210,7 @@ impl DialogStory {
                 })
         });
 
-        self.input1.focus_handle(cx).focus(window, cx);
+        self.input1.focus_handle(cx).focus(window);
     }
 
     fn on_action_test_action(

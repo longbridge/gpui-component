@@ -213,6 +213,10 @@ fn redact_error(mut error: reqwest::Error) -> reqwest::Error {
 }
 
 impl http_client::HttpClient for ReqwestClient {
+    fn type_name(&self) -> &'static str {
+        "ReqwestClient"
+    }
+
     fn proxy(&self) -> Option<&Url> {
         self.proxy.as_ref()
     }
