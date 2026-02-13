@@ -40,6 +40,7 @@ pub enum Language {
     Rust,
     Scala,
     Sql,
+    Svelte,
     Swift,
     Toml,
     Tsx,
@@ -94,6 +95,7 @@ impl Language {
             Self::Rust => "rust",
             Self::Scala => "scala",
             Self::Sql => "sql",
+            Self::Svelte => "svelte",
             Self::Swift => "swift",
             Self::Toml => "toml",
             Self::Tsx => "tsx",
@@ -138,6 +140,7 @@ impl Language {
             "rust" | "rs" => Self::Rust,
             "scala" => Self::Scala,
             "sql" => Self::Sql,
+            "svelte" => Self::Svelte,
             "swift" => Self::Swift,
             "toml" => Self::Toml,
             "tsx" => Self::Tsx,
@@ -180,6 +183,7 @@ impl Language {
                 "jsdoc",
                 "graphql",
             ],
+            Self::Svelte => vec!["svelte", "html", "css", "typescript"],
             _ => vec![],
         }
         .into_iter()
@@ -382,6 +386,12 @@ impl Language {
                 include_str!("languages/kotlin/highlights.scm"),
                 "",
                 "",
+            ),
+            Self::Svelte => (
+                tree_sitter_svelte_next::LANGUAGE,
+                tree_sitter_svelte_next::HIGHLIGHTS_QUERY,
+                tree_sitter_svelte_next::INJECTIONS_QUERY,
+                tree_sitter_svelte_next::LOCALS_QUERY,
             ),
         };
 
