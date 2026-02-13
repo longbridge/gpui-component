@@ -244,7 +244,7 @@ where
             loop_selection: true,
             col_selectable: true,
             row_selectable: true,
-            cell_selectable: true,
+            cell_selectable: false,
             sortable: true,
             col_movable: true,
             col_resizable: true,
@@ -1641,7 +1641,8 @@ where
                                                                 move |table, e, window, cx| {
                                                                     cx.stop_propagation();
                                                                     table.on_cell_click(
-                                                                        e, row_ix, col_ix, window, cx,
+                                                                        e, row_ix, col_ix, window,
+                                                                        cx,
                                                                     );
                                                                 },
                                                             ))
