@@ -824,15 +824,15 @@ impl TextElement {
         let text = &state.text;
         let is_multi_line = state.mode.is_multi_line();
 
-        let (highlighter, diagnostics) = match &state.mode {
+        let (mut highlighter, diagnostics) = match &state.mode {
             InputMode::CodeEditor {
                 highlighter,
                 diagnostics,
                 ..
-            } => (highlighter.borrow(), diagnostics),
+            } => (highlighter.borrow_mut(), diagnostics),
             _ => return None,
         };
-        let highlighter = highlighter.as_ref()?;
+        let highlighter = highlighter.as_mut()?;
 
         let mut offset = visible_byte_range.start;
         let mut styles = vec![];
