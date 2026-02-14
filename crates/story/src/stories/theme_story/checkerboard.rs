@@ -1,4 +1,5 @@
 use gpui::*;
+use gpui_component::ActiveTheme as _;
 
 #[derive(IntoElement)]
 pub struct Checkerboard {
@@ -22,7 +23,7 @@ impl ParentElement for Checkerboard {
 }
 
 impl RenderOnce for Checkerboard {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let square_size = px(12.);
         // Use a subtle difference for the checkerboard
         let (c1, c2) = if self.is_dark {
@@ -35,7 +36,7 @@ impl RenderOnce for Checkerboard {
 
         div()
             .bg(c1)
-            .rounded_lg()
+            .rounded(cx.theme().radius_lg)
             .overflow_hidden()
             .size_full()
             .child(

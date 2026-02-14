@@ -103,7 +103,7 @@ NumberInput::new(&input).disabled(true)
 div()
     .w_full()
     .bg(cx.theme().secondary)
-    .rounded_md()
+    .rounded(cx.theme().radius)
     .child(NumberInput::new(&input).appearance(false))
 ```
 

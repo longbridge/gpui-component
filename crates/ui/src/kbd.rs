@@ -1,5 +1,5 @@
 use gpui::{
-    Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
+    Action, AsKeystroke, FocusHandle, Half, IntoElement, KeyContext, Keystroke, ParentElement as _,
     RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
 };
 
@@ -232,7 +232,7 @@ impl RenderOnce for Kbd {
             .px_1()
             .min_w_5()
             .text_center()
-            .rounded_sm()
+            .rounded(cx.theme().radius.half())
             .line_height(relative(1.))
             .text_xs()
             .whitespace_normal()

@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
-    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
-    SharedString, Styled, StyledText, Subscription, Window, deferred, div, prelude::FluentBuilder,
-    px, relative,
+    Half as _, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
+    prelude::FluentBuilder, px, relative,
 };
 use lsp_types::CodeAction;
 
@@ -87,7 +87,7 @@ impl RenderOnce for MenuItem {
             .p_1()
             .text_xs()
             .line_height(relative(1.))
-            .rounded_sm()
+            .rounded(cx.theme().radius.half())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
                 this.bg(cx.theme().accent)

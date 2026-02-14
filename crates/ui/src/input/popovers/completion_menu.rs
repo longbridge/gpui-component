@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
-    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
+    Half as _, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point,
+    Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
     prelude::FluentBuilder, px, relative,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
@@ -107,7 +107,7 @@ impl RenderOnce for CompletionMenuItem {
             .p_1()
             .text_xs()
             .line_height(relative(1.))
-            .rounded_sm()
+            .rounded(cx.theme().radius.half())
             .when(item.deprecated.unwrap_or(false), |this| this.line_through())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {

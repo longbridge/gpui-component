@@ -1,6 +1,6 @@
 use gpui::{
-    Action, App, AppContext, Context,DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render,
+    Action, App, AppContext, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
+    Half, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render,
     Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
@@ -319,7 +319,7 @@ impl Render for PopoverStory {
                         .bg(cx.theme().primary)
                         .text_color(cx.theme().primary_foreground)
                         .max_w(px(600.))
-                        .rounded_sm()
+                        .rounded(cx.theme().radius.half())
                         .text_sm()
                         .shadow_2xl()
                         .child("A styled Popover with custom background and text color."),
