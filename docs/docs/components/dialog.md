@@ -215,7 +215,7 @@ window.open_dialog(cx, |dialog, _, _| {
 ```rust
 window.open_dialog(cx, |dialog, _, cx| {
     dialog
-        .rounded_lg()
+        .rounded(cx.theme().radius_lg)
         .bg(cx.theme().cyan)
         .text_color(cx.theme().info_foreground)
         .title("Custom Style")

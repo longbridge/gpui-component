@@ -157,7 +157,7 @@ impl Render for CustomModal {
                     .gap_4()
                     .p_6()
                     .bg(cx.theme().background)
-                    .rounded_lg()
+                    .rounded(cx.theme().radius_lg)
                     .shadow_lg()
                     .border_1()
                     .border_color(cx.theme().border)

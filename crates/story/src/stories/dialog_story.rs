@@ -348,7 +348,7 @@ impl Render for DialogStory {
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_dialog(cx, move |dialog, _, cx| {
                                         dialog
-                                            .rounded_lg()
+                                            .rounded(cx.theme().radius_lg)
                                             .confirm()
                                             .overlay(dialog_overlay)
                                             .overlay_closable(overlay_closable)
@@ -476,7 +476,7 @@ impl Render for DialogStory {
                                 .on_click(cx.listener(move |_, _, window, cx| {
                                     window.open_dialog(cx, move |dialog, _, cx| {
                                         dialog
-                                            .rounded_lg()
+                                            .rounded(cx.theme().radius_lg)
                                             .bg(cx.theme().cyan)
                                             .text_color(cx.theme().info_foreground)
                                             .title("Custom Dialog Title")

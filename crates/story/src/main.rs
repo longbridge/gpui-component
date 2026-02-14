@@ -180,7 +180,7 @@ impl Render for Gallery {
                                                     .flex()
                                                     .items_center()
                                                     .justify_center()
-                                                    .rounded(cx.theme().radius)
+                                                    .rounded(cx.theme().radius_lg)
                                                     .bg(cx.theme().primary)
                                                     .text_color(cx.theme().primary_foreground)
                                                     .size_8()
@@ -197,8 +197,7 @@ impl Render for Gallery {
                                                             .child(Icon::new(
                                                                 IconName::GalleryVerticalEnd,
                                                             ))
-                                                    })
-                                                    .rounded_lg(),
+                                                    }),
                                             )
                                             .when(!self.collapsed, |this| {
                                                 this.child(

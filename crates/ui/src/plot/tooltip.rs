@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, AnyElement, App, Div, Hsla, IntoElement, ParentElement,
-    Pixels, Point, RenderOnce, StyleRefinement, Styled, Window,
+    AnyElement, App, Div, Half as _, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
-use crate::{v_flex, ActiveTheme};
+use crate::{ActiveTheme, v_flex};
 
 #[derive(Default)]
 pub enum CrossLineAxis {
@@ -274,7 +274,7 @@ impl RenderOnce for Tooltip {
                         .p_2()
                         .border_1()
                         .border_color(cx.theme().border)
-                        .rounded_sm()
+                        .rounded(cx.theme().radius.half())
                         .bg(cx.theme().background.opacity(0.9))
                         .when_some(self.position, |this, position| {
                             if position == TooltipPosition::Left {

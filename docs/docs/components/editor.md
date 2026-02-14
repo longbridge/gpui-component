@@ -232,7 +232,7 @@ div()
     .bg(cx.theme().background)
     .border_2()
     .border_color(cx.theme().input)
-    .rounded_lg()
+    .rounded(cx.theme().radius_lg)
     .p_4()
     .child(
         Input::new(&state)

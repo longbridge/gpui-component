@@ -290,6 +290,7 @@ impl ThemeColorsStory {
         hex: String,
         is_explicit: bool,
         isolated_theme: &ThemeColor,
+        cx: &App,
     ) -> impl IntoElement {
         use gpui_component::{WindowExt as _, clipboard::Clipboard};
 
@@ -303,7 +304,7 @@ impl ThemeColorsStory {
             .child(
                 div()
                     .size_16()
-                    .rounded_md()
+                    .rounded(cx.theme().radius)
                     .bg(color)
                     .border_1()
                     .border_color(isolated_theme.border)
@@ -443,7 +444,7 @@ impl ThemeColorsStory {
                                             .child(
                                                 div()
                                                     .size_4()
-                                                    .rounded_sm()
+                                                    .rounded(cx.theme().radius.half())
                                                     .bg(color_value)
                                                     .border_1()
                                                     .border_color(cx.theme().border)
@@ -503,7 +504,7 @@ impl ThemeColorsStory {
         div()
             .border_1()
             .border_color(isolated_theme.border)
-            .rounded_lg()
+            .rounded(cx.theme().radius_lg)
             .size_full()
             .overflow_hidden()
             .child(
@@ -511,11 +512,11 @@ impl ThemeColorsStory {
                     v_flex()
                         .size_full()
                         .overflow_hidden()
-                        .rounded_lg()
+                        .rounded(cx.theme().radius_lg)
                         .px_4()
                         .child(
                             list(list_state.clone(), {
-                                move |ix, _, _| {
+                                move |ix, _, cx| {
                                     let ColorCategory {
                                         name: category_name,
                                         entries: colors,
@@ -546,6 +547,7 @@ impl ThemeColorsStory {
                                                     entry.hex.clone(),
                                                     entry.is_explicit,
                                                     &isolated_theme,
+                                                    cx,
                                                 ))
                                             }),
                                         ))
