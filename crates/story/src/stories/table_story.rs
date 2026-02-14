@@ -1199,9 +1199,11 @@ impl Render for TableStory {
                 ),
             )
             .child(
-                Table::new(&self.table)
-                    .with_size(self.size)
-                    .stripe(self.stripe),
+                div().flex_1().child(
+                    Table::new(&self.table)
+                        .with_size(self.size)
+                        .stripe(self.stripe),
+                ),
             )
     }
 }
