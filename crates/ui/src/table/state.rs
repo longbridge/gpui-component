@@ -90,6 +90,10 @@ pub enum TableEvent {
     /// Use this event to show context menus specific to the cell content.
     /// The right-clicked cell is highlighted with a subtle border until another cell is clicked.
     RightClickedCell(usize, usize),
+    /// The selection has been cleared.
+    ///
+    /// This event is emitted when the selection is cleared.
+    ClearSelection,
 }
 
 /// The visible range of the rows and columns.
@@ -447,6 +451,7 @@ where
         self.selected_row = None;
         self.selected_col = None;
         self.selected_cell = None;
+        cx.emit(TableEvent::ClearSelection);
         cx.notify();
     }
 
