@@ -908,6 +908,9 @@ impl TableStory {
             TableEvent::RightClickedCell(row_ix, col_ix) => {
                 println!("Right clicked cell: row={}, col={}", row_ix, col_ix)
             }
+            TableEvent::ClearSelection => {
+                println!("Selection cleared");
+            }
         }
     }
 
