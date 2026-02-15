@@ -4,33 +4,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GPUI Component is a UI component library for building desktop applications using [GPUI](https://gpui.rs). It provides 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design.
+**onetcli** (One Net Client) is a cross-platform desktop application built on [GPUI](https://gpui.rs) that provides a unified interface for database management, SSH/SFTP, terminal, and AI tools.
 
-This is a Rust workspace project with the following main crates:
-
-- `crates/ui` - Core UI component library (published as `gpui-component`)
-- `crates/story` - Gallery application for showcasing and testing components
-- `crates/macros` - Procedural macros (`IntoPlot` derive)
-- `crates/assets` - Static assets
-- `crates/webview` - WebView component support
-- `examples/` - Various example applications
+Key capabilities:
+- Multi-protocol database management (PostgreSQL, MySQL, SQLite, SQL Server, Oracle, ClickHouse)
+- Redis and MongoDB views
+- SSH terminal and SFTP file management
+- Local terminal with multi-tab workflows
+- Cloud sync and account system with encrypted key storage
+- Built-in AI chat (OnetCli Provider via `llm-connector`)
 
 ## Common Commands
 
-### Development and Testing
-
 ```bash
-# Run Story Gallery (component showcase application)
-cargo run
+# Run the application
+cargo run -p main
 
-# Run individual examples
-cargo run --example hello_world
-cargo run --example table
-
-# Build the project
+# Build
 cargo build
 
-# Lint check
+# Run all tests
+cargo test --all
+
+# Run tests for a specific crate
+cargo test -p gpui-component
+cargo test -p db
+cargo test -p one-core
+
+# Run doc tests
+cargo test -p gpui-component --doc
+
+# Lint
 cargo clippy -- --deny warnings
 
 # Format check
@@ -39,196 +43,148 @@ cargo fmt --check
 # Spell check
 typos
 
-# Check for unused dependencies
+# Unused dependency check
 cargo machete
+
+# Performance profiling (macOS)
+MTL_HUD_ENABLED=1 cargo run -p main
+samply record cargo run -p main
+
+# Install system dependencies (Linux/macOS)
+script/bootstrap
 ```
 
-### Testing
+## Workspace Structure
 
-**Note**: Per user configuration, tests do not need to be run.
+The workspace has four default members (`crates/ui`, `crates/story`, `crates/assets`, `main`) and 25+ total crates.
 
-```bash
-# Run all tests
-cargo test --all
+### Application Layer
 
-# Run tests for a specific crate
-cargo test -p gpui-component
+- **`main/`** — Application entry point and main UI. Orchestrates all subsystems: auth, settings, licensing, updates, home page. Entry: `main/src/main.rs` → `OnetCliApp`.
 
-# Run doc tests
-cargo test -p gpui-component --doc
-```
+### Core Infrastructure
 
-### Performance Profiling
+- **`crates/core` (one-core)** — Core logic: connection management, cloud sync, AI integration, configuration, encryption (AES-GCM, Ed25519).
+- **`crates/ui` (gpui-component)** — Reusable UI component library (60+ components). Published to crates.io.
+- **`crates/one_ui`** — Application-specific UI components extending gpui-component.
+- **`crates/macros` (gpui-component-macros)** — Procedural macros.
+- **`crates/assets` (gpui-component-assets)** — Bundled static assets (rust-embed).
 
-```bash
-# View FPS on macOS (using Metal HUD)
-MTL_HUD_ENABLED=1 cargo run
+### Feature Crates (Backend + View Pairs)
 
-# Profile performance using samply
-samply record cargo run
-```
+| Domain | Backend Crate | View Crate |
+|--------|--------------|------------|
+| Database | `crates/db` | `crates/db_view` |
+| Terminal | `crates/terminal` | `crates/terminal_view` |
+| SSH/SFTP | `crates/ssh`, `crates/sftp` | `crates/sftp_view` |
+| Redis | — | `crates/redis_view` |
+| MongoDB | — | `crates/mongodb_view` |
 
-## Core Architecture
+### Utilities
 
-### Component Initialization
+- **`crates/reqwest_client`** — HTTP client wrapper around Zed's custom reqwest fork.
+- **`crates/webview` (gpui-wry)** — WebView integration via Wry.
+- **`crates/license_tool`** — License key generation and management.
+- **`crates/story`** — Component gallery/showcase app (runs with `cargo run` from default members).
 
-**Critical requirement**: You must call `gpui_component::init(cx)` at your application's entry point before using any GPUI Component features.
+## Application Initialization Flow
 
-```rust
-fn main() {
-    let app = Application::new();
-    app.run(move |cx| {
-        // This must be called first
-        gpui_component::init(cx);
+The startup sequence in `main/src/main.rs` is order-sensitive:
 
-        cx.spawn(async move |cx| {
-            cx.open_window(WindowOptions::default(), |window, cx| {
-                let view = cx.new(|_| MyView);
-                // The first level view in a window must be a Root
-                cx.new(|cx| Root::new(view, window, cx))
-            })?;
-            Ok::<_, anyhow::Error>(())
-        }).detach();
-    });
-}
-```
+1. Handle update commands → Load `.env.local` / `.env`
+2. Create `Application` with `Assets`
+3. `onetcli_app::init(cx)` — tracing, theme, HTTP client
+4. `setting_tab::init_settings(cx)` — settings system
+5. `GlobalDbState::new()` + cleanup task → `cx.set_global()`
+6. `DatabaseViewPluginRegistry` → `cx.set_global()`
+7. `gpui_component::init(cx)` — **must be called before any UI component usage**
+8. `one_core::init(cx)`, `one_ui::init(cx)` — core and UI subsystem init
+9. Auth, license, terminal, Redis, MongoDB subsystem init
+10. Open window with `Root::new(OnetCliApp, window, cx)` — **Root must be the first view**
+
+## Architecture Patterns
 
 ### Root View System
 
-`Root` is the top-level view for a window and manages:
-
-- Sheet (side panels)
-- Dialog (dialogs)
-- Notification (notifications)
-- Keyboard navigation (Tab/Shift-Tab)
-
-The first view of every window must be a `Root`.
-
-### Theme System
-
-- Uses `Theme` global singleton for theme configuration
-- Supports light/dark mode switching
-- Access theme via `ActiveTheme` trait: `cx.theme()`
-- Theme configuration includes:
-  - Colors (`ThemeColor`)
-  - Syntax highlighting theme (`HighlightTheme`)
-  - Font configuration (system font and monospace font)
-  - UI parameters like border radius, shadows
-  - Scrollbar display mode
+Every window's outermost view must be a `Root`. It manages sheets, dialogs, notifications, and keyboard navigation (Tab/Shift-Tab).
 
 ### Dock System
 
-A complex panel layout system supporting:
+Panel layout system with drag-and-drop, zoom, serialization:
+- `DockArea` → `DockItem` tree (`Split` | `Tabs` | `Panel`)
+- Panels implement `PanelView` trait
+- `PanelRegistry` handles serialization/deserialization
 
-- **DockArea**: Main container managing center area and left/bottom/right docks
-- **DockItem**: Tree-based layout structure
-  - `Split`: Split layout (horizontal/vertical)
-  - `Tabs`: Tab layout
-  - `Panel`: Individual panel
-- **Panel**: Defined via `PanelView` trait
-- **PanelRegistry**: Global panel registry for serializing/deserializing layouts
-- **StackPanel**: Resizable split panel container
-- **TabPanel**: Tab panel container
+### Component Design
 
-The Dock system supports:
+- **Stateless preferred**: Use `RenderOnce` trait when possible
+- **Size system**: `xs`, `sm`, `md` (default), `lg` via `Sizable` trait
+- **Cursor convention**: Buttons use `default` cursor (desktop convention), not `pointer`, unless link-style
+- **Styling**: CSS-like API via `Styled` trait and `ElementExt`
 
-- Panel drag-and-drop reordering
-- Panel zoom
-- Layout locking
-- Layout serialization/restoration
+### Theme System
+
+- `Theme` global singleton, light/dark mode
+- Access via `ActiveTheme` trait: `cx.theme()`
+- Covers colors (`ThemeColor`), syntax highlighting, fonts, border radius, shadows, scrollbar mode
 
 ### Input System
 
-Text input system based on Rope data structure:
+Text input based on Rope (`ropey` crate) with:
+- LSP integration (diagnostics, completion, hover)
+- Tree-sitter syntax highlighting
+- Variants: `Input`, `NumberInput`, `OtpInput`
 
-- **InputState**: Input state management
-- **Rope**: Efficient text storage (from ropey crate)
-- LSP integration support (diagnostics, completion, hover)
-- Syntax highlighting support (Tree-sitter)
-- Multiple input modes:
-  - Regular input (`Input`)
-  - Number input (`NumberInput`)
-  - OTP input (`OtpInput`)
+## Configuration
 
-### Component Design Principles
-
-1. **Stateless design**: Use `RenderOnce` trait, components should be stateless when possible
-2. **Size system**: Supports `xs`, `sm`, `md` (default), `lg` sizes via `Sizable` trait.
-3. **Mouse cursor**: Buttons use `default` cursor not `pointer` (desktop app convention), unless it's a link button
-4. **Style system**: Provides CSS-like styling API via `Styled` trait and `ElementExt` extensions
+- **Environment files**: `.env.local` (priority) → `.env` (fallback)
+- **Build-time config**: `SUPABASE_URL`, `SUPABASE_ANON_KEY` can be baked in at compile time, overridden at runtime
+- **Update URL**: `ONETCLI_UPDATE_URL` env var
 
 ## Code Style
 
-- Follow naming and organization patterns from existing code
-- Reference macOS/Windows control API design for naming
-- AI-generated code must be refactored to match project style
-- Mark AI-generated portions when submitting PRs
+- Follow existing patterns and naming conventions
+- Reference macOS/Windows control API design for component naming
+- AI-generated code must be refactored to match project style; mark AI portions in PRs
+- Clippy: `dbg_macro` and `todo` are **denied**
 
 ## Icon System
 
-The `Icon` element does not include SVG files by default. You need to:
-
-- Use [Lucide](https://lucide.dev) or other icon libraries
-- Name SVG files according to the `IconName` enum definition (located in `crates/ui/src/icon.rs`)
-
-## Dependencies
-
-- GPUI: Git version from Zed repository
-- Tree-sitter: For syntax highlighting
-- Ropey: Rope data structure for text, and `RopeExt` trait with more features.
-- Markdown rendering: `markdown` crate
-- HTML rendering: `html5ever` (basic support)
-- Charts: Built-in chart components
-- LSP: `lsp-types` crate
+`Icon` does not bundle SVGs. Use [Lucide](https://lucide.dev) icons, naming files per the `IconName` enum in `crates/ui/src/icon.rs`.
 
 ## Internationalization
 
-Uses `rust-i18n` crate.
-
-- Localization files are located in `crates/ui/locales/`.
-- Only add `en`, `zh-CN`, `zh-HK` by default.
+Uses `rust-i18n`. Locale files in `crates/ui/locales/`. Default locales: `en`, `zh-CN`, `zh-HK`.
 
 ## Platform Support
 
-- macOS (aarch64, x86_64)
-- Linux (x86_64)
-- Windows (x86_64)
+- macOS (aarch64, x86_64) — Metal backend
+- Linux (x86_64) — Vulkan, client-side decorations, gtk dependencies
+- Windows (x86_64) — 8MB stack size configured in `.cargo/config.toml`
 
-CI runs full test suite on each platform.
+CI runs clippy (macOS), machete (macOS), typos (macOS), and full test suite on all three platforms.
 
-## Skills Reference
+## Key Dependencies
 
-This project has custom Claude Code skills in `.claude/skills/` to assist with common development tasks:
-
-### Component Development Skills
-
-- **new-component** - Creating new GPUI components with proper structure and patterns
-- **generate-component-story** - Creating story examples for components in the gallery
-- **generate-component-documentation** - Generating documentation for components
-
-### GPUI Framework Skills
-
-- **gpui-action** - Working with actions and keyboard shortcuts
-- **gpui-async** - Async operations and background tasks
-- **gpui-context** - Context management (App, Window, AsyncApp)
-- **gpui-element** - Implementing custom elements using low-level Element API
-- **gpui-entity** - Entity management and state handling
-- **gpui-event** - Event handling and subscriptions
-- **gpui-focus-handle** - Focus management and keyboard navigation
-- **gpui-global** - Global state management
-- **gpui-layout-and-style** - Layout and styling systems
-- **gpui-test** - Writing tests for GPUI applications
-
-### Other Skills
-
-- **github-pull-request-description** - Writing PR descriptions
-
-When working on tasks related to these areas, Claude Code will automatically use the appropriate skill to provide specialized guidance and patterns.
+- **GPUI**: Git dependency from `zed-industries/zed`
+- **reqwest**: Zed's custom fork (`zed-reqwest`)
+- **Database drivers**: tokio-postgres, mysql_async, rusqlite, tiberius+bb8, oracle, clickhouse
+- **SSH/SFTP**: russh ecosystem (russh, russh-sftp, russh-keys)
+- **Terminal**: alacritty_terminal
+- **AI**: llm-connector (with streaming)
+- **Text**: ropey (Rope), tree-sitter (syntax highlighting)
 
 ## Testing Guidelines
 
-See `.claude/COMPONENT_TEST_RULES.md` for detailed testing principles:
+See `.claude/COMPONENT_TEST_RULES.md`:
+- Focus on complex logic, avoid excessive simple tests
+- Every component needs a `test_*_builder` test for the builder pattern
+- Test state transitions, branching, and edge cases
+- Use `#[gpui::test]` macro for GPUI tests
 
-- **Simplicity First**: Focus on complex logic and core functionality, avoid excessive simple tests
-- **Builder Pattern Testing**: Every component should have a `test_*_builder` test covering the builder pattern
-- **Complex Logic Testing**: Test conditional branching, state transitions, and edge cases
+## Skills Reference
+
+Custom Claude Code skills in `.claude/skills/` cover:
+- **Component development**: `new-component`, `generate-component-story`, `generate-component-documentation`
+- **GPUI framework**: `gpui-action`, `gpui-async`, `gpui-context`, `gpui-element`, `gpui-entity`, `gpui-event`, `gpui-focus-handle`, `gpui-global`, `gpui-layout-and-style`, `gpui-style-guide`, `gpui-test`
+- **Other**: `github-pull-request-description`

@@ -1,0 +1,120 @@
+The OnetCli License
+
+一、定义
+
+"许可方"是指分发其软件的 OnetCli 团队。
+
+"软件"是指根据本许可提供的 OnetCli 软件。
+
+"商业使用"是指将本软件用于任何旨在获取商业利益或金钱报酬的活动，包括但不限于在商业环境中使用本软件进行开发、运营或管理。
+
+"再分发"是指以任何形式向第三方提供本软件的副本，无论是否经过修改，包括但不限于出售、转售、租赁、出借、托管分发或捆绑分发。
+
+二、许可授予
+
+根据本许可的条款和条件，许可方特此授予您非排他性、全球性、不可转让、不可再许可、可撤销、免版税的版权许可，允许您将本软件用于个人用途和商业用途。
+
+上述版权声明和本许可声明应包含在本软件的所有副本或重要部分中。
+
+三、允许的使用
+
+在遵守本许可所有条款的前提下，您可以：
+
+（一）在个人或企业内部环境中安装和使用本软件；
+（二）将本软件用于商业目的，包括在商业项目中使用本软件作为工具；
+（三）为适配您的使用环境对本软件进行必要的配置和调整。
+
+四、再分发限制
+
+（一）您不得出售、转售、租赁或以任何直接或间接收取费用的方式向第三方分发本软件的副本，无论是否经过修改。
+
+（二）您不得将本软件（无论是否经过修改）作为独立产品或任何产品、套件、平台的组成部分进行再分发或转授权。
+
+（三）您不得将本软件托管于任何公开的下载站点、应用商店或软件分发平台（许可方官方渠道除外）。
+
+（四）您不得基于本软件的全部或部分代码创建竞争性产品或服务。
+
+五、其他限制
+
+您不得出于任何军事或非法目的使用本软件。您不得对本软件进行反编译、反汇编或逆向工程，除非适用法律明确允许。
+
+六、免责声明
+
+本软件"按原样"提供，不提供任何明示或暗示的保证，包括但不限于对适销性、特定用途的适用性和非侵权性的保证。在任何情况下，作者或版权持有人均不对任何索赔、损害或其他责任负责，无论是在合同诉讼、侵权行为还是其他方面，由软件或软件的使用或其他交易引起、由软件引起或与之相关。
+
+许可方不对因使用或无法使用本软件而导致的任何数据丢失、业务中断、利润损失或其他商业损害承担责任。用户应自行承担使用本软件的全部风险，并负责对重要数据进行备份。
+
+七、责任限制
+
+除适用法律禁止的范围外，在任何情况下且根据任何法律理论，无论是基于侵权行为、疏忽、合同、责任或其他原因，任何许可方均不对您承担任何直接、间接、特殊、偶然、示范性或间接损害，或任何其他商业损失，即使许可人已被告知此类损害的可能性。
+
+八、许可终止
+
+如您违反本许可的任何条款，本许可将自动终止，您必须立即停止使用本软件并销毁所有副本。许可终止不影响许可方依据本许可或适用法律享有的任何其他权利或救济。
+
+九、争议解决
+
+本许可受中华人民共和国法律管辖并按其解释。因本许可引起的或与本许可有关的任何争议应提交北京市海淀区人民法院。
+
+请注意，许可证可能会更新到更全面的版本。有关许可和版权的任何问题，请通过 xiaofei.hf@gmail.com 与我们联系。
+
+
+The OnetCli License
+
+1. Definitions
+
+"Licensor" refers to the OnetCli team that distributes its software.
+
+"Software" refers to the OnetCli software provided under this license.
+
+"Commercial Use" means any activity intended to generate commercial advantage or monetary compensation, including but not limited to using the Software for development, operations, or management in a commercial environment.
+
+"Redistribution" means providing copies of the Software to third parties in any form, whether modified or unmodified, including but not limited to selling, reselling, leasing, lending, hosting for distribution, or bundling for distribution.
+
+2. License Grant
+
+Subject to the terms and conditions of this License, the Licensor hereby grants to you a non-exclusive, worldwide, non-transferable, non-sublicensable, revocable, royalty-free copyright license to use the Software for personal and commercial purposes.
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+3. Permitted Uses
+
+Subject to compliance with all terms of this License, you may:
+
+(a) Install and use the Software in personal or internal enterprise environments;
+(b) Use the Software for commercial purposes, including using the Software as a tool in commercial projects;
+(c) Make necessary configurations and adjustments to the Software to adapt it to your usage environment.
+
+4. Redistribution Restrictions
+
+(a) You may not sell, resell, lease, or distribute copies of the Software to third parties by any means that directly or indirectly charges a fee, whether modified or unmodified.
+
+(b) You may not redistribute or sublicense the Software (whether modified or unmodified) as a standalone product or as a component of any product, suite, or platform.
+
+(c) You may not host the Software on any public download site, application store, or software distribution platform (except through the Licensor's official channels).
+
+(d) You may not create competing products or services based on the Software's code, in whole or in part.
+
+5. Other Restrictions
+
+You may not use the Software for any military or illegal purposes. You may not decompile, disassemble, or reverse-engineer the Software, except to the extent expressly permitted by applicable law.
+
+6. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+THE LICENSOR SHALL NOT BE LIABLE FOR ANY DATA LOSS, BUSINESS INTERRUPTION, LOSS OF PROFITS, OR OTHER COMMERCIAL DAMAGES RESULTING FROM THE USE OF OR INABILITY TO USE THE SOFTWARE. USERS SHALL BEAR ALL RISKS ASSOCIATED WITH THE USE OF THE SOFTWARE AND ARE RESPONSIBLE FOR BACKING UP IMPORTANT DATA.
+
+7. Limitation of Liability
+
+EXCEPT TO THE EXTENT PROHIBITED BY APPLICABLE LAW, IN NO EVENT AND UNDER NO LEGAL THEORY, WHETHER BASED IN TORT, NEGLIGENCE, CONTRACT, LIABILITY, OR OTHERWISE WILL ANY LICENSOR BE LIABLE TO YOU FOR ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES, OR ANY OTHER COMMERCIAL LOSSES, EVEN IF THE LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+8. Termination
+
+If you violate any term of this License, this License shall terminate automatically, and you must immediately cease all use of the Software and destroy all copies. Termination of this License shall not affect any other rights or remedies available to the Licensor under this License or applicable law.
+
+9. Dispute Resolution
+
+This license shall be governed and construed in accordance with the laws of People's Republic of China. Any dispute arising from or in connection with this License shall be submitted to Haidian District People's Court in Beijing.
+
+Note that the license is subject to update to a more comprehensive version. For any questions related to the license and copyright, please contact us at xiaofei.hf@gmail.com.

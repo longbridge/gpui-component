@@ -4,6 +4,10 @@ version = "0.1.0"
 publish.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "onetcli"
+path = "src/main.rs"
+
 [dependencies]
 gpui = { workspace = true }
 gpui-macros = { workspace = true }
