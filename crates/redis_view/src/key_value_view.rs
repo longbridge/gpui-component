@@ -419,18 +419,13 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
                     Self::fetch_key_value(&global_state, &connection_id, &key).await
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 match result {
@@ -914,7 +909,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let value = value.clone();
@@ -935,12 +930,7 @@ impl KeyValueView {
                     }
                     Ok::<(), anyhow::Error>(())
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -959,7 +949,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let new_value = new_value.clone();
@@ -971,12 +961,7 @@ impl KeyValueView {
                     guard.lset(&key, index as i64, &new_value).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1045,7 +1030,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let member = member.clone();
@@ -1057,12 +1042,7 @@ impl KeyValueView {
                     guard.sadd(&key, &[member.as_str()]).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1221,7 +1201,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let member = member.clone();
@@ -1233,12 +1213,7 @@ impl KeyValueView {
                     guard.zadd(&key, &[(score, member.as_str())]).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1257,7 +1232,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let old_member = old_member.clone();
@@ -1276,12 +1251,7 @@ impl KeyValueView {
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                     Ok::<(), anyhow::Error>(())
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1441,7 +1411,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let field = field.clone();
@@ -1454,12 +1424,7 @@ impl KeyValueView {
                     guard.hset(&key, &field, &value).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1478,7 +1443,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
@@ -1492,12 +1457,7 @@ impl KeyValueView {
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                     Ok::<(), anyhow::Error>(())
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1588,7 +1548,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
@@ -1608,12 +1568,7 @@ impl KeyValueView {
                     }
                     Ok::<(), anyhow::Error>(())
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1685,7 +1640,7 @@ impl KeyValueView {
         let db_index = self.db_index;
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let old_name = old_name.clone();
                 let new_name = new_name.clone();
@@ -1697,12 +1652,7 @@ impl KeyValueView {
                     guard.rename(&old_name, &new_name).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1723,7 +1673,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let value = value.clone();
@@ -1735,12 +1685,7 @@ impl KeyValueView {
                     guard.set(&key, &value, None).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1768,7 +1713,7 @@ impl KeyValueView {
         let delete_marker = "__DELETED_ELEMENT_MARKER__";
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
@@ -1782,12 +1727,7 @@ impl KeyValueView {
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                     Ok::<(), anyhow::Error>(())
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1806,7 +1746,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let member = member.clone();
@@ -1818,12 +1758,7 @@ impl KeyValueView {
                     guard.srem(&key, &[member.as_str()]).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1842,7 +1777,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let member = member.clone();
@@ -1854,12 +1789,7 @@ impl KeyValueView {
                     guard.zrem(&key, &[member.as_str()]).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1878,7 +1808,7 @@ impl KeyValueView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let field = field.clone();
@@ -1890,12 +1820,7 @@ impl KeyValueView {
                     guard.hdel(&key, &[field.as_str()]).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => Err(anyhow::anyhow!("{}", e)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {

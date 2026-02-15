@@ -68,7 +68,7 @@ macro_rules! with_plugin_session {
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             result
-        })?
+        })
         .await
     }};
 }
@@ -116,7 +116,7 @@ macro_rules! with_plugin_session_db {
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             result
-        })?
+        })
         .await
     }};
 }
@@ -696,7 +696,7 @@ impl GlobalDbState {
         C: AppContext,
     {
         let manager = Arc::new(self.connection_manager.clone());
-        Tokio::spawn(cx, async move {
+        let _ = Tokio::spawn(cx, async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
@@ -863,7 +863,7 @@ impl GlobalDbState {
                 .remove_all_sessions(&connection_id)
                 .await;
             Ok(())
-        })?
+        })
         .await
     }
 
@@ -889,7 +889,7 @@ impl GlobalDbState {
                 .create_session(config, &clone_self.db_manager)
                 .await
                 .map_err(|e| anyhow::anyhow!("{}", e))
-        })?
+        })
         .await
     }
 
@@ -959,9 +959,7 @@ impl GlobalDbState {
     ) -> anyhow::Result<Vec<SqlResult>> {
         // 获取缓存实例用于 DDL 失效
         let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         let clone_self = self.clone();
         let config_id = config.id.clone();
@@ -1026,7 +1024,7 @@ impl GlobalDbState {
             }
 
             Ok(result)
-        })?
+        })
         .await?;
 
         // 执行成功后，处理 DDL 缓存失效
@@ -1040,7 +1038,7 @@ impl GlobalDbState {
                         current_schema.as_deref(),
                     )
                     .await;
-            })?
+            })
             .detach();
         }
 
@@ -1137,7 +1135,7 @@ impl GlobalDbState {
             if let Err(e) = exec_result {
                 error!("Streaming execution error: {}", e);
             }
-        })?
+        })
         .detach();
 
         Ok(rx)
@@ -1180,7 +1178,7 @@ impl GlobalDbState {
                 .await?;
 
             result
-        })?
+        })
         .await
     }
 
@@ -1189,7 +1187,7 @@ impl GlobalDbState {
         let clone_self = self.clone();
         Tokio::spawn_result(cx, async move {
             Ok(clone_self.connection_manager.stats().await)
-        })?
+        })
         .await
     }
 
@@ -1205,7 +1203,7 @@ impl GlobalDbState {
                 .connection_manager
                 .list_sessions(&connection_id)
                 .await)
-        })?
+        })
         .await
     }
 
@@ -1218,7 +1216,7 @@ impl GlobalDbState {
                 .close_session(&session_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("{}", e))
-        })?
+        })
         .await
     }
 
@@ -1235,7 +1233,7 @@ impl GlobalDbState {
                 .remove_all_sessions(&connection_id)
                 .await;
             Ok(())
-        })?
+        })
         .await
     }
 
@@ -1275,9 +1273,7 @@ impl GlobalDbState {
 
         // 获取缓存实例
         let cache = cx
-            .update(|cx| cx.try_global::<crate::GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<crate::GlobalNodeCache>().cloned());
 
         // For Database and Schema nodes, we need to connect to the specific database
         // This is especially important for PostgreSQL which doesn't support database switching
@@ -1354,7 +1350,7 @@ impl GlobalDbState {
             }
 
             result
-        })?
+        })
         .await
     }
 
@@ -1413,9 +1409,7 @@ impl GlobalDbState {
     ) -> anyhow::Result<Vec<String>> {
         // 获取缓存实例
         let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1426,7 +1420,7 @@ impl GlobalDbState {
                     return Ok(databases);
                 }
                 Err(anyhow::anyhow!("Cache miss"))
-            })?
+            })
             .await;
 
             if let Ok(databases) = result {
@@ -1447,7 +1441,7 @@ impl GlobalDbState {
             Tokio::spawn(cx, async move {
                 cache.cache_databases(&conn_id, databases_clone).await;
                 tracing::debug!("Cached databases for: {}", conn_id);
-            })?
+            })
             .detach();
         }
 
@@ -1490,9 +1484,7 @@ impl GlobalDbState {
     ) -> anyhow::Result<Vec<String>> {
         // 获取缓存实例
         let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1504,7 +1496,7 @@ impl GlobalDbState {
                     return Ok(schemas);
                 }
                 Err(anyhow::anyhow!("Cache miss"))
-            })?
+            })
             .await;
 
             if let Ok(schemas) = result {
@@ -1526,7 +1518,7 @@ impl GlobalDbState {
             Tokio::spawn(cx, async move {
                 cache.cache_schemas(&conn_id, &db, schemas_clone).await;
                 tracing::debug!("Cached schemas for: {}:{}", conn_id, db);
-            })?
+            })
             .detach();
         }
 
@@ -1543,9 +1535,7 @@ impl GlobalDbState {
     ) -> anyhow::Result<Vec<crate::types::TableInfo>> {
         // 获取缓存实例
         let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1558,7 +1548,7 @@ impl GlobalDbState {
                     return Ok(tables);
                 }
                 Err(anyhow::anyhow!("Cache miss"))
-            })?
+            })
             .await;
 
             if let Ok(tables) = result {
@@ -1583,7 +1573,7 @@ impl GlobalDbState {
                     .cache_tables(&conn_id, &db, sch.as_deref(), tables_clone)
                     .await;
                 tracing::debug!("Cached tables for: {}:{}:{:?}", conn_id, db, sch);
-            })?
+            })
             .detach();
         }
 
@@ -1614,9 +1604,7 @@ impl GlobalDbState {
     ) -> anyhow::Result<Vec<crate::types::ColumnInfo>> {
         // 获取缓存实例
         let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1639,7 +1627,7 @@ impl GlobalDbState {
                     return Ok(columns);
                 }
                 Err(anyhow::anyhow!("Cache miss"))
-            })?
+            })
             .await;
 
             if let Ok(columns) = result {
@@ -1665,7 +1653,7 @@ impl GlobalDbState {
                     .cache_columns(&conn_id, &db, sch.as_deref(), &tbl, columns_clone)
                     .await;
                 tracing::debug!("Cached columns for: {}:{}:{:?}:{}", conn_id, db, sch, tbl);
-            })?
+            })
             .detach();
         }
 
@@ -1699,9 +1687,7 @@ impl GlobalDbState {
     ) -> anyhow::Result<Vec<crate::types::IndexInfo>> {
         // 获取缓存实例
         let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned())
-            .ok()
-            .flatten();
+            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1722,7 +1708,7 @@ impl GlobalDbState {
                     return Ok(indexes);
                 }
                 Err(anyhow::anyhow!("Cache miss"))
-            })?
+            })
             .await;
 
             if let Ok(indexes) = result {
@@ -1748,7 +1734,7 @@ impl GlobalDbState {
                     .cache_indexes(&conn_id, &db, sch.as_deref(), &tbl, indexes_clone)
                     .await;
                 tracing::debug!("Cached indexes for: {}:{}:{:?}:{}", conn_id, db, sch, tbl);
-            })?
+            })
             .detach();
         }
 
@@ -1921,7 +1907,7 @@ impl GlobalDbState {
             }
 
             result
-        })?
+        })
         .await
     }
 
@@ -1994,7 +1980,7 @@ impl GlobalDbState {
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             result
-        })?
+        })
         .await
     }
 
@@ -2079,7 +2065,7 @@ impl GlobalDbState {
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
             result
-        })?
+        })
         .await
     }
 

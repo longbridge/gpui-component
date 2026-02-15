@@ -241,7 +241,7 @@ impl RedisTreeView {
                 }
             };
 
-            let spawn_result = Tokio::spawn_result(cx, {
+            let connect_result = Tokio::spawn_result(cx, {
                 let config = config.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -250,20 +250,8 @@ impl RedisTreeView {
                         .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let connect_result = match spawn_result {
-                Ok(task) => task.await,
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    _ = this.update(cx, |view, cx| {
-                        view.loading_nodes.remove(&node_id);
-                        view.error_nodes.insert(node_id.clone(), error_msg);
-                        cx.notify();
-                    });
-                    return;
-                }
-            };
+            })
+            .await;
 
             match connect_result {
                 Ok(_conn_id) => {
@@ -298,7 +286,7 @@ impl RedisTreeView {
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let databases = match Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -309,13 +297,9 @@ impl RedisTreeView {
                     guard.get_databases_info().await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let databases = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(dbs) => dbs,
-                    Err(_) => return,
-                },
+            })
+            .await {
+                Ok(dbs) => dbs,
                 Err(_) => return,
             };
 

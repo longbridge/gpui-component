@@ -455,19 +455,13 @@ impl MongoFormWindow {
         cx.notify();
 
         cx.spawn(async move |this, cx| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let test_result: Result<(), String> = Tokio::spawn_result(cx, async move {
                 MongoManager::test_parameters(test_name, &parameters)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let test_result: Result<(), String> = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(()) => Ok(()),
-                    Err(error) => Err(error.to_string()),
-                },
-                Err(error) => Err(error.to_string()),
-            };
+            })
+            .await
+            .map_err(|error| error.to_string());
 
             let _ = this.update(cx, |this, cx| {
                 this.is_testing = false;
@@ -516,7 +510,7 @@ impl MongoFormWindow {
             .clone();
 
         cx.spawn(async move |_this, cx| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let repo = storage
                     .get::<one_core::storage::ConnectionRepository>()
                     .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
@@ -534,34 +528,30 @@ impl MongoFormWindow {
                     repo.insert(&mut connection)?;
                 }
                 Ok::<StoredConnection, anyhow::Error>(connection)
-            });
+            })
+            .await;
 
-            match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(saved_conn) => {
-                        let _ = cx.update(|cx| {
-                            if let Some(notifier) = get_notifier(cx) {
-                                let event = if is_editing {
-                                    ConnectionDataEvent::ConnectionUpdated {
-                                        connection: saved_conn,
-                                    }
-                                } else {
-                                    ConnectionDataEvent::ConnectionCreated {
-                                        connection: saved_conn,
-                                    }
-                                };
-                                notifier.update(cx, |_, cx| {
-                                    cx.emit(event);
-                                });
-                            }
-                        });
-                    }
-                    Err(error) => {
-                        error!("保存 MongoDB 连接失败: {}", error);
-                    }
-                },
+            match result {
+                Ok(saved_conn) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(notifier) = get_notifier(cx) {
+                            let event = if is_editing {
+                                ConnectionDataEvent::ConnectionUpdated {
+                                    connection: saved_conn,
+                                }
+                            } else {
+                                ConnectionDataEvent::ConnectionCreated {
+                                    connection: saved_conn,
+                                }
+                            };
+                            notifier.update(cx, |_, cx| {
+                                cx.emit(event);
+                            });
+                        }
+                    });
+                }
                 Err(error) => {
-                    error!("Spawn 错误: {}", error);
+                    error!("保存 MongoDB 连接失败: {}", error);
                 }
             }
         })

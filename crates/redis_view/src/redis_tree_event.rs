@@ -254,7 +254,7 @@ impl RedisEventHandler {
         cx: &mut App,
     ) {
         cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let databases = match Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -267,13 +267,9 @@ impl RedisEventHandler {
                         .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let databases = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(dbs) => dbs,
-                    Err(_) => return,
-                },
+            })
+            .await {
+                Ok(dbs) => dbs,
                 Err(_) => return,
             };
 
@@ -313,7 +309,7 @@ impl RedisEventHandler {
         cx: &mut App,
     ) {
         cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let keys_with_types = match Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -355,13 +351,9 @@ impl RedisEventHandler {
 
                     Ok::<Vec<(String, RedisKeyType)>, anyhow::Error>(keys_with_types)
                 }
-            });
-
-            let keys_with_types = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(keys) => keys,
-                    Err(_) => return,
-                },
+            })
+            .await {
+                Ok(keys) => keys,
                 Err(_) => return,
             };
 
@@ -599,7 +591,7 @@ impl RedisEventHandler {
         let node_id = format!("{}:db{}", connection_id, db_index);
 
         cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 let value = value.clone();
@@ -682,43 +674,28 @@ impl RedisEventHandler {
 
                     Ok::<String, anyhow::Error>(key)
                 }
-            });
+            })
+            .await;
 
-            match spawn_result {
-                Ok(task) => {
-                    match task.await {
-                        Ok(_key) => {
-                            // 创建成功，刷新键列表
-                            let _ = cx.update(|cx| {
-                                tree_view.update(cx, |tree, cx| {
-                                    // 清除数据库节点的子节点加载状态，强制重新加载
-                                    tree.clear_node_loaded(&node_id, cx);
-                                    cx.emit(RedisTreeViewEvent::RefreshKeys { node_id: node_id.clone() });
-                                });
+            match result {
+                Ok(_key) => {
+                    // 创建成功，刷新键列表
+                    let _ = cx.update(|cx| {
+                        tree_view.update(cx, |tree, cx| {
+                            // 清除数据库节点的子节点加载状态，强制重新加载
+                            tree.clear_node_loaded(&node_id, cx);
+                            cx.emit(RedisTreeViewEvent::RefreshKeys { node_id: node_id.clone() });
+                        });
 
-                                if let Some(window) = cx.active_window() {
-                                    _ = window.update(cx, |_, window, cx| {
-                                        window.push_notification(
-                                            Notification::success("键创建成功").autohide(true),
-                                            cx,
-                                        );
-                                    });
-                                }
+                        if let Some(window) = cx.active_window() {
+                            _ = window.update(cx, |_, window, cx| {
+                                window.push_notification(
+                                    Notification::success("键创建成功").autohide(true),
+                                    cx,
+                                );
                             });
                         }
-                        Err(e) => {
-                            let _ = cx.update(|cx| {
-                                if let Some(window) = cx.active_window() {
-                                    _ = window.update(cx, |_, window, cx| {
-                                        window.push_notification(
-                                            Notification::error(format!("创建键失败: {}", e)).autohide(true),
-                                            cx,
-                                        );
-                                    });
-                                }
-                            });
-                        }
-                    }
+                    });
                 }
                 Err(e) => {
                     let _ = cx.update(|cx| {

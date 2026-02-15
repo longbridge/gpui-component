@@ -308,7 +308,7 @@ impl TabContent for RedisTabView {
                 }
 
                 let connection_id_clone = connection_id.clone();
-                let spawn_result = Tokio::spawn_result(cx, {
+                let result = Tokio::spawn_result(cx, {
                     let global_state = global_state.clone();
                     async move {
                         global_state
@@ -316,25 +316,15 @@ impl TabContent for RedisTabView {
                             .await
                             .map_err(|e| anyhow::anyhow!("{}", e))
                     }
-                });
+                })
+                .await;
 
-                match spawn_result {
-                    Ok(task) => {
-                        if let Err(error) = task.await {
-                            warn!(
-                                "Failed to close redis connection {}: {}",
-                                connection_id,
-                                error
-                            );
-                        }
-                    }
-                    Err(error) => {
-                        warn!(
-                            "Failed to close redis connection {}: {}",
-                            connection_id,
-                            error
-                        );
-                    }
+                if let Err(error) = result {
+                    warn!(
+                        "Failed to close redis connection {}: {}",
+                        connection_id,
+                        error
+                    );
                 }
             }
             let _ = cx.update(|cx| {

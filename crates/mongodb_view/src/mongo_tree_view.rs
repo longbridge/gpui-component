@@ -161,7 +161,7 @@ impl MongoTreeView {
                 }
             };
 
-            let spawn_result = Tokio::spawn_result(cx, {
+            let connect_result = Tokio::spawn_result(cx, {
                 let config = config.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -170,20 +170,8 @@ impl MongoTreeView {
                         .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let connect_result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => {
-                    let error_message = error.to_string();
-                    _ = this.update(cx, |view, cx| {
-                        view.loading_nodes.remove(&node_id);
-                        view.error_nodes.insert(node_id.clone(), error_message);
-                        cx.notify();
-                    });
-                    return;
-                }
-            };
+            })
+            .await;
 
             match connect_result {
                 Ok(_) => {
@@ -218,7 +206,7 @@ impl MongoTreeView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let database_names = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -231,15 +219,8 @@ impl MongoTreeView {
                         .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let database_names = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(names) => Ok(names),
-                    Err(error) => Err(error),
-                },
-                Err(error) => Err(error),
-            };
+            })
+            .await;
 
             match database_names {
                 Ok(names) => {
@@ -282,7 +263,7 @@ impl MongoTreeView {
         }
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, {
+            let collection_names = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let database_name = database_name.clone();
                 let global_state = global_state.clone();
@@ -296,15 +277,8 @@ impl MongoTreeView {
                         .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            });
-
-            let collection_names = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(names) => Ok(names),
-                    Err(error) => Err(error),
-                },
-                Err(error) => Err(error),
-            };
+            })
+            .await;
 
             match collection_names {
                 Ok(names) => {
@@ -881,7 +855,7 @@ impl MongoTreeView {
         let database_node_id = format!("{}:db:{}", connection_id, database_name);
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -890,12 +864,7 @@ impl MongoTreeView {
                     .create_collection(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
@@ -922,7 +891,7 @@ impl MongoTreeView {
         let connection_id_for_update = connection_id.clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id_for_task)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -931,12 +900,7 @@ impl MongoTreeView {
                     .create_collection(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
@@ -964,7 +928,7 @@ impl MongoTreeView {
         let database_name_for_update = database_name.clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id_for_task)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -973,12 +937,7 @@ impl MongoTreeView {
                     .drop_database(&database_name_for_task)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
@@ -1011,17 +970,12 @@ impl MongoTreeView {
         cx.notify();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 global_state
                     .remove_connection(&connection_id_for_task)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.loading_nodes.remove(&connection_id_for_update);

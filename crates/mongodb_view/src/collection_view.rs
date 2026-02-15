@@ -795,7 +795,7 @@ impl CollectionView {
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let target_id = target_id.clone();
             let success_message = success_message.to_string();
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -816,12 +816,7 @@ impl CollectionView {
                     EditorMode::View => Ok(()),
                 }
                 .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.is_loading = false;
@@ -877,7 +872,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -886,12 +881,7 @@ impl CollectionView {
                     .delete_document(&database_name, &collection_name, id_bson)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.is_loading = false;
@@ -1079,7 +1069,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1088,12 +1078,7 @@ impl CollectionView {
                     .explain_find(&database_name, &collection_name, inputs.filter, options)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.is_loading = false;
@@ -1150,7 +1135,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1159,12 +1144,7 @@ impl CollectionView {
                     .aggregate_documents(&database_name, &collection_name, pipeline)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.aggregation_loading = false;
@@ -1218,7 +1198,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1229,12 +1209,7 @@ impl CollectionView {
                     .find_documents(&database_name, &collection_name, None, options)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.schema_loading = false;
@@ -1279,7 +1254,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1288,12 +1263,7 @@ impl CollectionView {
                     .list_indexes(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.indexes_loading = false;
@@ -1353,7 +1323,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1362,12 +1332,7 @@ impl CollectionView {
                     .create_index(&database_name, &collection_name, keys, name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.indexes_loading = false;
@@ -1413,7 +1378,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1422,12 +1387,7 @@ impl CollectionView {
                     .drop_index(&database_name, &collection_name, &name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.indexes_loading = false;
@@ -1465,7 +1425,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1474,12 +1434,7 @@ impl CollectionView {
                     .get_collection_validation(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.validation_loading = false;
@@ -1531,7 +1486,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1540,12 +1495,7 @@ impl CollectionView {
                     .update_collection_validation(&database_name, &collection_name, validator)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.validation_loading = false;
@@ -1583,7 +1533,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1592,12 +1542,7 @@ impl CollectionView {
                     .update_collection_validation(&database_name, &collection_name, None)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 view.validation_loading = false;
@@ -1674,7 +1619,7 @@ impl CollectionView {
         let global_state = cx.global::<GlobalMongoState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
                     .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
@@ -1688,12 +1633,7 @@ impl CollectionView {
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
                 Ok((documents, total))
-            });
-
-            let result = match spawn_result {
-                Ok(task) => task.await,
-                Err(error) => Err(anyhow::anyhow!("{}", error)),
-            };
+            }).await;
 
             _ = this.update(cx, |view, cx| {
                 match result {

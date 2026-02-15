@@ -512,19 +512,13 @@ impl RedisFormWindow {
         let config = self.get_config(cx);
 
         cx.spawn(async move |this, cx| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let test_result: Result<(), String> = Tokio::spawn_result(cx, async move {
                 RedisManager::test_connection(&config)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            });
-
-            let test_result: Result<(), String> = match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(()) => Ok(()),
-                    Err(e) => Err(e.to_string()),
-                },
-                Err(e) => Err(e.to_string()),
-            };
+            })
+            .await
+            .map_err(|e| e.to_string());
 
             let _ = this.update(cx, |this, cx| {
                 this.is_testing = false;
@@ -566,7 +560,7 @@ impl RedisFormWindow {
             .clone();
 
         cx.spawn(async move |_this, cx| {
-            let spawn_result = Tokio::spawn_result(cx, async move {
+            let result = Tokio::spawn_result(cx, async move {
                 let repo = storage
                     .get::<one_core::storage::ConnectionRepository>()
                     .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
@@ -584,34 +578,30 @@ impl RedisFormWindow {
                     repo.insert(&mut conn)?;
                 }
                 Ok::<StoredConnection, anyhow::Error>(conn)
-            });
+            })
+            .await;
 
-            match spawn_result {
-                Ok(task) => match task.await {
-                    Ok(saved_conn) => {
-                        let _ = cx.update(|cx| {
-                            if let Some(notifier) = get_notifier(cx) {
-                                let event = if is_editing {
-                                    ConnectionDataEvent::ConnectionUpdated {
-                                        connection: saved_conn,
-                                    }
-                                } else {
-                                    ConnectionDataEvent::ConnectionCreated {
-                                        connection: saved_conn,
-                                    }
-                                };
-                                notifier.update(cx, |_, cx| {
-                                    cx.emit(event);
-                                });
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        tracing::error!("保存 Redis 连接失败: {}", e);
-                    }
-                },
+            match result {
+                Ok(saved_conn) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(notifier) = get_notifier(cx) {
+                            let event = if is_editing {
+                                ConnectionDataEvent::ConnectionUpdated {
+                                    connection: saved_conn,
+                                }
+                            } else {
+                                ConnectionDataEvent::ConnectionCreated {
+                                    connection: saved_conn,
+                                }
+                            };
+                            notifier.update(cx, |_, cx| {
+                                cx.emit(event);
+                            });
+                        }
+                    });
+                }
                 Err(e) => {
-                    tracing::error!("Spawn 错误: {}", e);
+                    tracing::error!("保存 Redis 连接失败: {}", e);
                 }
             }
         })
