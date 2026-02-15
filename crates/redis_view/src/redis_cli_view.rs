@@ -608,7 +608,7 @@ impl RedisCliView {
         let mut lines = Vec::new();
 
         // 欢迎信息
-        lines.push("欢迎使用 Onet 的 Redis 命令行控制台".to_string());
+        lines.push("欢迎使用 ONetCli 的 Redis 命令行控制台".to_string());
         lines.push(String::new());
 
         // 历史命令和结果
@@ -1387,7 +1387,7 @@ impl RedisCliView {
         // 欢迎信息
         lines.push(CliLine {
             line_type: CliLineType::Welcome {
-                text: "欢迎使用 Onet 的 Redis 命令行控制台".to_string(),
+                text: "欢迎使用 ONetCli 的 Redis 命令行控制台".to_string(),
             },
         });
         lines.push(CliLine {
