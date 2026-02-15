@@ -8,13 +8,13 @@ use rust_i18n::t;
 use gpui_component::{h_flex, v_flex, ActiveTheme};
 
 
-const WECHAT_QR_ENV: &str = "ONEHUB_WECHAT_QR_URL";
-const ALIPAY_QR_ENV: &str = "ONEHUB_ALIPAY_QR_URL";
-const PAYPAL_QR_ENV: &str = "ONEHUB_PAYPAL_QR_URL";
+const WECHAT_QR_ENV: &str = "ONETCLI_WECHAT_QR_URL";
+const ALIPAY_QR_ENV: &str = "ONETCLI_ALIPAY_QR_URL";
+const PAYPAL_QR_ENV: &str = "ONETCLI_PAYPAL_QR_URL";
 
-const WECHAT_QR_BUILD: Option<&str> = option_env!("ONEHUB_WECHAT_QR_URL");
-const ALIPAY_QR_BUILD: Option<&str> = option_env!("ONEHUB_ALIPAY_QR_URL");
-const PAYPAL_QR_BUILD: Option<&str> = option_env!("ONEHUB_PAYPAL_QR_URL");
+const WECHAT_QR_BUILD: Option<&str> = option_env!("ONETCLI_WECHAT_QR_URL");
+const ALIPAY_QR_BUILD: Option<&str> = option_env!("ONETCLI_ALIPAY_QR_URL");
+const PAYPAL_QR_BUILD: Option<&str> = option_env!("ONETCLI_PAYPAL_QR_URL");
 
 const WECHAT_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/wechat.svg");
 const ALIPAY_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/alipay.svg");

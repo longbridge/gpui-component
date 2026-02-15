@@ -44,26 +44,26 @@ impl UpdateConfig {
 
     /// 获取更新接口地址
     fn get_update_url() -> String {
-        if let Ok(url) = std::env::var("ONEHUB_UPDATE_URL") {
+        if let Ok(url) = std::env::var("ONETCLI_UPDATE_URL") {
             if !url.trim().is_empty() {
                 return url;
             }
         }
 
-        option_env!("ONEHUB_UPDATE_URL")
+        option_env!("ONETCLI_UPDATE_URL")
             .unwrap_or_default()
             .to_string()
     }
 
     /// 获取下载页地址
     fn get_download_url() -> Option<String> {
-        if let Ok(url) = std::env::var("ONEHUB_UPDATE_DOWNLOAD_URL") {
+        if let Ok(url) = std::env::var("ONETCLI_UPDATE_DOWNLOAD_URL") {
             if !url.trim().is_empty() {
                 return Some(url);
             }
         }
 
-        option_env!("ONEHUB_UPDATE_DOWNLOAD_URL").and_then(|value| {
+        option_env!("ONETCLI_UPDATE_DOWNLOAD_URL").and_then(|value| {
             if value.trim().is_empty() {
                 None
             } else {
