@@ -416,20 +416,16 @@ impl ProviderForm {
         };
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let task = Tokio::spawn(cx, async move {
+            let result = Tokio::spawn(cx, async move {
                 let connector = LlmConnector::from_config(&config)?;
                 connector.models().await
-            });
+            })
+            .await;
 
-            let result: Result<Vec<String>, String> = match task {
-                Ok(task) => match task.await {
-                    Ok(Ok(models)) => Ok(models),
-                    Ok(Err(e)) => Err(e.to_string()),
-                    Err(e) => Err(t!("LlmProviders.model_task_failed", error = e).to_string()),
-                },
-                Err(e) => Err(
-                    t!("LlmProviders.model_task_schedule_failed", error = e).to_string(),
-                ),
+            let result: Result<Vec<String>, String> = match result {
+                Ok(Ok(models)) => Ok(models),
+                Ok(Err(e)) => Err(e.to_string()),
+                Err(e) => Err(t!("LlmProviders.model_task_failed", error = e).to_string()),
             };
 
             let _ = cx.update(|cx| {

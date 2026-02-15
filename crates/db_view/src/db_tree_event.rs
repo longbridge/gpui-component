@@ -833,9 +833,8 @@ impl DatabaseEventHandler {
                     cx.update(|cx| {
                         clone_export_view.update(cx, |this, cx| {
                             this.update_column_list(columns, cx);
-                        })
-                    })
-                    .ok();
+                        });
+                    });
                 }
                 Err(err) => {
                     error!("{}", err);

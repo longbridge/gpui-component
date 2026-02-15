@@ -673,10 +673,9 @@ fn render_account_section(_window: &mut Window, cx: &App) -> gpui::AnyElement {
                                 let auth = get_auth_service(cx);
                                 cx.spawn(async move |cx: &mut AsyncApp| {
                                     auth.sign_out().await;
-                                    cx.update(|cx| {
-                                        GlobalCurrentUser::set_user(None, cx);
-                                    })
-                                    .ok();
+                            cx.update(|cx| {
+                                GlobalCurrentUser::set_user(None, cx);
+                            });
                                 })
                                 .detach();
                             }),

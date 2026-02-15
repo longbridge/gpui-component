@@ -323,7 +323,6 @@ impl DataGrid {
                         cx.notify();
                     });
                 })
-                .ok();
             }
         })
         .detach();
@@ -405,7 +404,6 @@ impl DataGrid {
                             state.refresh(cx);
                         });
                     })
-                    .ok();
                 }
                 (Ok(response), columns_info_result) => {
                     let query_result = response.query_result;
@@ -472,8 +470,7 @@ impl DataGrid {
                             info.error_message = None;
                             cx.notify();
                         });
-                    })
-                    .ok();
+                    });
 
                     cx.update(|cx| {
                         filter_editor.update(cx, |editor, cx| {
@@ -491,8 +488,7 @@ impl DataGrid {
                             state.delegate_mut().update_data(columns, rows, rowids, cx);
                             state.refresh(cx);
                         });
-                    })
-                    .ok();
+                    });
                 }
             }
         })
@@ -570,14 +566,11 @@ impl DataGrid {
 
                 match columns_result {
                     Ok(columns) => {
-                        let update_result = cx.update(|cx| {
+                        cx.update(|cx| {
                             export_view_handle.update(cx, |view, cx| {
                                 view.update_column_list(columns, cx);
                             });
                         });
-                        if let Err(error) = update_result {
-                            error!("Failed to update export columns: {}", error);
-                        }
                     }
                     Err(error) => {
                         error!("Failed to fetch export columns: {}", error);
@@ -665,13 +658,12 @@ impl DataGrid {
                                 Err(error) => {
                                     let _ = cx.update(|cx| {
                                         if let Some(window_id) = window_id {
-                                            cx.update_window(window_id, |_entity, window, cx| {
+                                            let _ = cx.update_window(window_id, |_entity, window, cx| {
                                                 window.push_notification(
                                                     format!("导出失败: {}", error),
                                                     cx,
                                                 );
-                                            })
-                                            .ok();
+                                            });
                                         }
                                     });
                                     return;
@@ -686,10 +678,9 @@ impl DataGrid {
             let Some((columns, rows)) = export_payload else {
                 let _ = cx.update(|cx| {
                     if let Some(window_id) = window_id {
-                        cx.update_window(window_id, |_entity, window, cx| {
+                        let _ = cx.update_window(window_id, |_entity, window, cx| {
                             window.push_notification("没有可导出的数据".to_string(), cx);
-                        })
-                        .ok();
+                        });
                     }
                 });
                 return;
@@ -705,10 +696,9 @@ impl DataGrid {
                 None => {
                     let _ = cx.update(|cx| {
                         if let Some(window_id) = window_id {
-                            cx.update_window(window_id, |_entity, window, cx| {
+                            let _ = cx.update_window(window_id, |_entity, window, cx| {
                                 window.push_notification("没有可导出的数据".to_string(), cx);
-                            })
-                            .ok();
+                            });
                         }
                     });
                     return;
@@ -747,7 +737,7 @@ impl DataGrid {
 
             let _ = cx.update(|cx| {
                 if let Some(window_id) = window_id {
-                    cx.update_window(window_id, |_entity, window, cx| {
+                    let _ = cx.update_window(window_id, |_entity, window, cx| {
                         match write_result {
                             Ok(()) => {
                                 window.push_notification(
@@ -762,8 +752,7 @@ impl DataGrid {
                                 );
                             }
                         }
-                    })
-                    .ok();
+                    });
                 }
             });
         })
@@ -806,8 +795,6 @@ impl DataGrid {
 
                 Some((columns, rows))
             })
-            .ok()
-            .flatten()
     }
 
     fn normalize_query_result(
@@ -918,7 +905,6 @@ impl DataGrid {
                     cx.update(|cx| {
                         notification(cx, format!("Failed to execute SQL: {}", err));
                     })
-                    .ok();
                 }
                 Ok(results) => {
                     let (result, column_meta) = results;
@@ -942,7 +928,6 @@ impl DataGrid {
                                 state.refresh(cx);
                             });
                         })
-                        .ok();
                     }
                 }
             }
@@ -1534,8 +1519,7 @@ impl DataGrid {
                     Err(err) => {
                         cx.update(|cx| {
                             notification(cx, format!("Failed to get table keys: {}", err));
-                        })
-                        .ok();
+                        });
                         return;
                     }
                 };
@@ -1563,12 +1547,11 @@ impl DataGrid {
             });
 
             let (sql_content, change_count) = match save_result {
-                Ok(Ok((sql, count))) => (sql, count),
-                Ok(Err(msg)) => {
-                    cx.update(|cx| notification(cx, msg)).ok();
+                Ok((sql, count)) => (sql, count),
+                Err(msg) => {
+                    cx.update(|cx| notification(cx, msg));
                     return;
                 }
-                Err(_) => return,
             };
 
             let exec_options = ExecOptions {
@@ -1611,8 +1594,7 @@ impl DataGrid {
                 Err(e) => {
                     notification(cx, format!("Failed to save changes: {}", e));
                 }
-            })
-            .ok();
+            });
         })
         .detach();
     }
@@ -1653,8 +1635,7 @@ impl DataGrid {
                     Err(err) => {
                         cx.update(|cx| {
                             notification(cx, format!("Failed to get table keys: {}", err));
-                        })
-                        .ok();
+                        });
                         return;
                     }
                 };
@@ -1682,12 +1663,11 @@ impl DataGrid {
             });
 
             let (sql_content, change_count) = match save_result {
-                Ok(Ok((sql, count))) => (sql, count),
-                Ok(Err(msg)) => {
-                    cx.update(|cx| notification(cx, msg)).ok();
+                Ok((sql, count)) => (sql, count),
+                Err(msg) => {
+                    cx.update(|cx| notification(cx, msg));
                     return;
                 }
-                Err(_) => return,
             };
 
             let exec_options = ExecOptions {
@@ -1723,8 +1703,7 @@ impl DataGrid {
                 Err(e) => {
                     notification(cx, format!("Failed to save changes: {}", e));
                 }
-            })
-            .ok();
+            });
         })
         .detach();
     }
@@ -1765,8 +1744,7 @@ impl DataGrid {
                     Err(err) => {
                         cx.update(|cx| {
                             notification(cx, format!("Failed to get table keys: {}", err));
-                        })
-                        .ok();
+                        });
                         return;
                     }
                 };
@@ -1793,8 +1771,7 @@ impl DataGrid {
                         this.show_sql_editor_dialog(sql_content, "变更SQL预览", window, cx);
                     });
                 }
-            })
-            .ok();
+            });
         })
         .detach();
     }
@@ -1923,8 +1900,7 @@ impl DataGrid {
                                 window.push_notification("执行成功".to_string(), cx);
                             });
                         }
-                    })
-                    .ok();
+                    });
                 }
                 Err(error_msg) => {
                     cx.update(|cx| {
@@ -1933,8 +1909,7 @@ impl DataGrid {
                                 window.push_notification(error_msg, cx);
                             });
                         }
-                    })
-                    .ok();
+                    });
                 }
             }
         })

@@ -424,7 +424,7 @@ impl Render for UpdateDialogView {
                 this.child(
                     v_flex()
                         .gap_2()
-                        .child(Progress::new().value(self.progress_value()))
+                        .child(Progress::new("update-progress").value(self.progress_value()))
                         .child(
                             div()
                                 .text_xs()

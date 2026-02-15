@@ -500,16 +500,14 @@ impl TabContent for DatabaseTabView {
             });
 
             let global_state = cx.update(|cx| cx.global::<GlobalDbState>().clone());
-            if let Ok(global_state) = global_state {
-                let connection_ids: Vec<String> = connections
-                    .iter()
-                    .filter_map(|conn| conn.id.map(|id| id.to_string()))
-                    .collect();
+            let connection_ids: Vec<String> = connections
+                .iter()
+                .filter_map(|conn| conn.id.map(|id| id.to_string()))
+                .collect();
 
-                for connection_id in connection_ids {
-                    if let Err(e) = global_state.disconnect_all(cx, connection_id.clone()).await {
-                        tracing::warn!("Failed to disconnect connection {}: {}", connection_id, e);
-                    }
+            for connection_id in connection_ids {
+                if let Err(e) = global_state.disconnect_all(cx, connection_id.clone()).await {
+                    tracing::warn!("Failed to disconnect connection {}: {}", connection_id, e);
                 }
             }
 

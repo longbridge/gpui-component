@@ -979,7 +979,8 @@ impl DbConnectionForm {
                 let conn = db_plugin.create_connection(connection).await?;
                 conn.ping().await?;
                 Ok::<bool, Error>(true)
-            });
+            })
+            .await;
 
             let result_msg = match test_result {
                 Ok(_) => Ok(true),

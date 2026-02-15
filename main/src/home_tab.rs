@@ -1409,7 +1409,6 @@ impl HomePage {
                             .tooltip(t!("Home.new_connection"))
                             .dropdown_menu(move |menu, window, _cx| {
                                 let mut menu = menu
-                                    .large()
                                     .item(
                                         PopupMenuItem::new(t!("Workspace.label"))
                                             .icon(IconName::AppsColor.color().with_size(Size::Medium))

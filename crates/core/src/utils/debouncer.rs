@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use gpui::App;
+use gpui::{App, AsyncApp, BackgroundExecutor};
 
 /// A simple debouncer that delays execution until a period of inactivity.
 ///
@@ -14,7 +14,7 @@ use gpui::App;
 /// let debouncer = Arc::new(Debouncer::new(Duration::from_millis(250)));
 ///
 /// cx.spawn(async move |view, cx| {
-///     if debouncer.debounce().await {
+///     if debouncer.debounce(cx).await {
 ///         // This runs after 250ms of inactivity
 ///         let _ = view.update(cx, |this, cx| {
 ///             this.do_something(cx);
@@ -25,6 +25,22 @@ use gpui::App;
 pub struct Debouncer {
     delay: Duration,
     seq: AtomicU64,
+}
+
+pub trait DebouncerContext {
+    fn debounce_executor(&self) -> BackgroundExecutor;
+}
+
+impl DebouncerContext for App {
+    fn debounce_executor(&self) -> BackgroundExecutor {
+        self.background_executor().clone()
+    }
+}
+
+impl DebouncerContext for AsyncApp {
+    fn debounce_executor(&self) -> BackgroundExecutor {
+        self.background_executor().clone()
+    }
 }
 
 impl Debouncer {
@@ -40,12 +56,15 @@ impl Debouncer {
     ///
     /// Returns `true` if no newer calls have been made during the delay,
     /// `false` otherwise (meaning a newer call has superseded this one).
-    pub async fn debounce(&self, cx: &mut App) -> bool {
+    pub async fn debounce<C>(&self, cx: &C) -> bool
+    where
+        C: DebouncerContext,
+    {
         // Increment sequence number to invalidate any pending calls
         let my_seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
 
         // Wait for the delay
-        cx.background_executor().timer(self.delay).await;
+        cx.debounce_executor().timer(self.delay).await;
 
         // Only return true if no newer call has been made
         self.seq.load(Ordering::SeqCst) == my_seq

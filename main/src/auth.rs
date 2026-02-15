@@ -358,20 +358,20 @@ pub fn show_auth_dialog<V: 'static>(
                         cx.spawn(async move |cx: &mut AsyncApp| {
                             match auth.send_otp(&email_clone).await {
                                 Ok(()) => {
-                                    cx.update(|cx| {
-                                        step_update.update(cx, |step, cx| {
-                                            *step = OtpStep::EnterCode;
-                                            cx.notify();
-                                        });
-                                    }).ok();
+                            cx.update(|cx| {
+                                step_update.update(cx, |step, cx| {
+                                    *step = OtpStep::EnterCode;
+                                    cx.notify();
+                                });
+                            });
                                 }
                                 Err(e) => {
-                                    cx.update(|cx| {
-                                        error_update.update(cx, |msg, cx| {
-                                            *msg = Some(e);
-                                            cx.notify();
-                                        });
-                                    }).ok();
+                            cx.update(|cx| {
+                                error_update.update(cx, |msg, cx| {
+                                    *msg = Some(e);
+                                    cx.notify();
+                                });
+                            });
                                 }
                             }
                         })
@@ -479,18 +479,18 @@ pub fn show_auth_dialog<V: 'static>(
 
                                                 cx.spawn(async move |cx: &mut AsyncApp| {
                                                     let result = auth.send_otp(&email).await;
-                                                    cx.update(|cx| {
-                                                        sending_update.update(cx, |s, cx| {
-                                                            *s = false;
-                                                            cx.notify();
-                                                        });
+                            cx.update(|cx| {
+                                sending_update.update(cx, |s, cx| {
+                                    *s = false;
+                                    cx.notify();
+                                });
                                                         if let Err(e) = result {
                                                             error_update.update(cx, |msg, cx| {
                                                                 *msg = Some(e);
                                                                 cx.notify();
                                                             });
                                                         }
-                                                    }).ok();
+                            });
                                                 })
                                                     .detach();
                                             },

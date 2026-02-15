@@ -502,7 +502,7 @@ impl DbTreeView {
                     let query_for_task = query.clone();
 
                     cx.spawn(async move |view, cx| {
-                        if debouncer.debounce().await {
+                        if debouncer.debounce(cx).await {
                             _ = view.update(cx, |this, cx| {
                                 if this.search_seq == current_seq {
                                     this.search_query = query_for_task.clone();
@@ -887,7 +887,7 @@ impl DbTreeView {
                     }
                 }
                 Ok(())
-            })?
+            })
             .await;
 
             let _ = result;

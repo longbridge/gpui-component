@@ -1,10 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
-    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, Axis, Div, Element,
-    ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems, RenderOnce,
-    SharedString, Styled, Window,
-};
+use gpui::{div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _, IntoElement, JustifyItems, ParentElement, Pixels, Rems, RenderOnce, SharedString, Styled, Window};
 
 use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, Size, StyledExt};
 
@@ -90,6 +86,7 @@ pub struct Field {
     required: bool,
     /// Alignment of the form field.
     align_items: Option<AlignItems>,
+    label_justify_items: Option<JustifyItems>,
     col_span: u16,
     col_start: Option<i16>,
     col_end: Option<i16>,
@@ -106,6 +103,7 @@ impl Field {
             required: false,
             label_indent: true,
             align_items: None,
+            label_justify_items: None,
             props: FieldProps::default(),
             col_span: 1,
             col_start: None,
@@ -179,7 +177,22 @@ impl Field {
         self.props = props;
         self
     }
+    /// =====================BEGIN=================================
+    pub fn label_justify_start(mut self) -> Self {
+        self.label_justify_items = Some(JustifyItems::Start);
+        self
+    }
 
+    pub fn label_justify_center(mut self) -> Self {
+        self.label_justify_items = Some(JustifyItems::Center);
+        self
+    }
+
+    pub fn label_justify_end(mut self) -> Self {
+        self.label_justify_items = Some(JustifyItems::End);
+        self
+    }
+    // ==================================END================================
     /// Align the form field items to the start, this is the default.
     pub fn items_start(mut self) -> Self {
         self.align_items = Some(AlignItems::Start);
@@ -295,6 +308,14 @@ impl RenderOnce for Field {
                                 .when_some(self.label, |this, builder| {
                                     this.child(
                                         h_flex()
+                                            .when_some(self.label_justify_items, |this, value| {
+                                                match value {
+                                                    JustifyItems::Start => this.justify_start(),
+                                                    JustifyItems::End => this.justify_end(),
+                                                    JustifyItems::Center => this.justify_center(),
+                                                    _ => this.justify_end(),
+                                                }
+                                            })
                                             .gap_1()
                                             .child(
                                                 div()

@@ -6,7 +6,7 @@ use gpui::prelude::*;
 use gpui::{
     App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity,
     EventEmitter, FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, SharedString, Styled, Task, Timer, WeakEntity, Window, div, px,
+    Pixels, Point, Render, SharedString, Styled, Task, WeakEntity, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::InputEvent;
@@ -19,6 +19,7 @@ use one_core::storage::manager::get_queries_dir;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
 use rust_i18n::t;
+use smol::Timer;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -488,9 +489,7 @@ impl SqlEditorTab {
         } else if self.supports_schema {
             let schema = self
                 .schema_select
-                .read_with(cx, |state, _cx| state.selected_value().cloned())
-                .ok()
-                .flatten();
+                .read_with(cx, |state, _cx| state.selected_value().cloned());
             (database.to_string(), schema)
         } else {
             (database.to_string(), None)

@@ -468,7 +468,7 @@ impl TableDesigner {
                     global_state.db_manager.get_plugin(&database_type)
                 });
                 match plugin_result {
-                    Ok(Ok(plugin)) => {
+                    Ok(plugin) => {
                         if let Some(original) = &original_design {
                             plugin.build_alter_table_sql(original, &design)
                         } else {
@@ -773,7 +773,7 @@ impl TableDesigner {
                     global_state.db_manager.get_plugin(&database_type)
                 });
                 match plugin_result {
-                    Ok(Ok(plugin)) => {
+                    Ok(plugin) => {
                         if let Some(original) = &original_design {
                             plugin.build_alter_table_sql(original, &design)
                         } else {

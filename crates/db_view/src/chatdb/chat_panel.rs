@@ -829,7 +829,7 @@ impl ChatPanel {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             // 调用AI选表
-            let select_result = Tokio::spawn(cx, async move {
+            let ai_response = match Tokio::spawn(cx, async move {
                 let repo = storage_manager
                     .get::<ProviderRepository>()
                     .ok_or_else(|| anyhow::anyhow!("ProviderRepository not found"))?;
@@ -850,51 +850,47 @@ impl ChatPanel {
 
                 let provider = global_provider_state.manager().get_provider(&config).await?;
                 provider.chat(&request).await
-            });
-
-            let ai_response = match select_result {
-                Ok(task) => match task.await {
-                    Ok(Ok(response)) => response,
-                    Ok(Err(e)) => {
-                        if let Some(entity) = this.upgrade() {
-                            let _ = cx.update(|cx| {
-                                if let Some(window_id) = cx.active_window() {
-                                    let _ = cx.update_window(window_id, |_, window, cx| {
-                                        entity.update(cx, |content, cx| {
-                                            content.handle_workflow_action(
-                                                WorkflowAction::Error(format!("AI调用失败: {}", e)),
-                                                status_msg_id,
-                                                window,
-                                                cx,
-                                            );
-                                        });
+            })
+            .await {
+                Ok(Ok(response)) => response,
+                Ok(Err(e)) => {
+                    if let Some(entity) = this.upgrade() {
+                        let _ = cx.update(|cx| {
+                            if let Some(window_id) = cx.active_window() {
+                                let _ = cx.update_window(window_id, |_, window, cx| {
+                                    entity.update(cx, |content, cx| {
+                                        content.handle_workflow_action(
+                                            WorkflowAction::Error(format!("AI调用失败: {}", e)),
+                                            status_msg_id,
+                                            window,
+                                            cx,
+                                        );
                                     });
-                                }
-                            });
-                        }
-                        return;
+                                });
+                            }
+                        });
                     }
-                    Err(e) => {
-                        if let Some(entity) = this.upgrade() {
-                            let _ = cx.update(|cx| {
-                                if let Some(window_id) = cx.active_window() {
-                                    let _ = cx.update_window(window_id, |_, window, cx| {
-                                        entity.update(cx, |content, cx| {
-                                            content.handle_workflow_action(
-                                                WorkflowAction::Error(format!("任务失败: {:?}", e)),
-                                                status_msg_id,
-                                                window,
-                                                cx,
-                                            );
-                                        });
+                    return;
+                }
+                Err(e) => {
+                    if let Some(entity) = this.upgrade() {
+                        let _ = cx.update(|cx| {
+                            if let Some(window_id) = cx.active_window() {
+                                let _ = cx.update_window(window_id, |_, window, cx| {
+                                    entity.update(cx, |content, cx| {
+                                        content.handle_workflow_action(
+                                            WorkflowAction::Error(format!("任务失败: {:?}", e)),
+                                            status_msg_id,
+                                            window,
+                                            cx,
+                                        );
                                     });
-                                }
-                            });
-                        }
-                        return;
+                                });
+                            }
+                        });
                     }
-                },
-                Err(_) => return,
+                    return;
+                }
             };
 
             // 解析AI选表结果
@@ -1093,69 +1089,67 @@ impl ChatPanel {
 
                 let provider = global_provider_state.manager().get_provider(&config).await?;
                 provider.chat_stream(&request).await
-            });
+            })
+            .await;
 
             let mut stream = match stream_result {
-                Ok(task) => match task.await {
-                    Ok(Ok(s)) => s,
-                    Ok(Err(e)) => {
-                        let error_msg = format!("生成失败: {}", e);
-                        if let Some(entity) = this.upgrade() {
-                            let _ = cx.update(|cx| {
-                                if let Some(window_id) = cx.active_window() {
-                                    let _ = cx.update_window(window_id, |_, window, cx| {
-                                        entity.update(cx, |content, cx| {
-                                            if let Some(msg) = content
-                                                .messages
-                                                .iter_mut()
-                                                .find(|m| m.id == assistant_msg_id)
-                                            {
-                                                msg.is_streaming = false;
-                                                msg.content = error_msg;
-                                            }
-                                            content.is_loading = false;
-                                            content.workflow_stage = WorkflowStage::Idle;
-                                            ai_input.update(cx, |input, cx| {
-                                                input.set_loading(false, window, cx);
-                                            });
-                                            cx.notify();
+                Ok(Ok(s)) => s,
+                Ok(Err(e)) => {
+                    let error_msg = format!("生成失败: {}", e);
+                    if let Some(entity) = this.upgrade() {
+                        let _ = cx.update(|cx| {
+                            if let Some(window_id) = cx.active_window() {
+                                let _ = cx.update_window(window_id, |_, window, cx| {
+                                    entity.update(cx, |content, cx| {
+                                        if let Some(msg) = content
+                                            .messages
+                                            .iter_mut()
+                                            .find(|m| m.id == assistant_msg_id)
+                                        {
+                                            msg.is_streaming = false;
+                                            msg.content = error_msg;
+                                        }
+                                        content.is_loading = false;
+                                        content.workflow_stage = WorkflowStage::Idle;
+                                        ai_input.update(cx, |input, cx| {
+                                            input.set_loading(false, window, cx);
                                         });
+                                        cx.notify();
                                     });
-                                }
-                            });
-                        }
-                        return;
+                                });
+                            }
+                        });
                     }
-                    Err(e) => {
-                        let error_msg = format!("任务错误: {:?}", e);
-                        if let Some(entity) = this.upgrade() {
-                            let _ = cx.update(|cx| {
-                                if let Some(window_id) = cx.active_window() {
-                                    let _ = cx.update_window(window_id, |_, window, cx| {
-                                        entity.update(cx, |content, cx| {
-                                            if let Some(msg) = content
-                                                .messages
-                                                .iter_mut()
-                                                .find(|m| m.id == assistant_msg_id)
-                                            {
-                                                msg.is_streaming = false;
-                                                msg.content = error_msg;
-                                            }
-                                            content.is_loading = false;
-                                            content.workflow_stage = WorkflowStage::Idle;
-                                            ai_input.update(cx, |input, cx| {
-                                                input.set_loading(false, window, cx);
-                                            });
-                                            cx.notify();
+                    return;
+                }
+                Err(e) => {
+                    let error_msg = format!("任务错误: {:?}", e);
+                    if let Some(entity) = this.upgrade() {
+                        let _ = cx.update(|cx| {
+                            if let Some(window_id) = cx.active_window() {
+                                let _ = cx.update_window(window_id, |_, window, cx| {
+                                    entity.update(cx, |content, cx| {
+                                        if let Some(msg) = content
+                                            .messages
+                                            .iter_mut()
+                                            .find(|m| m.id == assistant_msg_id)
+                                        {
+                                            msg.is_streaming = false;
+                                            msg.content = error_msg;
+                                        }
+                                        content.is_loading = false;
+                                        content.workflow_stage = WorkflowStage::Idle;
+                                        ai_input.update(cx, |input, cx| {
+                                            input.set_loading(false, window, cx);
                                         });
+                                        cx.notify();
                                     });
-                                }
-                            });
-                        }
-                        return;
+                                });
+                            }
+                        });
                     }
-                },
-                Err(_) => return,
+                    return;
+                }
             };
 
             // 流式处理响应（以工作流摘要为前缀）
@@ -1399,10 +1393,7 @@ impl ChatPanel {
             }
 
             // 在 tokio 运行时中执行流式请求
-            let spawn_result = Tokio::spawn(cx, stream_future);
-            if spawn_result.is_err() {
-                return;
-            }
+            let _ = Tokio::spawn(cx, stream_future);
 
             // 处理流式事件
             while let Some(event) = stream_handle.events.recv().await {

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{
     App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    Render, Styled, Timer, UniformListScrollHandle, Window, div, px, uniform_list,
+    Render, Styled, UniformListScrollHandle, Window, div, px, uniform_list,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size, StyledExt,
@@ -22,6 +22,7 @@ use gpui_component::{
 };
 use one_ui::edit_table::Column;
 use tracing::log::error;
+use smol::Timer;
 
 use one_core::ai_chat::ask_ai::AskAiButton;
 use crate::table_data::data_grid::{DataGrid, DataGridConfig, DataGridUsage};
@@ -258,21 +259,19 @@ impl SqlResultTabContainer {
                 }
 
                 // 更新运行时间
-                let should_continue = cx
-                    .update(|cx| {
-                        let start_time = timer_self.execution_start.read(cx);
-                        if let Some(start) = *start_time {
-                            let elapsed = start.elapsed().as_millis() as f64;
-                            timer_self.total_elapsed_ms.update(cx, |ms, cx| {
-                                *ms = elapsed;
-                                cx.notify();
-                            });
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                    .unwrap_or(false);
+                let should_continue = cx.update(|cx| {
+                    let start_time = timer_self.execution_start.read(cx);
+                    if let Some(start) = *start_time {
+                        let elapsed = start.elapsed().as_millis() as f64;
+                        timer_self.total_elapsed_ms.update(cx, |ms, cx| {
+                            *ms = elapsed;
+                            cx.notify();
+                        });
+                        true
+                    } else {
+                        false
+                    }
+                });
 
                 if !should_continue {
                     break;
@@ -282,16 +281,14 @@ impl SqlResultTabContainer {
         .detach();
 
         cx.spawn(async move |cx: &mut AsyncApp| {
-            let (global_state, database_type) = cx
-                .update(|cx| {
-                    let global_state = cx.global::<GlobalDbState>();
-                    let config = global_state.get_config(&connection_id);
-                    let database_type = config
-                        .map(|c| c.database_type)
-                        .unwrap_or(one_core::storage::DatabaseType::MySQL);
-                    (global_state.clone(), database_type)
-                })
-                .ok()?;
+            let (global_state, database_type) = cx.update(|cx| {
+                let global_state = cx.global::<GlobalDbState>();
+                let config = global_state.get_config(&connection_id);
+                let database_type = config
+                    .map(|c| c.database_type)
+                    .unwrap_or(one_core::storage::DatabaseType::MySQL);
+                (global_state.clone(), database_type)
+            });
 
             let exec_opts = db::ExecOptions {
                 stop_on_error: false,
@@ -308,7 +305,7 @@ impl SqlResultTabContainer {
                 Ok(receiver) => receiver,
                 Err(e) => {
                     error!("Error starting streaming execution: {:?}", e);
-                    if let Err(err) = cx.update(|cx| {
+                    cx.update(|cx| {
                         // 停止计时器
                         clone_self.timer_stop_flag.store(true, Ordering::SeqCst);
                         // 清除开始时间
@@ -320,9 +317,7 @@ impl SqlResultTabContainer {
                             *state = ExecutionState::Idle;
                             cx.notify();
                         });
-                    }) {
-                        error!("Failed to update execution state on error: {:?}", err);
-                    }
+                    });
                     return None;
                 }
             };
@@ -376,7 +371,7 @@ impl SqlResultTabContainer {
 
             if !pending_results.is_empty() {
                 let results_to_send = pending_results;
-                if let Err(err) = cx.update(|cx| {
+                cx.update(|cx| {
                     if let Some(window_id) = cx.active_window() {
                         if let Err(err) = cx.update_window(window_id, |_entity, window, cx| {
                             clone_self.add_streaming_results_batch(
@@ -391,14 +386,12 @@ impl SqlResultTabContainer {
                             error!("Failed to update window after streaming: {:?}", err);
                         }
                     }
-                }) {
-                    error!("Failed to update app after streaming: {:?}", err);
-                }
+                });
             }
 
             // 最终状态更新
             let total_elapsed = execution_start.elapsed().as_secs_f64();
-            if let Err(err) = cx.update(|cx| {
+            cx.update(|cx| {
                 // 停止计时器
                 clone_self.timer_stop_flag.store(true, Ordering::SeqCst);
 
@@ -426,9 +419,7 @@ impl SqlResultTabContainer {
                         });
                     }
                 }
-            }) {
-                error!("Failed to update final state after streaming: {:?}", err);
-            }
+            });
             Some(())
         })
         .detach();
@@ -467,7 +458,7 @@ impl SqlResultTabContainer {
         database_type: one_core::storage::DatabaseType,
         cx: &mut AsyncApp,
     ) {
-        if let Err(err) = cx.update(|cx| {
+        cx.update(|cx| {
             if let Some(window_id) = cx.active_window() {
                 if let Err(err) = cx.update_window(window_id, |_entity, window, cx| {
                     self.execution_state.update(cx, |state, cx| {
@@ -487,9 +478,7 @@ impl SqlResultTabContainer {
                     error!("Failed to update window during batch update: {:?}", err);
                 }
             }
-        }) {
-            error!("Failed to update app during batch update: {:?}", err);
-        }
+        });
     }
 
     /// 批量添加streaming结果并滚动到最新位置
@@ -579,8 +568,7 @@ impl SqlResultTabContainer {
                                 data_grid.update(cx, |grid, cx| {
                                     grid.set_editable(false, cx);
                                 });
-                            })
-                            .ok();
+                            });
                         }
                     })
                     .detach();
@@ -794,7 +782,7 @@ impl SqlResultTabContainer {
         let progress_percent = (current as f32 / total as f32) * 100.0;
         div()
             .px_4()
-            .child(Progress::new().h(px(4.)).value(progress_percent))
+            .child(Progress::new("query-progress").h(px(4.)).value(progress_percent))
     }
 
     fn render_table_header(&self, cx: &Context<Self>) -> impl IntoElement {
