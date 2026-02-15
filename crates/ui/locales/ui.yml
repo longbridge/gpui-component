@@ -101,6 +101,18 @@ DatePicker:
     zh-CN: 选择日期
     zh-HK: 選擇日期
     it: "Seleziona data"
+DateTimePicker:
+  placeholder:
+    en: "Select date and time"
+    zh-CN: 选择日期和时间
+    zh-HK: 選擇日期和時間
+    it: "Seleziona data e ora"
+TimePicker:
+  placeholder:
+    en: "Select time"
+    zh-CN: 选择时间
+    zh-HK: 選擇時間
+    it: "Seleziona ora"
 Select:
   placeholder:
     en: "Please select"
