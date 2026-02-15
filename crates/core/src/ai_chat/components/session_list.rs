@@ -158,8 +158,11 @@ impl<H: SessionListHost> RenderOnce for SessionListItem<H> {
 
         let container_id = SharedString::from(format!("session-item-{}", session_id));
 
+        let group_name = SharedString::from(format!("session-group-{}", session_id));
+
         let mut row = h_flex()
             .id(container_id)
+            .group(group_name.clone())
             .w_full()
             .gap_2()
             .items_center()
@@ -208,7 +211,11 @@ impl<H: SessionListHost> RenderOnce for SessionListItem<H> {
 
         // 添加操作按钮
         if self.config.show_edit_button || self.config.show_delete_button {
-            let mut actions = h_flex().gap_1().items_center();
+            let mut actions = h_flex()
+                .gap_1()
+                .items_center()
+                .invisible()
+                .group_hover(group_name.clone(), |this| this.visible());
 
             if self.config.show_edit_button {
                 let host = host.clone();

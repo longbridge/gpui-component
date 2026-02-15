@@ -1151,12 +1151,12 @@ impl TableMentionCompletionProvider {
 
     pub(crate) fn format_table_mention(table: &str) -> String {
         if Self::is_simple_mention_name(table) {
-            return format!("@{}", table);
+            return format!("@{} ", table);
         }
         if !table.contains('`') {
-            return format!("@`{}`", table);
+            return format!("@`{}` ", table);
         }
-        format!("@\"{}\"", table)
+        format!("@\"{}\" ", table)
     }
 
     pub(crate) fn extract_mention_query(text: &str, offset: usize) -> Option<(usize, String)> {

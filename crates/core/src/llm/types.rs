@@ -151,7 +151,7 @@ impl ProviderConfig {
     pub fn builtin_onet_cli() -> Self {
         Self {
             id: BUILTIN_ONET_CLI_ID,
-            name: "Onet AI".to_string(),
+            name: "ONetCli AI".to_string(),
             provider_type: ProviderType::OnetCli,
             api_key: None,
             api_base: None,

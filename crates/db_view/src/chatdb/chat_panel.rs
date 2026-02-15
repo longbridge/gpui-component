@@ -13,18 +13,21 @@ use gpui::{div, px, AnyElement, App, AppContext, AsyncApp, Context, Entity, Even
 use gpui_component::{
     button::Button,
     clipboard::Clipboard,
+    dialog::DialogButtonProps,
     h_flex,
+    input::{Input, InputState},
     list::{List, ListState},
     scroll::Scrollbar,
     text::TextView,
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
+    WindowExt as _,
 };
 use gpui_component::button::ButtonVariants;
 use one_core::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
 use one_core::agent::registry::AgentRegistry;
 use one_core::gpui_tokio::Tokio;
 use one_core::llm::{
-    chat_history::ChatSession,
+    chat_history::{ChatSession, MessageRepository},
     manager::GlobalProviderState,
     storage::ProviderRepository,
     Message, ProviderConfig, Role, BUILTIN_ONET_CLI_ID,
@@ -252,10 +255,9 @@ impl ChatPanel {
                 delegate.update_sessions(sessions_data);
             });
         } else {
-            // 使用不显示编辑/删除按钮的配置（SQL Chat 面板不需要这些功能）
             self.session_list = Some(cx.new(|cx| {
                 ListState::new(
-                    SessionListDelegate::new(panel, sessions_data, SessionListConfig::no_actions()),
+                    SessionListDelegate::new(panel, sessions_data, SessionListConfig::default()),
                     window,
                     cx,
                 )
@@ -285,6 +287,119 @@ impl ChatPanel {
                         });
                     }
                 });
+            }
+        })
+        .detach();
+    }
+
+    fn delete_session(&mut self, session_id: i64, cx: &mut Context<Self>) {
+        let storage_manager = self.storage_manager.clone();
+
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let delete_ok = {
+                let message_repo = match storage_manager.get::<MessageRepository>() {
+                    Some(r) => r,
+                    None => return,
+                };
+                let _ = message_repo.delete_by_session(session_id);
+
+                let session_service = SessionService::new(storage_manager);
+                session_service.delete_session(session_id).is_ok()
+            };
+
+            if delete_ok {
+                if let Some(entity) = this.upgrade() {
+                    let _ = cx.update(|cx| {
+                        entity.update(cx, |this, cx| {
+                            if this.session_id == Some(session_id) {
+                                this.session_id = None;
+                                this.messages.clear();
+                                this.chat_history.clear();
+                            }
+                            this.history_sessions.retain(|s| s.id != session_id);
+                            let sessions_data: Vec<SessionData> = this
+                                .history_sessions
+                                .iter()
+                                .map(|s| SessionData::new(s.id, s.name.clone(), s.updated_at))
+                                .collect();
+                            if let Some(session_list) = &this.session_list {
+                                session_list.update(cx, |state, _| {
+                                    state.delegate_mut().update_sessions(sessions_data);
+                                });
+                            }
+                            cx.notify();
+                        });
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn start_rename_session(
+        &mut self,
+        session_id: i64,
+        current_name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let input_state = cx.new(|cx| {
+            InputState::new(window, cx)
+                .default_value(&current_name)
+                .placeholder("会话名称")
+        });
+
+        let panel_entity = cx.entity();
+        let input_for_dialog = input_state.clone();
+
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let input_for_ok = input_for_dialog.clone();
+            let panel_for_ok = panel_entity.clone();
+
+            dialog
+                .title("重命名会话")
+                .w(px(360.0))
+                .confirm()
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text("保存")
+                        .cancel_text("取消"),
+                )
+                .on_ok(move |_, _window, cx| {
+                    let new_name = input_for_ok.read(cx).value().to_string();
+                    if !new_name.trim().is_empty() {
+                        panel_for_ok.update(cx, |this, cx| {
+                            this.rename_session(session_id, new_name, cx);
+                        });
+                    }
+                    true
+                })
+                .child(
+                    v_flex().gap_2().child(
+                        div().text_sm().child("请输入新的会话名称："),
+                    ).child(
+                        Input::new(&input_for_dialog).w_full(),
+                    ),
+                )
+        });
+    }
+
+    fn rename_session(&mut self, session_id: i64, new_name: String, cx: &mut Context<Self>) {
+        let session_service = self.session_service.clone();
+
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let renamed = session_service
+                .update_session_name(session_id, new_name)
+                .is_ok();
+
+            if renamed {
+                if let Some(entity) = this.upgrade() {
+                    let _ = cx.update(|cx| {
+                        entity.update(cx, |this, cx| {
+                            this.load_history_sessions(cx);
+                        });
+                    });
+                }
             }
         })
         .detach();
@@ -1562,6 +1677,20 @@ impl Focusable for ChatPanel {
 impl SessionListHost for ChatPanel {
     fn on_session_select(&mut self, session_id: i64, cx: &mut Context<Self>) {
         self.load_session(session_id, cx);
+    }
+
+    fn on_session_edit(
+        &mut self,
+        session_id: i64,
+        name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.start_rename_session(session_id, name, window, cx);
+    }
+
+    fn on_session_delete(&mut self, session_id: i64, cx: &mut Context<Self>) {
+        self.delete_session(session_id, cx);
     }
 
     fn is_current_session(&self, session_id: i64) -> bool {
