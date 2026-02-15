@@ -2109,6 +2109,91 @@ impl GlobalDbState {
 
         result
     }
+
+    /// Pure async version of `list_tables` — can be called from any tokio context
+    /// without `AsyncApp`. Skips `GlobalNodeCache`.
+    pub async fn list_tables_direct(
+        &self,
+        connection_id: &str,
+        database: &str,
+        schema: Option<String>,
+    ) -> anyhow::Result<Vec<crate::types::TableInfo>> {
+        let config = self
+            .get_config(connection_id)
+            .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?;
+        let mut config = config.clone();
+        config.database = Some(database.to_string());
+
+        let plugin = self.get_plugin(&config.database_type)?;
+        let session_id = self
+            .connection_manager
+            .create_session(config, &self.db_manager)
+            .await?;
+
+        let result = {
+            let mut guard = self
+                .connection_manager
+                .get_session_connection(&session_id)
+                .await?;
+            let conn = guard
+                .connection()
+                .ok_or_else(|| anyhow::anyhow!("Session connection not found"))?;
+            plugin
+                .list_tables(conn, database, schema)
+                .await
+                .map_err(|e| anyhow::anyhow!("{}", e))
+        };
+
+        self.connection_manager
+            .release_session(&session_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        result
+    }
+
+    /// Pure async version of `list_columns` — can be called from any tokio context
+    /// without `AsyncApp`. Skips `GlobalNodeCache`.
+    pub async fn list_columns_direct(
+        &self,
+        connection_id: &str,
+        database: &str,
+        schema: Option<String>,
+        table: &str,
+    ) -> anyhow::Result<Vec<crate::types::ColumnInfo>> {
+        let config = self
+            .get_config(connection_id)
+            .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?;
+        let mut config = config.clone();
+        config.database = Some(database.to_string());
+
+        let plugin = self.get_plugin(&config.database_type)?;
+        let session_id = self
+            .connection_manager
+            .create_session(config, &self.db_manager)
+            .await?;
+
+        let result = {
+            let mut guard = self
+                .connection_manager
+                .get_session_connection(&session_id)
+                .await?;
+            let conn = guard
+                .connection()
+                .ok_or_else(|| anyhow::anyhow!("Session connection not found"))?;
+            plugin
+                .list_columns(conn, database, schema, table)
+                .await
+                .map_err(|e| anyhow::anyhow!("{}", e))
+        };
+
+        self.connection_manager
+            .release_session(&session_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        result
+    }
 }
 
 impl Default for GlobalDbState {

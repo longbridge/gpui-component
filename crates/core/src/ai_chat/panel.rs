@@ -16,21 +16,21 @@ use gpui_component::{
 };
 use tracing::{info, warn};
 use tokio_util::sync::CancellationToken;
+use crate::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
+use crate::agent::registry::AgentRegistry;
+use crate::gpui_tokio::Tokio;
 use crate::llm::ProviderConfig;
 use crate::llm::{
     chat_history::{MessageRepository, SessionRepository},
     manager::GlobalProviderState,
     storage::ProviderRepository,
-    Message, Role,
+    Message, Role, BUILTIN_ONET_CLI_ID,
 };
 use crate::storage::{traits::Repository, GlobalStorageState};
-use crate::gpui_tokio::Tokio;
 
 // 使用引擎和渲染器
 use super::engine::ChatEngine;
 use super::rendering::ChatMessageRenderer;
-// 使用流式处理器
-use super::stream::{ChatStreamProcessor, StreamEvent};
 // 使用共享组件
 use super::components::{
     ProviderSelectState, ProviderSelectEvent,
@@ -292,6 +292,8 @@ pub struct AiChatPanel {
     custom_colors: Option<AiChatColors>,
     /// 模型设置面板
     settings_panel: Entity<ModelSettingsPanel>,
+    /// Agent 会话亲和性（用于多轮对话保持同一 Agent）
+    session_affinity: SessionAffinity,
 }
 
 
@@ -373,6 +375,7 @@ impl AiChatPanel {
             session_list: None,
             custom_colors: None,
             settings_panel,
+            session_affinity: SessionAffinity::new(),
         };
 
         // 加载 providers
@@ -752,10 +755,37 @@ impl AiChatPanel {
         let global_state = cx.global::<GlobalStorageState>();
         let storage_manager = global_state.storage.clone();
         let session_id = self.engine.session_id;
-        let selected_model = self.engine.selected_model.clone();
         let history_count = self.engine.model_settings.history_count;
         let max_tokens = self.engine.model_settings.max_tokens;
         let temperature = self.engine.model_settings.temperature;
+
+        // 构建 ProviderConfig（含用户选择的 model 和设置覆盖）
+        let provider_config = {
+            let base = if provider_id == BUILTIN_ONET_CLI_ID {
+                ProviderConfig::builtin_onet_cli()
+            } else {
+                self.engine
+                    .provider_configs
+                    .iter()
+                    .find(|c| c.id == provider_id)
+                    .cloned()
+                    .unwrap_or_default()
+            };
+            ProviderConfig {
+                model: self.engine.selected_model.clone().unwrap_or(base.model),
+                max_tokens: Some(max_tokens as i32),
+                temperature: Some(temperature),
+                ..base
+            }
+        };
+
+        // 获取 AgentRegistry 快照
+        let registry = cx.global::<AgentRegistry>();
+        let agent_ids: Vec<&'static str> = registry.sorted_ids().to_vec();
+        let agents: Vec<_> = agent_ids
+            .iter()
+            .filter_map(|id| registry.get(id).cloned())
+            .collect();
 
         // 添加用户消息到 UI 并创建助手消息占位符
         self.engine.push_user_message(content.clone());
@@ -768,10 +798,19 @@ impl AiChatPanel {
         let cancel_token = CancellationToken::new();
         self.engine.cancel_token = Some(cancel_token.clone());
 
+        // 获取当前亲和性状态
+        let mut affinity = self.session_affinity.clone();
+
         self.engine.scroll_to_bottom();
         cx.notify();
 
+        // 获取 Tokio runtime handle（AgentDispatcher::dispatch 内部使用 tokio::spawn）
+        let tokio_handle = Tokio::handle(cx);
+
         cx.spawn(async move |this, cx: &mut AsyncApp| {
+            // 进入 Tokio runtime 上下文
+            let _guard = tokio_handle.enter();
+
             if cancel_token.is_cancelled() {
                 return;
             }
@@ -807,31 +846,47 @@ impl AiChatPanel {
                 }
             };
 
-            // 使用 ChatStreamProcessor 创建流
-            let (mut rx, _cancel, future) = ChatStreamProcessor::create_stream(
-                provider_id,
-                selected_model,
+            // 构建 AgentContext
+            let ctx_agent = AgentContext::new(
+                content,
                 history,
-                max_tokens as u32,
-                temperature,
-                cancel_token,
+                provider_config,
                 global_provider_state,
                 storage_manager.clone(),
+                cancel_token,
             );
 
-            // Spawn 流式处理 future
-            let _stream_task = Tokio::spawn(cx, future);
+            // 使用 AgentDispatcher 进行路由和执行
+            // 由于只有一个内置 agent，会走 single-candidate 快捷路径
+            let mut local_registry = AgentRegistry::new();
+            for agent in agents {
+                // 通过 descriptor 获取 id 并直接插入
+                local_registry.register_arc(agent);
+            }
+            let mut rx = AgentDispatcher::dispatch(ctx_agent, &local_registry, &mut affinity).await;
 
-            // 处理流式事件
+            // 回写亲和性状态
+            if let Some(entity) = this.upgrade() {
+                let affinity_clone = affinity.clone();
+                let _ = cx.update(|cx| {
+                    entity.update(cx, |this, _cx| {
+                        this.session_affinity = affinity_clone;
+                    });
+                });
+            }
+
+            // 处理 Agent 事件
+            let mut full_content = String::new();
             while let Some(event) = rx.recv().await {
                 match event {
-                    StreamEvent::ContentDelta { full_content, .. } => {
+                    AgentEvent::TextDelta(delta) => {
+                        full_content.push_str(&delta);
                         if let Some(entity) = this.upgrade() {
-                            let content_clone = full_content;
+                            let content_snapshot = full_content.clone();
                             let msg_id = assistant_msg_id.clone();
                             cx.update(|cx| {
                                 entity.update(cx, |this, cx| {
-                                    this.engine.update_streaming_content(&msg_id, content_clone);
+                                    this.engine.update_streaming_content(&msg_id, content_snapshot);
                                     this.engine.scroll_to_bottom();
                                     cx.notify();
                                 })
@@ -840,10 +895,10 @@ impl AiChatPanel {
                             return;
                         }
                     }
-                    StreamEvent::Completed { full_content } => {
+                    AgentEvent::Completed(result) => {
                         if let Some(entity) = this.upgrade() {
                             let msg_id = assistant_msg_id.clone();
-                            let final_content = full_content;
+                            let final_content = result.content;
                             let storage_for_save = storage_manager.clone();
                             cx.update(|cx| {
                                 entity.update(cx, |this, cx| {
@@ -876,7 +931,7 @@ impl AiChatPanel {
                         }
                         break;
                     }
-                    StreamEvent::Error { message } => {
+                    AgentEvent::Error(message) => {
                         if let Some(entity) = this.upgrade() {
                             let msg_id = assistant_msg_id.clone();
                             cx.update(|cx| {
@@ -891,8 +946,20 @@ impl AiChatPanel {
                         }
                         break;
                     }
-                    StreamEvent::Cancelled => {
-                        info!("Stream cancelled by user");
+                    AgentEvent::Progress(msg) => {
+                        if let Some(entity) = this.upgrade() {
+                            let msg_id = assistant_msg_id.clone();
+                            cx.update(|cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.engine.update_streaming_content(&msg_id, msg);
+                                    this.engine.scroll_to_bottom();
+                                    cx.notify();
+                                })
+                            });
+                        }
+                    }
+                    AgentEvent::Cancelled => {
+                        info!("Agent operation cancelled by user");
                         break;
                     }
                 }

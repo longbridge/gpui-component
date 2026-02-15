@@ -53,6 +53,7 @@ pub fn init(cx: &mut App) {
     gpui_component::init(cx);
     one_core::init(cx);
     one_ui::init(cx);
+    db_view::chatdb::agents::init(cx);
     crate::auth::init(cx);
     crate::license::init(cx);
     {

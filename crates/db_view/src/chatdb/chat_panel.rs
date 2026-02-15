@@ -2,9 +2,12 @@
 //!
 //! 使用 AIInput 组件实现双模式（Agent/SQL）的智能输入
 //! 支持 @表名 语法和智能工作流
+//!
+//! 所有 AI 请求统一通过 AgentDispatcher::dispatch() 路由：
+//! - 有数据库连接 → SqlWorkflowAgent（自动处理选表/元数据/SQL生成）
+//! - 无数据库连接 → GeneralChatAgent
 
 use db::{GlobalDbState, is_query_statement_fallback};
-use futures::StreamExt;
 use gpui::prelude::FluentBuilder;
 use gpui::{div, px, AnyElement, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window};
 use gpui_component::{
@@ -17,22 +20,22 @@ use gpui_component::{
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
 };
 use gpui_component::button::ButtonVariants;
+use one_core::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
+use one_core::agent::registry::AgentRegistry;
 use one_core::gpui_tokio::Tokio;
 use one_core::llm::{
     chat_history::ChatSession,
     manager::GlobalProviderState,
     storage::ProviderRepository,
-    ChatRequest, Message, Role,
+    Message, ProviderConfig, Role, BUILTIN_ONET_CLI_ID,
 };
 use one_core::storage::{traits::Repository, DatabaseType, GlobalStorageState};
 use one_core::tab_container::{TabContent, TabContentEvent};
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
 use uuid::Uuid;
 use crate::chatdb::ai_input::{AIInput, AIInputEvent};
+use crate::chatdb::agents::{CAP_DB_METADATA, DatabaseMetadataProvider};
 use crate::chatdb::chat_markdown::SqlCodeBlock;
 use crate::chatdb::chat_sql_block::SqlBlockResultState;
 use crate::chatdb::chat_sql_result::ChatSqlResultView;
@@ -43,11 +46,6 @@ use one_core::ai_chat::components::{
     SessionData, SessionListConfig, SessionListDelegate, SessionListHost,
 };
 use one_core::ai_chat::services::{SessionService, extract_session_name};
-use crate::chatdb::query_workflow::{
-    parse_user_input, ParsedInput, QueryContext, TableBrief, WorkflowStage,
-};
-use crate::chatdb::workflow::{WorkflowExecutor, WorkflowAction};
-use crate::chatdb::services::{ChatService, StreamEvent};
 use crate::chatdb::sql_query_detector::is_query_statement_for_connection;
 use crate::sql_result_tab::SqlResultTabContainer;
 
@@ -73,7 +71,7 @@ pub struct ChatPanel {
 
     // 服务层
     session_service: SessionService,
-    chat_service: ChatService,
+    session_affinity: SessionAffinity,
 
     // 状态
     provider_id: Option<String>,
@@ -92,11 +90,6 @@ pub struct ChatPanel {
     storage_manager: one_core::storage::StorageManager,
     latest_ai_message_id: Option<String>,
 
-    // 工作流状态
-    workflow_stage: WorkflowStage,
-    pending_tables: Vec<TableBrief>,
-    pending_question: Option<String>,
-    pending_warning: Option<String>,
     render_limit: usize,
     /// 用户是否在底部区域（用于判断是否可以裁剪渲染窗口）
     is_at_bottom: bool,
@@ -108,25 +101,8 @@ pub struct ChatPanel {
 
     // 取消和重试
     cancel_token: Option<CancellationToken>,
-    retry_context: Option<RetryContext>,
-}
-
-/// 重试上下文
-#[derive(Clone, Debug)]
-struct RetryContext {
-    user_question: String,
-    mentioned_tables: Vec<String>,
-    connection_id: String,
-    database: Option<String>,
-    schema: Option<String>,
-    database_type: DatabaseType,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum QueryIntent {
-    FollowupChat,
-    FollowupQuery,
-    NewQuery,
+    /// 上一次用户输入（用于简化重试）
+    last_user_input: Option<String>,
 }
 
 impl ChatPanel {
@@ -180,14 +156,13 @@ impl ChatPanel {
         let global_state = cx.global::<GlobalStorageState>();
         let storage_manager = global_state.storage.clone();
         let session_service = SessionService::new(storage_manager.clone());
-        let chat_service = ChatService::new(storage_manager.clone());
 
         let mut instance = Self {
             focus_handle,
             ai_input,
             _input_subscription: input_subscription,
             session_service,
-            chat_service,
+            session_affinity: SessionAffinity::new(),
             provider_id: None,
             selected_model: None,
             is_loading: false,
@@ -201,16 +176,12 @@ impl ChatPanel {
             session_list: None,
             storage_manager,
             latest_ai_message_id: None,
-            workflow_stage: WorkflowStage::Idle,
-            pending_tables: Vec::new(),
-            pending_question: None,
-            pending_warning: None,
             render_limit: MESSAGE_RENDER_LIMIT,
             is_at_bottom: true,
             is_new_session: false,
             model_settings: ModelSettings::default(),
             cancel_token: None,
-            retry_context: None,
+            last_user_input: None,
         };
 
         instance.load_providers(window, cx);
@@ -263,6 +234,7 @@ impl ChatPanel {
         self.sql_block_results.clear();
         self.latest_ai_message_id = None;
         self.render_limit = MESSAGE_RENDER_LIMIT;
+        self.session_affinity.reset();
         cx.notify();
     }
 
@@ -368,36 +340,6 @@ impl ChatPanel {
     // 消息发送与工作流
     // ========================================================================
 
-    fn ensure_session_id(&mut self, provider_id: &str, cx: &mut Context<Self>) -> Option<i64> {
-        if let Some(id) = self.session_id {
-            return Some(id);
-        }
-
-        match self.session_service.ensure_session(None, provider_id, "SQL 会话") {
-            Ok(id) => {
-                self.session_id = Some(id);
-                self.is_new_session = true; // 标记为新会话，等待第一条消息更新名称
-                self.load_history_sessions(cx);
-                Some(id)
-            }
-            Err(_) => None,
-        }
-    }
-
-    fn persist_user_message(&mut self, session_id: i64, content: String, cx: &mut Context<Self>) {
-        let _ = self.session_service.add_user_message(session_id, content.clone());
-
-        // 如果是新会话的第一条消息，使用消息内容的前几个字作为会话名称
-        if self.is_new_session {
-            self.is_new_session = false;
-            let session_name = extract_session_name(&content);
-            if self.session_service.update_session_name(session_id, session_name).is_ok() {
-                self.load_history_sessions(cx);
-            }
-        }
-    }
-
-
     fn persist_assistant_message(&self, session_id: i64, content: String) {
         let _ = self.session_service.add_assistant_message(session_id, content);
     }
@@ -409,184 +351,33 @@ impl ChatPanel {
 
         // 添加用户消息
         self.messages.push(ChatMessageUI::user(content.clone()));
+        self.chat_history
+            .push(Message::text(Role::User, content.clone()));
+        self.last_user_input = Some(content.clone());
         self.scroll_to_bottom_and_mark();
         cx.notify();
 
-        let intent = self.recognize_query_intent(&content);
-        if intent == QueryIntent::FollowupChat {
-            self.reset_workflow_state();
-            self.chat_history
-                .push(Message::text(Role::User, content.clone()));
-            self.send_to_ai_direct(content, cx);
-            return;
-        }
+        // 统一走 send_to_ai — AgentDispatcher 自动路由：
+        //   有 database_metadata capability → SqlWorkflowAgent
+        //   无 → GeneralChatAgent
+        self.send_to_ai(content, cx);
+    }
 
-        // 检查是否选择了数据库连接
-        let Some((connection_id, database, schema)) = self.ai_input.read(cx).get_connection_info()
-        else {
-            // 没有选择数据库，直接使用普通AI对话
-            self.chat_history
-                .push(Message::text(Role::User, content.clone()));
-            self.send_to_ai_direct(content, cx);
-            return;
+    /// 构建 ProviderConfig（两条路径共用）
+    fn build_provider_config(&self, provider_id: i64, _cx: &mut Context<Self>) -> ProviderConfig {
+        let base = if provider_id == BUILTIN_ONET_CLI_ID {
+            ProviderConfig::builtin_onet_cli()
+        } else {
+            self.storage_manager
+                .get::<ProviderRepository>()
+                .and_then(|repo| repo.get(provider_id).ok().flatten())
+                .unwrap_or_default()
         };
-
-        // 获取数据库类型
-        let global_db_state = cx.global::<GlobalDbState>().clone();
-        let database_type = global_db_state
-            .get_config(&connection_id)
-            .map(|c| c.database_type)
-            .unwrap_or(DatabaseType::MySQL);
-
-        if let Some(provider_id) = self.provider_id.clone() {
-            if let Some(session_id) = self.ensure_session_id(&provider_id, cx) {
-                self.persist_user_message(session_id, content.clone(), cx);
-            }
-        }
-
-        let parsed = match intent {
-            QueryIntent::FollowupQuery => {
-                let fallback_question = self.pending_question.clone().unwrap_or_default();
-                let current = parse_user_input(&content);
-                let clean_question = merge_followup_question(&fallback_question, &current.clean_question);
-                ParsedInput {
-                    raw_question: content.clone(),
-                    clean_question,
-                    mentioned_tables: current.mentioned_tables,
-                }
-            }
-            _ => parse_user_input(&content),
-        };
-
-        // 启动工作流
-        self.reset_workflow_context();
-        self.start_query_workflow(parsed, connection_id, database, schema, database_type, cx);
-    }
-
-    /// 启动查询工作流
-    fn start_query_workflow(
-        &mut self,
-        parsed: ParsedInput,
-        connection_id: String,
-        database: Option<String>,
-        schema: Option<String>,
-        database_type: DatabaseType,
-        cx: &mut Context<Self>,
-    ) {
-        self.is_loading = true;
-        self.workflow_stage = WorkflowStage::FetchingTables;
-        self.pending_question = Some(parsed.clean_question.clone());
-
-        // 创建取消令牌
-        let cancel_token = CancellationToken::new();
-        self.cancel_token = Some(cancel_token.clone());
-
-        // 保存重试上下文
-        self.retry_context = Some(RetryContext {
-            user_question: parsed.clean_question.clone(),
-            mentioned_tables: parsed.mentioned_tables.clone(),
-            connection_id: connection_id.clone(),
-            database: database.clone(),
-            schema: schema.clone(),
-            database_type,
-        });
-
-        // 添加状态消息
-        let status_msg_id = Uuid::new_v4().to_string();
-        self.messages.push(
-            ChatMessageUI::status("分析查询意图...", false)
-                .with_id(status_msg_id.clone())
-        );
-        cx.notify();
-
-        let global_db_state = cx.global::<GlobalDbState>().clone();
-        let executor = WorkflowExecutor::new(
-            connection_id,
-            database,
-            schema,
-            database_type,
-        );
-
-        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            // 检查取消状态
-            if cancel_token.is_cancelled() {
-                return;
-            }
-
-            let action = executor.start(&parsed, &global_db_state, cx, &cancel_token).await;
-
-            // 再次检查取消状态（WorkflowExecutor 内部也会检查）
-            if cancel_token.is_cancelled() {
-                return;
-            }
-
-            let _ = cx.update(|cx| {
-                if let Some(window_id) = cx.active_window() {
-                    let _ = cx.update_window(window_id, |_, window, cx| {
-                        if let Some(entity) = this.upgrade() {
-                            entity.update(cx, |content, cx| {
-                                content.handle_workflow_action(
-                                    action,
-                                    status_msg_id,
-                                    window,
-                                    cx,
-                                );
-                            });
-                        }
-                    });
-                }
-            });
-        })
-        .detach();
-    }
-
-    fn recognize_query_intent(&self, content: &str) -> QueryIntent {
-        if matches!(self.workflow_stage, WorkflowStage::NeedUserSelectTables { .. }) {
-            if content.contains('@') {
-                return QueryIntent::FollowupQuery;
-            }
-            return QueryIntent::FollowupChat;
-        }
-
-        if let Some(last_msg) = self.last_assistant_message() {
-            if last_msg.is_streaming {
-                return QueryIntent::FollowupChat;
-            }
-            if matches!(last_msg.variant, MessageVariant::Status { .. }) {
-                return QueryIntent::FollowupChat;
-            }
-            if is_followup_prompt(&last_msg.content) {
-                return QueryIntent::FollowupChat;
-            }
-        }
-
-        QueryIntent::NewQuery
-    }
-
-    fn last_assistant_message(&self) -> Option<&ChatMessageUI> {
-        if let Some(latest_id) = &self.latest_ai_message_id {
-            if let Some(msg) = self.messages.iter().find(|m| &m.id == latest_id) {
-                return Some(msg);
-            }
-        }
-        self.messages
-            .iter()
-            .rev()
-            .find(|m| matches!(m.role, ChatRole::Assistant))
-    }
-
-    fn reset_workflow_context(&mut self) {
-        self.pending_tables.clear();
-        self.pending_warning = None;
-    }
-
-    fn reset_workflow_state(&mut self) {
-        self.reset_workflow_context();
-        self.pending_question = None;
-        self.workflow_stage = WorkflowStage::Idle;
-        // 取消正在进行的请求
-        if let Some(token) = self.cancel_token.take() {
-            token.cancel();
+        ProviderConfig {
+            model: self.selected_model.clone().unwrap_or(base.model),
+            max_tokens: Some(self.model_settings.max_tokens as i32),
+            temperature: Some(self.model_settings.temperature),
+            ..base
         }
     }
 
@@ -599,7 +390,6 @@ impl ChatPanel {
 
         // 重置状态
         self.is_loading = false;
-        self.workflow_stage = WorkflowStage::Idle;
 
         // 更新输入组件状态
         self.ai_input.update(cx, |input, cx| {
@@ -617,9 +407,9 @@ impl ChatPanel {
         cx.notify();
     }
 
-    /// 重试失败的操作
+    /// 重试上一次操作
     pub fn retry_last_operation(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let Some(retry_ctx) = self.retry_context.take() else {
+        let Some(last_input) = self.last_user_input.clone() else {
             return;
         };
 
@@ -628,21 +418,8 @@ impl ChatPanel {
             !matches!(&m.variant, MessageVariant::Status { title, .. } if title.contains("错误") || title.contains("失败"))
         });
 
-        // 重新开始工作流
-        let parsed = ParsedInput {
-            raw_question: retry_ctx.user_question.clone(),
-            clean_question: retry_ctx.user_question.clone(),
-            mentioned_tables: retry_ctx.mentioned_tables.clone(),
-        };
-
-        self.start_query_workflow(
-            parsed,
-            retry_ctx.connection_id,
-            retry_ctx.database,
-            retry_ctx.schema,
-            retry_ctx.database_type,
-            cx,
-        );
+        // 重新发送
+        self.send_to_ai(last_input, cx);
     }
 
     /// 是否可以取消
@@ -652,628 +429,10 @@ impl ChatPanel {
 
     /// 是否可以重试
     fn can_retry(&self) -> bool {
-        self.retry_context.is_some() && !self.is_loading
+        self.last_user_input.is_some() && !self.is_loading
     }
 
-    /// 处理工作流动作
-    fn handle_workflow_action(
-        &mut self,
-        action: WorkflowAction,
-        status_msg_id: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match action {
-            WorkflowAction::ReadyToGenerate { context } => {
-                // 找到最后一个进行中的状态消息（可能是元数据获取状态）
-                let last_streaming_status_id = self.messages.iter().rev()
-                    .find(|m| m.is_streaming && matches!(m.variant, MessageVariant::Status { .. }))
-                    .map(|m| m.id.clone());
-
-                // 更新元数据状态消息为已完成
-                if let Some(msg_id) = &last_streaming_status_id {
-                    if let Some(msg) = self.messages.iter_mut().find(|m| &m.id == msg_id) {
-                        msg.variant = MessageVariant::Status {
-                            title: "表结构获取完成".to_string(),
-                            is_done: true,
-                        };
-                        msg.is_streaming = false;
-                    }
-                }
-
-                // 添加生成SQL的状态消息
-                let sql_gen_msg_id = Uuid::new_v4().to_string();
-                self.messages.push(
-                    ChatMessageUI::status("生成 SQL...", false)
-                        .with_id(sql_gen_msg_id.clone())
-                );
-                cx.notify();
-
-                // 准备好了，开始生成SQL
-                self.generate_sql_with_context(context, sql_gen_msg_id, cx);
-            }
-            WorkflowAction::NeedAiSelectTables { prompt, tables, warning } => {
-                // 存储警告信息
-                self.pending_warning = warning.clone();
-
-                // 如果有警告，先显示警告消息
-                if let Some(warning_msg) = warning {
-                    // 更新状态消息为警告
-                    if let Some(msg) = self.messages.iter_mut().find(|m| m.id == status_msg_id) {
-                        msg.variant = MessageVariant::Status {
-                            title: warning_msg,
-                            is_done: true,
-                        };
-                        msg.is_streaming = false;
-                    }
-                    // 添加新的AI选表状态消息
-                    let ai_select_msg_id = Uuid::new_v4().to_string();
-                    self.messages.push(
-                        ChatMessageUI::status("AI 选择相关表...", false)
-                            .with_id(ai_select_msg_id.clone())
-                    );
-                    self.pending_tables = tables;
-                    cx.notify();
-                    // 需要AI选表
-                    self.ai_select_tables(prompt, ai_select_msg_id, cx);
-                } else {
-                    // 没有警告，直接更新状态消息
-                    if let Some(msg) = self.messages.iter_mut().find(|m| m.id == status_msg_id) {
-                        msg.variant = MessageVariant::Status {
-                            title: "AI 选择相关表...".to_string(),
-                            is_done: false,
-                        };
-                    }
-                    self.pending_tables = tables;
-                    cx.notify();
-                    // 需要AI选表
-                    self.ai_select_tables(prompt, status_msg_id, cx);
-                }
-            }
-            WorkflowAction::RequireUserMention { message, table_count } => {
-                // 移除状态消息
-                self.messages.retain(|m| m.id != status_msg_id);
-
-                // 添加提示消息
-                self.messages.push(ChatMessageUI::assistant(message));
-                self.is_loading = false;
-                self.workflow_stage = WorkflowStage::NeedUserSelectTables {
-                    user_question: self.pending_question.clone().unwrap_or_default(),
-                    table_count,
-                };
-                self.ai_input.update(cx, |input, cx| {
-                    input.set_loading(false, window, cx);
-                });
-                cx.notify();
-            }
-            WorkflowAction::Error(error) => {
-                // 移除状态消息
-                self.messages.retain(|m| m.id != status_msg_id);
-
-                // 添加错误消息
-                self.messages
-                    .push(ChatMessageUI::assistant(format!("错误: {}", error)));
-                self.is_loading = false;
-                self.workflow_stage = WorkflowStage::Idle;
-                self.ai_input.update(cx, |input, cx| {
-                    input.set_loading(false, window, cx);
-                });
-                cx.notify();
-            }
-            WorkflowAction::Continue(_) => {
-                // 内部状态转换，不应该到达这里
-            }
-            WorkflowAction::Cancelled => {
-                // 操作已取消
-                self.messages.retain(|m| m.id != status_msg_id);
-                self.messages.push(ChatMessageUI::status("操作已取消", true));
-                self.is_loading = false;
-                self.workflow_stage = WorkflowStage::Idle;
-                self.ai_input.update(cx, |input, cx| {
-                    input.set_loading(false, window, cx);
-                });
-                cx.notify();
-            }
-            WorkflowAction::Progress { stage, completed, total } => {
-                // 更新进度消息
-                if let Some(msg) = self.messages.iter_mut().find(|m| m.id == status_msg_id) {
-                    msg.variant = MessageVariant::Status {
-                        title: format!("{} ({}/{})", stage, completed, total),
-                        is_done: false,
-                    };
-                }
-                cx.notify();
-            }
-        }
-    }
-
-    /// AI 选择相关表
-    fn ai_select_tables(
-        &mut self,
-        prompt: String,
-        status_msg_id: String,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(provider_id_str) = self.provider_id.clone() else {
-            // 移除状态消息并显示错误
-            self.messages.retain(|m| m.id != status_msg_id);
-            self.messages
-                .push(ChatMessageUI::assistant("请先选择 AI 模型".to_string()));
-            self.is_loading = false;
-            self.workflow_stage = WorkflowStage::Idle;
-            cx.notify();
-            return;
-        };
-
-        let provider_id: i64 = match provider_id_str.parse() {
-            Ok(id) => id,
-            Err(_) => {
-                self.messages
-                    .push(ChatMessageUI::assistant("无效的模型 ID".to_string()));
-                self.is_loading = false;
-                cx.notify();
-                return;
-            }
-        };
-
-        let global_provider_state = cx.global::<GlobalProviderState>().clone();
-        let storage_manager = self.storage_manager.clone();
-        let pending_question = self.pending_question.clone().unwrap_or_default();
-        let pending_warning = self.pending_warning.clone();
-        let cancel_token = self.cancel_token.clone().unwrap_or_else(CancellationToken::new);
-        let selected_model = self.selected_model.clone();
-
-        // 获取连接信息用于后续获取元数据
-        let connection_info = self.ai_input.read(cx).get_connection_info();
-        let global_db_state = cx.global::<GlobalDbState>().clone();
-
-        cx.spawn(async move |this, cx: &mut AsyncApp| {
-            // 调用AI选表
-            let ai_response = match Tokio::spawn(cx, async move {
-                let repo = storage_manager
-                    .get::<ProviderRepository>()
-                    .ok_or_else(|| anyhow::anyhow!("ProviderRepository not found"))?;
-                let config = repo
-                    .get(provider_id)?
-                    .ok_or_else(|| anyhow::anyhow!("Provider not found"))?;
-
-                let request = ChatRequest {
-                    model: selected_model
-                        .clone()
-                        .unwrap_or_else(|| config.model.clone()),
-                    messages: vec![Message::text(Role::User, prompt)],
-                    max_tokens: Some(500),
-                    temperature: Some(0.3),
-                    stream: Some(false),
-                    ..Default::default()
-                };
-
-                let provider = global_provider_state.manager().get_provider(&config).await?;
-                provider.chat(&request).await
-            })
-            .await {
-                Ok(Ok(response)) => response,
-                Ok(Err(e)) => {
-                    if let Some(entity) = this.upgrade() {
-                        let _ = cx.update(|cx| {
-                            if let Some(window_id) = cx.active_window() {
-                                let _ = cx.update_window(window_id, |_, window, cx| {
-                                    entity.update(cx, |content, cx| {
-                                        content.handle_workflow_action(
-                                            WorkflowAction::Error(format!("AI调用失败: {}", e)),
-                                            status_msg_id,
-                                            window,
-                                            cx,
-                                        );
-                                    });
-                                });
-                            }
-                        });
-                    }
-                    return;
-                }
-                Err(e) => {
-                    if let Some(entity) = this.upgrade() {
-                        let _ = cx.update(|cx| {
-                            if let Some(window_id) = cx.active_window() {
-                                let _ = cx.update_window(window_id, |_, window, cx| {
-                                    entity.update(cx, |content, cx| {
-                                        content.handle_workflow_action(
-                                            WorkflowAction::Error(format!("任务失败: {:?}", e)),
-                                            status_msg_id,
-                                            window,
-                                            cx,
-                                        );
-                                    });
-                                });
-                            }
-                        });
-                    }
-                    return;
-                }
-            };
-
-            // 解析AI选表结果
-            let selected_tables =
-                crate::chatdb::query_workflow::parse_table_selection_response(&ai_response);
-
-            // 显示选中的表
-            if let Some(entity) = this.upgrade() {
-                let tables_display = format!("{:?}", selected_tables);
-                let _ = cx.update(|cx| {
-                    if let Some(window_id) = cx.active_window() {
-                        let _ = cx.update_window(window_id, |_, _window, cx| {
-                            entity.update(cx, |content, cx| {
-                                // 更新状态消息显示选中的表
-                                if let Some(msg) = content.messages.iter_mut().find(|m| m.id == status_msg_id) {
-                                    msg.variant = MessageVariant::Status {
-                                        title: format!("已选择表: {}", tables_display),
-                                        is_done: true,
-                                    };
-                                }
-                                // 添加获取元数据的状态消息
-                                let metadata_msg_id = Uuid::new_v4().to_string();
-                                content.messages.push(
-                                    ChatMessageUI::status("获取表结构信息...", false)
-                                        .with_id(metadata_msg_id)
-                                );
-                                cx.notify();
-                            });
-                        });
-                    }
-                });
-            }
-
-            if selected_tables.is_empty() {
-                if let Some(entity) = this.upgrade() {
-                    let _ = cx.update(|cx| {
-                        if let Some(window_id) = cx.active_window() {
-                            let _ = cx.update_window(window_id, |_, window, cx| {
-                                entity.update(cx, |content, cx| {
-                                    content.handle_workflow_action(
-                                        WorkflowAction::Error("AI 未能选择相关表".to_string()),
-                                        status_msg_id,
-                                        window,
-                                        cx,
-                                    );
-                                });
-                            });
-                        }
-                    });
-                }
-                return;
-            }
-
-            // 获取选中表的元数据
-            let Some((connection_id, database, schema)) = connection_info else {
-                return;
-            };
-
-            let database_type = global_db_state
-                .get_config(&connection_id)
-                .map(|c| c.database_type)
-                .unwrap_or(DatabaseType::MySQL);
-
-            let executor = WorkflowExecutor::new(
-                connection_id,
-                database,
-                schema,
-                database_type,
-            );
-
-            let action = executor
-                .handle_table_selection(
-                    &pending_question,
-                    &selected_tables,
-                    pending_warning,
-                    &global_db_state,
-                    cx,
-                    &cancel_token,
-                    None,
-                )
-                .await;
-
-            if let Some(entity) = this.upgrade() {
-                let _ = cx.update(|cx| {
-                    if let Some(window_id) = cx.active_window() {
-                        let _ = cx.update_window(window_id, |_, window, cx| {
-                            entity.update(cx, |content, cx| {
-                                content.handle_workflow_action(action, status_msg_id, window, cx);
-                            });
-                        });
-                    }
-                });
-            }
-        })
-        .detach();
-    }
-
-    /// 使用上下文生成 SQL
-    fn generate_sql_with_context(
-        &mut self,
-        context: QueryContext,
-        status_msg_id: String,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(provider_id_str) = self.provider_id.clone() else {
-            self.messages
-                .push(ChatMessageUI::assistant("请先选择 AI 模型".to_string()));
-            self.is_loading = false;
-            cx.notify();
-            return;
-        };
-
-        let provider_id: i64 = match provider_id_str.parse() {
-            Ok(id) => id,
-            Err(_) => {
-                self.messages
-                    .push(ChatMessageUI::assistant("无效的模型 ID".to_string()));
-                self.is_loading = false;
-                cx.notify();
-                return;
-            }
-        };
-
-        // 移除状态消息，添加AI响应消息
-        self.messages.retain(|m| m.id != status_msg_id);
-
-        // 生成工作流摘要作为前缀
-        let workflow_summary = context.to_workflow_summary();
-
-        // 生成 system prompt 和用户问题
-        let system_prompt = context.to_sql_generation_prompt();
-        let user_question = context.user_question.clone();
-
-        // 创建助手消息占位符（预填充工作流摘要）
-        let assistant_msg_id = Uuid::new_v4().to_string();
-        self.latest_ai_message_id = Some(assistant_msg_id.clone());
-        self.messages.push(
-            ChatMessageUI::assistant(workflow_summary.clone())
-                .with_id(assistant_msg_id.clone())
-                .with_streaming(true)
-        );
-
-        self.scroll_to_bottom_and_mark();
-        cx.notify();
-
-        // 构建消息历史（带上下文）
-        // 首先添加 system prompt
-        let mut messages = vec![Message::text(Role::System, system_prompt)];
-
-        // 添加历史消息（根据设置限制数量）
-        let history_count = self.model_settings.history_count;
-        if history_count > 0 && !self.chat_history.is_empty() {
-            let history_start = self.chat_history.len().saturating_sub(history_count);
-            for msg in self.chat_history.iter().skip(history_start) {
-                messages.push(msg.clone());
-            }
-        }
-
-        // 添加当前用户问题
-        messages.push(Message::text(Role::User, user_question.clone()));
-
-        // 更新 chat_history
-        self.chat_history
-            .push(Message::text(Role::User, user_question));
-
-        let global_provider_state = cx.global::<GlobalProviderState>().clone();
-        let storage_manager = self.storage_manager.clone();
-        let ai_input = self.ai_input.clone();
-        let provider_id_for_session = provider_id_str.clone();
-        let max_tokens = self.model_settings.max_tokens;
-        let temperature = self.model_settings.temperature;
-        let selected_model = self.selected_model.clone();
-
-        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            // 为内部 spawn 克隆 storage_manager
-            let storage_manager_inner = storage_manager.clone();
-            // 流式调用AI
-            let stream_result = Tokio::spawn(cx, async move {
-                let repo = storage_manager_inner
-                    .get::<ProviderRepository>()
-                    .ok_or_else(|| anyhow::anyhow!("ProviderRepository not found"))?;
-                let config = repo
-                    .get(provider_id)?
-                    .ok_or_else(|| anyhow::anyhow!("Provider not found: {}", provider_id))?;
-
-                let request = ChatRequest {
-                    model: selected_model
-                        .clone()
-                        .unwrap_or_else(|| config.model.clone()),
-                    messages,
-                    max_tokens: Some(max_tokens as u32),
-                    temperature: Some(temperature),
-                    stream: Some(true),
-                    ..Default::default()
-                };
-
-                let provider = global_provider_state.manager().get_provider(&config).await?;
-                provider.chat_stream(&request).await
-            })
-            .await;
-
-            let mut stream = match stream_result {
-                Ok(Ok(s)) => s,
-                Ok(Err(e)) => {
-                    let error_msg = format!("生成失败: {}", e);
-                    if let Some(entity) = this.upgrade() {
-                        let _ = cx.update(|cx| {
-                            if let Some(window_id) = cx.active_window() {
-                                let _ = cx.update_window(window_id, |_, window, cx| {
-                                    entity.update(cx, |content, cx| {
-                                        if let Some(msg) = content
-                                            .messages
-                                            .iter_mut()
-                                            .find(|m| m.id == assistant_msg_id)
-                                        {
-                                            msg.is_streaming = false;
-                                            msg.content = error_msg;
-                                        }
-                                        content.is_loading = false;
-                                        content.workflow_stage = WorkflowStage::Idle;
-                                        ai_input.update(cx, |input, cx| {
-                                            input.set_loading(false, window, cx);
-                                        });
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                        });
-                    }
-                    return;
-                }
-                Err(e) => {
-                    let error_msg = format!("任务错误: {:?}", e);
-                    if let Some(entity) = this.upgrade() {
-                        let _ = cx.update(|cx| {
-                            if let Some(window_id) = cx.active_window() {
-                                let _ = cx.update_window(window_id, |_, window, cx| {
-                                    entity.update(cx, |content, cx| {
-                                        if let Some(msg) = content
-                                            .messages
-                                            .iter_mut()
-                                            .find(|m| m.id == assistant_msg_id)
-                                        {
-                                            msg.is_streaming = false;
-                                            msg.content = error_msg;
-                                        }
-                                        content.is_loading = false;
-                                        content.workflow_stage = WorkflowStage::Idle;
-                                        ai_input.update(cx, |input, cx| {
-                                            input.set_loading(false, window, cx);
-                                        });
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                        });
-                    }
-                    return;
-                }
-            };
-
-            // 流式处理响应（以工作流摘要为前缀）
-            let mut full_content = workflow_summary;
-            let mut last_emit = Instant::now();
-            let throttle_duration = Duration::from_millis(50); // 50ms 节流
-
-            while let Some(result) = stream.next().await {
-                match result {
-                    Ok(response) => {
-                        if let Some(content) = response.get_content() {
-                            full_content.push_str(&content);
-
-                            // 节流：每 50ms 更新一次 UI
-                            if last_emit.elapsed() >= throttle_duration {
-                                if let Some(entity) = this.upgrade() {
-                                    let content_clone = full_content.clone();
-                                    let msg_id = assistant_msg_id.clone();
-                                    let _ = cx.update(|cx| {
-                                        entity.update(cx, |content, cx| {
-                                            if let Some(msg) =
-                                                content.messages.iter_mut().find(|m| m.id == msg_id)
-                                            {
-                                                msg.content = content_clone;
-                                            }
-                                            content.scroll_to_bottom_and_mark();
-                                            cx.notify();
-                                        });
-                                    });
-                                }
-                                last_emit = Instant::now();
-                            }
-                        }
-                        let is_done = response.choices.iter().any(|c| {
-                            if let Some(reason) = &c.finish_reason {
-                                reason != "null"
-                            } else {
-                                false
-                            }
-                        });
-                        if is_done {
-                            info!("Stream finished");
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        if let Some(entity) = this.upgrade() {
-                            let error_msg = format!("流错误: {}", err);
-                            let msg_id = assistant_msg_id.clone();
-                            let _ = cx.update(|cx| {
-                                if let Some(window_id) = cx.active_window() {
-                                    let _ = cx.update_window(window_id, |_, window, cx| {
-                                        entity.update(cx, |content, cx| {
-                                            if let Some(msg) = content
-                                                .messages
-                                                .iter_mut()
-                                                .find(|m| m.id == msg_id)
-                                            {
-                                                msg.is_streaming = false;
-                                                msg.content = error_msg;
-                                            }
-                                            content.is_loading = false;
-                                            content.workflow_stage = WorkflowStage::Idle;
-                                            ai_input.update(cx, |input, cx| {
-                                                input.set_loading(false, window, cx);
-                                            });
-                                            cx.notify();
-                                        });
-                                    });
-                                }
-                            });
-                        }
-                        return;
-                    }
-                }
-            }
-
-            // 完成处理
-            if let Some(entity) = this.upgrade() {
-                let final_content = full_content.clone();
-                let msg_id = assistant_msg_id.clone();
-                let provider_id_for_session_clone = provider_id_for_session.clone();
-                let _ = cx.update(|cx| {
-                    if let Some(window_id) = cx.active_window() {
-                        let _ = cx.update_window(window_id, |_, window, cx| {
-                            entity.update(cx, |content, cx| {
-                                if let Some(msg) =
-                                    content.messages.iter_mut().find(|m| m.id == msg_id)
-                                {
-                                    msg.is_streaming = false;
-                                    msg.content = final_content.clone();
-                                }
-                                content
-                                    .chat_history
-                                    .push(Message::text(Role::Assistant, final_content.clone()));
-                                content.is_loading = false;
-                                content.workflow_stage = WorkflowStage::Idle;
-                                ai_input.update(cx, |input, cx| {
-                                    input.set_loading(false, window, cx);
-                                });
-                                if let Some(session_id) =
-                                    content.ensure_session_id(&provider_id_for_session_clone, cx)
-                                {
-                                    content.persist_assistant_message(session_id, final_content.clone());
-                                    content.load_history_sessions(cx);
-                                }
-                                // 自动执行SQL代码块
-                                content.auto_execute_query_blocks(&msg_id, &final_content, window, cx);
-                                content.scroll_to_bottom_and_mark();
-                                cx.notify();
-                            });
-                        });
-                    }
-                });
-            }
-        })
-        .detach();
-    }
-
-    /// 直接发送到AI（不使用工作流，用于普通对话）
-    fn send_to_ai_direct(&mut self, content: String, cx: &mut Context<Self>) {
-        self.send_to_ai(content, cx);
-    }
-
+    /// 统一 AI 发送入口 — 通过 AgentDispatcher 路由到合适的 Agent
     fn send_to_ai(&mut self, content: String, cx: &mut Context<Self>) {
         let Some(provider_id_str) = self.provider_id.clone() else {
             self.messages.push(ChatMessageUI::assistant("请先选择 AI 模型".to_string()));
@@ -1302,13 +461,14 @@ impl ChatPanel {
         self.scroll_to_bottom_and_mark();
         cx.notify();
 
-        let global_provider_state = Arc::new(cx.global::<GlobalProviderState>().clone());
+        let global_provider_state = cx.global::<GlobalProviderState>().clone();
         let session_service = self.session_service.clone();
-        let chat_service = self.chat_service.clone();
+        let provider_config = self.build_provider_config(provider_id, cx);
+        let storage_manager = self.storage_manager.clone();
 
         // 根据设置限制历史记录数量
         let history_count = self.model_settings.history_count;
-        let history = if history_count > 0 && !self.chat_history.is_empty() {
+        let history: Vec<Message> = if history_count > 0 && !self.chat_history.is_empty() {
             let history_start = self.chat_history.len().saturating_sub(history_count);
             self.chat_history.iter().skip(history_start).cloned().collect()
         } else {
@@ -1319,9 +479,46 @@ impl ChatPanel {
         let session_id = self.session_id;
         let provider_id_str_clone = provider_id_str.clone();
         let message_content = content.clone();
-        let selected_model = self.selected_model.clone();
+
+        // 创建取消令牌
+        let cancel_token = CancellationToken::new();
+        self.cancel_token = Some(cancel_token.clone());
+
+        // 获取 AgentRegistry 快照
+        let registry = cx.global::<AgentRegistry>();
+        let agents: Vec<_> = registry
+            .sorted_ids()
+            .iter()
+            .filter_map(|id| registry.get(id).cloned())
+            .collect();
+
+        let mut affinity = self.session_affinity.clone();
+
+        // 注入数据库元数据 capability（如果有数据库连接）
+        let db_metadata = self.ai_input.read(cx).get_connection_info().and_then(
+            |(conn_id, database, schema)| {
+                let db_state = cx.global::<GlobalDbState>().clone();
+                let db_type = db_state
+                    .get_config(&conn_id)
+                    .map(|c| c.database_type)
+                    .unwrap_or(DatabaseType::MySQL);
+                let database_str = database.unwrap_or_default();
+                if database_str.is_empty() {
+                    return None;
+                }
+                Some(DatabaseMetadataProvider::new(
+                    db_state, conn_id, database_str, schema, db_type,
+                ))
+            },
+        );
+
+        // 获取 Tokio runtime handle（AgentDispatcher::dispatch 内部使用 tokio::spawn）
+        let tokio_handle = Tokio::handle(cx);
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            // 进入 Tokio runtime 上下文
+            let _guard = tokio_handle.enter();
+
             // 确保 session 存在
             let is_new_session = session_id.is_none();
             let session_db_id = match session_service.ensure_session(session_id, &provider_id_str_clone, "SQL 会话") {
@@ -1374,48 +571,88 @@ impl ChatPanel {
                 }
             }
 
-            // 使用 ChatService 创建流式对话
-            let (mut stream_handle, stream_future) = chat_service.create_chat_stream(
-                provider_id,
-                selected_model,
+            // 构建 AgentContext（注入 DB capability）
+            let mut ctx_agent = AgentContext::new(
+                message_content,
                 history,
+                provider_config,
                 global_provider_state,
+                storage_manager,
+                cancel_token,
             );
 
-            // 保存取消令牌
-            let cancel_token: CancellationToken = stream_handle.cancel_token();
+            if let Some(db_meta) = db_metadata {
+                ctx_agent.set_capability(CAP_DB_METADATA, db_meta);
+            }
+
+            // 使用 AgentDispatcher 进行路由和执行
+            let mut local_registry = AgentRegistry::new();
+            for agent in agents {
+                local_registry.register_arc(agent);
+            }
+            let mut rx = AgentDispatcher::dispatch(ctx_agent, &local_registry, &mut affinity).await;
+
+            // 回写亲和性状态
             if let Some(entity) = this.upgrade() {
+                let affinity_clone = affinity.clone();
                 let _ = cx.update(|cx| {
-                    entity.update(cx, |content, _cx| {
-                        content.cancel_token = Some(cancel_token);
+                    entity.update(cx, |this, _cx| {
+                        this.session_affinity = affinity_clone;
                     });
                 });
             }
 
-            // 在 tokio 运行时中执行流式请求
-            let _ = Tokio::spawn(cx, stream_future);
-
-            // 处理流式事件
-            while let Some(event) = stream_handle.events.recv().await {
+            // 处理 Agent 事件
+            let mut full_content = String::new();
+            while let Some(event) = rx.recv().await {
                 match event {
-                    StreamEvent::ContentDelta { full_content, .. } => {
+                    AgentEvent::Progress(stage) => {
+                        // 更新状态消息（工作流进度）
                         if let Some(entity) = this.upgrade() {
-                            let content_clone = full_content.clone();
+                            let stage_clone = stage.clone();
                             let msg_id = assistant_msg_id.clone();
                             let _ = cx.update(|cx| {
-                                entity.update(cx, |content, cx| {
-                                    if let Some(msg) = content.messages.iter_mut().find(|m| m.id == msg_id) {
-                                        msg.content = content_clone;
+                                entity.update(cx, |panel, cx| {
+                                    if let Some(msg) = panel.messages.iter_mut().find(|m| m.id == msg_id) {
+                                        msg.variant = MessageVariant::Status {
+                                            title: stage_clone,
+                                            is_done: false,
+                                        };
                                     }
-                                    content.scroll_to_bottom_and_mark();
+                                    panel.scroll_to_bottom_and_mark();
                                     cx.notify();
                                 });
                             });
                         }
                     }
-                    StreamEvent::Completed { full_content } => {
+                    AgentEvent::TextDelta(delta) => {
+                        full_content.push_str(&delta);
                         if let Some(entity) = this.upgrade() {
-                            let final_content = full_content.clone();
+                            let content_clone = full_content.clone();
+                            let msg_id = assistant_msg_id.clone();
+                            let _ = cx.update(|cx| {
+                                entity.update(cx, |panel, cx| {
+                                    if let Some(msg) = panel.messages.iter_mut().find(|m| m.id == msg_id) {
+                                        // 如果消息还是 Status 模式，切换为 Text 模式
+                                        if matches!(msg.variant, MessageVariant::Status { .. }) {
+                                            msg.variant = MessageVariant::Text;
+                                            msg.is_streaming = true;
+                                        }
+                                        msg.content = content_clone;
+                                    }
+                                    panel.scroll_to_bottom_and_mark();
+                                    cx.notify();
+                                });
+                            });
+                        }
+                    }
+                    AgentEvent::Completed(result) => {
+                        if let Some(entity) = this.upgrade() {
+                            let final_content = if full_content.is_empty() {
+                                result.content
+                            } else {
+                                full_content.clone()
+                            };
                             let msg_id = assistant_msg_id.clone();
                             let _ = cx.update(|cx| {
                                 if let Some(window_id) = cx.active_window() {
@@ -1423,6 +660,7 @@ impl ChatPanel {
                                         entity.update(cx, |content, cx| {
                                             if let Some(msg) = content.messages.iter_mut().find(|m| m.id == msg_id) {
                                                 msg.is_streaming = false;
+                                                msg.variant = MessageVariant::Text;
                                                 msg.content = final_content.clone();
                                             }
                                             content.chat_history.push(Message::text(Role::Assistant, final_content.clone()));
@@ -1443,7 +681,7 @@ impl ChatPanel {
                         }
                         break;
                     }
-                    StreamEvent::Error { message } => {
+                    AgentEvent::Error(message) => {
                         if let Some(entity) = this.upgrade() {
                             let msg_id = assistant_msg_id.clone();
                             let _ = cx.update(|cx| {
@@ -1452,6 +690,7 @@ impl ChatPanel {
                                         entity.update(cx, |content, cx| {
                                             if let Some(msg) = content.messages.iter_mut().find(|m| m.id == msg_id) {
                                                 msg.is_streaming = false;
+                                                msg.variant = MessageVariant::Text;
                                                 msg.content = format!("错误: {}", message);
                                             }
                                             content.is_loading = false;
@@ -1467,7 +706,7 @@ impl ChatPanel {
                         }
                         break;
                     }
-                    StreamEvent::Cancelled => {
+                    AgentEvent::Cancelled => {
                         if let Some(entity) = this.upgrade() {
                             let msg_id = assistant_msg_id.clone();
                             let _ = cx.update(|cx| {
@@ -1476,6 +715,7 @@ impl ChatPanel {
                                         entity.update(cx, |content, cx| {
                                             if let Some(msg) = content.messages.iter_mut().find(|m| m.id == msg_id) {
                                                 msg.is_streaming = false;
+                                                msg.variant = MessageVariant::Text;
                                                 msg.content = "操作已取消".to_string();
                                             }
                                             content.is_loading = false;
@@ -2372,49 +1612,3 @@ impl TabContent for ChatPanel {
     }
 }
 
-fn merge_followup_question(base: &str, supplement: &str) -> String {
-    let base = base.trim();
-    let supplement = supplement.trim();
-    if base.is_empty() {
-        return supplement.to_string();
-    }
-    if supplement.is_empty() {
-        return base.to_string();
-    }
-    format!("{} {}", base, supplement)
-}
-
-fn is_followup_prompt(content: &str) -> bool {
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    if trimmed.ends_with('？') || trimmed.ends_with('?') {
-        return true;
-    }
-    ["请补充", "请提供", "请说明", "请确认", "需要你", "能否", "是否", "请告诉", "请给出"]
-        .iter()
-        .any(|token| trimmed.contains(token))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{is_followup_prompt, merge_followup_question};
-
-    #[test]
-    fn test_merge_followup_question() {
-        assert_eq!(merge_followup_question("查询用户", ""), "查询用户");
-        assert_eq!(
-            merge_followup_question("查询用户", "只要活跃"),
-            "查询用户 只要活跃"
-        );
-        assert_eq!(merge_followup_question("", "新增条件"), "新增条件");
-    }
-
-    #[test]
-    fn test_is_followup_prompt() {
-        assert!(is_followup_prompt("还需要哪些字段？"));
-        assert!(is_followup_prompt("请补充条件"));
-        assert!(!is_followup_prompt("查询订单列表"));
-    }
-}
