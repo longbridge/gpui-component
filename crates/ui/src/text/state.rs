@@ -8,16 +8,16 @@ use std::{
 use gpui::{
     App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
     ListState, ParentElement as _, Pixels, Point, Render, SharedString, Size, Styled as _, Task,
-    Window, prelude::FluentBuilder as _, px,
+    Window, canvas, prelude::FluentBuilder as _, px,
 };
 use smol::{Timer, stream::StreamExt as _};
 
 use crate::{
-    ActiveTheme, ElementExt,
+    ActiveTheme,
     highlighter::HighlightTheme,
     input::{self, Copy},
     text::{
-        CodeBlockActionsFn, TextViewStyle,
+        CodeBlockActionsFn, CodeBlockRenderer, TextViewStyle,
         document::ParsedDocument,
         format,
         node::{self, NodeContext},
@@ -58,6 +58,7 @@ pub struct TextViewState {
     pub(super) scrollable: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(super) code_block_renderer: Option<Arc<CodeBlockRenderer>>,
 
     pub(super) is_selecting: bool,
     /// The local (in TextView) position of the selection.
@@ -113,6 +114,7 @@ impl TextViewState {
             list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)),
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
+            code_block_renderer: None,
             is_selecting: false,
             parsed_content: Default::default(),
             parsed_error: None,
@@ -179,11 +181,15 @@ impl TextViewState {
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
+        let code_block_actions = self.code_block_actions.clone();
+        let code_block_renderer = self.code_block_renderer.clone();
         let update_options = UpdateOptions {
             append,
             content: self.parsed_content.clone(),
             pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
+            code_block_actions: code_block_actions.clone(),
+            code_block_renderer: code_block_renderer.clone(),
         };
 
         // Parse at first time by blocking.
@@ -204,24 +210,13 @@ impl TextViewState {
     }
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
-        // Store content coordinates (not affected by scrolling)
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
-        let pos = pos - self.bounds.origin - scroll_offset;
+        let pos = pos - self.bounds.origin;
         self.selection_positions = (Some(pos), Some(pos));
         self.is_selecting = true;
     }
 
     pub(super) fn update_selection(&mut self, pos: Point<Pixels>) {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
-        let pos = pos - self.bounds.origin - scroll_offset;
+        let pos = pos - self.bounds.origin;
         if let (Some(start), Some(_)) = self.selection_positions {
             self.selection_positions = (Some(start), Some(pos))
         }
@@ -241,17 +236,10 @@ impl TextViewState {
 
     /// Return the bounds of the selection in window coordinates.
     pub(crate) fn selection_bounds(&self) -> Bounds<Pixels> {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
-
         selection_bounds(
             self.selection_positions.0,
             self.selection_positions.1,
             self.bounds,
-            scroll_offset,
         )
     }
 
@@ -277,8 +265,9 @@ impl Render for TextViewState {
             (content.document.clone(), content.node_cx.clone())
         };
 
+        // Update code_block_actions with current value (may have been set after initial parse)
         node_cx.code_block_actions = self.code_block_actions.clone();
-        node_cx.style = self.text_view_style.clone();
+        node_cx.code_block_renderer = self.code_block_renderer.clone();
 
         v_flex()
             .size_full()
@@ -300,11 +289,14 @@ impl Render for TextViewState {
                         .child(err.to_string()),
                 ),
             })
-            .on_prepaint(move |bounds, _, cx| {
-                state.update(cx, |state, _| {
-                    state.update_bounds(bounds);
-                })
-            })
+            .child(canvas(
+                move |bounds, _, cx| {
+                    state.update(cx, |state, _| {
+                        state.update_bounds(bounds);
+                    })
+                },
+                |_, _, _, _| {},
+            ))
     }
 }
 
@@ -339,6 +331,8 @@ impl UpdateFuture {
                 pending_text: String::new(),
                 content: Default::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
+                code_block_actions: None,
+                code_block_renderer: None,
             },
             timer: Timer::never(),
             rx: Box::pin(rx),
@@ -395,10 +389,14 @@ struct UpdateOptions {
     pending_text: String,
     append: bool,
     highlight_theme: Arc<HighlightTheme>,
+    code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    code_block_renderer: Option<Arc<CodeBlockRenderer>>,
 }
 
 fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), SharedString> {
     let mut node_cx = NodeContext {
+        code_block_actions: options.code_block_actions.clone(),
+        code_block_renderer: options.code_block_renderer.clone(),
         ..NodeContext::default()
     };
 
@@ -438,12 +436,10 @@ fn selection_bounds(
     start: Option<Point<Pixels>>,
     end: Option<Point<Pixels>>,
     bounds: Bounds<Pixels>,
-    scroll_offset: Point<Pixels>,
 ) -> Bounds<Pixels> {
     if let (Some(start), Some(end)) = (start, end) {
-        // Convert content coordinates to window coordinates
-        let start = start + scroll_offset + bounds.origin;
-        let end = end + scroll_offset + bounds.origin;
+        let start = start + bounds.origin;
+        let end = end + bounds.origin;
 
         let origin = Point {
             x: start.x.min(end.x),
@@ -468,25 +464,15 @@ mod tests {
     #[test]
     fn test_text_view_state_selection_bounds() {
         assert_eq!(
-            selection_bounds(None, None, Default::default(), Point::default()),
+            selection_bounds(None, None, Default::default()),
             Bounds::default()
         );
         assert_eq!(
-            selection_bounds(
-                None,
-                Some(point(px(10.), px(20.))),
-                Default::default(),
-                Point::default()
-            ),
+            selection_bounds(None, Some(point(px(10.), px(20.))), Default::default()),
             Bounds::default()
         );
         assert_eq!(
-            selection_bounds(
-                Some(point(px(10.), px(20.))),
-                None,
-                Default::default(),
-                Point::default()
-            ),
+            selection_bounds(Some(point(px(10.), px(20.))), None, Default::default()),
             Bounds::default()
         );
 
@@ -499,8 +485,7 @@ mod tests {
             selection_bounds(
                 Some(point(px(10.), px(10.))),
                 Some(point(px(50.), px(50.))),
-                Default::default(),
-                Point::default()
+                Default::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -516,8 +501,7 @@ mod tests {
             selection_bounds(
                 Some(point(px(50.), px(50.))),
                 Some(point(px(10.), px(10.))),
-                Default::default(),
-                Point::default()
+                Default::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -533,8 +517,7 @@ mod tests {
             selection_bounds(
                 Some(point(px(50.), px(10.))),
                 Some(point(px(10.), px(50.))),
-                Default::default(),
-                Point::default()
+                Default::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),
@@ -550,8 +533,7 @@ mod tests {
             selection_bounds(
                 Some(point(px(10.), px(50.))),
                 Some(point(px(50.), px(10.))),
-                Default::default(),
-                Point::default()
+                Default::default()
             ),
             Bounds {
                 origin: point(px(10.), px(10.)),

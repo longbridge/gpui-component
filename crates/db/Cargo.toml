@@ -1,0 +1,39 @@
+[package]
+name = "db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tokio.workspace = true
+once_cell.workspace = true
+tracing.workspace = true
+hex.workspace = true
+gpui.workspace = true
+gpui-component.workspace = true
+chrono.workspace = true
+mysql_async.workspace = true
+tokio-postgres.workspace = true
+postgres-types.workspace = true
+deadpool-postgres.workspace = true
+bb8-tiberius.workspace = true
+tiberius.workspace = true
+tokio-util = { workspace = true, features = ["compat"] }
+oracle.workspace = true
+clickhouse.workspace = true
+one-core.workspace = true
+sqlformat.workspace = true
+sqlparser.workspace = true
+unicode_categories.workspace = true
+uuid.workspace = true
+dashmap.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+rust-i18n.workspace = true
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = "3"

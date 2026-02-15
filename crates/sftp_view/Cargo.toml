@@ -1,0 +1,21 @@
+[package]
+name = "sftp_view"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[dependencies]
+gpui = { workspace = true }
+gpui-component = { workspace = true }
+one-core = { workspace = true }
+sftp = { workspace = true }
+ssh = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+rust-i18n = { workspace = true }
+
+[lints]
+workspace = true

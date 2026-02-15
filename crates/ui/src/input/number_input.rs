@@ -1,13 +1,7 @@
-use gpui::{
-    AnyElement, App, Context, Corners, Edges, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, TextAlign, Window, actions, prelude::FluentBuilder as _,
-};
+use gpui::{AnyElement, App, Context, Corners, Edges, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, actions, prelude::FluentBuilder as _, div, px};
 
-use crate::{
-    ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex,
-};
-
+use crate::{ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex, v_flex, Icon};
+use crate::button::ButtonVariants;
 use super::{Input, InputState};
 
 actions!(number_input, [Increment, Decrement]);
@@ -95,11 +89,11 @@ impl Disableable for NumberInput {
 }
 
 impl InputState {
-    fn on_action_increment(&mut self, _: &Increment, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn on_action_increment(&mut self, _: &Increment, window: &mut Window, cx: &mut Context<Self>) {
         self.on_number_input_step(StepAction::Increment, window, cx);
     }
 
-    fn on_action_decrement(&mut self, _: &Decrement, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn on_action_decrement(&mut self, _: &Decrement, window: &mut Window, cx: &mut Context<Self>) {
         self.on_number_input_step(StepAction::Decrement, window, cx);
     }
 
@@ -187,7 +181,6 @@ impl RenderOnce for NumberInput {
                     .disabled(self.disabled)
                     .gap_0()
                     .rounded_none()
-                    .text_align(TextAlign::Center)
                     .when_some(self.prefix, |this, prefix| this.prefix(prefix))
                     .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
             )
@@ -218,6 +211,140 @@ impl RenderOnce for NumberInput {
                             Self::on_increment(&state, window, cx);
                         }
                     }),
+            )
+    }
+}
+
+/// A number input element with a single up/down stepper on the right.
+#[derive(IntoElement)]
+pub struct StepperNumberInput {
+    state: Entity<InputState>,
+    size: Size,
+    appearance: bool,
+    disabled: bool,
+    style: StyleRefinement,
+}
+
+impl StepperNumberInput {
+    pub fn new(state: &Entity<InputState>) -> Self {
+        Self {
+            state: state.clone(),
+            size: Size::default(),
+            appearance: true,
+            disabled: false,
+            style: StyleRefinement::default(),
+        }
+    }
+
+    pub fn appearance(mut self, appearance: bool) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    pub(crate) fn on_increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
+        state.update(cx, |state, cx| {
+            state.focus(window, cx);
+            state.on_action_increment(&Increment, window, cx);
+        })
+    }
+
+    pub(crate) fn on_decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
+        state.update(cx, |state, cx| {
+            state.focus(window, cx);
+            state.on_action_decrement(&Decrement, window, cx);
+        })
+    }
+}
+
+impl Disableable for StepperNumberInput {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Focusable for StepperNumberInput {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.state.focus_handle(cx)
+    }
+}
+
+impl Sizable for StepperNumberInput {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
+impl Styled for StepperNumberInput {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+
+
+impl RenderOnce for StepperNumberInput {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        h_flex()
+            .id(("stepper-number-input", self.state.entity_id()))
+            .key_context(CONTEXT)
+            .on_action(window.listener_for(&self.state, InputState::on_action_increment))
+            .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
+            .flex_1()
+            .rounded(cx.theme().radius)
+            .refine_style(&self.style)
+            .when(self.disabled, |this| this.bg(cx.theme().muted))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(52.))
+                    .child(
+                        Input::new(&self.state)
+                            .appearance(self.appearance)
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .gap_0()
+                            .rounded_none()
+                            .flex_1()
+                            .w_full(),
+                    ),
+            )
+            .child(
+                v_flex()
+                    .w(px(24.))
+                    .h_full()
+                    .flex_none()
+                    .child(
+                        Button::new("stepper-up")
+                            .ghost()
+                            .with_size(Size::XSmall)
+                            .icon(Icon::new(IconName::ChevronUp).xsmall())
+                            .compact()
+                            .tab_stop(false)
+                            .disabled(self.disabled)
+                            .on_click({
+                                let state = self.state.clone();
+                                move |_, window, cx| {
+                                    Self::on_increment(&state, window, cx);
+                                }
+                            }),
+                    )
+                    .child(
+                        Button::new("stepper-down")
+                            .ghost()
+                            .with_size(Size::XSmall)
+                            .icon(Icon::new(IconName::ChevronDown).xsmall())
+                            .compact()
+                            .tab_stop(false)
+                            .disabled(self.disabled)
+                            .on_click({
+                                let state = self.state.clone();
+                                move |_, window, cx| {
+                                    Self::on_decrement(&state, window, cx);
+                                }
+                            }),
+                    ),
             )
     }
 }

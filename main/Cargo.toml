@@ -1,0 +1,39 @@
+[package]
+name = "main"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[dependencies]
+gpui = { workspace = true }
+gpui-macros = { workspace = true }
+gpui-component = { workspace = true, features = ["tree-sitter-languages"] }
+gpui-component-assets = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+semver = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rust-i18n = { workspace = true }
+lsp-types = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+dirs = "5"
+dotenvy = "0.15"
+futures = { workspace = true }
+db = { workspace = true }
+db_view = { workspace = true }
+terminal = { workspace = true }
+terminal_view = { workspace = true }
+sftp_view = { workspace = true }
+redis_view = { workspace = true }
+mongodb_view = { workspace = true }
+ssh = { workspace = true }
+one-core.workspace = true
+one-ui.workspace = true
+reqwest_client.workspace = true
+
+[lints]
+workspace = true

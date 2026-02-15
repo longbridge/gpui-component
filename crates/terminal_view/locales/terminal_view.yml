@@ -1,0 +1,301 @@
+_version: 2
+
+# 主题
+Theme:
+  midnight:
+    en: Midnight
+    zh-CN: 暗夜
+    zh-HK: 暗夜
+  daylight:
+    en: Daylight
+    zh-CN: 明亮
+    zh-HK: 明亮
+  ink:
+    en: Ink
+    zh-CN: 墨黑
+    zh-HK: 墨黑
+  paper:
+    en: Paper
+    zh-CN: 纸白
+    zh-HK: 紙白
+  ocean:
+    en: Ocean
+    zh-CN: 海浪
+    zh-HK: 海浪
+  obsidian:
+    en: Obsidian
+    zh-CN: 黑曜
+    zh-HK: 黑曜
+  lotus:
+    en: Lotus
+    zh-CN: 莲白
+    zh-HK: 蓮白
+  neon_blue:
+    en: Neon Blue
+    zh-CN: 霓蓝
+    zh-HK: 霓藍
+  matrix:
+    en: Matrix
+    zh-CN: 矩阵
+    zh-HK: 矩陣
+  crimson:
+    en: Crimson
+    zh-CN: 赤红
+    zh-HK: 赤紅
+
+# 通用文本
+Common:
+  ok:
+    en: OK
+    zh-CN: 确定
+    zh-HK: 確定
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消
+  none:
+    en: None
+    zh-CN: 无
+    zh-HK: 無
+
+# 连接
+Connection:
+  test:
+    en: Test
+    zh-CN: 测试
+    zh-HK: 測試
+  testing:
+    en: Testing...
+    zh-CN: 测试中...
+    zh-HK: 測試中...
+
+# SSH 连接
+SSH:
+  new:
+    en: New SSH Connection
+    zh-CN: 新建 SSH 连接
+    zh-HK: 新建 SSH 連線
+  edit:
+    en: Edit SSH Connection
+    zh-CN: 编辑 SSH 连接
+    zh-HK: 編輯 SSH 連線
+  name:
+    en: Connection Name
+    zh-CN: 连接名称
+    zh-HK: 連線名稱
+  name_placeholder:
+    en: Enter connection name
+    zh-CN: 请输入连接名称
+    zh-HK: 請輸入連線名稱
+  host:
+    en: Host
+    zh-CN: 主机地址
+    zh-HK: 主機地址
+  host_placeholder:
+    en: Enter host address
+    zh-CN: 请输入主机地址
+    zh-HK: 請輸入主機地址
+  port:
+    en: Port
+    zh-CN: 端口
+    zh-HK: 端口
+  username:
+    en: Username
+    zh-CN: 用户名
+    zh-HK: 用戶名
+  username_placeholder:
+    en: Enter username
+    zh-CN: 请输入用户名
+    zh-HK: 請輸入用戶名
+  password:
+    en: Password
+    zh-CN: 密码
+    zh-HK: 密碼
+  password_placeholder:
+    en: Enter password
+    zh-CN: 请输入密码
+    zh-HK: 請輸入密碼
+  private_key:
+    en: Private Key
+    zh-CN: 私钥
+    zh-HK: 私鑰
+  key_path:
+    en: Key Path
+    zh-CN: 密钥路径
+    zh-HK: 密鑰路徑
+  key_path_placeholder:
+    en: Enter private key path
+    zh-CN: 请输入私钥路径
+    zh-HK: 請輸入私鑰路徑
+  passphrase:
+    en: Passphrase
+    zh-CN: 密钥密码
+    zh-HK: 密鑰密碼
+  passphrase_placeholder:
+    en: Enter key passphrase (optional)
+    zh-CN: 请输入密钥密码（可选）
+    zh-HK: 請輸入密鑰密碼（可選）
+  auth_method:
+    en: Authentication Method
+    zh-CN: 认证方式
+    zh-HK: 認證方式
+  workspace:
+    en: Workspace
+    zh-CN: 工作区
+    zh-HK: 工作區
+  validation_error:
+    en: Please fill in all required fields
+    zh-CN: 请填写所有必填字段
+    zh-HK: 請填寫所有必填字段
+  test_success:
+    en: Connection test successful
+    zh-CN: 连接测试成功
+    zh-HK: 連線測試成功
+  # 标签页
+  tab_basic:
+    en: Basic
+    zh-CN: 基本信息
+    zh-HK: 基本信息
+  tab_connection:
+    en: Connection
+    zh-CN: 连接设置
+    zh-HK: 連接設定
+  tab_init:
+    en: Initialization
+    zh-CN: 初始化
+    zh-HK: 初始化
+  tab_jump_server:
+    en: Jump Server
+    zh-CN: 跳板机
+    zh-HK: 跳板機
+  tab_proxy:
+    en: Proxy
+    zh-CN: 代理设置
+    zh-HK: 代理設定
+  tab_advanced:
+    en: Advanced
+    zh-CN: 高级设置
+    zh-HK: 高級設定
+  tab_other:
+    en: Other
+    zh-CN: 其他设置
+    zh-HK: 其他設定
+  # 跳板机相关
+  enable_jump_server:
+    en: Enable Jump Server
+    zh-CN: 启用跳板机
+    zh-HK: 啟用跳板機
+  jump_host:
+    en: Jump Host
+    zh-CN: 跳板机地址
+    zh-HK: 跳板機地址
+  jump_port:
+    en: Jump Port
+    zh-CN: 跳板机端口
+    zh-HK: 跳板機端口
+  jump_username:
+    en: Jump Username
+    zh-CN: 跳板机用户名
+    zh-HK: 跳板機用戶名
+  jump_password:
+    en: Jump Password
+    zh-CN: 跳板机密码
+    zh-HK: 跳板機密碼
+  # 代理相关
+  enable_proxy:
+    en: Enable Proxy
+    zh-CN: 启用代理
+    zh-HK: 啟用代理
+  proxy_type:
+    en: Proxy Type
+    zh-CN: 代理类型
+    zh-HK: 代理類型
+  proxy_host:
+    en: Proxy Host
+    zh-CN: 代理地址
+    zh-HK: 代理地址
+  proxy_port:
+    en: Proxy Port
+    zh-CN: 代理端口
+    zh-HK: 代理端口
+  proxy_username:
+    en: Proxy Username
+    zh-CN: 代理用户名
+    zh-HK: 代理用戶名
+  proxy_password:
+    en: Proxy Password
+    zh-CN: 代理密码
+    zh-HK: 代理密碼
+  # 高级设置
+  connect_timeout:
+    en: Connect Timeout (s)
+    zh-CN: 连接超时 (秒)
+    zh-HK: 連接超時 (秒)
+  keepalive_interval:
+    en: Keepalive Interval (s)
+    zh-CN: 心跳间隔 (秒)
+    zh-HK: 心跳間隔 (秒)
+  keepalive_max:
+    en: Keepalive Max
+    zh-CN: 最大心跳次数
+    zh-HK: 最大心跳次數
+  # 初始化
+  init_script:
+    en: Init Script
+    zh-CN: 初始化脚本
+    zh-HK: 初始化腳本
+  init_script_placeholder:
+    en: Commands to run after connection
+    zh-CN: 连接后执行的命令
+    zh-HK: 連接後執行的命令
+  default_directory:
+    en: Default Directory
+    zh-CN: 默认目录
+    zh-HK: 默認目錄
+  default_directory_placeholder:
+    en: Default working directory
+    zh-CN: 默认工作目录
+    zh-HK: 默認工作目錄
+  # 其他设置
+  remark:
+    en: Remark
+    zh-CN: 备注
+    zh-HK: 備註
+  remark_placeholder:
+    en: Enter remark
+    zh-CN: 请输入备注
+    zh-HK: 請輸入備註
+
+# 连接表单
+ConnectionForm:
+  cloud_sync:
+    en: Cloud Sync
+    zh-CN: 云同步
+    zh-HK: 雲同步
+  cloud_sync_desc:
+    en: Sync this connection to cloud
+    zh-CN: 同步此连接到云端
+    zh-HK: 同步此連線到雲端
+
+# 右键菜单
+ContextMenu:
+  copy:
+    en: Copy
+    zh-CN: 复制
+    zh-HK: 複製
+  paste:
+    en: Paste
+    zh-CN: 粘贴
+    zh-HK: 貼上
+  select_all:
+    en: Select All
+    zh-CN: 全选
+    zh-HK: 全選
+  clear_selection:
+    en: Clear Selection
+    zh-CN: 清除选择
+    zh-HK: 清除選擇
+  ask_ai:
+    en: Ask AI
+    zh-CN: 询问AI
+    zh-HK: 詢問AI

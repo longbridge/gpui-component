@@ -1,0 +1,309 @@
+_version: 2
+
+# 通用文本
+Common:
+  ok:
+    en: OK
+    zh-CN: 确定
+    zh-HK: 確定
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消
+  delete:
+    en: Delete
+    zh-CN: 删除
+    zh-HK: 刪除
+  rename:
+    en: Rename
+    zh-CN: 重命名
+    zh-HK: 重命名
+  create:
+    en: Create
+    zh-CN: 创建
+    zh-HK: 創建
+  modify:
+    en: Modify
+    zh-CN: 修改
+    zh-HK: 修改
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 刷新
+  download:
+    en: Download
+    zh-CN: 下载
+    zh-HK: 下載
+  upload:
+    en: Upload
+    zh-CN: 上传
+    zh-HK: 上傳
+  scanning:
+    en: "Scanning..."
+    zh-CN: "正在扫描..."
+    zh-HK: "正在掃描..."
+  reconnect:
+    en: Reconnect
+    zh-CN: 重新连接
+    zh-HK: 重新連接
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+
+# 文件操作
+File:
+  new_file:
+    en: New File
+    zh-CN: 新建文件
+    zh-HK: 新建文件
+  new_folder:
+    en: New Folder
+    zh-CN: 新建文件夹
+    zh-HK: 新建文件夾
+  rename:
+    en: Rename
+    zh-CN: 重命名
+    zh-HK: 重命名
+  copy_name:
+    en: Copy Filename
+    zh-CN: 复制文件名
+    zh-HK: 複製文件名
+  copy_path:
+    en: Copy Absolute Path
+    zh-CN: 复制绝对路径
+    zh-HK: 複製絕對路徑
+  change_permission:
+    en: Change Permission
+    zh-CN: 修改权限
+    zh-HK: 修改權限
+  upload_file:
+    en: Upload File
+    zh-CN: 上传文件
+    zh-HK: 上傳文件
+  upload_folder:
+    en: Upload Folder
+    zh-CN: 上传文件夹
+    zh-HK: 上傳文件夾
+  toggle_hidden:
+    en: Show/Hide Hidden Files
+    zh-CN: 显示/隐藏隐藏文件
+    zh-HK: 顯示/隱藏隱藏文件
+
+# 占位符
+Placeholder:
+  filename:
+    en: Filename
+    zh-CN: 文件名
+    zh-HK: 文件名
+  new_name:
+    en: New name
+    zh-CN: 新名称
+    zh-HK: 新名稱
+  permission:
+    en: "Permission (e.g. 755)"
+    zh-CN: "权限 (如 755)"
+    zh-HK: "權限 (如 755)"
+
+# 对话框
+Dialog:
+  file_conflict:
+    en: File Conflict
+    zh-CN: 文件冲突
+    zh-HK: 文件衝突
+  confirm_delete:
+    en: Confirm Delete
+    zh-CN: 确认删除
+    zh-HK: 確認刪除
+  confirm_close:
+    en: Confirm Close
+    zh-CN: 确认关闭
+    zh-HK: 確認關閉
+  change_permission_title:
+    en: "Change permission of %{name}"
+    zh-CN: "修改 %{name} 的权限"
+    zh-HK: "修改 %{name} 的權限"
+
+# 冲突处理
+Conflict:
+  files_exist:
+    en: "The following files already exist at destination:"
+    zh-CN: "以下文件在目标位置已存在："
+    zh-HK: "以下文件在目標位置已存在："
+  choose_action:
+    en: "Choose how to proceed:"
+    zh-CN: "请选择处理方式："
+    zh-HK: "請選擇處理方式："
+  skip:
+    en: Skip
+    zh-CN: 跳过
+    zh-HK: 跳過
+  keep_both:
+    en: Keep Both
+    zh-CN: 保留两者
+    zh-HK: 保留兩者
+  merge:
+    en: Merge
+    zh-CN: 合并
+    zh-HK: 合併
+  overwrite:
+    en: Overwrite
+    zh-CN: 覆盖
+    zh-HK: 覆蓋
+  n_files:
+    en: "%{name} and %{count} other files"
+    zh-CN: "%{name} 等 %{count} 个文件"
+    zh-HK: "%{name} 等 %{count} 個文件"
+
+# 删除确认
+Delete:
+  confirm_folder:
+    en: Are you sure you want to delete this folder and all its contents?
+    zh-CN: 确定要删除这个文件夹及其所有内容吗？
+    zh-HK: 確定要刪除這個文件夾及其所有內容嗎？
+  confirm_folders:
+    en: "Are you sure you want to delete these %{count} folders and all their contents?"
+    zh-CN: "确定要删除这 %{count} 个文件夹及其所有内容吗？"
+    zh-HK: "確定要刪除這 %{count} 個文件夾及其所有內容嗎？"
+  confirm_file:
+    en: Are you sure you want to delete this file?
+    zh-CN: 确定要删除这个文件吗？
+    zh-HK: 確定要刪除這個文件嗎？
+  confirm_files:
+    en: "Are you sure you want to delete these %{count} files?"
+    zh-CN: "确定要删除这 %{count} 个文件吗？"
+    zh-HK: "確定要刪除這 %{count} 個文件嗎？"
+  confirm_mixed:
+    en: "Are you sure you want to delete %{files} files and %{dirs} folders?"
+    zh-CN: "确定要删除 %{files} 个文件和 %{dirs} 个文件夹吗？"
+    zh-HK: "確定要刪除 %{files} 個文件和 %{dirs} 個文件夾嗎？"
+  and_more:
+    en: "... and %{count} more items"
+    zh-CN: "... 还有 %{count} 项"
+    zh-HK: "... 還有 %{count} 項"
+  deleting:
+    en: "Deleting: %{name}"
+    zh-CN: "正在删除: %{name}"
+    zh-HK: "正在刪除: %{name}"
+  scanning:
+    en: "Scanning..."
+    zh-CN: "正在扫描..."
+    zh-HK: "正在掃描..."
+  delete_n_items:
+    en: "Delete %{count} items"
+    zh-CN: "删除 %{count} 项"
+    zh-HK: "刪除 %{count} 項"
+
+# 连接状态
+Connection:
+  connecting:
+    en: "Connecting..."
+    zh-CN: "正在连接..."
+    zh-HK: "正在連接..."
+  disconnected:
+    en: Disconnected
+    zh-CN: 连接已断开
+    zh-HK: 連接已斷開
+  establishing:
+    en: "Establishing SFTP connection..."
+    zh-CN: "正在建立 SFTP 连接..."
+    zh-HK: "正在建立 SFTP 連接..."
+  session_disconnected:
+    en: SFTP session disconnected.
+    zh-CN: SFTP 会话已断开连接。
+    zh-HK: SFTP 會話已斷開連接。
+
+# 终端
+Terminal:
+  open_here:
+    en: Open Terminal Here
+    zh-CN: 在此处打开终端
+    zh-HK: 在此處打開終端
+  open_in_current:
+    en: Open Terminal in Current Directory
+    zh-CN: 在当前目录打开终端
+    zh-HK: 在當前目錄打開終端
+
+# 提示信息
+Notification:
+  copied_filename:
+    en: Filename copied
+    zh-CN: 已复制文件名
+    zh-HK: 已複製文件名
+  copied_path:
+    en: Path copied
+    zh-CN: 已复制绝对路径
+    zh-HK: 已複製絕對路徑
+  permission_success:
+    en: Permission changed successfully
+    zh-CN: 权限修改成功
+    zh-HK: 權限修改成功
+  invalid_permission:
+    en: "Invalid permission value, please enter like 755 or 644"
+    zh-CN: "无效的权限值，请输入如 755 或 644"
+    zh-HK: "無效的權限值，請輸入如 755 或 644"
+  permission_hint:
+    en: "Enter octal permission value (e.g. 755, 644)"
+    zh-CN: "输入八进制权限值 (如 755, 644)"
+    zh-HK: "輸入八進制權限值 (如 755, 644)"
+
+# 错误信息
+Error:
+  read_dir_failed:
+    en: "Failed to read directory: %{error}"
+    zh-CN: "读取目录失败: %{error}"
+    zh-HK: "讀取目錄失敗: %{error}"
+  create_file_failed:
+    en: "Failed to create file: %{error}"
+    zh-CN: "创建文件失败: %{error}"
+    zh-HK: "創建文件失敗: %{error}"
+  create_folder_failed:
+    en: "Failed to create folder: %{error}"
+    zh-CN: "创建文件夹失败: %{error}"
+    zh-HK: "創建文件夾失敗: %{error}"
+  rename_failed:
+    en: "Failed to rename: %{error}"
+    zh-CN: "重命名失败: %{error}"
+    zh-HK: "重命名失敗: %{error}"
+  permission_failed:
+    en: "Failed to change permission: %{error}"
+    zh-CN: "修改权限失败: %{error}"
+    zh-HK: "修改權限失敗: %{error}"
+  delete_failed:
+    en: "Delete failed: %{error}"
+    zh-CN: "删除失败: %{error}"
+    zh-HK: "刪除失敗: %{error}"
+  delete_n_failed:
+    en: "Delete failed: %{count} files"
+    zh-CN: "删除失败: %{count} 个文件"
+    zh-HK: "刪除失敗: %{count} 個文件"
+  copy_failed:
+    en: "Copy failed: %{error}"
+    zh-CN: "复制失败: %{error}"
+    zh-HK: "複製失敗: %{error}"
+  copy_n_failed:
+    en: "Copy failed: %{count} files"
+    zh-CN: "复制失败: %{count} 个文件"
+    zh-HK: "複製失敗: %{count} 個文件"
+
+# 文件选择器
+FilePicker:
+  select_upload_files:
+    en: Select files to upload
+    zh-CN: 选择要上传的文件
+    zh-HK: 選擇要上傳的文件
+  select_upload_folder:
+    en: Select folder to upload
+    zh-CN: 选择要上传的文件夹
+    zh-HK: 選擇要上傳的文件夾
+
+# 传输相关
+Transfer:
+  has_active_tasks:
+    en: "There are %{count} file operation(s) in progress (upload/download/delete)."
+    zh-CN: "有 %{count} 个文件操作正在进行中（上传/下载/删除）。"
+    zh-HK: "有 %{count} 個文件操作正在進行中（上傳/下載/刪除）。"
+  confirm_close_warning:
+    en: "Closing now will cancel all operations. Are you sure you want to close?"
+    zh-CN: "现在关闭将取消所有操作。确定要关闭吗？"
+    zh-HK: "現在關閉將取消所有操作。確定要關閉嗎？"

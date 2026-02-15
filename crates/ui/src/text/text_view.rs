@@ -10,7 +10,7 @@ use gpui::{
 use crate::StyledExt;
 use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
-use crate::text::node::CodeBlock;
+use crate::text::node::{CodeBlock, CodeBlockRenderOptions, CodeBlockRenderer};
 use crate::text::state::TextViewState;
 use crate::{global_state::GlobalState, text::TextViewStyle};
 
@@ -45,6 +45,7 @@ pub struct TextView {
     selectable: bool,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    code_block_renderer: Option<Arc<CodeBlockRenderer>>,
 }
 
 impl Styled for TextView {
@@ -66,6 +67,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            code_block_renderer: None,
         }
     }
 
@@ -81,6 +83,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            code_block_renderer: None,
         }
     }
 
@@ -96,6 +99,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            code_block_renderer: None,
         }
     }
 
@@ -139,6 +143,23 @@ impl TextView {
     {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
+        }));
+        self
+    }
+
+    /// Set custom render for code blocks.
+    ///
+    /// The closure receives the [`CodeBlock`], render options and a default element.
+    pub fn code_block_renderer<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(&CodeBlock, CodeBlockRenderOptions, AnyElement, &mut Window, &mut App) -> E
+            + Send
+            + Sync
+            + 'static,
+        E: IntoElement,
+    {
+        self.code_block_renderer = Some(Arc::new(move |code_block, options, element, window, cx| {
+            f(code_block, options, element, window, cx).into_any_element()
         }));
         self
     }
@@ -199,6 +220,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.code_block_renderer = self.code_block_renderer.clone();
             state.selectable = self.selectable;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();

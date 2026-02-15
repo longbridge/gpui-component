@@ -1,0 +1,909 @@
+_version: 2
+
+# 通用文本
+Common:
+  ok:
+    en: OK
+    zh-CN: 好
+    zh-HK: 好
+  new:
+    en: New
+    zh-CN: 新建
+    zh-HK: 新建
+  edit:
+    en: Edit
+    zh-CN: 编辑
+    zh-HK: 編輯
+  delete:
+    en: Delete
+    zh-CN: 删除
+    zh-HK: 刪除
+  save:
+    en: Save
+    zh-CN: 保存
+    zh-HK: 保存
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消
+  confirm:
+    en: Confirm
+    zh-CN: 确认
+    zh-HK: 確認
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+  settings:
+    en: Settings
+    zh-CN: 设置
+    zh-HK: 設定
+  more:
+    en: More
+    zh-CN: 更多
+    zh-HK: 更多
+
+# 首页
+Home:
+  title:
+    en: Home
+    zh-CN: 首页
+    zh-HK: 首頁
+  search_placeholder:
+    en: "Search connections..."
+    zh-CN: 搜索连接...
+    zh-HK: 搜尋連線...
+  new_connection:
+    en: New Connection
+    zh-CN: 新建连接
+    zh-HK: 新建連線
+  connection_count:
+    en: "%{count} connections"
+    zh-CN: "%{count} 个连接"
+    zh-HK: "%{count} 個連線"
+  unassigned_workspace:
+    en: Unassigned Workspace
+    zh-CN: 未分配工作区
+    zh-HK: 未分配工作區
+  switch_theme:
+    en: Switch Theme
+    zh-CN: 切换主题
+    zh-HK: 切換主題
+  import:
+    en: Import
+    zh-CN: 导入
+    zh-HK: 導入
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 刷新
+  cloud_loading:
+    en: Loading cloud connections...
+    zh-CN: 加载云端连接中...
+    zh-HK: 載入雲端連線中...
+  cloud_login:
+    en: Login
+    zh-CN: 登录
+    zh-HK: 登入
+  import_success:
+    en: "Successfully imported %{count} connections"
+    zh-CN: "成功导入 %{count} 个连接"
+    zh-HK: "成功導入 %{count} 個連線"
+  cloud_need_login:
+    en: Please login first to access cloud repository
+    zh-CN: 请先登录以访问云端仓库
+    zh-HK: 請先登入以訪問雲端倉庫
+  cloud_empty:
+    en: No connections in cloud repository
+    zh-CN: 云端仓库中没有连接
+    zh-HK: 雲端倉庫中沒有連線
+  sync:
+    en: Sync
+    zh-CN: 同步
+    zh-HK: 同步
+  syncing:
+    en: Syncing...
+    zh-CN: 同步中...
+    zh-HK: 同步中...
+  sync_tooltip:
+    en: Sync data with cloud
+    zh-CN: 与云端同步数据
+    zh-HK: 與雲端同步數據
+  conflict_tooltip:
+    en: "%{count} sync conflicts need to be resolved"
+    zh-CN: "%{count} 个同步冲突需要解决"
+    zh-HK: "%{count} 個同步衝突需要解決"
+  ai_assistant:
+    en: AI Assistant
+    zh-CN: AI 助手
+    zh-HK: AI 助手
+
+# 鼓励作者
+Encourage:
+  title:
+    en: "❤️ Support Author"
+    zh-CN: "❤️ 支持作者"
+    zh-HK: "❤️ 支持作者"
+  button_label:
+    en: Support Author
+    zh-CN: 支持作者
+    zh-HK: 支持作者
+  intro_line1:
+    en: Onet is maintained by one person.
+    zh-CN: Onet 由个人长期维护。
+    zh-HK: Onet 由個人長期維護。
+  intro_line2:
+    en: If it saved you time, feel free to support in a way you are comfortable with ❤️
+    zh-CN: 如果它帮你节省了时间，欢迎用你觉得舒服的方式支持我 ❤️
+    zh-HK: 如果它幫你節省了時間，歡迎用你覺得舒服的方式支持我 ❤️
+  intro_line3:
+    en: No support is totally fine.
+    zh-CN: 不支持也完全没关系。
+    zh-HK: 不支持也完全沒關係。
+  wechat_label:
+    en: WeChat Pay
+    zh-CN: 微信支付
+    zh-HK: 微信支付
+  alipay_label:
+    en: Alipay
+    zh-CN: 支付宝
+    zh-HK: 支付寶
+  paypal_label:
+    en: PayPal
+    zh-CN: PayPal
+    zh-HK: PayPal
+  usage_title:
+    en: "Your support will be used for:"
+    zh-CN: "你的支持将用于："
+    zh-HK: "你的支持將用於："
+  usage_item1:
+    en: Cloud services and infrastructure
+    zh-CN: 云端服务与基础设施
+    zh-HK: 雲端服務與基礎設施
+  usage_item2:
+    en: New features and experience improvements
+    zh-CN: 新功能与体验优化
+    zh-HK: 新功能與體驗優化
+  usage_item3:
+    en: Long-term maintenance
+    zh-CN: 长期维护
+    zh-HK: 長期維護
+  alt_support_title:
+    en: "If you cannot sponsor, that's okay:"
+    zh-CN: "不方便赞助也没关系："
+    zh-HK: "不方便贊助也沒關係："
+  alt_support_item1:
+    en: "⭐ Star the project"
+    zh-CN: "⭐ Star 项目"
+    zh-HK: "⭐ Star 專案"
+  alt_support_item2:
+    en: "💬 Suggestions / Bug reports"
+    zh-CN: "💬 提建议 / 报 Bug"
+    zh-HK: "💬 提建議 / 報 Bug"
+  alt_support_item3:
+    en: "📣 Recommend to friends"
+    zh-CN: "📣 推荐给朋友"
+    zh-HK: "📣 推薦給朋友"
+  footer_notice:
+    en: All features remain fully available without support; sponsorship does not unlock or restrict anything.
+    zh-CN: 所有功能对未支持用户完全开放，赞助不会解锁或限制任何功能。
+    zh-HK: 所有功能對未支持用戶完全開放，贊助不會解鎖或限制任何功能。
+
+# 用户认证
+Auth:
+  login:
+    en: Login
+    zh-CN: 登录
+    zh-HK: 登入
+  logout:
+    en: Logout
+    zh-CN: 退出登录
+    zh-HK: 登出
+  email:
+    en: Email
+    zh-CN: 邮箱
+    zh-HK: 電郵
+  email_placeholder:
+    en: Enter your email
+    zh-CN: 输入您的邮箱
+    zh-HK: 輸入您的電郵
+  email_required:
+    en: Please enter your email
+    zh-CN: 请输入邮箱
+    zh-HK: 請輸入電郵
+  password:
+    en: Password
+    zh-CN: 密码
+    zh-HK: 密碼
+  password_placeholder:
+    en: Enter your password
+    zh-CN: 输入您的密码
+    zh-HK: 輸入您的密碼
+  login_failed:
+    en: "Login failed: %{error}"
+    zh-CN: "登录失败: %{error}"
+    zh-HK: "登入失敗: %{error}"
+  logging_in:
+    en: Logging in...
+    zh-CN: 登录中...
+    zh-HK: 登入中...
+  not_logged_in:
+    en: Not logged in
+    zh-CN: 未登录
+    zh-HK: 未登入
+  profile:
+    en: Profile
+    zh-CN: 个人资料
+    zh-HK: 個人資料
+  sign_up:
+    en: Sign Up
+    zh-CN: 注册
+    zh-HK: 註冊
+  switch_to_sign_up:
+    en: No account? Sign up
+    zh-CN: 没有账号？注册
+    zh-HK: 沒有帳號？註冊
+  switch_to_login:
+    en: Already have an account? Login
+    zh-CN: 已有账号？登录
+    zh-HK: 已有帳號？登入
+  sign_up_failed:
+    en: "Sign up failed: %{error}"
+    zh-CN: "注册失败: %{error}"
+    zh-HK: "註冊失敗: %{error}"
+  signing_up:
+    en: Signing up...
+    zh-CN: 注册中...
+    zh-HK: 註冊中...
+  confirm_password:
+    en: Confirm Password
+    zh-CN: 确认密码
+    zh-HK: 確認密碼
+  confirm_password_placeholder:
+    en: Enter your password again
+    zh-CN: 再次输入您的密码
+    zh-HK: 再次輸入您的密碼
+  password_mismatch:
+    en: Passwords do not match
+    zh-CN: 两次输入的密码不一致
+    zh-HK: 兩次輸入的密碼不一致
+  email_confirmation_required:
+    en: "Please check your email (%{email}) to confirm your account"
+    zh-CN: "请检查您的邮箱（%{email}）以确认您的账号"
+    zh-HK: "請檢查您的電郵（%{email}）以確認您的帳號"
+  auth_error_title:
+    en: Authentication Failed
+    zh-CN: 认证失败
+    zh-HK: 認證失敗
+  # OTP 相关
+  otp_placeholder:
+    en: Enter verification code
+    zh-CN: 输入验证码
+    zh-HK: 輸入驗證碼
+  otp_code:
+    en: Verification Code
+    zh-CN: 验证码
+    zh-HK: 驗證碼
+  otp_required:
+    en: Please enter the verification code
+    zh-CN: 请输入验证码
+    zh-HK: 請輸入驗證碼
+  send_otp:
+    en: Send Code
+    zh-CN: 发送验证码
+    zh-HK: 發送驗證碼
+  sending_otp:
+    en: Sending...
+    zh-CN: 发送中...
+    zh-HK: 發送中...
+  resend_otp:
+    en: Resend Code
+    zh-CN: 重新发送
+    zh-HK: 重新發送
+  verify_otp:
+    en: Verify Code
+    zh-CN: 验证
+    zh-HK: 驗證
+  otp_sent_hint:
+    en: A verification code has been sent to your email
+    zh-CN: 验证码已发送到您的邮箱
+    zh-HK: 驗證碼已發送到您的電郵
+  change_email:
+    en: Change email
+    zh-CN: 更换邮箱
+    zh-HK: 更換電郵
+
+# 主密钥
+Encryption:
+  edit_repo_password:
+    en: Edit Master Key
+    zh-CN: 编辑主密钥
+    zh-HK: 編輯主密鑰
+  set_repo_password:
+    en: Set Master Key
+    zh-CN: 设置主密钥
+    zh-HK: 設置主密鑰
+  unlock_repo_password:
+    en: Unlock
+    zh-CN: 解锁
+    zh-HK: 解鎖
+  change_repo_password:
+    en: Change Master Key
+    zh-CN: 修改主密钥
+    zh-HK: 修改主密鑰
+  repo_password_label:
+    en: "Master Key:"
+    zh-CN: "主密钥："
+    zh-HK: "主密鑰："
+  repo_password_placeholder:
+    en: Enter your master key
+    zh-CN: 输入您的主密钥
+    zh-HK: 輸入您的主密鑰
+  old_password_label:
+    en: "Old Master Key:"
+    zh-CN: "旧主密钥："
+    zh-HK: "舊主密鑰："
+  old_password_placeholder:
+    en: Enter your old master key
+    zh-CN: 输入旧主密钥
+    zh-HK: 輸入舊主密鑰
+  new_password_label:
+    en: "New Master Key:"
+    zh-CN: "新主密钥："
+    zh-HK: "新主密鑰："
+  new_password_placeholder:
+    en: Enter your new master key
+    zh-CN: 输入新主密钥
+    zh-HK: 輸入新主密鑰
+  what_is_repo_password:
+    en: "What is the master key?"
+    zh-CN: "什么是主密钥？"
+    zh-HK: "什麼是主密鑰？"
+  remember_password_title:
+    en: "Please remember your master key"
+    zh-CN: "请牢记你的主密钥"
+    zh-HK: "請牢記你的主密鑰"
+  remember_password_desc:
+    en: "The master key is the only credential to decrypt your cloud data, stored locally only"
+    zh-CN: "主密钥是解密云端数据的唯一凭证，仅存在本地"
+    zh-HK: "主密鑰是解密雲端數據的唯一憑證，僅存在本地"
+  e2e_encryption_desc:
+    en: "Sensitive information is encrypted end-to-end using the master key to ensure it is not leaked"
+    zh-CN: "使用主密钥对敏感信息使用端对端加密，确保敏感信息不被泄露"
+    zh-HK: "使用主密鑰對敏感信息使用端對端加密，確保敏感信息不被洩露"
+  encryption_scheme_link:
+    en: "Encryption scheme details?"
+    zh-CN: "具体加密方案？"
+    zh-HK: "具體加密方案？"
+  key_empty:
+    en: "Master key cannot be empty"
+    zh-CN: "主密钥不能为空"
+    zh-HK: "主密鑰不能為空"
+  key_mismatch:
+    en: "The two keys do not match"
+    zh-CN: "两次输入的密钥不一致"
+    zh-HK: "兩次輸入的密鑰不一致"
+  password_incorrect:
+    en: "Incorrect master key"
+    zh-CN: "主密钥错误"
+    zh-HK: "主密鑰錯誤"
+  confirm_password_placeholder:
+    en: Confirm your master key
+    zh-CN: 确认您的主密钥
+    zh-HK: 確認您的主密鑰
+  confirm_password_label:
+    en: "Confirm Master Key:"
+    zh-CN: "确认主密钥："
+    zh-HK: "確認主密鑰："
+  key_unlocked:
+    en: Unlocked
+    zh-CN: 已解锁
+    zh-HK: 已解鎖
+  key_unlocked_tooltip:
+    en: Master key is unlocked, click to change
+    zh-CN: 主密钥已解锁，点击修改
+    zh-HK: 主密鑰已解鎖，點擊修改
+  key_locked_tooltip:
+    en: Master key is locked, click to unlock
+    zh-CN: 主密钥已锁定，点击解锁
+    zh-HK: 主密鑰已鎖定，點擊解鎖
+
+# 视图模式
+ViewMode:
+  workspace:
+    en: Workspace View
+    zh-CN: 工作区视图
+    zh-HK: 工作區視圖
+  single_database:
+    en: Single Database View
+    zh-CN: 单库视图
+    zh-HK: 單庫視圖
+
+# 工作区
+Workspace:
+  label:
+    en: Workspace
+    zh-CN: 工作区
+    zh-HK: 工作區
+  name_placeholder:
+    en: Workspace name
+    zh-CN: 工作区名称
+    zh-HK: 工作區名稱
+  new:
+    en: New Workspace
+    zh-CN: 新建工作区
+    zh-HK: 新建工作區
+  edit:
+    en: Edit Workspace
+    zh-CN: 编辑工作区
+    zh-HK: 編輯工作區
+  delete:
+    en: Delete Workspace
+    zh-CN: 删除工作区
+    zh-HK: 刪除工作區
+  delete_confirm:
+    en: "Are you sure you want to delete workspace \"%{workspace_name}\"?"
+    zh-CN: "确定要删除工作区 \"%{workspace_name}\" 吗？"
+    zh-HK: "確定要刪除工作區 \"%{workspace_name}\" 嗎？"
+  filter:
+    en: Workspace Filter
+    zh-CN: 工作区过滤
+    zh-HK: 工作區過濾
+  select_all:
+    en: Select All
+    zh-CN: 全选
+    zh-HK: 全選
+  clear_filter:
+    en: Clear Filter
+    zh-CN: 清除筛选
+    zh-HK: 清除篩選
+
+# 连接
+Connection:
+  new:
+    en: "New %{db_type} Connection"
+    zh-CN: "新建 %{db_type} 连接"
+    zh-HK: "新建 %{db_type} 連線"
+  edit:
+    en: "Edit %{db_type} Connection"
+    zh-CN: "编辑 %{db_type} 连接"
+    zh-HK: "編輯 %{db_type} 連線"
+  test:
+    en: Test
+    zh-CN: 测试
+    zh-HK: 測試
+  testing:
+    en: Testing...
+    zh-CN: 测试中...
+    zh-HK: 測試中...
+  edit_connection:
+    en: Edit Connection
+    zh-CN: 编辑连接
+    zh-HK: 編輯連線
+  delete_connection:
+    en: Delete Connection
+    zh-CN: 删除连接
+    zh-HK: 刪除連線
+  delete_confirm:
+    en: "Are you sure you want to delete connection \"%{conn_name}\"?"
+    zh-CN: "确定要删除连接 \"%{conn_name}\" 吗？"
+    zh-HK: "確定要刪除連線 \"%{conn_name}\" 嗎？"
+  in_use_title:
+    en: Connection in Use
+    zh-CN: 连接正在使用中
+    zh-HK: 連線正在使用中
+  in_use_cannot_edit:
+    en: "Connection \"%{conn_name}\" is in use and cannot be edited.\n\nPlease close the connection first before editing."
+    zh-CN: "连接 \"%{conn_name}\" 正在使用中，无法编辑。\n\n请先关闭该连接后再进行编辑。"
+    zh-HK: "連線 \"%{conn_name}\" 正在使用中，無法編輯。\n\n請先關閉該連線後再進行編輯。"
+  in_use_cannot_delete:
+    en: "Connection \"%{conn_name}\" is in use and must be closed before deletion.\n\nPlease close the connection first before deleting."
+    zh-CN: "连接 \"%{conn_name}\" 正在使用中，删除前需要先关闭该连接。\n\n请先关闭该连接后再进行删除。"
+    zh-HK: "連線 \"%{conn_name}\" 正在使用中，刪除前需要先關閉該連線。\n\n請先關閉該連線後再進行刪除。"
+
+# 设置页面
+Settings:
+  title:
+    en: Settings
+    zh-CN: 设置
+    zh-HK: 設定
+
+  # 通用设置组
+  General:
+    title:
+      en: General
+      zh-CN: 通用
+      zh-HK: 通用
+
+    # 语言设置
+    Language:
+      group_title:
+        en: Language
+        zh-CN: 语言
+        zh-HK: 語言
+      ui_language:
+        en: Interface Language
+        zh-CN: 界面语言
+        zh-HK: 介面語言
+      ui_language_desc:
+        en: Switch the interface display language, some content requires restarting the application to take effect
+        zh-CN: 切换界面显示语言，部分内容需要重启应用后生效
+        zh-HK: 切換介面顯示語言，部分內容需要重啟應用後生效
+      zh_cn:
+        en: Simplified Chinese
+        zh-CN: 简体中文
+        zh-HK: 簡體中文
+      zh_hk:
+        en: Traditional Chinese
+        zh-CN: 繁體中文
+        zh-HK: 繁體中文
+      en:
+        en: English
+        zh-CN: English
+        zh-HK: English
+
+    # 外观设置
+    Appearance:
+      group_title:
+        en: Appearance
+        zh-CN: 外观
+        zh-HK: 外觀
+      dark_mode:
+        en: Dark Mode
+        zh-CN: 深色模式
+        zh-HK: 深色模式
+      dark_mode_desc:
+        en: Switch between light and dark themes
+        zh-CN: 在浅色和深色主题之间切换
+        zh-HK: 在淺色和深色主題之間切換
+      auto_switch_theme:
+        en: Auto Switch Theme
+        zh-CN: 自动切换主题
+        zh-HK: 自動切換主題
+      auto_switch_theme_desc:
+        en: Automatically switch theme based on system settings
+        zh-CN: 根据系统设置自动切换主题
+        zh-HK: 根據系統設定自動切換主題
+
+    # 字体设置
+    Font:
+      group_title:
+        en: Font
+        zh-CN: 字体
+        zh-HK: 字型
+      font_family:
+        en: Font Family
+        zh-CN: 字体系列
+        zh-HK: 字型系列
+      font_family_desc:
+        en: Select the application font family
+        zh-CN: 选择应用的字体系列
+        zh-HK: 選擇應用的字型系列
+      font_size:
+        en: Font Size
+        zh-CN: 字体大小
+        zh-HK: 字型大小
+      font_size_desc:
+        en: Adjust font size for better readability (8-72)
+        zh-CN: 调整字体大小以获得更好的可读性（8-72）
+        zh-HK: 調整字型大小以獲得更好的可讀性（8-72）
+
+    # 数据库设置
+    Database:
+      group_title:
+        en: Database
+        zh-CN: 数据库
+        zh-HK: 資料庫
+      open_mode:
+        en: Database Open Mode
+        zh-CN: 数据库打开方式
+        zh-HK: 資料庫打開方式
+      open_mode_desc:
+        en: Choose how to open database connections
+        zh-CN: 选择数据库连接的打开方式
+        zh-HK: 選擇資料庫連線的打開方式
+      open_mode_single:
+        en: Single Database Mode
+        zh-CN: 单库模式
+        zh-HK: 單庫模式
+      open_mode_workspace:
+        en: Workspace Mode
+        zh-CN: 工作区模式
+        zh-HK: 工作區模式
+      auto_save:
+        en: SQL Auto Save
+        zh-CN: SQL自动保存
+        zh-HK: SQL自動保存
+      auto_save_desc:
+        en: Automatically save SQL query content at regular intervals
+        zh-CN: 定时自动保存SQL查询内容
+        zh-HK: 定時自動保存SQL查詢內容
+      auto_save_interval:
+        en: Auto Save Interval (seconds)
+        zh-CN: 自动保存间隔（秒）
+        zh-HK: 自動保存間隔（秒）
+      auto_save_interval_desc:
+        en: Set the interval for automatic saving (1-60 seconds)
+        zh-CN: 设置自动保存的时间间隔（1-60秒）
+        zh-HK: 設置自動保存的時間間隔（1-60秒）
+
+  # 账户设置
+  Account:
+    title:
+      en: Account
+      zh-CN: 账户
+      zh-HK: 帳戶
+    username:
+      en: "Username:"
+      zh-CN: "用户名："
+      zh-HK: "用戶名："
+    email:
+      en: "Email:"
+      zh-CN: "邮箱："
+      zh-HK: "電郵："
+    not_logged_in:
+      en: Not logged in. Please log in from the sidebar to manage your account.
+      zh-CN: 未登录。请在侧边栏登录以管理您的账户。
+      zh-HK: 未登入。請在側邊欄登入以管理您的帳戶。
+
+# 许可证/订阅
+License:
+  upgrade_title:
+    en: Upgrade to Pro
+    zh-CN: 升级到 Pro
+    zh-HK: 升級到 Pro
+  upgrade_message:
+    en: Unlock cloud sync to seamlessly sync your data across devices.
+    zh-CN: 解锁云同步功能，让你的数据在多设备间无缝同步。
+    zh-HK: 解鎖雲同步功能，讓你的數據在多設備間無縫同步。
+  upgrade_button:
+    en: Learn More
+    zh-CN: 了解更多
+    zh-HK: 了解更多
+  upgrade_to_pro:
+    en: Upgrade to Pro
+    zh-CN: 升级 Pro
+    zh-HK: 升級 Pro
+  feature_cloud_sync:
+    en: Cloud Data Sync
+    zh-CN: 云端数据同步
+    zh-HK: 雲端數據同步
+  pro_required:
+    en: This feature requires a Pro subscription
+    zh-CN: 此功能需要 Pro 订阅
+    zh-HK: 此功能需要 Pro 訂閱
+
+# 应用更新
+Update:
+  title:
+    en: 发现新版本
+    zh-CN: 发现新版本
+    zh-HK: 发现新版本
+  message:
+    en: "已发布新版本 %{latest}（当前 %{current}），是否立即更新？"
+    zh-CN: "已发布新版本 %{latest}（当前 %{current}），是否立即更新？"
+    zh-HK: "已發布新版本 %{latest}（當前 %{current}），是否立即更新？"
+  action:
+    en: 立即更新
+    zh-CN: 立即更新
+    zh-HK: 立即更新
+  later:
+    en: 稍后再说
+    zh-CN: 稍后再说
+    zh-HK: 稍后再说
+  release_notes:
+    en: 更新内容
+    zh-CN: 更新内容
+    zh-HK: 更新内容
+  ready:
+    en: 准备开始下载更新。
+    zh-CN: 准备开始下载更新。
+    zh-HK: 準備開始下載更新。
+  downloading:
+    en: 正在下载更新，请稍候...
+    zh-CN: 正在下载更新，请稍候...
+    zh-HK: 正在下載更新，請稍候...
+  download_complete:
+    en: 下载完成，正在更新...
+    zh-CN: 下载完成，正在更新...
+    zh-HK: 下載完成，正在更新...
+  download_failed:
+    en: 下载失败，请重试。
+    zh-CN: 下载失败，请重试。
+    zh-HK: 下載失敗，請重試。
+  apply_failed:
+    en: 更新失败，请稍后重试。
+    zh-CN: 更新失败，请稍后重试。
+    zh-HK: 更新失敗，請稍後重試。
+  error_prefix:
+    en: 错误
+    zh-CN: 错误
+    zh-HK: 錯誤
+  missing_download_url:
+    en: 缺少下载地址，无法更新。
+    zh-CN: 缺少下载地址，无法更新。
+    zh-HK: 缺少下載地址，無法更新。
+  downloading_blocked:
+    en: 正在下载更新，请稍后关闭。
+    zh-CN: 正在下载更新，请稍后关闭。
+    zh-HK: 正在下載更新，請稍後關閉。
+
+
+# LLM 提供商
+LlmProviders:
+  title:
+    en: LLM Providers
+    zh-CN: LLM 提供商
+    zh-HK: LLM 提供商
+  description:
+    en: Manage AI model providers
+    zh-CN: 管理 AI 模型提供商
+    zh-HK: 管理 AI 模型提供商
+  add_provider:
+    en: Add Provider
+    zh-CN: 新增提供商
+    zh-HK: 新增提供商
+  loading:
+    en: Loading providers...
+    zh-CN: 正在加载提供商...
+    zh-HK: 正在載入提供商...
+  empty_title:
+    en: No providers configured
+    zh-CN: 暂无提供商配置
+    zh-HK: 暫無提供商配置
+  empty_description:
+    en: Click "Add Provider" to start configuring
+    zh-CN: 点击“新增提供商”开始配置
+    zh-HK: 點擊「新增提供商」開始配置
+  dialog_add_title:
+    en: Add Provider
+    zh-CN: 新增提供商
+    zh-HK: 新增提供商
+  dialog_edit_title:
+    en: Edit Provider
+    zh-CN: 编辑提供商
+    zh-HK: 編輯提供商
+  dialog_add_action:
+    en: Add
+    zh-CN: 新增
+    zh-HK: 新增
+  required_notice:
+    en: Please fill in required fields
+    zh-CN: 请填写必填项
+    zh-HK: 請填寫必填項
+  default_label:
+    en: Default
+    zh-CN: 默认
+    zh-HK: 默認
+  disabled_label:
+    en: Disabled
+    zh-CN: 已禁用
+    zh-HK: 已停用
+  default_value:
+    en: Default
+    zh-CN: 默认
+    zh-HK: 默認
+  default_model:
+    en: "Default model: %{model}"
+    zh-CN: "默认模型: %{model}"
+    zh-HK: "默認模型: %{model}"
+  optional_models_count:
+    en: "Optional models: %{count}"
+    zh-CN: "可选模型: %{count} 个"
+    zh-HK: "可選模型: %{count} 個"
+  api_base:
+    en: "API base URL: %{value}"
+    zh-CN: "API 基础地址: %{value}"
+    zh-HK: "API 基礎地址: %{value}"
+  api_version:
+    en: "API version: %{value}"
+    zh-CN: "API 版本: %{value}"
+    zh-HK: "API 版本: %{value}"
+  action_enable:
+    en: Enable
+    zh-CN: 启用
+    zh-HK: 啟用
+  action_disable:
+    en: Disable
+    zh-CN: 禁用
+    zh-HK: 停用
+  action_edit:
+    en: Edit
+    zh-CN: 编辑
+    zh-HK: 編輯
+  action_delete:
+    en: Delete
+    zh-CN: 删除
+    zh-HK: 刪除
+  name_label:
+    en: Name
+    zh-CN: 名称
+    zh-HK: 名稱
+  name_placeholder:
+    en: Provider name
+    zh-CN: 提供商名称
+    zh-HK: 提供商名稱
+  provider_type_label:
+    en: Provider type
+    zh-CN: 提供商类型
+    zh-HK: 提供商類型
+  api_key_label:
+    en: API key
+    zh-CN: API 密钥
+    zh-HK: API 金鑰
+  api_key_placeholder:
+    en: API key
+    zh-CN: API 密钥
+    zh-HK: API 金鑰
+  api_base_label:
+    en: API base URL (optional)
+    zh-CN: API 基础地址（可选）
+    zh-HK: API 基礎地址（可選）
+  api_base_placeholder:
+    en: API base URL (optional)
+    zh-CN: API 基础地址（可选）
+    zh-HK: API 基礎地址（可選）
+  api_version_label:
+    en: API version (optional)
+    zh-CN: API 版本（可选）
+    zh-HK: API 版本（可選）
+  api_version_placeholder:
+    en: API version (optional)
+    zh-CN: API 版本（可选）
+    zh-HK: API 版本（可選）
+  models_label:
+    en: Models
+    zh-CN: 模型列表
+    zh-HK: 模型列表
+  model_placeholder:
+    en: Enter model name
+    zh-CN: 请输入模型名称
+    zh-HK: 請輸入模型名稱
+  model_custom:
+    en: Custom model
+    zh-CN: 自定义模型
+    zh-HK: 自訂模型
+  model_add:
+    en: Add model
+    zh-CN: 添加模型
+    zh-HK: 新增模型
+  model_remove:
+    en: Remove
+    zh-CN: 移除
+    zh-HK: 移除
+  model_load:
+    en: Load models
+    zh-CN: 加载模型
+    zh-HK: 載入模型
+  model_loading:
+    en: Loading...
+    zh-CN: 加载中...
+    zh-HK: 載入中...
+  set_default:
+    en: Set as default provider
+    zh-CN: 设为默认提供商
+    zh-HK: 設為默認提供商
+  model_list_empty:
+    en: Model list is empty
+    zh-CN: 模型列表为空
+    zh-HK: 模型列表為空
+  model_load_failed:
+    en: "Failed to load models: %{error}"
+    zh-CN: "模型加载失败: %{error}"
+    zh-HK: "模型載入失敗: %{error}"
+  model_task_failed:
+    en: "Task failed: %{error}"
+    zh-CN: "任务失败: %{error}"
+    zh-HK: "任務失敗: %{error}"
+  model_task_schedule_failed:
+    en: "Task scheduling failed: %{error}"
+    zh-CN: "任务调度失败: %{error}"
+    zh-HK: "任務調度失敗: %{error}"
+  name_required:
+    en: Provider name is required
+    zh-CN: 提供商名称不能为空
+    zh-HK: 提供商名稱不能為空
+  model_required:
+    en: At least one model is required
+    zh-CN: 至少需要选择一个模型
+    zh-HK: 至少需要選擇一個模型

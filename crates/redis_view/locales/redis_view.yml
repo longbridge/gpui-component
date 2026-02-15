@@ -1,0 +1,406 @@
+_version: 2
+
+# 通用文本
+Common:
+  ok:
+    en: OK
+    zh-CN: 确定
+    zh-HK: 確定
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消
+  none:
+    en: None
+    zh-CN: 无
+    zh-HK: 無
+
+# 连接
+Connection:
+  test:
+    en: Test
+    zh-CN: 测试
+    zh-HK: 測試
+  testing:
+    en: Testing...
+    zh-CN: 测试中...
+    zh-HK: 測試中...
+
+# Redis 连接表单
+Redis:
+  new:
+    en: New Redis Connection
+    zh-CN: 新建 Redis 连接
+    zh-HK: 新建 Redis 連線
+  edit:
+    en: Edit Redis Connection
+    zh-CN: 编辑 Redis 连接
+    zh-HK: 編輯 Redis 連線
+  name:
+    en: Connection Name
+    zh-CN: 连接名称
+    zh-HK: 連線名稱
+  name_placeholder:
+    en: Enter connection name
+    zh-CN: 请输入连接名称
+    zh-HK: 請輸入連線名稱
+  host:
+    en: Host
+    zh-CN: 主机地址
+    zh-HK: 主機地址
+  host_placeholder:
+    en: Enter host address
+    zh-CN: 请输入主机地址
+    zh-HK: 請輸入主機地址
+  port:
+    en: Port
+    zh-CN: 端口
+    zh-HK: 端口
+  username:
+    en: Username
+    zh-CN: 用户名
+    zh-HK: 用戶名
+  username_placeholder:
+    en: Username (Redis 6.0+, optional)
+    zh-CN: 用户名（Redis 6.0+，可选）
+    zh-HK: 用戶名（Redis 6.0+，可選）
+  password:
+    en: Password
+    zh-CN: 密码
+    zh-HK: 密碼
+  password_placeholder:
+    en: Enter password (optional)
+    zh-CN: 请输入密码（可选）
+    zh-HK: 請輸入密碼（可選）
+  db_index:
+    en: Database
+    zh-CN: 数据库
+    zh-HK: 數據庫
+  db_index_placeholder:
+    en: Database index (0-15)
+    zh-CN: 数据库索引（0-15）
+    zh-HK: 數據庫索引（0-15）
+  workspace:
+    en: Workspace
+    zh-CN: 工作区
+    zh-HK: 工作區
+  validation_error:
+    en: Please fill in all required fields
+    zh-CN: 请填写所有必填字段
+    zh-HK: 請填寫所有必填字段
+  test_success:
+    en: Connection test successful
+    zh-CN: 连接测试成功
+    zh-HK: 連線測試成功
+  # 标签页
+  tab_basic:
+    en: Basic
+    zh-CN: 基本信息
+    zh-HK: 基本信息
+  tab_mode:
+    en: Mode
+    zh-CN: 连接模式
+    zh-HK: 連接模式
+  tab_advanced:
+    en: Advanced
+    zh-CN: 高级设置
+    zh-HK: 高級設定
+  tab_other:
+    en: Other
+    zh-CN: 其他设置
+    zh-HK: 其他設定
+  # 连接模式
+  mode:
+    en: Connection Mode
+    zh-CN: 连接模式
+    zh-HK: 連接模式
+  mode_standalone:
+    en: Standalone
+    zh-CN: 单机
+    zh-HK: 單機
+  mode_sentinel:
+    en: Sentinel
+    zh-CN: 哨兵
+    zh-HK: 哨兵
+  mode_cluster:
+    en: Cluster
+    zh-CN: 集群
+    zh-HK: 集群
+  # 哨兵模式
+  sentinel_master_name:
+    en: Master Name
+    zh-CN: 主节点名称
+    zh-HK: 主節點名稱
+  sentinel_master_name_placeholder:
+    en: Enter master name (e.g. mymaster)
+    zh-CN: 请输入主节点名称（如 mymaster）
+    zh-HK: 請輸入主節點名稱（如 mymaster）
+  sentinel_nodes:
+    en: Sentinel Nodes
+    zh-CN: 哨兵节点
+    zh-HK: 哨兵節點
+  sentinel_nodes_placeholder:
+    en: "host:port, one per line"
+    zh-CN: "host:port，每行一个"
+    zh-HK: "host:port，每行一個"
+  sentinel_password:
+    en: Sentinel Password
+    zh-CN: 哨兵密码
+    zh-HK: 哨兵密碼
+  sentinel_password_placeholder:
+    en: Sentinel password (optional)
+    zh-CN: 哨兵密码（可选）
+    zh-HK: 哨兵密碼（可選）
+  # 集群模式
+  cluster_nodes:
+    en: Cluster Nodes
+    zh-CN: 集群节点
+    zh-HK: 集群節點
+  cluster_nodes_placeholder:
+    en: "host:port, one per line"
+    zh-CN: "host:port，每行一个"
+    zh-HK: "host:port，每行一個"
+  # 高级设置
+  use_tls:
+    en: Enable TLS
+    zh-CN: 启用 TLS
+    zh-HK: 啟用 TLS
+  connect_timeout:
+    en: Connect Timeout (s)
+    zh-CN: 连接超时（秒）
+    zh-HK: 連接超時（秒）
+  # 其他设置
+  remark:
+    en: Remark
+    zh-CN: 备注
+    zh-HK: 備註
+  remark_placeholder:
+    en: Enter remark
+    zh-CN: 请输入备注
+    zh-HK: 請輸入備註
+
+# 连接表单通用
+ConnectionForm:
+  cloud_sync:
+    en: Cloud Sync
+    zh-CN: 云同步
+    zh-HK: 雲同步
+  cloud_sync_desc:
+    en: Sync this connection to cloud
+    zh-CN: 同步此连接到云端
+    zh-HK: 同步此連線到雲端
+
+# 键值视图
+KeyValueView:
+  select_key_placeholder:
+    en: Select a key to view its value
+    zh-CN: 选择一个键以查看其值
+    zh-HK: 選擇一個鍵以查看其值
+  filter_placeholder:
+    en: Filter...
+    zh-CN: 筛选...
+    zh-HK: 篩選...
+  connection_missing:
+    en: Connection not found
+    zh-CN: 连接不存在
+    zh-HK: 連線不存在
+  view_mode:
+    en: "View mode:"
+    zh-CN: "查看方式:"
+    zh-HK: "查看方式:"
+  exact_match:
+    en: Exact match
+    zh-CN: 全文匹配
+    zh-HK: 全文匹配
+  sort_by_score:
+    en: Score
+    zh-CN: 分数
+    zh-HK: 分數
+  sort_by_member:
+    en: Member
+    zh-CN: 成员
+    zh-HK: 成員
+  sort_by:
+    en: Sort by %{by}
+    zh-CN: 按%{by}
+    zh-HK: 按%{by}
+  insert_row:
+    en: Insert row
+    zh-CN: 插入行
+    zh-HK: 插入行
+  copy_value:
+    en: Copy value
+    zh-CN: 复制值
+    zh-HK: 複製值
+  save:
+    en: Save
+    zh-CN: 保存
+    zh-HK: 保存
+  input_value_placeholder:
+    en: Enter value
+    zh-CN: 输入值
+    zh-HK: 輸入值
+  list_insert_title:
+    en: Insert list item
+    zh-CN: 插入列表元素
+    zh-HK: 插入列表元素
+  list_insert_head:
+    en: Head (LPUSH)
+    zh-CN: 头部 (LPUSH)
+    zh-HK: 頭部 (LPUSH)
+  list_insert_tail:
+    en: Tail (RPUSH)
+    zh-CN: 尾部 (RPUSH)
+    zh-HK: 尾部 (RPUSH)
+  value_label:
+    en: "Value:"
+    zh-CN: "值:"
+    zh-HK: "值:"
+  add:
+    en: Add
+    zh-CN: 添加
+    zh-HK: 添加
+  edit_list_item:
+    en: Edit list item #%{index}
+    zh-CN: 编辑列表元素 #%{index}
+    zh-HK: 編輯列表元素 #%{index}
+  set_member_placeholder:
+    en: Enter member
+    zh-CN: 输入成员值
+    zh-HK: 輸入成員值
+  add_set_member:
+    en: Add set member
+    zh-CN: 添加集合成员
+    zh-HK: 添加集合成員
+  member_label:
+    en: "Member:"
+    zh-CN: "成员:"
+    zh-HK: "成員:"
+  score_placeholder:
+    en: Enter score
+    zh-CN: 输入分数
+    zh-HK: 輸入分數
+  add_zset_member:
+    en: Add sorted set member
+    zh-CN: 添加有序集成员
+    zh-HK: 添加有序集成員
+  score_label:
+    en: "Score:"
+    zh-CN: "分数:"
+    zh-HK: "分數:"
+  edit_zset_member:
+    en: Edit sorted set member
+    zh-CN: 编辑有序集成员
+    zh-HK: 編輯有序集成員
+  zset_member_placeholder:
+    en: Member value
+    zh-CN: 成员值
+    zh-HK: 成員值
+  hash_field_placeholder:
+    en: Enter field name
+    zh-CN: 输入字段名
+    zh-HK: 輸入字段名
+  add_hash_field:
+    en: Add hash field
+    zh-CN: 添加哈希字段
+    zh-HK: 添加哈希字段
+  field_label:
+    en: "Field:"
+    zh-CN: "字段名:"
+    zh-HK: "字段名:"
+  edit_hash_field:
+    en: Edit hash field
+    zh-CN: 编辑哈希字段
+    zh-HK: 編輯哈希字段
+  hash_field_placeholder_edit:
+    en: Field name
+    zh-CN: 字段名
+    zh-HK: 字段名
+  ttl_placeholder:
+    en: Expiration (s)
+    zh-CN: 过期时间（秒）
+    zh-HK: 過期時間（秒）
+  ttl_title:
+    en: Set expiration
+    zh-CN: 设置过期时间
+    zh-HK: 設定過期時間
+  ttl_current_permanent:
+    en: "Current: Permanent"
+    zh-CN: "当前: 永久"
+    zh-HK: "當前: 永久"
+  ttl_current:
+    en: "Current TTL: %{ttl} s"
+    zh-CN: "当前 TTL: %{ttl} 秒"
+    zh-HK: "當前 TTL: %{ttl} 秒"
+  ttl_label:
+    en: "TTL (s):"
+    zh-CN: "TTL (秒):"
+    zh-HK: "TTL (秒):"
+  ttl_hint:
+    en: Leave empty or enter -1 for no expiration
+    zh-CN: 留空或输入 -1 表示永久不过期
+    zh-HK: 留空或輸入 -1 表示永久不過期
+  rename_key_title:
+    en: Rename key
+    zh-CN: 重命名键
+    zh-HK: 重命名鍵
+  new_key_name_placeholder:
+    en: New key name
+    zh-CN: 新的键名
+    zh-HK: 新的鍵名
+  new_key_name_label:
+    en: "New key name:"
+    zh-CN: "新键名:"
+    zh-HK: "新鍵名:"
+  empty_value:
+    en: Key does not exist or is empty
+    zh-CN: 键不存在或为空
+    zh-HK: 鍵不存在或為空
+  status_memory:
+    en: "Memory: %{memory} B"
+    zh-CN: "内存占用: %{memory} B"
+    zh-HK: "記憶體佔用: %{memory} B"
+  status_length:
+    en: "Length: %{count}"
+    zh-CN: "长度: %{count}"
+    zh-HK: "長度: %{count}"
+  status_size:
+    en: "Size: %{size} B"
+    zh-CN: "大小: %{size} B"
+    zh-HK: "大小: %{size} B"
+  column_rank:
+    en: Rank
+    zh-CN: 排名
+    zh-HK: 排名
+  column_index:
+    en: "#"
+    zh-CN: "#"
+    zh-HK: "#"
+  column_value:
+    en: Value
+    zh-CN: 值
+    zh-HK: 值
+  column_action:
+    en: Actions
+    zh-CN: 操作
+    zh-HK: 操作
+  column_member:
+    en: Member
+    zh-CN: 成员
+    zh-HK: 成員
+  column_score:
+    en: Score
+    zh-CN: 分数
+    zh-HK: 分數
+  column_field:
+    en: Field
+    zh-CN: 字段
+    zh-HK: 欄位
+  load_failed:
+    en: "Load failed: %{error}"
+    zh-CN: "加载失败: %{error}"
+    zh-HK: "載入失敗: %{error}"
+  tab_title_default:
+    en: Key Value
+    zh-CN: 键值
+    zh-HK: 鍵值

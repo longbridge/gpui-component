@@ -1,0 +1,35 @@
+[package]
+name = "db_view"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+chrono.workspace = true
+once_cell = "1.21"
+tracing.workspace = true
+hex = "0.4"
+futures = "0.3"
+rand = "0.8"
+smol.workspace = true
+gpui.workspace = true
+db.workspace = true
+gpui-component = { workspace = true, features = ["tree-sitter-languages"] }
+one-ui.workspace = true
+one-core.workspace = true
+sum-tree.workspace = true
+lsp-types.workspace = true
+uuid.workspace = true
+rust-i18n.workspace = true
+json5.workspace = true
+regex.workspace = true
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

@@ -24,7 +24,7 @@ pub use indent::TabSize;
 pub use input::*;
 pub use lsp::*;
 pub use mask_pattern::MaskPattern;
-pub use number_input::{NumberInput, NumberInputEvent, StepAction};
+pub use number_input::{NumberInput, NumberInputEvent, StepAction, StepperNumberInput};
 pub use otp_input::*;
 pub use state::*;
 

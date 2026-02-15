@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size};
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
-    SharedString, StyleRefinement, Styled, Svg, Transformation, Window,
-    prelude::FluentBuilder as _, svg,
+    AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, ParentElement, Radians,
+    Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg, Transformation, Window, div,
+    img, prelude::FluentBuilder as _, svg,
 };
 
 /// Types implementing this trait can automatically be converted to [`Icon`].
@@ -18,6 +18,15 @@ impl<T: IconNamed> From<T> for Icon {
     fn from(value: T) -> Self {
         Icon::build(value)
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum IconColorMode {
+    /// Monochrome mode: uses SVG with text_color tinting (default)
+    #[default]
+    Mono,
+    /// Color mode: renders the original SVG/image colors
+    Color,
 }
 
 /// The name of an icon in the asset bundle.
@@ -122,12 +131,79 @@ pub enum IconName {
     WindowMaximize,
     WindowMinimize,
     WindowRestore,
+    Database,
+    Table,
+    Column,
+    Key,
+    View,
+    Function,
+    Schema,
+    GoldKey,
+    PrimaryKey,
+    Procedure,
+    Trigger,
+    FolderViews,
+    FolderQueries,
+    FolderFunctions,
+    FolderIndexes,
+    FolderTables,
+    FolderSchema,
+    FolderColumns,
+    FolderTriggers,
+    FolderProcedures,
+    FolderForeignKeys,
+    FolderCheckConstraints,
+    FolderSequences,
+    CheckConstraint,
+    Sequence,
+    Query,
+    Index,
+    Redis,
+    Terminal,
+    TerminalColor,
+    Apps,
+    AppsColor,
+    MongoDB,
+    MySQLColor,
+    MySQLLineColor,
+    SQLiteColor,
+    SQLiteLineColor,
+    PostgreSQLColor,
+    PostgreSQLLineColor,
+    MSSQLColor,
+    MSSQLLineColor,
+    OracleColor,
+    OracleLineColor,
+    ClickHouseColor,
+    ClickHouseLineColor,
+    Workspace,
+    RedisColor,
+    All,
+    Edit,
+    Filter,
+    Refresh,
+    EditBorder,
+    Folder1,
+    FolderOpen1,
+    Remove,
+    TableData,
+    TableDesign,
+    Server,
 }
 
 impl IconName {
     /// Return the icon as a Entity<Icon>
     pub fn view(self, cx: &mut App) -> Entity<Icon> {
         Icon::build(self).view(cx)
+    }
+
+    /// Return the icon in color mode (renders original colors)
+    pub fn color(self) -> Icon {
+        Icon::build(self).color()
+    }
+    
+    pub fn mono(self) -> Icon {
+        Icon::build(self).mono()
     }
 }
 
@@ -233,6 +309,64 @@ impl IconNamed for IconName {
             Self::WindowMaximize => "icons/window-maximize.svg",
             Self::WindowMinimize => "icons/window-minimize.svg",
             Self::WindowRestore => "icons/window-restore.svg",
+            Self::Database => "icons/db.svg",
+            Self::Schema => "icons/schema.svg",
+            Self::Table => "icons/table.svg",
+            Self::Folder1 => "icons/folder-1.svg",
+            Self::FolderOpen1 => "icons/folder-open-1.svg",
+            Self::View => "icons/view.svg",
+            Self::Function => "icons/function.svg",
+            Self::Column => "icons/column.svg",
+            Self::Key => "icons/key.svg",
+            Self::GoldKey => "icons/gold_key.svg",
+            Self::PrimaryKey => "icons/primary-key.svg",
+            Self::Procedure => "icons/procedure.svg",
+            Self::Trigger => "icons/trigger.svg",
+            Self::FolderViews => "icons/folder-views.svg",
+            Self::FolderQueries => "icons/folder-queries.svg",
+            Self::FolderFunctions => "icons/folder-functions.svg",
+            Self::FolderIndexes => "icons/folder-indexes.svg",
+            Self::FolderTables => "icons/folder-tables.svg",
+            Self::FolderSchema => "icons/folder-schema.svg",
+            Self::FolderColumns => "icons/folder-columns.svg",
+            Self::FolderTriggers => "icons/folder-triggers.svg",
+            Self::FolderProcedures => "icons/folder-procedures.svg",
+            Self::FolderForeignKeys => "icons/folder-foreign-keys.svg",
+            Self::FolderCheckConstraints => "icons/folder-check-constraints.svg",
+            Self::FolderSequences => "icons/folder-sequences.svg",
+            Self::CheckConstraint => "icons/check-constraint.svg",
+            Self::Sequence => "icons/sequence.svg",
+            Self::Query => "icons/query.svg",
+            Self::Index => "icons/index.svg",
+            Self::Redis => "icons/redis.svg",
+            Self::Terminal => "icons/terminal.svg",
+            Self::TerminalColor => "icons/terminal_color.svg",
+            Self::Apps => "icons/apps.svg",
+            Self::AppsColor => "icons/apps_color.svg",
+            Self::MongoDB => "icons/mongodb.svg",
+            Self::MySQLColor => "icons/mysql_color.svg",
+            Self::SQLiteColor => "icons/sqlite_color.svg",
+            Self::PostgreSQLColor => "icons/postgresql_color.svg",
+            Self::PostgreSQLLineColor => "icons/postgresql_line_color.svg",
+            Self::MSSQLColor => "icons/mssql_color.svg",
+            Self::MySQLLineColor => "icons/mysql_line_color.svg",
+            Self::SQLiteLineColor => "icons/sqlite_line_color.svg",
+            Self::OracleColor => "icons/oracle_color.svg",
+            Self::Workspace => "icons/workspace.svg",
+            Self::RedisColor => "icons/redis_color.svg",
+            Self::All => "icons/all.svg",
+            Self::Edit => "icons/edit.svg",
+            Self::Filter => "icons/filter.svg",
+            Self::Refresh => "icons/refresh.svg",
+            Self::EditBorder => "icons/edit_border.svg",
+            Self::MSSQLLineColor => "icons/mssql_line_color.svg",
+            Self::OracleLineColor => "icons/oracle_line_color.svg",
+            Self::ClickHouseColor => "icons/clickhouse_color.svg",
+            Self::ClickHouseLineColor => "icons/clickhouse_line_color.svg",
+            Self::Remove => "icons/remove.svg",
+            Self::TableData => "icons/table-data.svg",
+            Self::TableDesign => "icons/table-design.svg",
+            Self::Server => "icons/server.svg",
         }
         .into()
     }
@@ -258,6 +392,7 @@ pub struct Icon {
     text_color: Option<Hsla>,
     size: Option<Size>,
     rotation: Option<Radians>,
+    color_mode: IconColorMode,
 }
 
 impl Default for Icon {
@@ -269,6 +404,7 @@ impl Default for Icon {
             text_color: None,
             size: None,
             rotation: None,
+            color_mode: IconColorMode::default(),
         }
     }
 }
@@ -280,6 +416,7 @@ impl Clone for Icon {
         this.rotation = self.rotation;
         this.size = self.size;
         this.text_color = self.text_color;
+        this.color_mode = self.color_mode;
         this
     }
 }
@@ -306,7 +443,7 @@ impl Icon {
         cx.new(|_| self)
     }
 
-    pub fn transform(mut self, transformation: gpui::Transformation) -> Self {
+    pub fn transform(mut self, transformation: Transformation) -> Self {
         self.base = self.base.with_transformation(transformation);
         self
     }
@@ -320,6 +457,24 @@ impl Icon {
         self.base = self
             .base
             .with_transformation(Transformation::rotate(radians));
+        self
+    }
+
+    /// Set the icon color mode
+    pub fn color_mode(mut self, mode: IconColorMode) -> Self {
+        self.color_mode = mode;
+        self
+    }
+
+    /// Set the icon to color mode (renders original colors)
+    pub fn color(mut self) -> Self {
+        self.color_mode = IconColorMode::Color;
+        self
+    }
+
+    /// Set the icon to mono mode (uses text_color tinting)
+    pub fn mono(mut self) -> Self {
+        self.color_mode = IconColorMode::Mono;
         self
     }
 }
@@ -344,24 +499,49 @@ impl Sizable for Icon {
 
 impl RenderOnce for Icon {
     fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
         let text_size = window.text_style().font_size.to_pixels(window.rem_size());
         let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 
-        let mut base = self.base;
-        *base.style() = self.style;
+        match self.color_mode {
+            IconColorMode::Mono => {
+                // Monochrome mode: use SVG with text_color tinting
+                let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
 
-        base.flex_shrink_0()
-            .text_color(text_color)
-            .when(!has_base_size, |this| this.size(text_size))
-            .when_some(self.size, |this, size| match size {
-                Size::Size(px) => this.size(px),
-                Size::XSmall => this.size_3(),
-                Size::Small => this.size_3p5(),
-                Size::Medium => this.size_4(),
-                Size::Large => this.size_6(),
-            })
-            .path(self.path)
+                let mut base = self.base;
+                *base.style() = self.style;
+
+                base.flex_shrink_0()
+                    .text_color(text_color)
+                    .when(!has_base_size, |this| this.size(text_size))
+                    .when_some(self.size, |this, size| match size {
+                        Size::Size(px) => this.size(px),
+                        Size::XSmall => this.size_3(),
+                        Size::Small => this.size_3p5(),
+                        Size::Medium => this.size_4(),
+                        Size::Large => this.size_6(),
+                    })
+                    .path(self.path)
+                    .into_any_element()
+            }
+            IconColorMode::Color => {
+                // Color mode: use img to render original colors
+                let size = self.size.unwrap_or(Size::Medium);
+                let (w, h) = match size {
+                    Size::Size(px) => (px, px),
+                    Size::XSmall => (gpui::px(12.), gpui::px(12.)),
+                    Size::Small => (gpui::px(14.), gpui::px(14.)),
+                    Size::Medium => (gpui::px(16.), gpui::px(16.)),
+                    Size::Large => (gpui::px(24.), gpui::px(24.)),
+                };
+
+                div()
+                    .flex_shrink_0()
+                    .w(w)
+                    .h(h)
+                    .child(img(self.path.clone()).size_full())
+                    .into_any_element()
+            }
+        }
     }
 }
 
@@ -373,26 +553,51 @@ impl From<Icon> for AnyElement {
 
 impl Render for Icon {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let text_color = self.text_color.unwrap_or_else(|| cx.theme().foreground);
         let text_size = window.text_style().font_size.to_pixels(window.rem_size());
         let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 
-        let mut base = svg().flex_none();
-        *base.style() = self.style.clone();
+        match self.color_mode {
+            IconColorMode::Mono => {
+                // Monochrome mode: use SVG with text_color tinting
+                let text_color = self.text_color.unwrap_or_else(|| cx.theme().foreground);
 
-        base.flex_shrink_0()
-            .text_color(text_color)
-            .when(!has_base_size, |this| this.size(text_size))
-            .when_some(self.size, |this, size| match size {
-                Size::Size(px) => this.size(px),
-                Size::XSmall => this.size_3(),
-                Size::Small => this.size_3p5(),
-                Size::Medium => this.size_4(),
-                Size::Large => this.size_6(),
-            })
-            .path(self.path.clone())
-            .when_some(self.rotation, |this, rotation| {
-                this.with_transformation(Transformation::rotate(rotation))
-            })
+                let mut base = svg().flex_none();
+                *base.style() = self.style.clone();
+
+                base.flex_shrink_0()
+                    .text_color(text_color)
+                    .when(!has_base_size, |this| this.size(text_size))
+                    .when_some(self.size, |this, size| match size {
+                        Size::Size(px) => this.size(px),
+                        Size::XSmall => this.size_3(),
+                        Size::Small => this.size_3p5(),
+                        Size::Medium => this.size_4(),
+                        Size::Large => this.size_6(),
+                    })
+                    .path(self.path.clone())
+                    .when_some(self.rotation, |this, rotation| {
+                        this.with_transformation(Transformation::rotate(rotation))
+                    })
+                    .into_any_element()
+            }
+            IconColorMode::Color => {
+                // Color mode: use img to render original colors
+                let size = self.size.unwrap_or(Size::Medium);
+                let (w, h) = match size {
+                    Size::Size(px) => (px, px),
+                    Size::XSmall => (gpui::px(12.), gpui::px(12.)),
+                    Size::Small => (gpui::px(14.), gpui::px(14.)),
+                    Size::Medium => (gpui::px(16.), gpui::px(16.)),
+                    Size::Large => (gpui::px(24.), gpui::px(24.)),
+                };
+
+                div()
+                    .flex_shrink_0()
+                    .w(w)
+                    .h(h)
+                    .child(img(self.path.clone()).size_full())
+                    .into_any_element()
+            }
+        }
     }
 }

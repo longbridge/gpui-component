@@ -1,11 +1,12 @@
 [workspace]
-default-members = ["crates/ui", "crates/story", "crates/assets"]
+default-members = ["crates/ui", "crates/story", "crates/assets", "main"]
 members = [
     "crates/macros",
     "crates/story",
     "crates/ui",
     "crates/assets",
     "crates/webview",
+    "crates/reqwest_client",
     "examples/app_assets",
     "examples/hello_world",
     "examples/input",
@@ -14,7 +15,11 @@ members = [
     "examples/webview",
     "examples/system_monitor",
     "examples/focus_trap",
-]
+    "crates/db",
+    "crates/db_view",
+    "crates/terminal",
+    "crates/terminal_view"
+    , "main", "crates/ssh", "crates/sftp", "crates/sftp_view", "crates/one_ui", "crates/redis_view", "crates/license_tool", "crates/mongodb_view"]
 resolver = "2"
 
 [workspace.package]
@@ -28,6 +33,8 @@ gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 story = { path = "crates/story" }
 
 gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_tokio = { git = "https://github.com/zed-industries/zed" }
+util = { git = "https://github.com/zed-industries/zed" }
 gpui-macros = "0.2.2"
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 # reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
@@ -58,6 +65,79 @@ serde_repr = "0.1"
 smallvec = "1"
 smol = "2"
 tracing = "0.1.41"
+
+
+reqwest_client = { path = "crates/reqwest_client" }
+db = { path = "crates/db" }
+db_view = { path = "crates/db_view" }
+redis_view = { path = "crates/redis_view" }
+one-ui = { path = "crates/one_ui" }
+ssh = { path = "crates/ssh" }
+sftp = { path = "crates/sftp" }
+terminal = { path = "crates/terminal" }
+terminal_view = { path = "crates/terminal_view" }
+sftp_view = { path = "crates/sftp_view" }
+one-core = { path = "crates/core" }
+mongodb_view = {path = "crates/mongodb_view"}
+
+
+json5 = "1.3.0"
+semver = "1.0.22"
+regex = "1.10.0"
+futures = "0.3"
+rustls = "0.23.35"
+tracing-subscriber = "0.3"
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-util = "0.7.17"
+dirs = "6.0"
+chrono = {version = "0.4.23", features = ["serde"]}
+rust_decimal = { version = "1.19.0" }
+hex = "0.4"
+tiberius = "0.12.3"
+oracle = "0.6.3"
+once_cell = "1.21"
+proptest = "1.4"
+mysql_async = "0.36.1"
+tokio-postgres = { version = "0.7.15",features = ["with-serde_json-1", "with-chrono-0_4", "with-uuid-1"] }
+postgres-types = { version = "0.2.11",features = [ "with-chrono-0_4", "with-uuid-1"] }
+deadpool-postgres = "0.14.1"
+rusqlite = { version = "0.38", features = ["bundled", "column_decltype"] }
+bb8-tiberius = "0.16.0"
+clickhouse = "0.14.1"
+sqlformat = "0.5.0"
+sqlparser = "0.60.0"
+unicode_categories = "0.1.1"
+uuid = { version = "1.18.0", features = ["v4", "serde"] }
+dashmap = "5.5.3"
+thiserror="2.0.14"
+llm-connector = { version = "0.5.13", features = ["streaming"] }
+redis_client = { package = "redis", version = "0.27", features = ["tokio-comp", "cluster-async"] }
+
+# SSH and SFTP
+russh = "0.57"
+russh-sftp = "2.1.1"
+russh-keys = "0.49"
+russh-util = "0.52"
+tokio-socks = "0.5"
+
+# Encryption
+aes-gcm = "0.10"
+rand = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+
+# Terminal emulation
+alacritty_terminal = "0.25"
+vte = "0.13"
+
+# Local PTY
+portable-pty = "0.8"
+
+parking_lot = "0.12"
+bytes = "1.5"
+mongodb = "3.5.1"
+futures-util="0.3.31"
 
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]

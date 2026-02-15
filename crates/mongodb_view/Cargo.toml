@@ -1,0 +1,22 @@
+[package]
+name = "mongodb_view"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+dashmap.workspace = true
+futures-util.workspace = true
+gpui.workspace = true
+gpui-component.workspace = true
+mongodb.workspace = true
+one-core.workspace = true
+one-ui.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+[lints]
+workspace = true

@@ -1,6 +1,7 @@
 mod document;
 mod format;
 mod inline;
+mod markdown;
 mod node;
 mod state;
 mod style;
@@ -11,6 +12,8 @@ use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 pub use state::*;
 pub use style::*;
 pub use text_view::*;
+pub use markdown::*;
+pub use node::{CodeBlock, CodeBlockRenderOptions, CodeBlockRenderer, Span};
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);

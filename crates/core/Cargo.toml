@@ -1,0 +1,38 @@
+[package]
+name = "one-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+bytes = "1"
+futures.workspace = true
+http-body-util = "0.1"
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+gpui.workspace = true
+gpui-component.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+rustls.workspace = true
+regex.workspace = true
+rustls-platform-verifier = "0.5.0"
+dashmap.workspace = true
+llm-connector.workspace = true
+futures-util = "0.3"
+aes-gcm.workspace = true
+rand.workspace = true
+base64.workspace = true
+sha2.workspace = true
+ed25519-dalek = "2.2.0"
+urlencoding = "2.1"
+keyring = "3"
+parking_lot.workspace = true
+util.workspace = true

@@ -1,0 +1,12 @@
+_version: 2
+
+# 错误消息
+Error:
+  query_type_error:
+    en: Query type error
+    zh-CN: 查询类型异常
+    zh-HK: 查詢類型異常
+  no_changes:
+    en: "-- No data changes"
+    zh-CN: -- 没有变更数据
+    zh-HK: -- 沒有變更資料

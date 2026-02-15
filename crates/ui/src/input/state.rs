@@ -3,15 +3,7 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
-use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
-    Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _,
-    px,
-};
-use gpui::{Half, TextAlign};
+use gpui::{Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px, ShapedLine, TextAlign, Half};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::ops::Range;
@@ -25,7 +17,6 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
-use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
     HoverDefinition, Lsp, Position,
@@ -37,6 +28,7 @@ use crate::input::{
 use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
+use crate::input::blink_cursor::CURSOR_WIDTH;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -364,6 +356,9 @@ pub struct InputState {
 
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
+    /// 是否启用括号自动配对
+    /// 输入 `(` 时自动补全为 `()`，光标在中间
+    pub(super) auto_pair: bool,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -445,6 +440,7 @@ impl InputState {
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
+            auto_pair: false,
         }
     }
 
@@ -487,9 +483,28 @@ impl InputState {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
         self.searchable = true;
+        self.auto_pair = true; // 代码编辑器默认启用括号自动配对
         self
     }
 
+    /// 设置是否启用括号自动配对
+    ///
+    /// 启用后，输入左括号会自动补全右括号，光标在中间：
+    /// - `(` -> `(|)`
+    /// - `[` -> `[|]`
+    /// - `{` -> `{|}`
+    /// - `"` -> `"|"`
+    /// - `'` -> `'|'`
+    pub fn auto_pair(mut self, enabled: bool) -> Self {
+        self.auto_pair = enabled;
+        self
+    }
+
+    /// 设置是否启用括号自动配对（运行时修改）
+    pub fn set_auto_pair(&mut self, enabled: bool) {
+        self.auto_pair = enabled;
+    }
+    
     /// Set this input is searchable, default is false (Default true for Code Editor).
     pub fn searchable(mut self, searchable: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
@@ -849,6 +864,19 @@ impl InputState {
         &self.text
     }
 
+    /// Get the currently selected text as a String.
+    /// Returns an empty string if no text is selected.
+    pub fn selected_text_string(&self) -> String {
+        if self.selected_range.is_empty() {
+            return String::new();
+        }
+        let text_len = self.text.len();
+        if self.selected_range.end > text_len {
+            return String::new();
+        }
+        self.text.slice(self.selected_range.clone()).to_string()
+    }
+
     /// Return the (0-based) [`Position`] of the cursor.
     pub fn cursor_position(&self) -> Position {
         let offset = self.cursor();
@@ -1073,15 +1101,43 @@ impl InputState {
         }
 
         if next_indent.len() > current_indent.len() {
-            return next_indent;
+            next_indent
         } else {
-            return current_indent;
+            current_indent
         }
     }
 
     pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
-            self.select_to(self.previous_boundary(self.cursor()), cx)
+            let cursor = self.cursor();
+
+            // 括号自动配对删除：如果光标在成对括号中间，同时删除两边
+            if self.auto_pair && cursor > 0 && cursor < self.text.len() {
+                // 获取前一个字符（使用正确的字符边界）
+                let prev_offset = self.text.clip_offset(cursor.saturating_sub(1), Bias::Left);
+                let next_offset = cursor;
+
+                if let (Some(prev_char), Some(next_char)) =
+                    (self.text.char_at(prev_offset), self.text.char_at(next_offset))
+                {
+                    let is_pair = matches!(
+                        (prev_char, next_char),
+                        ('(', ')') | ('[', ']') | ('{', '}') | ('"', '"') | ('\'', '\'')
+                    );
+
+                    if is_pair {
+                        // 计算下一个字符的结束位置
+                        let next_char_end = self.text.clip_offset(cursor + 1, Bias::Right);
+                        // 同时删除前后两个字符
+                        self.selected_range = (prev_offset..next_char_end).into();
+                        self.replace_text_in_range(None, "", window, cx);
+                        self.pause_blink_cursor(cx);
+                        return;
+                    }
+                }
+            }
+
+            self.select_to(self.previous_boundary(cursor), cx)
         }
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
@@ -1972,6 +2028,48 @@ impl InputState {
         self.replace_text_in_range(range_utf16, new_text, window, cx);
         self.silent_replace_text = false;
     }
+
+    /// 应用括号自动配对
+    /// 返回 (实际插入的文本, 光标需要往回移动的字符数, 是否跳过插入)
+    fn apply_auto_pair(new_text: &str, cursor: usize, text: &Rope) -> (String, usize, bool) {
+        // 只处理单个字符输入
+        if new_text.len() != 1 {
+            return (new_text.to_string(), 0, false);
+        }
+
+        let ch = new_text.chars().next().unwrap();
+
+        // 检查是否是右括号且与光标后的字符相同（跳过插入）
+        let is_closing = matches!(ch, ')' | ']' | '}' | '"' | '\'');
+        if is_closing && cursor < text.len() {
+            if let Some(next_char) = text.char_at(cursor) {
+                if next_char == ch {
+                    // 跳过插入，直接移动光标
+                    return (String::new(), 0, true);
+                }
+            }
+        }
+
+        // 检查是否需要自动配对
+        let pair = match ch {
+            '(' => Some(')'),
+            '[' => Some(']'),
+            '{' => Some('}'),
+            '"' => Some('"'),
+            '\'' => Some('\''),
+            _ => None,
+        };
+
+        match pair {
+            Some(closing) => {
+                let mut result = String::with_capacity(2);
+                result.push(ch);
+                result.push(closing);
+                (result, 1, false) // 光标往回移动 1 个字符
+            }
+            None => (new_text.to_string(), 0, false),
+        }
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -2038,10 +2136,24 @@ impl EntityInputHandler for InputState {
             }))
             .unwrap_or(self.selected_range.into());
 
-        let old_text = self.text.clone();
-        self.text.replace(range.clone(), new_text);
+        // 括号自动配对逻辑
+        let (actual_text, cursor_offset_back, skip_insert) = if self.auto_pair {
+            InputState::apply_auto_pair(new_text, range.start, &self.text)
+        } else {
+            (new_text.to_string(), 0, false)
+        };
 
-        let mut new_offset = (range.start + new_text.len()).min(self.text.len());
+        // 如果是跳过插入（输入右括号且与光标后字符相同），只移动光标
+        if skip_insert {
+            self.selected_range = ((range.start + 1)..(range.start + 1)).into();
+            cx.notify();
+            return;
+        }
+
+        let old_text = self.text.clone();
+        self.text.replace(range.clone(), &actual_text);
+
+        let mut new_offset: usize = (range.start + actual_text.len() - cursor_offset_back).min(self.text.len());
 
         if self.mode.is_single_line() {
             let pending_text = self.text.to_string();
@@ -2055,20 +2167,20 @@ impl EntityInputHandler for InputState {
                 let mask_text = self.mask_pattern.mask(&pending_text);
                 self.text = Rope::from(mask_text.as_str());
                 let new_text_len =
-                    (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
+                    (actual_text.len() + mask_text.len()).saturating_sub(pending_text.len());
                 new_offset = (range.start + new_text_len).min(mask_text.len());
             }
         }
 
-        self.push_history(&old_text, &range, &new_text);
+        self.push_history(&old_text, &range, &actual_text);
         self.history.end_grouping();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
         self.text_wrapper
-            .update(&self.text, &range, &Rope::from(new_text), cx);
+            .update(&self.text, &range, &Rope::from(&*actual_text), cx);
         self.mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &self.text, &actual_text, true, cx);
         self.lsp.update(&self.text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
@@ -2076,7 +2188,7 @@ impl EntityInputHandler for InputState {
         self.update_search(cx);
         self.mode.update_auto_grow(&self.text_wrapper);
         if !self.silent_replace_text {
-            self.handle_completion_trigger(&range, &new_text, window, cx);
+            self.handle_completion_trigger(&range, &actual_text, window, cx);
         }
         cx.emit(InputEvent::Change);
         cx.notify();
@@ -2202,7 +2314,7 @@ impl EntityInputHandler for InputState {
 
     fn character_index_for_point(
         &mut self,
-        point: gpui::Point<Pixels>,
+        point: Point<Pixels>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {

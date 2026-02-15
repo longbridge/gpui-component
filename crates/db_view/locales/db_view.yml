@@ -1,0 +1,1110 @@
+_version: 2
+
+# 通用操作
+Common:
+  ok:
+    en: OK
+    zh-CN: 确定
+    zh-HK: 確定
+  discard:
+    en: Discard
+    zh-CN: 放弃
+    zh-HK: 放棄
+  new:
+    en: New
+    zh-CN: 新建
+    zh-HK: 新建
+  create:
+    en: Create
+    zh-CN: 新建
+    zh-HK: 新建
+  edit:
+    en: Edit
+    zh-CN: 编辑
+    zh-HK: 編輯
+  delete:
+    en: Delete
+    zh-CN: 删除
+    zh-HK: 刪除
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+  save:
+    en: Save
+    zh-CN: 保存
+    zh-HK: 保存
+  cancel:
+    en: Cancel
+    zh-CN: 取消
+    zh-HK: 取消
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 刷新
+  search:
+    en: "Search..."
+    zh-CN: 搜索...
+    zh-HK: 搜尋...
+  previous:
+    en: Previous
+    zh-CN: 上一步
+    zh-HK: 上一步
+  next:
+    en: Next
+    zh-CN: 下一步
+    zh-HK: 下一步
+  start:
+    en: Start
+    zh-CN: 开始
+    zh-HK: 開始
+  finish:
+    en: Finish
+    zh-CN: 完成
+    zh-HK: 完成
+  collapse_all:
+    en: Collapse All
+    zh-CN: 折叠所有
+    zh-HK: 摺疊所有
+  select_all:
+    en: Select All
+    zh-CN: 全选
+    zh-HK: 全選
+  select_row:
+    en: Select Row
+    zh-CN: 选择行
+    zh-HK: 選擇行
+  clear_filter:
+    en: Clear Filter
+    zh-CN: 清除筛选
+    zh-HK: 清除篩選
+  not_found:
+    en: No matches found
+    zh-CN: 未找到匹配项
+    zh-HK: 未找到匹配項
+  error_info:
+    en: Error Information
+    zh-CN: 错误信息
+    zh-HK: 錯誤資訊
+  none:
+    en: None
+    zh-CN: 无
+    zh-HK: 無
+  yes:
+    en: "Yes"
+    zh-CN: 是
+    zh-HK: 是
+  no:
+    en: "No"
+    zh-CN: 否
+    zh-HK: 否
+  type:
+    en: Type
+    zh-CN: 类型
+    zh-HK: 類型
+  no_available:
+    en: No {item} Available
+    zh-CN: 无可用的{item}
+    zh-HK: 無可用的{item}
+
+# 连接操作
+Connection:
+  test:
+    en: Test
+    zh-CN: 测试
+    zh-HK: 測試
+  testing:
+    en: Testing...
+    zh-CN: 测试中...
+    zh-HK: 測試中...
+  connection_list:
+    en: Connection List
+    zh-CN: 连接列表
+    zh-HK: 連接列表
+
+# 连接表单
+ConnectionForm:
+  # 标签组
+  general:
+    en: General
+    zh-CN: 常规
+    zh-HK: 常規
+  advanced:
+    en: Advanced
+    zh-CN: 高级
+    zh-HK: 高級
+  ssl:
+    en: SSL
+    zh-CN: SSL
+    zh-HK: SSL
+  ssh:
+    en: SSH
+    zh-CN: SSH
+    zh-HK: SSH
+  notes:
+    en: Notes
+    zh-CN: 备注
+    zh-HK: 備註
+
+  # 字段标签
+  connection_name:
+    en: Connection Name
+    zh-CN: 连接名称
+    zh-HK: 連線名稱
+  host:
+    en: Host
+    zh-CN: 主机
+    zh-HK: 主機
+  port:
+    en: Port
+    zh-CN: 端口
+    zh-HK: 端口
+  username:
+    en: Username
+    zh-CN: 用户名
+    zh-HK: 使用者名稱
+  password:
+    en: Password
+    zh-CN: 密码
+    zh-HK: 密碼
+  database:
+    en: Database
+    zh-CN: 数据库
+    zh-HK: 資料庫
+  database_file_path:
+    en: Database File Path
+    zh-CN: 数据库文件路径
+    zh-HK: 資料庫檔案路徑
+  workspace:
+    en: Workspace
+    zh-CN: 工作区
+    zh-HK: 工作區
+  cloud_sync:
+    en: Cloud Sync
+    zh-CN: 云同步
+    zh-HK: 雲同步
+  cloud_sync_desc:
+    en: Sync this connection to cloud
+    zh-CN: 同步此连接到云端
+    zh-HK: 同步此連線到雲端
+  remark:
+    en: Remark
+    zh-CN: 备注
+    zh-HK: 備註
+  connect_timeout:
+    en: Connect Timeout (seconds)
+    zh-CN: 连接超时(秒)
+    zh-HK: 連線逾時(秒)
+  read_timeout:
+    en: Idle Timeout (seconds)
+    zh-CN: 空闲超时(秒)
+    zh-HK: 閒置逾時(秒)
+  application_name:
+    en: Application Name
+    zh-CN: 应用名称
+    zh-HK: 應用名稱
+
+  # Placeholder
+  enter_connection_name:
+    en: "Enter connection name"
+    zh-CN: 输入连接名称
+    zh-HK: 輸入連線名稱
+  enter_remark:
+    en: "Enter remark information..."
+    zh-CN: 输入连接备注信息...
+    zh-HK: 輸入連線備註資訊...
+
+  # SQL Server 特定
+  encrypt:
+    en: Encrypt
+    zh-CN: 加密
+    zh-HK: 加密
+  encrypt_off:
+    en: "Off"
+    zh-CN: 关闭
+    zh-HK: 關閉
+  encrypt_on:
+    en: "On"
+    zh-CN: 开启
+    zh-HK: 開啟
+  encrypt_strict:
+    en: Strict
+    zh-CN: 强制
+    zh-HK: 強制
+  trust_certificate:
+    en: Trust Certificate
+    zh-CN: 信任证书
+    zh-HK: 信任憑證
+
+  # Oracle 特定
+  username_schema:
+    en: Username/Schema
+    zh-CN: 用户名/Schema
+    zh-HK: 使用者名稱/Schema
+  charset:
+    en: Character Set
+    zh-CN: 字符集
+    zh-HK: 字元集
+  default_tablespace:
+    en: Default Tablespace
+    zh-CN: 默认表空间
+    zh-HK: 預設表空間
+  tablespace_users:
+    en: USERS (optional)
+    zh-CN: USERS (可选)
+    zh-HK: USERS (可選)
+  enter_username_schema:
+    en: "Enter username/schema"
+    zh-CN: 输入用户名/Schema
+    zh-HK: 輸入使用者名稱/Schema
+
+  # 字符集选项
+  charset_utf8:
+    en: Unicode UTF-8 (Recommended)
+    zh-CN: Unicode UTF-8 (推荐)
+    zh-HK: Unicode UTF-8 (推薦)
+  charset_utf8_old:
+    en: Unicode UTF-8 (Legacy)
+    zh-CN: Unicode UTF-8 (旧版)
+    zh-HK: Unicode UTF-8 (舊版)
+  charset_gbk:
+    en: Simplified Chinese GBK
+    zh-CN: 简体中文 GBK
+    zh-HK: 簡體中文 GBK
+  charset_big5:
+    en: Traditional Chinese Big5
+    zh-CN: 繁体中文 Big5
+    zh-HK: 繁體中文 Big5
+  charset_shift_jis:
+    en: Japanese Shift-JIS
+    zh-CN: 日文 Shift-JIS
+    zh-HK: 日文 Shift-JIS
+  charset_korean:
+    en: Korean
+    zh-CN: 韩文
+    zh-HK: 韓文
+
+  # ClickHouse 特定
+  compression:
+    en: Compression
+    zh-CN: 压缩
+    zh-HK: 壓縮
+
+  # SQLite 特定
+  select_database_file:
+    en: Select SQLite Database File
+    zh-CN: 选择SQLite数据库文件
+    zh-HK: 選擇SQLite資料庫檔案
+  file_selected:
+    en: Selected
+    zh-CN: 已选择
+    zh-HK: 已選擇
+
+  # 测试连接
+  test_success:
+    en: Connection successful!
+    zh-CN: 连接成功!
+    zh-HK: 連線成功!
+  test_failed:
+    en: Test connection failed
+    zh-CN: 测试连接失败
+    zh-HK: 測試連線失敗
+  connection_failed:
+    en: Connection failed
+    zh-CN: 连接失败
+    zh-HK: 連線失敗
+  save_failed:
+    en: Failed to save connection
+    zh-CN: 保存连接失败
+    zh-HK: 保存連線失敗
+  serialize_failed:
+    en: Failed to serialize connection parameters
+    zh-CN: 序列化连接参数失败
+    zh-HK: 序列化連線參數失敗
+  parse_failed:
+    en: Unable to parse connection configuration
+    zh-CN: 无法解析连接配置
+    zh-HK: 無法解析連線設定
+
+# 数据库操作
+Database:
+  database:
+    en: Database
+    zh-CN: 数据库
+    zh-HK: 資料庫
+  new_database:
+    en: New Database
+    zh-CN: 新建数据库
+    zh-HK: 新建資料庫
+  edit_database:
+    en: Edit Database
+    zh-CN: 编辑数据库
+    zh-HK: 編輯資料庫
+  delete_database:
+    en: Delete Database
+    zh-CN: 删除数据库
+    zh-HK: 刪除資料庫
+  close_database:
+    en: Close Database
+    zh-CN: 关闭数据库
+    zh-HK: 關閉資料庫
+  database_name:
+    en: Database Name
+    zh-CN: 数据库名称
+    zh-HK: 資料庫名稱
+  enter_database_name:
+    en: Enter database name
+    zh-CN: 输入数据库名称
+    zh-HK: 輸入資料庫名稱
+  charset:
+    en: Character Set
+    zh-CN: 字符集
+    zh-HK: 字元集
+  collation:
+    en: Collation
+    zh-CN: 排序规则
+    zh-HK: 排序規則
+  encoding:
+    en: Encoding
+    zh-CN: 编码
+    zh-HK: 編碼
+  engine:
+    en: Database Engine
+    zh-CN: 数据库引擎
+    zh-HK: 資料庫引擎
+  comment:
+    en: Comment
+    zh-CN: 注释
+    zh-HK: 註釋
+  file_path:
+    en: File Path
+    zh-CN: 文件路径
+    zh-HK: 檔案路徑
+  schema_name:
+    en: Schema Name
+    zh-CN: 模式名称
+    zh-HK: 模式名稱
+  enter_schema_name:
+    en: Enter schema name
+    zh-CN: 输入模式名称
+    zh-HK: 輸入模式名稱
+  new_schema:
+    en: New Schema
+    zh-CN: 新建模式
+    zh-HK: 新建模式
+  delete_schema:
+    en: Delete Schema
+    zh-CN: 删除模式
+    zh-HK: 刪除模式
+  enter_remark:
+    en: "Enter remark (optional)"
+    zh-CN: 输入备注信息(可选)
+    zh-HK: 輸入備註資訊(可選)
+
+  # ClickHouse 引擎类型
+  engine_atomic:
+    en: Atomic Database Engine (Default, ClickHouse 20.5+)
+    zh-CN: 原子数据库引擎 (默认, ClickHouse 20.5+)
+    zh-HK: 原子資料庫引擎 (預設, ClickHouse 20.5+)
+  engine_ordinary:
+    en: Ordinary Database Engine
+    zh-CN: 普通数据库引擎
+    zh-HK: 普通資料庫引擎
+  engine_memory:
+    en: Memory Database Engine
+    zh-CN: 内存数据库引擎
+    zh-HK: 記憶體資料庫引擎
+  engine_lazy:
+    en: Lazy Database Engine (Log Tables)
+    zh-CN: 懒加载数据库引擎 (日志表)
+    zh-HK: 懶載入資料庫引擎 (日誌表)
+  engine_mysql:
+    en: MySQL Engine (Connect to external MySQL)
+    zh-CN: MySQL 引擎 (连接外部 MySQL)
+    zh-HK: MySQL 引擎 (連線外部 MySQL)
+  engine_postgresql:
+    en: PostgreSQL Engine (Connect to external PostgreSQL)
+    zh-CN: PostgreSQL 引擎 (连接外部 PostgreSQL)
+    zh-HK: PostgreSQL 引擎 (連線外部 PostgreSQL)
+  engine_comment:
+    en: Database Comment (optional)
+    zh-CN: 数据库注释 (可选)
+    zh-HK: 資料庫註釋 (可選)
+
+  # MySQL 排序规则
+  collation_latin1_general_ci:
+    en: Latin1 General, case-insensitive (Default)
+    zh-CN: Latin1 General, case-insensitive (默认)
+    zh-HK: Latin1 General, case-insensitive (預設)
+  collation_utf8mb4_general_ci:
+    en: Simplified Chinese, case-insensitive
+    zh-CN: 简体中文, case-insensitive
+    zh-HK: 簡體中文, case-insensitive
+  collation_utf8mb4_bin:
+    en: Simplified Chinese, case-sensitive
+    zh-CN: 简体中文, case-sensitive
+    zh-HK: 簡體中文, case-sensitive
+  collation_utf8mb4_zh_hk_0900_as_cs:
+    en: Traditional Chinese, case-insensitive
+    zh-CN: 繁体中文, case-insensitive
+    zh-HK: 繁體中文, case-insensitive
+  collation_utf8mb4_ja_0900_as_cs:
+    en: Japanese, case-insensitive
+    zh-CN: 日文, case-insensitive
+    zh-HK: 日文, case-insensitive
+  collation_utf8mb4_ko_0900_as_cs:
+    en: Korean, case-insensitive
+    zh-CN: 韩文, case-insensitive
+    zh-HK: 韓文, case-insensitive
+
+# 表操作
+Table:
+  new_table:
+    en: New Table
+    zh-CN: 新建表
+    zh-HK: 新建表
+  design_table:
+    en: Design Table
+    zh-CN: 设计表
+    zh-HK: 設計表
+  view_data:
+    en: View Table Data
+    zh-CN: 查看表数据
+    zh-HK: 檢視表資料
+  rename_table:
+    en: Rename Table
+    zh-CN: 重命名表
+    zh-HK: 重新命名表
+  truncate_table:
+    en: Truncate Table
+    zh-CN: 清空表
+    zh-HK: 清空表
+  delete_table:
+    en: Delete Table
+    zh-CN: 删除表
+    zh-HK: 刪除表
+  export_table:
+    en: Export Table
+    zh-CN: 导出表
+    zh-HK: 匯出表
+  import_data_to_table:
+    en: Import Data to Table
+    zh-CN: 导入数据到表
+    zh-HK: 匯入資料到表
+
+  # 表设计器
+  table_name:
+    en: Table Name
+    zh-CN: 表名
+    zh-HK: 表名
+  enter_table_name:
+    en: Enter table name
+    zh-CN: 输入表名
+    zh-HK: 輸入表名
+  please_enter_table_name:
+    en: Please enter table name
+    zh-CN: 请输入表名
+    zh-HK: 請輸入表名
+  please_add_column:
+    en: Please add at least one column
+    zh-CN: 请至少添加一列
+    zh-HK: 請至少新增一列
+  create_success:
+    en: Table created successfully
+    zh-CN: 表创建成功
+    zh-HK: 表建立成功
+  modify_success:
+    en: Table modified successfully
+    zh-CN: 表修改成功
+    zh-HK: 表修改成功
+  create_failed:
+    en: Failed to create table
+    zh-CN: 创建表失败
+    zh-HK: 建立表失敗
+  modify_failed:
+    en: Failed to modify table
+    zh-CN: 修改表失败
+    zh-HK: 修改表失敗
+  no_changes:
+    en: No changes to execute
+    zh-CN: 没有需要执行的变更
+    zh-HK: 沒有需要執行的變更
+  execute_failed:
+    en: Execution failed
+    zh-CN: 执行失败
+    zh-HK: 執行失敗
+
+  # 表设计器标签
+  columns:
+    en: Columns
+    zh-CN: 列
+    zh-HK: 列
+  indexes:
+    en: Indexes
+    zh-CN: 索引
+    zh-HK: 索引
+  options:
+    en: Options
+    zh-CN: 选项
+    zh-HK: 選項
+  sql_preview:
+    en: SQL Preview
+    zh-CN: SQL 预览
+    zh-HK: SQL 預覽
+
+  # 表选项
+  engine:
+    en: Engine
+    zh-CN: 引擎
+    zh-HK: 引擎
+  charset:
+    en: Character Set
+    zh-CN: 字符集
+    zh-HK: 字元集
+  collation:
+    en: Collation
+    zh-CN: 排序规则
+    zh-HK: 排序規則
+  auto_increment:
+    en: Auto Increment Start Value
+    zh-CN: 自增起始值
+    zh-HK: 自增起始值
+  table_comment:
+    en: Table Comment
+    zh-CN: 表注释
+    zh-HK: 表註釋
+
+  # 列字段
+  column_name:
+    en: Column Name
+    zh-CN: 列名
+    zh-HK: 列名
+  type:
+    en: Type
+    zh-CN: 类型
+    zh-HK: 類型
+  created_at:
+    en: Created At
+    zh-CN: 创建时间
+    zh-HK: 創建時間
+  updated_at:
+    en: Updated At
+    zh-CN: 更新时间
+    zh-HK: 更新時間
+  length:
+    en: Length
+    zh-CN: 长度
+    zh-HK: 長度
+  decimal_places:
+    en: Decimal Places
+    zh-CN: 小数位
+    zh-HK: 小數位
+  default_value:
+    en: Default Value
+    zh-CN: 默认值
+    zh-HK: 預設值
+  comment:
+    en: Comment
+    zh-CN: 注释
+    zh-HK: 註釋
+  default:
+    en: Default
+    zh-CN: 默认
+    zh-HK: 預設
+  search_column:
+    en: "Search column name..."
+    zh-CN: 搜索列名...
+    zh-HK: 搜尋列名...
+  value_list_hint:
+    en: "Value list, e.g: 'a','b','c'"
+    zh-CN: "值列表，如: 'a','b','c'"
+    zh-HK: "值列表，如: 'a','b','c'"
+  unsaved_changes_prompt:
+    en: There are unsaved changes. Do you want to continue?
+    zh-CN: 存在未保存的变更。是否继续？
+    zh-HK: 存在未保存的變更。是否繼續？
+
+# 视图操作
+View:
+  view_data:
+    en: View Data
+    zh-CN: 查看视图数据
+    zh-HK: 檢視視圖資料
+  delete_view:
+    en: Delete View
+    zh-CN: 删除视图
+    zh-HK: 刪除視圖
+
+# 模式操作
+Schema:
+  schema:
+    en: Schema
+    zh-CN: 模式
+    zh-HK: 模式
+
+# 查询操作
+Query:
+  compress:
+    en: Compress
+    zh-CN: 压缩
+    zh-HK: 壓縮
+  delete_query:
+    en: Delete Query
+    zh-CN: 删除查询
+    zh-HK: 刪除查詢
+  explain:
+    en: Explain
+    zh-CN: 解释
+    zh-HK: 解釋
+  format:
+    en: Format
+    zh-CN: 格式化
+    zh-HK: 格式化
+  new_query:
+    en: New Query
+    zh-CN: 新建查询
+    zh-HK: 新建查詢
+  no_sql_to_compress:
+    en: No SQL statement to compress
+    zh-CN: 没有待压缩的SQL语句
+    zh-HK: 没有待壓縮的SQL語句
+  no_sql_to_format:
+    en: No SQL statement to format
+    zh-CN: 没有待格式化的SQL语句
+    zh-HK: 沒有待格式化的SQL語句
+  open_query:
+    en: Open Query
+    zh-CN: 打开查询
+    zh-HK: 開啟查詢
+  please_enter_query:
+    en: Please enter a query
+    zh-CN: 请输入查询语句
+    zh-HK: 請輸入查詢語句
+  please_select_database:
+    en: Please select a database
+    zh-CN: 请选择数据库
+    zh-HK: 請選擇資料庫
+  query_content_empty:
+    en: Query content is empty
+    zh-CN: 查询内容为空
+    zh-HK: 查詢內容為空
+  query_editor_prefix:
+    en: Query
+    zh-CN: 查询
+    zh-HK: 查詢
+  query_list:
+    en: Query List
+    zh-CN: 查询列表
+    zh-HK: 查詢列表
+  query_name:
+    en: Query Name
+    zh-CN: 查询名称
+    zh-HK: 查詢名稱
+  query_saved:
+    en: Query saved successfully
+    zh-CN: 查询保存成功
+    zh-HK: 查詢儲存成功
+  rename_query:
+    en: Rename Query
+    zh-CN: 重命名查询
+    zh-HK: 重新命名查詢
+  run:
+    en: Run
+    zh-CN: 运行
+    zh-HK: 執行
+  running:
+    en: Running...
+    zh-CN: 运行中...
+    zh-HK: 執行中...
+  run_selected:
+    en: Run Selected
+    zh-CN: 运行选中
+    zh-HK: 執行選取
+  save:
+    en: Save
+    zh-CN: 保存
+    zh-HK: 儲存
+  select_database:
+    en: Select database...
+    zh-CN: 选择数据库...
+    zh-HK: 選擇資料庫...
+  select_schema:
+    en: Select schema...
+    zh-CN: 选择模式...
+    zh-HK: 選擇模式...
+  show_results:
+    en: Show results
+    zh-CN: 显示结果
+    zh-HK: 顯示結果
+  summary:
+    en: Summary
+    zh-CN: 摘要
+    zh-HK: 摘要
+  result:
+    en: Result
+    zh-CN: 结果
+    zh-HK: 結果
+  processed_queries:
+    en: Processed Queries
+    zh-CN: 已处理的查询
+    zh-HK: 已處理的查詢
+  success:
+    en: Success
+    zh-CN: 成功
+    zh-HK: 成功
+  error:
+    en: Error
+    zh-CN: 错误
+    zh-HK: 錯誤
+  execution_time:
+    en: Execution Time
+    zh-CN: 运行时间
+    zh-HK: 運行時間
+  executing:
+    en: Executing...
+    zh-CN: 执行中...
+    zh-HK: 執行中...
+  show_errors_only:
+    en: Show Errors Only
+    zh-CN: 仅显示错误
+    zh-HK: 僅顯示錯誤
+  query:
+    en: Query
+    zh-CN: 查询
+    zh-HK: 查詢
+  message:
+    en: Message
+    zh-CN: 消息
+    zh-HK: 消息
+  sql_statement:
+    en: SQL Statement
+    zh-CN: SQL 语句
+    zh-HK: SQL 語句
+
+DatabaseObjects:
+  title:
+    en: Objects
+    zh-CN: 对象
+    zh-HK: 對象
+
+
+
+
+# SQL 编辑器
+SqlEditor:
+  no_settings:
+    en: This page has no configuration options
+    zh-CN: 此页签暂无配置项
+    zh-HK: 此頁籤暫無設定項
+  no_changes:
+    en: -- No data changes
+    zh-CN: -- 没有变更数据
+    zh-HK: -- 沒有變更資料
+  query_type_error:
+    en: Query type error
+    zh-CN: 查询类型异常
+    zh-HK: 查詢類型異常
+
+# 导入导出
+ImportExport:
+  # 导入
+  import_data:
+    en: Import Data
+    zh-CN: 导入数据
+    zh-HK: 匯入資料
+  import_to_table:
+    en: Import to Table
+    zh-CN: 导入表
+    zh-HK: 匯入表
+  select_import_file:
+    en: Select Import File
+    zh-CN: 选择导入文件
+    zh-HK: 選擇匯入檔案
+  please_select_file:
+    en: Please select import file
+    zh-CN: 请选择导入文件
+    zh-HK: 請選擇匯入檔案
+  please_enter_table_name:
+    en: Please enter table name
+    zh-CN: 请输入表名
+    zh-HK: 請輸入表名
+  file_format:
+    en: File Format
+    zh-CN: 文件格式
+    zh-HK: 檔案格式
+  import_options:
+    en: Import Options
+    zh-CN: 导入选项
+    zh-HK: 匯入選項
+  has_header:
+    en: Contains Header Row
+    zh-CN: 包含标题行
+    zh-HK: 包含標題行
+  stop_on_error:
+    en: Stop on Error
+    zh-CN: 遇错停止
+    zh-HK: 遇錯停止
+  use_transaction:
+    en: Use Transaction
+    zh-CN: 使用事务
+    zh-HK: 使用事務
+  truncate_before_import:
+    en: Truncate Table Before Import
+    zh-CN: 导入前清空表
+    zh-HK: 匯入前清空表
+  delimiter_config:
+    en: Delimiter Configuration
+    zh-CN: 分隔符配置
+    zh-HK: 分隔符號設定
+  record_delimiter:
+    en: Record Delimiter
+    zh-CN: 记录分隔符
+    zh-HK: 記錄分隔符號
+  field_delimiter:
+    en: Field Delimiter
+    zh-CN: 字段分隔符
+    zh-HK: 欄位分隔符號
+  text_qualifier:
+    en: Text Qualifier
+    zh-CN: 文本识别符
+    zh-HK: 文字識別符號
+  start_import:
+    en: Start Import
+    zh-CN: 开始导入
+    zh-HK: 開始匯入
+  importing:
+    en: "Importing..."
+    zh-CN: 导入中...
+    zh-HK: 匯入中...
+  import_success:
+    en: Import successful
+    zh-CN: 导入成功
+    zh-HK: 匯入成功
+  import_partial_success:
+    en: Partial success
+    zh-CN: 部分成功
+    zh-HK: 部分成功
+  import_error:
+    en: Import error
+    zh-CN: 导入错误
+    zh-HK: 匯入錯誤
+  import_complete:
+    en: Import complete
+    zh-CN: 导入完成
+    zh-HK: 匯入完成
+  file_read_error:
+    en: File read error
+    zh-CN: 文件读取错误
+    zh-HK: 檔案讀取錯誤
+  file_read_success:
+    en: "File read successfully, starting execution..."
+    zh-CN: 文件读取成功，开始执行...
+    zh-HK: 檔案讀取成功，開始執行...
+
+  # 导入统计
+  file:
+    en: File
+    zh-CN: 文件
+    zh-HK: 檔案
+  processed:
+    en: Processed
+    zh-CN: 已处理
+    zh-HK: 已處理
+  time:
+    en: Time
+    zh-CN: 时间
+    zh-HK: 時間
+  errors:
+    en: Errors
+    zh-CN: 错误
+    zh-HK: 錯誤
+
+  # 字段分隔符选项
+  delimiter_comma:
+    en: "Comma (,)"
+    zh-CN: 逗号 (,)
+    zh-HK: 逗號 (,)
+  delimiter_tab:
+    en: "Tab (\\t)"
+    zh-CN: 制表符 (\t)
+    zh-HK: 定位字元 (\t)
+  delimiter_semicolon:
+    en: "Semicolon (;)"
+    zh-CN: 分号 (;)
+    zh-HK: 分號 (;)
+  delimiter_pipe:
+    en: "Pipe (|)"
+    zh-CN: 管道符 (|)
+    zh-HK: 管道符 (|)
+
+  # 文本识别符选项
+  qualifier_none:
+    en: None
+    zh-CN: 无
+    zh-HK: 無
+  qualifier_double_quote:
+    en: "Double Quote (\")"
+    zh-CN: 双引号 (")
+    zh-HK: 雙引號 (")
+  qualifier_single_quote:
+    en: "Single Quote (')"
+    zh-CN: 单引号 (')
+    zh-HK: 單引號 (')
+
+  # 提示文本
+  import_hint:
+    en: "Note: Please select the import file and configure options, then click [Next] to continue."
+    zh-CN: 注：请选择导入文件并配置选项，然后点击 [下一步] 继续。
+    zh-HK: 注：請選擇匯入檔案並設定選項，然後點擊 [下一步] 繼續。
+  import_ready_hint:
+    en: "We have collected all the information needed to import data. Click the [Start] button to begin importing."
+    zh-CN: 我们已收集导入数据时所需的所有信息。点击 [开始] 按钮开始导入。
+    zh-HK: 我們已收集匯入資料時所需的所有資訊。點擊 [開始] 按鈕開始匯入。
+
+  # 导出
+  export_data:
+    en: Export Data
+    zh-CN: 导出数据
+    zh-HK: 匯出資料
+  export_structure:
+    en: Export Structure
+    zh-CN: 导出结构
+    zh-HK: 匯出結構
+  export_structure_and_data:
+    en: Export Structure and Data
+    zh-CN: 导出结构和数据
+    zh-HK: 匯出結構和資料
+  dump_sql_file:
+    en: Dump SQL File
+    zh-CN: 转储SQL文件
+    zh-HK: 轉儲SQL檔案
+  getting_table_list:
+    en: "Getting table list..."
+    zh-CN: 获取表列表...
+    zh-HK: 取得表列表...
+  found_tables:
+    en: "Found {0} tables"
+    zh-CN: 找到 {0} 个表
+    zh-HK: 找到 {0} 個表
+  get_table_list_failed:
+    en: Failed to get table list
+    zh-CN: 获取表列表失败
+    zh-HK: 取得表列表失敗
+  export_table:
+    en: Export Table
+    zh-CN: 导出表
+    zh-HK: 匯出表
+
+  # SQL 文件运行
+  run_sql_file:
+    en: Run SQL File
+    zh-CN: 运行SQL文件
+    zh-HK: 執行SQL檔案
+  select_sql_file:
+    en: Select SQL File
+    zh-CN: 选择SQL文件
+    zh-HK: 選擇SQL檔案
+  please_select_sql_file:
+    en: Please select SQL file
+    zh-CN: 请选择SQL文件
+    zh-HK: 請選擇SQL檔案
+  processing_file:
+    en: Processing file
+    zh-CN: 开始处理文件
+    zh-HK: 開始處理檔案
+
+# 树形视图
+TreeView:
+  server:
+    en: Server
+    zh-CN: 服务器
+    zh-HK: 伺服器
+  databases:
+    en: Databases
+    zh-CN: 数据库
+    zh-HK: 資料庫
+  tables:
+    en: Tables
+    zh-CN: 表
+    zh-HK: 表
+
+# 模型设置
+ModelSettings:
+  title:
+    en: Model Settings
+    zh-CN: 模型设置
+    zh-HK: 模型設定
+  temperature_label:
+    en: Temperature
+    zh-CN: 温度
+    zh-HK: 溫度
+  temperature_desc:
+    en: Control randomness of outputs, 0 = deterministic, 2 = creative
+    zh-CN: 控制输出随机性，0=确定性，2=创造性
+    zh-HK: 控制輸出隨機性，0=確定性，2=創造性
+  history_label:
+    en: History
+    zh-CN: 历史记录
+    zh-HK: 歷史記錄
+  history_desc:
+    en: Number of messages included in multi-turn chats (0-50)
+    zh-CN: 多轮对话时携带的历史消息数 (0-50)
+    zh-HK: 多輪對話時攜帶的歷史訊息數 (0-50)
+  max_tokens_label:
+    en: Max Output
+    zh-CN: 最大输出
+    zh-HK: 最大輸出
+  max_tokens_desc:
+    en: Maximum tokens in AI responses (100-8000)
+    zh-CN: AI 响应的最大 token 数 (100-8000)
+    zh-HK: AI 回應的最大 token 數 (100-8000)
+  footer_notice:
+    en: Settings take effect immediately and apply to future chats
+    zh-CN: 设置会立即生效，影响后续对话
+    zh-HK: 設定會立即生效，影響後續對話
+
+DbTree:
+  Tables:
+    en: Tables
+    zh-CN: 表
+    zh-HK: 表
+  Views:
+    en: Views
+    zh-CN: 视图
+    zh-HK: 視圖
+  Functions:
+    en: Functions
+    zh-CN: 函数
+    zh-HK: 函數
+  Procedures:
+    en: Procedures
+    zh-CN: 存储过程
+    zh-HK: 存儲過程
+  Sequences:
+    en: Sequences
+    zh-CN: 序列
+    zh-HK: 序列
+  Queries:
+    en: Queries
+    zh-CN: 查询
+    zh-HK: 查詢
+  Columns:
+    en: Columns
+    zh-CN: 列
+    zh-HK: 列
+  Indexes:
+    en: Indexes
+    zh-CN: 索引
+    zh-HK: 索引
+  ForeignKeys:
+    en: Foreign Keys
+    zh-CN: 外键
+    zh-HK: 外鍵
+  Triggers:
+    en: Triggers
+    zh-CN: 触发器
+    zh-HK: 觸發器
+  Checks:
+    en: Checks
+    zh-CN: 检查约束
+    zh-HK: 檢查約束

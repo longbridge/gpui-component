@@ -1,0 +1,13 @@
+[package]
+name = "license_tool"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+one-core.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde_json.workspace = true
+ed25519-dalek = "2.2.0"

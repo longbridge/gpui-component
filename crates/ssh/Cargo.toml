@@ -1,0 +1,22 @@
+[package]
+name = "ssh"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true, features = ["fs", "net"] }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+# SSH and SFTP
+russh.workspace = true
+russh-sftp.workspace = true
+russh-keys.workspace = true
+russh-util.workspace = true
+# Proxy support
+tokio-socks.workspace = true
+
+[lints]
+workspace = true

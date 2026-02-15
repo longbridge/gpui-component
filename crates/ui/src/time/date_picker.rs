@@ -1,21 +1,16 @@
 use std::rc::Rc;
 
 use chrono::NaiveDate;
-use gpui::{
-    App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
-    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
-};
+use gpui::{anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window};
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
-    actions::{Cancel, Confirm},
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    input::{Delete, clear_button},
-    v_flex,
+    actions::{Cancel, Confirm}, button::{Button, ButtonVariants as _}, h_flex, input::{clear_button, Delete}, v_flex, ActiveTheme, Disableable, Icon,
+    IconName,
+    Sizable,
+    Size,
+    StyleSized as _,
+    StyledExt as _,
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
@@ -116,7 +111,7 @@ impl DatePickerState {
             |this, _, ev: &CalendarEvent, window, cx| match ev {
                 CalendarEvent::Selected(date) => {
                     this.update_date(*date, true, window, cx);
-                    this.focus_handle.focus(window, cx);
+                    this.focus_handle.focus(window,cx);
                 }
             },
         )];
@@ -155,6 +150,15 @@ impl DatePickerState {
         self.update_date(date.into(), false, window, cx);
     }
 
+    /// Set the picker to open state
+    pub fn set_open(&mut self, open: bool, _cx: &mut Context<Self>) {
+        self.open = open;
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     /// Set the disabled match for the calendar.
     pub fn disabled_matcher(mut self, disabled: impl Into<Matcher>) -> Self {
         self.disabled_matcher = Some(Rc::new(disabled.into()));
@@ -184,11 +188,13 @@ impl DatePickerState {
     fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
+            return;
         }
 
         self.focus_back_if_need(window, cx);
         self.open = false;
-
+        // 关闭时发出 Change 事件，让表格结束编辑模式
+        cx.emit(DatePickerEvent::Change(self.date));
         cx.notify();
     }
 
@@ -216,13 +222,12 @@ impl DatePickerState {
 
         if let Some(focused) = window.focused(cx) {
             if focused.contains(&self.focus_handle, window) {
-                self.focus_handle.focus(window, cx);
+                self.focus_handle.focus(window,cx);
             }
         }
     }
 
-    fn clean(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
+    fn clean(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         match self.date {
             Date::Single(_) => {
                 self.update_date(Date::Single(None), true, window, cx);
@@ -233,8 +238,15 @@ impl DatePickerState {
         }
     }
 
-    fn toggle_calendar(&mut self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_calendar(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
+        cx.notify();
+    }
+
+    fn confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open = false;
+        cx.emit(DatePickerEvent::Change(self.date));
+        self.focus_handle.focus(window,cx);
         cx.notify();
     }
 
@@ -415,15 +427,7 @@ impl RenderOnce for DatePicker {
                             .items_center()
                             .justify_between()
                             .gap_1()
-                            .child(
-                                div()
-                                    .w_full()
-                                    .overflow_hidden()
-                                    .when(!state.date.is_some(), |this| {
-                                        this.text_color(cx.theme().muted_foreground)
-                                    })
-                                    .child(display_title),
-                            )
+                            .child(div().w_full().overflow_hidden().child(display_title))
                             .when(!self.disabled, |this| {
                                 this.when(show_clean, |this| {
                                     this.child(clear_button(cx).on_click(
@@ -461,40 +465,84 @@ impl RenderOnce for DatePicker {
                                     }),
                                 )
                                 .child(
-                                    h_flex()
+                                    v_flex()
                                         .gap_3()
                                         .h_full()
                                         .items_start()
-                                        .when_some(self.presets.clone(), |this, presets| {
-                                            this.child(
-                                                v_flex().my_1().gap_2().justify_end().children(
-                                                    presets.into_iter().enumerate().map(
-                                                        |(i, preset)| {
-                                                            Button::new(("preset", i))
-                                                                .small()
-                                                                .ghost()
-                                                                .tab_stop(false)
-                                                                .label(preset.label.clone())
-                                                                .on_click(window.listener_for(
-                                                                    &self.state,
-                                                                    move |this, _, window, cx| {
-                                                                        this.select_preset(
-                                                                            &preset, window, cx,
-                                                                        );
-                                                                    },
-                                                                ))
-                                                        },
-                                                    ),
-                                                ),
-                                            )
-                                        })
                                         .child(
-                                            Calendar::new(&state.calendar)
-                                                .number_of_months(self.number_of_months)
-                                                .border_0()
-                                                .rounded_none()
-                                                .p_0()
-                                                .with_size(self.size),
+                                            h_flex()
+                                                .gap_3()
+                                                .h_full()
+                                                .items_start()
+                                                .when_some(self.presets.clone(), |this, presets| {
+                                                    this.child(
+                                                        v_flex()
+                                                            .my_1()
+                                                            .gap_2()
+                                                            .justify_end()
+                                                            .children(
+                                                                presets
+                                                                    .into_iter()
+                                                                    .enumerate()
+                                                                    .map(|(i, preset)| {
+                                                                        Button::new(("preset", i))
+                                                                            .small()
+                                                                            .ghost()
+                                                                            .tab_stop(false)
+                                                                            .label(preset.label.clone())
+                                                                            .on_click(window.listener_for(
+                                                                                &self.state,
+                                                                                move |this, _, window, cx| {
+                                                                                    this.select_preset(
+                                                                                        &preset, window, cx,
+                                                                                    );
+                                                                                },
+                                                                            ))
+                                                                    }),
+                                                            ),
+                                                    )
+                                                })
+                                                .child(
+                                                    Calendar::new(&state.calendar)
+                                                        .number_of_months(self.number_of_months)
+                                                        .border_0()
+                                                        .rounded_none()
+                                                        .p_0()
+                                                        .with_size(self.size),
+                                                ),
+                                        )
+                                        .child(
+                                            h_flex()
+                                                .mt_3()
+                                                .pt_3()
+                                                .border_t_1()
+                                                .border_color(cx.theme().border)
+                                                .justify_end()
+                                                .gap_2()
+                                                .child(
+                                                    Button::new("ok")
+                                                        .small()
+                                                        .primary()
+                                                        .label("OK")
+                                                        .on_click(window.listener_for(
+                                                            &self.state,
+                                                            |this, _, window, cx| {
+                                                                this.confirm(window, cx);
+                                                            },
+                                                        )),
+                                                )
+                                                .child(
+                                                    Button::new("cancel")
+                                                        .small()
+                                                        .ghost()
+                                                        .label("Cancel")
+                                                        .on_click(window.listener_for(
+                                                            &self.state,
+                                                            |this, _, window, cx| {
+                                                                this.on_escape(&Cancel, window, cx);
+                                                            },
+                                                        )),
+                                                ),
                                         ),
                                 ),
                         ),

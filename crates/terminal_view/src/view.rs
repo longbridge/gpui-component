@@ -1,0 +1,1920 @@
+use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::index::{Column, Line, Point as AlacPoint, Side};
+use alacritty_terminal::selection::SelectionType;
+use alacritty_terminal::term::TermMode;
+use alacritty_terminal::term::cell::Flags;
+use gpui::prelude::FluentBuilder;
+use gpui::*;
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
+use gpui_component::{Icon, IconName, Sizable, Size};
+use std::borrow::Cow;
+use std::path::PathBuf;
+
+use crate::addon::{
+    register_default_addons,
+    AddonManager,
+    SearchAddon,
+    TerminalAddonFrameContext,
+    TerminalAddonMouseContext,
+};
+use crate::blink_manager::BlinkManager;
+use crate::sidebar::{TerminalSidebar, TerminalSidebarEvent, SidebarPanel, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
+use crate::terminal::{ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent};
+use crate::terminal_element::{RenderCache, TerminalElement};
+use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
+use one_core::storage::models::StoredConnection;
+use one_core::tab_container::{TabContent, TabContentEvent};
+use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
+use rust_i18n::t;
+use std::ops::Deref;
+use terminal::LocalConfig;
+
+actions!(
+    terminal_view,
+    [
+        SendTab,
+        SendShiftTab,
+        Copy,
+        Paste,
+        SelectAll,
+        ClearSelection,
+        SearchForward,
+        SearchBackward,
+        ToggleViMode,
+        ViModeStartSelection,
+    ]
+);
+
+const TERMINAL_CONTEXT: &str = "TerminalView";
+
+const DEFAULT_CELL_WIDTH: Pixels = px(8.0);
+const DEFAULT_COLS: usize = 80;
+const DEFAULT_ROWS: usize = 24;
+const ALT_SCREEN_SCROLL_SENSITIVITY: f32 = 0.3;
+
+/// 正在调整大小的面板
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResizingPanel {
+    Sidebar,
+}
+
+pub fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("tab", SendTab, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("shift-tab", SendShiftTab, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("cmd-c", Copy, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("cmd-v", Paste, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("cmd-a", SelectAll, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("escape", ClearSelection, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("cmd-f", SearchForward, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("cmd-g", SearchBackward, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new("ctrl-shift-space", ToggleViMode, Some(TERMINAL_CONTEXT)),
+    ]);
+}
+
+/// IME composition state
+struct ImeState {
+    marked_range: Option<std::ops::Range<usize>>,
+}
+
+/// Terminal view component - supports both Local and SSH backends
+pub struct TerminalView {
+    /// Terminal model entity
+    terminal: Entity<Terminal>,
+    /// 本地终端工作目录
+    local_working_dir: Option<PathBuf>,
+    /// 光标闪烁管理器
+    blink_manager: Entity<BlinkManager>,
+    /// 侧边栏
+    sidebar: Entity<TerminalSidebar>,
+
+    font_size: Pixels,
+    line_height: Pixels,
+    cell_width: Pixels,
+
+    last_size: Option<(usize, usize)>,
+    scroll_lines_accumulated: f32,
+
+    mouse_state: MouseState,
+    addon_manager: AddonManager,
+
+    _subscriptions: Vec<Subscription>,
+
+    mouse_position: Option<Point<Pixels>>,
+
+    render_cache: RenderCache,
+    focus_handle: FocusHandle,
+
+    terminal_bounds: Bounds<Pixels>,
+
+    ime_state: Option<ImeState>,
+
+    current_theme: TerminalTheme,
+    /// 当前命令输入起点（用于更稳妥地截取命令）
+    command_input_start: Option<AlacPoint>,
+
+    /// 标签页序号（用于多实例显示）
+    tab_index: Option<usize>,
+
+    /// 侧边栏面板大小
+    sidebar_panel_size: Pixels,
+    /// 正在调整大小的面板
+    resizing: Option<ResizingPanel>,
+    /// 视图边界
+    view_bounds: Bounds<Pixels>,
+}
+
+/// Mouse interaction state
+#[derive(Default)]
+struct MouseState {
+    selecting: bool,
+    last_click_point: Option<AlacPoint>,
+    click_count: u32,
+    last_click_time: Option<std::time::Instant>,
+}
+
+impl TerminalView {
+    pub fn new(config: LocalConfig, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+        Self::new_with_index(config, None, window, cx)
+    }
+
+    pub fn new_with_index(config: LocalConfig, tab_index: Option<usize>, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+        // 创建 Terminal Entity
+        let local_working_dir = config.working_dir.clone().map(PathBuf::from);
+        let terminal = cx.new(|cx| {
+            Terminal::new_local(config, cx).expect("Failed to create local terminal")
+        });
+        Self::new_with_terminal(terminal, None, local_working_dir, tab_index, window, cx)
+    }
+
+    pub fn new_ssh(conn: StoredConnection, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_ssh_with_index(conn, None, window, cx, None)
+    }
+
+    pub fn new_ssh_with_index(conn: StoredConnection, tab_index: Option<usize>, window: &mut Window, cx: &mut Context<Self>, working_dir: Option<&str>) -> Self {
+        // 创建 SSH Terminal Entity
+        let connection_id = conn.id;
+        let terminal = cx.new(|cx| Terminal::new_ssh(conn, cx, working_dir));
+        Self::new_with_terminal(terminal, connection_id, None, tab_index, window, cx)
+            .expect("SSH terminal creation should not fail")
+    }
+
+    fn new_with_terminal(
+        terminal: Entity<Terminal>,
+        connection_id: Option<i64>,
+        local_working_dir: Option<PathBuf>,
+        tab_index: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<Self> {
+        let blink_manager = cx.new(|_| BlinkManager::new());
+
+        // 获取初始颜色
+        let colors = terminal.read(cx).term().lock().colors().clone();
+        let is_local_terminal = terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+
+        // 创建默认主题（需要在创建侧边栏之前）
+        let default_theme = TerminalTheme::midnight();
+
+        // 创建侧边栏
+        let sidebar = cx.new(|cx| TerminalSidebar::new(connection_id, &default_theme, window, cx));
+
+        // 订阅侧边栏事件
+        let sidebar_subscription = cx.subscribe(&sidebar, Self::handle_sidebar_event);
+
+        // 订阅 Terminal 事件
+        let terminal_subscription = cx.subscribe(&terminal, Self::handle_terminal_event);
+
+        // 订阅 BlinkManager 变化
+        let blink_subscription = cx.observe(&blink_manager, |this, _, cx| {
+            cx.notify();
+            let _ = this;
+        });
+
+        let focus_handle = cx.focus_handle();
+
+        // 焦点获得/失去订阅
+        let focus_subscription = cx.on_focus(&focus_handle, window, |this, _window, cx| {
+            this.blink_manager.update(cx, BlinkManager::enable);
+        });
+        let blur_subscription = cx.on_blur(&focus_handle, window, |this, _window, cx| {
+            this.blink_manager.update(cx, BlinkManager::disable);
+        });
+
+        let mut subscriptions = Vec::new();
+        subscriptions.push(sidebar_subscription);
+        subscriptions.push(terminal_subscription);
+        subscriptions.push(blink_subscription);
+        subscriptions.push(focus_subscription);
+        subscriptions.push(blur_subscription);
+
+        Ok(Self {
+            terminal,
+            local_working_dir: if is_local_terminal {
+                local_working_dir
+            } else {
+                None
+            },
+            blink_manager,
+            sidebar,
+            font_size: default_theme.font_size,
+            line_height: default_theme.line_height(),
+            cell_width: DEFAULT_CELL_WIDTH,
+            // 初始化为 None，确保首次渲染时会触发 resize，
+            // 将正确的终端尺寸发送给 PTY
+            last_size: None,
+            scroll_lines_accumulated: 0.0,
+            mouse_state: MouseState::default(),
+            addon_manager: Self::create_addon_manager(),
+            _subscriptions: subscriptions,
+            mouse_position: None,
+            render_cache: RenderCache::new(DEFAULT_ROWS, DEFAULT_COLS, colors),
+            focus_handle,
+            terminal_bounds: Bounds::default(),
+            ime_state: None,
+            current_theme: default_theme,
+            command_input_start: None,
+            tab_index,
+            sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
+            resizing: None,
+            view_bounds: Bounds::default(),
+        })
+    }
+
+    /// 处理侧边栏事件
+    fn handle_sidebar_event(
+        &mut self,
+        _sidebar: Entity<TerminalSidebar>,
+        event: &TerminalSidebarEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            TerminalSidebarEvent::PanelChanged(_panel) => {
+                cx.notify();
+            }
+            TerminalSidebarEvent::SearchPatternChanged(pattern) => {
+                let _ = self.set_search_pattern(pattern);
+                cx.notify();
+            }
+            TerminalSidebarEvent::SearchPrevious => {
+                self.search_backward_internal(cx);
+            }
+            TerminalSidebarEvent::SearchNext => {
+                self.search_forward_internal(cx);
+            }
+            TerminalSidebarEvent::FontSizeChanged(size) => {
+                self.set_font_size(*size, cx);
+            }
+            TerminalSidebarEvent::FontFamilyChanged(family) => {
+                self.set_font_family(family.clone(), cx);
+            }
+            TerminalSidebarEvent::ThemeChanged(theme) => {
+                self.set_theme(theme.clone(), cx);
+            }
+            TerminalSidebarEvent::ExecuteCommand(command) => {
+                // 发送命令到终端
+                self.terminal.update(cx, |term, _cx| {
+                    term.write(format!("{}\n", command).as_bytes());
+                });
+            }
+            TerminalSidebarEvent::PasteCodeToTerminal(code) => {
+                // 粘贴代码块到终端（使用 bracketed paste 模式，不自动执行）
+                self.paste_code_block(&code, cx);
+            }
+            TerminalSidebarEvent::AskAi => {
+                // AI 请求已由 sidebar 内部处理，这里只需要通知刷新
+                cx.notify();
+            }
+        }
+    }
+
+    /// 内部搜索：向前搜索
+    fn search_forward_internal(&mut self, cx: &mut Context<Self>) {
+        if let Some(search) = self.addon_manager.get_as_mut::<SearchAddon>("search") {
+            let term = self.terminal.read(cx).term().clone();
+            let mut term = term.lock();
+            search.find_next(&mut term);
+        }
+        cx.notify();
+    }
+
+    /// 内部搜索：向后搜索
+    fn search_backward_internal(&mut self, cx: &mut Context<Self>) {
+        if let Some(search) = self.addon_manager.get_as_mut::<SearchAddon>("search") {
+            let term = self.terminal.read(cx).term().clone();
+            let mut term = term.lock();
+            search.find_previous(&mut term);
+        }
+        cx.notify();
+    }
+
+    fn handle_terminal_event(
+        &mut self,
+        _terminal: Entity<Terminal>,
+        event: &TerminalModelEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            TerminalModelEvent::Wakeup => {
+                cx.notify();
+            }
+            TerminalModelEvent::TitleChanged(_) => {
+                cx.emit(TabContentEvent::StateChanged);
+            }
+            TerminalModelEvent::Bell => {
+                // 可选：播放声音或闪烁标签
+            }
+            TerminalModelEvent::ChildExit(_) => {
+                cx.notify();
+            }
+            TerminalModelEvent::ClipboardStore(data) => {
+                cx.write_to_clipboard(ClipboardItem::new_string(data.clone()));
+            }
+        }
+    }
+
+    fn create_addon_manager() -> AddonManager {
+        let mut manager = AddonManager::new();
+        register_default_addons(&mut manager);
+        manager
+    }
+
+    /// Apply a terminal theme
+    pub fn set_theme(&mut self, theme: TerminalTheme, cx: &mut Context<Self>) {
+        self.current_theme = theme;
+        self.font_size = self.current_theme.font_size;
+        self.line_height = self.current_theme.line_height();
+        cx.notify();
+    }
+
+    /// Get current theme
+    pub fn current_theme(&self) -> &TerminalTheme {
+        &self.current_theme
+    }
+
+    /// Get all available themes
+    pub fn available_themes() -> Vec<TerminalTheme> {
+        TerminalTheme::all()
+    }
+
+    /// 设置字体大小
+    pub fn set_font_size(&mut self, size: f32, cx: &mut Context<Self>) {
+        let clamped = size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
+        self.current_theme.font_size = px(clamped);
+        self.font_size = self.current_theme.font_size;
+        self.line_height = self.current_theme.line_height();
+        cx.notify();
+    }
+
+    /// 增大字体
+    pub fn increase_font_size(&mut self, cx: &mut Context<Self>) {
+        let current = f32::from(self.current_theme.font_size);
+        self.set_font_size(current + 1.0, cx);
+    }
+
+    /// 减小字体
+    pub fn decrease_font_size(&mut self, cx: &mut Context<Self>) {
+        let current = f32::from(self.current_theme.font_size);
+        self.set_font_size(current - 1.0, cx);
+    }
+
+    /// 重置字体大小为默认值
+    pub fn reset_font_size(&mut self, cx: &mut Context<Self>) {
+        self.set_font_size(DEFAULT_FONT_SIZE, cx);
+    }
+
+    /// 获取当前字体大小
+    pub fn font_size(&self) -> f32 {
+        f32::from(self.current_theme.font_size)
+    }
+
+    /// 设置主字体
+    pub fn set_font_family(&mut self, family: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.current_theme.font_family = family.into();
+        cx.notify();
+    }
+
+    /// 获取当前主字体
+    pub fn font_family(&self) -> &SharedString {
+        &self.current_theme.font_family
+    }
+
+    /// 设置行高比例
+    pub fn set_line_height_scale(&mut self, scale: f32, cx: &mut Context<Self>) {
+        self.current_theme.line_height_scale = scale.clamp(1.0, 2.5);
+        self.line_height = self.current_theme.line_height();
+        cx.notify();
+    }
+
+    /// 获取当前行高比例
+    pub fn line_height_scale(&self) -> f32 {
+        self.current_theme.line_height_scale
+    }
+
+    pub fn reconnect(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.terminal.update(cx, |terminal, cx| {
+            terminal.reconnect(cx);
+        });
+    }
+
+    fn write_to_pty(&mut self, data: Vec<u8>, cx: &mut Context<Self>) {
+        // 追踪输入用于命令历史
+        self.update_command_tracking_state(&data, cx);
+        self.track_pty_write_for_history(&data, cx);
+        self.terminal.read(cx).write(&data);
+    }
+
+    fn commit_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        if !text.is_empty() {
+            self.write_to_pty(text.as_bytes().to_vec(), cx);
+        }
+    }
+
+    /// 追踪 PTY 写入用于命令历史
+    ///
+    /// 当检测到回车时，从终端屏幕中提取光标所在行的命令内容。
+    /// 这种方式可以正确捕获：
+    /// - Tab 补全后的完整命令
+    /// - 通过上下键选择的历史命令
+    /// - 粘贴的命令
+    fn track_pty_write_for_history(&mut self, data: &[u8], cx: &mut Context<Self>) {
+        // 检测是否包含回车（命令提交）
+        let has_enter = data.iter().any(|&b| b == b'\r' || b == b'\n');
+
+        if has_enter {
+            // 从终端屏幕中提取当前光标行的命令
+            let command = self.command_input_start
+                .and_then(|start| self.extract_command_from_input_start(start, cx))
+                .or_else(|| self.extract_command_from_cursor_line(cx));
+            self.command_input_start = None;
+            if let Some(command) = command {
+                let command = command.trim().to_string();
+                if !command.is_empty() {
+                    self.sidebar.update(cx, |sidebar, cx| {
+                        sidebar.add_command_to_history(command, cx);
+                    });
+                }
+            }
+        }
+    }
+
+    fn update_command_tracking_state(&mut self, data: &[u8], cx: &Context<Self>) {
+        if data.iter().any(|&byte| byte == 0x03 || byte == 0x04) {
+            self.command_input_start = None;
+            return;
+        }
+
+        if self.command_input_start.is_some() {
+            return;
+        }
+
+        let has_non_enter = data.iter().any(|&byte| byte != b'\r' && byte != b'\n');
+        if !has_non_enter {
+            return;
+        }
+
+        let term = self.terminal.read(cx).term().lock();
+        if term.mode().contains(TermMode::ALT_SCREEN) {
+            return;
+        }
+
+        self.command_input_start = Some(term.grid().cursor.point);
+    }
+
+    fn extract_command_from_input_start(&self, start: AlacPoint, cx: &Context<Self>) -> Option<String> {
+        let term = self.terminal.read(cx).term().lock();
+        if term.mode().contains(TermMode::ALT_SCREEN) {
+            return None;
+        }
+
+        let grid = term.grid();
+        let cursor = grid.cursor.point;
+        if cursor.line < start.line {
+            return None;
+        }
+
+        let min_line = -(term.history_size() as i32);
+        let max_line = term.screen_lines() as i32;
+        if start.line < Line(min_line) || start.line >= Line(max_line) {
+            return None;
+        }
+        if cursor.line < Line(min_line) || cursor.line >= Line(max_line) {
+            return None;
+        }
+
+        let last_column = Column(term.columns().saturating_sub(1));
+        let mut command = String::new();
+        let mut line = start.line;
+
+        while line < cursor.line {
+            let start_column = if line == start.line { start.column } else { Column(0) };
+            let line_text = self.collect_line_text(&grid[line], start_column, last_column);
+            command.push_str(&line_text);
+
+            if !grid[line][last_column].flags.contains(Flags::WRAPLINE) {
+                return None;
+            }
+
+            line = Line(line.0 + 1);
+        }
+
+        let start_column = if line == start.line { start.column } else { Column(0) };
+        if start_column > cursor.column {
+            return None;
+        }
+        let line_text = self.collect_line_text(&grid[line], start_column, cursor.column);
+        command.push_str(&line_text);
+
+        let command = command.trim().to_string();
+        if command.is_empty() {
+            None
+        } else {
+            Some(command)
+        }
+    }
+
+    fn collect_line_text(
+        &self,
+        line: &alacritty_terminal::grid::Row<alacritty_terminal::term::cell::Cell>,
+        start: Column,
+        end: Column,
+    ) -> String {
+        let mut line_text = String::new();
+        for col in start.0..=end.0 {
+            let cell = &line[Column(col)];
+            if cell.c != '\0' && cell.c != ' ' || !line_text.is_empty() {
+                line_text.push(cell.c);
+            }
+        }
+        line_text.trim_end().to_string()
+    }
+
+    /// 从终端屏幕的光标行提取命令
+    ///
+    /// 返回光标所在行的文本内容（去除提示符后的命令部分）
+    fn extract_command_from_cursor_line(&self, cx: &Context<Self>) -> Option<String> {
+        let term = self.terminal.read(cx).term().lock();
+        let grid = term.grid();
+        let cursor = grid.cursor.point;
+
+        // 获取光标所在行的文本
+        let line = &grid[cursor.line];
+        let mut line_text = String::new();
+
+        for col in 0..term.columns() {
+            let cell = &line[Column(col)];
+            if cell.c != '\0' && cell.c != ' ' || !line_text.is_empty() {
+                line_text.push(cell.c);
+            }
+        }
+
+        // 去除末尾空格
+        let line_text = line_text.trim_end().to_string();
+
+        if line_text.is_empty() {
+            return None;
+        }
+
+        // 尝试识别并去除常见的 shell 提示符
+        // 常见模式：
+        // - "user@host:path$ command"
+        // - "user@host:path# command"
+        // - "[user@host path]$ command"
+        // - "➜ path git:(branch) command"
+        // - "$ command"
+        // - "# command"
+        // - "> command"
+        // - "% command"
+
+        let command = self.strip_shell_prompt(&line_text);
+        if command.is_empty() {
+            None
+        } else {
+            Some(command)
+        }
+    }
+
+    /// 去除 shell 提示符，提取命令部分
+    fn strip_shell_prompt(&self, line: &str) -> String {
+        // 定义提示符结束标记（按优先级排序）
+        let prompt_markers = [
+            "$ ",   // 最常见的普通用户提示符
+            "# ",   // root 用户提示符
+            "> ",   // 某些 shell 的提示符
+            "% ",   // zsh 默认提示符
+            "❯ ",   // starship 等现代提示符
+            "➜ ",   // oh-my-zsh 主题
+            "→ ",   // 某些主题
+        ];
+
+        // 尝试找到最后一个提示符标记
+        let mut best_pos = None;
+        for marker in &prompt_markers {
+            if let Some(pos) = line.rfind(marker) {
+                match best_pos {
+                    None => best_pos = Some((pos, marker.len())),
+                    Some((prev_pos, _)) if pos > prev_pos => {
+                        best_pos = Some((pos, marker.len()));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if let Some((pos, len)) = best_pos {
+            let command = &line[pos + len..];
+            return command.trim().to_string();
+        }
+
+        // 如果没有找到标准提示符，尝试使用正则模式
+        // 匹配 "user@host:path$ " 或 "[user@host path]$ " 等格式
+        if let Some(pos) = line.find(|c| c == '$' || c == '#' || c == '%' || c == '>') {
+            let after = &line[pos + 1..];
+            if after.starts_with(' ') {
+                return after[1..].trim().to_string();
+            }
+        }
+
+        // 如果都没找到，返回整行（可能是没有提示符的情况）
+        line.trim().to_string()
+    }
+
+    fn set_marked_text(
+        &mut self,
+        _text: String,
+        range: Option<std::ops::Range<usize>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.ime_state = Some(ImeState {
+            marked_range: range,
+        });
+        cx.notify();
+    }
+
+    fn clear_marked_text(&mut self, cx: &mut Context<Self>) {
+        if self.ime_state.is_some() {
+            self.ime_state = None;
+            cx.notify();
+        }
+    }
+
+    fn marked_text_range(&self) -> Option<std::ops::Range<usize>> {
+        self.ime_state
+            .as_ref()
+            .and_then(|state| state.marked_range.clone())
+    }
+
+    fn handle_key_event(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // 输入时暂停闪烁
+        self.blink_manager.update(cx, BlinkManager::pause_blinking);
+
+        if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
+            self.paste(&Paste, _window, cx);
+            return;
+        }
+
+        if event.keystroke.modifiers.platform && event.keystroke.key == "c" {
+            self.copy(&Copy, _window, cx);
+            return;
+        }
+
+        let mode = self.terminal.read(cx).mode();
+
+        if mode.contains(TermMode::VI) {
+            self.handle_vi_key_event(event, cx);
+            return;
+        }
+
+        if let Some(esc_str) = crate::keys::to_esc_str(&event.keystroke, &mode, false) {
+            let bytes = match esc_str {
+                Cow::Borrowed(s) => s.as_bytes().to_vec(),
+                Cow::Owned(s) => s.into_bytes(),
+            };
+            self.write_to_pty(bytes, cx);
+        }
+    }
+
+    fn handle_vi_key_event(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        use alacritty_terminal::vi_mode::ViMotion;
+
+        let key = &event.keystroke.key;
+        let shift = event.keystroke.modifiers.shift;
+        let ctrl = event.keystroke.modifiers.control;
+
+        let motion = match (key.as_str(), shift, ctrl) {
+            ("h", true, false) => Some(ViMotion::High),
+            ("m", true, false) => Some(ViMotion::Middle),
+            ("l", true, false) => Some(ViMotion::Low),
+            ("b", true, false) => Some(ViMotion::WordLeft),
+            ("w", true, false) => Some(ViMotion::WordRight),
+            ("e", true, false) => Some(ViMotion::WordRightEnd),
+            ("h" | "left", false, false) => Some(ViMotion::Left),
+            ("j" | "down", false, false) => Some(ViMotion::Down),
+            ("k" | "up", false, false) => Some(ViMotion::Up),
+            ("l" | "right", false, false) => Some(ViMotion::Right),
+            ("0", _, false) => Some(ViMotion::First),
+            ("$", _, false) => Some(ViMotion::Last),
+            ("^", _, false) => Some(ViMotion::FirstOccupied),
+            ("b", false, false) => Some(ViMotion::SemanticLeft),
+            ("w", false, false) => Some(ViMotion::SemanticRight),
+            ("e", false, false) => Some(ViMotion::SemanticRightEnd),
+            ("%", _, false) => Some(ViMotion::Bracket),
+            ("{", _, false) => Some(ViMotion::ParagraphUp),
+            ("}", _, false) => Some(ViMotion::ParagraphDown),
+            _ => None,
+        };
+
+        if let Some(ref motion) = motion {
+            let term = self.terminal.read(cx).term().clone();
+            let mut term = term.lock();
+            term.vi_motion(motion.clone());
+            drop(term);
+            cx.notify();
+            return;
+        }
+
+        let term = self.terminal.read(cx).term().clone();
+
+        match key.as_str() {
+            "v" if !ctrl && !shift => {
+                self.vi_start_selection(SelectionType::Simple, cx);
+            }
+            "v" if shift => {
+                self.vi_start_selection(SelectionType::Lines, cx);
+            }
+            "y" => {
+                let term = term.lock();
+                if let Some(text) = term.selection_to_string() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+                drop(term);
+                self.terminal.read(cx).term().lock().selection = None;
+                cx.notify();
+            }
+            "u" if ctrl => {
+                let mut term = term.lock();
+                let lines = term.screen_lines() as i32 / 2;
+                let vi_cursor = term.vi_mode_cursor.scroll(&term, lines);
+                term.vi_goto_point(vi_cursor.point);
+                drop(term);
+                cx.notify();
+            }
+            "d" if ctrl => {
+                let mut term = term.lock();
+                let lines = term.screen_lines() as i32 / 2;
+                let vi_cursor = term.vi_mode_cursor.scroll(&term, -lines);
+                term.vi_goto_point(vi_cursor.point);
+                drop(term);
+                cx.notify();
+            }
+            "g" if !shift => {
+                let mut term = term.lock();
+                let point = AlacPoint::new(Line(term.topmost_line().0), Column(0));
+                term.vi_goto_point(point);
+                drop(term);
+                cx.notify();
+            }
+            "g" if shift => {
+                let mut term = term.lock();
+                let point = AlacPoint::new(term.bottommost_line(), Column(0));
+                term.vi_goto_point(point);
+                drop(term);
+                cx.notify();
+            }
+            _ => {}
+        }
+    }
+
+    fn vi_start_selection(&mut self, selection_type: SelectionType, cx: &mut Context<Self>) {
+        use alacritty_terminal::selection::Selection;
+
+        let term = self.terminal.read(cx).term().clone();
+        let mut term = term.lock();
+        let point = term.vi_mode_cursor.point;
+        if term.selection.is_some() {
+            term.selection = None;
+        } else {
+            term.selection = Some(Selection::new(selection_type, point, Side::Left));
+        }
+        drop(term);
+        cx.notify();
+    }
+
+    fn toggle_vi_mode(&mut self, _: &ToggleViMode, _window: &mut Window, cx: &mut Context<Self>) {
+        self.terminal.update(cx, |terminal, _| {
+            terminal.toggle_vi_mode();
+        });
+        cx.notify();
+    }
+
+    fn copy(&mut self, _: &Copy, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(text) = self.terminal.read(cx).selection_text() {
+            cx.write_to_clipboard(ClipboardItem::new_string(text));
+        }
+    }
+
+    fn paste(&mut self, _: &Paste, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(clipboard) = cx.read_from_clipboard() {
+            if let Some(text) = clipboard.text() {
+                self.paste_text(&text, cx);
+            }
+        }
+    }
+
+    /// 粘贴文本到终端
+    ///
+    /// 统一使用 bracketed paste 模式处理所有粘贴操作，确保：
+    /// 1. 多行文本不会被立即执行（每一行都需要用户确认）
+    /// 2. 保持文本的完整性，让用户可以检查后再执行
+    /// 3. 避免意外执行危险命令
+    fn paste_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        // 总是使用 bracketed paste 模式
+        // 现代终端基本都支持此模式，即使不支持也只是显示转义序列，不会导致命令被意外执行
+        let paste_text = format!("\x1b[200~{}\x1b[201~", text.replace('\x1b', ""));
+        self.write_to_pty(paste_text.into_bytes(), cx);
+    }
+
+    /// 粘贴代码块到终端（用于AI生成的代码）
+    ///
+    /// 内部调用 paste_text，保持统一的粘贴行为
+    fn paste_code_block(&mut self, code: &str, cx: &mut Context<Self>) {
+        self.paste_text(code, cx);
+    }
+
+    fn select_all(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
+        self.terminal.update(cx, |terminal, _| {
+            terminal.select_all();
+        });
+        cx.notify();
+    }
+
+    fn clear_selection(&mut self, _: &ClearSelection, window: &mut Window, cx: &mut Context<Self>) {
+        // 如果侧边栏有激活的面板，按 Escape 关闭它
+        if self.sidebar.read(cx).active_panel().is_some() {
+            self.sidebar.update(cx, |sidebar, cx| {
+                sidebar.set_active_panel(None, cx);
+            });
+            // 清除搜索
+            self.sidebar.update(cx, |sidebar, cx| {
+                sidebar.set_search_value("", window, cx);
+            });
+            if let Some(search) = self.addon_manager.get_as_mut::<SearchAddon>("search") {
+                search.clear();
+            }
+            cx.notify();
+            return;
+        }
+
+        let term = self.terminal.read(cx).term().clone();
+        let mut term_lock = term.lock();
+        let in_vi_mode = term_lock.mode().contains(TermMode::VI);
+        let has_selection = term_lock.selection.is_some();
+
+        if in_vi_mode {
+            if has_selection {
+                term_lock.selection = None;
+            } else {
+                term_lock.toggle_vi_mode();
+            }
+            drop(term_lock);
+            cx.notify();
+        } else if has_selection {
+            term_lock.selection = None;
+            drop(term_lock);
+            cx.notify();
+        } else {
+            drop(term_lock);
+            self.write_to_pty(b"\x1b".to_vec(), cx);
+        }
+    }
+
+    fn search_forward(&mut self, _: &SearchForward, _window: &mut Window, cx: &mut Context<Self>) {
+        // 如果侧边栏设置面板未激活，则激活它
+        if self.sidebar.read(cx).active_panel() != Some(SidebarPanel::Settings) {
+            self.sidebar.update(cx, |sidebar, cx| {
+                sidebar.set_active_panel(Some(SidebarPanel::Settings), cx);
+            });
+            cx.notify();
+            return;
+        }
+        // 执行向前搜索
+        self.search_forward_internal(cx);
+    }
+
+    fn search_backward(&mut self, _: &SearchBackward, _window: &mut Window, cx: &mut Context<Self>) {
+        // 如果侧边栏设置面板未激活，则激活它
+        if self.sidebar.read(cx).active_panel() != Some(SidebarPanel::Settings) {
+            self.sidebar.update(cx, |sidebar, cx| {
+                sidebar.set_active_panel(Some(SidebarPanel::Settings), cx);
+            });
+            cx.notify();
+            return;
+        }
+        // 执行向后搜索
+        self.search_backward_internal(cx);
+    }
+
+    pub fn set_search_pattern(&mut self, pattern: &str) -> Result<()> {
+        if let Some(search) = self.addon_manager.get_as_mut::<SearchAddon>("search") {
+            search
+                .set_pattern(pattern)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+        }
+        Ok(())
+    }
+
+    fn resize_if_needed(&mut self, bounds: Bounds<Pixels>, cx: &mut Context<Self>) {
+        let cols = (bounds.size.width / self.cell_width).floor() as usize;
+        let rows = (bounds.size.height / self.line_height).floor() as usize;
+
+        let cols = cols.max(1);
+        let rows = rows.max(1);
+
+        let new_size = (cols, rows);
+        if self.last_size != Some(new_size) {
+            tracing::info!(
+                "终端尺寸变化: {:?} -> {:?}, cell_width={:.2}, line_height={:.2}, bounds={:.0}x{:.0}",
+                self.last_size,
+                new_size,
+                self.cell_width,
+                self.line_height,
+                bounds.size.width,
+                bounds.size.height
+            );
+            self.last_size = Some(new_size);
+            self.terminal.update(cx, |terminal, _| {
+                terminal.resize(
+                    cols,
+                    rows,
+                    f32::from(bounds.size.width).round() as u16,
+                    f32::from(bounds.size.height).round() as u16,
+                );
+            });
+        }
+    }
+
+    fn get_line_text(&self, screen_line: usize, cx: &Context<Self>) -> String {
+        let term = self.terminal.read(cx).term().lock();
+        let grid = term.grid();
+        let display_offset = grid.display_offset();
+        let grid_line = screen_line as i32 - display_offset as i32;
+
+        if grid_line < -(term.history_size() as i32) || grid_line >= term.screen_lines() as i32 {
+            return String::new();
+        }
+
+        let line = &grid[Line(grid_line)];
+        let text: String = line[..].iter().map(|cell| cell.c).collect();
+        text.trim_end_matches(|c: char| c == ' ' || c == '\0')
+            .to_string()
+    }
+
+    fn render_terminal(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        // Prepare addons before rendering
+        {
+            let is_local = self.terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+            let term = self.terminal.read(cx).term().lock();
+            let display_offset = term.grid().display_offset();
+            let visible_lines = 0..term.screen_lines();
+            let context = TerminalAddonFrameContext {
+                term: &term,
+                visible_lines,
+                display_offset,
+                is_local,
+                base_dir: self.local_working_dir.as_deref(),
+            };
+            self.addon_manager.dispatch_frame(&context);
+        }
+
+        // Update render cache with decorations from all addons
+        {
+            let term = self.terminal.read(cx).term().clone();
+            let mut term = term.lock();
+            self.render_cache
+                .update(&mut term, &self.addon_manager, &self.current_theme);
+            term.reset_damage();
+        }
+
+        // 获取光标可见性
+        let cursor_visible = self.blink_manager.read(cx).visible();
+
+        TerminalElement::new(
+            &self.render_cache,
+            self.current_theme.font_family.clone(),
+            self.current_theme.font_size,
+            self.current_theme.font_fallbacks.iter().map(|s| s.to_string()).collect(),
+            self.current_theme.line_height_scale,
+            cursor_visible,
+            self.cell_width,  // 传入预计算的 cell_width，确保与 resize 一致
+        )
+        .into_element()
+    }
+
+    /// 构建终端右键菜单
+    fn build_context_menu(
+        menu: PopupMenu,
+        has_selection: bool,
+        selection_text: Option<String>,
+        view: &Entity<Self>,
+        sidebar: &Entity<TerminalSidebar>,
+        _window: &mut Window,
+        _cx: &mut Context<PopupMenu>,
+    ) -> PopupMenu {
+        let view_copy = view.clone();
+        let view_paste = view.clone();
+        let view_select_all = view.clone();
+        let view_clear = view.clone();
+
+        let mut menu = menu
+            // 复制
+            .item(
+                PopupMenuItem::new(t!("ContextMenu.copy"))
+                    .icon(IconName::Copy)
+                    .action(Box::new(Copy))
+                    .disabled(!has_selection)
+                    .on_click(move |_, window, cx| {
+                        let _ = view_copy.update(cx, |this, cx| {
+                            this.copy(&Copy, window, cx);
+                        });
+                    }),
+            )
+            // 粘贴
+            .item(
+                PopupMenuItem::new(t!("ContextMenu.paste"))
+                    .action(Box::new(Paste))
+                    .on_click(move |_, window, cx| {
+                        let _ = view_paste.update(cx, |this, cx| {
+                            this.paste(&Paste, window, cx);
+                        });
+                    }),
+            )
+            .separator()
+            // 全选
+            .item(
+                PopupMenuItem::new(t!("ContextMenu.select_all"))
+                    .action(Box::new(SelectAll))
+                    .on_click(move |_, window, cx| {
+                        let _ = view_select_all.update(cx, |this, cx| {
+                            this.select_all(&SelectAll, window, cx);
+                        });
+                    }),
+            )
+            // 清除选择
+            .item(
+                PopupMenuItem::new(t!("ContextMenu.clear_selection"))
+                    .action(Box::new(ClearSelection))
+                    .disabled(!has_selection)
+                    .on_click(move |_, window, cx| {
+                        let _ = view_clear.update(cx, |this, cx| {
+                            this.clear_selection(&ClearSelection, window, cx);
+                        });
+                    }),
+            );
+
+        // 询问AI（仅在有选中文本时可用）
+        if let Some(text) = selection_text {
+            let message = format!(
+                "以下是我在终端中选中的内容，请帮我分析：\n\n```\n{}\n```",
+                text.trim()
+            );
+            let sidebar_clone = sidebar.clone();
+            menu = menu.separator().item(
+                PopupMenuItem::new(t!("ContextMenu.ask_ai"))
+                    .icon(IconName::Bot)
+                    .on_click(move |_, _window, cx| {
+                        sidebar_clone.update(cx, |sidebar, cx| {
+                            sidebar.ask_ai(message.clone(), cx);
+                        });
+                    }),
+            );
+        }
+
+        menu
+    }
+
+    fn render_connection_overlay(
+        &self,
+        can_reconnect: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let connection_state = self.terminal.read(cx).connection_state().clone();
+        let is_connecting = matches!(connection_state, ConnectionState::Connecting);
+        let error_msg = match &connection_state {
+            ConnectionState::Disconnected { error } => error.clone(),
+            _ => None,
+        };
+
+        div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(Hsla {
+                h: 0.,
+                s: 0.,
+                l: 0.,
+                a: 0.7,
+            })
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_4()
+                    .p_6()
+                    .bg(rgb(0x2d2d2d))
+                    .rounded_lg()
+                    .shadow_lg()
+                    .max_w(px(400.0))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Icon::new(if is_connecting {
+                                    IconName::Loader
+                                } else {
+                                    IconName::CircleX
+                                })
+                                .color()
+                                .with_size(px(24.0))
+                                .text_color(if is_connecting {
+                                    rgb(0xfbbf24)
+                                } else {
+                                    rgb(0xef4444)
+                                }),
+                            )
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .child(if is_connecting {
+                                        "Connecting..."
+                                    } else {
+                                        "Connection Lost"
+                                    }),
+                            ),
+                    )
+                    .when_some(error_msg, |this, msg| {
+                        this.child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(0xef4444))
+                                .max_w(px(350.0))
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .child(msg),
+                        )
+                    })
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(0x9ca3af))
+                            .child(if is_connecting {
+                                "Establishing SSH connection..."
+                            } else {
+                                "The SSH session has been disconnected."
+                            }),
+                    )
+                    .when(can_reconnect && !is_connecting, |this| {
+                        this.child(
+                            Button::new("reconnect-btn")
+                                .label("Reconnect")
+                                .primary()
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.reconnect(window, cx);
+                                })),
+                        )
+                    }),
+            )
+    }
+
+    fn handle_scroll(
+        &mut self,
+        event: &ScrollWheelEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let delta_pixels = event.delta.pixel_delta(self.line_height);
+        let delta_lines = delta_pixels.y / self.line_height;
+
+        let mode = self.terminal.read(cx).mode();
+        let mouse_mode = mode.contains(TermMode::MOUSE_REPORT_CLICK)
+            || mode.contains(TermMode::MOUSE_DRAG)
+            || mode.contains(TermMode::MOUSE_MOTION);
+
+        if mode.contains(TermMode::ALT_SCREEN) {
+            if mouse_mode {
+                let point = self.pixel_to_point(event.position, self.terminal_bounds, cx);
+                let col = point.column.0 + 1;
+                let row = point.line.0 + 1;
+
+                let count = delta_lines.abs().ceil() as i32;
+                // 64 = 向上滚动, 65 = 向下滚动
+                // delta_lines < 0 表示用户向下滑动（自然滚动），应发送向上滚动事件
+                let button = if delta_lines < 0.0 { 64 } else { 65 };
+
+                for _ in 0..count {
+                    let seq = if mode.contains(TermMode::SGR_MOUSE) {
+                        format!("\x1b[<{};{};{}M", button, col, row)
+                    } else {
+                        let cb = (button + 32) as u8 as char;
+                        let cx_char = (col as u8 + 32) as char;
+                        let cy = (row as u8 + 32) as char;
+                        format!("\x1b[M{}{}{}", cb, cx_char, cy)
+                    };
+                    self.write_to_pty(seq.into_bytes(), cx);
+                }
+            } else {
+                self.scroll_lines_accumulated += delta_lines * ALT_SCREEN_SCROLL_SENSITIVITY;
+                let lines = self.scroll_lines_accumulated as i32;
+                if lines != 0 {
+                    // delta_lines < 0 → 向下滑动 → 发送 Up 箭头查看历史
+                    let arrow = if lines < 0 { "\x1b[A" } else { "\x1b[B" };
+                    for _ in 0..lines.abs() {
+                        self.write_to_pty(arrow.as_bytes().to_vec(), cx);
+                    }
+                    self.scroll_lines_accumulated -= lines as f32;
+                }
+            }
+            return;
+        }
+
+        self.scroll_lines_accumulated += delta_lines;
+
+        let lines = self.scroll_lines_accumulated as i32;
+        if lines != 0 {
+            let term = self.terminal.read(cx).term().clone();
+
+            if mode.contains(TermMode::VI) {
+                let mut term = term.lock();
+                // delta_lines < 0 → 向下滑动 → lines < 0 → 传入正值使光标向上移动
+                let vi_cursor = term.vi_mode_cursor.scroll(&term, lines);
+                term.vi_goto_point(vi_cursor.point);
+
+                let display_offset = term.grid().display_offset();
+                let cursor_line = vi_cursor.point.line.0;
+                let screen_lines = term.screen_lines() as i32;
+
+                if cursor_line < -(display_offset as i32) {
+                    let delta = cursor_line + display_offset as i32;
+                    term.scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
+                } else if cursor_line >= screen_lines - (display_offset as i32) {
+                    let delta = cursor_line - screen_lines + 1 + display_offset as i32;
+                    term.scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
+                }
+            } else {
+                // delta_lines < 0 → 向下滑动 → lines < 0 → 传入正值向上滚动（查看历史）
+                term.lock()
+                    .scroll_display(alacritty_terminal::grid::Scroll::Delta(lines));
+            }
+            self.scroll_lines_accumulated -= lines as f32;
+            cx.notify();
+        }
+    }
+
+    fn pixel_to_point(&self, position: Point<Pixels>, bounds: Bounds<Pixels>, cx: &Context<Self>) -> AlacPoint {
+        let relative_x = position.x - bounds.origin.x;
+        let relative_y = position.y - bounds.origin.y;
+
+        let col = (relative_x / self.cell_width).floor().max(0.0) as usize;
+        let line = (relative_y / self.line_height).floor().max(0.0) as i32;
+
+        let term = self.terminal.read(cx).term().lock();
+        let col = col.min(term.columns().saturating_sub(1));
+        let line = line.clamp(0, term.screen_lines() as i32 - 1);
+        drop(term);
+
+        AlacPoint::new(Line(line), Column(col))
+    }
+
+    /// 根据鼠标在单元格内的位置计算 Side
+    fn pixel_to_side(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> Side {
+        let relative_x = position.x - bounds.origin.x;
+        let col_f = (relative_x / self.cell_width).max(0.0);
+        let cell_offset = col_f.fract();
+        if cell_offset < 0.5 {
+            Side::Left
+        } else {
+            Side::Right
+        }
+    }
+
+    fn handle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.focus(&self.focus_handle, cx);
+
+        if event.button != MouseButton::Left {
+            return;
+        }
+
+        let bounds = self.terminal_bounds;
+
+        let point = self.pixel_to_point(event.position, bounds, cx);
+        let screen_line = point.line.0 as usize;
+        let column = point.column.0;
+        let line_text = self.get_line_text(screen_line, cx);
+        let is_local = self.terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+        let consumed = {
+            let mut open_url = |url: &str| cx.open_url(url);
+            let mut context = TerminalAddonMouseContext::new(
+                screen_line,
+                column,
+                &line_text,
+                event.modifiers,
+                event.position,
+                is_local,
+                self.local_working_dir.as_deref(),
+                &mut open_url,
+            );
+            self.addon_manager.dispatch_mouse_down(&mut context)
+        };
+
+        if consumed {
+            return;
+        }
+
+        let now = std::time::Instant::now();
+        let is_double_click = self.mouse_state.last_click_point == Some(point)
+            && self
+                .mouse_state
+                .last_click_time
+                .map_or(false, |t| now.duration_since(t).as_millis() < 500);
+
+        if is_double_click {
+            self.mouse_state.click_count += 1;
+        } else {
+            self.mouse_state.click_count = 1;
+        }
+
+        self.mouse_state.last_click_point = Some(point);
+        self.mouse_state.last_click_time = Some(now);
+
+        let selection_type = match self.mouse_state.click_count {
+            1 => SelectionType::Simple,
+            2 => SelectionType::Semantic,
+            _ => SelectionType::Lines,
+        };
+
+        self.terminal.update(cx, |terminal, _| {
+            terminal.start_selection(selection_type, point, self.pixel_to_side(event.position, bounds));
+        });
+
+        self.mouse_state.selecting = true;
+        cx.notify();
+    }
+
+    fn handle_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let bounds = self.terminal_bounds;
+        self.mouse_position = Some(event.position);
+        let point = self.pixel_to_point(event.position, bounds, cx);
+        let screen_line = point.line.0 as usize;
+        let column = point.column.0;
+        let line_text = self.get_line_text(screen_line, cx);
+        let is_local = self.terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+        let hover_changed = {
+            let mut open_url = |url: &str| cx.open_url(url);
+            let mut context = TerminalAddonMouseContext::new(
+                screen_line,
+                column,
+                &line_text,
+                event.modifiers,
+                event.position,
+                is_local,
+                self.local_working_dir.as_deref(),
+                &mut open_url,
+            );
+            self.addon_manager.dispatch_mouse_move(&mut context)
+        };
+        if hover_changed {
+            cx.notify();
+        }
+
+        if !self.mouse_state.selecting {
+            return;
+        }
+
+        let point = self.pixel_to_point(event.position, bounds, cx);
+        let side = self.pixel_to_side(event.position, bounds);
+
+        self.terminal.update(cx, |terminal, _| {
+            terminal.update_selection(point, side);
+        });
+        cx.notify();
+    }
+
+    fn handle_mouse_up(
+        &mut self,
+        event: &MouseUpEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event.button != MouseButton::Left {
+            return;
+        }
+        let bounds = self.terminal_bounds;
+        let point = self.pixel_to_point(event.position, bounds, cx);
+        let screen_line = point.line.0 as usize;
+        let column = point.column.0;
+        let line_text = self.get_line_text(screen_line, cx);
+        let is_local = self.terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+        {
+            let mut open_url = |url: &str| cx.open_url(url);
+            let mut context = TerminalAddonMouseContext::new(
+                screen_line,
+                column,
+                &line_text,
+                event.modifiers,
+                event.position,
+                is_local,
+                self.local_working_dir.as_deref(),
+                &mut open_url,
+            );
+            let _ = self.addon_manager.dispatch_mouse_up(&mut context);
+        }
+        self.mouse_state.selecting = false;
+        cx.notify();
+    }
+
+    fn send_tab(&mut self, _: &SendTab, _window: &mut Window, cx: &mut Context<Self>) {
+        self.write_to_pty(b"\x09".to_vec(), cx);
+    }
+
+    fn send_shift_tab(&mut self, _: &SendShiftTab, _window: &mut Window, cx: &mut Context<Self>) {
+        self.write_to_pty(b"\x1b[Z".to_vec(), cx);
+    }
+
+    fn render_sidebar_resize_handle(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.entity().clone();
+
+        resize_handle::<ResizePanel, ResizePanel>("terminal-sidebar-resize-handle", Axis::Horizontal)
+            .placement(HandlePlacement::Right)
+            .on_drag(ResizePanel, move |info, _, _, cx| {
+                cx.stop_propagation();
+                view.update(cx, |view, cx| {
+                    view.resizing = Some(ResizingPanel::Sidebar);
+                    cx.notify();
+                });
+                cx.new(|_| info.deref().clone())
+            })
+    }
+
+    fn resize_sidebar(&mut self, mouse_position: Point<Pixels>, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(resizing) = self.resizing else {
+            return;
+        };
+
+        match resizing {
+            ResizingPanel::Sidebar => {
+                let new_size = self.view_bounds.right() - mouse_position.x;
+                self.sidebar_panel_size = new_size.clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
+            }
+        }
+
+        cx.notify();
+    }
+
+    fn done_resizing(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.resizing = None;
+        cx.notify();
+    }
+}
+
+impl Focusable for TerminalView {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl EventEmitter<TabContentEvent> for TerminalView {}
+
+impl TabContent for TerminalView {
+    fn content_key(&self) -> &'static str {
+        "Terminal"
+    }
+
+    fn title(&self, cx: &App) -> SharedString {
+        let terminal = self.terminal.read(cx);
+        let base_title = if let Some(name) = terminal.connection_name() {
+            name.to_string()
+        } else if !terminal.title().is_empty() {
+            terminal.title().to_string()
+        } else {
+            "Terminal".to_string()
+        };
+
+        // 如果有序号，添加到标题后
+        if let Some(index) = self.tab_index {
+            SharedString::from(format!("{}({})", base_title, index))
+        } else {
+            SharedString::from(base_title)
+        }
+    }
+
+    fn icon(&self, _cx: &App) -> Option<Icon> {
+        Some(IconName::Terminal.color().with_size(Size::Medium))
+    }
+
+    fn closeable(&self, _cx: &App) -> bool {
+        true
+    }
+
+    fn try_close(
+        &mut self,
+        _tab_id: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Task<bool> {
+        // 关闭终端连接
+        self.terminal.read(cx).shutdown();
+        Task::ready(true)
+    }
+}
+
+impl Render for TerminalView {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // 创建与 terminal_element 一致的字体配置（包含 fallbacks）
+        let fallbacks = if self.current_theme.font_fallbacks.is_empty() {
+            None
+        } else {
+            Some(FontFallbacks::from_fonts(
+                self.current_theme.font_fallbacks.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+            ))
+        };
+        let features = FontFeatures(std::sync::Arc::new(vec![("calt".to_string(), 0)]));
+
+        let font = Font {
+            family: self.current_theme.font_family.clone(),
+            weight: FontWeight::NORMAL,
+            style: FontStyle::Normal,
+            features,
+            fallbacks,
+        };
+        let font_id = window.text_system().resolve_font(&font);
+        // 使用 advance('m').width 计算 cell_width
+        // advance 返回字符的前进宽度，比 em_width 更准确反映等宽字体的单元格宽度
+        let new_cell_width = window
+            .text_system()
+            .advance(font_id, self.current_theme.font_size, 'm')
+            .map(|size| size.width)
+            .unwrap_or(self.current_theme.font_size * 0.6);
+
+        if self.cell_width != new_cell_width {
+            tracing::info!(
+                "cell_width 变化: {:.2} -> {:.2}, font={}, size={:.1}",
+                self.cell_width,
+                new_cell_width,
+                self.current_theme.font_family,
+                self.current_theme.font_size
+            );
+            self.cell_width = new_cell_width;
+        }
+
+        self.line_height = self.current_theme.font_size * self.current_theme.line_height_scale;
+        self.font_size = self.current_theme.font_size;
+
+        let connection_state = self.terminal.read(cx).connection_state().clone();
+        let can_reconnect = self.terminal.read(cx).can_reconnect();
+        let bg_color = self.current_theme.background;
+        let has_selection = self.terminal.read(cx).term().lock().selection.is_some();
+        let selection_text = self.terminal.read(cx).selection_text();
+        let sidebar_visible = self.sidebar.read(cx).is_visible();
+        let sidebar_panel_size = self.sidebar_panel_size;
+        let view = cx.entity().clone();
+
+        div()
+            .size_full()
+            .flex()
+            .flex_row()
+            .bg(bg_color)
+            .child({
+                let tooltip = self.addon_manager.tooltip();
+                let mouse_pos = self.mouse_position;
+                let terminal_bounds = self.terminal_bounds;
+                let entity = cx.entity().downgrade();
+                let focus_handle = self.focus_handle.clone();
+                div()
+                    .track_focus(&focus_handle)
+                    .key_context(TERMINAL_CONTEXT)
+                    .on_action(cx.listener(Self::send_tab))
+                    .on_action(cx.listener(Self::send_shift_tab))
+                    .on_action(cx.listener(Self::copy))
+                    .on_action(cx.listener(Self::paste))
+                    .on_action(cx.listener(Self::select_all))
+                    .on_action(cx.listener(Self::clear_selection))
+                    .on_action(cx.listener(Self::search_forward))
+                    .on_action(cx.listener(Self::search_backward))
+                    .on_action(cx.listener(Self::toggle_vi_mode))
+                    .on_key_down(cx.listener(Self::handle_key_event))
+                    .flex_1()
+                    .relative()
+                    .on_scroll_wheel(cx.listener(Self::handle_scroll))
+                    .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+                    .on_mouse_move(cx.listener(Self::handle_mouse_move))
+                    .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
+                    .child(
+                        canvas(
+                            move |bounds, _window, cx| {
+                                if let Some(entity) = entity.upgrade() {
+                                    entity.update(cx, |this, cx| {
+                                        this.terminal_bounds = bounds;
+                                        this.resize_if_needed(bounds, cx);
+                                    });
+                                }
+                            },
+                            {
+                                let entity = cx.entity().downgrade();
+                                let focus_handle = focus_handle.clone();
+                                move |bounds, _state, window, cx| {
+                                    if let Some(entity) = entity.upgrade() {
+                                        let input_handler =
+                                            ElementInputHandler::new(bounds, entity);
+                                        window.handle_input(&focus_handle, input_handler, cx);
+                                    }
+                                }
+                            },
+                        )
+                        .absolute()
+                        .left(px(12.))
+                        .right(px(12.))
+                        .top(px(12.))
+                        .bottom(px(12.)),
+                    )
+                    .child({
+                        let view = cx.entity().clone();
+                        let sidebar = self.sidebar.clone();
+                        div()
+                            .absolute()
+                            .left(px(12.))
+                            .right(px(12.))
+                            .top(px(12.))
+                            .bottom(px(12.))
+                            .child(self.render_terminal(cx))
+                            .context_menu(move |menu, window, cx| {
+                                Self::build_context_menu(menu, has_selection, selection_text.clone(), &view, &sidebar, window, cx)
+                            })
+                    })
+                    .when_some(tooltip.zip(mouse_pos), |this, (tooltip, pos)| {
+                        let relative_x = pos.x - terminal_bounds.origin.x;
+                        let relative_y = pos.y - terminal_bounds.origin.y;
+                        this.child(
+                            div()
+                                .absolute()
+                                .left(relative_x + px(10.0))
+                                .top(relative_y + px(20.0))
+                                .px_2()
+                                .py_1()
+                                .bg(rgb(0x3d3d3d))
+                                .rounded_md()
+                                .shadow_md()
+                                .text_size(px(11.0))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .px_1()
+                                                .bg(rgb(0x4d4d4d))
+                                                .rounded_sm()
+                                                .text_color(rgb(0xcccccc))
+                                                .child(tooltip.action_hint),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(rgb(0x888888))
+                                                .child(tooltip.action_text),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_color(tooltip.display_color)
+                                        .overflow_hidden()
+                                        .max_w(px(400.0))
+                                        .text_ellipsis()
+                                        .child(tooltip.display_text),
+                                ),
+                        )
+                    })
+                    .when(
+                        matches!(connection_state, ConnectionState::Disconnected { .. })
+                            || matches!(connection_state, ConnectionState::Connecting),
+                        |this| this.child(self.render_connection_overlay(can_reconnect, cx)),
+                    )
+            })
+            // 渲染侧边栏
+            .when(sidebar_visible, |this| {
+                this.child(
+                    div()
+                        .relative()
+                        .h_full()
+                        .w(sidebar_panel_size)
+                        .flex_shrink_0()
+                        .child(self.render_sidebar_resize_handle(window, cx))
+                        .child(self.sidebar.clone())
+                )
+            })
+            .when(!sidebar_visible, |this| {
+                this.child(self.sidebar.clone())
+            })
+            .child(ResizeEventHandler { view })
+    }
+}
+
+impl EntityInputHandler for TerminalView {
+    fn text_for_range(
+        &mut self,
+        _range: std::ops::Range<usize>,
+        _actual_range: &mut Option<std::ops::Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<String> {
+        None
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled_input: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        Some(UTF16Selection {
+            range: 0..0,
+            reversed: false,
+        })
+    }
+
+    fn marked_text_range(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<std::ops::Range<usize>> {
+        self.marked_text_range()
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.clear_marked_text(cx);
+    }
+
+    fn replace_text_in_range(
+        &mut self,
+        _replacement_range: Option<std::ops::Range<usize>>,
+        text: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.clear_marked_text(cx);
+        self.commit_text(text, cx);
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _range: Option<std::ops::Range<usize>>,
+        new_text: &str,
+        new_marked_range: Option<std::ops::Range<usize>>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.set_marked_text(new_text.to_string(), new_marked_range, cx);
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _range: std::ops::Range<usize>,
+        _bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        // 获取光标位置用于 IME 定位
+        let term = self.terminal.read(cx).term().lock();
+        let cursor = term.grid().cursor.point;
+        let display_offset = term.grid().display_offset();
+        drop(term);
+
+        let screen_line = cursor.line.0 + display_offset as i32;
+        let col = cursor.column.0;
+
+        // 计算像素位置
+        let origin = Point::new(
+            self.terminal_bounds.origin.x + self.cell_width * col as f32,
+            self.terminal_bounds.origin.y + self.line_height * screen_line as f32,
+        );
+
+        Some(Bounds::new(origin, size(self.cell_width, self.line_height)))
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _point: Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
+    }
+}
+
+struct ResizeEventHandler {
+    view: Entity<TerminalView>,
+}
+
+impl IntoElement for ResizeEventHandler {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for ResizeEventHandler {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        (window.request_layout(Style::default(), None, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let bounds = window.bounds();
+        self.view.update(cx, |view, _| {
+            view.view_bounds = Bounds {
+                origin: Point::default(),
+                size: bounds.size,
+            };
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.on_mouse_event({
+            let view = self.view.clone();
+            let resizing = view.read(cx).resizing;
+            move |e: &MouseMoveEvent, phase, window, cx| {
+                if resizing.is_none() {
+                    return;
+                }
+                if !phase.bubble() {
+                    return;
+                }
+                view.update(cx, |view, cx| view.resize_sidebar(e.position, window, cx));
+            }
+        });
+
+        window.on_mouse_event({
+            let view = self.view.clone();
+            move |_: &MouseUpEvent, phase, window, cx| {
+                if phase.bubble() {
+                    view.update(cx, |view, cx| view.done_resizing(window, cx));
+                }
+            }
+        });
+    }
+}
