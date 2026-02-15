@@ -1,4 +1,4 @@
-target/
+/target
 .DS_Store
 /docks.json
 /profile.json
@@ -6,3 +6,44 @@ target/
 index.scip
 *.log
 node_modules/
+
+# Rust build artifacts
+target/
+**/target/
+crates/**/target/
+
+# Debug artifacts
+**/*.rs.bk
+*.pdb
+
+# IDEs
+.idea/
+.idea/vcs.xml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Cargo lock for libraries (keep for binaries)
+# Cargo.lock is already tracked, so commenting this out
+# Cargo.lock
+
+# Backup files
+*.bak
+*.tmp
+
+# OS specific
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Application specific
+onehub.db
+onehub.db-shm
+onehub.db-wal
+
+
+# Environment variables
+.env
+.env.local
+.env.*.local
