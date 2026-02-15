@@ -1,8 +1,10 @@
 //! AI Chat 共享类型定义
 //!
 //! 此模块包含 AI 聊天面板的核心类型，可被不同的面板实现复用。
+//! ChatMessageUI 支持泛型扩展，通过 MessageExtension trait 实现不同场景的定制。
 
 use std::collections::hash_map::DefaultHasher;
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 use crate::llm::{Message, MessageBlock, Role};
@@ -52,14 +54,36 @@ pub enum MessageVariant {
 }
 
 // ============================================================================
-// 聊天消息
+// 消息扩展 trait
 // ============================================================================
 
-/// UI 聊天消息结构
+/// 消息扩展 trait
+///
+/// 不同的面板可以通过实现此 trait 为消息添加额外的状态和行为。
+/// 例如，SQL 面板可以添加 SQL 代码块缓存。
+pub trait MessageExtension: Clone + Debug + Send + Sync + 'static {
+    /// 流式结束时清理缓存
+    fn on_finalize_streaming(&mut self) {}
+    /// 清除缓存
+    fn clear_cache(&mut self) {}
+}
+
+/// 空扩展（通用面板使用）
+#[derive(Clone, Debug, Default)]
+pub struct NoExtension;
+
+impl MessageExtension for NoExtension {}
+
+// ============================================================================
+// 泛型聊天消息
+// ============================================================================
+
+/// 泛型 UI 聊天消息结构
 ///
 /// 包含消息的所有 UI 相关状态，如流式状态、是否展开等。
+/// 通过泛型参数 E 支持扩展，默认使用 NoExtension。
 #[derive(Clone, Debug)]
-pub struct ChatMessageUI {
+pub struct ChatMessageUIGeneric<E: MessageExtension = NoExtension> {
     /// 消息唯一标识
     pub id: String,
     /// 消息角色
@@ -74,9 +98,14 @@ pub struct ChatMessageUI {
     pub is_expanded: bool,
     /// 内容缓存（用于避免重复解析）
     cached_content_hash: Option<u64>,
+    /// 扩展数据
+    pub extension: E,
 }
 
-impl ChatMessageUI {
+/// 默认类型别名，保持向后兼容
+pub type ChatMessageUI = ChatMessageUIGeneric<NoExtension>;
+
+impl<E: MessageExtension + Default> ChatMessageUIGeneric<E> {
     /// 创建用户消息
     pub fn user(content: impl Into<String>) -> Self {
         Self {
@@ -87,6 +116,7 @@ impl ChatMessageUI {
             is_streaming: false,
             is_expanded: true,
             cached_content_hash: None,
+            extension: E::default(),
         }
     }
 
@@ -100,6 +130,7 @@ impl ChatMessageUI {
             is_streaming: false,
             is_expanded: true,
             cached_content_hash: None,
+            extension: E::default(),
         }
     }
 
@@ -113,6 +144,7 @@ impl ChatMessageUI {
             is_streaming: false,
             is_expanded: true,
             cached_content_hash: None,
+            extension: E::default(),
         }
     }
 
@@ -129,6 +161,7 @@ impl ChatMessageUI {
             is_streaming: !is_done,
             is_expanded: !is_done,
             cached_content_hash: None,
+            extension: E::default(),
         }
     }
 
@@ -142,6 +175,7 @@ impl ChatMessageUI {
             is_streaming: true,
             is_expanded: true,
             cached_content_hash: None,
+            extension: E::default(),
         }
     }
 
@@ -155,9 +189,46 @@ impl ChatMessageUI {
             is_streaming: false,
             is_expanded: true,
             cached_content_hash: None,
+            extension: E::default(),
         }
     }
 
+    /// 从 LLM 消息创建
+    pub fn from_llm_message(llm_msg: &Message) -> Self {
+        let role = match llm_msg.role {
+            Role::User => ChatRole::User,
+            Role::Assistant => ChatRole::Assistant,
+            Role::System => ChatRole::System,
+            Role::Tool => ChatRole::Assistant,
+        };
+
+        let content = llm_msg
+            .content
+            .iter()
+            .filter_map(|block| {
+                if let MessageBlock::Text { text } = block {
+                    Some(text.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
+
+        Self {
+            id: Uuid::new_v4().to_string(),
+            role,
+            content,
+            variant: MessageVariant::Text,
+            is_streaming: false,
+            is_expanded: true,
+            cached_content_hash: None,
+            extension: E::default(),
+        }
+    }
+}
+
+impl<E: MessageExtension> ChatMessageUIGeneric<E> {
     /// 设置 ID
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = id.into();
@@ -206,11 +277,13 @@ impl ChatMessageUI {
     pub fn finalize_streaming(&mut self) {
         self.is_streaming = false;
         self.cached_content_hash = None;
+        self.extension.on_finalize_streaming();
     }
 
     /// 清除缓存
     pub fn clear_cache(&mut self) {
         self.cached_content_hash = None;
+        self.extension.clear_cache();
     }
 
     /// 转换为 LLM 消息
@@ -221,39 +294,6 @@ impl ChatMessageUI {
             ChatRole::System => Role::System,
         };
         Message::text(role, &self.content)
-    }
-
-    /// 从 LLM 消息创建
-    pub fn from_llm_message(llm_msg: &Message) -> Self {
-        let role = match llm_msg.role {
-            Role::User => ChatRole::User,
-            Role::Assistant => ChatRole::Assistant,
-            Role::System => ChatRole::System,
-            Role::Tool => ChatRole::Assistant,
-        };
-
-        let content = llm_msg
-            .content
-            .iter()
-            .filter_map(|block| {
-                if let MessageBlock::Text { text } = block {
-                    Some(text.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("");
-
-        Self {
-            id: Uuid::new_v4().to_string(),
-            role,
-            content,
-            variant: MessageVariant::Text,
-            is_streaming: false,
-            is_expanded: true,
-            cached_content_hash: None,
-        }
     }
 }
 

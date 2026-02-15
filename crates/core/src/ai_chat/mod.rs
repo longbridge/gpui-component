@@ -4,8 +4,10 @@
 //!
 //! # 模块结构
 //!
-//! - `types`: 共享类型定义（ChatMessageUI, ChatRole 等）
-//! - `delegate`: 面板代理 trait，用于自定义行为
+//! - `types`: 共享类型定义（ChatMessageUI, ChatRole, MessageExtension 等）
+//! - `engine`: 共享业务逻辑引擎（ChatEngine）
+//! - `rendering`: 共享消息渲染工具（ChatMessageRenderer）
+//! - `stream`: 流式处理器（ChatStreamProcessor, StreamEvent）
 //! - `panel`: 默认的聊天面板实现
 //! - `components`: 可复用的 UI 组件（Provider 选择器、模型设置、发送按钮等）
 //! - `ask_ai`: AI 提问通知机制
@@ -20,21 +22,13 @@
 //! let panel = cx.new(|cx| AiChatPanel::new(window, cx));
 //! ```
 //!
-//! ## 自定义面板行为
-//!
-//! 实现 `ChatPanelDelegate` trait 来自定义面板行为：
+//! ## 使用 ChatEngine 构建自定义面板
 //!
 //! ```rust,ignore
-//! use one_core::ai_chat::{ChatPanelDelegate, ChatMessageUI};
+//! use one_core::ai_chat::engine::ChatEngine;
+//! use one_core::ai_chat::types::NoExtension;
 //!
-//! struct MyDelegate { /* ... */ }
-//!
-//! impl ChatPanelDelegate for MyDelegate {
-//!     fn render_input_area(&self, window: &mut Window, cx: &App) -> AnyElement {
-//!         // 自定义输入区域
-//!     }
-//!     // ...
-//! }
+//! let engine = ChatEngine::<NoExtension>::new(storage_manager);
 //! ```
 //!
 //! ## 使用可复用组件
@@ -59,7 +53,9 @@
 
 mod panel;
 mod types;
-mod delegate;
+pub mod engine;
+pub mod rendering;
+pub mod stream;
 pub mod components;
 pub mod ask_ai;
 pub mod services;
@@ -70,16 +66,25 @@ pub use panel::*;
 // 导出共享类型
 pub use types::{
     ChatMessageUI,
+    ChatMessageUIGeneric,
     ChatRole,
+    MessageExtension,
     MessageVariant,
+    NoExtension,
     ProviderSelectItem,
     ModelSelectItem,
     MESSAGE_RENDER_LIMIT,
     MESSAGE_RENDER_STEP,
 };
 
-// 导出代理 trait
-pub use delegate::{ChatPanelDelegate, default_render_message};
+// 导出引擎
+pub use engine::ChatEngine;
+
+// 导出渲染器
+pub use rendering::ChatMessageRenderer;
+
+// 导出流式处理器
+pub use stream::{ChatStreamProcessor, StreamEvent as CoreStreamEvent, StreamError};
 
 // 重导出常用组件（方便使用）
 pub use components::{ProviderItem, ModelItem};

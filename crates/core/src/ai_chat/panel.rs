@@ -1,45 +1,42 @@
 //! AI Chat Panel - 数据库 AI 助手对话面板
 
 use std::sync::Arc;
-use futures::StreamExt;
-use gpui::{div, prelude::FluentBuilder, px, AnyElement, App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Subscription, Window};
+use gpui::{div, prelude::FluentBuilder, px, App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window};
 use gpui_component::{
     button::{Button, ButtonVariants},
-    clipboard::Clipboard,
     dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputEvent, InputState},
     list::{List, ListState},
     popover::Popover,
-    text::TextView,
     v_flex,
     ActiveTheme,
-    Icon, IconName, Sizable, Size,
+    IconName, Sizable, Size,
     WindowExt as _,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 use crate::llm::ProviderConfig;
 use crate::llm::{
-    chat_history::{ChatMessage, ChatSession, MessageRepository, SessionRepository},
+    chat_history::{MessageRepository, SessionRepository},
     manager::GlobalProviderState,
     storage::ProviderRepository,
-    ChatRequest, Message, MessageBlock, Role,
+    Message, Role,
 };
 use crate::storage::{traits::Repository, GlobalStorageState};
 use crate::gpui_tokio::Tokio;
 
-// 使用共享类型
-use super::types::{ChatMessageUI, ChatRole, MessageVariant};
+// 使用引擎和渲染器
+use super::engine::ChatEngine;
+use super::rendering::ChatMessageRenderer;
+// 使用流式处理器
+use super::stream::{ChatStreamProcessor, StreamEvent};
 // 使用共享组件
 use super::components::{
     ProviderSelectState, ProviderSelectEvent,
     SessionData, SessionListConfig, SessionListDelegate, SessionListHost,
     ModelSettings, ModelSettingsPanel, ModelSettingsEvent,
 };
-// 使用共享服务
-use super::services::{SessionService, extract_session_name};
 
 /// AI 聊天面板的自定义颜色配置
 ///
@@ -279,44 +276,32 @@ pub enum AiChatPanelEvent {
 /// AI 聊天面板
 pub struct AiChatPanel {
     focus_handle: FocusHandle,
-    messages: Vec<ChatMessageUI>,
+
+    /// 共享业务逻辑引擎
+    engine: ChatEngine,
 
     ai_input_state: Entity<InputState>,
     provider_select_state: ProviderSelectState,
-    provider_configs: Vec<ProviderConfig>,
 
     _subscriptions: Vec<Subscription>,
-    session_id: Option<i64>,
-    provider_id: Option<String>,
-    selected_model: Option<String>,
     connection_name: Option<String>,
     database: Option<String>,
-    is_loading: bool,
-    scroll_handle: ScrollHandle,
-    history_sessions: Vec<ChatSession>,
-    auto_scroll_enabled: bool,
     history_popover_open: bool,
     session_list: Option<Entity<ListState<SessionListDelegate<AiChatPanel>>>>,
     /// 可选的自定义颜色（用于终端等需要自定义主题的场景）
     custom_colors: Option<AiChatColors>,
-    /// 代码块操作注册表
-    code_block_actions: CodeBlockActionRegistry,
-    /// 取消令牌，用于终止正在进行的请求
-    cancel_token: Option<CancellationToken>,
-    /// 模型设置
-    model_settings: ModelSettings,
     /// 模型设置面板
     settings_panel: Entity<ModelSettingsPanel>,
-    /// 会话服务
-    session_service: SessionService,
-    /// 是否为新会话（等待第一条消息更新名称）
-    is_new_session: bool,
 }
 
 
 impl AiChatPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
+
+        // 创建引擎
+        let global_state = cx.global::<GlobalStorageState>();
+        let engine = ChatEngine::new(global_state.storage.clone());
 
         // Agent 模式输入框
         let agent_input_state = cx.new(|cx| {
@@ -330,13 +315,13 @@ impl AiChatPanel {
         let provider_select_state = ProviderSelectState::new(window, cx, |event, this, window, cx| {
             match event {
                 ProviderSelectEvent::ProviderChanged { provider_id, .. } => {
-                    this.provider_id = Some(provider_id.clone());
-                    this.selected_model = this.provider_select_state
+                    this.engine.provider_id = Some(provider_id.clone());
+                    this.engine.selected_model = this.provider_select_state
                         .update_models_for_provider(&provider_id, window, cx);
                     cx.notify();
                 }
                 ProviderSelectEvent::ModelChanged { model } => {
-                    this.selected_model = Some(model.clone());
+                    this.engine.selected_model = Some(model.clone());
                     cx.notify();
                 }
             }
@@ -369,42 +354,25 @@ impl AiChatPanel {
             window,
             |this, _panel, event: &ModelSettingsEvent, _window, cx| {
                 match event { ModelSettingsEvent::Changed(settings) => {
-                    this.model_settings = settings.clone();
+                    this.engine.model_settings = settings.clone();
                     cx.notify();
                     }
                 }
             },
         ));
 
-        // 创建会话服务
-        let global_state = cx.global::<GlobalStorageState>();
-        let session_service = SessionService::new(global_state.storage.clone());
-
         let mut panel = Self {
             focus_handle,
-            messages: Vec::new(),
+            engine,
             ai_input_state: agent_input_state,
             provider_select_state,
-            provider_configs: Vec::new(),
             _subscriptions: subscriptions,
-            session_id: None,
-            provider_id: None,
-            selected_model: None,
             connection_name: None,
             database: None,
-            is_loading: false,
-            scroll_handle: ScrollHandle::new(),
-            history_sessions: Vec::new(),
-            auto_scroll_enabled: true,
             history_popover_open: false,
             session_list: None,
             custom_colors: None,
-            code_block_actions: CodeBlockActionRegistry::new(),
-            cancel_token: None,
-            model_settings,
             settings_panel,
-            session_service,
-            is_new_session: false,
         };
 
         // 加载 providers
@@ -433,16 +401,14 @@ impl AiChatPanel {
                     let _ = cx.update_window(window_id, |_, window, cx| {
                         if let Some(entity) = this.upgrade() {
                             entity.update(cx, |panel, cx| {
-                                panel.provider_configs = {
+                                panel.engine.provider_configs = {
                                     let mut configs = providers.clone();
-                                    // 添加内置的 OnetCli provider（始终在最前面）
                                     configs.insert(0, ProviderConfig::builtin_onet_cli());
                                     configs
                                 };
-                                // 使用组件统一设置 providers 和 models
-                                panel.provider_select_state.set_provider_configs(&panel.provider_configs, window, cx);
-                                panel.provider_id = panel.provider_select_state.selected_provider().cloned();
-                                panel.selected_model = panel.provider_select_state.selected_model().cloned();
+                                panel.provider_select_state.set_provider_configs(&panel.engine.provider_configs, window, cx);
+                                panel.engine.provider_id = panel.provider_select_state.selected_provider().cloned();
+                                panel.engine.selected_model = panel.provider_select_state.selected_model().cloned();
                                 cx.notify();
                             });
                         }
@@ -486,56 +452,35 @@ impl AiChatPanel {
 
 
     pub fn set_provider_id(&mut self, provider_id: String, cx: &mut Context<Self>) {
-        self.provider_id = Some(provider_id.clone());
-        // 使用 ProviderSelectState 的静态方法从 config 计算模型
+        self.engine.provider_id = Some(provider_id.clone());
         if let Some(config) = self
-            .provider_configs
+            .engine.provider_configs
             .iter()
             .find(|provider| provider.id.to_string() == provider_id)
         {
             let models = ProviderSelectState::build_model_list_from_config(config);
-            self.selected_model = ProviderSelectState::resolve_default_model_from_config(config, &models);
+            self.engine.selected_model = ProviderSelectState::resolve_default_model_from_config(config, &models);
         }
         cx.notify();
     }
 
     /// 注册代码块操作
-    ///
-    /// 注册后，当 AI 回复的代码块语言匹配时，会显示对应的操作按钮。
-    ///
-    /// # 示例
-    ///
-    /// ```rust
-    /// // 注册 SQL 操作
-    /// panel.register_code_block_action(
-    ///     CodeBlockAction::new("send-to-editor")
-    ///         .icon(IconName::Edit)
-    ///         .label("发送到编辑器")
-    ///         .matcher(LanguageMatcher::sql())
-    ///         .on_click(|code, _lang, _window, _cx| {
-    ///             println!("SQL: {}", code);
-    ///         })
-    ///         .build()
-    ///         .unwrap(),
-    ///     cx,
-    /// );
-    /// ```
     pub fn register_code_block_action(&mut self, action: CodeBlockAction, cx: &mut Context<Self>) {
-        self.code_block_actions.register(action);
+        self.engine.code_block_actions.register(action);
         cx.notify();
     }
 
     /// 批量注册代码块操作
     pub fn register_code_block_actions(&mut self, actions: Vec<CodeBlockAction>, cx: &mut Context<Self>) {
         for action in actions {
-            self.code_block_actions.register(action);
+            self.engine.code_block_actions.register(action);
         }
         cx.notify();
     }
 
     /// 获取代码块操作注册表的引用（用于外部查询）
     pub fn code_block_actions(&self) -> &CodeBlockActionRegistry {
-        &self.code_block_actions
+        &self.engine.code_block_actions
     }
 
     /// 从外部发送消息到AI聊天
@@ -547,76 +492,42 @@ impl AiChatPanel {
 
     // 创建新会话 - 同步返回，异步保存
     pub fn start_new_session(&mut self, cx: &mut Context<Self>) {
-        self.session_id = None;
-        self.is_new_session = false;
-        self.messages.clear();
+        self.engine.start_new_session();
         cx.notify();
     }
 
     /// 确保会话存在，如果不存在则创建新会话
     fn ensure_session_id(&mut self, provider_id: &str, cx: &mut Context<Self>) -> Option<i64> {
-        if let Some(id) = self.session_id {
-            return Some(id);
+        let result = self.engine.ensure_session_id(provider_id, "新会话");
+        if result.is_some() && self.engine.is_new_session {
+            // 新创建的会话，需要刷新历史列表（ensure_session_id 已经设置了 is_new_session）
+            self.load_history_sessions(cx);
         }
-
-        match self.session_service.ensure_session(None, provider_id, "新会话") {
-            Ok(id) => {
-                self.session_id = Some(id);
-                self.is_new_session = true; // 标记为新会话，等待第一条消息更新名称
-                self.load_history_sessions(cx);
-                Some(id)
-            }
-            Err(e) => {
-                warn!("创建会话失败: {}", e);
-                None
-            }
-        }
+        result
     }
 
     /// 持久化用户消息，并在新会话时更新标题
-    fn persist_user_message(&mut self, session_id: i64, content: String, cx: &mut Context<Self>) {
-        let _ = self.session_service.add_user_message(session_id, content.clone());
-
-        // 如果是新会话的第一条消息，使用消息内容的前几个字作为会话名称
-        if self.is_new_session {
-            self.is_new_session = false;
-            let session_name = extract_session_name(&content);
-            if self.session_service.update_session_name(session_id, session_name).is_ok() {
-                self.load_history_sessions(cx);
-            }
+    fn persist_user_message(&mut self, session_id: i64, content: &str, cx: &mut Context<Self>) {
+        let was_new = self.engine.is_new_session;
+        self.engine.persist_user_message(session_id, content);
+        if was_new {
+            self.load_history_sessions(cx);
         }
     }
 
     /// 取消当前操作
     pub fn cancel_current_operation(&mut self, cx: &mut Context<Self>) {
-        // 取消正在进行的请求
-        if let Some(token) = self.cancel_token.take() {
-            token.cancel();
-        }
-
-        // 重置状态
-        self.is_loading = false;
-
-        // 更新最后一条流式消息为取消状态
-        if let Some(msg) = self.messages.iter_mut().rev().find(|m| m.is_streaming) {
-            msg.is_streaming = false;
-            if msg.content.is_empty() {
-                msg.content = "操作已取消".to_string();
-            } else {
-                msg.content.push_str("\n\n*操作已取消*");
-            }
-        }
-
+        self.engine.cancel_current_operation();
         cx.notify();
     }
 
     /// 是否可以取消
     pub fn can_cancel(&self) -> bool {
-        self.is_loading && self.cancel_token.is_some()
+        self.engine.can_cancel()
     }
 
     fn update_session_list(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let sessions_data: Vec<SessionData> = self.history_sessions
+        let sessions_data: Vec<SessionData> = self.engine.history_sessions
             .iter()
             .map(|s| SessionData::new(s.id, s.name.clone(), s.updated_at))
             .collect();
@@ -659,7 +570,7 @@ impl AiChatPanel {
                     if let Some(window_id) = cx.active_window() {
                         let _ = cx.update_window(window_id, |_, window, cx| {
                             entity.update(cx, |this, cx| {
-                                this.history_sessions = sessions;
+                                this.engine.history_sessions = sessions;
                                 this.update_session_list(window, cx);
                                 cx.notify();
                             });
@@ -684,7 +595,6 @@ impl AiChatPanel {
                     Some(r) => r,
                     None => return,
                 };
-                // 先删除消息，再删除会话
                 message_repo.delete_by_session(session_id).is_ok()
                     && session_repo.delete(session_id).is_ok()
             };
@@ -693,13 +603,11 @@ impl AiChatPanel {
                 if let Some(entity) = this.upgrade() {
                     let _ = cx.update(|cx| {
                         entity.update(cx, |this, cx| {
-                            // 如果删除的是当前会话，清空界面
-                            if this.session_id == Some(session_id) {
-                                this.session_id = None;
-                                this.messages.clear();
+                            if this.engine.session_id == Some(session_id) {
+                                this.engine.session_id = None;
+                                this.engine.messages.clear();
                             }
-                            // 从历史列表中移除
-                            this.history_sessions.retain(|s| s.id != session_id);
+                            this.engine.history_sessions.retain(|s| s.id != session_id);
                             cx.notify();
                         });
                     });
@@ -709,7 +617,6 @@ impl AiChatPanel {
     }
 
     fn start_rename_session(&mut self, session_id: i64, current_name: String, window: &mut Window, cx: &mut Context<Self>) {
-        // 创建输入框状态
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(&current_name)
@@ -719,7 +626,6 @@ impl AiChatPanel {
         let panel_entity = cx.entity();
         let input_for_dialog = input_state.clone();
 
-        // 打开重命名对话框
         window.open_dialog(cx, move |dialog, _window, _cx| {
             let input_for_ok = input_for_dialog.clone();
             let panel_for_ok = panel_entity.clone();
@@ -780,7 +686,6 @@ impl AiChatPanel {
                 if let Some(entity) = this.upgrade() {
                     let _ = cx.update(|cx| {
                         entity.update(cx, |this, cx| {
-                            // 重新加载历史会话列表
                             this.load_history_sessions(cx);
                         });
                     });
@@ -808,18 +713,8 @@ impl AiChatPanel {
             if let Some(entity) = this.upgrade() {
                 let _ = cx.update(|cx| {
                     entity.update(cx, |this, cx| {
-                        this.session_id = Some(session_id);
-                        this.messages = messages.iter()
-                            .map(|msg| {
-                                let role = match msg.role.as_str() {
-                                    "user" => ChatRole::User,
-                                    "assistant" => ChatRole::Assistant,
-                                    "system" => ChatRole::System,
-                                    _ => ChatRole::User,
-                                };
-                                ChatMessageUI::from_history(msg.id.to_string(), role, msg.content.clone())
-                            })
-                            .collect();
+                        this.engine.session_id = Some(session_id);
+                        this.engine.messages = ChatEngine::messages_from_history(&messages);
                         this.history_popover_open = false;
                         cx.notify();
                     });
@@ -829,12 +724,12 @@ impl AiChatPanel {
     }
 
     fn send_message(&mut self, content: String, cx: &mut Context<Self>) {
-        if content.trim().is_empty() || self.is_loading {
+        if content.trim().is_empty() || self.engine.is_loading {
             return;
         }
 
-        let Some(provider_id_str) = self.provider_id.clone() else {
-            self.messages.push(ChatMessageUI::assistant("请先选择 AI 提供商".to_string()));
+        let Some(provider_id_str) = self.engine.provider_id.clone() else {
+            self.engine.push_assistant("请先选择 AI 提供商");
             cx.notify();
             return;
         };
@@ -842,7 +737,7 @@ impl AiChatPanel {
         let provider_id: i64 = match provider_id_str.parse() {
             Ok(id) => id,
             Err(_) => {
-                self.messages.push(ChatMessageUI::assistant("无效的提供商 ID".to_string()));
+                self.engine.push_assistant("无效的提供商 ID");
                 cx.notify();
                 return;
             }
@@ -850,434 +745,157 @@ impl AiChatPanel {
 
         // 确保会话存在并持久化用户消息
         if let Some(session_id) = self.ensure_session_id(&provider_id_str, cx) {
-            self.persist_user_message(session_id, content.clone(), cx);
+            self.persist_user_message(session_id, &content, cx);
         }
 
         let global_provider_state = cx.global::<GlobalProviderState>().clone();
         let global_state = cx.global::<GlobalStorageState>();
         let storage_manager = global_state.storage.clone();
-        let connection_name = self.connection_name.clone();
-        let session_id = self.session_id;
-        let selected_model = self.selected_model.clone();
-        let history_count = self.model_settings.history_count;
-        let max_tokens = self.model_settings.max_tokens;
-        let temperature = self.model_settings.temperature;
+        let session_id = self.engine.session_id;
+        let selected_model = self.engine.selected_model.clone();
+        let history_count = self.engine.model_settings.history_count;
+        let max_tokens = self.engine.model_settings.max_tokens;
+        let temperature = self.engine.model_settings.temperature;
 
-        // 添加用户消息到 UI
-        self.messages.push(ChatMessageUI::user(content.clone()));
+        // 添加用户消息到 UI 并创建助手消息占位符
+        self.engine.push_user_message(content.clone());
+        let assistant_msg_id = self.engine.push_streaming_assistant();
 
-        // 创建助手消息占位符
-        let assistant_msg_id = Uuid::new_v4().to_string();
-        self.messages.push(
-            ChatMessageUI::streaming_assistant()
-                .with_id(assistant_msg_id.clone())
-        );
-
-        self.auto_scroll_enabled = true;
-        self.is_loading = true;
+        self.engine.auto_scroll_enabled = true;
+        self.engine.is_loading = true;
 
         // 创建取消令牌
         let cancel_token = CancellationToken::new();
-        self.cancel_token = Some(cancel_token.clone());
+        self.engine.cancel_token = Some(cancel_token.clone());
 
-        self.auto_scroll_to_bottom();
+        self.engine.scroll_to_bottom();
         cx.notify();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            // 检查是否已取消
             if cancel_token.is_cancelled() {
                 return;
             }
 
-            // 获取或创建会话
-            let session_db_id = match session_id {
-                Some(id) => id,
-                None => {
-                    let session_repo = match storage_manager.get::<SessionRepository>() {
-                        Some(r) => r,
-                        None => {
-                            if let Some(entity) = this.upgrade() {
-                                let _ = cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == assistant_msg_id) {
-                                            msg.is_streaming = false;
-                                            msg.content = "SessionRepository not found".to_string();
-                                        }
-                                        this.is_loading = false;
-                                        cx.notify();
-                                    });
-                                });
+            // 构建聊天历史消息
+            let history: Vec<Message> = {
+                if let Some(sid) = session_id {
+                    if let Some(message_repo) = storage_manager.get::<MessageRepository>() {
+                        match message_repo.list_by_session(sid) {
+                            Ok(messages) => {
+                                let mut msgs: Vec<Message> = messages.iter().map(|msg| {
+                                    let role = match msg.role.as_str() {
+                                        "user" => Role::User,
+                                        "assistant" => Role::Assistant,
+                                        "system" => Role::System,
+                                        _ => Role::User,
+                                    };
+                                    Message::text(role, &msg.content)
+                                }).collect();
+                                // 限制历史条数
+                                if msgs.len() > history_count {
+                                    msgs = msgs.split_off(msgs.len() - history_count);
+                                }
+                                msgs
                             }
-                            return;
+                            Err(_) => vec![Message::text(Role::User, &content)],
                         }
-                    };
-                    let session_name = format!("Chat with {}", connection_name.as_deref().unwrap_or("Database"));
-                    let mut session = ChatSession::new(session_name, provider_id.to_string());
-                    match session_repo.insert(&mut session) {
-                        Ok(id) => {
-                            // 更新 UI 中的 session_id
-                            if let Some(entity) = this.upgrade() {
-                                let _ = cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        this.session_id = Some(id);
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                            id
-                        }
-                        Err(_) => {
-                            if let Some(entity) = this.upgrade() {
-                                let _ = cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == assistant_msg_id) {
-                                            msg.is_streaming = false;
-                                            msg.content = "Failed to create session.".to_string();
-                                        }
-                                        this.is_loading = false;
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                            return;
-                        }
+                    } else {
+                        vec![Message::text(Role::User, &content)]
                     }
+                } else {
+                    vec![Message::text(Role::User, &content)]
                 }
             };
 
-            // 保存用户消息
-            {
-                let content_clone = content.clone();
-                if let Some(message_repo) = storage_manager.get::<MessageRepository>() {
-                    let mut message = ChatMessage::new(session_db_id, "user".to_string(), content_clone);
-                    if let Err(e) = message_repo.insert(&mut message) {
-                        error!("Failed to save user message: {}", e);
-                    }
-                }
-            }
+            // 使用 ChatStreamProcessor 创建流
+            let (mut rx, _cancel, future) = ChatStreamProcessor::create_stream(
+                provider_id,
+                selected_model,
+                history,
+                max_tokens as u32,
+                temperature,
+                cancel_token,
+                global_provider_state,
+                storage_manager.clone(),
+            );
 
-            // 获取聊天历史（不包含当前消息）
-            let mut history: Vec<Message> = {
-                if let Some(message_repo) = storage_manager.get::<MessageRepository>() {
-                    match message_repo.list_by_session(session_db_id) {
-                        Ok(messages) => {
-                            messages.iter().map(|msg| {
-                                let role = match msg.role.as_str() {
-                                    "user" => Role::User,
-                                    "assistant" => Role::Assistant,
-                                    "system" => Role::System,
-                                    _ => Role::User,
-                                };
-                                Message::text(role, &msg.content)
-                            }).collect()
-                        }
-                        Err(e) => {
-                            error!("Failed to load chat history: {}", e);
-                            vec![]
-                        }
-                    }
-                } else {
-                    vec![]
-                }
-            };
+            // Spawn 流式处理 future
+            let _stream_task = Tokio::spawn(cx, future);
 
-            // 确保当前用户消息在历史中
-            let content_clone_for_check = content.clone();
-            let should_add = history.is_empty() || {
-                history.last().map(|m| {
-                    m.content.iter()
-                        .filter_map(|block| {
-                            if let MessageBlock::Text { text } = block {
-                                Some(text.as_str())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<String>()
-                }) != Some(content_clone_for_check.clone())
-            };
-            if should_add {
-                history.push(Message::text(Role::User, content.clone()));
-            }
-
-            let model_name = {
-                // 对于内置 provider，直接使用内置配置
-                let config = if provider_id == crate::llm::BUILTIN_ONET_CLI_ID {
-                    ProviderConfig::builtin_onet_cli()
-                } else {
-                    let storage_manager_for_model = storage_manager.clone();
-                    let repo = match storage_manager_for_model.get::<ProviderRepository>() {
-                        Some(r) => r,
-                        None => {
-                            if let Some(entity) = this.upgrade() {
-                                let _ = cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == assistant_msg_id) {
-                                            msg.is_streaming = false;
-                                            msg.content = "ProviderRepository not found".to_string();
-                                        }
-                                        this.is_loading = false;
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                            return;
-                        }
-                    };
-                    match repo.get(provider_id) {
-                        Ok(Some(c)) => c,
-                        Ok(None) => {
-                            if let Some(entity) = this.upgrade() {
-                                let _ = cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == assistant_msg_id) {
-                                            msg.is_streaming = false;
-                                            msg.content = format!("Provider not found: {}", provider_id);
-                                        }
-                                        this.is_loading = false;
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                            return;
-                        }
-                        Err(e) => {
-                            if let Some(entity) = this.upgrade() {
-                                let _ = cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == assistant_msg_id) {
-                                            msg.is_streaming = false;
-                                            msg.content = format!("Failed to get provider: {}", e);
-                                        }
-                                        this.is_loading = false;
-                                        cx.notify();
-                                    });
-                                });
-                            }
-                            return;
-                        }
-                    }
-                };
-                selected_model
-                    .clone()
-                    .unwrap_or_else(|| config.model.clone())
-            };
-
-            let request = ChatRequest {
-                model: model_name.clone(),
-                messages: history.iter().rev().take(history_count).rev().cloned().collect(),
-                max_tokens: Some(max_tokens as u32),
-                temperature: Some(temperature),
-                stream: Some(true),
-                ..Default::default()
-            };
-
-            // 打印请求信息用于调试
-            debug!("Request details:");
-            debug!("  Model: {}", model_name);
-            debug!("  Max tokens: 2000");
-            debug!("  Temperature: 0.7");
-            debug!("  Messages count: {}", history.len());
-            for (i, msg) in history.iter().enumerate() {
-                let content_preview = msg.content.iter()
-                    .filter_map(|block| {
-                        if let MessageBlock::Text { text } = block {
-                            Some(text.as_str())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<String>();
-                let preview = if content_preview.chars().count() > 100 {
-                    format!("{}...", content_preview.chars().take(100).collect::<String>())
-                } else {
-                    content_preview
-                };
-                debug!("  Message #{}: {:?} - {:?}", i + 1, msg.role, preview);
-            }
-
-            // 开始流式聊天
-            info!("Starting chat stream for provider_id: {}", provider_id);
-            let storage_manager_for_stream = storage_manager.clone();
-            let stream_result = Tokio::spawn(cx, async move {
-                // 对于内置 provider，直接使用内置配置
-                let config = if provider_id == crate::llm::BUILTIN_ONET_CLI_ID {
-                    ProviderConfig::builtin_onet_cli()
-                } else {
-                    let repo = storage_manager_for_stream.get::<ProviderRepository>()
-                        .ok_or_else(|| anyhow::anyhow!("ProviderRepository not found"))?;
-                    repo.get(provider_id)?
-                        .ok_or_else(|| anyhow::anyhow!("Provider not found: {}", provider_id))?
-                };
-                let provider = global_provider_state.manager().get_provider(&config).await?;
-                provider.chat_stream(&request).await
-            }).await;
-
-            debug!("Waiting for stream initialization...");
-            let mut stream = match stream_result {
-                Ok(task) => match task {
-                    Ok(s) => {
-                        info!("Stream initialized successfully");
-                        s
-                    },
-                    Err(e) => {
-                        let error_msg = format!("Failed to start chat: {}", e);
-                        error!("Stream error: {}", error_msg);
+            // 处理流式事件
+            while let Some(event) = rx.recv().await {
+                match event {
+                    StreamEvent::ContentDelta { full_content, .. } => {
                         if let Some(entity) = this.upgrade() {
-                            cx.update(|cx| {
-                                entity.update(cx, |this, cx| {
-                                    if let Some(msg) = this.messages.iter_mut().find(|m| m.id == assistant_msg_id) {
-                                        msg.is_streaming = false;
-                                        msg.content = error_msg;
-                                    }
-                                    this.is_loading = false;
-                                    cx.notify();
-                                })
-                            })
-                        }
-                        return;
-                    }
-                }
-                Err(e) => {
-                    error!("Tokio spawn error: {:?}", e);
-                    return;
-                }
-            };
-
-            // 处理流式响应
-            info!("Starting to process stream responses...");
-            let mut full_content = String::new();
-            let mut chunk_count = 0;
-            while let Some(result) = stream.next().await {
-                // 检查是否已取消
-                if cancel_token.is_cancelled() {
-                    info!("Stream cancelled by user");
-                    break;
-                }
-
-                chunk_count += 1;
-                match result {
-                    Ok(response) => {
-                        debug!("Chunk #{}: response.choices.len() = {}", chunk_count, response.choices.len());
-                        for (i, choice) in response.choices.iter().enumerate() {
-                            debug!("  Choice #{}: finish_reason = {:?}", i, choice.finish_reason);
-                        }
-
-                        if let Some(content) = response.get_content() {
-                            let content_preview: String = if content.chars().count() > 50 {
-                                content.chars().take(50).collect()
-                            } else {
-                                content.to_string()
-                            };
-                            debug!("Chunk #{}: received {} chars, content: {:?}",
-                                chunk_count, content.len(), content_preview);
-                            full_content.push_str(&content);
-                            debug!("Total content length now: {}", full_content.len());
-
-                            if let Some(entity) = this.upgrade() {
-                                let content_clone = full_content.clone();
-                                let msg_id = assistant_msg_id.clone();
-                                debug!("Attempting to update UI...");
-                                cx.update(|cx| {
-                                    entity.update(cx, |this, cx| {
-                                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == msg_id) {
-                                            msg.content = content_clone;
-                                            debug!("Message content updated in UI");
-                                        } else {
-                                            warn!("Message with id {} not found!", msg_id);
-                                        }
-                                        this.auto_scroll_to_bottom();
-                                        cx.notify();
-                                    })
-                                });
-                            } else {
-                                warn!("Entity dropped during streaming, stopping");
-                                return;
-                            }
-                        } else {
-                            debug!("Chunk #{}: no content in response", chunk_count);
-                        }
-
-                        // 检查是否完成：finish_reason 存在且不是 "null" 字符串
-                        let is_done = response.choices.iter().any(|c| {
-                            if let Some(reason) = &c.finish_reason {
-                                reason != "null"
-                            } else {
-                                false
-                            }
-                        });
-                        if is_done {
-                            info!("Stream finished (finish_reason detected)");
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        error!("Stream error occurred: {}", err);
-                        if let Some(entity) = this.upgrade() {
-                            let error_msg = format!("Stream error: {}", err);
+                            let content_clone = full_content;
                             let msg_id = assistant_msg_id.clone();
                             cx.update(|cx| {
                                 entity.update(cx, |this, cx| {
-                                    if let Some(msg) = this.messages.iter_mut().find(|m| m.id == msg_id) {
-                                        msg.is_streaming = false;
-                                        msg.content = error_msg;
+                                    this.engine.update_streaming_content(&msg_id, content_clone);
+                                    this.engine.scroll_to_bottom();
+                                    cx.notify();
+                                })
+                            });
+                        } else {
+                            return;
+                        }
+                    }
+                    StreamEvent::Completed { full_content } => {
+                        if let Some(entity) = this.upgrade() {
+                            let msg_id = assistant_msg_id.clone();
+                            let final_content = full_content;
+                            let storage_for_save = storage_manager.clone();
+                            cx.update(|cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.engine.finalize_streaming(&msg_id, final_content.clone());
+                                    this.engine.is_loading = false;
+                                    this.engine.cancel_token = None;
+                                    this.engine.scroll_to_bottom();
+
+                                    // 持久化助手消息
+                                    if let Some(sid) = session_id {
+                                        let content_to_save = final_content;
+                                        let storage = storage_for_save;
+                                        cx.spawn(async move |_this, _cx: &mut AsyncApp| {
+                                            if let Some(repo) = storage.get::<MessageRepository>() {
+                                                let mut msg = crate::llm::chat_history::ChatMessage::new(
+                                                    sid,
+                                                    "assistant".to_string(),
+                                                    content_to_save,
+                                                );
+                                                if let Err(e) = repo.insert(&mut msg) {
+                                                    warn!("Failed to save assistant message: {}", e);
+                                                }
+                                            }
+                                        }).detach();
                                     }
-                                    this.is_loading = false;
-                                    this.auto_scroll_to_bottom();
+
                                     cx.notify();
                                 })
                             });
                         }
-                        return;
+                        break;
+                    }
+                    StreamEvent::Error { message } => {
+                        if let Some(entity) = this.upgrade() {
+                            let msg_id = assistant_msg_id.clone();
+                            cx.update(|cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.engine.set_message_error(&msg_id, message);
+                                    this.engine.is_loading = false;
+                                    this.engine.cancel_token = None;
+                                    this.engine.scroll_to_bottom();
+                                    cx.notify();
+                                })
+                            });
+                        }
+                        break;
+                    }
+                    StreamEvent::Cancelled => {
+                        info!("Stream cancelled by user");
+                        break;
                     }
                 }
-            }
-
-            info!("Stream loop ended. Total chunks: {}, final content length: {}",
-                chunk_count, full_content.len());
-
-            // 流结束，保存助手消息
-            debug!("Finalizing message...");
-            if let Some(entity) = this.upgrade() {
-                let final_content = full_content.clone();
-                let msg_id = assistant_msg_id.clone();
-                let storage_manager_final = storage_manager.clone();
-                cx.update(|cx| {
-                    entity.update(cx, |this, cx| {
-                        if let Some(msg) = this.messages.iter_mut().find(|m| m.id == msg_id) {
-                            msg.is_streaming = false;
-                            msg.content = final_content.clone();
-                            debug!("Message marked as not streaming, final length: {}", final_content.len());
-                        }
-
-                        // 保存助手消息到数据库
-                        let final_content_inner = final_content.clone();
-                        cx.spawn(async move |_this, _cx: &mut AsyncApp| {
-                            debug!("Saving assistant message to database...");
-                            let message_repo = storage_manager_final.get::<MessageRepository>();
-                            if let Some (repo) = message_repo {
-                                let mut assistant_message = ChatMessage::new(session_db_id, "assistant".to_string(), final_content_inner);
-                                let result = repo.insert(&mut assistant_message);
-                                match result {
-                                    Ok(id) => {
-                                        info!("Assistant message saved successfully, id={}",id);
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to schedule assistant message save: {}", e);
-                                    }
-                                }
-                            }
-                        }).detach();
-
-                        this.is_loading = false;
-                        this.cancel_token = None;
-                        this.auto_scroll_to_bottom();
-                        cx.notify();
-                        debug!("Finalization complete");
-                    })
-                });
-            } else {
-                warn!("Entity dropped before finalization");
             }
         }).detach();
     }
@@ -1362,14 +980,16 @@ impl AiChatPanel {
             )
     }
 
-    fn render_messages(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_messages(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let code_block_actions = self.engine.code_block_actions.clone();
+
         div()
             .id("chat-messages-list")
             .flex_1()
             .min_h_0()
             .w_full()
             .overflow_y_scroll()
-            .track_scroll(&self.scroll_handle)
+            .track_scroll(&self.engine.scroll_handle)
             .p_4()
             .pb_8()
             .child(
@@ -1377,159 +997,11 @@ impl AiChatPanel {
                     .w_full()
                     .gap_4()
                     .children(
-                        self.messages
+                        self.engine.messages
                             .iter()
-                            .map(|msg| self.render_message(msg, window, cx)),
+                            .map(|msg| ChatMessageRenderer::render_message(msg, &code_block_actions, cx)),
                     ),
             )
-    }
-
-    fn auto_scroll_to_bottom(&self) {
-        if self.auto_scroll_enabled {
-            self.scroll_handle.scroll_to_bottom();
-        }
-    }
-
-    fn render_message(&self, msg: &ChatMessageUI, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        match msg.role {
-            ChatRole::User => {
-                div()
-                    .w_full()
-                    .px_3()
-                    .py_2()
-                    .bg(cx.theme().accent)
-                    .text_color(cx.theme().accent_foreground)
-                    .rounded_lg()
-                    .child(TextView::markdown(SharedString::from(format!("user-msg-{}", msg.id)), msg.content.clone()))
-                    .into_any_element()
-            }
-            ChatRole::Assistant => {
-                match &msg.variant {
-                    MessageVariant::Status { title, is_done } => {
-                        self.render_status_message(msg.id.clone(), title, *is_done, msg.is_expanded, cx)
-                    }
-                    MessageVariant::Text => {
-                        self.render_assistant_message(msg, window, cx)
-                    }
-                    MessageVariant::SqlResult => {
-                        // SqlResult 在通用面板中不支持，返回占位符
-                        div()
-                            .w_full()
-                            .py_2()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("SQL 结果")
-                            )
-                            .into_any_element()
-                    }
-                }
-            }
-            ChatRole::System => {
-                h_flex()
-                    .w_full()
-                    .justify_center()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(msg.content.clone())
-                    )
-                    .into_any_element()
-            }
-        }
-    }
-
-    fn render_status_message(&self, id: String, title: &str, is_done: bool, _is_expanded: bool, cx: &mut Context<Self>) -> AnyElement {
-        let icon = if is_done { IconName::Check } else { IconName::Loader };
-
-        div()
-            .id(SharedString::from(id))
-            .w_full()
-            .flex()
-            .items_center()
-            .gap_2()
-            .py_1()
-            .child(
-                Icon::new(icon)
-                    .with_size(Size::Small)
-                    .text_color(if is_done { cx.theme().success } else { cx.theme().muted_foreground })
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(title.to_string())
-            )
-            .into_any_element()
-    }
-
-    fn render_assistant_message(&self, msg: &ChatMessageUI, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        if msg.is_streaming && msg.content.is_empty() {
-            return div()
-                .w_full()
-                .py_2()
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("Thinking...")
-                )
-                .into_any_element();
-        }
-
-        let view_id = SharedString::from(format!("ai-msg-{}", msg.id));
-        let registry = self.code_block_actions.clone();
-
-        div()
-            .w_full()
-            .child(
-                TextView::markdown(view_id, msg.content.clone())
-                    .code_block_actions({
-                        move |code_block, _window, _cx| {
-                            let code = code_block.code();
-                            let lang = code_block.lang();
-                            let lang_str = lang.as_ref().map(|s| s.as_ref());
-                            let matched_actions = registry.get_actions_for_lang(lang_str);
-
-                            let mut row = h_flex()
-                                .gap_1()
-                                .child(Clipboard::new("copy").value(code.clone()));
-
-                            for (idx, action) in matched_actions.iter().enumerate() {
-                                let btn_id = SharedString::from(format!("{}-{}", action.id, idx));
-                                let callback = action.callback.clone();
-                                let icon = action.icon.clone();
-                                let label = action.label.clone();
-                                let code = code.to_string();
-                                let lang = lang.as_ref().map(|s| s.to_string());
-                                let mut btn = Button::new(btn_id)
-                                    .icon(icon)
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click({
-                                        let code = code.clone();
-                                        let lang = lang.clone();
-                                        move |_, window, cx| {
-                                            callback(code.clone(), lang.clone(), window, cx);
-                                        }
-                                    });
-
-                                if let Some(lbl) = label {
-                                    btn = btn.label(lbl);
-                                }
-
-                                row = row.child(btn);
-                            }
-
-                            row
-                        }
-                    })
-                    .p_3()
-                    .selectable(true)
-            )
-            .into_any_element()
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1660,7 +1132,7 @@ impl SessionListHost for AiChatPanel {
     }
 
     fn is_current_session(&self, session_id: i64) -> bool {
-        self.session_id == Some(session_id)
+        self.engine.session_id == Some(session_id)
     }
 
     fn on_session_list_confirm(&mut self, cx: &mut Context<Self>) {

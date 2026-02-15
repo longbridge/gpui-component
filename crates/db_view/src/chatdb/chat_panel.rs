@@ -36,7 +36,7 @@ use crate::chatdb::ai_input::{AIInput, AIInputEvent};
 use crate::chatdb::chat_markdown::SqlCodeBlock;
 use crate::chatdb::chat_sql_block::SqlBlockResultState;
 use crate::chatdb::chat_sql_result::ChatSqlResultView;
-use crate::chatdb::components::{ChatMessageUI, ChatRole, MessageVariant, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP};
+use crate::chatdb::components::{ChatMessageUI, ChatRole, MessageVariant, SqlBlockCacheExt, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP};
 // 从核心库导入
 use one_core::ai_chat::components::{
     ModelSettings, ProviderItem,

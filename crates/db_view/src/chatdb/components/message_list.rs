@@ -9,19 +9,16 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
     div, px, AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement, ScrollHandle,
-    SharedString, StatefulInteractiveElement, Styled,
+    StatefulInteractiveElement, Styled,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
     highlighter::HighlightTheme,
     scroll::Scrollbar,
-    text::TextView,
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
+    v_flex, ActiveTheme,
 };
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::chatdb::chat_markdown::{parse_sql_code_blocks, SqlCodeBlock};
@@ -33,146 +30,62 @@ pub use one_core::ai_chat::{
     ChatRole, MessageVariant, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP,
 };
 
+// 使用核心库的泛型消息类型
+use one_core::{ChatMessageUIGeneric, MessageExtension};
+
 // ============================================================================
-// 消息类型（SQL 扩展版本）
+// SQL 扩展
 // ============================================================================
 
-/// UI 消息结构（SQL 扩展版本）
+/// SQL 消息扩展
 ///
-/// 继承核心库的基础功能，添加 SQL 代码块缓存支持。
-#[derive(Clone, Debug)]
-pub struct ChatMessageUI {
-    pub id: String,
-    pub role: ChatRole,
-    pub content: String,
-    pub variant: MessageVariant,
-    pub is_streaming: bool,
+/// 为消息添加 SQL 代码块解析缓存支持。
+#[derive(Clone, Debug, Default)]
+pub struct SqlExtension {
     /// SQL 代码块解析缓存（内容哈希, 解析结果）
-    cached_sql_blocks: Option<Arc<(u64, Vec<SqlCodeBlock>)>>,
+    pub cached_sql_blocks: Option<Arc<(u64, Vec<SqlCodeBlock>)>>,
 }
 
-impl ChatMessageUI {
-    /// 创建用户消息
-    pub fn user(content: impl Into<String>) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            role: ChatRole::User,
-            content: content.into(),
-            variant: MessageVariant::Text,
-            is_streaming: false,
-            cached_sql_blocks: None,
-        }
-    }
-
-    /// 创建助手消息
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            role: ChatRole::Assistant,
-            content: content.into(),
-            variant: MessageVariant::Text,
-            is_streaming: false,
-            cached_sql_blocks: None,
-        }
-    }
-
-    /// 创建状态消息
-    pub fn status(title: impl Into<String>, is_done: bool) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            role: ChatRole::Assistant,
-            content: String::new(),
-            variant: MessageVariant::Status {
-                title: title.into(),
-                is_done,
-            },
-            is_streaming: !is_done,
-            cached_sql_blocks: None,
-        }
-    }
-
-    /// 创建流式助手消息
-    pub fn streaming_assistant() -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            role: ChatRole::Assistant,
-            content: String::new(),
-            variant: MessageVariant::Text,
-            is_streaming: true,
-            cached_sql_blocks: None,
-        }
-    }
-
-    /// 从历史消息创建（用于加载会话历史）
-    pub fn from_history(id: impl Into<String>, role: ChatRole, content: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            role,
-            content: content.into(),
-            variant: MessageVariant::Text,
-            is_streaming: false,
-            cached_sql_blocks: None,
-        }
-    }
-
-    /// 设置 ID
-    pub fn with_id(mut self, id: impl Into<String>) -> Self {
-        self.id = id.into();
-        self
-    }
-
-    /// 设置变体
-    pub fn with_variant(mut self, variant: MessageVariant) -> Self {
-        self.variant = variant;
-        self
-    }
-
-    /// 设置流式状态
-    pub fn with_streaming(mut self, is_streaming: bool) -> Self {
-        self.is_streaming = is_streaming;
-        self
-    }
-
-    /// 设置内容
-    pub fn with_content(mut self, content: impl Into<String>) -> Self {
-        self.content = content.into();
+impl MessageExtension for SqlExtension {
+    fn on_finalize_streaming(&mut self) {
         self.cached_sql_blocks = None;
-        self
     }
 
-    /// 计算内容哈希
-    fn content_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.content.hash(&mut hasher);
-        hasher.finish()
+    fn clear_cache(&mut self) {
+        self.cached_sql_blocks = None;
     }
+}
 
+/// SQL 扩展版本的 ChatMessageUI
+pub type ChatMessageUI = ChatMessageUIGeneric<SqlExtension>;
+
+// ============================================================================
+// SQL 代码块缓存扩展方法
+// ============================================================================
+
+/// SQL 代码块缓存扩展 trait
+///
+/// 为 `ChatMessageUI`（即 `ChatMessageUIGeneric<SqlExtension>`）添加 SQL 特有的方法。
+pub trait SqlBlockCacheExt {
     /// 获取 SQL 代码块（带缓存）
-    pub fn get_sql_blocks(&mut self, highlight_theme: &HighlightTheme) -> Vec<SqlCodeBlock> {
-        let content_hash = self.content_hash();
+    fn get_sql_blocks(&mut self, highlight_theme: &HighlightTheme) -> Vec<SqlCodeBlock>;
+}
+
+impl SqlBlockCacheExt for ChatMessageUI {
+    fn get_sql_blocks(&mut self, highlight_theme: &HighlightTheme) -> Vec<SqlCodeBlock> {
+        let hash = self.content_hash();
 
         // 检查缓存是否有效
-        if let Some(cached) = &self.cached_sql_blocks {
-            if cached.0 == content_hash {
+        if let Some(cached) = &self.extension.cached_sql_blocks {
+            if cached.0 == hash {
                 return cached.1.clone();
             }
         }
 
         // 重新解析并缓存
         let blocks = parse_sql_code_blocks(&self.content, highlight_theme);
-        self.cached_sql_blocks = Some(Arc::new((content_hash, blocks.clone())));
+        self.extension.cached_sql_blocks = Some(Arc::new((hash, blocks.clone())));
         blocks
-    }
-
-    /// 流式消息结束时刷新缓存
-    pub fn finalize_streaming(&mut self) {
-        self.is_streaming = false;
-        self.cached_sql_blocks = None;
-    }
-
-    /// 清除缓存
-    pub fn clear_cache(&mut self) {
-        self.cached_sql_blocks = None;
     }
 }
 
@@ -300,98 +213,34 @@ impl MessageListRenderer {
     }
 
     /// 渲染单条消息
+    /// 委托用户/系统消息到 ChatMessageRenderer，保留 SQL 特有的渲染逻辑
     fn render_message(
         msg: &ChatMessageUI,
         ctx: &MessageListContext,
         cx: &App,
     ) -> AnyElement {
+        use one_core::ChatMessageRenderer;
+
         match msg.role {
-            ChatRole::User => Self::render_user_message(msg, cx),
+            ChatRole::User => ChatMessageRenderer::render_user_message(msg, cx),
             ChatRole::Assistant => match &msg.variant {
                 MessageVariant::Status { title, is_done } => {
-                    Self::render_status_message(&msg.id, title, *is_done, cx)
+                    ChatMessageRenderer::render_status_message(&msg.id, title, *is_done, cx)
                 }
                 MessageVariant::Text => Self::render_assistant_text_message(msg, cx),
                 MessageVariant::SqlResult => Self::render_sql_result_message(&msg.id, ctx, cx),
             },
-            ChatRole::System => {
-                // 系统消息渲染为居中的灰色文本
-                h_flex()
-                    .w_full()
-                    .justify_center()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(msg.content.clone()),
-                    )
-                    .into_any_element()
-            }
+            ChatRole::System => ChatMessageRenderer::render_system_message(msg, cx),
         }
-    }
-
-    /// 渲染用户消息
-    fn render_user_message(msg: &ChatMessageUI, cx: &App) -> AnyElement {
-        div()
-            .w_full()
-            .px_3()
-            .py_2()
-            .bg(cx.theme().accent)
-            .text_color(cx.theme().accent_foreground)
-            .rounded_lg()
-            .child(
-                TextView::markdown(
-                    SharedString::from(format!("user-msg-{}", msg.id)),
-                    msg.content.clone(),
-                )
-                .selectable(true),
-            )
-            .into_any_element()
-    }
-
-    /// 渲染状态消息
-    fn render_status_message(id: &str, title: &str, is_done: bool, cx: &App) -> AnyElement {
-        let icon = if is_done {
-            IconName::Check
-        } else {
-            IconName::Loader
-        };
-
-        h_flex()
-            .id(SharedString::from(id.to_string()))
-            .w_full()
-            .items_center()
-            .gap_2()
-            .py_1()
-            .child(
-                Icon::new(icon).with_size(Size::Small).text_color(if is_done {
-                    cx.theme().success
-                } else {
-                    cx.theme().muted_foreground
-                }),
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(title.to_string()),
-            )
-            .into_any_element()
     }
 
     /// 渲染助手文本消息
     fn render_assistant_text_message(msg: &ChatMessageUI, cx: &App) -> AnyElement {
+        use gpui::SharedString;
+        use gpui_component::text::TextView;
+
         if msg.is_streaming && msg.content.is_empty() {
-            return div()
-                .w_full()
-                .py_2()
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("思考中..."),
-                )
-                .into_any_element();
+            return one_core::ChatMessageRenderer::render_thinking(cx);
         }
 
         div()
