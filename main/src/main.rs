@@ -5,14 +5,14 @@ mod auth;
 mod home;
 mod home_tab;
 mod license;
-mod onehub_app;
+mod onetcli_app;
 mod setting_tab;
 mod settings;
 mod update;
 mod user_avatar;
 mod encourage;
 
-use crate::onehub_app::OneHubApp;
+use crate::onetcli_app::OnetCliApp;
 use db::GlobalDbState;
 use db_view::database_view_plugin::DatabaseViewPluginRegistry;
 use gpui::*;
@@ -32,7 +32,7 @@ fn main() {
     let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
-        onehub_app::init(cx);
+        onetcli_app::init(cx);
         setting_tab::init_settings(cx);
         // Initialize global database state
         let db_state = GlobalDbState::new();
@@ -73,7 +73,7 @@ fn main() {
         cx.spawn(async move |cx| {
             cx.open_window(options, |window, cx| {
                 update::schedule_update_check(window, cx);
-                let view = cx.new(|cx| OneHubApp::new(window, cx));
+                let view = cx.new(|cx| OnetCliApp::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
             })?;
 

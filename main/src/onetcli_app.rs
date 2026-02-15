@@ -75,13 +75,13 @@ pub fn init(cx: &mut App) {
     cx.activate(true);
 }
 
-pub struct OneHubApp {
+pub struct OnetCliApp {
     tab_container: Entity<TabContainer>,
     last_layout_state: Option<TabContainerState>,
     _save_layout_task: Option<Task<()>>,
 }
 
-impl OneHubApp {
+impl OnetCliApp {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let tab_container = cx.new(|cx| {
             let mut container = TabContainer::new(window, cx)
@@ -172,7 +172,7 @@ impl OneHubApp {
     }
 }
 
-impl Render for OneHubApp {
+impl Render for OnetCliApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
         let dialog_layer = Root::render_dialog_layer(window, cx);

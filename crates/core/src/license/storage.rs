@@ -202,7 +202,7 @@ mod tests {
     impl TestLicenseStorage {
         fn new() -> Self {
             let path = env::temp_dir()
-                .join("onehub-test")
+                .join("onetcli-test")
                 .join(format!("license-{}.json", std::process::id()));
             Self { path }
         }

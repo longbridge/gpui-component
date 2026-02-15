@@ -37,11 +37,6 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
-# Application specific
-onehub.db
-onehub.db-shm
-onehub.db-wal
-
 
 # Environment variables
 .env

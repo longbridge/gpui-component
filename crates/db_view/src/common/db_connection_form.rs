@@ -321,7 +321,7 @@ impl DbFormConfig {
                         FormFieldType::Text,
                     )
                     .optional()
-                    .placeholder("OneHub"),
+                    .placeholder("Application Name"),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
                 TabGroup::new("ssh", t!("ConnectionForm.ssh")),
@@ -428,7 +428,7 @@ impl DbFormConfig {
                         FormFieldType::Text,
                     )
                     .optional()
-                    .placeholder("OneHub"),
+                    .placeholder("Application Name"),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
                 TabGroup::new("ssh", t!("ConnectionForm.ssh")),
@@ -596,8 +596,8 @@ impl DbFormConfig {
     /// SQLite form configuration
     pub fn sqlite() -> Self {
         let default_db_path = get_config_dir()
-            .map(|p| p.join("onehub_default.db").to_string_lossy().to_string())
-            .unwrap_or_else(|_| "onehub_default.db".to_string());
+            .map(|p| p.join("onetcli_default.db").to_string_lossy().to_string())
+            .unwrap_or_else(|_| "onetcli_default.db".to_string());
 
         Self {
             db_type: DatabaseType::SQLite,

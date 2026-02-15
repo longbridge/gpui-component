@@ -7,7 +7,7 @@
 //! # 使用方式
 //!
 //! ```rust,ignore
-//! use onehub_core::key_storage::{KeyStorage, LocalFileStorage, set_key_storage};
+//! use onetcli_core::key_storage::{KeyStorage, LocalFileStorage, set_key_storage};
 //! use std::sync::Arc;
 //!
 //! // 设置全局存储后端（应用启动时调用一次）
@@ -28,10 +28,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 /// Keychain 服务名称
-const KEYCHAIN_SERVICE: &str = "com.onehub.master-key";
+const KEYCHAIN_SERVICE: &str = "com.onetcli.master-key";
 
 /// Keychain 用户名
-const KEYCHAIN_USER: &str = "onehub-user";
+const KEYCHAIN_USER: &str = "onetcli-user";
 
 /// 本地加密密钥文件名
 const KEY_STORAGE_FILE: &str = "key_storage";
@@ -233,7 +233,7 @@ impl KeyStorage for KeychainStorage {
 /// # 示例
 ///
 /// ```rust,ignore
-/// use onehub_core::key_storage::{set_key_storage, LocalFileStorage, KeychainStorage};
+/// use onetcli_core::key_storage::{set_key_storage, LocalFileStorage, KeychainStorage};
 /// use std::sync::Arc;
 ///
 /// // 开发环境：使用本地文件
