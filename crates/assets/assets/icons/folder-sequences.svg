@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="fld-seq" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#80DEEA"/>
+                <stop offset="100%" style="stop-color:#26C6DA"/>
+            </linearGradient>
+        </defs>
+
+        <!-- Folder base -->
+        <path d="M2 3 L7 3 L8 5 L14 5 L14 13 L2 13 Z"
+              fill="url(#fld-seq)"/>
+        <path d="M2 5 L2 13 L14 13 L14 5"
+              fill="url(#fld-seq)" opacity="0.85"/>
+
+        <!-- Sequence glyph -->
+        <rect x="6" y="9.5" width="1.2" height="2.5" rx="0.25"
+              fill="white" opacity="0.85"/>
+        <rect x="8" y="8" width="1.2" height="4" rx="0.25"
+              fill="white" opacity="0.9"/>
+        <rect x="10" y="6.5" width="1.2" height="5.5" rx="0.25"
+              fill="white" opacity="0.95"/>
+    </svg>

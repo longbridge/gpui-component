@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="tbsch" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#42A5F5"/>
+                <stop offset="100%" style="stop-color:#1976D2"/>
+            </linearGradient>
+        </defs>
+
+        <!-- Table container -->
+        <rect x="2" y="2" width="12" height="12" rx="1.2"
+              fill="url(#tbsch)"/>
+
+        <!-- Header separator -->
+        <line x1="3" y1="5" x2="13" y2="5"
+              stroke="white" stroke-width="1" opacity="0.7"/>
+
+        <!-- Field nodes -->
+        <circle cx="4.5" cy="7" r="0.8" fill="white" opacity="0.9"/>
+        <line x1="6" y1="7" x2="12" y2="7"
+              stroke="white" stroke-width="0.9" opacity="0.85"/>
+
+        <circle cx="4.5" cy="9.5" r="0.8" fill="white" opacity="0.9"/>
+        <line x1="6" y1="9.5" x2="10.5" y2="9.5"
+              stroke="white" stroke-width="0.9" opacity="0.85"/>
+
+        <circle cx="4.5" cy="12" r="0.8" fill="white" opacity="0.9"/>
+        <line x1="6" y1="12" x2="9" y2="12"
+              stroke="white" stroke-width="0.9" opacity="0.85"/>
+    </svg>

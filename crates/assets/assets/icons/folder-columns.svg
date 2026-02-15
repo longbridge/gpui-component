@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="fld-col" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#FFB74D"/>
+                <stop offset="100%" style="stop-color:#F57C00"/>
+            </linearGradient>
+        </defs>
+
+        <!-- Folder base -->
+        <path d="M 2 3 L 7 3 L 8 5 L 14 5 L 14 13 L 2 13 Z"
+              fill="url(#fld-col)"/>
+        <path d="M 2 5 L 2 13 L 14 13 L 14 5"
+              fill="url(#fld-col)" opacity="0.85"/>
+
+        <!-- Column glyph -->
+        <rect x="5" y="7" width="1.8" height="4.5" rx="0.3"
+              fill="white" opacity="0.9"/>
+        <rect x="7.8" y="7" width="1.8" height="4.5" rx="0.3"
+              fill="white" opacity="0.9"/>
+        <rect x="10.6" y="7" width="1.8" height="4.5" rx="0.3"
+              fill="white" opacity="0.9"/>
+    </svg>

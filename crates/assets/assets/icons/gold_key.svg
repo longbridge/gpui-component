@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 60" width="48" height="60">
+    <defs>
+        <linearGradient id="keyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFD966;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#F4B942;stop-opacity:1"/>
+        </linearGradient>
+        <filter id="shadow">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
+            <feOffset dx="0" dy="1"/>
+            <feComponentTransfer>
+                <feFuncA type="linear" slope="0.3"/>
+            </feComponentTransfer>
+            <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <g filter="url(#shadow)">
+        <circle cx="24" cy="20" r="10" fill="url(#keyGrad)"/>
+        <circle cx="24" cy="20" r="5" fill="#FAFBFC"/>
+        <rect x="20" y="28" width="8" height="18" rx="1" fill="url(#keyGrad)"/>
+        <rect x="28" y="34" width="4" height="3" fill="url(#keyGrad)"/>
+        <rect x="28" y="40" width="4" height="3" fill="url(#keyGrad)"/>
+        <circle cx="24" cy="20" r="10" fill="white" opacity="0.25"/>
+        <ellipse cx="21" cy="17" rx="3" ry="4" fill="white" opacity="0.4"/>
+    </g>
+</svg>

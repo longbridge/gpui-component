@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="fld-chk" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#81C784"/>
+                <stop offset="100%" style="stop-color:#4CAF50"/>
+            </linearGradient>
+        </defs>
+        <path d="M2 3 L7 3 L8 5 L14 5 L14 13 L2 13 Z" fill="url(#fld-chk)"/>
+        <path d="M2 5 L2 13 L14 13 L14 5" fill="url(#fld-chk)" opacity="0.85"/>
+        <path d="M6 9 L7.2 10.2 L10 7.5"
+              fill="none" stroke="white" stroke-width="1.2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>

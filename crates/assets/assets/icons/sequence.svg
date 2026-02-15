@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="seq" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#4DD0E1"/>
+                <stop offset="100%" style="stop-color:#0097A7"/>
+            </linearGradient>
+        </defs>
+
+        <!-- Container -->
+        <rect x="2" y="2" width="12" height="12" rx="1.5"
+              fill="url(#seq)"/>
+
+        <!-- Increment bars -->
+        <rect x="4" y="9.5" width="1.8" height="2.5" rx="0.3"
+              fill="white" opacity="0.85"/>
+        <rect x="7.1" y="7.5" width="1.8" height="4.5" rx="0.3"
+              fill="white" opacity="0.9"/>
+        <rect x="10.2" y="5.5" width="1.8" height="6.5" rx="0.3"
+              fill="white" opacity="0.95"/>
+    </svg>

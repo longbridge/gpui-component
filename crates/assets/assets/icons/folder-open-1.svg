@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 60" width="48" height="60">
+    <defs>
+        <linearGradient id="folderOpenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#3ED6FF;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#1B9BDB;stop-opacity:1"/>
+        </linearGradient>
+        <filter id="shadow">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
+            <feOffset dx="0" dy="1"/>
+            <feComponentTransfer>
+                <feFuncA type="linear" slope="0.3"/>
+            </feComponentTransfer>
+            <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <g filter="url(#shadow)">
+        <path d="M 8 24 L 8 46 C 8 47 8.5 48 9.5 48 L 42 48 C 43 48 44 47 44 46 L 44 26 L 8 24 Z" fill="#1B9BDB" opacity="0.5"/>
+        <path d="M 4 18 L 6 42 C 6 44 7 46 9 46 L 39 46 C 41 46 42 44 42 42 L 40 22 C 40 20 39 18 37 18 L 24 18 L 21 14 C 20 13 19 12 17 12 L 7 12 C 5 12 4 14 4 16 Z" fill="url(#folderOpenGrad)"/>
+        <path d="M 4 16 L 17 12 L 21 14 L 24 18 L 7 18 C 5 18 4 17 4 16 Z" fill="#3ED6FF"/>
+        <path d="M 4 16 L 17 12 L 21 14 L 24 18 L 7 18 C 5 18 4 17 4 16 Z" fill="white" opacity="0.3"/>
+        <rect x="4" y="18" width="36" height="6" fill="white" opacity="0.15"/>
+    </g>
+</svg>

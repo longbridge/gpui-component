@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="fld-trg" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#FFAB91"/>
+                <stop offset="100%" style="stop-color:#FF7043"/>
+            </linearGradient>
+        </defs>
+        <path d="M2 3 L7 3 L8 5 L14 5 L14 13 L2 13 Z" fill="url(#fld-trg)"/>
+        <path d="M2 5 L2 13 L14 13 L14 5" fill="url(#fld-trg)" opacity="0.85"/>
+        <path d="M8 6.5 L10.5 9 L8 9 L8 11.5 L5.5 9 L8 9 Z"
+              fill="white" opacity="0.9"/>
+    </svg>
