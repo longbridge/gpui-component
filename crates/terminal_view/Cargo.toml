@@ -12,7 +12,7 @@ ssh = { workspace = true }
 gpui = { workspace = true }
 gpui-component = { workspace = true }
 one-core = { workspace = true }
-one-ui = { path = "../../crates/one_ui" }
+one-ui = { workspace = true }
 # Terminal emulation
 alacritty_terminal.workspace = true
 
