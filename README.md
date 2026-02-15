@@ -133,44 +133,6 @@ Workspace 包含 4 个 default members 和 25+ 个 crate。
 | `crates/reqwest_client` | 基于 Zed 定制 reqwest fork 的 HTTP 客户端封装 |
 | `crates/webview` (gpui-wry) | 通过 Wry 集成 WebView |
 | `crates/license_tool` | 许可证密钥生成与管理 |
-| `crates/story` | 组件展示画廊 / Showcase 应用 |
-
-## 示例
-
-`examples/` 目录提供了多个独立示例，每个示例聚焦展示一个功能点：
-
-```bash
-# 查看可用示例
-ls examples/
-
-# 运行特定示例
-cargo run --example hello_world
-```
-
-| 示例 | 说明 |
-|------|------|
-| `hello_world` | 基础 GPUI 应用 |
-| `input` | 输入组件使用 |
-| `window_title` | 窗口管理 |
-| `dialog_overlay` | 对话框实现 |
-| `webview` | WebView 集成（Wry）|
-| `system_monitor` | 系统监控 |
-| `focus_trap` | 焦点管理 |
-| `app_assets` | 自定义资源/图标嵌入 |
-
-## 组件展示（Story）
-
-`crates/story` 是一个组件画廊应用，可以在界面中浏览和测试所有 GPUI 组件：
-
-```bash
-# 运行组件画廊
-cargo run
-
-# 运行单个 story 示例
-cargo run --example dock
-cargo run --example editor
-cargo run --example markdown
-```
 
 ## 配置
 
@@ -265,6 +227,9 @@ rustflags = ["-C", "link-arg=/STACK:8000000"]
 
 ## 许可证
 
-本项目采用 OnetCli License，详见 [ONETCLI_LICENSE](ONETCLI_LICENSE)。
+本项目采用双协议授权：
 
-允许个人及商业使用，但禁止二次分发、转售或基于本软件创建竞争性产品。如有许可证与版权相关问题，请联系 xiaofei.hf@gmail.com。
+- **OnetCli License** — 适用于 OnetCli 应用本身，详见 [ONETCLI_LICENSE](ONETCLI_LICENSE)。允许个人及商业使用，但禁止二次分发、转售或基于本软件创建竞争性产品。
+- **Apache License 2.0** — 适用于可独立复用的组件库（`gpui-component` 等），详见 [LICENSE-APACHE](LICENSE-APACHE)。
+
+如有许可证与版权相关问题，请联系 xiaofei.hf@gmail.com。
