@@ -62,6 +62,10 @@ pub fn init(cx: &mut App) {
         global_provider_state.set_cloud_client(auth_service.cloud_client());
     }
     db::init_cache(cx);
+    // 启动后台磁盘缓存清理任务
+    if let Some(cache) = cx.try_global::<db::GlobalNodeCache>() {
+        cache.start_cleanup_task(cx);
+    }
     terminal_view::init(cx);
     redis_view::init(cx);
     mongodb_view::init(cx);

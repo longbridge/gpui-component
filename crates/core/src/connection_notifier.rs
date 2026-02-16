@@ -16,6 +16,12 @@ pub enum ConnectionDataEvent {
     WorkspaceUpdated { workspace_id: i64 },
     /// 工作区被删除
     WorkspaceDeleted { workspace_id: i64 },
+    /// Schema 结构变更（DDL 执行后触发）
+    SchemaChanged {
+        connection_id: String,
+        database: String,
+        schema: Option<String>,
+    },
 }
 
 /// 全局连接数据通知器

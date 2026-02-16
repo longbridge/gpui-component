@@ -1,10 +1,11 @@
 use anyhow::Result;
-use dashmap::DashMap;
+use moka::sync::Cache;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs;
 use tracing::{debug, error, info, warn};
 
@@ -31,7 +32,7 @@ impl CacheContext {
     /// 从连接配置创建缓存上下文
     pub fn from_config(config: &DbConnectionConfig) -> Self {
         Self {
-            database_type: config.database_type.clone(),
+            database_type: config.database_type,
             host: config.host.clone(),
             port: config.port,
         }
@@ -99,7 +100,7 @@ impl CacheContext {
 #[derive(Clone, Serialize, Deserialize)]
 struct CachedNode {
     node: DbNode,
-    cached_at: SystemTime,
+    cached_at: std::time::SystemTime,
     ttl_millis: u64,
 }
 
@@ -107,7 +108,7 @@ impl CachedNode {
     fn new(node: DbNode, ttl: Duration) -> Self {
         Self {
             node,
-            cached_at: SystemTime::now(),
+            cached_at: std::time::SystemTime::now(),
             ttl_millis: ttl.as_millis() as u64,
         }
     }
@@ -123,7 +124,7 @@ impl CachedNode {
 /// 节点缓存管理器
 pub struct NodeCache {
     cache_dir: PathBuf,
-    memory_cache: DashMap<String, CachedNode>,
+    memory_cache: Cache<String, CachedNode>,
     default_ttl: Duration,
 }
 
@@ -132,10 +133,15 @@ impl NodeCache {
     pub fn new(cache_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&cache_dir)?;
 
+        let memory_cache = Cache::builder()
+            .max_capacity(10_000)
+            .time_to_idle(Duration::from_secs(120))
+            .build();
+
         Ok(Self {
             cache_dir,
-            memory_cache: DashMap::new(),
-            default_ttl: Duration::from_secs(300),
+            memory_cache,
+            default_ttl: Duration::from_secs(120),
         })
     }
 
@@ -159,15 +165,18 @@ impl NodeCache {
             .join(format!("{}.json", safe_node_id))
     }
 
+    /// 获取缓存目录
+    pub fn cache_dir(&self) -> &PathBuf {
+        &self.cache_dir
+    }
+
     /// 从内存缓存获取节点
     fn get_from_memory(&self, ctx: &CacheContext, node_id: &str) -> Option<DbNode> {
         let key = self.cache_key(ctx, node_id);
-        if let Some(entry) = self.memory_cache.get(&key) {
-            let cached = entry.value();
+        if let Some(cached) = self.memory_cache.get(&key) {
             if cached.is_expired() {
                 debug!("Memory cache expired for node: {}", node_id);
-                drop(entry);
-                self.memory_cache.remove(&key);
+                self.memory_cache.invalidate(&key);
                 None
             } else {
                 debug!("Memory cache hit for node: {}", node_id);
@@ -265,7 +274,7 @@ impl NodeCache {
     /// 使指定节点的缓存失效
     pub async fn invalidate_node(&self, ctx: &CacheContext, node_id: &str) {
         let key = self.cache_key(ctx, node_id);
-        self.memory_cache.remove(&key);
+        self.memory_cache.invalidate(&key);
 
         let path = self.cache_path(ctx, node_id);
         if path.exists() {
@@ -290,7 +299,14 @@ impl NodeCache {
     /// 清除指定连接的所有缓存
     pub async fn clear_connection_cache(&self, ctx: &CacheContext) {
         let prefix = format!("{}_", ctx.cache_key_prefix());
-        self.memory_cache.retain(|key, _| !key.starts_with(&prefix));
+        // moka 没有 retain，需要收集匹配的 key 后逐个 invalidate
+        let keys_to_remove: Vec<Arc<String>> = self.memory_cache.iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, _)| k)
+            .collect();
+        for key in keys_to_remove {
+            self.memory_cache.invalidate(&*key);
+        }
 
         let connection_dir = self.cache_dir.join(ctx.cache_dir_name());
         if connection_dir.exists() {
@@ -308,7 +324,7 @@ impl NodeCache {
 
     /// 清除所有缓存
     pub async fn clear_all(&self) {
-        self.memory_cache.clear();
+        self.memory_cache.invalidate_all();
 
         if self.cache_dir.exists() {
             if let Err(e) = fs::remove_dir_all(&self.cache_dir).await {
@@ -329,14 +345,14 @@ impl NodeCache {
     /// 获取缓存统计信息
     pub fn stats(&self) -> CacheStats {
         CacheStats {
-            memory_entries: self.memory_cache.len(),
+            memory_entries: self.memory_cache.entry_count() as usize,
             cache_dir: self.cache_dir.clone(),
         }
     }
 
     #[cfg(test)]
     pub fn clear_memory_cache(&self) {
-        self.memory_cache.clear();
+        self.memory_cache.invalidate_all();
     }
 }
 

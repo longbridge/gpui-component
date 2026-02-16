@@ -1,3 +1,4 @@
+use crate::cache::CacheContext;
 use crate::cache_manager::GlobalNodeCache;
 use crate::clickhouse::ClickHousePlugin;
 use crate::connection::{DbConnection, DbError, StreamingProgress};
@@ -15,6 +16,7 @@ use crate::{
 };
 use dashmap::DashMap;
 use gpui::{AppContext, AsyncApp, Global};
+use one_core::connection_notifier::{ConnectionDataEvent, GlobalConnectionNotifier};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
 use std::collections::HashMap;
@@ -961,6 +963,18 @@ impl GlobalDbState {
         let cache = cx
             .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
+        let cache_ctx = cx
+            .update(|cx| {
+                cx.try_global::<GlobalDbState>()
+                    .and_then(|state| state.get_config(&config.id))
+                    .map(|cfg| CacheContext::from_config(&cfg))
+            });
+
+        let notifier = cx
+            .update(|cx| {
+                cx.try_global::<GlobalConnectionNotifier>().cloned()
+            });
+
         let clone_self = self.clone();
         let config_id = config.id.clone();
         let current_database = config.database.clone().unwrap_or_default();
@@ -1029,17 +1043,33 @@ impl GlobalDbState {
 
         // 执行成功后，处理 DDL 缓存失效
         if let Some(cache) = cache {
-            Tokio::spawn(cx, async move {
-                cache
+            let ddl_info = Tokio::spawn_result(cx, async move {
+                Ok(cache
                     .process_sql_for_invalidation(
                         &config_id,
                         &script_for_ddl,
                         &current_database,
                         current_schema.as_deref(),
+                        cache_ctx.as_ref(),
                     )
-                    .await;
+                    .await)
             })
-            .detach();
+            .await;
+
+            // 如果检测到 DDL 变更，发射 SchemaChanged 事件
+            if let Ok(Some((conn_id, database, schema))) = ddl_info {
+                if let Some(notifier) = notifier {
+                    cx.update(|cx| {
+                        notifier.0.update(cx, |_, cx| {
+                            cx.emit(ConnectionDataEvent::SchemaChanged {
+                                connection_id: conn_id,
+                                database,
+                                schema,
+                            });
+                        });
+                    });
+                }
+            }
         }
 
         Ok(result)

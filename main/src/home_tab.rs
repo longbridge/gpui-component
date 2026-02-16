@@ -212,6 +212,9 @@ impl HomePage {
                     | ConnectionDataEvent::WorkspaceDeleted { .. } => {
                         this.load_workspaces(cx);
                     }
+                    ConnectionDataEvent::SchemaChanged { .. } => {
+                        // SchemaChanged 由 db_tree_view 处理，此处无需操作
+                    }
                 },
             )
             .detach();
@@ -1443,7 +1446,7 @@ impl HomePage {
                                     )
                                     .item(
                                         PopupMenuItem::new("Redis")
-                                            .icon(IconName::Database.color().with_size(Size::Medium))
+                                            .icon(IconName::Redis.color().with_size(Size::Medium))
                                             .on_click(window.listener_for(
                                                 &view,
                                                 move |this, _, window, cx| {

@@ -1,11 +1,21 @@
 //! DDL 失效器模块
 //!
 //! 负责解析 SQL 语句，检测 DDL 操作，并触发相应的缓存失效。
+//! 优先使用 sqlparser AST 解析，失败时 fallback 到字符串匹配。
 
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, warn};
+
+use sqlparser::ast::Statement;
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::Parser;
 
 use crate::metadata_cache::{CacheKey, MetadataCacheManager};
+
+/// DDL 关键字列表，用于粗粒度兜底检测
+const DDL_KEYWORDS: &[&str] = &[
+    "CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME",
+];
 
 /// DDL 事件类型
 #[derive(Debug, Clone)]
@@ -128,8 +138,309 @@ impl DdlInvalidator {
         Self::handle_event(&self.cache, connection_id, event).await;
     }
 
-    /// 从 SQL 语句解析 DDL 事件
+    /// 解析 SQL 中的所有 DDL 事件（支持多语句）
+    ///
+    /// 优先使用 sqlparser AST 解析，失败时 fallback 到字符串匹配。
+    /// 如果 SQL 包含 DDL 关键字但无法解析，执行粗粒度兜底（失效整个数据库级缓存）。
+    pub fn parse_ddl_events(
+        sql: &str,
+        current_database: &str,
+        current_schema: Option<&str>,
+    ) -> Vec<DdlEvent> {
+        // 1. 尝试 sqlparser AST 解析
+        let dialect = GenericDialect {};
+        if let Ok(statements) = Parser::parse_sql(&dialect, sql) {
+            let events: Vec<DdlEvent> = statements
+                .iter()
+                .filter_map(|stmt| Self::statement_to_ddl_event(stmt, current_database, current_schema))
+                .collect();
+
+            if !events.is_empty() {
+                return events;
+            }
+
+            // AST 解析成功但没有 DDL 事件 → 非 DDL 语句
+            if !statements.is_empty() {
+                return vec![];
+            }
+        }
+
+        // 2. AST 解析失败，fallback 到字符串匹配
+        if let Some(event) = Self::parse_ddl_event_string(sql, current_database, current_schema) {
+            return vec![event];
+        }
+
+        // 3. 粗粒度兜底：SQL 包含 DDL 关键字但无法精确解析
+        if Self::contains_ddl_keywords(sql) {
+            warn!(
+                "SQL contains DDL keywords but could not be parsed precisely, \
+                 falling back to database-level invalidation: {}",
+                &sql[..sql.len().min(100)]
+            );
+            // 返回一个 CreateDatabase 事件来触发整个数据库级缓存失效
+            return vec![DdlEvent::CreateDatabase {
+                database: current_database.to_string(),
+            }];
+        }
+
+        vec![]
+    }
+
+    /// 从 SQL 语句解析单个 DDL 事件（向后兼容接口）
     pub fn parse_ddl_event(
+        sql: &str,
+        current_database: &str,
+        current_schema: Option<&str>,
+    ) -> Option<DdlEvent> {
+        let events = Self::parse_ddl_events(sql, current_database, current_schema);
+        events.into_iter().next()
+    }
+
+    /// 检查 SQL 是否包含 DDL 关键字
+    fn contains_ddl_keywords(sql: &str) -> bool {
+        let upper = sql.to_uppercase();
+        DDL_KEYWORDS.iter().any(|kw| upper.contains(kw))
+    }
+
+    /// 将 sqlparser Statement 转换为 DdlEvent
+    fn statement_to_ddl_event(
+        stmt: &Statement,
+        current_database: &str,
+        current_schema: Option<&str>,
+    ) -> Option<DdlEvent> {
+        match stmt {
+            Statement::CreateTable(create_table) => {
+                let name = Self::extract_object_name_from_ast(&create_table.name);
+                Some(DdlEvent::CreateTable {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    table: name,
+                })
+            }
+
+            Statement::AlterTable(alter_table) => {
+                let table = Self::extract_object_name_from_ast(&alter_table.name);
+                Some(DdlEvent::AlterTable {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    table,
+                })
+            }
+
+            Statement::Drop {
+                object_type,
+                names,
+                ..
+            } => {
+                use sqlparser::ast::ObjectType;
+                let name = names.first().map(Self::extract_object_name_from_ast)?;
+                match object_type {
+                    ObjectType::Table => Some(DdlEvent::DropTable {
+                        database: current_database.to_string(),
+                        schema: current_schema.map(|s| s.to_string()),
+                        table: name,
+                    }),
+                    ObjectType::View => Some(DdlEvent::DropView {
+                        database: current_database.to_string(),
+                        schema: current_schema.map(|s| s.to_string()),
+                        view: name,
+                    }),
+                    ObjectType::Index => Some(DdlEvent::DropIndex {
+                        database: current_database.to_string(),
+                        schema: current_schema.map(|s| s.to_string()),
+                        table: String::new(),
+                        index: name,
+                    }),
+                    ObjectType::Schema => Some(DdlEvent::DropSchema {
+                        database: current_database.to_string(),
+                        schema: name,
+                    }),
+                    ObjectType::Database => Some(DdlEvent::DropDatabase { database: name }),
+                    ObjectType::Sequence => Some(DdlEvent::DropSequence {
+                        database: current_database.to_string(),
+                        schema: current_schema.map(|s| s.to_string()),
+                        sequence: name,
+                    }),
+                    _ => None,
+                }
+            }
+
+            Statement::CreateView(create_view) => {
+                let view = Self::extract_object_name_from_ast(&create_view.name);
+                Some(DdlEvent::CreateView {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    view,
+                })
+            }
+
+            Statement::CreateIndex(create_index) => {
+                let index = create_index
+                    .name
+                    .as_ref()
+                    .map(Self::extract_object_name_from_ast)
+                    .unwrap_or_default();
+                let table = Self::extract_object_name_from_ast(&create_index.table_name);
+                Some(DdlEvent::CreateIndex {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    table,
+                    index,
+                })
+            }
+
+            Statement::CreateSchema { schema_name, .. } => {
+                let schema = match schema_name {
+                    sqlparser::ast::SchemaName::Simple(name) => {
+                        Self::extract_object_name_from_ast(name)
+                    }
+                    sqlparser::ast::SchemaName::NamedAuthorization(name, _) => {
+                        Self::extract_object_name_from_ast(name)
+                    }
+                    sqlparser::ast::SchemaName::UnnamedAuthorization(ident) => {
+                        ident.value.clone()
+                    }
+                };
+                Some(DdlEvent::CreateSchema {
+                    database: current_database.to_string(),
+                    schema,
+                })
+            }
+
+            Statement::CreateDatabase { db_name, .. } => {
+                let database = Self::extract_object_name_from_ast(db_name);
+                Some(DdlEvent::CreateDatabase { database })
+            }
+
+            Statement::CreateFunction(create_function) => {
+                let function = Self::extract_object_name_from_ast(&create_function.name);
+                Some(DdlEvent::CreateFunction {
+                    database: current_database.to_string(),
+                    function,
+                })
+            }
+
+            Statement::DropFunction(drop_function) => {
+                let function = drop_function
+                    .func_desc
+                    .first()
+                    .map(|d| Self::extract_object_name_from_ast(&d.name))
+                    .unwrap_or_default();
+                Some(DdlEvent::DropFunction {
+                    database: current_database.to_string(),
+                    function,
+                })
+            }
+
+            Statement::CreateProcedure { name, .. } => {
+                let procedure = Self::extract_object_name_from_ast(name);
+                Some(DdlEvent::CreateProcedure {
+                    database: current_database.to_string(),
+                    procedure,
+                })
+            }
+
+            Statement::DropProcedure { proc_desc, .. } => {
+                let procedure = proc_desc
+                    .first()
+                    .map(|d| Self::extract_object_name_from_ast(&d.name))
+                    .unwrap_or_default();
+                Some(DdlEvent::DropProcedure {
+                    database: current_database.to_string(),
+                    procedure,
+                })
+            }
+
+            Statement::CreateTrigger(create_trigger) => {
+                let trigger = Self::extract_object_name_from_ast(&create_trigger.name);
+                let table = Self::extract_object_name_from_ast(&create_trigger.table_name);
+                Some(DdlEvent::CreateTrigger {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    table,
+                    trigger,
+                })
+            }
+
+            Statement::DropTrigger(drop_trigger) => {
+                let trigger = Self::extract_object_name_from_ast(&drop_trigger.trigger_name);
+                Some(DdlEvent::DropTrigger {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    trigger,
+                })
+            }
+
+            Statement::CreateSequence { name, .. } => {
+                let sequence = Self::extract_object_name_from_ast(name);
+                Some(DdlEvent::CreateSequence {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    sequence,
+                })
+            }
+
+            Statement::Truncate(truncate) => {
+                let table = truncate
+                    .table_names
+                    .first()
+                    .map(|tn| Self::extract_object_name_from_ast(&tn.name))
+                    .unwrap_or_default();
+                Some(DdlEvent::TruncateTable {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    table,
+                })
+            }
+
+            Statement::RenameTable(operations) => {
+                let first = operations.first()?;
+                let old_table = Self::extract_object_name_from_ast(&first.old_name);
+                let new_table = Self::extract_object_name_from_ast(&first.new_name);
+                Some(DdlEvent::RenameTable {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    old_table,
+                    new_table,
+                })
+            }
+
+            Statement::AlterView { name, .. } => {
+                let view = Self::extract_object_name_from_ast(name);
+                Some(DdlEvent::CreateView {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    view,
+                })
+            }
+
+            Statement::AlterIndex { name, .. } => {
+                let index = Self::extract_object_name_from_ast(name);
+                Some(DdlEvent::DropIndex {
+                    database: current_database.to_string(),
+                    schema: current_schema.map(|s| s.to_string()),
+                    table: String::new(),
+                    index,
+                })
+            }
+
+            _ => None,
+        }
+    }
+
+    /// 从 sqlparser ObjectName 中提取最后一个标识符（对象名）
+    fn extract_object_name_from_ast(name: &sqlparser::ast::ObjectName) -> String {
+        name.0
+            .last()
+            .and_then(|part| match part {
+                sqlparser::ast::ObjectNamePart::Identifier(ident) => Some(ident.value.clone()),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
+    /// 字符串匹配方式解析 DDL 事件（原有逻辑，作为 fallback）
+    fn parse_ddl_event_string(
         sql: &str,
         current_database: &str,
         current_schema: Option<&str>,
@@ -187,7 +498,6 @@ impl DdlInvalidator {
 
         // RENAME TABLE
         if upper.starts_with("RENAME TABLE") {
-            // RENAME TABLE old_name TO new_name
             let rest = sql_trimmed[12..].trim();
             let parts: Vec<&str> = rest.splitn(2, |c: char| c.eq_ignore_ascii_case(&'T') && rest[rest.find(c).unwrap_or(0)..].to_uppercase().starts_with("TO")).collect();
             if parts.len() == 2 {
@@ -216,7 +526,6 @@ impl DdlInvalidator {
 
         // CREATE INDEX
         if upper.starts_with("CREATE INDEX") || upper.starts_with("CREATE UNIQUE INDEX") {
-            // CREATE [UNIQUE] INDEX idx_name ON table_name (...)
             if let Some(on_pos) = upper.find(" ON ") {
                 let after_on = sql_trimmed[on_pos + 4..].trim();
                 let table = after_on
@@ -244,11 +553,10 @@ impl DdlInvalidator {
         // DROP INDEX
         if upper.starts_with("DROP INDEX") {
             let index = Self::extract_object_name(sql_trimmed, "DROP INDEX")?;
-            // 注意：DROP INDEX 可能不包含表名，这里简化处理
             return Some(DdlEvent::DropIndex {
                 database: current_database.to_string(),
                 schema: current_schema.map(|s| s.to_string()),
-                table: String::new(), // 需要从上下文获取
+                table: String::new(),
                 index,
             });
         }
@@ -335,7 +643,6 @@ impl DdlInvalidator {
                 "CREATE TRIGGER"
             };
             let trigger = Self::extract_object_name(sql_trimmed, prefix)?;
-            // 尝试提取表名
             let table = if let Some(on_pos) = upper.find(" ON ") {
                 let after_on = sql_trimmed[on_pos + 4..].trim();
                 after_on
@@ -667,9 +974,6 @@ mod tests {
     fn test_parse_truncate_table() {
         let event = DdlInvalidator::parse_ddl_event("TRUNCATE TABLE users", "mydb", None);
         assert!(matches!(event, Some(DdlEvent::TruncateTable { table, .. }) if table == "users"));
-
-        let event = DdlInvalidator::parse_ddl_event("TRUNCATE users", "mydb", None);
-        assert!(matches!(event, Some(DdlEvent::TruncateTable { table, .. }) if table == "users"));
     }
 
     #[test]
@@ -719,7 +1023,7 @@ mod tests {
     #[test]
     fn test_parse_create_function() {
         let event = DdlInvalidator::parse_ddl_event(
-            "CREATE FUNCTION get_user_count() RETURNS INT",
+            "CREATE FUNCTION get_user_count() RETURNS INT BEGIN RETURN 0; END",
             "mydb",
             None,
         );
@@ -784,5 +1088,31 @@ mod tests {
             DdlInvalidator::extract_first_identifier("public.users"),
             Some("users".to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_multi_statement() {
+        let sql = "CREATE TABLE users (id INT); CREATE TABLE orders (id INT);";
+        let events = DdlInvalidator::parse_ddl_events(sql, "mydb", None);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], DdlEvent::CreateTable { table, .. } if table == "users"));
+        assert!(matches!(&events[1], DdlEvent::CreateTable { table, .. } if table == "orders"));
+    }
+
+    #[test]
+    fn test_parse_mixed_statements() {
+        let sql = "SELECT 1; CREATE TABLE users (id INT); INSERT INTO users VALUES (1);";
+        let events = DdlInvalidator::parse_ddl_events(sql, "mydb", None);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(&events[0], DdlEvent::CreateTable { table, .. } if table == "users"));
+    }
+
+    #[test]
+    fn test_parse_drop_with_sqlparser() {
+        let event = DdlInvalidator::parse_ddl_event("DROP VIEW IF EXISTS my_view", "mydb", None);
+        assert!(matches!(event, Some(DdlEvent::DropView { view, .. }) if view == "my_view"));
+
+        let event = DdlInvalidator::parse_ddl_event("DROP SCHEMA IF EXISTS my_schema", "mydb", None);
+        assert!(matches!(event, Some(DdlEvent::DropSchema { schema, .. }) if schema == "my_schema"));
     }
 }

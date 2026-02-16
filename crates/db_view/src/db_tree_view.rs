@@ -607,6 +607,33 @@ impl DbTreeView {
                 }
             }
             ConnectionDataEvent::WorkspaceCreated { .. } => {}
+            ConnectionDataEvent::SchemaChanged {
+                connection_id,
+                database,
+                schema: _,
+            } => {
+                // DDL 变更后自动刷新受影响连接的树节点
+                if self.tracked_connection_ids.contains(
+                    &connection_id.parse::<i64>().unwrap_or(-1),
+                ) {
+                    // 找到该连接下对应数据库节点并刷新
+                    let target_node_id = self.find_database_node(connection_id, database);
+                    if let Some(node_id) = target_node_id {
+                        info!(
+                            "Auto-refreshing tree after DDL: connection={}, database={}",
+                            connection_id, database
+                        );
+                        self.refresh_tree(node_id, cx);
+                    } else {
+                        // 找不到具体数据库节点，刷新整个连接
+                        info!(
+                            "Auto-refreshing connection tree after DDL: connection={}",
+                            connection_id
+                        );
+                        self.refresh_tree(connection_id.clone(), cx);
+                    }
+                }
+            }
         }
     }
 
@@ -1644,6 +1671,18 @@ impl DbTreeView {
         self.db_nodes.get(node_id)
     }
 
+    /// 查找指定连接下的数据库节点 ID
+    fn find_database_node(&self, connection_id: &str, database_name: &str) -> Option<String> {
+        if let Some(conn_node) = self.db_nodes.get(connection_id) {
+            for child in &conn_node.children {
+                if child.node_type == DbNodeType::Database && child.name == database_name {
+                    return Some(child.id.clone());
+                }
+            }
+        }
+        None
+    }
+
     /// 关闭连接并清理相关状态
     pub fn close_connection(&mut self, connection_id: &str, cx: &mut Context<Self>) {
         info!("Closing connection in DbTreeView: {}", connection_id);
@@ -1651,9 +1690,11 @@ impl DbTreeView {
         let global_state = cx.global::<GlobalDbState>().clone();
         if let Some(config) = global_state.get_config(connection_id) {
             let cache_ctx = db::CacheContext::from_config(&config);
+            let conn_id = connection_id.to_string();
             if let Some(cache) = cx.try_global::<db::GlobalNodeCache>().cloned() {
                 Tokio::spawn(cx, async move {
                     cache.clear_connection_cache(&cache_ctx).await;
+                    cache.invalidate_connection_metadata(&conn_id).await;
                     Ok::<_, anyhow::Error>(())
                 })
                 .detach();

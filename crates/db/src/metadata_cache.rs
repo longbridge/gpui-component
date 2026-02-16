@@ -1,15 +1,15 @@
 //! 数据库元数据缓存模块
 //!
 //! 实现分层缓存策略，支持：
-//! - 内存缓存（DashMap）+ 文件持久化（JSON）
+//! - 内存缓存（moka LRU）+ 文件持久化（JSON）
 //! - 按层级配置不同的 TTL
 //! - DDL 执行后自动失效
-//! - LRU 淘汰策略
 
 use anyhow::Result;
-use dashmap::DashMap;
+use moka::sync::Cache;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs;
 use tracing::{debug, warn};
@@ -36,10 +36,10 @@ impl CacheLevel {
     /// 获取该层级的默认 TTL
     pub fn default_ttl(&self) -> Duration {
         match self {
-            CacheLevel::Connection => Duration::from_secs(30 * 60), // 30分钟
-            CacheLevel::Database => Duration::from_secs(15 * 60),   // 15分钟
-            CacheLevel::Table => Duration::from_secs(10 * 60),      // 10分钟
-            CacheLevel::Detail => Duration::from_secs(5 * 60),      // 5分钟
+            CacheLevel::Connection => Duration::from_secs(5 * 60), // 5分钟
+            CacheLevel::Database => Duration::from_secs(3 * 60),   // 3分钟
+            CacheLevel::Table => Duration::from_secs(2 * 60),      // 2分钟
+            CacheLevel::Detail => Duration::from_secs(60),          // 1分钟
         }
     }
 }
@@ -398,10 +398,10 @@ pub struct MetadataCacheConfig {
 impl Default for MetadataCacheConfig {
     fn default() -> Self {
         Self {
-            connection_ttl: Duration::from_secs(30 * 60), // 30分钟
-            database_ttl: Duration::from_secs(15 * 60),   // 15分钟
-            table_ttl: Duration::from_secs(10 * 60),      // 10分钟
-            detail_ttl: Duration::from_secs(5 * 60),      // 5分钟
+            connection_ttl: Duration::from_secs(5 * 60), // 5分钟
+            database_ttl: Duration::from_secs(3 * 60),   // 3分钟
+            table_ttl: Duration::from_secs(2 * 60),      // 2分钟
+            detail_ttl: Duration::from_secs(60),          // 1分钟
             max_memory_entries: 10000,
             enable_file_cache: true,
         }
@@ -420,10 +420,34 @@ impl MetadataCacheConfig {
     }
 }
 
+/// 构建缓存文件路径（共用逻辑，消除重复）
+fn build_cache_path(cache_dir: &Path, key: &CacheKey) -> PathBuf {
+    let mut path = cache_dir.join("metadata");
+
+    path = path.join(&key.connection_id);
+
+    if let Some(db) = &key.database {
+        let safe_db = db.replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
+        path = path.join(safe_db);
+    }
+
+    if let Some(schema) = &key.schema {
+        let safe_schema = schema.replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
+        path = path.join(safe_schema);
+    }
+
+    let filename = format!("{}_{}.json",
+        key.object_name.as_deref().unwrap_or("_list"),
+        key.entry_type.as_str()
+    ).replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
+
+    path.join(filename)
+}
+
 /// 元数据缓存管理器
 pub struct MetadataCacheManager {
-    /// 内存缓存
-    memory_cache: DashMap<String, CachedEntry>,
+    /// 内存缓存（moka LRU）
+    memory_cache: Cache<String, CachedEntry>,
     /// 文件缓存目录
     cache_dir: PathBuf,
     /// 缓存配置
@@ -439,11 +463,27 @@ impl MetadataCacheManager {
     /// 使用自定义配置创建缓存管理器
     pub fn with_config(cache_dir: PathBuf, config: MetadataCacheConfig) -> Result<Self> {
         std::fs::create_dir_all(&cache_dir)?;
+
+        let max_ttl = config.connection_ttl
+            .max(config.database_ttl)
+            .max(config.table_ttl)
+            .max(config.detail_ttl);
+
+        let memory_cache = Cache::builder()
+            .max_capacity(config.max_memory_entries as u64)
+            .time_to_idle(max_ttl)
+            .build();
+
         Ok(Self {
-            memory_cache: DashMap::new(),
+            memory_cache,
             cache_dir,
             config,
         })
+    }
+
+    /// 获取缓存目录
+    pub fn cache_dir(&self) -> &PathBuf {
+        &self.cache_dir
     }
 
     /// 获取缓存（优先内存 → 文件）
@@ -456,8 +496,7 @@ impl MetadataCacheManager {
                 debug!("Metadata cache hit (memory): {}", string_key);
                 return Some(entry.data.clone());
             }
-            drop(entry);
-            self.memory_cache.remove(&string_key);
+            self.memory_cache.invalidate(&string_key);
             debug!("Metadata cache expired (memory): {}", string_key);
         }
 
@@ -485,7 +524,7 @@ impl MetadataCacheManager {
         let ttl = self.config.ttl_for_level(level);
         let entry = CachedEntry::with_ttl(data, ttl);
 
-        // 写入内存
+        // 写入内存（moka 自动处理 LRU 淘汰）
         self.memory_cache.insert(string_key.clone(), entry.clone());
         debug!("Metadata cached (memory): {}", string_key);
 
@@ -502,15 +541,12 @@ impl MetadataCacheManager {
                 }
             });
         }
-
-        // LRU 淘汰
-        self.evict_if_needed();
     }
 
     /// 使缓存失效
     pub async fn invalidate(&self, key: &CacheKey) {
         let string_key = key.to_string_key();
-        self.memory_cache.remove(&string_key);
+        self.memory_cache.invalidate(&string_key);
         debug!("Metadata cache invalidated: {}", string_key);
 
         if self.config.enable_file_cache {
@@ -521,9 +557,14 @@ impl MetadataCacheManager {
     /// 使连接下所有缓存失效
     pub async fn invalidate_connection(&self, connection_id: &str) {
         let prefix = format!("{}:", connection_id);
-        let count = self.memory_cache.len();
-        self.memory_cache.retain(|k, _| !k.starts_with(&prefix));
-        let removed = count - self.memory_cache.len();
+        let keys_to_remove: Vec<Arc<String>> = self.memory_cache.iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, _)| k)
+            .collect();
+        let removed = keys_to_remove.len();
+        for key in keys_to_remove {
+            self.memory_cache.invalidate(&*key);
+        }
         debug!(
             "Metadata cache invalidated for connection {}: {} entries removed",
             connection_id, removed
@@ -541,7 +582,13 @@ impl MetadataCacheManager {
     /// 使数据库下所有缓存失效
     pub async fn invalidate_database(&self, connection_id: &str, database: &str) {
         let prefix = format!("{}:{}:", connection_id, database);
-        self.memory_cache.retain(|k, _| !k.starts_with(&prefix));
+        let keys_to_remove: Vec<Arc<String>> = self.memory_cache.iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, _)| k)
+            .collect();
+        for key in keys_to_remove {
+            self.memory_cache.invalidate(&*key);
+        }
         debug!(
             "Metadata cache invalidated for database {}:{}",
             connection_id, database
@@ -600,7 +647,7 @@ impl MetadataCacheManager {
 
     /// 清除所有缓存
     pub async fn clear_all(&self) {
-        self.memory_cache.clear();
+        self.memory_cache.invalidate_all();
         debug!("Metadata cache cleared (memory)");
 
         if self.config.enable_file_cache {
@@ -615,61 +662,14 @@ impl MetadataCacheManager {
     /// 获取缓存统计信息
     pub fn stats(&self) -> MetadataCacheStats {
         MetadataCacheStats {
-            memory_entries: self.memory_cache.len(),
+            memory_entries: self.memory_cache.entry_count() as usize,
             cache_dir: self.cache_dir.clone(),
         }
     }
 
-    /// LRU 淘汰
-    fn evict_if_needed(&self) {
-        if self.memory_cache.len() <= self.config.max_memory_entries {
-            return;
-        }
-
-        // 收集所有条目及其缓存时间
-        let mut entries: Vec<(String, SystemTime)> = self
-            .memory_cache
-            .iter()
-            .map(|e| (e.key().clone(), e.cached_at))
-            .collect();
-
-        // 按缓存时间排序（最老的在前）
-        entries.sort_by_key(|(_, time)| *time);
-
-        // 移除最老的 10%
-        let remove_count = self.config.max_memory_entries / 10;
-        for (key, _) in entries.into_iter().take(remove_count) {
-            self.memory_cache.remove(&key);
-        }
-
-        debug!(
-            "Metadata cache evicted {} entries",
-            remove_count
-        );
-    }
-
     /// 获取缓存文件路径
     fn cache_file_path(&self, key: &CacheKey) -> PathBuf {
-        let mut path = self.cache_dir.join("metadata");
-
-        path = path.join(&key.connection_id);
-
-        if let Some(db) = &key.database {
-            let safe_db = db.replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
-            path = path.join(safe_db);
-        }
-
-        if let Some(schema) = &key.schema {
-            let safe_schema = schema.replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
-            path = path.join(safe_schema);
-        }
-
-        let filename = format!("{}_{}.json",
-            key.object_name.as_deref().unwrap_or("_list"),
-            key.entry_type.as_str()
-        ).replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
-
-        path.join(filename)
+        build_cache_path(&self.cache_dir, key)
     }
 
     /// 从文件加载缓存
@@ -690,28 +690,13 @@ impl MetadataCacheManager {
         key: &CacheKey,
         entry: &CachedEntry,
     ) -> Result<()> {
-        let mut path = cache_dir.join("metadata");
-        path = path.join(&key.connection_id);
-
-        if let Some(db) = &key.database {
-            let safe_db = db.replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
-            path = path.join(safe_db);
-        }
-
-        if let Some(schema) = &key.schema {
-            let safe_schema = schema.replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
-            path = path.join(safe_schema);
-        }
+        let file_path = build_cache_path(cache_dir, key);
 
         // 确保目录存在
-        fs::create_dir_all(&path).await?;
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
 
-        let filename = format!("{}_{}.json",
-            key.object_name.as_deref().unwrap_or("_list"),
-            key.entry_type.as_str()
-        ).replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
-
-        let file_path = path.join(filename);
         let content = serde_json::to_string_pretty(entry)?;
         fs::write(&file_path, content).await?;
 
@@ -784,19 +769,19 @@ mod tests {
     fn test_cache_level_ttl() {
         assert_eq!(
             CacheLevel::Connection.default_ttl(),
-            Duration::from_secs(30 * 60)
+            Duration::from_secs(5 * 60)
         );
         assert_eq!(
             CacheLevel::Database.default_ttl(),
-            Duration::from_secs(15 * 60)
+            Duration::from_secs(3 * 60)
         );
         assert_eq!(
             CacheLevel::Table.default_ttl(),
-            Duration::from_secs(10 * 60)
+            Duration::from_secs(2 * 60)
         );
         assert_eq!(
             CacheLevel::Detail.default_ttl(),
-            Duration::from_secs(5 * 60)
+            Duration::from_secs(60)
         );
     }
 

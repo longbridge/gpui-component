@@ -110,6 +110,7 @@ sqlparser = "0.60.0"
 unicode_categories = "0.1.1"
 uuid = { version = "1.18.0", features = ["v4", "serde"] }
 dashmap = "5.5.3"
+moka = { version = "0.12", features = ["sync"] }
 thiserror="2.0.14"
 llm-connector = { version = "0.5.13", features = ["streaming"] }
 redis_client = { package = "redis", version = "0.27", features = ["tokio-comp", "cluster-async"] }

@@ -17,7 +17,9 @@ use crate::types::{
 use anyhow::Result;
 use gpui::{App, Global};
 use one_core::storage::manager::get_config_dir;
+use std::path::Path;
 use std::sync::Arc;
+use tracing::{debug, info, warn};
 
 /// 全局缓存状态
 #[derive(Clone)]
@@ -415,19 +417,72 @@ impl GlobalNodeCache {
         self.ddl_invalidator.invalidate(connection_id, &event).await;
     }
 
-    /// 解析 SQL 并触发 DDL 失效
+    /// 解析 SQL 并触发 DDL 失效（MetadataCache + NodeCache）
+    ///
+    /// 返回解析到的 DDL 事件信息（connection_id, database, schema），供调用方发射 SchemaChanged 事件。
+    /// 支持多语句：返回第一个 DDL 事件的范围信息。
     pub async fn process_sql_for_invalidation(
         &self,
         connection_id: &str,
         sql: &str,
         current_database: &str,
         current_schema: Option<&str>,
-    ) {
-        if let Some(event) =
-            DdlInvalidator::parse_ddl_event(sql, current_database, current_schema)
-        {
-            // 同步失效，确保后续查询能获取最新数据
-            self.ddl_invalidator.invalidate(connection_id, &event).await;
+        cache_ctx: Option<&CacheContext>,
+    ) -> Option<(String, String, Option<String>)> {
+        let events = DdlInvalidator::parse_ddl_events(sql, current_database, current_schema);
+
+        if events.is_empty() {
+            return None;
+        }
+
+        // 提取第一个事件的 database 和 schema 信息用于返回
+        let (database, schema) = Self::extract_ddl_scope(&events[0]);
+
+        // 同步失效 MetadataCache（处理所有事件）
+        for event in &events {
+            self.ddl_invalidator.invalidate(connection_id, event).await;
+        }
+
+        // 同步失效 NodeCache
+        if let Some(ctx) = cache_ctx {
+            self.node_cache.clear_connection_cache(ctx).await;
+        }
+
+        Some((connection_id.to_string(), database, schema))
+    }
+
+    /// 从 DDL 事件中提取数据库和 schema 信息
+    fn extract_ddl_scope(event: &DdlEvent) -> (String, Option<String>) {
+        match event {
+            DdlEvent::CreateTable { database, schema, .. }
+            | DdlEvent::AlterTable { database, schema, .. }
+            | DdlEvent::DropTable { database, schema, .. }
+            | DdlEvent::TruncateTable { database, schema, .. }
+            | DdlEvent::RenameTable { database, schema, .. }
+            | DdlEvent::CreateIndex { database, schema, .. }
+            | DdlEvent::DropIndex { database, schema, .. }
+            | DdlEvent::CreateView { database, schema, .. }
+            | DdlEvent::DropView { database, schema, .. }
+            | DdlEvent::CreateTrigger { database, schema, .. }
+            | DdlEvent::DropTrigger { database, schema, .. }
+            | DdlEvent::CreateSequence { database, schema, .. }
+            | DdlEvent::DropSequence { database, schema, .. } => {
+                (database.clone(), schema.clone())
+            }
+            DdlEvent::CreateSchema { database, schema }
+            | DdlEvent::DropSchema { database, schema } => {
+                (database.clone(), Some(schema.clone()))
+            }
+            DdlEvent::CreateDatabase { database }
+            | DdlEvent::DropDatabase { database } => {
+                (database.clone(), None)
+            }
+            DdlEvent::CreateFunction { database, .. }
+            | DdlEvent::DropFunction { database, .. }
+            | DdlEvent::CreateProcedure { database, .. }
+            | DdlEvent::DropProcedure { database, .. } => {
+                (database.clone(), None)
+            }
         }
     }
 
@@ -466,6 +521,121 @@ impl GlobalNodeCache {
     /// 获取元数据缓存统计信息
     pub fn metadata_stats(&self) -> crate::metadata_cache::MetadataCacheStats {
         self.metadata_cache.stats()
+    }
+
+    /// 启动后台磁盘缓存清理任务
+    ///
+    /// 每 5 分钟扫描缓存目录，删除过期的 JSON 文件和空目录。
+    /// 使用 GPUI background_executor 确保与应用生命周期一致。
+    pub fn start_cleanup_task(&self, cx: &App) {
+        let node_cache_dir = self.node_cache.cache_dir().clone();
+        let metadata_cache_dir = self.metadata_cache.cache_dir().clone();
+
+        cx.background_executor()
+            .spawn(async move {
+                let interval = std::time::Duration::from_secs(5 * 60);
+                loop {
+                    smol::Timer::after(interval).await;
+                    debug!("Running periodic cache cleanup");
+                    Self::cleanup_expired_files(&node_cache_dir).await;
+                    Self::cleanup_expired_files(&metadata_cache_dir.join("metadata")).await;
+                }
+            })
+            .detach();
+    }
+
+    /// 扫描目录并清理过期的缓存 JSON 文件
+    async fn cleanup_expired_files(dir: &Path) {
+        if !dir.exists() {
+            return;
+        }
+
+        let dir = dir.to_path_buf();
+        let result = smol::unblock(move || {
+            let mut removed_count = 0usize;
+            if let Err(e) = Self::cleanup_dir_recursive_sync(&dir, &mut removed_count) {
+                warn!("Error during cache cleanup of {}: {}", dir.display(), e);
+            }
+            removed_count
+        }).await;
+
+        if result > 0 {
+            info!(
+                "Cache cleanup: removed {} expired files",
+                result
+            );
+        }
+    }
+
+    /// 递归清理目录中的过期文件（同步版本，在 smol::unblock 中运行）
+    fn cleanup_dir_recursive_sync(dir: &Path, removed_count: &mut usize) -> Result<()> {
+        let entries = std::fs::read_dir(dir)?;
+        let mut empty_subdirs = vec![];
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                Self::cleanup_dir_recursive_sync(&path, removed_count)?;
+                // 检查子目录是否为空
+                if std::fs::read_dir(&path)?.next().is_none() {
+                    empty_subdirs.push(path);
+                }
+            } else if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                if Self::is_cache_file_expired_sync(&path) {
+                    if let Err(e) = std::fs::remove_file(&path) {
+                        warn!("Failed to remove expired cache file {}: {}", path.display(), e);
+                    } else {
+                        *removed_count += 1;
+                    }
+                }
+            }
+        }
+
+        // 清理空目录
+        for empty_dir in empty_subdirs {
+            let _ = std::fs::remove_dir(&empty_dir);
+        }
+
+        Ok(())
+    }
+
+    /// 检查缓存文件是否过期（同步版本）
+    fn is_cache_file_expired_sync(path: &Path) -> bool {
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => return true,
+        };
+
+        // 尝试解析为 CachedEntry（MetadataCache 格式）
+        if let Ok(entry) = serde_json::from_str::<crate::metadata_cache::CachedEntry>(&content) {
+            return entry.is_expired();
+        }
+
+        // 尝试解析通用格式（NodeCache 格式）
+        #[derive(serde::Deserialize)]
+        struct CacheTimestamp {
+            cached_at: std::time::SystemTime,
+            ttl_millis: u64,
+        }
+
+        if let Ok(ts) = serde_json::from_str::<CacheTimestamp>(&content) {
+            return match ts.cached_at.elapsed() {
+                Ok(elapsed) => elapsed.as_millis() as u64 > ts.ttl_millis,
+                Err(_) => true,
+            };
+        }
+
+        // 无法解析的文件：检查文件修改时间，超过 1 小时视为过期
+        if let Ok(metadata) = std::fs::metadata(path) {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(age) = modified.elapsed() {
+                    return age.as_secs() > 3600;
+                }
+            }
+        }
+
+        true
     }
 }
 
