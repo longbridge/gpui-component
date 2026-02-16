@@ -39,5 +39,8 @@ one-core.workspace = true
 one-ui.workspace = true
 reqwest_client.workspace = true
 
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource = "0.1"
+
 [lints]
 workspace = true

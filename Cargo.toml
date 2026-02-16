@@ -165,6 +165,12 @@ codegen-units = 16
 debug = "limited"
 split-debuginfo = "unpacked"
 
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
 [profile.dev.package]
 resvg = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }

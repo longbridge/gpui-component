@@ -82,9 +82,11 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "ONETCLI_VERSION=${{ github.ref_name }}" >> "$GITHUB_ENV"
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+            echo "ONETCLI_VERSION=${VERSION}" >> "$GITHUB_ENV"
           else
-            echo "ONETCLI_VERSION=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+            echo "ONETCLI_VERSION=0.0.0-dev.$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
           fi
 
       - name: Build release binary
@@ -93,12 +95,27 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: cargo build --release -p main --target ${{ matrix.target }}
 
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Create macOS app bundle
+        if: runner.os == 'macOS'
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.archive }} ${{ matrix.binary }}
-          cd ../../..
+          chmod +x script/bundle-macos.sh
+          script/bundle-macos.sh ${{ matrix.target }}
+          tar czf ${{ matrix.archive }} -C target OnetCli.app
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p package/usr/bin
+          mkdir -p package/usr/share/applications
+          mkdir -p package/usr/share/icons/hicolor/128x128/apps
+          mkdir -p package/usr/share/icons/hicolor/256x256/apps
+          mkdir -p package/usr/share/icons/hicolor/512x512/apps
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} package/usr/bin/
+          cp resources/linux/onetcli.desktop package/usr/share/applications/
+          cp resources/linux/onetcli-128.png package/usr/share/icons/hicolor/128x128/apps/onetcli.png
+          cp resources/linux/onetcli-256.png package/usr/share/icons/hicolor/256x256/apps/onetcli.png
+          cp resources/linux/onetcli-512.png package/usr/share/icons/hicolor/512x512/apps/onetcli.png
+          tar czf ${{ matrix.archive }} -C package .
 
       - name: Package (Windows)
         if: runner.os == 'Windows'

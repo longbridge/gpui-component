@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>OnetCli</string>
+    <key>CFBundleDisplayName</key>
+    <string>OnetCli</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.onetcli.app</string>
+    <key>CFBundleVersion</key>
+    <string>${ONETCLI_VERSION}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${ONETCLI_VERSION}</string>
+    <key>CFBundleExecutable</key>
+    <string>onetcli</string>
+    <key>CFBundleIconFile</key>
+    <string>OnetCli</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+</dict>
+</plist>

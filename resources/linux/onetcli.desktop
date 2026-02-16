@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=OnetCli
+Comment=One Net Client - Database, SSH, Terminal, AI Tools
+Exec=onetcli
+Icon=onetcli
+Type=Application
+Categories=Development;Utility;Database;
+Terminal=false
+StartupWMClass=onetcli
+MimeType=
+Keywords=database;ssh;sftp;terminal;redis;mongodb;postgresql;mysql;
