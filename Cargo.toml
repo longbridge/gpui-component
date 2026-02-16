@@ -160,6 +160,12 @@ style = { level = "allow", priority = -1 }
 todo = "deny"
 type_complexity = "allow"
 
+[workspace.lints.rust.unexpected_cfgs]
+level = "allow"
+check-cfg = [
+    'cfg(feature, values("tree-sitter-bash", "tree-sitter-c", "tree-sitter-c-sharp", "tree-sitter-cmake", "tree-sitter-cpp", "tree-sitter-css", "tree-sitter-diff", "tree-sitter-elixir", "tree-sitter-embedded-template", "tree-sitter-go", "tree-sitter-graphql", "tree-sitter-html", "tree-sitter-java", "tree-sitter-javascript", "tree-sitter-jsdoc", "tree-sitter-kotlin-sg", "tree-sitter-make", "tree-sitter-md", "tree-sitter-php", "tree-sitter-proto", "tree-sitter-python", "tree-sitter-ruby", "tree-sitter-rust", "tree-sitter-scala", "tree-sitter-sequel", "tree-sitter-svelte-next", "tree-sitter-swift", "tree-sitter-toml-ng", "tree-sitter-typescript", "tree-sitter-yaml", "tree-sitter-zig"))',
+]
+
 [profile.dev]
 codegen-units = 16
 debug = "limited"
@@ -167,7 +173,7 @@ split-debuginfo = "unpacked"
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 strip = true
 

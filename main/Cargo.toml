@@ -11,7 +11,7 @@ path = "src/main.rs"
 [dependencies]
 gpui = { workspace = true }
 gpui-macros = { workspace = true }
-gpui-component = { workspace = true, features = ["tree-sitter-languages"] }
+gpui-component = { workspace = true, features = ["tree-sitter-essential"] }
 gpui-component-assets = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }

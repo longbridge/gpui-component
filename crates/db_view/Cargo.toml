@@ -19,7 +19,7 @@ rand = "0.8"
 smol.workspace = true
 gpui.workspace = true
 db.workspace = true
-gpui-component = { workspace = true, features = ["tree-sitter-languages"] }
+gpui-component = { workspace = true, features = ["tree-sitter-essential"] }
 one-ui.workspace = true
 one-core.workspace = true
 sum-tree.workspace = true

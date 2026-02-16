@@ -18,38 +18,43 @@ doctest = false
 decimal = ["dep:rust_decimal"]
 inspector = ["gpui-macros/inspector", "gpui/inspector"]
 
-# For syntax highlighting in Markdown and CodeEditor.
-tree-sitter-languages = [
+# Essential languages for database/SSH/terminal tools.
+tree-sitter-essential = [
     "dep:tree-sitter-bash",
+    "dep:tree-sitter-css",
+    "dep:tree-sitter-diff",
+    "dep:tree-sitter-html",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-jsdoc",
+    "dep:tree-sitter-md",
+    "dep:tree-sitter-python",
+    "dep:tree-sitter-sequel",
+    "dep:tree-sitter-toml-ng",
+    "dep:tree-sitter-yaml",
+]
+
+# All languages for syntax highlighting in Markdown and CodeEditor.
+tree-sitter-languages = [
+    "tree-sitter-essential",
     "dep:tree-sitter-c",
     "dep:tree-sitter-c-sharp",
     "dep:tree-sitter-cmake",
     "dep:tree-sitter-cpp",
-    "dep:tree-sitter-css",
-    "dep:tree-sitter-diff",
     "dep:tree-sitter-elixir",
     "dep:tree-sitter-embedded-template",
     "dep:tree-sitter-go",
     "dep:tree-sitter-graphql",
-    "dep:tree-sitter-html",
     "dep:tree-sitter-java",
-    "dep:tree-sitter-javascript",
-    "dep:tree-sitter-jsdoc",
     "dep:tree-sitter-kotlin-sg",
     "dep:tree-sitter-make",
-    "dep:tree-sitter-md",
     "dep:tree-sitter-php",
     "dep:tree-sitter-proto",
-    "dep:tree-sitter-python",
     "dep:tree-sitter-ruby",
     "dep:tree-sitter-rust",
     "dep:tree-sitter-scala",
-    "dep:tree-sitter-sequel",
     "dep:tree-sitter-swift",
-    "dep:tree-sitter-toml-ng",
     "dep:tree-sitter-typescript",
     "dep:tree-sitter-svelte-next",
-    "dep:tree-sitter-yaml",
     "dep:tree-sitter-zig",
 ]
 
