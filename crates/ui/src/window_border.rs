@@ -66,7 +66,7 @@ impl ParentElement for WindowBorder {
 impl RenderOnce for WindowBorder {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let decorations = window.window_decorations();
-        let effective_shadow = match decorations {
+        let effective_shadow_size = match decorations {
             Decorations::Client { tiling }
                 if tiling.top && tiling.bottom && tiling.left && tiling.right =>
             {
@@ -74,7 +74,7 @@ impl RenderOnce for WindowBorder {
             }
             _ => SHADOW_SIZE,
         };
-        window.set_client_inset(SHADOW_SIZE);
+        window.set_client_inset(effective_shadow_size);
 
         div()
             .id("window-backdrop")
