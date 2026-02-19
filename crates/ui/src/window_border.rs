@@ -66,6 +66,14 @@ impl ParentElement for WindowBorder {
 impl RenderOnce for WindowBorder {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let decorations = window.window_decorations();
+        let effective_shadow = match decorations {
+            Decorations::Client { tiling }
+                if tiling.top && tiling.bottom && tiling.left && tiling.right =>
+            {
+                px(0.0)
+            }
+            _ => SHADOW_SIZE,
+        };
         window.set_client_inset(SHADOW_SIZE);
 
         div()
@@ -89,6 +97,12 @@ impl RenderOnce for WindowBorder {
                             move |_bounds, hitbox, window, _| {
                                 let mouse = window.mouse_position();
                                 let size = window.window_bounds().get_bounds().size;
+                                let Decorations::Client { tiling } = window.window_decorations() else {
+                                    return;
+                                };
+                                if tiling.top && tiling.bottom && tiling.left && tiling.right {
+                                    return;
+                                }
                                 let Some(edge) = resize_edge(mouse, SHADOW_SIZE, size) else {
                                     return;
                                 };
@@ -125,6 +139,12 @@ impl RenderOnce for WindowBorder {
                     .when(!tiling.left, |div| div.pl(SHADOW_SIZE))
                     .when(!tiling.right, |div| div.pr(SHADOW_SIZE))
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
+                        let Decorations::Client { tiling } = window.window_decorations() else {
+                            return;
+                        };
+                        if tiling.top && tiling.bottom && tiling.left && tiling.right {
+                            return;
+                        }
                         let size = window.window_bounds().get_bounds().size;
                         let pos = window.mouse_position();
 
