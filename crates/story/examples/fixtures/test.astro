@@ -1,0 +1,131 @@
+---
+// @ts-nocheck
+// This file demonstrates Astro 5 syntax highlighting features.
+// Frontmatter: TypeScript/JavaScript code that runs at build time
+
+import type { GetStaticPaths } from 'astro';
+
+interface Props {
+	title: string;
+	count?: number;
+}
+
+const { title, count = 0 } = Astro.props;
+const currentYear = new Date().getFullYear();
+
+const items = ['Astro', 'TypeScript', 'React', 'Vue'];
+const isProduction = import.meta.env.PROD;
+
+function formatGreeting(name: string): string {
+	return `Hello, ${name}!`;
+}
+
+const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'https://api.example.com';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<title>{title} - Astro 5 Demo</title>
+		<style>
+			.container {
+				max-width: 800px;
+				margin: 0 auto;
+				padding: 2rem;
+				font-family: system-ui, sans-serif;
+			}
+
+			.highlight {
+				color: #ff5d01;
+				font-weight: bold;
+			}
+
+			.card {
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				padding: 1.5rem;
+				border-radius: 8px;
+				color: white;
+			}
+
+			@media (prefers-color-scheme: dark) {
+				.container {
+					background: #1a1a1a;
+					color: #fff;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h1 class="highlight">{formatGreeting(title)}</h1>
+
+			<p>Current year: <strong>{currentYear}</strong></p>
+			<p>
+				Environment: <span class="highlight"
+					>{isProduction ? 'Production' : 'Development'}</span
+				>
+			</p>
+
+			{
+				count > 0 && (
+					<div class="card">
+						<p>
+							You have {count} {count === 1 ? 'item' : 'items'}
+						</p>
+					</div>
+				)
+			}
+
+			<ul>
+				{
+					items.map((item, index) => (
+						<li key={index}>
+							<a href={`/${item.toLowerCase()}`}>{item}</a>
+						</li>
+					))
+				}
+			</ul>
+
+			<p>
+				{items.length > 0 ? `Found ${items.length} technologies` : 'No technologies found'}
+			</p>
+
+			<div
+				data-count={count}
+				data-env={import.meta.env.MODE}
+				class:list={['card', { highlight: count > 5 }]}
+			>
+				<p>Interactive card with dynamic attributes</p>
+			</div>
+		</div>
+
+		<script>
+			interface Config {
+				theme: 'light' | 'dark';
+				debug: boolean;
+			}
+
+			const config: Config = {
+				theme: 'dark',
+				debug: false
+			};
+
+			const initializeApp = async (): Promise<void> => {
+				console.log('Astro app initialized');
+
+				const data = await fetch('/api/data')
+					.then((res) => res.json())
+					.catch((err) => console.error('Fetch error:', err));
+
+				const count = data?.items?.length ?? 0;
+				console.log(`Found ${count} items`);
+			};
+
+			document.addEventListener('DOMContentLoaded', () => {
+				initializeApp();
+			});
+		</script>
+	</body>
+</html>

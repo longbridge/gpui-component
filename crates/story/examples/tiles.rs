@@ -104,7 +104,7 @@ impl Panel for ContainerPanel {
                 .w_24()
                 .h_6()
                 .px_0p5()
-                .rounded_lg()
+                .rounded(cx.theme().radius_lg)
                 .border_1()
                 .border_color(cx.theme().input)
                 .child(Input::new(&self.search_state).xsmall().appearance(false))

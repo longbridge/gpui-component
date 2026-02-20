@@ -507,6 +507,9 @@ cx.subscribe_in(&state, window, |view, table, event, _, cx| {
             // Show cell-specific context menu
             show_cell_context_menu(row_ix, col_ix);
         }
+        TableEvent::ClearSelection => {
+            println!("Selection cleared");
+        }
         _ => {}
     }
 }).detach();

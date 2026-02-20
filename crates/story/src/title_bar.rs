@@ -124,6 +124,11 @@ impl FontSizeSelector {
         cx: &mut Context<Self>,
     ) {
         Theme::global_mut(cx).radius = px(radius.0 as f32);
+        Theme::global_mut(cx).radius_lg = if cx.theme().radius > px(0.) {
+            cx.theme().radius + px(2.)
+        } else {
+            px(0.)
+        };
         window.refresh();
     }
 

@@ -322,7 +322,7 @@ fn chart_container(
         .h_full()
         .border_1()
         .border_color(cx.theme().border)
-        .rounded_lg()
+        .rounded(cx.theme().radius_lg)
         .p_4()
         .child(
             div()

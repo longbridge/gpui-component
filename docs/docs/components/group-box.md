@@ -276,7 +276,7 @@ GroupBox::new()
     .outline()
     .border_2()
     .border_color(cx.theme().accent)
-    .rounded_lg()
+    .rounded(cx.theme().radius_lg)
     .title("Custom Styled Group Box")
     .title_style(
         StyleRefinement::default()

@@ -141,7 +141,7 @@ v_flex()
     .p_4()
     .border_1()
     .border_color(cx.theme().border)
-    .rounded_lg()
+    .rounded(cx.theme().radius_lg)
     .child(
         h_flex()
             .gap_3()

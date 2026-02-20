@@ -320,7 +320,7 @@ Select::new(&state)
 h_flex()
     .border_1()
     .border_color(cx.theme().input)
-    .rounded_lg()
+    .rounded(cx.theme().radius_lg)
     .w_full()
     .gap_1()
     .child(

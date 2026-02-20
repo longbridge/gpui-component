@@ -1,8 +1,8 @@
 use gpui::{
-    px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window,
+    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Window, px,
 };
-use gpui_component::{skeleton::Skeleton, v_flex};
+use gpui_component::{ActiveTheme as _, skeleton::Skeleton, v_flex};
 
 use crate::section;
 
@@ -49,7 +49,7 @@ impl Focusable for SkeletonStory {
 }
 
 impl Render for SkeletonStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .items_center()
             .gap_y_3()
@@ -60,20 +60,27 @@ impl Render for SkeletonStory {
                     .child(
                         v_flex()
                             .gap_2()
-                            .child(Skeleton::new().w(px(250.)).h_4().rounded_md())
-                            .child(Skeleton::new().w(px(200.)).h_4().rounded_md()),
+                            .child(Skeleton::new().w(px(250.)).h_4().rounded(cx.theme().radius))
+                            .child(Skeleton::new().w(px(200.)).h_4().rounded(cx.theme().radius)),
                     ),
             )
             .child(
                 section("Card").max_w_md().child(
                     v_flex()
                         .gap_2()
-                        .child(Skeleton::new().w(px(250.)).h(px(125.)).rounded_md())
+                        .child(
+                            Skeleton::new()
+                                .w(px(250.))
+                                .h(px(125.))
+                                .rounded(cx.theme().radius),
+                        )
                         .child(
                             v_flex()
                                 .gap_2()
-                                .child(Skeleton::new().w(px(250.)).h_4().rounded_md())
-                                .child(Skeleton::new().w(px(200.)).h_4().rounded_md()),
+                                .child(Skeleton::new().w(px(250.)).h_4().rounded(cx.theme().radius))
+                                .child(
+                                    Skeleton::new().w(px(200.)).h_4().rounded(cx.theme().radius),
+                                ),
                         ),
                 ),
             )
