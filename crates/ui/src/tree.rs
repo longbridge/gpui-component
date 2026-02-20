@@ -338,6 +338,10 @@ impl TreeState {
         }
     }
 
+    pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
+        self.focus_handle.focus(window, cx);
+    }
+
     fn on_action_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(selected_ix) = self.selected_ix {
             if let Some(entry) = self.entries.get(selected_ix) {
