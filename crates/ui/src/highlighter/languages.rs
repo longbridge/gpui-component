@@ -13,6 +13,7 @@ pub enum Language {
 pub enum Language {
     Json,
     Plain,
+    Astro,
     Bash,
     C,
     CMake,
@@ -67,6 +68,7 @@ impl Language {
         #[cfg(feature = "tree-sitter-languages")]
         match self {
             Self::Plain => "text",
+            Self::Astro => "astro",
             Self::Bash => "bash",
             Self::C => "c",
             Self::CMake => "cmake",
@@ -112,6 +114,7 @@ impl Language {
 
         #[cfg(feature = "tree-sitter-languages")]
         match s {
+            "astro" => Self::Astro,
             "bash" | "sh" => Self::Bash,
             "c" => Self::C,
             "cmake" => Self::CMake,
@@ -174,6 +177,7 @@ impl Language {
                 "yaml",
                 "graphql",
             ],
+            Self::Astro => vec!["html", "css", "javascript", "typescript"],
             Self::Php => vec![
                 "php",
                 "html",
@@ -379,6 +383,12 @@ impl Language {
                 tree_sitter_php::LANGUAGE_PHP,
                 tree_sitter_php::HIGHLIGHTS_QUERY,
                 include_str!("languages/php/injections.scm"),
+                "",
+            ),
+            Self::Astro => (
+                tree_sitter_astro_next::LANGUAGE,
+                tree_sitter_astro_next::HIGHLIGHTS_QUERY,
+                tree_sitter_astro_next::INJECTIONS_QUERY,
                 "",
             ),
             Self::Kotlin => (

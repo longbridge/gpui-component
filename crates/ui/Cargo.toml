@@ -20,6 +20,7 @@ inspector = ["gpui-macros/inspector", "gpui/inspector"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
+    "dep:tree-sitter-astro-next",
     "dep:tree-sitter-bash",
     "dep:tree-sitter-c",
     "dep:tree-sitter-c-sharp",
@@ -96,6 +97,7 @@ chrono = "0.4.38"
 aho-corasick = "1.1.3"
 lsp-types.workspace = true
 tree-sitter = "0.25.4"
+tree-sitter-astro-next = { version="0.1.1", optional = true }
 tree-sitter-bash = { version = "0.23.3", optional = true }
 tree-sitter-c = { version = "0.24.1", optional = true }
 tree-sitter-c-sharp = { version = "0.23.1", optional = true }
