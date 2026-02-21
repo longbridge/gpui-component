@@ -299,6 +299,31 @@ impl SheetStory {
                                 }),
                         )
                         .child(
+                            Button::new("confirm-dialog-from-sheet")
+                                .child("Open Confirm Dialog")
+                                .on_click(|_, window, cx| {
+                                    window.open_dialog(cx, move |dialog, _, _| {
+                                        dialog
+                                            .confirm()
+                                            .child("Confirm dialog opened from sheet.")
+                                            .on_ok(|_, window, cx| {
+                                                window.push_notification(
+                                                    "You have pressed ok.",
+                                                    cx,
+                                                );
+                                                true
+                                            })
+                                            .on_cancel(|_, window, cx| {
+                                                window.push_notification(
+                                                    "You have pressed cancel.",
+                                                    cx,
+                                                );
+                                                true
+                                            })
+                                    });
+                                }),
+                        )
+                        .child(
                             List::new(&list)
                                 .border_1()
                                 .border_color(cx.theme().border)
