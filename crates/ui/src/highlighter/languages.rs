@@ -35,6 +35,7 @@ pub enum Language {
     Make,
     Markdown,
     MarkdownInline,
+    Ocaml,
     Php,
     Proto,
     Python,
@@ -92,6 +93,7 @@ impl Language {
             Self::Make => "make",
             Self::Markdown => "markdown",
             Self::MarkdownInline => "markdown_inline",
+            Self::Ocaml => "ocaml",
             Self::Php => "php",
             Self::Proto => "proto",
             Self::Python => "python",
@@ -139,6 +141,7 @@ impl Language {
             "make" | "makefile" => Self::Make,
             "markdown" | "md" | "mdx" => Self::Markdown,
             "markdown_inline" | "markdown-inline" => Self::MarkdownInline,
+            "ml" | "mli" => Self::Ocaml,
             "php" | "php3" | "php4" | "php5" | "phtml" => Self::Php,
             "proto" | "protobuf" => Self::Proto,
             "python" | "py" => Self::Python,
@@ -411,6 +414,12 @@ impl Language {
                 tree_sitter_svelte_next::HIGHLIGHTS_QUERY,
                 tree_sitter_svelte_next::INJECTIONS_QUERY,
                 tree_sitter_svelte_next::LOCALS_QUERY,
+            ),
+            Self::Ocaml => (
+                tree_sitter_ocaml::LANGUAGE_OCAML,
+                tree_sitter_ocaml::HIGHLIGHTS_QUERY,
+                "",
+                tree_sitter_ocaml::LOCALS_QUERY,
             ),
         };
 
