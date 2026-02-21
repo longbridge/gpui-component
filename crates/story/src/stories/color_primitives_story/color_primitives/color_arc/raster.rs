@@ -2,7 +2,7 @@ use super::arc::{ColorArcDelegate, ColorArcEvent, ColorArcState};
 use super::common::{arc_contains_turn, size_px as component_size_px, turn_to_position};
 use crate::stories::color_primitives_story::color_slider::color_spec::Hsv;
 use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, PixelsExt as _, Size as ComponentSize};
+use gpui_component::{ActiveTheme as _, Size as ComponentSize};
 use std::cell::RefCell;
 use std::f32::consts::TAU;
 use std::sync::Arc;

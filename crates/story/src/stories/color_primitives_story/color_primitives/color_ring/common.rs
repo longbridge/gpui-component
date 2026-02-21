@@ -1,5 +1,4 @@
 use gpui::{px, Bounds, Modifiers, Pixels, Point};
-use gpui_component::PixelsExt as _;
 use std::f32::consts::TAU;
 
 #[derive(Clone, Copy)]

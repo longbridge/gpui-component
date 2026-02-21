@@ -3,7 +3,7 @@ use super::color_arc::{
 };
 use crate::section;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, PixelsExt as _, Sizable};
+use gpui_component::{h_flex, v_flex, Sizable};
 
 const ARC_GAP_DEGREES: f32 = 8.0;
 const ARC_ROTATION_DEGREES: f32 = 90.0;

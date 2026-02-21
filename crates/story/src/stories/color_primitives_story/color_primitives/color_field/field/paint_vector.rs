@@ -2,7 +2,6 @@ use super::super::domain::FieldDomain2D;
 use super::super::model::{ColorFieldModel2D, ColorFieldModelKind};
 use crate::stories::color_primitives_story::color_spec::Hsv;
 use gpui::*;
-use gpui_component::PixelsExt as _;
 use std::f32::consts::PI;
 
 pub(super) fn paint_domain_background(

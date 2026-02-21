@@ -1,7 +1,7 @@
 pub use super::color_thumb::ThumbShape;
 use super::color_thumb::{ColorThumb, ThumbAxis, TrackEndcaps, bar_main_axis_size};
 use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, ElementExt, PixelsExt as _, Sizable, Size, StyledExt as _};
+use gpui_component::{ActiveTheme as _, ElementExt, Sizable, Size, StyledExt as _};
 
 pub mod sizing {
     pub const TRACK_THICKNESS_XSMALL: f32 = 4.0;

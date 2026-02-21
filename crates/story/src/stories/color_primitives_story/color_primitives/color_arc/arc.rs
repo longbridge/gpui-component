@@ -7,7 +7,7 @@ use super::common::{
 };
 use crate::stories::color_primitives_story::color_slider::color_thumb::{ColorThumb, ThumbShape};
 use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, ElementExt, PixelsExt as _, Sizable, Size, StyledExt as _};
+use gpui_component::{ActiveTheme as _, ElementExt, Sizable, Size, StyledExt as _};
 
 pub mod sizing {
     pub const ARC_THICKNESS_XSMALL: f32 = 7.0;

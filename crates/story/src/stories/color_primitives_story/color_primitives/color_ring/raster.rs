@@ -5,7 +5,7 @@ use super::common::{
 use super::ring::{ColorRingDelegate, ColorRingEvent, ColorRingState};
 use crate::stories::color_primitives_story::color_slider::color_spec::Hsv;
 use gpui::{prelude::*, *};
-use gpui_component::{PixelsExt as _, Size as ComponentSize};
+use gpui_component::{Size as ComponentSize};
 use std::cell::RefCell;
 use std::f32::consts::TAU;
 use std::sync::Arc;

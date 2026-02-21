@@ -9,7 +9,7 @@ use super::super::delegates::ChannelDelegate;
 use super::super::mouse_behavior::MouseCursorDecision;
 use super::color_text_label::ColorTextLabel;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, ActiveTheme as _, Colorize as _, PixelsExt as _, Sizable, Size};
+use gpui_component::{h_flex, v_flex, ActiveTheme as _, Colorize as _, Sizable, Size};
 use std::sync::Arc;
 
 // Composition overview:

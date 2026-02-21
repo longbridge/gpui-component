@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use gpui::{px, Bounds, Pixels, Point};
-use gpui_component::PixelsExt as _;
 use std::f32::consts::TAU;
 
 #[derive(Clone, Copy)]

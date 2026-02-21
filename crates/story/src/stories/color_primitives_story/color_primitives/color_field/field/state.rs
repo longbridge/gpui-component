@@ -10,7 +10,6 @@ use crate::stories::color_primitives_story::mouse_behavior::{
     resolve_shared_mouse_preset, MouseCursorDecision, SharedMousePreset, SharedMousePresetContext,
 };
 use gpui::{prelude::*, *};
-use gpui_component::PixelsExt as _;
 use std::sync::Arc;
 
 const EDGE_TO_EDGE_THUMB_LIMIT_INSET_PX: f32 = 5.0;

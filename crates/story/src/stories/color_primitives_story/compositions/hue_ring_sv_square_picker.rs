@@ -3,7 +3,7 @@ use super::super::color_ring::{ColorRingEvent, ColorRingState, HueRingDelegate};
 use super::super::color_spec::{ColorSpecification, Hsv};
 use super::color_text_label::ColorTextLabel;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Colorize, PixelsExt as _, Sizable};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Colorize, Sizable};
 use std::f32::consts::SQRT_2;
 
 pub struct HueRingSvSquarePickerState {

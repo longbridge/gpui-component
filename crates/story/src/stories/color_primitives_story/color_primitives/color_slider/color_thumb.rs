@@ -1,5 +1,4 @@
 use gpui::{prelude::*, *};
-use gpui_component::PixelsExt as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum ThumbShape {

@@ -2,7 +2,6 @@ use super::super::domain::FieldDomain2D;
 use super::super::model::{ColorFieldModel2D, ColorFieldModelKind};
 use crate::stories::color_primitives_story::color_spec::Hsv;
 use gpui::{black, white, *};
-use gpui_component::PixelsExt as _;
 use std::sync::Arc;
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 

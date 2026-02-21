@@ -9,7 +9,7 @@ use crate::stories::color_primitives_story::mouse_behavior::{
     resolve_shared_mouse_preset, MouseCursorDecision, SharedMousePreset, SharedMousePresetContext,
 };
 use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, ElementExt, PixelsExt as _, Sizable, Size, StyledExt as _};
+use gpui_component::{ActiveTheme as _, ElementExt, Sizable, Size, StyledExt as _};
 use std::sync::Arc;
 
 pub mod sizing {

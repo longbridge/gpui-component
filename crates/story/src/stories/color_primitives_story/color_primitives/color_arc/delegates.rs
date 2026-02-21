@@ -5,8 +5,7 @@ use crate::stories::color_primitives_story::color_slider::color_spec::Hsv;
 use gpui::{prelude::*, *};
 use gpui_component::{
     plot::shape::{Arc, ArcData},
-    ActiveTheme as _, PixelsExt as _,
-};
+    ActiveTheme as _, };
 use std::f32::consts::TAU;
 
 fn normalize_hue_degrees(hue: f32) -> f32 {
