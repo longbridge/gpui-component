@@ -60,6 +60,7 @@ fn paint_round_cap(window: &mut Window, center: (f32, f32), diameter: f32, color
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_arc_end_caps(
     window: &mut Window,
     bounds: Bounds<Pixels>,

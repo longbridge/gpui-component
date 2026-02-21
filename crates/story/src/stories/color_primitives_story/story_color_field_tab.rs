@@ -1063,6 +1063,7 @@ struct ColorPlaneTestPicker {
 }
 
 impl ColorPlaneTestPicker {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         cx: &mut Context<StoryColorPlanePanel>,
         label: Option<impl Into<String>>,

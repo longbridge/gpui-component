@@ -115,8 +115,7 @@ fn paint_sv_rect_background(window: &mut Window, bounds: Bounds<Pixels>, hue: f3
             90.0,
             linear_color_stop(white(), 0.0),
             linear_color_stop(hsla(0.0, 0.0, 1.0, 0.0), 1.0),
-        )
-        .into(),
+        ),
     );
     paint_quad_fill(
         window,
@@ -125,8 +124,7 @@ fn paint_sv_rect_background(window: &mut Window, bounds: Bounds<Pixels>, hue: f3
             180.0,
             linear_color_stop(hsla(0.0, 0.0, 0.0, 0.0), 0.0),
             linear_color_stop(black(), 1.0),
-        )
-        .into(),
+        ),
     );
 }
 
@@ -143,8 +141,7 @@ fn paint_hs_rect_background(window: &mut Window, bounds: Bounds<Pixels>, value: 
             180.0,
             linear_color_stop(transparent_gray, 0.0),
             linear_color_stop(gray, 1.0),
-        )
-        .into(),
+        ),
     );
 }
 
@@ -158,8 +155,7 @@ fn paint_hv_rect_background(window: &mut Window, bounds: Bounds<Pixels>, saturat
             180.0,
             linear_color_stop(hsla(0.0, 0.0, 0.0, 0.0), 0.0),
             linear_color_stop(black(), 1.0),
-        )
-        .into(),
+        ),
     );
 }
 
@@ -185,8 +181,7 @@ fn paint_hsl_photoshop_rect_background(window: &mut Window, bounds: Bounds<Pixel
             180.0,
             linear_color_stop(white(), 0.0),
             linear_color_stop(hsla(0.0, 0.0, 1.0, 0.0), 1.0),
-        )
-        .into(),
+        ),
     );
 
     paint_quad_fill(
@@ -199,8 +194,7 @@ fn paint_hsl_photoshop_rect_background(window: &mut Window, bounds: Bounds<Pixel
             180.0,
             linear_color_stop(hsla(0.0, 0.0, 0.0, 0.0), 0.0),
             linear_color_stop(black(), 1.0),
-        )
-        .into(),
+        ),
     );
 
     paint_quad_fill(
@@ -246,8 +240,7 @@ fn paint_hue_sweep(window: &mut Window, bounds: Bounds<Pixels>, saturation: f32,
                 90.0,
                 linear_color_stop(hsv_color(start_hue, saturation, value), 0.0),
                 linear_color_stop(hsv_color(end_hue, saturation, value), 1.0),
-            )
-            .into(),
+            ),
         );
     }
 }
@@ -354,8 +347,7 @@ fn paint_sv_domain_background_fast(
                     90.0,
                     linear_color_stop(left, 0.0),
                     linear_color_stop(right, 1.0),
-                )
-                .into(),
+                ),
             );
         }
     }

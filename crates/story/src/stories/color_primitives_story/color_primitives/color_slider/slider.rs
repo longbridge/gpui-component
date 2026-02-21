@@ -88,21 +88,11 @@ pub enum ColorSliderEvent {
     Release(f32),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct ThumbConfig {
     pub position: ThumbPosition,
     pub size: ThumbSize,
     pub shape: ThumbShape,
-}
-
-impl Default for ThumbConfig {
-    fn default() -> Self {
-        Self {
-            position: ThumbPosition::default(),
-            size: ThumbSize::default(),
-            shape: ThumbShape::default(),
-        }
-    }
 }
 
 pub struct SliderDimensions {
@@ -881,7 +871,7 @@ impl RenderOnce for ColorSlider {
 
         let layout = Self::compute_layout(&state);
         let radius = Self::resolve_track_radius(&state, window.rem_size());
-        let container = Self::track_frame(layout, radius.clone(), track_border_color);
+        let container = Self::track_frame(layout, radius, track_border_color);
         let background_element = state
             .delegate
             .style_background(&state, container, window, cx);
@@ -905,7 +895,7 @@ impl RenderOnce for ColorSlider {
             .when(disabled, |this| {
                 this.child(Self::disabled_overlay(
                     layout,
-                    radius.clone(),
+                    radius,
                     disabled_overlay_color,
                 ))
             })

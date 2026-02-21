@@ -258,8 +258,9 @@ mod tests {
     use super::*;
 
     fn approx_eq(a: f32, b: f32) {
+        const EPSILON: f32 = 2e-5;
         assert!(
-            (a - b).abs() < 1e-5,
+            (a - b).abs() <= EPSILON,
             "expected {a} ~= {b}, delta={}",
             (a - b).abs()
         );

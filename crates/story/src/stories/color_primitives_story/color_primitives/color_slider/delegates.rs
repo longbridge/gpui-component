@@ -198,8 +198,7 @@ impl ColorSliderDelegate for HueDelegate {
                                 angle,
                                 linear_color_stop(*start_color, 0.0),
                                 linear_color_stop(*end_color, 1.0),
-                            )
-                            .into(),
+                            ),
                             border_widths: Edges::default(),
                             border_color: transparent_black(),
                             border_style: BorderStyle::default(),
@@ -312,8 +311,7 @@ impl ColorSliderDelegate for GradientDelegate {
                                     angle,
                                     linear_color_stop(start_color, 0.0),
                                     linear_color_stop(end_color, 1.0),
-                                )
-                                .into(),
+                                ),
                                 border_widths: Edges::default(),
                                 border_color: transparent_black(),
                                 border_style: BorderStyle::default(),
@@ -383,8 +381,7 @@ impl ColorSliderDelegate for GradientDelegate {
                                         angle,
                                         linear_color_stop(sub_start_color, 0.0),
                                         linear_color_stop(sub_end_color, 1.0),
-                                    )
-                                    .into(),
+                                    ),
                                     border_widths: Edges::default(),
                                     border_color: transparent_black(),
                                     border_style: BorderStyle::default(),
@@ -547,8 +544,7 @@ impl<S: ColorSpecification> ColorSliderDelegate for AlphaDelegate<S> {
                             angle,
                             linear_color_stop(transparent_color, start),
                             linear_color_stop(opaque_color, end),
-                        )
-                        .into(),
+                        ),
                         border_widths: Edges::default(),
                         border_color: transparent_black(),
                         border_style: BorderStyle::default(),
@@ -703,8 +699,7 @@ impl<S: ColorSpecification> ColorSliderDelegate for ChannelDelegate<S> {
                                 angle,
                                 linear_color_stop(start_color, 0.0),
                                 linear_color_stop(end_color, 1.0),
-                            )
-                            .into(),
+                            ),
                             border_widths: Edges::default(),
                             border_color: transparent_black(),
                             border_style: BorderStyle::default(),
