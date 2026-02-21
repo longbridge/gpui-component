@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
-use gpui::{px, App, Background, Bounds, Hsla, Pixels, SharedString, TextAlign, Window};
+use gpui::{App, Background, Bounds, Hsla, Pixels, SharedString, TextAlign, Window, px};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
+    ActiveTheme,
     plot::{
+        AXIS_GAP, AxisText, Grid, Plot, PlotAxis, StrokeStyle,
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Area,
-        AxisText, Grid, Plot, PlotAxis, StrokeStyle, AXIS_GAP,
     },
-    ActiveTheme, PixelsExt,
 };
 
 #[derive(IntoPlot)]

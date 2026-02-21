@@ -5,11 +5,11 @@ use gpui_component_macros::IntoPlot;
 use num_traits::Zero;
 
 use crate::{
+    ActiveTheme,
     plot::{
-        shape::{Arc, ArcData, Pie},
         Plot,
+        shape::{Arc, ArcData, Pie},
     },
-    ActiveTheme, PixelsExt,
 };
 
 #[derive(IntoPlot)]

@@ -26,7 +26,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{AxisExt, PixelsExt, scroll::ScrollbarHandle};
+use crate::{AxisExt, scroll::ScrollbarHandle};
 
 struct VirtualListScrollHandleState {
     axis: Axis,

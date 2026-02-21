@@ -234,21 +234,6 @@ impl AxisExt for Axis {
     }
 }
 
-/// A trait for converting [`Pixels`] to `f32` and `f64`.
-pub trait PixelsExt {
-    fn as_f32(&self) -> f32;
-    fn as_f64(self) -> f64;
-}
-impl PixelsExt for Pixels {
-    fn as_f32(&self) -> f32 {
-        f32::from(self)
-    }
-
-    fn as_f64(self) -> f64 {
-        f64::from(self)
-    }
-}
-
 /// A trait to extend the [`Length`] enum with utility methods.
 pub trait LengthExt {
     /// Converts the [`Length`] to [`Pixels`] based on a given `base_size` and `rem_size`.

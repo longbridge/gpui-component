@@ -10,6 +10,7 @@ inspector = ["gpui-component/inspector"]
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui_platform.workspace = true
 gpui-component = { workspace = true, features = [
   "tree-sitter-languages",
 ] }

@@ -8,6 +8,7 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui_platform.workspace = true
 gpui-component-assets.workspace = true
 gpui-component.workspace = true
 sysinfo = "0.37"

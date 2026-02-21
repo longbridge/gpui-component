@@ -2,7 +2,7 @@
 
 use gpui::{App, Bounds, Pixels, TextAlign, Window, px};
 use gpui_component::{
-    ActiveTheme, PixelsExt,
+    ActiveTheme,
     plot::{
         AXIS_GAP, AxisText, Grid, IntoPlot, Plot, PlotAxis,
         scale::{Scale, ScaleBand, ScaleLinear, ScaleOrdinal},

@@ -2,9 +2,7 @@
 
 use std::{f32::consts::PI, fmt::Debug};
 
-use gpui::{point, px, Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window};
-
-use crate::PixelsExt;
+use gpui::{Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window, point, px};
 
 const EPSILON: f32 = 1e-12;
 const HALF_PI: f32 = PI / 2.;
