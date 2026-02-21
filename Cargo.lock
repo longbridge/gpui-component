@@ -3017,6 +3017,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smol",
+ "tiny-skia",
  "tracing",
  "tracing-subscriber",
  "tree-sitter-navi",

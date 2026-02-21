@@ -477,6 +477,7 @@ impl StoryState {
             "SidebarStory" => story!(SidebarStory),
             "FormStory" => story!(FormStory),
             "NotificationStory" => story!(NotificationStory),
+            "ColorPrimitivesStory" => story!(ColorPrimitivesStory),
             "ThemeColorsStory" => story!(ThemeColorsStory),
             _ => {
                 unreachable!("Invalid story klass: {}", self.story_klass)
