@@ -55,7 +55,7 @@ impl AssetSource for Assets {
 
 fn main() {
     // Call with_assets to register assets
-    let app = Application::new().with_assets(Assets);
+    let app = gpui_platform::application().with_assets(Assets);
 
     // ...
 }
@@ -78,5 +78,5 @@ gpui-component-assets = "*"
 And then use it in your application:
 
 ```rs
-let app = Application::new().with_assets(gpui_component_assets::Assets);
+let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
 ```
