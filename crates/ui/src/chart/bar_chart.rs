@@ -5,7 +5,7 @@ use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-    ActiveTheme, PixelsExt,
+    ActiveTheme,
     plot::{
         AXIS_GAP, AxisText, Grid, Plot, PlotAxis,
         label::Text,

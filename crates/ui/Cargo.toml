@@ -16,7 +16,7 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui-macros/inspector", "gpui/inspector"]
+inspector = ["gpui_macros/inspector", "gpui/inspector"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
@@ -58,8 +58,8 @@ tree-sitter-languages = [
 [dependencies]
 anyhow.workspace = true
 gpui = { workspace = true }
+gpui_macros.workspace = true
 gpui-component-macros = { workspace = true }
-gpui-macros.workspace = true
 notify.workspace = true
 ropey.workspace = true
 rust-i18n.workspace = true

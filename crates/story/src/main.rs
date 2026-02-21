@@ -302,7 +302,7 @@ impl Render for Gallery {
 }
 
 fn main() {
-    let app = Application::new().with_assets(Assets);
+    let app = gpui_platform::application().with_assets(Assets);
 
     // Parse `cargo run -- <story_name>`
     let name = std::env::args().nth(1);

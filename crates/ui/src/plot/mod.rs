@@ -9,11 +9,9 @@ pub use gpui_component_macros::IntoPlot;
 
 use std::{fmt::Debug, ops::Add};
 
-use gpui::{point, px, App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point, Window};
+use gpui::{App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point, Window, point, px};
 
-use crate::PixelsExt;
-
-pub use axis::{AxisText, PlotAxis, AXIS_GAP};
+pub use axis::{AXIS_GAP, AxisText, PlotAxis};
 pub use grid::Grid;
 pub use label::PlotLabel;
 

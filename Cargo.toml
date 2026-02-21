@@ -28,7 +28,8 @@ gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 story = { path = "crates/story" }
 
 gpui = { git = "https://github.com/zed-industries/zed" }
-gpui-macros = "0.2.2"
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui_macros = { git = "https://github.com/zed-industries/zed" }
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 # reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", default-features = false, features = [
@@ -91,7 +92,8 @@ taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
 smol = { opt-level = 3 }
 gpui = { opt-level = 3 }
-gpui-macros = { opt-level = 3 }
+gpui_platform = { opt-level = 3 }
+gpui_macros = { opt-level = 3 }
 tree-sitter = { opt-level = 3 }
 sum_tree = { opt-level = 3 }
 ropey = { opt-level = 3 }
