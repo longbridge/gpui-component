@@ -134,7 +134,8 @@ impl SelectStory {
                     )
                 }),
                 simple_select2: cx.new(|cx| {
-                    let mut select = SelectState::new(SearchableVec::new(vec![]), None, window, cx);
+                    let mut select = SelectState::new(SearchableVec::new(vec![]), None, window, cx)
+                        .searchable(true);
 
                     select.set_items(
                         SearchableVec::new(vec!["Rust", "Go", "C++", "JavaScript"]),
