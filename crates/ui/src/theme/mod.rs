@@ -12,11 +12,13 @@ use std::{
 };
 
 mod color;
+mod oklch;
 mod registry;
 mod schema;
 mod theme_color;
 
 pub use color::*;
+pub use oklch::*;
 pub use registry::*;
 pub use schema::*;
 pub use theme_color::*;

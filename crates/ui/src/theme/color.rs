@@ -5,6 +5,8 @@ use serde::{Deserialize, Deserializer, de::Error as _};
 
 use anyhow::{Error, Result, anyhow};
 
+use crate::Oklch;
+
 /// Create a [`gpui::Hsla`] color.
 ///
 /// - h: 0..360.0
@@ -393,6 +395,8 @@ pub(crate) struct ShadcnColor {
     pub(crate) scale: usize,
     #[serde(deserialize_with = "from_hsl_channel", alias = "hslChannel")]
     pub(crate) hsla: Hsla,
+    #[serde(deserialize_with = "from_oklch_string")]
+    pub(crate) oklch: Oklch,
 }
 
 /// Deserialize Hsla from a string in the format "210 40% 98%"
@@ -424,6 +428,14 @@ where
     Ok(hsl(h, s, l))
 }
 
+fn from_oklch_string<'de, D>(deserializer: D) -> Result<Oklch, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer).unwrap();
+    Oklch::try_from(s.as_str()).map_err(|e| D::Error::custom(e.to_string()))
+}
+
 macro_rules! color_method {
     ($color:tt, $scale:tt) => {
         paste::paste! {
@@ -452,7 +464,7 @@ macro_rules! color_methods {
             #[inline]
             pub fn [<$color>](scale: usize) -> Hsla {
                 if let Some(color) = DEFAULT_COLORS.$color.get(&scale) {
-                    return color.hsla;
+                    return color.oklch.into();
                 }
 
                 black()
