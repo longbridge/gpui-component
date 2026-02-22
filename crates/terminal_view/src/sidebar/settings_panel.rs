@@ -10,6 +10,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState, NumberInput, NumberInputEvent, StepAction},
     scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectState},
+    switch::Switch,
     h_flex, ActiveTheme, v_flex, Icon, IconName, Sizable, Size,
 };
 use rust_i18n::t;
@@ -33,6 +34,8 @@ pub enum SettingsPanelEvent {
     FontFamilyChanged(String),
     /// 主题变更
     ThemeChanged(TerminalTheme),
+    /// 光标闪烁变更
+    CursorBlinkChanged(bool),
 }
 
 /// 设置面板组件
@@ -45,6 +48,8 @@ pub struct SettingsPanel {
     font_select_state: Entity<SelectState<Vec<SharedString>>>,
     /// 当前主题
     current_theme: TerminalTheme,
+    /// 光标闪烁开关
+    cursor_blink: bool,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 订阅
@@ -170,6 +175,7 @@ impl SettingsPanel {
             font_size_input_state,
             font_select_state,
             current_theme: initial_theme.clone(),
+            cursor_blink: false,
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
         }
@@ -435,6 +441,49 @@ impl SettingsPanel {
             )
     }
 
+    /// 渲染光标设置区域
+    fn render_cursor_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        let muted_fg = cx.theme().muted_foreground;
+        let cursor_blink = self.cursor_blink;
+
+        v_flex()
+            .gap_3()
+            .p_3()
+            .border_t_1()
+            .border_color(border)
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(muted_fg)
+                            .child(t!("Settings.cursor").to_uppercase())
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .child(t!("Settings.cursor_blink"))
+                            )
+                            .child(
+                                Switch::new("cursor-blink-switch")
+                                    .checked(cursor_blink)
+                                    .small()
+                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
+                                        this.cursor_blink = *checked;
+                                        cx.emit(SettingsPanelEvent::CursorBlinkChanged(*checked));
+                                    }))
+                            )
+                    )
+            )
+    }
+
     /// 渲染主题选择区域
     fn render_theme_section(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
@@ -495,6 +544,7 @@ impl Render for SettingsPanel {
                     .overflow_y_scrollbar()
                     .child(self.render_search_section(cx))
                     .child(self.render_font_section(cx))
+                    .child(self.render_cursor_section(cx))
                     .child(self.render_theme_section(cx))
             )
     }

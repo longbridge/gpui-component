@@ -5,9 +5,11 @@ edition = "2021"
 
 [dependencies]
 # Async runtime
-tokio = { workspace = true, features = ["fs"] }
+tokio = { workspace = true }
+futures = { workspace = true }
 anyhow = { workspace = true }
-
+one-core = { workspace = true }
+gpui = { workspace = true }
 ssh = { workspace = true }
 
 # Terminal emulation

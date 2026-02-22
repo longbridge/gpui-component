@@ -20,7 +20,7 @@ use crate::addon::{
 };
 use crate::blink_manager::BlinkManager;
 use crate::sidebar::{TerminalSidebar, TerminalSidebarEvent, SidebarPanel, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
-use crate::terminal::{ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent};
+use terminal::terminal::{ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent};
 use crate::terminal_element::{RenderCache, TerminalElement};
 use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 use one_core::storage::models::StoredConnection;
@@ -117,6 +117,9 @@ pub struct TerminalView {
     /// 标签页序号（用于多实例显示）
     tab_index: Option<usize>,
 
+    /// 是否启用光标闪烁
+    cursor_blink_enabled: bool,
+
     /// 侧边栏面板大小
     sidebar_panel_size: Pixels,
     /// 正在调整大小的面板
@@ -196,10 +199,14 @@ impl TerminalView {
 
         // 焦点获得/失去订阅
         let focus_subscription = cx.on_focus(&focus_handle, window, |this, _window, cx| {
-            this.blink_manager.update(cx, BlinkManager::enable);
+            if this.cursor_blink_enabled {
+                this.blink_manager.update(cx, BlinkManager::enable);
+            }
         });
         let blur_subscription = cx.on_blur(&focus_handle, window, |this, _window, cx| {
-            this.blink_manager.update(cx, BlinkManager::disable);
+            if this.cursor_blink_enabled {
+                this.blink_manager.update(cx, BlinkManager::disable);
+            }
         });
 
         let mut subscriptions = Vec::new();
@@ -236,6 +243,7 @@ impl TerminalView {
             current_theme: default_theme,
             command_input_start: None,
             tab_index,
+            cursor_blink_enabled: false,
             sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
             resizing: None,
             view_bounds: Bounds::default(),
@@ -285,6 +293,14 @@ impl TerminalView {
             TerminalSidebarEvent::AskAi => {
                 // AI 请求已由 sidebar 内部处理，这里只需要通知刷新
                 cx.notify();
+            }
+            TerminalSidebarEvent::CursorBlinkChanged(enabled) => {
+                self.cursor_blink_enabled = *enabled;
+                if *enabled {
+                    self.blink_manager.update(cx, BlinkManager::enable);
+                } else {
+                    self.blink_manager.update(cx, BlinkManager::disable);
+                }
             }
         }
     }
@@ -672,7 +688,9 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         // 输入时暂停闪烁
-        self.blink_manager.update(cx, BlinkManager::pause_blinking);
+        if self.cursor_blink_enabled {
+            self.blink_manager.update(cx, BlinkManager::pause_blinking);
+        }
 
         if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
             self.paste(&Paste, _window, cx);
@@ -1002,7 +1020,11 @@ impl TerminalView {
         }
 
         // 获取光标可见性
-        let cursor_visible = self.blink_manager.read(cx).visible();
+        let cursor_visible = if self.cursor_blink_enabled {
+            self.blink_manager.read(cx).visible()
+        } else {
+            true
+        };
 
         TerminalElement::new(
             &self.render_cache,

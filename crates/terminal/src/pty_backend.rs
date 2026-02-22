@@ -5,6 +5,7 @@ use alacritty_terminal::term::{ClipboardType, Term};
 use alacritty_terminal::tty::{self, Options as PtyOptions};
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::thread;
 use std::thread::JoinHandle;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -58,7 +59,7 @@ impl LocalPtyBackend {
             cell_height: 18,
         };
 
-        tracing::info!(
+        tracing::debug!(
             "LocalPtyBackend::new: 初始尺寸 {}x{}, cell={}x{}",
             window_size.num_cols, window_size.num_lines,
             window_size.cell_width, window_size.cell_height
@@ -68,7 +69,7 @@ impl LocalPtyBackend {
         let event_loop = EventLoop::new(term, event_proxy, pty, true, false)?;
         let event_loop_sender = event_loop.channel();
 
-        let handle = std::thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let _ = event_loop.spawn().join();
         });
 
@@ -97,7 +98,7 @@ impl LocalPtyBackend {
                 18
             },
         };
-        tracing::info!(
+        tracing::debug!(
             "LocalPtyBackend::resize: {}x{}, cell={}x{}, pixel={}x{}",
             window_size.num_cols, window_size.num_lines,
             window_size.cell_width, window_size.cell_height,

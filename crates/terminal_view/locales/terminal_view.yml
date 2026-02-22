@@ -277,6 +277,17 @@ ConnectionForm:
     zh-CN: 同步此连接到云端
     zh-HK: 同步此連線到雲端
 
+# 设置面板
+Settings:
+  cursor:
+    en: Cursor
+    zh-CN: 光标
+    zh-HK: 游標
+  cursor_blink:
+    en: Cursor Blink
+    zh-CN: 光标闪烁
+    zh-HK: 游標閃爍
+
 # 右键菜单
 ContextMenu:
   copy:

@@ -20,15 +20,16 @@ use one_core::storage::models::{
 };
 use std::sync::Arc;
 use std::time::Duration;
+use futures::StreamExt;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::interval;
 
-use terminal::pty_backend::{GpuiEventProxy, LocalPtyBackend};
-use terminal::{LocalConfig, SshBackend, TerminalBackend, TerminalEvent, TerminalSize};
+use crate::pty_backend::{GpuiEventProxy, LocalPtyBackend};
 
 pub use ssh::{
     JumpServerConnectConfig, ProxyConnectConfig, ProxyType, PtyConfig, SshAuth, SshConnectConfig,
 };
+use crate::{LocalConfig, SshBackend, TerminalBackend, TerminalEvent, TerminalSize};
 
 /// Terminal 发出的事件，供 TerminalView 订阅
 #[derive(Debug, Clone)]
@@ -111,7 +112,7 @@ pub struct Terminal {
 
 impl Terminal {
     /// 创建本地终端
-    pub fn new_local(config: LocalConfig, cx: &mut Context<Self>) -> anyhow::Result<Self> {
+    pub fn new_local(config: LocalConfig, cx: &mut Context<Self>) -> Result<Self> {
         let (event_tx, event_rx) = unbounded_channel::<TerminalEvent>();
         let (term, event_proxy, _colors) =
             Self::create_term(DEFAULT_COLS, DEFAULT_ROWS, event_tx.clone());
@@ -333,7 +334,6 @@ impl Terminal {
 
         // GPUI 线程事件处理
         cx.spawn(async move |this, cx| {
-            use futures::StreamExt;
             while let Some(event) = render_rx.next().await {
                 if this
                     .update(cx, |this, cx| {

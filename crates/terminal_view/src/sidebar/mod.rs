@@ -89,6 +89,8 @@ pub enum TerminalSidebarEvent {
     AskAi,
     /// 粘贴代码到终端（用于AI生成的代码块）
     PasteCodeToTerminal(String),
+    /// 光标闪烁变更
+    CursorBlinkChanged(bool),
 }
 
 /// 终端侧边栏组件
@@ -171,6 +173,9 @@ impl TerminalSidebar {
                 settings_panel::SettingsPanelEvent::ThemeChanged(theme) => {
                     this.colors = theme.colors();
                     cx.emit(TerminalSidebarEvent::ThemeChanged(theme.clone()));
+                }
+                settings_panel::SettingsPanelEvent::CursorBlinkChanged(enabled) => {
+                    cx.emit(TerminalSidebarEvent::CursorBlinkChanged(*enabled));
                 }
             }
         });
