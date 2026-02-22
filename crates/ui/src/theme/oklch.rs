@@ -1,7 +1,6 @@
-use std::hash::{Hash, Hasher};
-
 use anyhow::anyhow;
 use gpui::Hsla;
+use std::hash::{Hash, Hasher};
 
 /// An Oklch color without alpha, based on the OKLab perceptual color space.
 ///
@@ -17,6 +16,16 @@ pub struct Oklch {
     pub h: f32,
     /// Alpha (0.0 to 1.0), default is 1.0 (fully opaque)
     pub a: f32,
+}
+
+impl Oklch {
+    /// Return a new Oklch color with the same l, c, h values but modified alpha by multiplying with the given factor.
+    pub fn opacity(self, factor: f32) -> Self {
+        Oklch {
+            a: self.a * factor.clamp(0., 1.),
+            ..self
+        }
+    }
 }
 
 /// Create an Oklch color from l, c, h values.

@@ -7,6 +7,45 @@ use anyhow::{Error, Result, anyhow};
 
 use crate::Oklch;
 
+/// Enum representing a color in different color spaces.
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+pub enum Color {
+    Hsla(Hsla),
+    Oklch(Oklch),
+}
+
+impl Color {
+    /// Multiplies the alpha value of the color by a given factor
+    /// and returns a new Color.
+    pub fn opacity(&self, factor: f32) -> Self {
+        match self {
+            Color::Hsla(hsla) => Color::Hsla(hsla.opacity(factor)),
+            Color::Oklch(oklch) => Color::Oklch(oklch.opacity(factor)),
+        }
+    }
+}
+
+impl From<Hsla> for Color {
+    fn from(value: Hsla) -> Self {
+        Color::Hsla(value)
+    }
+}
+
+impl From<Color> for Hsla {
+    fn from(value: Color) -> Self {
+        match value {
+            Color::Hsla(hsla) => hsla,
+            Color::Oklch(oklch) => oklch.into(),
+        }
+    }
+}
+
+impl From<Oklch> for Color {
+    fn from(value: Oklch) -> Self {
+        Color::Oklch(value)
+    }
+}
+
 /// Create a [`gpui::Hsla`] color.
 ///
 /// - h: 0..360.0
@@ -309,7 +348,7 @@ impl ColorName {
     ///
     /// The `scale` is any of `[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]`
     /// falls back to 500 if out of range.
-    pub fn scale(&self, scale: usize) -> Hsla {
+    pub fn scale(&self, scale: usize) -> Color {
         let colors = match self {
             ColorName::Gray => &DEFAULT_COLORS.gray,
             ColorName::Red => &DEFAULT_COLORS.red,
@@ -332,9 +371,9 @@ impl ColorName {
         };
 
         if let Some(color) = colors.get(&scale) {
-            color.hsla
+            color.oklch.into()
         } else {
-            colors.get(&500).unwrap().hsla
+            colors.get(&500).unwrap().oklch.into()
         }
     }
 }
@@ -441,12 +480,12 @@ macro_rules! color_method {
         paste::paste! {
             #[inline]
             #[allow(unused)]
-            pub fn [<$color _ $scale>]() -> Hsla {
+            pub fn [<$color _ $scale>]() -> Color {
                 if let Some(color) = DEFAULT_COLORS.$color.get(&($scale as usize)) {
-                    return color.hsla;
+                    return color.oklch.into();
                 }
 
-                black()
+                black().into()
             }
         }
     };
@@ -462,12 +501,12 @@ macro_rules! color_methods {
             ///
             /// If the scale number is not found, it will return black color.
             #[inline]
-            pub fn [<$color>](scale: usize) -> Hsla {
+            pub fn [<$color>](scale: usize) -> Color {
                 if let Some(color) = DEFAULT_COLORS.$color.get(&scale) {
                     return color.oklch.into();
                 }
 
-                black()
+                black().into()
             }
         }
 
@@ -485,12 +524,12 @@ macro_rules! color_methods {
     };
 }
 
-pub fn black() -> Hsla {
-    DEFAULT_COLORS.black.hsla
+pub(crate) fn black() -> Color {
+    DEFAULT_COLORS.black.oklch.into()
 }
 
-pub fn white() -> Hsla {
-    DEFAULT_COLORS.white.hsla
+pub(crate) fn white() -> Color {
+    DEFAULT_COLORS.white.oklch.into()
 }
 
 color_methods!(slate);
@@ -522,6 +561,7 @@ color_methods!(rose);
 ///
 /// - `#RRGGBB` - The HEX color string.
 /// - `#RRGGBBAA` - The HEX color string with alpha.
+/// - `oklch(L C H)`, `okpch(L, C, H)` or `oklch(L C H / A)`
 ///
 /// Or the Tailwind Color format:
 ///
@@ -530,10 +570,13 @@ color_methods!(rose);
 /// - `name/opacity` - The color name with opacity, `opacity` should be an integer between 0 and 100.
 /// - `name-scale/opacity` - The color name with scale and opacity.
 ///
-pub fn try_parse_color(color: &str) -> Result<Hsla> {
+pub fn try_parse_color(color: &str) -> Result<Color> {
     if color.starts_with("#") {
         let rgba = gpui::Rgba::try_from(color)?;
-        return Ok(rgba.into());
+        return Ok(Hsla::from(rgba).into());
+    } else if color.starts_with("oklch(") {
+        let oklch = Oklch::try_from(color)?;
+        return Ok(oklch.into());
     }
 
     let mut name = String::new();
@@ -573,15 +616,15 @@ pub fn try_parse_color(color: &str) -> Result<Hsla> {
         return Err(anyhow!("Empty color name"));
     }
 
-    let mut hsla = match name.as_str() {
-        "black" => Ok::<Hsla, Error>(crate::black()),
+    let mut color: Color = match name.as_str() {
+        "black" => Ok::<Color, Error>(crate::black()),
         "white" => Ok(crate::white()),
         _ => {
             let color_name = ColorName::try_from(name.as_str())?;
             if let Some(scale) = scale {
-                Ok(color_name.scale(scale))
+                Ok(color_name.scale(scale).into())
             } else {
-                Ok(color_name.scale(500))
+                Ok(color_name.scale(500).into())
             }
         }
     }?;
@@ -590,33 +633,35 @@ pub fn try_parse_color(color: &str) -> Result<Hsla> {
         if opacity > 100. {
             return Err(anyhow!("Invalid color opacity"));
         }
-        hsla = hsla.opacity(opacity / 100.);
+        color = color.opacity(opacity / 100.);
     }
 
-    Ok(hsla)
+    Ok(color.into())
 }
 
 #[cfg(test)]
 mod tests {
     use gpui::{rgb, rgba};
 
+    use crate::oklch;
+
     use super::*;
 
     #[test]
     fn test_default_colors() {
-        assert_eq!(white(), hsl(0.0, 0.0, 100.0));
-        assert_eq!(black(), hsl(0.0, 0.0, 0.0));
+        assert_eq!(white(), hsl(0.0, 0.0, 100.0).into());
+        assert_eq!(black(), hsl(0.0, 0.0, 0.0).into());
 
-        assert_eq!(slate_50(), hsl(210.0, 40.0, 98.0));
-        assert_eq!(slate_100(), hsl(210.0, 40.0, 96.1));
-        assert_eq!(slate_900(), hsl(222.2, 47.4, 11.2));
+        assert_eq!(slate_50(), hsl(210.0, 40.0, 98.0).into());
+        assert_eq!(slate_100(), hsl(210.0, 40.0, 96.1).into());
+        assert_eq!(slate_900(), hsl(222.2, 47.4, 11.2).into());
 
-        assert_eq!(red_50(), hsl(0.0, 85.7, 97.3));
-        assert_eq!(yellow_100(), hsl(54.9, 96.7, 88.0));
-        assert_eq!(green_200(), hsl(141.0, 78.9, 85.1));
-        assert_eq!(cyan_300(), hsl(187.0, 92.4, 69.0));
-        assert_eq!(blue_400(), hsl(213.1, 93.9, 67.8));
-        assert_eq!(indigo_500(), hsl(238.7, 83.5, 66.7));
+        assert_eq!(red_50(), hsl(0.0, 85.7, 97.3).into());
+        assert_eq!(yellow_100(), hsl(54.9, 96.7, 88.0).into());
+        assert_eq!(green_200(), hsl(141.0, 78.9, 85.1).into());
+        assert_eq!(cyan_300(), hsl(187.0, 92.4, 69.0).into());
+        assert_eq!(blue_400(), hsl(213.1, 93.9, 67.8).into());
+        assert_eq!(indigo_500(), hsl(238.7, 83.5, 66.7).into());
     }
 
     #[test]
@@ -682,8 +727,8 @@ mod tests {
         assert_eq!(format!("{:?}", ColorName::Yellow), "Yellow");
 
         let color = ColorName::Green;
-        assert_eq!(color.scale(500).to_hex(), "#21C55E");
-        assert_eq!(color.scale(1500).to_hex(), "#21C55E");
+        assert_eq!(Hsla::from(color.scale(500)).to_hex(), "#21C55E");
+        assert_eq!(Hsla::from(color.scale(1500)).to_hex(), "#21C55E");
 
         for name in ColorName::all().iter() {
             let name1: ColorName = name.to_string().as_str().try_into().unwrap();
@@ -703,23 +748,30 @@ mod tests {
     fn test_try_parse_color() {
         assert_eq!(
             try_parse_color("#F2F200").ok(),
-            Some(hsla(0.16666667, 1., 0.4745098, 1.0))
+            Some(hsla(0.16666667, 1., 0.4745098, 1.0).into())
         );
         assert_eq!(
             try_parse_color("#00f21888").ok(),
-            Some(hsla(0.34986225, 1.0, 0.4745098, 0.53333336))
+            Some(hsla(0.34986225, 1.0, 0.4745098, 0.53333336).into())
         );
-        assert_eq!(try_parse_color("black").ok(), Some(crate::black()));
-        assert_eq!(try_parse_color("white-800").ok(), Some(crate::white()));
+        assert_eq!(
+            try_parse_color("oklch(0.5 0.2 130)").ok(),
+            Some(oklch(0.5, 0.2, 130.).into())
+        );
+        assert_eq!(try_parse_color("black").ok(), Some(crate::black().into()));
+        assert_eq!(
+            try_parse_color("white-800").ok(),
+            Some(crate::white().into())
+        );
         assert_eq!(try_parse_color("red").ok(), Some(crate::red_500()));
         assert_eq!(try_parse_color("blue-600").ok(), Some(crate::blue_600()));
         assert_eq!(
             try_parse_color("pink/33").ok(),
-            Some(crate::pink_500().opacity(0.33))
+            Some(Hsla::from(crate::pink_500()).opacity(0.33).into())
         );
         assert_eq!(
             try_parse_color("orange-300/66").ok(),
-            Some(crate::orange_300().opacity(0.66))
+            Some(Hsla::from(crate::orange_300()).opacity(0.66).into())
         );
     }
 }

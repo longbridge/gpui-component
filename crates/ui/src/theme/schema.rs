@@ -413,7 +413,7 @@ impl ThemeColor {
             ($config_field:ident) => {
                 if let Some(value) = colors.$config_field {
                     if let Ok(color) = try_parse_color(&value) {
-                        self.$config_field = color;
+                        self.$config_field = color.into();
                     } else {
                         self.$config_field = default_theme.$config_field;
                     }
@@ -425,7 +425,7 @@ impl ThemeColor {
             ($config_field:ident, fallback = $fallback:expr) => {
                 if let Some(value) = colors.$config_field {
                     if let Ok(color) = try_parse_color(&value) {
-                        self.$config_field = color;
+                        self.$config_field = color.into();
                     }
                 } else {
                     self.$config_field = $fallback;

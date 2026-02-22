@@ -1,8 +1,8 @@
-use crate::{theme::ActiveTheme as _, ColorName, Sizable, Size, StyledExt};
+use crate::{ColorName, Sizable, Size, StyledExt, theme::ActiveTheme as _};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, rems, transparent_white, AbsoluteLength,
-    AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window,
+    AbsoluteLength, AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative, rems,
+    transparent_white,
 };
 
 /// The variant of the Tag.
@@ -34,9 +34,9 @@ impl TagVariant {
             Self::Info => cx.theme().info,
             Self::Color(color) => {
                 if cx.theme().is_dark() {
-                    color.scale(950).opacity(0.5)
+                    color.scale(950).opacity(0.5).into()
                 } else {
-                    color.scale(50)
+                    color.scale(50).into()
                 }
             }
             Self::Custom { color, .. } => *color,
@@ -53,9 +53,9 @@ impl TagVariant {
             Self::Info => cx.theme().info,
             Self::Color(color) => {
                 if cx.theme().is_dark() {
-                    color.scale(800).opacity(0.5)
+                    color.scale(800).opacity(0.5).into()
                 } else {
-                    color.scale(200)
+                    color.scale(200).into()
                 }
             }
             Self::Custom { border, .. } => *border,
@@ -108,9 +108,9 @@ impl TagVariant {
             }
             Self::Color(color) => {
                 if cx.theme().is_dark() {
-                    color.scale(300)
+                    color.scale(300).into()
                 } else {
-                    color.scale(600)
+                    color.scale(600).into()
                 }
             }
             Self::Custom { foreground, .. } => *foreground,
@@ -174,11 +174,15 @@ impl Tag {
     }
 
     /// Create a new tag with default variant ([`TagVariant::Custom`]).
-    pub fn custom(color: Hsla, foreground: Hsla, border: Hsla) -> Self {
+    pub fn custom(
+        color: impl Into<Hsla>,
+        foreground: impl Into<Hsla>,
+        border: impl Into<Hsla>,
+    ) -> Self {
         Self::new().with_variant(TagVariant::Custom {
-            color,
-            foreground,
-            border,
+            color: color.into(),
+            foreground: foreground.into(),
+            border: border.into(),
         })
     }
 
