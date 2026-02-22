@@ -577,7 +577,7 @@
         "editor.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -587,7 +587,7 @@
         "editor.foreground": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -597,7 +597,7 @@
         "editor.active_line.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -607,7 +607,7 @@
         "editor.line_number": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -617,7 +617,7 @@
         "editor.active_line_number": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -627,7 +627,7 @@
         "error": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -637,7 +637,7 @@
         "error.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -647,7 +647,7 @@
         "error.border": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -657,7 +657,7 @@
         "warning": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -667,7 +667,7 @@
         "warning.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -677,7 +677,7 @@
         "warning.border": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -687,7 +687,7 @@
         "info": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -697,7 +697,7 @@
         "info.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -707,7 +707,7 @@
         "info.border": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -717,7 +717,7 @@
         "success": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -727,7 +727,7 @@
         "success.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -737,7 +737,7 @@
         "success.border": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -747,7 +747,7 @@
         "hint": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -757,7 +757,7 @@
         "hint.background": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -767,7 +767,7 @@
         "hint.border": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"
@@ -780,9 +780,9 @@
       },
       "required": ["syntax"]
     },
-    "Rgba": {
+    "Color": {
       "type": "string",
-      "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+      "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\(\\s*(\\d*\\.?\\d+%?)\\s+(\\d*\\.?\\d+)\\s+(\\d*\\.?\\d+)(\\s*/\\s*(\\d*\\.?\\d+))?\\s*\\))$"
     },
     "SyntaxColors": {
       "description": "Theme for Tree-sitter Highlight\n\nhttps://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/",
@@ -1197,7 +1197,7 @@
         "color": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Rgba"
+              "$ref": "#/$defs/Color"
             },
             {
               "type": "null"

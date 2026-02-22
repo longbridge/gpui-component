@@ -592,7 +592,7 @@ impl TextElement {
             .highlight_theme
             .style
             .editor_invisible
-            .unwrap_or(cx.theme().muted_foreground);
+            .unwrap_or(cx.theme().muted_foreground.into());
 
         let space_font_size = text_size.half();
         let tab_font_size = text_size;
@@ -604,7 +604,7 @@ impl TextElement {
             &[TextRun {
                 len: space_text.len(),
                 font: style.font(),
-                color: invisible_color,
+                color: invisible_color.into(),
                 background_color: None,
                 underline: None,
                 strikethrough: None,
@@ -619,7 +619,7 @@ impl TextElement {
             &[TextRun {
                 len: tab_text.len(),
                 font: style.font(),
-                color: invisible_color,
+                color: invisible_color.into(),
                 background_color: None,
                 underline: None,
                 strikethrough: None,

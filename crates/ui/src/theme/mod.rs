@@ -186,7 +186,8 @@ impl Theme {
         self.highlight_theme
             .style
             .editor_background
-            .unwrap_or(self.background)
+            .unwrap_or(self.background.into())
+            .into()
     }
 }
 
@@ -225,7 +226,18 @@ impl From<&ThemeColor> for Theme {
 }
 
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize, JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {

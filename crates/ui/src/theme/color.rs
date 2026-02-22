@@ -1,17 +1,40 @@
 use std::{collections::HashMap, fmt::Display};
 
-use gpui::{Hsla, SharedString, hsla};
-use serde::{Deserialize, Deserializer, de::Error as _};
+use gpui::{Background, Hsla, SharedString, hsla};
+use schemars::JsonSchema;
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use anyhow::{Error, Result, anyhow};
 
 use crate::Oklch;
 
 /// Enum representing a color in different color spaces.
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, JsonSchema, Serialize)]
 pub enum Color {
     Hsla(Hsla),
     Oklch(Oklch),
+}
+
+impl<'de> Deserialize<'de> for Color {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        if s.trim().starts_with("oklch(") {
+            let oklch = Oklch::try_from(s.as_str()).map_err(|e| D::Error::custom(e.to_string()))?;
+            Ok(Color::Oklch(oklch))
+        } else {
+            let hsla = Hsla::parse_hex(&s).map_err(|e| D::Error::custom(e.to_string()))?;
+            Ok(Color::Hsla(hsla))
+        }
+    }
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Color::Hsla(Hsla::default())
+    }
 }
 
 impl Color {
@@ -43,6 +66,15 @@ impl From<Color> for Hsla {
 impl From<Oklch> for Color {
     fn from(value: Oklch) -> Self {
         Color::Oklch(value)
+    }
+}
+
+impl From<Color> for Background {
+    fn from(value: Color) -> Self {
+        match value {
+            Color::Hsla(hsla) => hsla.into(),
+            Color::Oklch(oklch) => Hsla::from(oklch).into(),
+        }
     }
 }
 
