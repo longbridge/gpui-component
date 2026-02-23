@@ -137,84 +137,6 @@ impl DialogStory {
         }
     }
 
-    fn show_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let overlay = self.dialog_overlay;
-        let dialog_close_button = self.close_button;
-        let overlay_closable = self.overlay_closable;
-        let input1 = self.input1.clone();
-        let date = self.date.clone();
-        let select = self.select.clone();
-        let view = cx.entity().clone();
-        let keyboard = self.keyboard;
-
-        window.open_dialog(cx, move |dialog, _, _| {
-            dialog
-                .title("Form Dialog")
-                .overlay(overlay)
-                .keyboard(keyboard)
-                .close_button(dialog_close_button)
-                .overlay_closable(overlay_closable)
-                .child(
-                    v_flex()
-                        .gap_3()
-                        .child("This is a dialog dialog.")
-                        .child("You can put anything here.")
-                        .child(Input::new(&input1))
-                        .child(Select::new(&select))
-                        .child(DatePicker::new(&date).placeholder("Date of Birth")),
-                )
-                .footer({
-                    let view = view.clone();
-                    let input1 = input1.clone();
-                    let date = date.clone();
-                    move |_, _, _, _cx| {
-                        vec![
-                            Button::new("confirm").primary().label("Confirm").on_click({
-                                let view = view.clone();
-                                let input1 = input1.clone();
-                                let date = date.clone();
-                                move |_, window, cx| {
-                                    window.close_dialog(cx);
-
-                                    view.update(cx, |view, cx| {
-                                        view.selected_value = Some(
-                                            format!(
-                                                "Hello, {}, date: {}",
-                                                input1.read(cx).value(),
-                                                date.read(cx).date()
-                                            )
-                                            .into(),
-                                        )
-                                    });
-                                }
-                            }),
-                            Button::new("new-dialog")
-                                .label("Open Other Dialog")
-                                .on_click(move |_, window, cx| {
-                                    window.open_dialog(cx, move |dialog, _, _| {
-                                        dialog
-                                            .title("Other Dialog")
-                                            .child("This is another dialog.")
-                                            .min_h(px(100.))
-                                            .overlay(overlay)
-                                            .keyboard(keyboard)
-                                            .close_button(dialog_close_button)
-                                            .overlay_closable(overlay_closable)
-                                    });
-                                }),
-                            Button::new("cancel")
-                                .label("Cancel")
-                                .on_click(move |_, window, cx| {
-                                    window.close_dialog(cx);
-                                }),
-                        ]
-                    }
-                })
-        });
-
-        self.input1.focus_handle(cx).focus(window, cx);
-    }
-
     fn on_action_test_action(
         &mut self,
         _: &TestAction,
@@ -286,13 +208,90 @@ impl Render for DialogStory {
                             ),
                     )
                     .child(
-                        section("Normal Dialog").child(
-                            Button::new("show-dialog")
-                                .outline()
-                                .label("Open Dialog")
-                                .on_click(
-                                    cx.listener(|this, _, window, cx| this.show_dialog(window, cx)),
-                                ),
+                        section("Basic Dialog").child(
+                            Dialog::new(cx).trigger(
+                                Button::new("show-dialog")
+                                    .outline()
+                                    .label("Open Dialog")
+                            )
+                            .overlay(self.dialog_overlay)
+                            .keyboard(self.keyboard)
+                            .close_button(self.close_button)
+                            .overlay_closable(self.overlay_closable)
+                            .content({
+                                let input1 = self.input1.clone();
+                                let date = self.date.clone();
+                                let select = self.select.clone();
+                                let view = cx.entity().clone();
+                                move |content, _, _| {
+                                    content.child(
+                                        DialogHeader::new().child(
+                                            DialogTitle::new().child("Basic Dialog"),
+                                        ).child(
+                                            DialogDescription::new().child(
+                                                "This is a basic dialog created using the declarative API."
+                                            )
+                                        )
+                                        .child(
+                                            v_flex()
+                                                .gap_3()
+                                                .child("This is a dialog dialog.")
+                                                .child("You can put anything here.")
+                                                .child(Input::new(&input1))
+                                                .child(Select::new(&select))
+                                                .child(DatePicker::new(&date).placeholder("Date of Birth")),
+                                        )
+                                        .child(
+                                            DialogFooter::new()
+                                                .justify_between()
+                                                .child(
+                                                    Button::new("new-dialog")
+                                                        .label("Open Other Dialog")
+                                                        .on_click(move |_, window, cx| {
+                                                                  window.open_dialog(cx, move |dialog, _, _| {
+                                                                      dialog
+                                                                          .title("Other Dialog")
+                                                                          .child("This is another dialog.")
+                                                                          .min_h(px(100.))
+                                                                          .overlay_closable(overlay_closable)
+                                                                  });
+                                                              }),
+                                                )
+                                                .child(
+                                                    h_flex().gap_2()
+                                                        .child(
+                                                            Button::new("cancel")
+                                                                .label("Cancel")
+                                                                .on_click(move |_, window, cx| {
+                                                                    window.close_dialog(cx);
+                                                                })
+                                                        )
+                                                        .child(
+                                                            Button::new("confirm").primary().label("Confirm").on_click({
+                                                                let view = view.clone();
+                                                                let input1 = input1.clone();
+                                                                let date = date.clone();
+                                                                move |_, window, cx| {
+                                                                    window.close_dialog(cx);
+
+                                                                    view.update(cx, |view, cx| {
+                                                                        view.selected_value = Some(
+                                                                            format!(
+                                                                                "Hello, {}, date: {}",
+                                                                                input1.read(cx).value(),
+                                                                                date.read(cx).date()
+                                                                            )
+                                                                            .into(),
+                                                                        )
+                                                                    });
+                                                                }
+                                                            })
+                                                        )
+                                                )
+                                            )
+                                        )
+                                }
+                            })
                         ),
                     )
                     .child(
@@ -490,38 +489,6 @@ impl Render for DialogStory {
                         ),
                     )
                     .child(
-                        section("Basic Dialog").sub_title("Declarative API").child(
-                            Dialog::new(cx).trigger(
-                                Button::new("basic-dialog-btn")
-                                    .outline()
-                                    .label("Declarative Dialog")
-                            )
-                            .content(|content, _, cx| {
-                                content
-                                    .child(
-                                        DialogHeader::new()
-                                            .child(DialogTitle::new().child("Account Created"))
-                                            .child(DialogDescription::new().child(
-                                                "Your account has been created successfully!",
-                                            )),
-                                    )
-                                    .child(
-                                        "This is a basic dialog created using the declarative API. \
-                                        You can put any content here, and it will be displayed in the dialog.",
-                                    )
-                                    .child(
-                                        DialogFooter::new().mt_3().border_t_1().border_color(cx.theme().border).bg(cx.theme().muted).child(
-                                            Button::new("cancel").outline().label("Cancel").on_click(|_, window, cx| {
-                                                window.close_dialog(cx);
-                                            }),
-                                        ).child(
-                                            Button::new("ok").primary().label("Save Changes")
-                                        ),
-                                    )
-                            })
-                        ),
-                    )
-                    .child(
                         section("Open Dialog with DialogContent").sub_title("Declarative API").child(
                             Button::new("custom-width-dialog-btn")
                                 .outline()
@@ -530,7 +497,7 @@ impl Render for DialogStory {
                                     window.open_dialog(cx, move |dialog, _, _| {
                                         dialog
                                             .w(px(400.))
-                                            .content(|content, _, _| {
+                                            .content(|content, _, cx| {
                                                 content
                                                     .child(
                                                         DialogHeader::new()
@@ -544,7 +511,7 @@ impl Render for DialogStory {
                                                         and the footer is used flex 1 button widths.",
                                                     )
                                                     .child(
-                                                        DialogFooter::new().justify_center().child(
+                                                        DialogFooter::new().mt_3().border_t_1().border_color(cx.theme().border).bg(cx.theme().muted).justify_center().child(
                                                             Button::new("cancel").flex_1().outline().label("Cancel").on_click(|_, window, cx| {
                                                                 window.close_dialog(cx);
                                                             }),
