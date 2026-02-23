@@ -71,6 +71,7 @@ pub struct AlertDialog {
     title: Option<AnyElement>,
     description: Option<AnyElement>,
     button_props: DialogButtonProps,
+    children: Vec<AnyElement>,
 }
 
 impl AlertDialog {
@@ -81,10 +82,11 @@ impl AlertDialog {
         Self {
             base: Dialog::new(cx).overlay_closable(false).close_button(false),
             trigger: None,
+            icon: None,
             title: None,
             description: None,
             button_props: DialogButtonProps::default(),
-            icon: None,
+            children: Vec::new(),
         }
     }
 
@@ -310,7 +312,7 @@ impl AlertDialog {
         }
         footer = footer.child(action_button);
 
-        let content = v_flex().child(header).child(footer);
+        let content = v_flex().child(header).children(self.children).child(footer);
 
         self.base.child(content)
     }
@@ -319,6 +321,12 @@ impl AlertDialog {
 impl Styled for AlertDialog {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.base.style
+    }
+}
+
+impl ParentElement for AlertDialog {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
