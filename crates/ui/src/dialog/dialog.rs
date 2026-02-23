@@ -14,6 +14,7 @@ use crate::{
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
+    dialog::DialogContent,
     h_flex,
     scroll::ScrollableElement as _,
     v_flex,
@@ -81,18 +82,20 @@ impl DialogButtonProps {
 #[derive(IntoElement)]
 pub struct Dialog {
     style: StyleRefinement,
-    title: Option<AnyElement>,
-    footer: Option<FooterFn>,
     children: Vec<AnyElement>,
+    title: Option<AnyElement>,
+    content: Option<DialogContent>,
     width: Pixels,
     max_width: Option<Pixels>,
     margin_top: Option<Pixels>,
-
+    close_button: bool,
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
+
+    footer: Option<FooterFn>,
     on_ok: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>>,
     on_cancel: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static>,
     button_props: DialogButtonProps,
-    close_button: bool,
+
     overlay: bool,
     overlay_closable: bool,
     keyboard: bool,
@@ -119,6 +122,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             title: None,
             footer: None,
+            content: None,
             children: Vec::new(),
             margin_top: None,
             width: px(480.),
@@ -134,6 +138,14 @@ impl Dialog {
             close_button: true,
             overlay_closable: true,
         }
+    }
+
+    /// Sets the content of the dialog, the content will replace the default title, body and footer layout.
+    ///
+    /// When you set the content, the `title`, `footer` and `children` will be ignored.
+    pub fn content(mut self, content: DialogContent) -> Self {
+        self.content = Some(content);
+        self
     }
 
     /// Sets the title of the dialog.
@@ -379,7 +391,7 @@ impl RenderOnce for Dialog {
         let base_size = window.text_style().font_size;
         let rem_size = window.rem_size();
 
-        let mut paddings = Edges::all(px(24.));
+        let mut paddings = Edges::all(px(16.));
         if let Some(pl) = self.style.padding.left {
             paddings.left = pl.to_pixels(base_size, rem_size);
         }
@@ -449,7 +461,7 @@ impl RenderOnce for Dialog {
                             .min_h_24()
                             .pt(paddings.top)
                             .pb(paddings.bottom)
-                            .gap(paddings.top.min(px(16.)))
+                            .gap(paddings.top.min(px(8.)))
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
@@ -492,15 +504,51 @@ impl RenderOnce for Dialog {
                             .top(y)
                             .w(self.width)
                             .when_some(self.max_width, |this, w| this.max_w(w))
-                            .when_some(self.title, |this, title| {
-                                this.child(
-                                    div()
-                                        .pl(paddings.left)
-                                        .pr(paddings.right)
-                                        .line_height(relative(1.))
-                                        .font_semibold()
-                                        .child(title),
-                                )
+                            .map(|this| {
+                                if let Some(content) = self.content {
+                                    this.child(content)
+                                } else {
+                                    this.when_some(self.title, |this, title| {
+                                        this.child(
+                                            div()
+                                                .pl(paddings.left)
+                                                .pr(paddings.right)
+                                                .line_height(relative(1.))
+                                                .font_semibold()
+                                                .child(title),
+                                        )
+                                    })
+                                    .child(
+                                        div().flex_1().overflow_hidden().child(
+                                            // Body
+                                            v_flex()
+                                                .size_full()
+                                                .overflow_y_scrollbar()
+                                                .pl(paddings.left)
+                                                .pr(paddings.right)
+                                                .children(self.children),
+                                        ),
+                                    )
+                                    .when_some(
+                                        self.footer,
+                                        |this, footer| {
+                                            this.child(
+                                                h_flex()
+                                                    .gap_2()
+                                                    .pl(paddings.left)
+                                                    .pr(paddings.right)
+                                                    .line_height(relative(1.))
+                                                    .justify_end()
+                                                    .children(footer(
+                                                        render_ok,
+                                                        render_cancel,
+                                                        window,
+                                                        cx,
+                                                    )),
+                                            )
+                                        },
+                                    )
+                                }
                             })
                             .children(self.close_button.then(|| {
                                 let top = (paddings.top - px(10.)).max(px(8.));
@@ -523,28 +571,6 @@ impl RenderOnce for Dialog {
                                         }
                                     })
                             }))
-                            .child(
-                                div().flex_1().overflow_hidden().child(
-                                    // Body
-                                    v_flex()
-                                        .size_full()
-                                        .overflow_y_scrollbar()
-                                        .pl(paddings.left)
-                                        .pr(paddings.right)
-                                        .children(self.children),
-                                ),
-                            )
-                            .when_some(self.footer, |this, footer| {
-                                this.child(
-                                    h_flex()
-                                        .gap_2()
-                                        .pl(paddings.left)
-                                        .pr(paddings.right)
-                                        .line_height(relative(1.))
-                                        .justify_end()
-                                        .children(footer(render_ok, render_cancel, window, cx)),
-                                )
-                            })
                             .on_any_mouse_down({
                                 |_, _, cx| {
                                     cx.stop_propagation();

@@ -8,7 +8,10 @@ use gpui_component::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
-    dialog::DialogButtonProps,
+    dialog::{
+        DialogButtonProps, DialogContent, DialogDescription, DialogFooter, DialogHeader,
+        DialogTitle,
+    },
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
@@ -484,7 +487,68 @@ impl Render for DialogStory {
                                     });
                                 })),
                         ),
-                    ),
+                    )
+                    .child(
+                        section("Declarative API - Basic Dialog").child(
+                            Button::new("basic-dialog-btn")
+                                .outline()
+                                .label("Declarative Dialog")
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_dialog(cx, move |dialog, _, cx| {
+                                        dialog.content(
+                                            DialogContent::new()
+                                                .child(
+                                                    DialogHeader::new()
+                                                        .child(DialogTitle::new().child("Account Created"))
+                                                        .child(DialogDescription::new().child(
+                                                            "Your account has been created successfully!",
+                                                        )),
+                                                )
+                                                .child(
+                                                    DialogFooter::new().bg(cx.theme().muted).child(
+                                                        Button::new("cancel").outline().label("Cancel").on_click(|_, window, cx| {
+                                                            window.close_dialog(cx);
+                                                        }),
+                                                    ).child(
+                                                        Button::new("ok").primary().label("Save Changes")
+                                                    ),
+                                                ),
+                                        )
+                                    });
+                                })),
+                        ),
+                    )
+                    .child(
+                        section("Declarative API - Custom Width").child(
+                            Button::new("custom-width-dialog-btn")
+                                .outline()
+                                .label("Custom Width (600px)")
+                                .on_click(cx.listener(move |_, _, window, cx| {
+                                    window.open_dialog(cx, move |dialog, _, _| {
+                                        dialog.w(px(600.)).content(
+                                            DialogContent::new()
+                                                .child(
+                                                    DialogHeader::new()
+                                                        .child(DialogTitle::new().child("Custom Width"))
+                                                        .child(DialogDescription::new().child(
+                                                            "This dialog has a custom width of 600px.",
+                                                        )),
+                                                )
+                                                .child(div().child(
+                                                    "Content area with custom width configuration.",
+                                                ))
+                                                .child(
+                                                    DialogFooter::new().child(
+                                                        Button::new("done").primary().label("Done").on_click(|_, window, cx| {
+                                                            window.close_dialog(cx);
+                                                        }),
+                                                    ),
+                                                ),
+                                        )
+                                    });
+                                })),
+                        ),
+                    )
             )
     }
 }
