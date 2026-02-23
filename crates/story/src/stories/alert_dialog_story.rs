@@ -187,7 +187,12 @@ impl Render for AlertDialogStory {
                     Button::new("session-timeout").outline().label("Session Timeout").on_click(cx.listener(
                         |_, _, window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
-                                alert.content(|content, _, _| {
+                                alert
+                                    .on_ok(|_, window, cx| {
+                                        window.push_notification("Redirecting to login...", cx);
+                                        true
+                                    })
+                                    .content(|content, _, _| {
                                     content
                                         .child(
                                             DialogHeader::new()

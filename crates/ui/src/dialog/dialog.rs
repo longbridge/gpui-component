@@ -34,6 +34,7 @@ type FooterFn =
     Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<AnyElement>>;
 
 /// Dialog button props.
+#[derive(Clone)]
 pub struct DialogButtonProps {
     pub(crate) ok_text: Option<SharedString>,
     pub(crate) ok_variant: ButtonVariant,
@@ -560,7 +561,8 @@ impl RenderOnce for Dialog {
                                         // FIXME:
                                         //
                                         // Here some Dialog have no focus_handle, so it will not work will Escape key.
-                                        // But by now, we `cx.close_dialog()` going to close the last active model, so the Escape is unexpected to work.
+                                        // But by now, we `cx.close_dialog()` going to close the last active model,
+                                        // so the Escape is unexpected to work.
                                         on_cancel(&ClickEvent::default(), window, cx);
                                         on_close(&ClickEvent::default(), window, cx);
                                     }
@@ -570,6 +572,7 @@ impl RenderOnce for Dialog {
                                     let on_close = on_close.clone();
                                     let has_footer = self.footer.is_some();
                                     move |_: &Confirm, window, cx| {
+                                        dbg!("Confirm action triggered", &on_ok.is_some());
                                         if let Some(on_ok) = &on_ok {
                                             if on_ok(&ClickEvent::default(), window, cx) {
                                                 Self::defer_close_dialog(window, cx);

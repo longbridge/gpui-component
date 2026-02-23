@@ -1,7 +1,6 @@
 use gpui::{
     AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     Pixels, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
-    relative,
 };
 use rust_i18n::t;
 
@@ -11,7 +10,6 @@ use crate::{
     dialog::{
         Dialog, DialogButtonProps, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
     },
-    v_flex,
 };
 
 /// AlertDialog is a modal dialog that interrupts the user with important content
@@ -251,6 +249,7 @@ impl AlertDialog {
 
     /// Convert AlertDialog into a configured Dialog.
     pub(crate) fn into_dialog(self, _window: &mut Window, _cx: &mut App) -> Dialog {
+        let button_props = self.button_props.clone();
         let action_text = self.button_props.ok_text.unwrap_or_else(|| t!("Dialog.ok").into());
         let cancel_text =
             self.button_props.cancel_text.unwrap_or_else(|| t!("Dialog.cancel").into());
@@ -258,63 +257,56 @@ impl AlertDialog {
         let action_variant = self.button_props.ok_variant;
         let cancel_variant = self.button_props.cancel_variant;
 
-        // Build action button
-        let action_button = {
-            let on_action = self.button_props.on_ok.clone();
-            Button::new("action").label(action_text).with_variant(action_variant).on_click({
-                move |_, window, cx| {
-                    let should_close = if let Some(on_action) = &on_action {
-                        on_action(&ClickEvent::default(), window, cx)
-                    } else {
-                        true
-                    };
+        self.base
+            .button_props(button_props)
+            .child(
+                DialogHeader::new()
+                    .when_some(self.icon, |this, icon| this.child(icon))
+                    .when_some(self.title, |this, title| {
+                        this.child(DialogTitle::new().child(title))
+                    })
+                    .when_some(self.description, |this, desc| {
+                        this.child(DialogDescription::new().child(desc))
+                    }),
+            )
+            .children(self.children)
+            .child(
+                DialogFooter::new()
+                    .when(self.button_props.show_cancel, |this| {
+                        this.child({
+                            let on_cancel = self.button_props.on_cancel.clone();
+                            Button::new("cancel")
+                                .label(cancel_text)
+                                .with_variant(cancel_variant)
+                                .on_click({
+                                    move |_, window, cx| {
+                                        if on_cancel(&ClickEvent::default(), window, cx) {
+                                            window.close_dialog(cx);
+                                        }
+                                    }
+                                })
+                        })
+                    })
+                    .child({
+                        let on_action = self.button_props.on_ok.clone();
+                        Button::new("action")
+                            .label(action_text)
+                            .with_variant(action_variant)
+                            .on_click({
+                                move |_, window, cx| {
+                                    let should_close = if let Some(on_action) = &on_action {
+                                        on_action(&ClickEvent::default(), window, cx)
+                                    } else {
+                                        true
+                                    };
 
-                    if should_close {
-                        window.close_dialog(cx);
-                    }
-                }
-            })
-        };
-
-        // Build cancel button
-        let cancel_button = {
-            let on_cancel = self.button_props.on_cancel.clone();
-            Button::new("cancel").label(cancel_text).with_variant(cancel_variant).on_click({
-                move |_, window, cx| {
-                    if on_cancel(&ClickEvent::default(), window, cx) {
-                        window.close_dialog(cx);
-                    }
-                }
-            })
-        };
-
-        // Build header with title and description using new declarative components
-        let mut header = DialogHeader::new();
-
-        if let Some(title) = self.title {
-            header =
-                header.child(DialogTitle::new().text_lg().line_height(relative(1.4)).child(title));
-        }
-
-        if let Some(desc) = self.description {
-            header = header.child(DialogDescription::new().line_height(relative(1.6)).child(desc));
-        }
-
-        // Build main content
-        if let Some(icon) = self.icon {
-            header = header.child(icon);
-        }
-
-        // Build footer with new DialogFooter component
-        let mut footer = DialogFooter::new();
-        if self.button_props.show_cancel {
-            footer = footer.child(cancel_button);
-        }
-        footer = footer.child(action_button);
-
-        let content = v_flex().child(header).children(self.children).child(footer);
-
-        self.base.child(content)
+                                    if should_close {
+                                        window.close_dialog(cx);
+                                    }
+                                }
+                            })
+                    }),
+            )
     }
 }
 
