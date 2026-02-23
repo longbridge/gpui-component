@@ -27,7 +27,7 @@ use gpui_component::WindowExt;
 
 ### Setup Application Root View
 
-Like Dialog, you need to set up your application's root view to render the dialog layer. See [Dialog documentation](/components/dialog#setup-application-root-view-for-display-of-dialogs).
+Like Dialog, you need to set up your application's root view to render the dialog layer. See [Dialog documentation](./dialog.md#setup-application-root-view) for details.
 
 ### Basic AlertDialog (Declarative API)
 
@@ -323,35 +323,35 @@ window.open_alert_dialog(cx, |alert, _, _| {
 
 ### AlertDialog
 
-| Method | Description |
-|--------|-------------|
-| `new(cx)` | Create a new AlertDialog |
-| `trigger(element)` | Set trigger element that opens the dialog when clicked |
-| `content(builder)` | Set dialog content using a builder function (declarative API) |
-| `title(title)` | Set dialog title (imperative API) |
-| `description(desc)` | Set dialog description (imperative API) |
-| `icon(icon)` | Set dialog icon (imperative API) |
-| `button_props(props)` | Set button properties (text, style, visibility) |
-| `show_cancel(bool)` | Show/hide cancel button, default `false` |
-| `width(px)` | Set dialog width, default `420px` |
-| `overlay_closable(bool)` | Allow clicking overlay to close, default `false` |
-| `close_button(bool)` | Show/hide close button, default `false` |
-| `keyboard(bool)` | Support ESC key to close, default `true` |
-| `on_ok(callback)` | Set OK button callback, return `true` to close dialog |
-| `on_cancel(callback)` | Set cancel button callback, return `true` to close dialog |
-| `on_close(callback)` | Set callback after dialog closes |
+| Method                   | Description                                                   |
+| ------------------------ | ------------------------------------------------------------- |
+| `new(cx)`                | Create a new AlertDialog                                      |
+| `trigger(element)`       | Set trigger element that opens the dialog when clicked        |
+| `content(builder)`       | Set dialog content using a builder function (declarative API) |
+| `title(title)`           | Set dialog title (imperative API)                             |
+| `description(desc)`      | Set dialog description (imperative API)                       |
+| `icon(icon)`             | Set dialog icon (imperative API)                              |
+| `button_props(props)`    | Set button properties (text, style, visibility)               |
+| `show_cancel(bool)`      | Show/hide cancel button, default `false`                      |
+| `width(px)`              | Set dialog width, default `420px`                             |
+| `overlay_closable(bool)` | Allow clicking overlay to close, default `false`              |
+| `close_button(bool)`     | Show/hide close button, default `false`                       |
+| `keyboard(bool)`         | Support ESC key to close, default `true`                      |
+| `on_ok(callback)`        | Set OK button callback, return `true` to close dialog         |
+| `on_cancel(callback)`    | Set cancel button callback, return `true` to close dialog     |
+| `on_close(callback)`     | Set callback after dialog closes                              |
 
 ### DialogButtonProps
 
-| Method | Description |
-|--------|-------------|
-| `ok_text(text)` | Set OK button text, default "OK" |
-| `cancel_text(text)` | Set cancel button text, default "Cancel" |
-| `ok_variant(variant)` | Set OK button variant |
-| `cancel_variant(variant)` | Set cancel button variant |
-| `show_cancel(bool)` | Show/hide cancel button |
-| `on_ok(callback)` | Set OK callback |
-| `on_cancel(callback)` | Set cancel callback |
+| Method                    | Description                              |
+| ------------------------- | ---------------------------------------- |
+| `ok_text(text)`           | Set OK button text, default "OK"         |
+| `cancel_text(text)`       | Set cancel button text, default "Cancel" |
+| `ok_variant(variant)`     | Set OK button variant                    |
+| `cancel_variant(variant)` | Set cancel button variant                |
+| `show_cancel(bool)`       | Show/hide cancel button                  |
+| `on_ok(callback)`         | Set OK callback                          |
+| `on_cancel(callback)`     | Set cancel callback                      |
 
 ## Examples
 
