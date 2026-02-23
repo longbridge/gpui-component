@@ -196,7 +196,7 @@ impl Root {
             .iter()
             .enumerate()
             .map(|(i, active_dialog)| {
-                let mut dialog = Dialog::new(window, cx);
+                let mut dialog = Dialog::new(cx);
 
                 dialog = (active_dialog.builder)(dialog, window, cx);
 
@@ -218,7 +218,7 @@ impl Root {
 
         if let Some(ix) = show_overlay_ix {
             if let Some(dialog) = dialogs.get_mut(ix) {
-                dialog.overlay_visible = true;
+                dialog.props.overlay_visible = true;
             }
         }
 

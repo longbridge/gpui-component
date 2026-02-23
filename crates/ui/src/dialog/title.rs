@@ -38,8 +38,7 @@ impl RenderOnce for DialogTitle {
         div()
             .id("dialog-title")
             .font_semibold()
-            .text_lg()
-            .line_height(relative(1.4))
+            .line_height(relative(1.))
             .refine_style(&self.style)
             .children(self.children)
     }

@@ -1,9 +1,9 @@
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window, div, relative,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    relative,
 };
 
-use crate::{StyledExt as _, h_flex};
+use crate::{ActiveTheme as _, StyledExt as _, h_flex};
 
 /// Footer section of a dialog, typically contains action buttons.
 ///
@@ -42,7 +42,7 @@ impl Styled for DialogFooter {
 }
 
 impl RenderOnce for DialogFooter {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .mx_neg_4()
             .mb_neg_4()
@@ -51,12 +51,8 @@ impl RenderOnce for DialogFooter {
             .gap_2()
             .justify_end()
             .line_height(relative(1.))
+            .rounded_b(cx.theme().radius_lg)
             .refine_style(&self.style)
-            .children(
-                self.children
-                    .into_iter()
-                    .enumerate()
-                    .map(|(ix, child)| div().id(ix).child(child)),
-            )
+            .children(self.children)
     }
 }

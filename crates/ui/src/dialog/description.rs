@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window, div, relative,
+    StyleRefinement, Styled, Window, div,
 };
 
 use crate::{ActiveTheme as _, StyledExt as _};
@@ -46,7 +46,6 @@ impl RenderOnce for DialogDescription {
         div()
             .id("dialog-description")
             .text_sm()
-            .line_height(relative(1.6))
             .text_color(cx.theme().muted_foreground)
             .refine_style(&self.style)
             .children(self.children)
