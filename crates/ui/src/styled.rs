@@ -179,7 +179,7 @@ pub trait StyledExt: Styled + Sized {
             .text_color(cx.theme().popover_foreground)
             .border_1()
             .border_color(cx.theme().border)
-            .shadow_lg()
+            // .shadow_lg()
             .rounded(cx.theme().radius)
     }
 
