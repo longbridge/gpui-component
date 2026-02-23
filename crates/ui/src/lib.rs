@@ -23,6 +23,7 @@ pub(crate) mod actions;
 
 pub mod accordion;
 pub mod alert;
+pub mod alert_dialog;
 pub mod animation;
 pub mod avatar;
 pub mod badge;

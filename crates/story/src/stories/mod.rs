@@ -3,6 +3,7 @@ use gpui_component::dock::PanelControl;
 
 mod accordion_story;
 mod alert_story;
+mod alert_dialog_story;
 mod avatar_story;
 mod badge_story;
 mod breadcrumb_story;
@@ -60,6 +61,7 @@ mod theme_story;
 
 pub use accordion_story::AccordionStory;
 pub use alert_story::AlertStory;
+pub use alert_dialog_story::AlertDialogStory;
 pub use avatar_story::AvatarStory;
 pub use badge_story::BadgeStory;
 pub use breadcrumb_story::BreadcrumbStory;

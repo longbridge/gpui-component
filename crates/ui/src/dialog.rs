@@ -34,10 +34,10 @@ type FooterFn =
 
 /// Dialog button props.
 pub struct DialogButtonProps {
-    ok_text: Option<SharedString>,
-    ok_variant: ButtonVariant,
-    cancel_text: Option<SharedString>,
-    cancel_variant: ButtonVariant,
+    pub(crate) ok_text: Option<SharedString>,
+    pub(crate) ok_variant: ButtonVariant,
+    pub(crate) cancel_text: Option<SharedString>,
+    pub(crate) cancel_variant: ButtonVariant,
 }
 
 impl Default for DialogButtonProps {
