@@ -1,6 +1,9 @@
 use crate::{
-    Placement, Root, alert_dialog::AlertDialog, dialog::Dialog, input::InputState,
-    notification::Notification, sheet::Sheet,
+    Placement, Root,
+    dialog::{AlertDialog, Dialog},
+    input::InputState,
+    notification::Notification,
+    sheet::Sheet,
 };
 use gpui::{App, Entity, Window};
 use std::rc::Rc;
@@ -122,8 +125,8 @@ impl WindowExt for Window {
     where
         F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static,
     {
-        self.open_dialog(cx, move |dialog, window, cx| {
-            build(AlertDialog::new(dialog), window, cx).into_dialog(window, cx)
+        self.open_dialog(cx, move |_, window, cx| {
+            build(AlertDialog::new(cx), window, cx).into_dialog(window, cx)
         })
     }
 

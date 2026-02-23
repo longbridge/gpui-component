@@ -21,10 +21,7 @@ pub struct DialogHeader {
 
 impl DialogHeader {
     pub fn new() -> Self {
-        Self {
-            style: StyleRefinement::default(),
-            children: Vec::new(),
-        }
+        Self { style: StyleRefinement::default(), children: Vec::new() }
     }
 }
 

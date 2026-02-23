@@ -30,15 +30,13 @@ impl Gallery {
             _ => {}
         })];
         let stories = vec![
-            (
-                "Getting Started",
-                vec![StoryContainer::panel::<WelcomeStory>(window, cx)],
-            ),
+            ("Getting Started", vec![StoryContainer::panel::<WelcomeStory>(window, cx)]),
             (
                 "Components",
                 vec![
                     StoryContainer::panel::<AccordionStory>(window, cx),
                     StoryContainer::panel::<AlertStory>(window, cx),
+                    StoryContainer::panel::<AlertDialogStory>(window, cx),
                     StoryContainer::panel::<AvatarStory>(window, cx),
                     StoryContainer::panel::<BadgeStory>(window, cx),
                     StoryContainer::panel::<BreadcrumbStory>(window, cx),
@@ -138,11 +136,7 @@ impl Render for Gallery {
                     .cloned()
                     .collect();
 
-                if !filtered_items.is_empty() {
-                    Some((name, filtered_items))
-                } else {
-                    None
-                }
+                if !filtered_items.is_empty() { Some((name, filtered_items)) } else { None }
             })
             .collect();
 
@@ -160,107 +154,99 @@ impl Render for Gallery {
 
         h_resizable("gallery-container")
             .child(
-                resizable_panel()
-                    .size(px(255.))
-                    .size_range(px(200.)..px(320.))
-                    .child(
-                        Sidebar::new("gallery-sidebar")
-                            .w(relative(1.))
-                            .border_0()
-                            .collapsed(self.collapsed)
-                            .header(
-                                v_flex()
-                                    .w_full()
-                                    .gap_4()
-                                    .child(
-                                        SidebarHeader::new()
-                                            .w_full()
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .justify_center()
-                                                    .rounded(cx.theme().radius_lg)
-                                                    .bg(cx.theme().primary)
-                                                    .text_color(cx.theme().primary_foreground)
-                                                    .size_8()
-                                                    .flex_shrink_0()
-                                                    .when(!self.collapsed, |this| {
-                                                        this.child(Icon::new(
+                resizable_panel().size(px(255.)).size_range(px(200.)..px(320.)).child(
+                    Sidebar::new("gallery-sidebar")
+                        .w(relative(1.))
+                        .border_0()
+                        .collapsed(self.collapsed)
+                        .header(
+                            v_flex()
+                                .w_full()
+                                .gap_4()
+                                .child(
+                                    SidebarHeader::new()
+                                        .w_full()
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .rounded(cx.theme().radius_lg)
+                                                .bg(cx.theme().primary)
+                                                .text_color(cx.theme().primary_foreground)
+                                                .size_8()
+                                                .flex_shrink_0()
+                                                .when(!self.collapsed, |this| {
+                                                    this.child(Icon::new(
+                                                        IconName::GalleryVerticalEnd,
+                                                    ))
+                                                })
+                                                .when(self.collapsed, |this| {
+                                                    this.size_4()
+                                                        .bg(cx.theme().transparent)
+                                                        .text_color(cx.theme().foreground)
+                                                        .child(Icon::new(
                                                             IconName::GalleryVerticalEnd,
                                                         ))
-                                                    })
-                                                    .when(self.collapsed, |this| {
-                                                        this.size_4()
-                                                            .bg(cx.theme().transparent)
-                                                            .text_color(cx.theme().foreground)
-                                                            .child(Icon::new(
-                                                                IconName::GalleryVerticalEnd,
-                                                            ))
-                                                    }),
+                                                }),
+                                        )
+                                        .when(!self.collapsed, |this| {
+                                            this.child(
+                                                v_flex()
+                                                    .gap_0()
+                                                    .text_sm()
+                                                    .flex_1()
+                                                    .line_height(relative(1.25))
+                                                    .overflow_hidden()
+                                                    .text_ellipsis()
+                                                    .child("GPUI Component")
+                                                    .child(
+                                                        div()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child("Gallery")
+                                                            .text_xs(),
+                                                    ),
                                             )
-                                            .when(!self.collapsed, |this| {
-                                                this.child(
-                                                    v_flex()
-                                                        .gap_0()
-                                                        .text_sm()
-                                                        .flex_1()
-                                                        .line_height(relative(1.25))
-                                                        .overflow_hidden()
-                                                        .text_ellipsis()
-                                                        .child("GPUI Component")
-                                                        .child(
-                                                            div()
-                                                                .text_color(
-                                                                    cx.theme().muted_foreground,
-                                                                )
-                                                                .child("Gallery")
-                                                                .text_xs(),
-                                                        ),
-                                                )
-                                            }),
-                                    )
-                                    .child(
-                                        div()
-                                            .bg(cx.theme().sidebar_accent)
-                                            .rounded_full()
-                                            .px_1()
-                                            .when(cx.theme().radius.is_zero(), |this| {
-                                                this.rounded(px(0.))
-                                            })
-                                            .flex_1()
-                                            .mx_1()
-                                            .child(
-                                                Input::new(&self.search_input)
-                                                    .appearance(false)
-                                                    .cleanable(true),
-                                            ),
-                                    ),
-                            )
-                            .children(stories.clone().into_iter().enumerate().map(
-                                |(group_ix, (group_name, sub_stories))| {
-                                    SidebarGroup::new(*group_name).child(
-                                        SidebarMenu::new().children(
-                                            sub_stories.iter().enumerate().map(|(ix, story)| {
-                                                SidebarMenuItem::new(story.read(cx).name.clone())
-                                                    .active(
-                                                        self.active_group_index == Some(group_ix)
-                                                            && self.active_index == Some(ix),
-                                                    )
-                                                    .on_click(cx.listener(
-                                                        move |this, _: &ClickEvent, _, cx| {
-                                                            this.active_group_index =
-                                                                Some(group_ix);
-                                                            this.active_index = Some(ix);
-                                                            cx.notify();
-                                                        },
-                                                    ))
-                                            }),
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .bg(cx.theme().sidebar_accent)
+                                        .rounded_full()
+                                        .px_1()
+                                        .when(cx.theme().radius.is_zero(), |this| {
+                                            this.rounded(px(0.))
+                                        })
+                                        .flex_1()
+                                        .mx_1()
+                                        .child(
+                                            Input::new(&self.search_input)
+                                                .appearance(false)
+                                                .cleanable(true),
                                         ),
-                                    )
-                                },
-                            )),
-                    ),
+                                ),
+                        )
+                        .children(stories.clone().into_iter().enumerate().map(
+                            |(group_ix, (group_name, sub_stories))| {
+                                SidebarGroup::new(*group_name).child(SidebarMenu::new().children(
+                                    sub_stories.iter().enumerate().map(|(ix, story)| {
+                                        SidebarMenuItem::new(story.read(cx).name.clone())
+                                            .active(
+                                                self.active_group_index == Some(group_ix)
+                                                    && self.active_index == Some(ix),
+                                            )
+                                            .on_click(cx.listener(
+                                                move |this, _: &ClickEvent, _, cx| {
+                                                    this.active_group_index = Some(group_ix);
+                                                    this.active_index = Some(ix);
+                                                    cx.notify();
+                                                },
+                                            ))
+                                    }),
+                                ))
+                            },
+                        )),
+                ),
             )
             .child(
                 v_flex()
@@ -276,14 +262,11 @@ impl Render for Gallery {
                             .justify_between()
                             .items_start()
                             .child(
-                                v_flex()
-                                    .gap_1()
-                                    .child(div().text_xl().child(story_name))
-                                    .child(
-                                        div()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(description),
-                                    ),
+                                v_flex().gap_1().child(div().text_xl().child(story_name)).child(
+                                    div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(description),
+                                ),
                             ),
                     )
                     .child(

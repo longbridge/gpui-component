@@ -13,10 +13,7 @@ pub struct DialogContent {
 
 impl DialogContent {
     pub fn new() -> Self {
-        Self {
-            style: StyleRefinement::default(),
-            children: Vec::new(),
-        }
+        Self { style: StyleRefinement::default(), children: Vec::new() }
     }
 }
 
