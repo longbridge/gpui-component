@@ -1,5 +1,6 @@
 use crate::{
-    Placement, Root, dialog::Dialog, input::InputState, notification::Notification, sheet::Sheet,
+    Placement, Root, alert_dialog::AlertDialog, dialog::Dialog, input::InputState,
+    notification::Notification, sheet::Sheet,
 };
 use gpui::{App, Entity, Window};
 use std::rc::Rc;
@@ -26,6 +27,27 @@ pub trait WindowExt: Sized {
     fn open_dialog<F>(&mut self, cx: &mut App, build: F)
     where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static;
+
+    /// Opens an AlertDialog.
+    ///
+    /// This is a convenience method for opening an alert dialog with opinionated defaults.
+    /// The footer buttons are center-aligned and include an icon based on the variant.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use gpui_component::{AlertDialog, alert::AlertVariant};
+    ///
+    /// window.open_alert_dialog(cx, |alert, _, _| {
+    ///     alert.warning()
+    ///         .title("Unsaved Changes")
+    ///         .description("You have unsaved changes. Are you sure you want to leave?")
+    ///         .show_cancel(true)
+    /// });
+    /// ```
+    fn open_alert_dialog<F>(&mut self, cx: &mut App, build: F)
+    where
+        F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static;
 
     /// Return true, if there is an active Dialog.
     fn has_active_dialog(&mut self, cx: &mut App) -> bool;
@@ -92,6 +114,16 @@ impl WindowExt for Window {
     {
         Root::update(self, cx, move |root, window, cx| {
             root.open_dialog(build, window, cx);
+        })
+    }
+
+    #[inline]
+    fn open_alert_dialog<F>(&mut self, cx: &mut App, build: F)
+    where
+        F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static,
+    {
+        self.open_dialog(cx, move |dialog, window, cx| {
+            build(AlertDialog::new(dialog), window, cx).into_dialog(window, cx)
         })
     }
 
