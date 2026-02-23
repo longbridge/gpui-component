@@ -17,6 +17,9 @@ doctest = false
 [features]
 decimal = ["dep:rust_decimal"]
 inspector = ["gpui_macros/inspector", "gpui/inspector"]
+x11 = ["gpui_platform/x11"]
+wayland = ["gpui_platform/wayland"]
+runtime_shaders = ["gpui_platform/runtime_shaders"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
@@ -59,6 +62,9 @@ tree-sitter-languages = [
 anyhow.workspace = true
 gpui = { workspace = true }
 gpui_macros.workspace = true
+# Required on all platforms for feature forwarding (x11/wayland/runtime_shaders).
+# On Linux/FreeBSD, additional features are added via the target-specific section below.
+gpui_platform = { workspace = true }
 gpui-component-macros = { workspace = true }
 notify.workspace = true
 ropey.workspace = true
@@ -135,6 +141,9 @@ tree-sitter-zig = { version = "1.1.2", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "=21.0.0"
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+gpui_platform = { workspace = true, features = ["x11", "wayland"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
