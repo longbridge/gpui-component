@@ -506,7 +506,11 @@ impl Render for DialogStory {
                                             )),
                                     )
                                     .child(
-                                        DialogFooter::new().border_t_1().border_color(cx.theme().border).bg(cx.theme().muted).child(
+                                        "This is a basic dialog created using the declarative API. \
+                                        You can put any content here, and it will be displayed in the dialog.",
+                                    )
+                                    .child(
+                                        DialogFooter::new().mt_3().border_t_1().border_color(cx.theme().border).bg(cx.theme().muted).child(
                                             Button::new("cancel").outline().label("Cancel").on_click(|_, window, cx| {
                                                 window.close_dialog(cx);
                                             }),
@@ -535,10 +539,10 @@ impl Render for DialogStory {
                                                                 "This dialog has a custom width of 400px.",
                                                             )),
                                                     )
-                                                    .child(div().child(
+                                                    .child(
                                                         "Content area with custom width configuration, \
                                                         and the footer is used flex 1 button widths.",
-                                                    ))
+                                                    )
                                                     .child(
                                                         DialogFooter::new().justify_center().child(
                                                             Button::new("cancel").flex_1().outline().label("Cancel").on_click(|_, window, cx| {
