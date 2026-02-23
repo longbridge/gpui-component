@@ -2,11 +2,9 @@ use gpui::{
     AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     Pixels, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
-use rust_i18n::t;
 
 use crate::{
     StyledExt as _, WindowExt as _,
-    button::{Button, ButtonVariants as _},
     dialog::{
         Dialog, DialogButtonProps, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
     },
@@ -248,17 +246,11 @@ impl AlertDialog {
     }
 
     /// Convert AlertDialog into a configured Dialog.
-    pub(crate) fn into_dialog(self, _window: &mut Window, _cx: &mut App) -> Dialog {
+    pub(crate) fn into_dialog(self, window: &mut Window, cx: &mut App) -> Dialog {
         let button_props = self.button_props.clone();
-        let action_text = self.button_props.ok_text.unwrap_or_else(|| t!("Dialog.ok").into());
-        let cancel_text =
-            self.button_props.cancel_text.unwrap_or_else(|| t!("Dialog.cancel").into());
-
-        let action_variant = self.button_props.ok_variant;
-        let cancel_variant = self.button_props.cancel_variant;
 
         self.base
-            .button_props(button_props)
+            .button_props(button_props.clone())
             .child(
                 DialogHeader::new()
                     .when_some(self.icon, |this, icon| this.child(icon))
@@ -272,40 +264,10 @@ impl AlertDialog {
             .children(self.children)
             .child(
                 DialogFooter::new()
-                    .when(self.button_props.show_cancel, |this| {
-                        this.child({
-                            let on_cancel = self.button_props.on_cancel.clone();
-                            Button::new("cancel")
-                                .label(cancel_text)
-                                .with_variant(cancel_variant)
-                                .on_click({
-                                    move |_, window, cx| {
-                                        if on_cancel(&ClickEvent::default(), window, cx) {
-                                            window.close_dialog(cx);
-                                        }
-                                    }
-                                })
-                        })
+                    .when(button_props.show_cancel, |this| {
+                        this.child(button_props.render_cancel(window, cx))
                     })
-                    .child({
-                        let on_action = self.button_props.on_ok.clone();
-                        Button::new("action")
-                            .label(action_text)
-                            .with_variant(action_variant)
-                            .on_click({
-                                move |_, window, cx| {
-                                    let should_close = if let Some(on_action) = &on_action {
-                                        on_action(&ClickEvent::default(), window, cx)
-                                    } else {
-                                        true
-                                    };
-
-                                    if should_close {
-                                        window.close_dialog(cx);
-                                    }
-                                }
-                            })
-                    }),
+                    .child(button_props.render_ok(window, cx)),
             )
     }
 }
@@ -327,21 +289,24 @@ impl AlertDialog {
         let content_builder = self.base.content_builder.clone();
         let style = self.base.style.clone();
         let props = self.base.props.clone();
+        let button_props = self.button_props.clone();
 
         div()
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 let content_builder = content_builder.clone();
                 let style = style.clone();
                 let props = props.clone();
+                let button_props = button_props.clone();
                 window.open_dialog(cx, move |dialog, _, _| {
-                    dialog.refine_style(&style).with_props(props.clone()).when_some(
-                        content_builder.clone(),
-                        |this, content_builder| {
+                    dialog
+                        .refine_style(&style)
+                        .button_props(button_props.clone())
+                        .with_props(props.clone())
+                        .when_some(content_builder.clone(), |this, content_builder| {
                             this.content(move |content, window, cx| {
                                 content_builder(content, window, cx)
                             })
-                        },
-                    )
+                        })
                 });
                 cx.stop_propagation();
             })

@@ -36,7 +36,7 @@ pub struct MyComponent {
     children: Vec<AnyElement>,
 
     // Callbacks (use Rc for Clone)
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
 }
 
 impl MyComponent {

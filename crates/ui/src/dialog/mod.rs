@@ -10,6 +10,6 @@ pub use alert_dialog::*;
 pub use content::DialogContent;
 pub use description::DialogDescription;
 pub use dialog::*;
-pub use footer::DialogFooter;
+pub use footer::*;
 pub use header::DialogHeader;
 pub use title::DialogTitle;

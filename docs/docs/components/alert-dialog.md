@@ -19,7 +19,7 @@ AlertDialog provides these defaults on top of Dialog:
 ## Import
 
 ```rust
-use gpui_component::dialog::AlertDialog;
+use gpui_component::dialog::{AlertDialog, DialogAction, DialogClose};
 use gpui_component::WindowExt;
 ```
 
@@ -75,6 +75,55 @@ AlertDialog::new(cx)
     })
 ```
 
+### Using DialogAction and DialogClose
+
+`DialogAction` and `DialogClose` are wrapper components that simplify button click handling by automatically triggering the appropriate actions:
+
+- **DialogClose**: Wraps a button to trigger the `Cancel` action, invoking `on_cancel` callback
+- **DialogAction**: Wraps a button to trigger the `Confirm` action, invoking `on_ok` callback
+
+These components eliminate the need to manually call `window.close_dialog(cx)`:
+
+```rust
+AlertDialog::new(cx)
+    .trigger(Button::new("show-alert").outline().label("Show Alert"))
+    .on_ok(|_, window, cx| {
+        window.push_notification("You confirmed!", cx);
+        true  // Return true to close dialog
+    })
+    .on_cancel(|_, window, cx| {
+        window.push_notification("You cancelled!", cx);
+        true
+    })
+    .content(|content, _, cx| {
+        content
+            .child(
+                DialogHeader::new()
+                    .child(DialogTitle::new().child("Confirm Action"))
+                    .child(DialogDescription::new().child("Do you want to proceed?"))
+            )
+            .child(
+                DialogFooter::new()
+                    .child(
+                        DialogClose::new().child(
+                            Button::new("cancel").outline().label("Cancel")
+                        )
+                    )
+                    .child(
+                        DialogAction::new().child(
+                            Button::new("ok").primary().label("Confirm")
+                        )
+                    )
+            )
+    })
+```
+
+**Benefits:**
+- No need to manually close the dialog
+- Automatically connects to `on_ok` and `on_cancel` callbacks
+- Cleaner, more declarative code
+- Supports returning `false` from callbacks to prevent closing
+
 ### Basic AlertDialog (Imperative API)
 
 Open a dialog imperatively using `WindowExt::open_alert_dialog`:
@@ -128,6 +177,10 @@ use gpui_component::{Icon, IconName, ActiveTheme};
 AlertDialog::new(cx)
     .w(px(320.))
     .trigger(Button::new("permission").outline().label("Request Permission"))
+    .on_ok(|_, window, cx| {
+        window.push_notification("Permission granted", cx);
+        true
+    })
     .content(|content, _, cx| {
         content
             .child(
@@ -147,23 +200,14 @@ AlertDialog::new(cx)
                 DialogFooter::new()
                     .v_flex()
                     .child(
-                        Button::new("allow")
-                            .w_full()
-                            .primary()
-                            .label("Allow")
-                            .on_click(|_, window, cx| {
-                                window.push_notification("Permission granted", cx);
-                                window.close_dialog(cx);
-                            })
+                        DialogAction::new().child(
+                            Button::new("allow").w_full().primary().label("Allow")
+                        )
                     )
                     .child(
-                        Button::new("deny")
-                            .w_full()
-                            .outline()
-                            .label("Don't Allow")
-                            .on_click(|_, window, cx| {
-                                window.close_dialog(cx);
-                            })
+                        DialogClose::new().child(
+                            Button::new("deny").w_full().outline().label("Don't Allow")
+                        )
                     )
             )
     })
@@ -194,6 +238,10 @@ AlertDialog::new(cx)
             .danger()
             .label("Delete Account")
     )
+    .on_ok(|_, window, cx| {
+        window.push_notification("Account deletion initiated", cx);
+        true
+    })
     .content(|content, _, _| {
         content
             .child(
@@ -207,24 +255,18 @@ AlertDialog::new(cx)
             .child(
                 DialogFooter::new()
                     .child(
-                        Button::new("cancel")
-                            .flex_1()
-                            .outline()
-                            .label("Cancel")
-                            .on_click(|_, window, cx| {
-                                window.close_dialog(cx);
-                            })
+                        DialogClose::new().child(
+                            Button::new("cancel").flex_1().outline().label("Cancel")
+                        )
                     )
                     .child(
-                        Button::new("delete")
-                            .flex_1()
-                            .outline()
-                            .danger()
-                            .label("Delete Forever")
-                            .on_click(|_, window, cx| {
-                                window.push_notification("Account deletion initiated", cx);
-                                window.close_dialog(cx);
-                            })
+                        DialogAction::new().child(
+                            Button::new("delete")
+                                .flex_1()
+                                .outline()
+                                .danger()
+                                .label("Delete Forever")
+                        )
                     )
             )
     })
@@ -353,9 +395,45 @@ window.open_alert_dialog(cx, |alert, _, _| {
 | `on_ok(callback)`         | Set OK callback                          |
 | `on_cancel(callback)`     | Set cancel callback                      |
 
+### DialogAction
+
+A wrapper component that automatically triggers the `Confirm` action when its child element is clicked. This invokes the `on_ok` callback set on the AlertDialog.
+
+**Usage:**
+```rust
+DialogAction::new().child(
+    Button::new("ok").primary().label("Confirm")
+)
+```
+
+**Behavior:**
+- Dispatches `Confirm` action on click
+- Invokes the `on_ok` callback
+- Dialog closes if callback returns `true`
+- Dialog stays open if callback returns `false`
+
+### DialogClose
+
+A wrapper component that automatically triggers the `Cancel` action when its child element is clicked. This invokes the `on_cancel` callback set on the AlertDialog.
+
+**Usage:**
+```rust
+DialogClose::new().child(
+    Button::new("cancel").outline().label("Cancel")
+)
+```
+
+**Behavior:**
+- Dispatches `Cancel` action on click
+- Invokes the `on_cancel` callback
+- Dialog closes if callback returns `true` (or if no callback is set)
+- Dialog stays open if callback returns `false`
+
 ## Examples
 
 ### Delete Confirmation
+
+Using imperative API with button props:
 
 ```rust
 Button::new("delete")
@@ -378,6 +456,38 @@ Button::new("delete")
                     true
                 })
         });
+    })
+```
+
+Or using declarative API with DialogAction/DialogClose:
+
+```rust
+AlertDialog::new(cx)
+    .trigger(Button::new("delete").danger().label("Delete"))
+    .on_ok(|_, window, cx| {
+        window.push_notification("File deleted", cx);
+        true
+    })
+    .content(|content, _, cx| {
+        content
+            .child(
+                DialogHeader::new()
+                    .child(DialogTitle::new().child("Delete File?"))
+                    .child(DialogDescription::new().child("This action cannot be undone."))
+            )
+            .child(
+                DialogFooter::new()
+                    .child(
+                        DialogClose::new().child(
+                            Button::new("cancel").outline().label("Cancel")
+                        )
+                    )
+                    .child(
+                        DialogAction::new().child(
+                            Button::new("delete-confirm").danger().label("Delete")
+                        )
+                    )
+            )
     })
 ```
 
@@ -419,6 +529,14 @@ window.open_alert_dialog(cx, |alert, _, _| {
 ```rust
 AlertDialog::new(cx)
     .trigger(Button::new("update").outline().label("Update Available"))
+    .on_cancel(|_, window, cx| {
+        window.push_notification("Update postponed", cx);
+        true
+    })
+    .on_ok(|_, window, cx| {
+        window.push_notification("Starting update...", cx);
+        true
+    })
     .content(|content, _, _| {
         content
             .child(
@@ -432,24 +550,14 @@ AlertDialog::new(cx)
             .child(
                 DialogFooter::new()
                     .child(
-                        Button::new("later")
-                            .flex_1()
-                            .outline()
-                            .label("Later")
-                            .on_click(|_, window, cx| {
-                                window.push_notification("Update postponed", cx);
-                                window.close_dialog(cx);
-                            })
+                        DialogClose::new().child(
+                            Button::new("later").flex_1().outline().label("Later")
+                        )
                     )
                     .child(
-                        Button::new("update-now")
-                            .flex_1()
-                            .primary()
-                            .label("Update Now")
-                            .on_click(|_, window, cx| {
-                                window.push_notification("Starting update...", cx);
-                                window.close_dialog(cx);
-                            })
+                        DialogAction::new().child(
+                            Button::new("update-now").flex_1().primary().label("Update Now")
+                        )
                     )
             )
     })
@@ -458,11 +566,12 @@ AlertDialog::new(cx)
 ## Best Practices
 
 1. **Choose the Right API**: Use imperative API (`open_alert_dialog`) for simple confirmations; use declarative API (`trigger` + `content`) for complex layouts or integration with other components
-2. **Clarify Intent**: Use appropriate button variants (e.g., `ButtonVariant::Danger` for delete operations) to communicate the importance of actions
-3. **Provide Clear Descriptions**: Ensure users understand the consequences of their actions, especially for destructive operations
-4. **Use Icons Wisely**: Icons can enhance attention for warnings and errors, but use them appropriately
-5. **Prevent Closing Carefully**: Only prevent dialog closing when user confirmation is truly necessary (e.g., a process is running)
-6. **Maintain Consistency**: Keep dialog button order and styles consistent throughout your application
+2. **Use DialogAction and DialogClose**: Prefer wrapping buttons with `DialogAction` and `DialogClose` over manual `window.close_dialog()` calls for cleaner, more declarative code
+3. **Clarify Intent**: Use appropriate button variants (e.g., `ButtonVariant::Danger` for delete operations) to communicate the importance of actions
+4. **Provide Clear Descriptions**: Ensure users understand the consequences of their actions, especially for destructive operations
+5. **Use Icons Wisely**: Icons can enhance attention for warnings and errors, but use them appropriately
+6. **Prevent Closing Carefully**: Only prevent dialog closing when user confirmation is truly necessary (e.g., a process is running)
+7. **Maintain Consistency**: Keep dialog button order and styles consistent throughout your application
 
 ## Related Components
 
@@ -471,6 +580,8 @@ AlertDialog::new(cx)
 - [DialogTitle] - Dialog title component
 - [DialogDescription] - Dialog description component
 - [DialogFooter] - Dialog footer component
+- [DialogAction] - Wrapper component for confirm/OK buttons
+- [DialogClose] - Wrapper component for cancel/close buttons
 
 [AlertDialog]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.AlertDialog.html
 [Dialog]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.Dialog.html
@@ -478,3 +589,5 @@ AlertDialog::new(cx)
 [DialogTitle]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.DialogTitle.html
 [DialogDescription]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.DialogDescription.html
 [DialogFooter]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.DialogFooter.html
+[DialogAction]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.DialogAction.html
+[DialogClose]: https://docs.rs/gpui-component/latest/gpui_component/dialog/struct.DialogClose.html

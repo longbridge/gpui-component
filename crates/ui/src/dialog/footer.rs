@@ -1,9 +1,13 @@
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
-    relative,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, relative,
 };
 
-use crate::{ActiveTheme as _, StyledExt as _, h_flex};
+use crate::{
+    ActiveTheme as _, StyledExt as _,
+    dialog::{CancelDialog, ConfirmDialog},
+    h_flex,
+};
 
 /// Footer section of a dialog, typically contains action buttons.
 ///
@@ -49,6 +53,70 @@ impl RenderOnce for DialogFooter {
             .line_height(relative(1.))
             .rounded_b(cx.theme().radius_lg)
             .refine_style(&self.style)
+            .children(self.children)
+    }
+}
+
+pub trait DialogFooterButton {
+    fn is_cancel(&self) -> bool {
+        false
+    }
+
+    fn is_action(&self) -> bool {
+        false
+    }
+}
+
+#[derive(IntoElement)]
+pub struct DialogClose {
+    children: Vec<AnyElement>,
+}
+
+impl DialogClose {
+    pub fn new() -> Self {
+        Self { children: Vec::new() }
+    }
+}
+
+impl ParentElement for DialogClose {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for DialogClose {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .size_full()
+            .id("dialog-close")
+            .on_click(move |_, window, cx| window.dispatch_action(Box::new(CancelDialog), cx))
+            .children(self.children)
+    }
+}
+
+#[derive(IntoElement)]
+pub struct DialogAction {
+    children: Vec<AnyElement>,
+}
+
+impl DialogAction {
+    pub fn new() -> Self {
+        Self { children: Vec::new() }
+    }
+}
+
+impl ParentElement for DialogAction {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for DialogAction {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .size_full()
+            .id("dialog-action")
+            .on_click(move |_, window, cx| window.dispatch_action(Box::new(ConfirmDialog), cx))
             .children(self.children)
     }
 }

@@ -6,7 +6,10 @@ use gpui::{
 use gpui_component::{
     ActiveTheme, Icon, IconName, StyledExt, WindowExt as _,
     button::{Button, ButtonVariant, ButtonVariants},
-    dialog::{AlertDialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
+    dialog::{
+        AlertDialog, DialogAction, DialogButtonProps, DialogClose, DialogDescription, DialogFooter,
+        DialogHeader, DialogTitle,
+    },
     v_flex,
 };
 
@@ -55,6 +58,14 @@ impl Render for AlertDialogStory {
                     section("AlertDialog").child(
                         AlertDialog::new(cx)
                             .trigger(Button::new("info-alert").outline().label("Show Info Alert"))
+                            .on_ok(|_, window, cx| {
+                                window.push_notification("You have confirmed the alert", cx);
+                                true
+                            })
+                            .on_cancel(|_, window, cx| {
+                                window.push_notification("Ok, you canceled the alert", cx);
+                                true
+                            })
                             .content(|content, _, cx| {
                                 content
                                     .child(DialogHeader::new().child(DialogTitle::new().child("Are you absolutely sure?")).child(
@@ -69,23 +80,20 @@ impl Render for AlertDialogStory {
                                         .border_color(cx.theme().border)
                                         .bg(cx.theme().muted)
                                         .child(
-                                            Button::new("cancel").outline().label("Cancel").on_click(
-                                                |_, window, cx| {
-                                                    window.close_dialog(cx);
-                                                },
-                                            ),
+                                            DialogClose::new().child(
+                                                Button::new("cancel").outline().label("Cancel")
+                                            )
                                         )
                                         .child(
-                                            Button::new("ok").label("Continue").primary().on_click(|_, window, cx| {
-                                                window.push_notification("Info alert acknowledged", cx);
-                                                window.close_dialog(cx);
-                                            }),
+                                            DialogAction::new().child(
+                                                Button::new("ok").label("Continue").primary()
+                                            )
                                         )
                                     )
                             }),
                     ),
                 )
-                .child(section("With Buttons").child(
+                .child(section("With open_alert_dialog").child(
                     Button::new("confirm-alert").outline().label("Show Confirmation").on_click(cx.listener(
                         |_, _, window, cx| {
                             use gpui_component::dialog::DialogButtonProps;
@@ -115,7 +123,11 @@ impl Render for AlertDialogStory {
                 .child(section("With Icon").child(
                     AlertDialog::new(cx).w(px(320.)).trigger(
                         Button::new("icon-alert").outline().label("Request Permission"),
-                    ).content(|content, _, cx| {
+                    ).on_ok(|_, window, cx| {
+                        window.push_notification("Thank you for allowing network access", cx);
+                        true
+                    })
+                    .content(|content, _, cx| {
                         content
                             .child(
                                 DialogHeader::new()
@@ -133,19 +145,16 @@ impl Render for AlertDialogStory {
                             .child(
                                 DialogFooter::new()
                                     .v_flex()
-                                    .child(Button::new("agree").w_full().primary().label("Allow").on_click(
-                                        |_, window, cx| {
-                                            window.push_notification("Thank you for allowing network access", cx);
-                                            window.close_dialog(cx);
-                                        },
-                                    ))
                                     .child(
-                                        Button::new("disagree").w_full().outline().label("Don't Allow").on_click(
-                                            |_, window, cx| {
-                                                window.close_dialog(cx);
-                                            },
-                                        ),
-                                    ),
+                                        DialogAction::new().child(
+                                            Button::new("agree").w_full().primary().label("Allow")
+                                        )
+                                    )
+                                    .child(
+                                        DialogClose::new().child(
+                                            Button::new("disagree").w_full().outline().label("Don't Allow")
+                                        )
+                                    )
                             )
                     }),
                 ))
@@ -153,6 +162,10 @@ impl Render for AlertDialogStory {
                     section("Destructive Action").child(
                         AlertDialog::new(cx)
                             .trigger(Button::new("destructive-action").outline().danger().label("Delete Account"))
+                            .on_ok(|_, window, cx| {
+                                window.push_notification("Your account has been deleted", cx);
+                                true
+                            })
                             .content(|content, _, _| {
                                 content
                                     .child(DialogHeader::new().child(DialogTitle::new().child("Delete Account")).child(
@@ -163,22 +176,20 @@ impl Render for AlertDialogStory {
                                     ))
                                     .child(
                                         DialogFooter::new()
-                                            .child(Button::new("cancel").flex_1().outline().label("Cancel").on_click(
-                                                |_, window, cx| {
-                                                    window.close_dialog(cx);
-                                                },
-                                            ))
                                             .child(
-                                                Button::new("delete")
-                                                    .flex_1()
-                                                    .outline()
-                                                    .danger()
-                                                    .label("Delete Forever")
-                                                    .on_click(|_, window, cx| {
-                                                        window.push_notification("Account deletion initiated", cx);
-                                                        window.close_dialog(cx);
-                                                    }),
-                                            ),
+                                                DialogClose::new().child(
+                                                    Button::new("cancel").flex_1().outline().label("Cancel")
+                                                )
+                                            )
+                                            .child(
+                                                DialogAction::new().child(
+                                                    Button::new("delete")
+                                                        .flex_1()
+                                                        .outline()
+                                                        .danger()
+                                                        .label("Delete Forever")
+                                                )
+                                            )
                                     )
                             }),
                     ),
@@ -217,8 +228,18 @@ impl Render for AlertDialogStory {
                     )),
                 ))
                 .child(section("Update Available").child(
-                    AlertDialog::new(cx).trigger(Button::new("update").outline().label("Update Available")).content(
-                        |content, _, _| {
+                    AlertDialog::new(cx)
+                        .trigger(Button::new("update").outline().label("Update Available"))
+                        .on_cancel(|_, window, cx| {
+                            window.push_notification("Update postponed", cx);
+                            true
+                        })
+                        .on_ok(|_, window, cx| {
+                            window.push_notification("Starting update...", cx);
+                            true
+                        })
+                        .content(
+                        |content, _, cx| {
                             content
                                 .child(DialogHeader::new().child(DialogTitle::new().child("Update Available")).child(
                                     DialogDescription::new().child(
@@ -228,18 +249,18 @@ impl Render for AlertDialogStory {
                                 ))
                                 .child(
                                     DialogFooter::new()
-                                        .child(Button::new("later").flex_1().outline().label("Later").on_click(
-                                            |_, window, cx| {
-                                                window.push_notification("Update postponed", cx);
-                                                window.close_dialog(cx);
-                                            },
-                                        ))
-                                        .child(Button::new("update-now").flex_1().primary().label("Update Now").on_click(
-                                            |_, window, cx| {
-                                                window.push_notification("Starting update...", cx);
-                                                window.close_dialog(cx);
-                                            },
-                                        ))
+                                        .mt_4()
+                                        .bg(cx.theme().muted)
+                                        .child(
+                                            DialogClose::new().child(
+                                                Button::new("later").flex_1().outline().label("Later")
+                                            ),
+                                        )
+                                        .child(
+                                            DialogAction::new().child(
+                                                Button::new("update-now").flex_1().primary().label("Update Now")
+                                            )
+                                        )
                                 )
                         },
                     ),
@@ -274,8 +295,6 @@ impl Render for AlertDialogStory {
                 .child(section("Prevent Close").child(
                     Button::new("prevent-close").outline().label("Prevent Close").on_click(cx.listener(
                         |_, _, window, cx| {
-                            use gpui_component::dialog::DialogButtonProps;
-
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
                                     .title("Processing")
