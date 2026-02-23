@@ -44,6 +44,7 @@ impl RenderOnce for DialogHeader {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         v_flex()
             .gap_2()
+            .mb_4()
             .rounded_t(cx.theme().radius_lg)
             .refine_style(&self.style)
             .children(self.children)
