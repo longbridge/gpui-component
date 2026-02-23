@@ -287,35 +287,30 @@ impl AlertDialog {
         };
 
         // Build header with title and description using new declarative components
-        let mut header = DialogHeader::new().items_center();
+        let mut header = DialogHeader::new();
 
         if let Some(title) = self.title {
-            header = header.child(
-                DialogTitle::new().text_lg().line_height(relative(1.4)).text_center().child(title),
-            );
+            header =
+                header.child(DialogTitle::new().text_lg().line_height(relative(1.4)).child(title));
         }
 
         if let Some(desc) = self.description {
-            header = header.child(
-                DialogDescription::new().line_height(relative(1.6)).text_center().child(desc),
-            );
+            header = header.child(DialogDescription::new().line_height(relative(1.6)).child(desc));
         }
 
         // Build main content
-        let mut main_content = v_flex().gap_4().items_center();
         if let Some(icon) = self.icon {
-            main_content = main_content.child(icon);
+            header = header.child(icon);
         }
-        main_content = main_content.child(header);
 
         // Build footer with new DialogFooter component
-        let mut footer = DialogFooter::new().justify_center();
+        let mut footer = DialogFooter::new();
         if self.button_props.show_cancel {
             footer = footer.child(cancel_button);
         }
         footer = footer.child(action_button);
 
-        let content = v_flex().items_center().child(main_content).child(footer);
+        let content = v_flex().child(header).child(footer);
 
         self.base.child(content)
     }
