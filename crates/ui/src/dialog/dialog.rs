@@ -98,7 +98,7 @@ impl Default for DialogProps {
     fn default() -> Self {
         Self {
             margin_top: None,
-            width: px(480.),
+            width: px(448.),
             max_width: None,
             overlay: true,
             keyboard: true,
@@ -273,7 +273,7 @@ impl Dialog {
         self
     }
 
-    /// Sets the width of the dialog, defaults to 480px.
+    /// Sets the width of the dialog, defaults to 448px.
     ///
     /// See also [`Self::width`]
     pub fn w(mut self, width: impl Into<Pixels>) -> Self {
@@ -281,7 +281,7 @@ impl Dialog {
         self
     }
 
-    /// Sets the width of the dialog, defaults to 480px.
+    /// Sets the width of the dialog, defaults to 448px.
     pub fn width(mut self, width: impl Into<Pixels>) -> Self {
         self.props.width = width.into();
         self
