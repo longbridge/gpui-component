@@ -5,7 +5,7 @@ use gpui::{
 
 use gpui_component::{
     ActiveTheme, Icon, IconName, StyledExt, WindowExt as _,
-    button::{Button, ButtonVariants},
+    button::{Button, ButtonVariant, ButtonVariants},
     dialog::{AlertDialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
     v_flex,
 };
@@ -55,11 +55,37 @@ impl Render for AlertDialogStory {
                     section("AlertDialog").child(
                         AlertDialog::new(cx)
                             .trigger(Button::new("info-alert").outline().label("Show Info Alert"))
-                            .title("Account Created")
-                            .description("Your account has been created successfully!"),
+                            .content(|content, _, cx| {
+                                content
+                                    .child(DialogHeader::new().child(DialogTitle::new().child("Are you absolutely sure?")).child(
+                                        DialogDescription::new().child(
+                                            "This action cannot be undone. \
+                                            This will permanently delete your account from our servers.",
+                                        ),
+                                    ))
+                                    .child(DialogFooter::new()
+                                        .mt_3()
+                                        .border_t_1()
+                                        .border_color(cx.theme().border)
+                                        .bg(cx.theme().muted)
+                                        .child(
+                                            Button::new("cancel").outline().label("Cancel").on_click(
+                                                |_, window, cx| {
+                                                    window.close_dialog(cx);
+                                                },
+                                            ),
+                                        )
+                                        .child(
+                                            Button::new("ok").label("Continue").primary().on_click(|_, window, cx| {
+                                                window.push_notification("Info alert acknowledged", cx);
+                                                window.close_dialog(cx);
+                                            }),
+                                        )
+                                    )
+                            }),
                     ),
                 )
-                .child(section("Confirmation Dialog").child(
+                .child(section("With Buttons").child(
                     Button::new("confirm-alert").outline().label("Show Confirmation").on_click(cx.listener(
                         |_, _, window, cx| {
                             use gpui_component::dialog::DialogButtonProps;
@@ -73,6 +99,7 @@ impl Render for AlertDialogStory {
                                     )
                                     .button_props(
                                         DialogButtonProps::default()
+                                            .ok_variant(ButtonVariant::Danger)
                                             .ok_text("Delete")
                                             .cancel_text("Cancel")
                                             .show_cancel(true),
@@ -86,66 +113,41 @@ impl Render for AlertDialogStory {
                     )),
                 ))
                 .child(section("With Icon").child(
-                    Button::new("icon-alert").outline().label("Show with Icon").on_click(cx.listener(
-                        |_, _, window, cx| {
-                            window.open_alert_dialog(cx, |alert, _, cx| {
-                                alert
-                                    .icon(Icon::new(IconName::TriangleAlert).text_color(cx.theme().danger))
-                                    .title("Error Occurred")
-                                    .description(
-                                        "An unexpected error has occurred. \
-                                                Please try again later.",
-                                    )
-                            });
-                        },
-                    )),
-                ))
-                .child(section("Custom Width").child(
-                    Button::new("custom-width").outline().label("Custom Width (450px)").on_click(cx.listener(
-                        |_, _, window, cx| {
-                            window.open_alert_dialog(cx, |alert, _, _| {
-                                alert
-                                    .title("Custom Width")
-                                    .description("This alert dialog has a custom width of 500px.")
-                                    .width(px(450.))
-                            });
-                        },
-                    )),
-                ))
-                .child(section("Long Description").child(
-                    AlertDialog::new(cx).trigger(Button::new("long-desc").outline().label("Long Description")).content(
-                        |content, _, _| {
-                            content
-                                .child(
-                                    DialogHeader::new().child(DialogTitle::new().child("Terms and Conditions")).child(
+                    AlertDialog::new(cx).w(px(320.)).trigger(
+                        Button::new("icon-alert").outline().label("Request Permission"),
+                    ).content(|content, _, cx| {
+                        content
+                            .child(
+                                DialogHeader::new()
+                                    .items_center()
+                                    .child(Icon::new(IconName::TriangleAlert).size_10().text_color(cx.theme().warning))
+                                    .child(
+                                        DialogTitle::new().child("Network Permission Required"),
+                                    ).child(
                                         DialogDescription::new().child(
-                                            "By continuing, you agree to our Terms of Service \
-                                                    and Privacy Policy. Please read them carefully \
-                                                    before proceeding. These terms govern your use of \
-                                                    our services and your account.",
+                                            "We need your permission to access the network to provide better services. \
+                                            Please allow network access in your system settings.",
                                         ),
                                     ),
-                                )
-                                .child(
-                                    DialogFooter::new()
-                                        .v_flex()
-                                        .child(Button::new("agree").w_full().primary().label("I Agree").on_click(
+                            )
+                            .child(
+                                DialogFooter::new()
+                                    .v_flex()
+                                    .child(Button::new("agree").w_full().primary().label("Allow").on_click(
+                                        |_, window, cx| {
+                                            window.push_notification("Thank you for allowing network access", cx);
+                                            window.close_dialog(cx);
+                                        },
+                                    ))
+                                    .child(
+                                        Button::new("disagree").w_full().outline().label("Don't Allow").on_click(
                                             |_, window, cx| {
-                                                window.push_notification("You agreed to the terms", cx);
                                                 window.close_dialog(cx);
                                             },
-                                        ))
-                                        .child(
-                                            Button::new("disagree").w_full().outline().label("I Disagree").on_click(
-                                                |_, window, cx| {
-                                                    window.push_notification("You disagreed with the terms", cx);
-                                                    window.close_dialog(cx);
-                                                },
-                                            ),
                                         ),
-                                )
-                        },
-                    ),
+                                    ),
+                            )
+                    }),
                 ))
                 .child(
                     section("Destructive Action").child(
@@ -187,11 +189,15 @@ impl Render for AlertDialogStory {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert.content(|content, _, _| {
                                     content
-                                        .child(DialogHeader::new().child(DialogTitle::new().child("Session Expired")))
-                                        .child(DialogDescription::new().child(
-                                            "Your session has expired due to inactivity. \
-                                                            Please log in again to continue.",
-                                        ))
+                                        .child(
+                                            DialogHeader::new()
+                                                .items_center()
+                                                .child(DialogTitle::new().child("Session Expired"))
+                                                .child(DialogDescription::new().child(
+                                                    "Your session has expired due to inactivity. \
+                                                                    Please log in again to continue.",
+                                                ))
+                                        )
                                         .child(DialogFooter::new().child(
                                             Button::new("sign-in").label("Sign in").primary().flex_1().on_click(
                                                 move |_, window, cx| {
@@ -201,58 +207,6 @@ impl Render for AlertDialogStory {
                                             ),
                                         ))
                                 })
-                            });
-                        },
-                    )),
-                ))
-                .child(section("Network Error Retry").child(
-                    Button::new("network-error").outline().label("Network Error").on_click(cx.listener(
-                        |_, _, window, cx| {
-                            use gpui_component::dialog::DialogButtonProps;
-
-                            window.open_alert_dialog(cx, |alert, _, _| {
-                                alert
-                                    .title("Connection Failed")
-                                    .description(
-                                        "Unable to connect to the server. \
-                                                Please check your internet connection and try again.",
-                                    )
-                                    .button_props(
-                                        DialogButtonProps::default()
-                                            .ok_text("Retry")
-                                            .cancel_text("Cancel")
-                                            .show_cancel(true),
-                                    )
-                                    .on_ok(|_, window, cx| {
-                                        window.push_notification("Retrying connection...", cx);
-                                        true
-                                    })
-                            });
-                        },
-                    )),
-                ))
-                .child(section("Permission Request").child(
-                    Button::new("permission").outline().label("Request Permission").on_click(cx.listener(
-                        |_, _, window, cx| {
-                            use gpui_component::dialog::DialogButtonProps;
-
-                            window.open_alert_dialog(cx, |alert, _, _| {
-                                alert
-                                    .title("Camera Permission Required")
-                                    .description(
-                                        "This app needs access to your camera to take photos. \
-                                                Please allow camera access in your system settings.",
-                                    )
-                                    .button_props(
-                                        DialogButtonProps::default()
-                                            .ok_text("Open Settings")
-                                            .cancel_text("Not Now")
-                                            .show_cancel(true),
-                                    )
-                                    .on_ok(|_, window, cx| {
-                                        window.push_notification("Opening system settings...", cx);
-                                        true
-                                    })
                             });
                         },
                     )),
@@ -269,19 +223,18 @@ impl Render for AlertDialogStory {
                                 ))
                                 .child(
                                     DialogFooter::new()
-                                        .v_flex()
-                                        .child(Button::new("update-now").success().label("Update Now").on_click(
+                                        .child(Button::new("later").flex_1().outline().label("Later").on_click(
+                                            |_, window, cx| {
+                                                window.push_notification("Update postponed", cx);
+                                                window.close_dialog(cx);
+                                            },
+                                        ))
+                                        .child(Button::new("update-now").flex_1().primary().label("Update Now").on_click(
                                             |_, window, cx| {
                                                 window.push_notification("Starting update...", cx);
                                                 window.close_dialog(cx);
                                             },
                                         ))
-                                        .child(Button::new("later").outline().label("Later").on_click(
-                                            |_, window, cx| {
-                                                window.push_notification("Update postponed", cx);
-                                                window.close_dialog(cx);
-                                            },
-                                        )),
                                 )
                         },
                     ),
@@ -339,60 +292,6 @@ impl Render for AlertDialogStory {
                         },
                     )),
                 ))
-                .child(section("Custom Footer Layout (Declarative API)").child(
-                    Button::new("custom-footer").outline().label("Custom Footer").on_click(cx.listener(
-                        |_, _, window, cx| {
-                            use gpui_component::{
-                                button::ButtonVariants as _,
-                                dialog::{DialogDescription, DialogFooter, DialogHeader, DialogTitle},
-                            };
-
-                            window.open_alert_dialog(cx, |alert, _, _| {
-                                alert.content(|content, _, _cx| {
-                                    content
-                                        .items_center()
-                                        .gap_6()
-                                        .child(
-                                            DialogHeader::new()
-                                                .items_center()
-                                                .child(
-                                                    DialogTitle::new()
-                                                        .text_lg()
-                                                        .line_height(gpui::relative(1.4))
-                                                        .text_center()
-                                                        .child("Custom Footer Layout"),
-                                                )
-                                                .child(
-                                                    DialogDescription::new()
-                                                        .line_height(gpui::relative(1.6))
-                                                        .text_center()
-                                                        .child(
-                                                            "This alert has a custom footer with reversed\
-                                                                    button order using declarative API.",
-                                                        ),
-                                                ),
-                                        )
-                                        .child(
-                                            DialogFooter::new()
-                                                .w_full()
-                                                .justify_between()
-                                                .child(Button::new("action").primary().label("Action").on_click(
-                                                    |_: &gpui::ClickEvent, window, cx| {
-                                                        window.push_notification("Action clicked", cx);
-                                                        window.close_dialog(cx);
-                                                    },
-                                                ))
-                                                .child(Button::new("cancel").label("Cancel").on_click(
-                                                    |_: &gpui::ClickEvent, window, cx| {
-                                                        window.close_dialog(cx);
-                                                    },
-                                                )),
-                                        )
-                                })
-                            });
-                        },
-                    )),
-                )),
         )
     }
 }

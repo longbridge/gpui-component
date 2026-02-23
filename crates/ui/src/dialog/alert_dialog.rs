@@ -75,9 +75,11 @@ pub struct AlertDialog {
 
 impl AlertDialog {
     /// Create a new AlertDialog.
+    ///
+    /// By default, the dialog is not overlay closable. You can change this with `.overlay_closable(true)`.
     pub fn new(cx: &mut App) -> Self {
         Self {
-            base: Dialog::new(cx),
+            base: Dialog::new(cx).overlay_closable(false).close_button(false),
             trigger: None,
             title: None,
             description: None,
@@ -92,6 +94,8 @@ impl AlertDialog {
     ///
     /// **Note**: When using `.trigger()`, you should also use `.content()` to define the dialog content
     /// declaratively instead of using `.title()`, `.description()`, etc.
+    ///
+    /// The `title`, `description`, `icon`, and `button_props` will be ignored when used together with `.trigger()`.
     pub fn trigger(mut self, trigger: impl IntoElement) -> Self {
         self.trigger = Some(trigger.into_any_element());
         self
@@ -124,20 +128,34 @@ impl AlertDialog {
         self
     }
 
+    #[track_caller]
+    fn debug_assert_no_trigger(&self) {
+        debug_assert!(
+            self.trigger.is_none() && self.base.content_builder.is_none(),
+            "Cannot set this property when trigger is used. Use content() to define dialog content instead."
+        );
+    }
+
     /// Sets the icon of the alert dialog, default is None.
+    #[track_caller]
     pub fn icon(mut self, icon: impl IntoElement) -> Self {
+        self.debug_assert_no_trigger();
         self.icon = Some(icon.into_any_element());
         self
     }
 
     /// Sets the title of the alert dialog.
+    #[track_caller]
     pub fn title(mut self, title: impl IntoElement) -> Self {
+        self.debug_assert_no_trigger();
         self.title = Some(title.into_any_element());
         self
     }
 
     /// Sets the description of the alert dialog.
+    #[track_caller]
     pub fn description(mut self, description: impl IntoElement) -> Self {
+        self.debug_assert_no_trigger();
         self.description = Some(description.into_any_element());
         self
     }
@@ -157,7 +175,9 @@ impl AlertDialog {
     ///         .show_cancel(true)
     /// )
     /// ```
+    #[track_caller]
     pub fn button_props(mut self, button_props: DialogButtonProps) -> Self {
+        self.debug_assert_no_trigger();
         self.button_props = button_props;
         self
     }
@@ -179,6 +199,12 @@ impl AlertDialog {
     /// When the overlay is clicked, the dialog will be closed.
     pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
         self.base = self.base.overlay_closable(overlay_closable);
+        self
+    }
+
+    /// Set the close button of the alert dialog, defaults to `false`.
+    pub fn close_button(mut self, close_button: bool) -> Self {
+        self.base = self.base.close_button(close_button);
         self
     }
 
@@ -291,7 +317,7 @@ impl AlertDialog {
 
         let content = v_flex().items_center().child(main_content).child(footer);
 
-        self.base.close_button(false).child(content)
+        self.base.child(content)
     }
 }
 

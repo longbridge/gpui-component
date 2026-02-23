@@ -23,7 +23,6 @@ pub(crate) mod actions;
 
 pub mod accordion;
 pub mod alert;
-pub mod alert_dialog;
 pub mod animation;
 pub mod avatar;
 pub mod badge;
@@ -167,10 +166,7 @@ pub struct Measure {
 impl Measure {
     #[track_caller]
     pub fn new(name: impl Into<SharedString>) -> Self {
-        Self {
-            name: name.into(),
-            start: std::time::Instant::now(),
-        }
+        Self { name: name.into(), start: std::time::Instant::now() }
     }
 
     #[track_caller]
