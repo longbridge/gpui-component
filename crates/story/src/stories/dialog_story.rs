@@ -281,18 +281,16 @@ impl DialogStory {
                                         we need to restart the application.",
                                     ),
                             )
-                            .child(
-                                DialogFooter::new()
-                                    .child(
-                                        DialogClose::new()
-                                            .child(Button::new("cancel").label("Later").outline()),
-                                    )
-                                    .child(
-                                        DialogAction::new().child(
-                                            Button::new("ok").label("Restart Now").primary(),
-                                        ),
-                                    ),
-                            )
+                            .footer(|this, _, _| {
+                                this.child(
+                                    DialogClose::new()
+                                        .child(Button::new("cancel").label("Later").outline()),
+                                )
+                                .child(
+                                    DialogAction::new()
+                                        .child(Button::new("ok").label("Restart Now").primary()),
+                                )
+                            })
                             .on_ok(|_, window, cx| {
                                 window.push_notification("You have pressed restart.", cx);
                                 true
@@ -322,9 +320,16 @@ impl DialogStory {
                             .overlay_closable(overlay_closable)
                             .title("Dialog with scrollbar")
                             .child(markdown(include_str!("../../../../README.md")))
-                            .child(DialogFooter::new().child(
-                                Button::new("cancel").label("Cancel").outline(),
-                            ).child(Button::new("confirm").label("Confirm").primary()))
+                            .footer(|this, _, _| {
+                                this.child(
+                                    DialogClose::new()
+                                        .child(Button::new("cancel").label("Cancel").outline()),
+                                )
+                                .child(
+                                    DialogAction::new()
+                                        .child(Button::new("confirm").label("Confirm").primary()),
+                                )
+                            })
                     });
                 }),
             ),

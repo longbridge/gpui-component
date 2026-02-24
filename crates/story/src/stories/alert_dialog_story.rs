@@ -203,26 +203,19 @@ impl Render for AlertDialogStory {
                                         window.push_notification("Redirecting to login...", cx);
                                         true
                                     })
-                                    .content(|content, _, _| {
-                                    content
-                                        .child(
-                                            DialogHeader::new()
-                                                .items_center()
-                                                .child(DialogTitle::new().child("Session Expired"))
-                                                .child(DialogDescription::new().child(
-                                                    "Your session has expired due to inactivity. \
-                                                                    Please log in again to continue.",
-                                                ))
-                                        )
-                                        .child(DialogFooter::new().child(
+                                    .title("Session Expired")
+                                    .description("Your session has expired due to inactivity.\
+                                        Please log in again to continue.")
+                                    .footer(move |this, window, cx| {
+                                        this.child(
                                             Button::new("sign-in").label("Sign in").primary().flex_1().on_click(
                                                 move |_, window, cx| {
                                                     window.push_notification("Redirecting to login...", cx);
                                                     window.close_dialog(cx);
                                                 },
                                             ),
-                                        ))
-                                })
+                                        )
+                                    })
                             });
                         },
                     )),

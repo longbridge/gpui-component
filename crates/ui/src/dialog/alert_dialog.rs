@@ -5,9 +5,7 @@ use gpui::{
 
 use crate::{
     StyledExt as _, WindowExt as _,
-    dialog::{
-        Dialog, DialogButtonProps, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-    },
+    dialog::{Dialog, DialogButtonProps, DialogDescription, DialogHeader, DialogTitle},
 };
 
 /// AlertDialog is a modal dialog that interrupts the user with important content
@@ -136,6 +134,15 @@ impl AlertDialog {
         self
     }
 
+    pub fn footer<F>(mut self, builder: F) -> Self
+    where
+        F: Fn(crate::dialog::DialogFooter, &mut Window, &mut App) -> crate::dialog::DialogFooter
+            + 'static,
+    {
+        self.base = self.base.footer(builder);
+        self
+    }
+
     #[track_caller]
     fn debug_assert_no_trigger(&self) {
         debug_assert!(
@@ -256,8 +263,9 @@ impl AlertDialog {
     }
 
     /// Convert AlertDialog into a configured Dialog.
-    pub(crate) fn into_dialog(self, window: &mut Window, cx: &mut App) -> Dialog {
+    pub(crate) fn into_dialog(self, _: &mut Window, _: &mut App) -> Dialog {
         let button_props = self.button_props.clone();
+        let has_footer = self.base.footer_builder.is_some();
 
         self.base
             .button_props(button_props.clone())
@@ -272,13 +280,16 @@ impl AlertDialog {
                     }),
             )
             .children(self.children)
-            .child(
-                DialogFooter::new()
-                    .when(button_props.show_cancel, |this| {
-                        this.child(button_props.render_cancel(window, cx))
-                    })
-                    .child(button_props.render_ok(window, cx)),
-            )
+            .when(!has_footer, |this| {
+                // Default footer for AlertDialog if user doesn't provide one, with OK and optional Cancel button
+                this.footer(move |footer, window, cx| {
+                    footer
+                        .when(button_props.show_cancel, |this| {
+                            this.child(button_props.render_cancel(window, cx))
+                        })
+                        .child(button_props.render_ok(window, cx))
+                })
+            })
     }
 }
 
