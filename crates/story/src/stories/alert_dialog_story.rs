@@ -243,7 +243,6 @@ impl Render for AlertDialogStory {
                                 ))
                                 .child(
                                     DialogFooter::new()
-                                        .mt_4()
                                         .bg(cx.theme().muted)
                                         .child(
                                             DialogClose::new().child(

@@ -516,7 +516,7 @@ impl RenderOnce for Dialog {
                             .min_h_24()
                             .pt(paddings.top)
                             .pb(paddings.bottom)
-                            .gap(paddings.top.min(px(8.)))
+                            .gap(paddings.bottom.max(px(8.)))
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
@@ -565,7 +565,10 @@ impl RenderOnce for Dialog {
                             })
                             .when_some(self.content_builder, |this, builder| {
                                 this.child(builder(
-                                    DialogContent::new().pl(paddings.left).pr(paddings.right),
+                                    DialogContent::new()
+                                        .gap(paddings.bottom)
+                                        .pl(paddings.left)
+                                        .pr(paddings.right),
                                     window,
                                     cx,
                                 ))
