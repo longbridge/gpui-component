@@ -197,6 +197,7 @@ pub struct Dialog {
     children: Vec<AnyElement>,
     trigger: Option<AnyElement>,
     title: Option<AnyElement>,
+    pub(crate) header: Option<AnyElement>,
     pub(crate) footer: Option<AnyElement>,
     pub(crate) content_builder: Option<ContentBuilderFn>,
     pub(crate) props: DialogProps,
@@ -224,6 +225,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             trigger: None,
             title: None,
+            header: None,
             footer: None,
             content_builder: None,
             props: DialogProps::default(),
@@ -253,6 +255,14 @@ impl Dialog {
     /// Sets the title of the dialog.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = Some(title.into_any_element());
+        self
+    }
+
+    /// Sets the footer of the dialog, the footer will render at the bottom of the dialog, usually for action buttons.
+    ///
+    /// When you set the footer, the `button_props` will be ignored, you need to render the action buttons by yourself.
+    pub(crate) fn header(mut self, header: impl IntoElement) -> Self {
+        self.header = Some(header.into_any_element());
         self
     }
 
@@ -429,7 +439,6 @@ impl RenderOnce for Dialog {
         let on_close = self.button_props.on_close.clone();
         let on_ok = self.button_props.on_ok.clone();
         let on_cancel = self.button_props.on_cancel.clone();
-        let has_title = self.title.is_some();
 
         let window_paddings = crate::window_border::window_paddings(window);
         let view_size = window.viewport_size()
@@ -457,11 +466,6 @@ impl RenderOnce for Dialog {
         }
         if let Some(pb) = self.style.padding.bottom {
             paddings.bottom = pb.to_pixels(base_size, rem_size);
-        }
-
-        if !has_title && self.content_builder.is_none() {
-            // When no title, reduce the top padding to fix line-height effect.
-            paddings.top -= px(6.);
         }
 
         let animation =
@@ -516,7 +520,7 @@ impl RenderOnce for Dialog {
                             .min_h_24()
                             .pt(paddings.top)
                             .pb(paddings.bottom)
-                            .gap(paddings.bottom.max(px(8.)))
+                            .gap(paddings.top.max(px(8.)))
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
@@ -555,6 +559,9 @@ impl RenderOnce for Dialog {
                             .top(y)
                             .w(self.props.width)
                             .when_some(self.props.max_width, |this, w| this.max_w(w))
+                            .when_some(self.header, |this, header| {
+                                this.child(div().pl(paddings.left).pr(paddings.right).child(header))
+                            })
                             .when_some(self.title, |this, title| {
                                 this.child(
                                     DialogTitle::new()

@@ -269,19 +269,22 @@ impl AlertDialog {
     pub(crate) fn into_dialog(self, window: &mut Window, cx: &mut App) -> Dialog {
         let button_props = self.button_props.clone();
         let has_footer = self.base.footer.is_some();
+        let has_header = self.icon.is_some() || self.title.is_some() || self.description.is_some();
 
         self.base
             .button_props(button_props.clone())
-            .child(
-                DialogHeader::new()
-                    .when_some(self.icon, |this, icon| this.child(icon))
-                    .when_some(self.title, |this, title| {
-                        this.child(DialogTitle::new().child(title))
-                    })
-                    .when_some(self.description, |this, desc| {
-                        this.child(DialogDescription::new().child(desc))
-                    }),
-            )
+            .when(has_header, |this| {
+                this.header(
+                    DialogHeader::new()
+                        .when_some(self.icon, |this, icon| this.child(icon))
+                        .when_some(self.title, |this, title| {
+                            this.child(DialogTitle::new().child(title))
+                        })
+                        .when_some(self.description, |this, desc| {
+                            this.child(DialogDescription::new().child(desc))
+                        }),
+                )
+            })
             .children(self.children)
             .when(!has_footer, |this| {
                 // Default footer for AlertDialog if user doesn't provide one, with OK and optional Cancel button

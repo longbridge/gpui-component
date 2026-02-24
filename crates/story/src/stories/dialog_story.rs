@@ -195,8 +195,10 @@ impl DialogStory {
                                     .px_4()
                                     .pb_4()
                                     .gap_3()
-                                    .child("This is a dialog dialog.")
-                                    .child("You can put anything here.")
+                                    .child(
+                                        "This is a dialog dialog, \
+                                        you can put anything here.",
+                                    )
                                     .child(Input::new(&input1))
                                     .child(Select::new(&select))
                                     .child(DatePicker::new(&date).placeholder("Date of Birth")),
@@ -250,6 +252,24 @@ impl DialogStory {
                         to make sure when Dialog close,\
                         \nthis still can handle the action.",
                 ),
+        )
+    }
+
+    fn render_dialog_without_title(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let dialog_overlay = self.dialog_overlay;
+        let overlay_closable = self.overlay_closable;
+
+        section("Dialog without Title").child(
+            Button::new("dialog-no-title").outline().label("Dialog without Title").on_click(
+                cx.listener(move |_, _, window, cx| {
+                    window.open_dialog(cx, move |dialog, _, _| {
+                        dialog.overlay(dialog_overlay).overlay_closable(overlay_closable).child(
+                            "This is a dialog without title, \
+                                you can use it when the title is not necessary.",
+                        )
+                    });
+                }),
+            ),
         )
     }
 
@@ -431,7 +451,6 @@ impl DialogStory {
                                 )
                                 .child(
                                     DialogFooter::new()
-                                        .mt_3()
                                         .justify_center()
                                         .child(
                                             Button::new("cancel")
@@ -521,6 +540,7 @@ impl Render for DialogStory {
                     .child(self.render_custom_buttons(cx))
                     .child(self.render_scrollable_dialog(cx))
                     .child(self.render_table_in_dialog(cx))
+                    .child(self.render_dialog_without_title(cx))
                     .child(self.render_custom_paddings(cx))
                     .child(self.render_custom_style(cx))
                     .child(self.render_dialog_with_content(cx)),
