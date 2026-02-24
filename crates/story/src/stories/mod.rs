@@ -2,6 +2,7 @@ use gpui::{AnyView, App, AppContext as _, Entity, Hsla, Pixels, Render, Window, 
 use gpui_component::dock::PanelControl;
 
 mod accordion_story;
+mod alert_dialog_story;
 mod alert_story;
 mod avatar_story;
 mod badge_story;
@@ -34,8 +35,8 @@ mod otp_input_story;
 mod pagination_story;
 mod popover_story;
 mod progress_story;
-mod rating_story;
 mod radio_story;
+mod rating_story;
 mod resizable_story;
 mod scrollbar_story;
 mod select_story;
@@ -51,14 +52,15 @@ mod table_story;
 mod tabs_story;
 mod tag_story;
 mod textarea_story;
+mod theme_story;
 mod toggle_story;
 mod tooltip_story;
 mod tree_story;
 mod virtual_list_story;
 mod welcome_story;
-mod theme_story;
 
 pub use accordion_story::AccordionStory;
+pub use alert_dialog_story::AlertDialogStory;
 pub use alert_story::AlertStory;
 pub use avatar_story::AvatarStory;
 pub use badge_story::BadgeStory;
@@ -91,8 +93,8 @@ pub use otp_input_story::OtpInputStory;
 pub use pagination_story::PaginationStory;
 pub use popover_story::PopoverStory;
 pub use progress_story::ProgressStory;
-pub use rating_story::RatingStory;
 pub use radio_story::RadioStory;
+pub use rating_story::RatingStory;
 pub use resizable_story::ResizableStory;
 pub use scrollbar_story::ScrollbarStory;
 pub use select_story::SelectStory;
@@ -108,11 +110,11 @@ pub use table_story::TableStory;
 pub use tabs_story::TabsStory;
 pub use tag_story::TagStory;
 pub use textarea_story::TextareaStory;
+pub use theme_story::ThemeColorsStory;
 pub use toggle_story::ToggleStory;
 pub use tooltip_story::TooltipStory;
 pub use tree_story::TreeStory;
 pub use virtual_list_story::VirtualListStory;
-pub use theme_story::ThemeColorsStory;
 
 pub use welcome_story::WelcomeStory;
 

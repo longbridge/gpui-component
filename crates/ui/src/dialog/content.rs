@@ -1,8 +1,8 @@
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window, div,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{ActiveTheme as _, StyledExt as _};
+use crate::{ActiveTheme as _, StyledExt as _, v_flex};
 
 /// Content container for a dialog.
 #[derive(IntoElement)]
@@ -13,10 +13,7 @@ pub struct DialogContent {
 
 impl DialogContent {
     pub fn new() -> Self {
-        Self {
-            style: StyleRefinement::default(),
-            children: Vec::new(),
-        }
+        Self { style: StyleRefinement::default(), children: Vec::new() }
     }
 }
 
@@ -34,7 +31,7 @@ impl Styled for DialogContent {
 
 impl RenderOnce for DialogContent {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
+        v_flex()
             .w_full()
             .flex_1()
             .px_4()

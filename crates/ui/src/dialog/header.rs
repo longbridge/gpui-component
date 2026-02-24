@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{ActiveTheme as _, StyledExt as _, v_flex};
+use crate::{StyledExt as _, v_flex};
 
 /// Header section of a dialog, typically contains DialogTitle and DialogDescription.
 ///
@@ -21,10 +21,7 @@ pub struct DialogHeader {
 
 impl DialogHeader {
     pub fn new() -> Self {
-        Self {
-            style: StyleRefinement::default(),
-            children: Vec::new(),
-        }
+        Self { style: StyleRefinement::default(), children: Vec::new() }
     }
 }
 
@@ -41,12 +38,7 @@ impl Styled for DialogHeader {
 }
 
 impl RenderOnce for DialogHeader {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .mb_3()
-            .rounded_t(cx.theme().radius_lg)
-            .refine_style(&self.style)
-            .children(self.children)
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        v_flex().gap_2().mb_3().refine_style(&self.style).children(self.children)
     }
 }

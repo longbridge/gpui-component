@@ -166,10 +166,7 @@ pub struct Measure {
 impl Measure {
     #[track_caller]
     pub fn new(name: impl Into<SharedString>) -> Self {
-        Self {
-            name: name.into(),
-            start: std::time::Instant::now(),
-        }
+        Self { name: name.into(), start: std::time::Instant::now() }
     }
 
     #[track_caller]

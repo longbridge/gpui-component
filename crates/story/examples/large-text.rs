@@ -23,10 +23,7 @@ impl Example {
         let editor = cx.new(|cx| {
             InputState::new(window, cx)
                 .multi_line(true)
-                .tab_size(TabSize {
-                    tab_size: 4,
-                    hard_tabs: false,
-                })
+                .tab_size(TabSize { tab_size: 4, hard_tabs: false })
                 .soft_wrap(true)
                 .placeholder("Enter your code here...")
                 .default_value(text)
@@ -37,12 +34,7 @@ impl Example {
             cx.notify();
         })];
 
-        Self {
-            editor,
-            go_to_line_state,
-            soft_wrap: false,
-            _subscribes,
-        }
+        Self { editor, go_to_line_state, soft_wrap: false, _subscribes }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -64,37 +56,33 @@ impl Example {
                 state.focus(window, cx);
             });
 
-            dialog
-                .title("Go to line")
-                .child(Input::new(&input_state))
-                .confirm()
-                .on_ok({
-                    let editor = editor.clone();
-                    let input_state = input_state.clone();
-                    move |_, window, cx| {
-                        let query = input_state.read(cx).value();
-                        let mut parts = query
-                            .split(':')
-                            .map(|s| s.trim().parse::<usize>().ok())
-                            .collect::<Vec<_>>()
-                            .into_iter();
-                        let Some(line) = parts.next().and_then(|l| l) else {
-                            return false;
-                        };
-                        let line = line.saturating_sub(1);
-                        let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
+            dialog.title("Go to line").child(Input::new(&input_state)).on_ok({
+                let editor = editor.clone();
+                let input_state = input_state.clone();
+                move |_, window, cx| {
+                    let query = input_state.read(cx).value();
+                    let mut parts = query
+                        .split(':')
+                        .map(|s| s.trim().parse::<usize>().ok())
+                        .collect::<Vec<_>>()
+                        .into_iter();
+                    let Some(line) = parts.next().and_then(|l| l) else {
+                        return false;
+                    };
+                    let line = line.saturating_sub(1);
+                    let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
 
-                        editor.update(cx, |state, cx| {
-                            state.set_cursor_position(
-                                input::Position::new(line as u32, column as u32),
-                                window,
-                                cx,
-                            );
-                        });
+                    editor.update(cx, |state, cx| {
+                        state.set_cursor_position(
+                            input::Position::new(line as u32, column as u32),
+                            window,
+                            cx,
+                        );
+                    });
 
-                        true
-                    }
-                })
+                    true
+                }
+            })
         });
     }
 
@@ -114,12 +102,7 @@ impl Render for Example {
                 .id("source")
                 .w_full()
                 .flex_1()
-                .child(
-                    Input::new(&self.editor)
-                        .bordered(false)
-                        .h_full()
-                        .focus_bordered(false),
-                )
+                .child(Input::new(&self.editor).bordered(false).h_full().focus_bordered(false))
                 .child(
                     h_flex()
                         .justify_between()

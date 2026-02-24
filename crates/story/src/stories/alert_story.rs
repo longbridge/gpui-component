@@ -21,11 +21,7 @@ pub struct AlertStory {
 
 impl AlertStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self {
-            size: Size::default(),
-            banner_visible: true,
-            focus_handle: cx.focus_handle(),
-        }
+        Self { size: Size::default(), banner_visible: true, focus_handle: cx.focus_handle() }
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -71,25 +67,13 @@ impl Render for AlertStory {
                     .outline()
                     .compact()
                     .child(
-                        Button::new("xsmall")
-                            .label("XSmall")
-                            .selected(self.size == Size::XSmall),
+                        Button::new("xsmall").label("XSmall").selected(self.size == Size::XSmall),
                     )
+                    .child(Button::new("small").label("Small").selected(self.size == Size::Small))
                     .child(
-                        Button::new("small")
-                            .label("Small")
-                            .selected(self.size == Size::Small),
+                        Button::new("medium").label("Medium").selected(self.size == Size::Medium),
                     )
-                    .child(
-                        Button::new("medium")
-                            .label("Medium")
-                            .selected(self.size == Size::Medium),
-                    )
-                    .child(
-                        Button::new("large")
-                            .label("Large")
-                            .selected(self.size == Size::Large),
-                    )
+                    .child(Button::new("large").label("Large").selected(self.size == Size::Large))
                     .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
                         let size = match selecteds[0] {
                             0 => Size::XSmall,
