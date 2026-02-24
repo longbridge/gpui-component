@@ -1,9 +1,9 @@
 ---
-title: Table
+title: DataTable
 description: High-performance data table with virtual scrolling, sorting, filtering, and column management.
 ---
 
-# Table
+# Data Table
 
 A comprehensive data table component designed for handling large datasets with high performance. Features virtual scrolling, column configuration, sorting, filtering, row/column/cell selection, and custom cell rendering. Perfect for displaying tabular data with thousands of rows while maintaining smooth performance.
 
