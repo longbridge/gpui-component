@@ -322,6 +322,9 @@ impl DialogStory {
                             .overlay_closable(overlay_closable)
                             .title("Dialog with scrollbar")
                             .child(markdown(include_str!("../../../../README.md")))
+                            .child(DialogFooter::new().child(
+                                Button::new("cancel").label("Cancel").outline(),
+                            ).child(Button::new("confirm").label("Confirm").primary()))
                     });
                 }),
             ),
