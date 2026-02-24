@@ -89,21 +89,21 @@ impl Default for TableOptions {
 ///         .row_selectable(true)
 /// });
 ///
-/// Table::new(&table_state)
+/// DataTable::new(&table_state)
 ///     .stripe(true)
 ///     .bordered(true)
 /// ```
 #[derive(IntoElement)]
-pub struct Table<D: TableDelegate> {
+pub struct DataTable<D: TableDelegate> {
     state: Entity<TableState<D>>,
     options: TableOptions,
 }
 
-impl<D> Table<D>
+impl<D> DataTable<D>
 where
     D: TableDelegate,
 {
-    /// Create a new Table element with the given [`TableState`].
+    /// Create a new DataTable element with the given [`TableState`].
     pub fn new(state: &Entity<TableState<D>>) -> Self {
         Self {
             state: state.clone(),
@@ -134,7 +134,7 @@ where
     }
 }
 
-impl<D> Sizable for Table<D>
+impl<D> Sizable for DataTable<D>
 where
     D: TableDelegate,
 {
@@ -144,7 +144,7 @@ where
     }
 }
 
-impl<D> RenderOnce for Table<D>
+impl<D> RenderOnce for DataTable<D>
 where
     D: TableDelegate,
 {

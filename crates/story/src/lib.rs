@@ -470,7 +470,7 @@ impl StoryState {
             "ResizableStory" => story!(ResizableStory),
             "ScrollbarStory" => story!(ScrollbarStory),
             "SwitchStory" => story!(SwitchStory),
-            "TableStory" => story!(TableStory),
+            "DataTableStory" => story!(DataTableStory),
             "LabelStory" => story!(LabelStory),
             "TooltipStory" => story!(TooltipStory),
             "AccordionStory" => story!(AccordionStory),

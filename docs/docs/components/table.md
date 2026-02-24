@@ -23,7 +23,7 @@ A comprehensive data table component designed for handling large datasets with h
 
 ```rust
 use gpui_component::table::{
-    Table, TableState, TableDelegate,
+    DataTable, TableState, TableDelegate,
     Column, ColumnSort, ColumnFixed,
     TableEvent
 };
@@ -38,7 +38,7 @@ To create a table, you need to implement the `TableDelegate` trait and provide c
 ```rust
 use std::ops::Range;
 use gpui::{App, Context, Window, IntoElement};
-use gpui_component::table::{Table, TableDelegate, Column, ColumnSort};
+use gpui_component::table::{DataTable, TableDelegate, Column, ColumnSort};
 
 struct MyData {
     id: usize,
@@ -408,7 +408,7 @@ let state = cx.new(|cx| {
 });
 
 // In render
-Table::new(&state)
+DataTable::new(&state)
     .stripe(true)           // Alternating row colors
     .bordered(true)           // Border around table
     .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
@@ -611,7 +611,7 @@ impl TableDelegate for MyTableDelegate {
 
 ### Core Types
 
-- [Table] - The table component
+- [DataTable] - The data table component
 - [TableState] - Table state management
 - [TableDelegate] - Trait for implementing table data source
 - [Column] - Column configuration
@@ -667,7 +667,7 @@ impl TableDelegate for MyTableDelegate {
 - `ColumnWidthsChanged(Vec<Pixels>)` - Column widths changed
 - `MoveColumn(usize, usize)` - Column moved (from_ix, to_ix)
 
-[Table]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.Table.html
+[DataTable]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.DataTable.html
 [TableState]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.TableState.html
 [TableDelegate]: https://docs.rs/gpui-component/latest/gpui_component/table/trait.TableDelegate.html
 [Column]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.Column.html
