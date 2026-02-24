@@ -156,6 +156,58 @@ Implement `Sizable` trait for components that support size variants (xs, sm, md,
 ### Variants
 Use enums for visual variants (e.g., `AlertVariant::Info`, `ButtonVariant::Primary`).
 
+### Styled Trait Implementation
+
+Components that render as a single container element should implement `Styled` to allow callers to customize styles. The pattern uses a `StyleRefinement` field and `refine_style()` from `StyledExt`:
+
+```rust
+use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window, div};
+use crate::StyledExt as _;
+
+#[derive(IntoElement)]
+pub struct MyComponent {
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
+}
+
+impl MyComponent {
+    pub fn new() -> Self {
+        Self {
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl ParentElement for MyComponent {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for MyComponent {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for MyComponent {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            // ... component's default styles ...
+            .refine_style(&self.style)  // Apply user's style overrides
+            .children(self.children)
+    }
+}
+```
+
+Key points:
+- Add `style: StyleRefinement` field initialized with `StyleRefinement::default()`
+- Implement `Styled` trait returning `&mut self.style`
+- In `render()`, call `.refine_style(&self.style)` on the root div to merge user styles
+- Place `.refine_style()` after component defaults but before `.children()` so user styles override defaults
+- Reference: `crates/ui/src/dialog/header.rs` (DialogHeader), `crates/ui/src/table/table.rs` (Table and sub-components)
+
 ### Callbacks
 Use `Rc<dyn Fn>` for callbacks that may be called multiple times:
 ```rust

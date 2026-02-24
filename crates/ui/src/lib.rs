@@ -76,7 +76,7 @@ pub mod tree;
 
 pub use crate::Disableable;
 pub(crate) use anchored::*;
-pub use element_ext::ElementExt;
+pub use element_ext::*;
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;
 pub use geometry::*;

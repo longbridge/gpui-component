@@ -192,7 +192,7 @@ Explore the component documentation to learn more about each component:
 - [Button](./components/button) - Interactive button component
 - [Input](./components/input) - Text input with validation
 - [Dialog](./components/dialog) - Dialog and modal windows
-- [Table](./components/table) - High-performance data tables
+- [DataTable](./components/data-table) - High-performance data tables
 - [More components...](./components/index)
 
 ## Development

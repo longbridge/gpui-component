@@ -454,11 +454,19 @@
           "type": ["string", "null"]
         },
         "table.head.background": {
-          "description": "Table head background color.",
+          "description": "Table header background color.",
           "type": ["string", "null"]
         },
         "table.head.foreground": {
-          "description": "Table head text color.",
+          "description": "Table header text color.",
+          "type": ["string", "null"]
+        },
+        "table.foot.background": {
+          "description": "Table footer background color.",
+          "type": ["string", "null"]
+        },
+        "table.foot.foreground": {
+          "description": "Table footer text color.",
           "type": ["string", "null"]
         },
         "table.hover.background": {

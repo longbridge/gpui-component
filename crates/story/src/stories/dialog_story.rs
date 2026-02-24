@@ -15,7 +15,7 @@ use gpui_component::{
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
-    table::{Column, Table, TableDelegate, TableState},
+    table::{Column, DataTable, TableDelegate, TableState},
     text::markdown,
     v_flex,
 };
@@ -366,7 +366,7 @@ impl DialogStory {
                                         .size_full()
                                         .gap_3()
                                         .child("This is a dialog contains a table component.")
-                                        .child(Table::new(&table)),
+                                        .child(DataTable::new(&table)),
                                 )
                         }
                     });

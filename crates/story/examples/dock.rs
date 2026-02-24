@@ -12,7 +12,7 @@ use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
     IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
-    StoryContainer, SwitchStory, TableStory, TooltipStory,
+    StoryContainer, SwitchStory, DataTableStory, TooltipStory,
 };
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
@@ -347,7 +347,7 @@ impl StoryWorkspace {
                     Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
-                    Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
+                    Arc::new(StoryContainer::panel::<DataTableStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
                     Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),
@@ -433,7 +433,7 @@ impl StoryWorkspace {
             5 => Arc::new(StoryContainer::panel::<PopoverStory>(window, cx)),
             6 => Arc::new(StoryContainer::panel::<SwitchStory>(window, cx)),
             7 => Arc::new(StoryContainer::panel::<ProgressStory>(window, cx)),
-            8 => Arc::new(StoryContainer::panel::<TableStory>(window, cx)),
+            8 => Arc::new(StoryContainer::panel::<DataTableStory>(window, cx)),
             9 => Arc::new(StoryContainer::panel::<ImageStory>(window, cx)),
             10 => Arc::new(StoryContainer::panel::<IconStory>(window, cx)),
             11 => Arc::new(StoryContainer::panel::<TooltipStory>(window, cx)),

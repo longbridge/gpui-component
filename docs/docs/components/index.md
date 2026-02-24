@@ -63,7 +63,7 @@ collapsed: false
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.
 - [Settings](settings) - Settings UI
-- [Table](table) - High-performance data tables
+- [DataTable](data-table) - High-performance data tables
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display
 - [VirtualList](virtual-list) - Virtualized list for large datasets
