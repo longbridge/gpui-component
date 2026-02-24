@@ -24,7 +24,11 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new("secondary-enter", Confirm { secondary: true }, Some(CONTEXT)),
+        KeyBinding::new(
+            "secondary-enter",
+            Confirm { secondary: true },
+            Some(CONTEXT),
+        ),
         KeyBinding::new("escape", Cancel, Some(CONTEXT)),
     ])
 }
@@ -138,7 +142,9 @@ impl<T: SelectItem> SelectDelegate for Vec<T> {
         Self::Item: SelectItem<Value = V>,
         V: PartialEq,
     {
-        self.iter().position(|v| v.value() == value).map(|ix| IndexPath::default().row(ix))
+        self.iter()
+            .position(|v| v.value() == value)
+            .map(|ix| IndexPath::default().row(ix))
     }
 }
 
@@ -190,8 +196,13 @@ where
         window: &mut Window,
         cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
-        let selected = self.selected_index.map_or(false, |selected_index| selected_index == ix);
-        let size = self.state.upgrade().map_or(Size::Medium, |state| state.read(cx).options.size);
+        let selected = self
+            .selected_index
+            .map_or(false, |selected_index| selected_index == ix);
+        let size = self
+            .state
+            .upgrade()
+            .map_or(Size::Medium, |state| state.read(cx).options.size);
 
         if let Some(item) = self.delegate.item(ix) {
             let list_item = SelectListItem::new(ix.row)
@@ -206,8 +217,10 @@ where
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         let state = self.state.clone();
-        let final_selected_index =
-            state.read_with(cx, |this, _| this.final_selected_index).ok().flatten();
+        let final_selected_index = state
+            .read_with(cx, |this, _| this.final_selected_index)
+            .ok()
+            .flatten();
 
         // If the selected index is not the final selected index, we need to restore it.
         let need_restore = if final_selected_index != self.selected_index {
@@ -231,8 +244,9 @@ where
 
     fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
         let selected_index = self.selected_index;
-        let selected_value =
-            selected_index.and_then(|ix| self.delegate.item(ix)).map(|item| item.value().clone());
+        let selected_value = selected_index
+            .and_then(|ix| self.delegate.item(ix))
+            .map(|item| item.value().clone());
         let state = self.state.clone();
 
         cx.defer_in(window, move |_, window, cx| {
@@ -271,7 +285,11 @@ where
         window: &mut Window,
         cx: &mut Context<ListState<Self>>,
     ) -> impl IntoElement {
-        if let Some(empty) = self.state.upgrade().and_then(|state| state.read(cx).empty.as_ref()) {
+        if let Some(empty) = self
+            .state
+            .upgrade()
+            .and_then(|state| state.read(cx).empty.as_ref())
+        {
             empty(window, cx).into_any_element()
         } else {
             h_flex()
@@ -361,13 +379,19 @@ impl<T: Clone> SearchableVec<T> {
 impl<T: Clone> SearchableVec<T> {
     pub fn new(items: impl Into<Vec<T>>) -> Self {
         let items = items.into();
-        Self { items: items.clone(), matched_items: items }
+        Self {
+            items: items.clone(),
+            matched_items: items,
+        }
     }
 }
 
 impl<T: SelectItem> From<Vec<T>> for SearchableVec<T> {
     fn from(items: Vec<T>) -> Self {
-        Self { items: items.clone(), matched_items: items }
+        Self {
+            items: items.clone(),
+            matched_items: items,
+        }
     }
 }
 
@@ -402,8 +426,12 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<I> {
         _window: &mut Window,
         _: &mut Context<SelectState<Self>>,
     ) -> Task<()> {
-        self.matched_items =
-            self.items.iter().filter(|item| item.matches(query)).cloned().collect();
+        self.matched_items = self
+            .items
+            .iter()
+            .filter(|item| item.matches(query))
+            .cloned()
+            .collect();
 
         Task::ready(())
     }
@@ -417,11 +445,19 @@ impl<I: SelectItem> SelectDelegate for SearchableVec<SelectGroup<I>> {
     }
 
     fn items_count(&self, section: usize) -> usize {
-        self.matched_items.get(section).map_or(0, |group| group.items.len())
+        self.matched_items
+            .get(section)
+            .map_or(0, |group| group.items.len())
     }
 
     fn section(&self, section: usize) -> Option<AnyElement> {
-        Some(self.matched_items.get(section)?.title.clone().into_any_element())
+        Some(
+            self.matched_items
+                .get(section)?
+                .title
+                .clone()
+                .into_any_element(),
+        )
     }
 
     fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
@@ -480,7 +516,10 @@ where
 {
     /// Create a new SelectGroup with the given title.
     pub fn new(title: impl Into<SharedString>) -> Self {
-        Self { title: title.into(), items: vec![] }
+        Self {
+            title: title.into(),
+            items: vec![],
+        }
     }
 
     /// Add an item to the group.
@@ -513,8 +552,11 @@ where
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
-        let delegate =
-            SelectListDelegate { delegate, state: cx.entity().downgrade(), selected_index };
+        let delegate = SelectListDelegate {
+            delegate,
+            state: cx.entity().downgrade(),
+            selected_index,
+        };
 
         let list = cx.new(|cx| ListState::new(delegate, window, cx).reset_on_cancel(false));
         let list_focus_handle = list.read(cx).focus_handle.clone();
@@ -701,15 +743,23 @@ where
     /// Returns the title element for the select input.
     fn display_title(&mut self, _: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let default_title = div().text_color(cx.theme().muted_foreground).child(
-            self.options.placeholder.clone().unwrap_or_else(|| t!("Select.placeholder").into()),
+            self.options
+                .placeholder
+                .clone()
+                .unwrap_or_else(|| t!("Select.placeholder").into()),
         );
 
         let Some(selected_index) = &self.selected_index(cx) else {
             return default_title;
         };
 
-        let Some(title) =
-            self.list.read(cx).delegate().delegate.item(*selected_index).map(|item| {
+        let Some(title) = self
+            .list
+            .read(cx)
+            .delegate()
+            .delegate
+            .item(*selected_index)
+            .map(|item| {
                 if let Some(el) = item.display_title() {
                     el
                 } else {
@@ -725,7 +775,9 @@ where
         };
 
         div()
-            .when(self.options.disabled, |this| this.text_color(cx.theme().muted_foreground))
+            .when(self.options.disabled, |this| {
+                this.text_color(cx.theme().muted_foreground)
+            })
             .child(title)
     }
 }
@@ -743,7 +795,8 @@ where
         let outline_visible = self.open || is_focused && !self.options.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
 
-        self.list.update(cx, |list, cx| list.set_searchable(searchable, cx));
+        self.list
+            .update(cx, |list, cx| list.set_searchable(searchable, cx));
 
         div()
             .size_full()
@@ -763,13 +816,21 @@ where
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())
                     })
-                    .map(|this| if self.options.disabled { this.shadow_none() } else { this })
+                    .map(|this| {
+                        if self.options.disabled {
+                            this.shadow_none()
+                        } else {
+                            this
+                        }
+                    })
                     .overflow_hidden()
                     .input_size(self.options.size)
                     .input_text_size(self.options.size)
                     .refine_style(&self.options.style)
                     .when(outline_visible, |this| this.focused_border(cx))
-                    .when(allow_open, |this| this.on_click(cx.listener(Self::toggle_menu)))
+                    .when(allow_open, |this| {
+                        this.on_click(cx.listener(Self::toggle_menu))
+                    })
                     .child(
                         h_flex()
                             .id("inner")
@@ -943,7 +1004,11 @@ where
     D: SelectDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        if self.open { self.list.focus_handle(cx) } else { self.focus_handle.clone() }
+        if self.open {
+            self.list.focus_handle(cx)
+        } else {
+            self.focus_handle.clone()
+        }
     }
 }
 
@@ -971,7 +1036,9 @@ where
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
-            .when(!disabled, |this| this.track_focus(&focus_handle.tab_stop(true)))
+            .when(!disabled, |this| {
+                this.track_focus(&focus_handle.tab_stop(true))
+            })
             .on_action(window.listener_for(&self.state, SelectState::up))
             .on_action(window.listener_for(&self.state, SelectState::down))
             .on_action(window.listener_for(&self.state, SelectState::enter))
@@ -1064,7 +1131,9 @@ impl RenderOnce for SelectListItem {
                 })
             })
             .when(self.selected, |this| this.bg(cx.theme().accent))
-            .when(self.disabled, |this| this.text_color(cx.theme().muted_foreground))
+            .when(self.disabled, |this| {
+                this.text_color(cx.theme().muted_foreground)
+            })
             .child(
                 h_flex()
                     .w_full()

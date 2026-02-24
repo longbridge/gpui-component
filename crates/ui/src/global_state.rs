@@ -19,7 +19,10 @@ pub(crate) struct GlobalState {
 
 impl GlobalState {
     pub(crate) fn new() -> Self {
-        Self { text_view_state_stack: Vec::new(), open_deferred_popovers: HashSet::new() }
+        Self {
+            text_view_state_stack: Vec::new(),
+            open_deferred_popovers: HashSet::new(),
+        }
     }
 
     pub(crate) fn global(cx: &App) -> &Self {
@@ -41,7 +44,8 @@ impl GlobalState {
 
     /// Register a popover that uses deferred rendering as open.
     pub(crate) fn register_deferred_popover(&mut self, focus_handle: &FocusHandle) {
-        self.open_deferred_popovers.insert(format!("{focus_handle:?}").into());
+        self.open_deferred_popovers
+            .insert(format!("{focus_handle:?}").into());
     }
 
     /// Unregister a popover when it closes.

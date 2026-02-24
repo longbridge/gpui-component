@@ -144,8 +144,9 @@ impl Popover {
         E: IntoElement,
         F: Fn(&mut PopoverState, &mut Window, &mut Context<PopoverState>) -> E + 'static,
     {
-        self.content =
-            Some(Rc::new(move |state, window, cx| content(state, window, cx).into_any_element()));
+        self.content = Some(Rc::new(move |state, window, cx| {
+            content(state, window, cx).into_any_element()
+        }));
         self
     }
 
@@ -178,7 +179,10 @@ impl Popover {
 
         trigger_bounds.corner(anchor.swap_vertical().into())
             + offset
-            + Point { x: px(0.), y: -trigger_bounds.size.height }
+            + Point {
+                x: px(0.),
+                y: -trigger_bounds.size.height,
+            }
     }
 }
 
@@ -257,12 +261,14 @@ impl PopoverState {
             focus_handle.focus(window, cx);
 
             self._dismiss_subscription =
-                Some(window.subscribe(&cx.entity(), cx, move |_, _: &DismissEvent, window, cx| {
-                    state.update(cx, |state, cx| {
-                        state.dismiss(window, cx);
-                    });
-                    window.refresh();
-                }));
+                Some(
+                    window.subscribe(&cx.entity(), cx, move |_, _: &DismissEvent, window, cx| {
+                        state.update(cx, |state, cx| {
+                            state.dismiss(window, cx);
+                        });
+                        window.refresh();
+                    }),
+                );
         } else {
             self._dismiss_subscription = None;
         }
@@ -336,8 +342,9 @@ impl RenderOnce for Popover {
         let force_open = self.open;
         let default_open = self.default_open;
         let tracked_focus_handle = self.tracked_focus_handle.clone();
-        let state = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| PopoverState::new(default_open, cx));
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
+            PopoverState::new(default_open, cx)
+        });
 
         state.update(cx, |state, cx| {
             if let Some(tracked_focus_handle) = tracked_focus_handle {
@@ -410,7 +417,13 @@ impl RenderOnce for Popover {
                 })
                 .refine_style(&self.style);
 
-        el.child(Self::render_popover(self.anchor, trigger_bounds, popover_content, window, cx))
+        el.child(Self::render_popover(
+            self.anchor,
+            trigger_bounds,
+            popover_content,
+            window,
+            cx,
+        ))
     }
 }
 
@@ -440,8 +453,14 @@ mod tests {
         use gpui::px;
 
         let bounds = Bounds {
-            origin: Point { x: px(100.), y: px(100.) },
-            size: gpui::Size { width: px(200.), height: px(50.) },
+            origin: Point {
+                x: px(100.),
+                y: px(100.),
+            },
+            size: gpui::Size {
+                width: px(200.),
+                height: px(50.),
+            },
         };
 
         let pos = Popover::resolved_corner(Anchor::TopLeft, bounds);
