@@ -311,6 +311,7 @@ impl Render for AlertDialogStory {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
                                     .title("Processing")
+                                    .close_button(true)
                                     .description(
                                         "A process is running. \
                                                 Click Continue to stop it or Cancel to keep waiting.",
