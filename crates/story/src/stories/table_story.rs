@@ -71,7 +71,7 @@ impl Render for TableStory {
             ("INV001", "Paid", "Credit Card", "$250.00", "2024-01-15"),
             ("INV002", "Pending", "PayPal", "$150.00", "2024-02-01"),
             ("INV003", "Unpaid", "Bank Transfer", "$350.00", "2024-02-15"),
-            ("INV004", "Paid", "Credit Card", "$450.00", "2024-03-01"),
+            ("INV004", "Paid", "Credit Card\nMaster Card / Visa", "$450.00", "2024-03-01"),
             ("INV005", "Paid", "PayPal", "$550.00", "2024-03-15"),
             ("INV006", "Pending", "Bank Transfer", "$200.00", "2024-04-01"),
             ("INV007", "Unpaid", "Credit Card", "$300.00", "2024-04-15"),
@@ -162,18 +162,16 @@ impl Render for TableStory {
                             TableHeader::new().child(
                                 TableRow::new()
                                     .child(TableHead::new().w(px(100.)).child("Invoice"))
-                                    .child(TableHead::new().child("Status"))
                                     .child(TableHead::new().child("Method"))
                                     .child(TableHead::new().text_right().child("Amount"))
                                     .child(TableHead::new().text_right().child("Date")),
                             ),
                         )
                         .child(TableBody::new().children(invoices.iter().enumerate().take(6).map(
-                            |(ix, (invoice, status, method, amount, date))| {
+                            |(ix, (invoice, _, method, amount, date))| {
                                 TableRow::new()
                                     .when(ix % 2 != 0, |this| this.bg(cx.theme().table_even))
                                     .child(TableCell::new().w(px(100.)).child(invoice.to_string()))
-                                    .child(TableCell::new().child(status_tag(status)))
                                     .child(TableCell::new().child(method.to_string()))
                                     .child(TableCell::new().text_right().child(amount.to_string()))
                                     .child(TableCell::new().text_right().child(date.to_string()))
