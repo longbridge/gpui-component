@@ -4,7 +4,7 @@ use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
     Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, WindowControlArea,
-    actions, anchored, div, hsla, point, prelude::FluentBuilder, px, relative,
+    actions, anchored, div, hsla, point, prelude::FluentBuilder, px,
 };
 use rust_i18n::t;
 
@@ -13,8 +13,7 @@ use crate::{
     TITLE_BAR_HEIGHT, WindowExt as _,
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    dialog::DialogContent,
-    h_flex,
+    dialog::{DialogContent, DialogTitle},
     scroll::ScrollableElement as _,
     v_flex,
 };
@@ -30,10 +29,6 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("enter", ConfirmDialog, Some(CONTEXT)),
     ]);
 }
-
-type RenderButtonFn = Box<dyn FnOnce(&mut Window, &mut App) -> AnyElement>;
-type FooterFn =
-    Box<dyn Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<AnyElement>>;
 
 /// Dialog button props.
 #[derive(Clone)]
@@ -205,7 +200,6 @@ pub struct Dialog {
     pub(crate) content_builder: Option<ContentBuilderFn>,
     pub(crate) props: DialogProps,
 
-    footer: Option<FooterFn>,
     button_props: DialogButtonProps,
 
     /// This will be change when open the dialog, the focus handle is create when open the dialog.
@@ -229,7 +223,6 @@ impl Dialog {
             style: StyleRefinement::default(),
             trigger: None,
             title: None,
-            footer: None,
             content_builder: None,
             props: DialogProps::default(),
             children: Vec::new(),
@@ -260,25 +253,6 @@ impl Dialog {
     /// Sets the title of the dialog.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = Some(title.into_any_element());
-        self
-    }
-
-    /// Set the footer of the dialog.
-    ///
-    /// The `footer` is a function that takes two `RenderButtonFn` and a `WindowContext` and returns a list of `AnyElement`.
-    ///
-    /// - First `RenderButtonFn` is the render function for the OK button.
-    /// - Second `RenderButtonFn` is the render function for the CANCEL button.
-    ///
-    /// When you set the footer, the footer will be placed default footer buttons.
-    pub fn footer<E, F>(mut self, footer: F) -> Self
-    where
-        E: IntoElement,
-        F: Fn(RenderButtonFn, RenderButtonFn, &mut Window, &mut App) -> Vec<E> + 'static,
-    {
-        self.footer = Some(Box::new(move |ok, cancel, window, cx| {
-            footer(ok, cancel, window, cx).into_iter().map(|e| e.into_any_element()).collect()
-        }));
         self
     }
 
@@ -449,15 +423,6 @@ impl RenderOnce for Dialog {
         let on_cancel = self.button_props.on_cancel.clone();
         let has_title = self.title.is_some();
 
-        let render_ok: RenderButtonFn = Box::new({
-            let button_props = self.button_props.clone();
-            move |window, cx| button_props.render_ok(window, cx)
-        });
-        let render_cancel: RenderButtonFn = Box::new({
-            let button_props = self.button_props.clone();
-            move |window, cx| button_props.render_cancel(window, cx)
-        });
-
         let window_paddings = crate::window_border::window_paddings(window);
         let view_size = window.viewport_size()
             - gpui::size(
@@ -588,11 +553,9 @@ impl RenderOnce for Dialog {
                                 } else {
                                     this.when_some(self.title, |this, title| {
                                         this.child(
-                                            div()
+                                            DialogTitle::new()
                                                 .pl(paddings.left)
                                                 .pr(paddings.right)
-                                                .line_height(relative(1.))
-                                                .font_semibold()
                                                 .child(title),
                                         )
                                     })
@@ -606,25 +569,6 @@ impl RenderOnce for Dialog {
                                                 .pr(paddings.right)
                                                 .children(self.children),
                                         ),
-                                    )
-                                    .when_some(
-                                        self.footer,
-                                        |this, footer| {
-                                            this.child(
-                                                h_flex()
-                                                    .gap_2()
-                                                    .pl(paddings.left)
-                                                    .pr(paddings.right)
-                                                    .line_height(relative(1.))
-                                                    .justify_end()
-                                                    .children(footer(
-                                                        render_ok,
-                                                        render_cancel,
-                                                        window,
-                                                        cx,
-                                                    )),
-                                            )
-                                        },
                                     )
                                 }
                             })

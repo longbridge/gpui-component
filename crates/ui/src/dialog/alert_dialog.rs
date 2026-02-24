@@ -73,7 +73,9 @@ pub struct AlertDialog {
 impl AlertDialog {
     /// Create a new AlertDialog.
     ///
-    /// By default, the dialog is not overlay closable. You can change this with `.overlay_closable(true)`.
+    /// By default, the dialog is not overlay closable with a OK button.
+    ///
+    /// You can change this with `.overlay_closable(true)`.
     pub fn new(cx: &mut App) -> Self {
         Self {
             base: Dialog::new(cx).overlay_closable(false).close_button(false),
@@ -84,6 +86,14 @@ impl AlertDialog {
             button_props: DialogButtonProps::default(),
             children: Vec::new(),
         }
+    }
+
+    /// Set to use confirm dialog, with OK and Cancel buttons.
+    ///
+    /// The default of [`AlertDialog`] has OK button.
+    pub fn confirm(mut self) -> Self {
+        self.button_props.show_cancel = true;
+        self
     }
 
     /// Sets the trigger element for the alert dialog.

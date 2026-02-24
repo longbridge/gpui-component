@@ -5,12 +5,12 @@ use gpui::{
 
 use gpui_component::{
     ActiveTheme, Icon, IconName, WindowExt as _,
-    button::{Button, ButtonVariant, ButtonVariants as _},
+    button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
     dialog::{
-        Dialog, DialogAction, DialogButtonProps, DialogClose, DialogDescription, DialogFooter,
-        DialogHeader, DialogTitle,
+        Dialog, DialogAction, DialogClose, DialogDescription, DialogFooter, DialogHeader,
+        DialogTitle,
     },
     h_flex,
     input::{Input, InputState},
@@ -266,21 +266,32 @@ impl DialogStory {
                                     .gap_3()
                                     .items_center()
                                     .child(
-                                        Icon::new(IconName::TriangleAlert)
-                                            .size_6()
-                                            .text_color(cx.theme().warning),
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .rounded(cx.theme().radius_lg)
+                                            .bg(cx.theme().warning.opacity(0.2))
+                                            .size_12()
+                                            .text_color(cx.theme().warning)
+                                            .child(Icon::new(IconName::TriangleAlert).size_8()),
                                     )
                                     .child(
                                         "Update successful, \
                                         we need to restart the application.",
                                     ),
                             )
-                            .button_props(
-                                DialogButtonProps::default()
-                                    .cancel_text("Later")
-                                    .cancel_variant(ButtonVariant::Secondary)
-                                    .ok_text("Restart Now")
-                                    .ok_variant(ButtonVariant::Danger),
+                            .child(
+                                DialogFooter::new()
+                                    .child(
+                                        DialogClose::new()
+                                            .child(Button::new("cancel").label("Later").outline()),
+                                    )
+                                    .child(
+                                        DialogAction::new().child(
+                                            Button::new("ok").label("Restart Now").primary(),
+                                        ),
+                                    ),
                             )
                             .on_ok(|_, window, cx| {
                                 window.push_notification("You have pressed restart.", cx);

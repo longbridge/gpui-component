@@ -89,66 +89,11 @@ window.open_dialog(cx, |dialog, _, _| {
 })
 ```
 
-### Confirm Dialog
-
-```rust
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .confirm()
-        .child("Are you sure you want to delete this item?")
-        .on_ok(|_, window, cx| {
-            window.push_notification("Item deleted", cx);
-            true // Return true to close dialog
-        })
-        .on_cancel(|_, window, cx| {
-            window.push_notification("Cancelled", cx);
-            true
-        })
-})
-```
-
-### Alert Dialog
-
-```rust
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .alert()
-        .child("Operation completed successfully!")
-        .on_close(|_, window, cx| {
-            window.push_notification("Alert closed", cx);
-        })
-})
-```
-
-### Custom Button Labels
-
-```rust
-use gpui_component::button::ButtonVariant;
-
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .confirm()
-        .child("Update available. Restart now?")
-        .button_props(
-            DialogButtonProps::default()
-                .cancel_text("Later")
-                .cancel_variant(ButtonVariant::Secondary)
-                .ok_text("Restart Now")
-                .ok_variant(ButtonVariant::Danger)
-        )
-        .on_ok(|_, window, cx| {
-            window.push_notification("Restarting...", cx);
-            true
-        })
-})
-```
-
 ### Dialog with Icon
 
 ```rust
 window.open_dialog(cx, |dialog, _, cx| {
     dialog
-        .confirm()
         .child(
             h_flex()
                 .gap_3()
@@ -252,41 +197,6 @@ Button::new("submit")
     })
 ```
 
-## Examples
-
-### Delete Confirmation
-
-```rust
-Button::new("delete")
-    .danger()
-    .label("Delete")
-    .on_click(|_, window, cx| {
-        window.open_dialog(cx, |dialog, _, _| {
-            dialog
-                .confirm()
-                .child("Are you sure you want to delete this item?")
-                .on_ok(|_, window, cx| {
-                    // Perform delete
-                    window.push_notification("Deleted", cx);
-                    true
-                })
-        });
-    })
-```
-
-### Success Alert
-
-```rust
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .confirm()
-        .alert()
-        .child("Your changes have been saved successfully!")
-        .on_close(|_, _, _| {
-            // Optional close handler
-        })
-})
-```
 ## Declarative API
 
 The Dialog component now supports a declarative API that provides a more React-like component composition pattern using dedicated header, title, description, and footer components.
@@ -516,18 +426,18 @@ window.open_dialog(cx, |dialog, _, _| {
 
 ### Dialog
 
-| Method                   | Description                                            |
-| ------------------------ | ------------------------------------------------------ |
+| Method                   | Description                                           |
+| ------------------------ | ----------------------------------------------------- |
 | `new(cx)`                | Create a new Dialog (no longer requires window param) |
-| `trigger(element)`       | Set trigger element that opens the dialog              |
-| `content(builder)`       | Set content using a builder function                   |
-| `w(px)` / `width(px)`    | Set dialog width                                       |
-| `max_w(px)`              | Set maximum width                                      |
-| `margin_top(px)`         | Set top margin                                         |
-| `overlay(bool)`          | Show/hide overlay (default: true)                      |
-| `overlay_closable(bool)` | Allow closing by clicking overlay (default: true)      |
-| `keyboard(bool)`         | Allow closing with ESC key (default: true)             |
-| `close_button(bool)`     | Show/hide close button (default: true)                 |
+| `trigger(element)`       | Set trigger element that opens the dialog             |
+| `content(builder)`       | Set content using a builder function                  |
+| `w(px)` / `width(px)`    | Set dialog width                                      |
+| `max_w(px)`              | Set maximum width                                     |
+| `margin_top(px)`         | Set top margin                                        |
+| `overlay(bool)`          | Show/hide overlay (default: true)                     |
+| `overlay_closable(bool)` | Allow closing by clicking overlay (default: true)     |
+| `keyboard(bool)`         | Allow closing with ESC key (default: true)            |
+| `close_button(bool)`     | Show/hide close button (default: true)                |
 
 ### DialogContent
 
