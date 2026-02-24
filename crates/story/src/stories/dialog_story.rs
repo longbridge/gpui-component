@@ -433,7 +433,6 @@ impl DialogStory {
                                 )
                                 .child(
                                     DialogFooter::new()
-                                        .mt_3()
                                         .justify_center()
                                         .child(
                                             Button::new("cancel")

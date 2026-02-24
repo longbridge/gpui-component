@@ -439,7 +439,6 @@ impl RenderOnce for Dialog {
         let on_close = self.button_props.on_close.clone();
         let on_ok = self.button_props.on_ok.clone();
         let on_cancel = self.button_props.on_cancel.clone();
-        let has_title = self.title.is_some();
 
         let window_paddings = crate::window_border::window_paddings(window);
         let view_size = window.viewport_size()
@@ -467,11 +466,6 @@ impl RenderOnce for Dialog {
         }
         if let Some(pb) = self.style.padding.bottom {
             paddings.bottom = pb.to_pixels(base_size, rem_size);
-        }
-
-        if !has_title && self.content_builder.is_none() {
-            // When no title, reduce the top padding to fix line-height effect.
-            paddings.top -= px(6.);
         }
 
         let animation =
@@ -526,7 +520,7 @@ impl RenderOnce for Dialog {
                             .min_h_24()
                             .pt(paddings.top)
                             .pb(paddings.bottom)
-                            .gap(paddings.bottom.max(px(8.)))
+                            .gap(paddings.top.max(px(8.)))
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
