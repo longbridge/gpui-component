@@ -13,7 +13,7 @@ use crate::{
     TITLE_BAR_HEIGHT, WindowExt as _,
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    dialog::{DialogContent, DialogFooter, DialogTitle},
+    dialog::{DialogContent, DialogTitle},
     scroll::ScrollableElement as _,
     v_flex,
 };
@@ -161,7 +161,6 @@ impl DialogButtonProps {
 }
 
 type ContentBuilderFn = Rc<dyn Fn(DialogContent, &mut Window, &mut App) -> DialogContent + 'static>;
-type FooterBuilderFn = Rc<dyn Fn(DialogFooter, &mut Window, &mut App) -> DialogFooter + 'static>;
 
 #[derive(Clone)]
 pub(crate) struct DialogProps {
@@ -198,8 +197,8 @@ pub struct Dialog {
     children: Vec<AnyElement>,
     trigger: Option<AnyElement>,
     title: Option<AnyElement>,
+    pub(crate) footer: Option<AnyElement>,
     pub(crate) content_builder: Option<ContentBuilderFn>,
-    pub(crate) footer_builder: Option<FooterBuilderFn>,
     pub(crate) props: DialogProps,
 
     button_props: DialogButtonProps,
@@ -225,7 +224,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             trigger: None,
             title: None,
-            footer_builder: None,
+            footer: None,
             content_builder: None,
             props: DialogProps::default(),
             children: Vec::new(),
@@ -260,11 +259,8 @@ impl Dialog {
     /// Sets the footer of the dialog, the footer will render at the bottom of the dialog, usually for action buttons.
     ///
     /// When you set the footer, the `button_props` will be ignored, you need to render the action buttons by yourself.
-    pub fn footer<F>(mut self, builder: F) -> Self
-    where
-        F: Fn(DialogFooter, &mut Window, &mut App) -> DialogFooter + 'static,
-    {
-        self.footer_builder = Some(Rc::new(builder));
+    pub fn footer(mut self, footer: impl IntoElement) -> Self {
+        self.footer = Some(footer.into_any_element());
         self
     }
 
@@ -587,16 +583,8 @@ impl RenderOnce for Dialog {
                                     ),
                                 )
                             })
-                            .when_some(self.footer_builder, |this, builder| {
-                                this.child(builder(
-                                    DialogFooter::new()
-                                        .mx_0()
-                                        .pl(paddings.left)
-                                        .pr(paddings.right)
-                                        .pb(paddings.bottom),
-                                    window,
-                                    cx,
-                                ))
+                            .when_some(self.footer, |this, footer| {
+                                this.child(div().pl(paddings.left).pr(paddings.right).child(footer))
                             })
                             .children(self.props.close_button.then(|| {
                                 let top = (paddings.top - px(10.)).max(px(8.));

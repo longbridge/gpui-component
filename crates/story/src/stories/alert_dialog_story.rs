@@ -57,6 +57,7 @@ impl Render for AlertDialogStory {
                 .child(
                     section("AlertDialog").child(
                         AlertDialog::new(cx)
+                            .p_0()
                             .trigger(Button::new("info-alert").outline().label("Show Info Alert"))
                             .on_ok(|_, window, cx| {
                                 window.push_notification("You have confirmed the alert", cx);
@@ -68,14 +69,14 @@ impl Render for AlertDialogStory {
                             })
                             .content(|content, _, cx| {
                                 content
-                                    .child(DialogHeader::new().child(DialogTitle::new().child("Are you absolutely sure?")).child(
+                                    .child(DialogHeader::new().p_4().child(DialogTitle::new().child("Are you absolutely sure?")).child(
                                         DialogDescription::new().child(
                                             "This action cannot be undone. \
                                             This will permanently delete your account from our servers.",
                                         ),
                                     ))
                                     .child(DialogFooter::new()
-                                        .mt_3()
+                                        .p_4()
                                         .border_t_1()
                                         .border_color(cx.theme().border)
                                         .bg(cx.theme().muted)
@@ -206,8 +207,8 @@ impl Render for AlertDialogStory {
                                     .title("Session Expired")
                                     .description("Your session has expired due to inactivity.\
                                         Please log in again to continue.")
-                                    .footer(move |this, window, cx| {
-                                        this.child(
+                                    .footer(
+                                        DialogFooter::new().child(
                                             Button::new("sign-in").label("Sign in").primary().flex_1().on_click(
                                                 move |_, window, cx| {
                                                     window.push_notification("Redirecting to login...", cx);
@@ -215,7 +216,7 @@ impl Render for AlertDialogStory {
                                                 },
                                             ),
                                         )
-                                    })
+                                    )
                             });
                         },
                     )),

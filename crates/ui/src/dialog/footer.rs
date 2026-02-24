@@ -45,9 +45,6 @@ impl Styled for DialogFooter {
 impl RenderOnce for DialogFooter {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
-            .mx_neg_4()
-            .mb_neg_4()
-            .p_4()
             .gap_2()
             .justify_end()
             .line_height(relative(1.))

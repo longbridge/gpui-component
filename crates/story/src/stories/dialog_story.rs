@@ -177,11 +177,13 @@ impl DialogStory {
                         true
                     }
                 })
+                .p_0()
                 .content({
                     move |content, _, cx| {
                         content
                             .child(
                                 DialogHeader::new()
+                                    .p_4()
                                     .child(DialogTitle::new().child("Basic Dialog"))
                                     .child(DialogDescription::new().child(
                                         "This is a basic dialog created \
@@ -190,6 +192,8 @@ impl DialogStory {
                             )
                             .child(
                                 v_flex()
+                                    .px_4()
+                                    .pb_4()
                                     .gap_3()
                                     .child("This is a dialog dialog.")
                                     .child("You can put anything here.")
@@ -199,7 +203,7 @@ impl DialogStory {
                             )
                             .child(
                                 DialogFooter::new()
-                                    .mt_4()
+                                    .p_4()
                                     .bg(cx.theme().muted)
                                     .justify_between()
                                     .child(
@@ -281,16 +285,18 @@ impl DialogStory {
                                         we need to restart the application.",
                                     ),
                             )
-                            .footer(|this, _, _| {
-                                this.child(
-                                    DialogClose::new()
-                                        .child(Button::new("cancel").label("Later").outline()),
-                                )
-                                .child(
-                                    DialogAction::new()
-                                        .child(Button::new("ok").label("Restart Now").primary()),
-                                )
-                            })
+                            .footer(
+                                DialogFooter::new()
+                                    .child(
+                                        DialogClose::new()
+                                            .child(Button::new("cancel").label("Later").outline()),
+                                    )
+                                    .child(
+                                        DialogAction::new().child(
+                                            Button::new("ok").label("Restart Now").primary(),
+                                        ),
+                                    ),
+                            )
                             .on_ok(|_, window, cx| {
                                 window.push_notification("You have pressed restart.", cx);
                                 true
@@ -320,16 +326,19 @@ impl DialogStory {
                             .overlay_closable(overlay_closable)
                             .title("Dialog with scrollbar")
                             .child(markdown(include_str!("../../../../README.md")))
-                            .footer(|this, _, _| {
-                                this.child(
-                                    DialogClose::new()
-                                        .child(Button::new("cancel").label("Cancel").outline()),
-                                )
-                                .child(
-                                    DialogAction::new()
-                                        .child(Button::new("confirm").label("Confirm").primary()),
-                                )
-                            })
+                            .footer(
+                                DialogFooter::new()
+                                    .gap_2()
+                                    .child(
+                                        DialogClose::new()
+                                            .child(Button::new("cancel").label("Cancel").outline()),
+                                    )
+                                    .child(
+                                        DialogAction::new().child(
+                                            Button::new("confirm").label("Confirm").primary(),
+                                        ),
+                                    ),
+                            )
                     });
                 }),
             ),
@@ -406,7 +415,7 @@ impl DialogStory {
                 .label("Custom Width (400px)")
                 .on_click(cx.listener(move |_, _, window, cx| {
                     window.open_dialog(cx, move |dialog, _, _| {
-                        dialog.w(px(400.)).content(|content, _, cx| {
+                        dialog.w(px(400.)).content(|content, _, _| {
                             content
                                 .child(
                                     DialogHeader::new()
@@ -423,9 +432,6 @@ impl DialogStory {
                                 .child(
                                     DialogFooter::new()
                                         .mt_3()
-                                        .border_t_1()
-                                        .border_color(cx.theme().border)
-                                        .bg(cx.theme().muted)
                                         .justify_center()
                                         .child(
                                             Button::new("cancel")
