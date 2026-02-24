@@ -272,7 +272,7 @@ impl AlertDialog {
 
         self.base
             .button_props(button_props.clone())
-            .child(
+            .header(
                 DialogHeader::new()
                     .when_some(self.icon, |this, icon| this.child(icon))
                     .when_some(self.title, |this, title| {

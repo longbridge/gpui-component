@@ -197,6 +197,7 @@ pub struct Dialog {
     children: Vec<AnyElement>,
     trigger: Option<AnyElement>,
     title: Option<AnyElement>,
+    pub(crate) header: Option<AnyElement>,
     pub(crate) footer: Option<AnyElement>,
     pub(crate) content_builder: Option<ContentBuilderFn>,
     pub(crate) props: DialogProps,
@@ -224,6 +225,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             trigger: None,
             title: None,
+            header: None,
             footer: None,
             content_builder: None,
             props: DialogProps::default(),
@@ -253,6 +255,14 @@ impl Dialog {
     /// Sets the title of the dialog.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = Some(title.into_any_element());
+        self
+    }
+
+    /// Sets the footer of the dialog, the footer will render at the bottom of the dialog, usually for action buttons.
+    ///
+    /// When you set the footer, the `button_props` will be ignored, you need to render the action buttons by yourself.
+    pub(crate) fn header(mut self, header: impl IntoElement) -> Self {
+        self.header = Some(header.into_any_element());
         self
     }
 
@@ -555,6 +565,9 @@ impl RenderOnce for Dialog {
                             .top(y)
                             .w(self.props.width)
                             .when_some(self.props.max_width, |this, w| this.max_w(w))
+                            .when_some(self.header, |this, header| {
+                                this.child(div().pl(paddings.left).pr(paddings.right).child(header))
+                            })
                             .when_some(self.title, |this, title| {
                                 this.child(
                                     DialogTitle::new()
