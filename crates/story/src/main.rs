@@ -82,6 +82,7 @@ impl Gallery {
                     StoryContainer::panel::<StepperStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<DataTableStory>(window, cx),
+                    StoryContainer::panel::<TableStory>(window, cx),
                     StoryContainer::panel::<TabsStory>(window, cx),
                     StoryContainer::panel::<TagStory>(window, cx),
                     StoryContainer::panel::<TextareaStory>(window, cx),

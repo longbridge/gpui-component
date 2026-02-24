@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{theme::DEFAULT_THEME_COLORS, ThemeMode};
+use crate::{ThemeMode, theme::DEFAULT_THEME_COLORS};
 
 use gpui::Hsla;
 use schemars::JsonSchema;
@@ -179,6 +179,10 @@ pub struct ThemeColor {
     pub table_head: Hsla,
     /// Table head text color.
     pub table_head_foreground: Hsla,
+    /// Table footer background color.
+    pub table_foot: Hsla,
+    /// Table footer text color.
+    pub table_foot_foreground: Hsla,
     /// Table item hover background color.
     pub table_hover: Hsla,
     /// Table row border color.
