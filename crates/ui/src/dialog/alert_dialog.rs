@@ -136,6 +136,16 @@ impl AlertDialog {
         self
     }
 
+    /// Sets the footer builder for declarative API.
+    ///
+    /// This is used to define the footer content using declarative components like `DialogFooter`.
+    ///
+    /// If not set, a default footer with OK and optional Cancel button will be used.
+    pub fn footer(mut self, footer: impl IntoElement) -> Self {
+        self.base = self.base.footer(footer);
+        self
+    }
+
     #[track_caller]
     fn debug_assert_no_trigger(&self) {
         debug_assert!(
@@ -258,6 +268,7 @@ impl AlertDialog {
     /// Convert AlertDialog into a configured Dialog.
     pub(crate) fn into_dialog(self, window: &mut Window, cx: &mut App) -> Dialog {
         let button_props = self.button_props.clone();
+        let has_footer = self.base.footer.is_some();
 
         self.base
             .button_props(button_props.clone())
@@ -272,13 +283,16 @@ impl AlertDialog {
                     }),
             )
             .children(self.children)
-            .child(
-                DialogFooter::new()
-                    .when(button_props.show_cancel, |this| {
-                        this.child(button_props.render_cancel(window, cx))
-                    })
-                    .child(button_props.render_ok(window, cx)),
-            )
+            .when(!has_footer, |this| {
+                // Default footer for AlertDialog if user doesn't provide one, with OK and optional Cancel button
+                this.footer(
+                    DialogFooter::new()
+                        .when(button_props.show_cancel, |this| {
+                            this.child(button_props.render_cancel(window, cx))
+                        })
+                        .child(button_props.render_ok(window, cx)),
+                )
+            })
     }
 }
 
