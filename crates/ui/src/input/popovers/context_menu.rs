@@ -7,6 +7,7 @@ use rust_i18n::t;
 
 use crate::{
     ActiveTheme as _,
+    global_state::GlobalState,
     input::{self, InputState, popovers::ContextMenu},
     menu::PopupMenu,
 };
@@ -29,6 +30,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Check if we are already in a deferred context (e.g., inside a Popover)
+        // If so, don't show the context menu to prevent double-deferred panic
+        if GlobalState::global(cx).is_in_deferred_context() {
+            return;
+        }
+
         // Show Mouse context menu
         if !self.selected_range.contains(offset) {
             self.move_to(offset, None, cx);

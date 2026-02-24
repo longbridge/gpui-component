@@ -6,7 +6,10 @@ use gpui::{
 };
 use std::rc::Rc;
 
-use crate::{Anchor, ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored, v_flex};
+use crate::{
+    Anchor, ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored,
+    global_state::GlobalState, v_flex,
+};
 
 const CONTEXT: &str = "Popover";
 pub(crate) fn init(cx: &mut App) {
@@ -141,9 +144,8 @@ impl Popover {
         E: IntoElement,
         F: Fn(&mut PopoverState, &mut Window, &mut Context<PopoverState>) -> E + 'static,
     {
-        self.content = Some(Rc::new(move |state, window, cx| {
-            content(state, window, cx).into_any_element()
-        }));
+        self.content =
+            Some(Rc::new(move |state, window, cx| content(state, window, cx).into_any_element()));
         self
     }
 
@@ -176,10 +178,7 @@ impl Popover {
 
         trigger_bounds.corner(anchor.swap_vertical().into())
             + offset
-            + Point {
-                x: px(0.),
-                y: -trigger_bounds.size.height,
-            }
+            + Point { x: px(0.), y: -trigger_bounds.size.height }
     }
 }
 
@@ -236,8 +235,17 @@ impl PopoverState {
         }
     }
 
+    fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        self.open = open;
+        if self.open {
+            GlobalState::global_mut(cx).register_deferred_popover(&self.focus_handle);
+        } else {
+            GlobalState::global_mut(cx).unregister_deferred_popover(&self.focus_handle);
+        }
+    }
+
     fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open = !self.open;
+        self.set_open(!self.open, cx);
         if self.open {
             let state = cx.entity();
             let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
@@ -249,14 +257,12 @@ impl PopoverState {
             focus_handle.focus(window, cx);
 
             self._dismiss_subscription =
-                Some(
-                    window.subscribe(&cx.entity(), cx, move |_, _: &DismissEvent, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.dismiss(window, cx);
-                        });
-                        window.refresh();
-                    }),
-                );
+                Some(window.subscribe(&cx.entity(), cx, move |_, _: &DismissEvent, window, cx| {
+                    state.update(cx, |state, cx| {
+                        state.dismiss(window, cx);
+                    });
+                    window.refresh();
+                }));
         } else {
             self._dismiss_subscription = None;
         }
@@ -330,17 +336,16 @@ impl RenderOnce for Popover {
         let force_open = self.open;
         let default_open = self.default_open;
         let tracked_focus_handle = self.tracked_focus_handle.clone();
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
-            PopoverState::new(default_open, cx)
-        });
+        let state = window
+            .use_keyed_state(self.id.clone(), cx, |_, cx| PopoverState::new(default_open, cx));
 
-        state.update(cx, |state, _| {
+        state.update(cx, |state, cx| {
             if let Some(tracked_focus_handle) = tracked_focus_handle {
                 state.tracked_focus_handle = Some(tracked_focus_handle);
             }
             state.on_open_change = self.on_open_change.clone();
             if let Some(force_open) = force_open {
-                state.open = force_open;
+                state.set_open(force_open, cx);
             }
         });
 
@@ -364,7 +369,7 @@ impl RenderOnce for Popover {
                     state.update(cx, |state, cx| {
                         // We force set open to false to toggle it correctly.
                         // Because if the mouse down out will toggle open first.
-                        state.open = open;
+                        state.set_open(open, cx);
                         state.toggle_open(window, cx);
                     });
                     cx.notify(parent_view_id);
@@ -405,13 +410,7 @@ impl RenderOnce for Popover {
                 })
                 .refine_style(&self.style);
 
-        el.child(Self::render_popover(
-            self.anchor,
-            trigger_bounds,
-            popover_content,
-            window,
-            cx,
-        ))
+        el.child(Self::render_popover(self.anchor, trigger_bounds, popover_content, window, cx))
     }
 }
 
@@ -441,14 +440,8 @@ mod tests {
         use gpui::px;
 
         let bounds = Bounds {
-            origin: Point {
-                x: px(100.),
-                y: px(100.),
-            },
-            size: gpui::Size {
-                width: px(200.),
-                height: px(50.),
-            },
+            origin: Point { x: px(100.), y: px(100.) },
+            size: gpui::Size { width: px(200.), height: px(50.) },
         };
 
         let pos = Popover::resolved_corner(Anchor::TopLeft, bounds);
