@@ -195,6 +195,18 @@ impl Render for AlertDialogStory {
                             }),
                     ),
                 )
+                .child(section("Without Title").child(
+                    Button::new("without-title").outline().label("Dialog without Title").on_click(cx.listener(
+                        |_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert
+                                    .confirm()
+                                    .child("This is a AlertDialog with `confirm` mode.\
+                                        Will have OK, CANCEL buttons.")
+                            });
+                        },
+                    )),
+                ))
                 .child(section("Session Timeout").child(
                     Button::new("session-timeout").outline().label("Session Timeout").on_click(cx.listener(
                         |_, _, window, cx| {
