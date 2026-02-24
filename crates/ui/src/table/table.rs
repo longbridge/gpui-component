@@ -1,19 +1,45 @@
 use gpui::{
-    AnyElement, App, DefiniteLength, IntoElement, ParentElement, RenderOnce, StyleRefinement,
-    Styled, TextAlign, Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, TextAlign,
+    Window, div, prelude::FluentBuilder as _, relative,
 };
 
-use crate::{ActiveTheme as _, Sizable, Size, StyledExt as _};
+use gpui::Hsla;
+
+use crate::{ActiveTheme as _, Sizable, Size, StyledExt as _, element_ext::AnySizableElement};
+
+/// Render children with `border_b` on all except the last one.
+fn render_row_children(
+    children: Vec<AnySizableElement>,
+    size: Size,
+    border_color: Hsla,
+) -> Vec<AnyElement> {
+    let len = children.len();
+    children
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let el = c.into_any(size);
+            if i < len - 1 {
+                div().w_full().border_b_1().border_color(border_color).child(el).into_any_element()
+            } else {
+                el
+            }
+        })
+        .collect()
+}
 
 /// A basic table component for directly rendering tabular data.
 ///
 /// Unlike [`DataTable`], this is a simple, stateless, composable table
 /// without virtual scrolling or column management.
 ///
+/// Size set via [`Sizable`] is automatically propagated to all children.
+///
 /// # Example
 ///
 /// ```rust,ignore
 /// Table::new()
+///     .small()
 ///     .child(TableHeader::new().child(
 ///         TableRow::new()
 ///             .child(TableHead::new().child("Name"))
@@ -29,7 +55,7 @@ use crate::{ActiveTheme as _, Sizable, Size, StyledExt as _};
 #[derive(IntoElement)]
 pub struct Table {
     style: StyleRefinement,
-    children: Vec<AnyElement>,
+    children: Vec<AnySizableElement>,
     size: Size,
 }
 
@@ -37,11 +63,18 @@ impl Table {
     pub fn new() -> Self {
         Self { style: StyleRefinement::default(), children: Vec::new(), size: Size::default() }
     }
-}
 
-impl ParentElement for Table {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+    pub fn child(mut self, child: impl IntoElement + Sizable + 'static) -> Self {
+        self.children.push(AnySizableElement::new(child));
+        self
+    }
+
+    pub fn children<E: IntoElement + Sizable + 'static>(
+        mut self,
+        children: impl IntoIterator<Item = E>,
+    ) -> Self {
+        self.children.extend(children.into_iter().map(AnySizableElement::new));
+        self
     }
 }
 
@@ -60,13 +93,16 @@ impl Sizable for Table {
 
 impl RenderOnce for Table {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let children: Vec<AnyElement> =
+            self.children.into_iter().map(|c| c.into_any(self.size)).collect();
+
         div()
             .w_full()
             .text_sm()
             .overflow_hidden()
             .bg(cx.theme().table)
             .refine_style(&self.style)
-            .children(self.children)
+            .children(children)
     }
 }
 
@@ -74,18 +110,26 @@ impl RenderOnce for Table {
 #[derive(IntoElement)]
 pub struct TableHeader {
     style: StyleRefinement,
-    children: Vec<AnyElement>,
+    children: Vec<AnySizableElement>,
+    size: Size,
 }
 
 impl TableHeader {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self { style: StyleRefinement::default(), children: Vec::new(), size: Size::default() }
     }
-}
 
-impl ParentElement for TableHeader {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+    pub fn child(mut self, child: impl IntoElement + Sizable + 'static) -> Self {
+        self.children.push(AnySizableElement::new(child));
+        self
+    }
+
+    pub fn children<E: IntoElement + Sizable + 'static>(
+        mut self,
+        children: impl IntoIterator<Item = E>,
+    ) -> Self {
+        self.children.extend(children.into_iter().map(AnySizableElement::new));
+        self
     }
 }
 
@@ -95,14 +139,26 @@ impl Styled for TableHeader {
     }
 }
 
+impl Sizable for TableHeader {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for TableHeader {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let border_color = cx.theme().table_row_border;
+        let children = render_row_children(self.children, self.size, border_color);
+
         div()
             .w_full()
             .bg(cx.theme().table_head)
             .text_color(cx.theme().table_head_foreground)
+            .border_b_1()
+            .border_color(cx.theme().table_row_border)
             .refine_style(&self.style)
-            .children(self.children)
+            .children(children)
     }
 }
 
@@ -110,18 +166,26 @@ impl RenderOnce for TableHeader {
 #[derive(IntoElement)]
 pub struct TableBody {
     style: StyleRefinement,
-    children: Vec<AnyElement>,
+    children: Vec<AnySizableElement>,
+    size: Size,
 }
 
 impl TableBody {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self { style: StyleRefinement::default(), children: Vec::new(), size: Size::default() }
     }
-}
 
-impl ParentElement for TableBody {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+    pub fn child(mut self, child: impl IntoElement + Sizable + 'static) -> Self {
+        self.children.push(AnySizableElement::new(child));
+        self
+    }
+
+    pub fn children<E: IntoElement + Sizable + 'static>(
+        mut self,
+        children: impl IntoIterator<Item = E>,
+    ) -> Self {
+        self.children.extend(children.into_iter().map(AnySizableElement::new));
+        self
     }
 }
 
@@ -131,9 +195,19 @@ impl Styled for TableBody {
     }
 }
 
+impl Sizable for TableBody {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for TableBody {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div().w_full().refine_style(&self.style).children(self.children)
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let border_color = cx.theme().table_row_border;
+        let children = render_row_children(self.children, self.size, border_color);
+
+        div().w_full().refine_style(&self.style).children(children)
     }
 }
 
@@ -141,18 +215,26 @@ impl RenderOnce for TableBody {
 #[derive(IntoElement)]
 pub struct TableFooter {
     style: StyleRefinement,
-    children: Vec<AnyElement>,
+    children: Vec<AnySizableElement>,
+    size: Size,
 }
 
 impl TableFooter {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self { style: StyleRefinement::default(), children: Vec::new(), size: Size::default() }
     }
-}
 
-impl ParentElement for TableFooter {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+    pub fn child(mut self, child: impl IntoElement + Sizable + 'static) -> Self {
+        self.children.push(AnySizableElement::new(child));
+        self
+    }
+
+    pub fn children<E: IntoElement + Sizable + 'static>(
+        mut self,
+        children: impl IntoIterator<Item = E>,
+    ) -> Self {
+        self.children.extend(children.into_iter().map(AnySizableElement::new));
+        self
     }
 }
 
@@ -162,14 +244,26 @@ impl Styled for TableFooter {
     }
 }
 
+impl Sizable for TableFooter {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for TableFooter {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let border_color = cx.theme().table_row_border;
+        let children = render_row_children(self.children, self.size, border_color);
+
         div()
             .w_full()
             .bg(cx.theme().table_foot)
             .text_color(cx.theme().table_foot_foreground)
+            .border_t_1()
+            .border_color(cx.theme().table_row_border)
             .refine_style(&self.style)
-            .children(self.children)
+            .children(children)
     }
 }
 
@@ -177,18 +271,26 @@ impl RenderOnce for TableFooter {
 #[derive(IntoElement)]
 pub struct TableRow {
     style: StyleRefinement,
-    children: Vec<AnyElement>,
+    children: Vec<AnySizableElement>,
+    size: Size,
 }
 
 impl TableRow {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self { style: StyleRefinement::default(), children: Vec::new(), size: Size::default() }
     }
-}
 
-impl ParentElement for TableRow {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+    pub fn child(mut self, child: impl IntoElement + Sizable + 'static) -> Self {
+        self.children.push(AnySizableElement::new(child));
+        self
+    }
+
+    pub fn children<E: IntoElement + Sizable + 'static>(
+        mut self,
+        children: impl IntoIterator<Item = E>,
+    ) -> Self {
+        self.children.extend(children.into_iter().map(AnySizableElement::new));
+        self
     }
 }
 
@@ -198,16 +300,19 @@ impl Styled for TableRow {
     }
 }
 
+impl Sizable for TableRow {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl RenderOnce for TableRow {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
-            .w_full()
-            .flex()
-            .flex_row()
-            .border_b_1()
-            .border_color(cx.theme().table_row_border)
-            .refine_style(&self.style)
-            .children(self.children)
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let children: Vec<AnyElement> =
+            self.children.into_iter().map(|c| c.into_any(self.size)).collect();
+
+        div().w_full().flex().flex_row().refine_style(&self.style).children(children)
     }
 }
 
@@ -216,8 +321,9 @@ impl RenderOnce for TableRow {
 pub struct TableHead {
     style: StyleRefinement,
     children: Vec<AnyElement>,
-    width: Option<DefiniteLength>,
+    col_span: usize,
     align: TextAlign,
+    size: Size,
 }
 
 impl TableHead {
@@ -225,14 +331,15 @@ impl TableHead {
         Self {
             style: StyleRefinement::default(),
             children: Vec::new(),
-            width: None,
+            col_span: 1,
             align: TextAlign::Left,
+            size: Size::default(),
         }
     }
 
-    /// Set the width of this column.
-    pub fn w(mut self, width: impl Into<DefiniteLength>) -> Self {
-        self.width = Some(width.into());
+    /// Set the column span of this header cell.
+    pub fn col_span(mut self, span: usize) -> Self {
+        self.col_span = span.max(1);
         self
     }
 
@@ -255,6 +362,13 @@ impl ParentElement for TableHead {
     }
 }
 
+impl Sizable for TableHead {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl Styled for TableHead {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
@@ -263,19 +377,19 @@ impl Styled for TableHead {
 
 impl RenderOnce for TableHead {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let paddings = Size::default().table_cell_padding();
+        let paddings = self.size.table_cell_padding();
 
         div()
             .flex()
             .items_center()
-            .flex_1()
+            .flex_shrink()
+            .flex_basis(relative(self.col_span as f32))
             .truncate()
-            .h(Size::default().table_row_height())
+            .h(self.size.table_row_height())
             .px(paddings.left)
             .py(paddings.top)
             .when(self.align == TextAlign::Center, |this| this.justify_center())
             .when(self.align == TextAlign::Right, |this| this.justify_end())
-            .when_some(self.width, |this, width| this.flex_none().w(width))
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -286,8 +400,9 @@ impl RenderOnce for TableHead {
 pub struct TableCell {
     style: StyleRefinement,
     children: Vec<AnyElement>,
-    width: Option<DefiniteLength>,
+    col_span: usize,
     align: TextAlign,
+    size: Size,
 }
 
 impl TableCell {
@@ -295,14 +410,15 @@ impl TableCell {
         Self {
             style: StyleRefinement::default(),
             children: Vec::new(),
-            width: None,
+            col_span: 1,
             align: TextAlign::Left,
+            size: Size::default(),
         }
     }
 
-    /// Set the width of this cell.
-    pub fn w(mut self, width: impl Into<DefiniteLength>) -> Self {
-        self.width = Some(width.into());
+    /// Set the column span of this cell.
+    pub fn col_span(mut self, span: usize) -> Self {
+        self.col_span = span.max(1);
         self
     }
 
@@ -325,6 +441,13 @@ impl ParentElement for TableCell {
     }
 }
 
+impl Sizable for TableCell {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
 impl Styled for TableCell {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
@@ -333,19 +456,19 @@ impl Styled for TableCell {
 
 impl RenderOnce for TableCell {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let paddings = Size::default().table_cell_padding();
+        let paddings = self.size.table_cell_padding();
 
         div()
             .flex()
             .items_center()
-            .flex_1()
+            .flex_shrink()
+            .flex_basis(relative(self.col_span as f32))
             .truncate()
-            .h(Size::default().table_row_height())
+            .h(self.size.table_row_height())
             .px(paddings.left)
             .py(paddings.top)
             .when(self.align == TextAlign::Center, |this| this.justify_center())
             .when(self.align == TextAlign::Right, |this| this.justify_end())
-            .when_some(self.width, |this, width| this.flex_none().w(width))
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -356,17 +479,25 @@ impl RenderOnce for TableCell {
 pub struct TableCaption {
     style: StyleRefinement,
     children: Vec<AnyElement>,
+    size: Size,
 }
 
 impl TableCaption {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self { style: StyleRefinement::default(), children: Vec::new(), size: Size::default() }
     }
 }
 
 impl ParentElement for TableCaption {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
+    }
+}
+
+impl Sizable for TableCaption {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
     }
 }
 
@@ -378,7 +509,7 @@ impl Styled for TableCaption {
 
 impl RenderOnce for TableCaption {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let paddings = Size::default().table_cell_padding();
+        let paddings = self.size.table_cell_padding();
 
         div()
             .w_full()
@@ -386,6 +517,7 @@ impl RenderOnce for TableCaption {
             .py(paddings.top)
             .text_sm()
             .text_color(cx.theme().muted_foreground)
+            .text_center()
             .refine_style(&self.style)
             .children(self.children)
     }

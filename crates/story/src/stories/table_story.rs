@@ -3,7 +3,9 @@ use gpui::{
     Render, Styled, Window, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, Sizable,
+    ActiveTheme, Selectable as _, Sizable, Size,
+    button::{Button, ButtonGroup},
+    h_flex,
     table::{
         Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow,
     },
@@ -15,15 +17,21 @@ use crate::section;
 
 pub struct TableStory {
     focus_handle: FocusHandle,
+    size: Size,
 }
 
 impl TableStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self { focus_handle: cx.focus_handle() }
+        Self { focus_handle: cx.focus_handle(), size: Size::default() }
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
+    }
+
+    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
+        self.size = size;
+        cx.notify();
     }
 }
 
@@ -73,14 +81,47 @@ impl Render for TableStory {
             .gap_6()
             .size_full()
             .child(
+                h_flex().gap_3().child(
+                    ButtonGroup::new("toggle-size")
+                        .outline()
+                        .compact()
+                        .child(
+                            Button::new("xsmall")
+                                .label("XSmall")
+                                .selected(self.size == Size::XSmall),
+                        )
+                        .child(
+                            Button::new("small").label("Small").selected(self.size == Size::Small),
+                        )
+                        .child(
+                            Button::new("medium")
+                                .label("Medium")
+                                .selected(self.size == Size::Medium),
+                        )
+                        .child(
+                            Button::new("large").label("Large").selected(self.size == Size::Large),
+                        )
+                        .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
+                            let size = match selecteds[0] {
+                                0 => Size::XSmall,
+                                1 => Size::Small,
+                                2 => Size::Medium,
+                                3 => Size::Large,
+                                _ => unreachable!(),
+                            };
+                            this.set_size(size, window, cx);
+                        })),
+                ),
+            )
+            .child(
                 section("Table").child(
                     Table::new()
+                        .with_size(self.size)
                         .child(
                             TableHeader::new().child(
                                 TableRow::new()
                                     .child(TableHead::new().w(px(100.)).child("Invoice"))
-                                    .child(TableHead::new().child("Status"))
-                                    .child(TableHead::new().child("Method"))
+                                    .child(TableHead::new().col_span(2).child("Status"))
                                     .child(TableHead::new().text_right().child("Amount"))
                                     .child(TableHead::new().text_right().child("Date")),
                             ),
@@ -98,11 +139,13 @@ impl Render for TableStory {
                         .child(
                             TableFooter::new().child(
                                 TableRow::new()
-                                    .child(TableCell::new().w(px(100.)).child("Total"))
-                                    .child(TableCell::new().child(""))
-                                    .child(TableCell::new().child(""))
-                                    .child(TableCell::new().text_right().child("$2,250.00"))
-                                    .child(TableCell::new().text_right().child("")),
+                                    .child(TableCell::new().col_span(3).child("Total"))
+                                    .child(
+                                        TableCell::new()
+                                            .col_span(2)
+                                            .text_right()
+                                            .child("$2,250.00"),
+                                    ),
                             ),
                         )
                         .child(TableCaption::new().child("A list of your recent invoices.")),
@@ -111,6 +154,7 @@ impl Render for TableStory {
             .child(
                 section("With Border").child(
                     Table::new()
+                        .with_size(self.size)
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
@@ -127,7 +171,7 @@ impl Render for TableStory {
                         .child(TableBody::new().children(invoices.iter().enumerate().take(6).map(
                             |(ix, (invoice, status, method, amount, date))| {
                                 TableRow::new()
-                                    .when(ix % 2 == 0, |this| this.bg(cx.theme().table_even))
+                                    .when(ix % 2 != 0, |this| this.bg(cx.theme().table_even))
                                     .child(TableCell::new().w(px(100.)).child(invoice.to_string()))
                                     .child(TableCell::new().child(status_tag(status)))
                                     .child(TableCell::new().child(method.to_string()))
