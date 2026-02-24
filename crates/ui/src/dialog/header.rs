@@ -39,6 +39,6 @@ impl Styled for DialogHeader {
 
 impl RenderOnce for DialogHeader {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        v_flex().gap_2().mb_3().refine_style(&self.style).children(self.children)
+        v_flex().gap_2().refine_style(&self.style).children(self.children)
     }
 }

@@ -34,7 +34,6 @@ impl RenderOnce for DialogContent {
         v_flex()
             .w_full()
             .flex_1()
-            .px_4()
             .rounded(cx.theme().radius_lg)
             .refine_style(&self.style)
             .children(self.children)

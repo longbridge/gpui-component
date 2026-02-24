@@ -197,6 +197,7 @@ pub struct Dialog {
     children: Vec<AnyElement>,
     trigger: Option<AnyElement>,
     title: Option<AnyElement>,
+    pub(crate) footer: Option<AnyElement>,
     pub(crate) content_builder: Option<ContentBuilderFn>,
     pub(crate) props: DialogProps,
 
@@ -223,6 +224,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             trigger: None,
             title: None,
+            footer: None,
             content_builder: None,
             props: DialogProps::default(),
             children: Vec::new(),
@@ -239,9 +241,7 @@ impl Dialog {
         self
     }
 
-    /// Sets the content of the dialog, the content will replace the default title, body and footer layout.
-    ///
-    /// When you set the content, the `title`, `footer` and `children` will be ignored.
+    /// Sets the content of the dialog.
     pub fn content<F>(mut self, builder: F) -> Self
     where
         F: Fn(DialogContent, &mut Window, &mut App) -> DialogContent + 'static,
@@ -253,6 +253,14 @@ impl Dialog {
     /// Sets the title of the dialog.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = Some(title.into_any_element());
+        self
+    }
+
+    /// Sets the footer of the dialog, the footer will render at the bottom of the dialog, usually for action buttons.
+    ///
+    /// When you set the footer, the `button_props` will be ignored, you need to render the action buttons by yourself.
+    pub fn footer(mut self, footer: impl IntoElement) -> Self {
+        self.footer = Some(footer.into_any_element());
         self
     }
 
@@ -508,7 +516,7 @@ impl RenderOnce for Dialog {
                             .min_h_24()
                             .pt(paddings.top)
                             .pb(paddings.bottom)
-                            .gap(paddings.top.min(px(8.)))
+                            .gap(paddings.bottom.max(px(8.)))
                             .refine_style(&self.style)
                             .px_0()
                             .key_context(CONTEXT)
@@ -547,30 +555,39 @@ impl RenderOnce for Dialog {
                             .top(y)
                             .w(self.props.width)
                             .when_some(self.props.max_width, |this, w| this.max_w(w))
-                            .map(|this| {
-                                if let Some(builder) = self.content_builder {
-                                    this.child(builder(DialogContent::new(), window, cx))
-                                } else {
-                                    this.when_some(self.title, |this, title| {
-                                        this.child(
-                                            DialogTitle::new()
-                                                .pl(paddings.left)
-                                                .pr(paddings.right)
-                                                .child(title),
-                                        )
-                                    })
-                                    .child(
-                                        div().flex_1().overflow_hidden().child(
-                                            // Body
-                                            v_flex()
-                                                .size_full()
-                                                .overflow_y_scrollbar()
-                                                .pl(paddings.left)
-                                                .pr(paddings.right)
-                                                .children(self.children),
-                                        ),
-                                    )
-                                }
+                            .when_some(self.title, |this, title| {
+                                this.child(
+                                    DialogTitle::new()
+                                        .pl(paddings.left)
+                                        .pr(paddings.right)
+                                        .child(title),
+                                )
+                            })
+                            .when_some(self.content_builder, |this, builder| {
+                                this.child(builder(
+                                    DialogContent::new()
+                                        .gap(paddings.bottom)
+                                        .pl(paddings.left)
+                                        .pr(paddings.right),
+                                    window,
+                                    cx,
+                                ))
+                            })
+                            .when(!self.children.is_empty(), |this| {
+                                this.child(
+                                    div().flex_1().overflow_hidden().child(
+                                        // Body
+                                        v_flex()
+                                            .size_full()
+                                            .overflow_y_scrollbar()
+                                            .pl(paddings.left)
+                                            .pr(paddings.right)
+                                            .children(self.children),
+                                    ),
+                                )
+                            })
+                            .when_some(self.footer, |this, footer| {
+                                this.child(div().pl(paddings.left).pr(paddings.right).child(footer))
                             })
                             .children(self.props.close_button.then(|| {
                                 let top = (paddings.top - px(10.)).max(px(8.));
