@@ -205,7 +205,7 @@ impl Render for MenuStory {
                                     .submenu("Links", window, cx, |menu, _, _| {
                                         menu.link_with_icon(
                                             "GPUI Component",
-                                            IconName::GitHub,
+                                            IconName::Github,
                                             "https://github.com/longbridge/gpui-component",
                                         )
                                         .separator()
