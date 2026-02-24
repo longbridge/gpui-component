@@ -558,6 +558,7 @@ impl RenderOnce for Dialog {
                             .when_some(self.title, |this, title| {
                                 this.child(
                                     DialogTitle::new()
+                                        .gap(paddings.bottom)
                                         .pl(paddings.left)
                                         .pr(paddings.right)
                                         .child(title),
