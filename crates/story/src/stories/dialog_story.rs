@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement, Render, SharedString, Styled, Window, div, px,
+    ParentElement, Render, SharedString, Styled, Window, div, px, relative,
 };
 
 use gpui_component::{
@@ -195,8 +195,10 @@ impl DialogStory {
                                     .px_4()
                                     .pb_4()
                                     .gap_3()
-                                    .child("This is a dialog dialog.")
-                                    .child("You can put anything here.")
+                                    .child(
+                                        "This is a dialog dialog. \
+                                        You can put anything here.",
+                                    )
                                     .child(Input::new(&input1))
                                     .child(Select::new(&select))
                                     .child(DatePicker::new(&date).placeholder("Date of Birth")),
