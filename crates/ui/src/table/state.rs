@@ -117,7 +117,7 @@ impl TableVisibleRange {
     }
 }
 
-/// The state for [`Table`].
+/// The state for [`DataTable`].
 ///
 /// # Selection Modes
 ///
@@ -336,8 +336,7 @@ where
 
     /// Scroll to the row at the given index.
     pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
-        self.vertical_scroll_handle
-            .scroll_to_item(row_ix, ScrollStrategy::Top);
+        self.vertical_scroll_handle.scroll_to_item(row_ix, ScrollStrategy::Top);
         cx.notify();
     }
 
@@ -345,8 +344,7 @@ where
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
 
-        self.horizontal_scroll_handle
-            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        self.horizontal_scroll_handle.scroll_to_item(col_ix, ScrollStrategy::Top);
         cx.notify();
     }
 
@@ -369,11 +367,7 @@ where
         if let Some(row_ix) = self.selected_row {
             self.vertical_scroll_handle.scroll_to_item(
                 row_ix,
-                if is_down {
-                    ScrollStrategy::Bottom
-                } else {
-                    ScrollStrategy::Top
-                },
+                if is_down { ScrollStrategy::Bottom } else { ScrollStrategy::Top },
             );
         }
         cx.emit(TableEvent::SelectRow(row_ix));
@@ -437,8 +431,7 @@ where
         self.selected_cell = Some((row_ix, col_ix));
 
         // Scroll to the cell
-        self.vertical_scroll_handle
-            .scroll_to_item(row_ix, ScrollStrategy::Center);
+        self.vertical_scroll_handle.scroll_to_item(row_ix, ScrollStrategy::Center);
         self.scroll_to_col(col_ix, cx);
 
         cx.emit(TableEvent::SelectCell(row_ix, col_ix));
@@ -492,11 +485,7 @@ where
         self.col_groups = (0..self.delegate.columns_count(cx))
             .map(|col_ix| {
                 let column = self.delegate().column(col_ix, cx);
-                ColGroup {
-                    width: column.width,
-                    bounds: Bounds::default(),
-                    column,
-                }
+                ColGroup { width: column.width, bounds: Bounds::default(), column }
             })
             .collect();
         cx.notify();
@@ -507,10 +496,7 @@ where
             return 0;
         }
 
-        self.col_groups
-            .iter()
-            .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
-            .count()
+        self.col_groups.iter().filter(|col| col.column.fixed == Some(ColumnFixed::Left)).count()
     }
 
     fn page_item_count(&self) -> usize {
@@ -1025,15 +1011,13 @@ where
             if self.visible_range.rows == visible_range {
                 return;
             }
-            self.delegate_mut()
-                .visible_rows_changed(visible_range.clone(), window, cx);
+            self.delegate_mut().visible_rows_changed(visible_range.clone(), window, cx);
             self.visible_range.rows = visible_range;
         } else {
             if self.visible_range.cols == visible_range {
                 return;
             }
-            self.delegate_mut()
-                .visible_columns_changed(visible_range.clone(), window, cx);
+            self.delegate_mut().visible_columns_changed(visible_range.clone(), window, cx);
             self.visible_range.cols = visible_range;
         }
     }
@@ -1060,11 +1044,9 @@ where
             .whitespace_nowrap()
             .table_cell_size(self.options.size)
             .map(|this| match col_padding {
-                Some(padding) => this
-                    .pl(padding.left)
-                    .pr(padding.right)
-                    .pt(padding.top)
-                    .pb(padding.bottom),
+                Some(padding) => {
+                    this.pl(padding.left).pr(padding.right).pt(padding.top).pb(padding.bottom)
+                }
                 None => this,
             })
     }
@@ -1107,11 +1089,7 @@ where
         const HANDLE_SIZE: Pixels = px(2.);
 
         let resizable = self.col_resizable
-            && self
-                .col_groups
-                .get(ix)
-                .map(|col| col.is_resizable())
-                .unwrap_or(false);
+            && self.col_groups.get(ix).map(|col| col.is_resizable()).unwrap_or(false);
         if !resizable {
             return div().into_any_element();
         }
@@ -1136,42 +1114,37 @@ where
                     .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
                     .w(px(1.)),
             )
-            .on_drag_move(
-                cx.listener(move |view, e: &DragMoveEvent<ResizeColumn>, window, cx| {
-                    match e.drag(cx) {
-                        ResizeColumn((entity_id, ix)) => {
-                            if cx.entity_id() != *entity_id {
-                                return;
-                            }
-
-                            // sync col widths into real widths
-                            // TODO: Consider to remove this, this may not need now.
-                            // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
-                            //     col_group.width = col_group.bounds.size.width;
-                            // }
-
-                            let ix = *ix;
-                            view.resizing_col = Some(ix);
-
-                            let col_group = view
-                                .col_groups
-                                .get(ix)
-                                .expect("BUG: invalid col index")
-                                .clone();
-
-                            view.resize_cols(
-                                ix,
-                                e.event.position.x - HANDLE_SIZE - col_group.bounds.left(),
-                                window,
-                                cx,
-                            );
-
-                            // scroll the table if the drag is near the edge
-                            view.scroll_table_by_col_resizing(e.event.position, &col_group);
+            .on_drag_move(cx.listener(move |view, e: &DragMoveEvent<ResizeColumn>, window, cx| {
+                match e.drag(cx) {
+                    ResizeColumn((entity_id, ix)) => {
+                        if cx.entity_id() != *entity_id {
+                            return;
                         }
-                    };
-                }),
-            )
+
+                        // sync col widths into real widths
+                        // TODO: Consider to remove this, this may not need now.
+                        // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
+                        //     col_group.width = col_group.bounds.size.width;
+                        // }
+
+                        let ix = *ix;
+                        view.resizing_col = Some(ix);
+
+                        let col_group =
+                            view.col_groups.get(ix).expect("BUG: invalid col index").clone();
+
+                        view.resize_cols(
+                            ix,
+                            e.event.position.x - HANDLE_SIZE - col_group.bounds.left(),
+                            window,
+                            cx,
+                        );
+
+                        // scroll the table if the drag is near the edge
+                        view.scroll_table_by_col_resizing(e.event.position, &col_group);
+                    }
+                };
+            }))
             .on_drag(ResizeColumn((cx.entity_id(), ix)), |drag, _, _, cx| {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
@@ -1253,11 +1226,7 @@ where
                 .on_click(
                     cx.listener(move |table, _, window, cx| table.perform_sort(col_ix, window, cx)),
                 )
-                .child(
-                    Icon::new(icon)
-                        .size_3()
-                        .text_color(cx.theme().secondary_foreground),
-                ),
+                .child(Icon::new(icon).size_3().text_color(cx.theme().secondary_foreground)),
         )
     }
 
@@ -1297,12 +1266,7 @@ where
                     )
                     .when(movable, |this| {
                         this.on_drag(
-                            DragColumn {
-                                entity_id,
-                                col_ix,
-                                name,
-                                width: col_group.width,
-                            },
+                            DragColumn { entity_id, col_ix, name, width: col_group.width },
                             |drag, _, _, cx| {
                                 cx.stop_propagation();
                                 cx.new(|_| drag.clone())
@@ -1776,10 +1740,7 @@ where
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         if !crate::measure_enable() {
-            return self
-                .delegate
-                .render_td(row_ix, col_ix, window, cx)
-                .into_any_element();
+            return self.delegate.render_td(row_ix, col_ix, window, cx).into_any_element();
         }
 
         let start = std::time::Instant::now();
@@ -1795,10 +1756,7 @@ where
 
         // Print avg measure time of each td
         if self._measure.len() > 0 {
-            let total = self
-                ._measure
-                .iter()
-                .fold(Duration::default(), |acc, d| acc + *d);
+            let total = self._measure.iter().fold(Duration::default(), |acc, d| acc + *d);
             let avg = total / self._measure.len() as u32;
             eprintln!(
                 "last render {} cells total: {:?}, avg: {:?}",
@@ -1871,42 +1829,23 @@ where
         let loading = self.delegate.loading(cx);
 
         let row_height = self.options.size.table_row_height();
-        let total_height = self
-            .vertical_scroll_handle
-            .0
-            .borrow()
-            .base_handle
-            .bounds()
-            .size
-            .height;
+        let total_height = self.vertical_scroll_handle.0.borrow().base_handle.bounds().size.height;
         let actual_height = row_height * rows_count as f32;
         let extra_rows_count =
             self.calculate_extra_rows_needed(total_height, actual_height, row_height);
-        let render_rows_count = if self.options.stripe {
-            rows_count + extra_rows_count
-        } else {
-            rows_count
-        };
+        let render_rows_count =
+            if self.options.stripe { rows_count + extra_rows_count } else { rows_count };
         let right_clicked_row = self.right_clicked_row;
         let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
         let loading_view = if loading {
-            Some(
-                self.delegate
-                    .render_loading(self.options.size, window, cx)
-                    .into_any_element(),
-            )
+            Some(self.delegate.render_loading(self.options.size, window, cx).into_any_element())
         } else {
             None
         };
 
         let empty_view = if rows_count == 0 {
-            Some(
-                div()
-                    .size_full()
-                    .child(self.delegate.render_empty(window, cx))
-                    .into_any_element(),
-            )
+            Some(div().size_full().child(self.delegate.render_empty(window, cx)).into_any_element())
         } else {
             None
         };
@@ -2011,10 +1950,7 @@ where
             .children(loading_view)
             .when(!loading, |this| {
                 this.child(inner_table)
-                    .child(ScrollableMask::new(
-                        Axis::Horizontal,
-                        &self.horizontal_scroll_handle,
-                    ))
+                    .child(ScrollableMask::new(Axis::Horizontal, &self.horizontal_scroll_handle))
                     .when(right_clicked_row.is_some(), |this| {
                         this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
                             this.on_row_right_click(e, None, window, cx);
@@ -2035,10 +1971,9 @@ where
                         .when(self.options.scrollbar_visible.bottom, |this| {
                             this.child(self.render_horizontal_scrollbar(window, cx))
                         })
-                        .when(
-                            self.options.scrollbar_visible.right && rows_count > 0,
-                            |this| this.children(self.render_vertical_scrollbar(window, cx)),
-                        ),
+                        .when(self.options.scrollbar_visible.right && rows_count > 0, |this| {
+                            this.children(self.render_vertical_scrollbar(window, cx))
+                        }),
                 )
             })
     }
