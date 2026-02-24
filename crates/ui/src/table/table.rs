@@ -1,9 +1,11 @@
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, relative,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
+    StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{ActiveTheme as _, AnyChildElement, ChildElement, Sizable, Size, StyledExt as _};
+
+const MIN_CELL_WIDTH: Pixels = px(100.);
 
 /// A basic table component for directly rendering tabular data.
 ///
@@ -440,8 +442,10 @@ impl RenderOnce for TableHead {
             .id(("table-head", self.ix))
             .flex()
             .items_center()
-            .flex_shrink()
-            .flex_basis(relative(self.col_span as f32))
+            .when(self.style.size.width.is_none(), |this| {
+                this.flex_shrink().flex_basis(relative(self.col_span as f32))
+            })
+            .min_w(MIN_CELL_WIDTH * self.col_span)
             .px(paddings.left)
             .py(paddings.top)
             .when(self.align == TextAlign::Center, |this| this.justify_center())
@@ -527,8 +531,10 @@ impl RenderOnce for TableCell {
             .id(("table-cell", self.ix))
             .flex()
             .items_center()
-            .flex_shrink()
-            .flex_basis(relative(self.col_span as f32))
+            .when(self.style.size.width.is_none(), |this| {
+                this.flex_shrink().flex_basis(relative(self.col_span as f32))
+            })
+            .min_w(MIN_CELL_WIDTH * self.col_span)
             .px(paddings.left)
             .py(paddings.top)
             .when(self.align == TextAlign::Center, |this| this.justify_center())

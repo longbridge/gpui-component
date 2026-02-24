@@ -120,7 +120,7 @@ impl Render for TableStory {
                         .child(
                             TableHeader::new().child(
                                 TableRow::new()
-                                    .child(TableHead::new().w(px(100.)).child("Invoice"))
+                                    .child(TableHead::new().w(px(150.)).child("Invoice"))
                                     .child(TableHead::new().col_span(2).child("Status"))
                                     .child(TableHead::new().text_right().child("Amount"))
                                     .child(TableHead::new().text_right().child("Date")),
@@ -129,7 +129,7 @@ impl Render for TableStory {
                         .child(TableBody::new().children(invoices.iter().map(
                             |(invoice, status, method, amount, date)| {
                                 TableRow::new()
-                                    .child(TableCell::new().w(px(100.)).child(invoice.to_string()))
+                                    .child(TableCell::new().w(px(150.)).child(invoice.to_string()))
                                     .child(TableCell::new().child(status_tag(status)))
                                     .child(TableCell::new().child(method.to_string()))
                                     .child(TableCell::new().text_right().child(amount.to_string()))
