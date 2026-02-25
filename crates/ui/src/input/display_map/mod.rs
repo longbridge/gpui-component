@@ -6,7 +6,7 @@
 /// - **DisplayMap**: Public facade for Editor/Input
 ///
 /// The goal is to provide a clean, unified API where Editor only needs to know
-/// about `BufferPos ↔ DisplayPos` mapping, without worrying about internal wrap/fold complexity.
+/// about `BufferPoint ↔ DisplayPoint` mapping, without worrying about internal wrap/fold complexity.
 mod display_map;
 mod fold_map;
 mod folding;
@@ -25,12 +25,12 @@ pub use folding::{FoldRange, extract_fold_ranges};
 /// - `line`: 0-based logical line number (split by `\n`)
 /// - `col`: 0-based column offset (byte offset)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BufferPos {
+pub struct BufferPoint {
     pub line: usize,
     pub col: usize,
 }
 
-impl BufferPos {
+impl BufferPoint {
     pub fn new(line: usize, col: usize) -> Self {
         Self { line, col }
     }
@@ -38,12 +38,12 @@ impl BufferPos {
 
 /// Position after soft-wrapping but before folding (internal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(super) struct WrapPos {
+pub(super) struct WrapPoint {
     pub row: usize,
     pub col: usize,
 }
 
-impl WrapPos {
+impl WrapPoint {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
     }
@@ -54,12 +54,12 @@ impl WrapPos {
 /// - `row`: 0-based display row (final visible row)
 /// - `col`: 0-based display column
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DisplayPos {
+pub struct DisplayPoint {
     pub row: usize,
     pub col: usize,
 }
 
-impl DisplayPos {
+impl DisplayPoint {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
     }

@@ -141,7 +141,7 @@ impl InputMode {
             return;
         }
 
-        let wrapped_lines = display_map.wrap_map().wrap_row_count();
+        let wrapped_lines = display_map.wrap_row_count();
         self.set_rows(wrapped_lines);
     }
 

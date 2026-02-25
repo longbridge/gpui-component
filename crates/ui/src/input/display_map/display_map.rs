@@ -1,7 +1,7 @@
 /// DisplayMap: Public facade for Editor/Input display mapping.
 ///
 /// This combines WrapMap and FoldMap to provide a unified API:
-/// - BufferPos ↔ DisplayPos conversion
+/// - BufferPoint ↔ DisplayPoint conversion
 /// - Fold management (candidates, toggle, query)
 /// - Automatic projection updates on text/layout changes
 use std::ops::Range;
@@ -11,10 +11,10 @@ use ropey::Rope;
 
 use super::fold_map::FoldMap;
 use super::folding::FoldRange;
-use super::text_wrapper::LineItem;
+use super::text_wrapper::{LineItem, WrapDisplayPoint};
 use super::wrap_map::WrapMap;
-use super::{BufferPos, DisplayPos};
-use crate::input::display_map::WrapPos;
+use super::{BufferPoint, DisplayPoint};
+use crate::input::display_map::WrapPoint;
 use crate::input::rope_ext::RopeExt as _;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
@@ -23,7 +23,7 @@ use crate::input::rope_ext::RopeExt as _;
 /// 1. Buffer → Wrap (soft-wrapping)
 /// 2. Wrap → Display (folding)
 ///
-/// Editor/Input only needs to work with BufferPos and DisplayPos.
+/// Editor/Input only needs to work with BufferPoint and DisplayPoint.
 pub struct DisplayMap {
     wrap_map: WrapMap,
     fold_map: FoldMap,
@@ -40,27 +40,27 @@ impl DisplayMap {
     // ==================== Core Coordinate Mapping ====================
 
     /// Convert buffer position to display position
-    pub fn buffer_pos_to_display_pos(&self, pos: BufferPos) -> DisplayPos {
+    pub fn buffer_pos_to_display_pos(&self, pos: BufferPoint) -> DisplayPoint {
         // Buffer → Wrap
         let wrap_pos = self.wrap_map.buffer_pos_to_wrap_pos(pos);
 
         // Wrap → Display
         if let Some(display_row) = self.fold_map.wrap_row_to_display_row(wrap_pos.row) {
-            DisplayPos::new(display_row, wrap_pos.col)
+            DisplayPoint::new(display_row, wrap_pos.col)
         } else {
             // Cursor is in a folded region, find nearest visible row
             let display_row = self.fold_map.nearest_visible_display_row(wrap_pos.row);
-            DisplayPos::new(display_row, 0) // Column 0 at fold boundary
+            DisplayPoint::new(display_row, 0) // Column 0 at fold boundary
         }
     }
 
     /// Convert display position to buffer position
-    pub fn display_pos_to_buffer_pos(&self, pos: DisplayPos) -> BufferPos {
+    pub fn display_pos_to_buffer_pos(&self, pos: DisplayPoint) -> BufferPoint {
         // Display → Wrap
         let wrap_row = self.fold_map.display_row_to_wrap_row(pos.row).unwrap_or(0);
 
         // Wrap → Buffer
-        let wrap_pos = WrapPos::new(wrap_row, pos.col);
+        let wrap_pos = WrapPoint::new(wrap_row, pos.col);
         self.wrap_map.wrap_pos_to_buffer_pos(wrap_pos)
     }
 
@@ -252,15 +252,55 @@ impl DisplayMap {
         }
     }
 
+    // ==================== Wrap Display Point Operations ====================
+
+    /// Convert byte offset to wrap display point (with soft wrap info).
     #[inline]
-    pub fn wrap_map(&self) -> &WrapMap {
-        &self.wrap_map
+    pub(crate) fn offset_to_wrap_display_point(&self, offset: usize) -> WrapDisplayPoint {
+        self.wrap_map.wrapper().offset_to_display_point(offset)
     }
 
+    /// Convert wrap display point to byte offset.
     #[inline]
-    pub fn fold_map(&self) -> &FoldMap {
-        &self.fold_map
+    pub(crate) fn wrap_display_point_to_offset(&self, point: WrapDisplayPoint) -> usize {
+        self.wrap_map.wrapper().display_point_to_offset(point)
     }
+
+    /// Convert wrap display point to tree_sitter::Point (buffer line/col).
+    #[inline]
+    pub(crate) fn wrap_display_point_to_point(
+        &self,
+        point: WrapDisplayPoint,
+    ) -> tree_sitter::Point {
+        self.wrap_map.wrapper().display_point_to_point(point)
+    }
+
+    /// Convert a wrap row to a display row (skipping folded rows).
+    /// Returns None if the wrap row is folded.
+    #[inline]
+    pub fn wrap_row_to_display_row(&self, wrap_row: usize) -> Option<usize> {
+        self.fold_map.wrap_row_to_display_row(wrap_row)
+    }
+
+    /// Find the nearest visible display row for a given wrap row.
+    #[inline]
+    pub fn nearest_visible_display_row(&self, wrap_row: usize) -> usize {
+        self.fold_map.nearest_visible_display_row(wrap_row)
+    }
+
+    /// Convert a display row to a wrap row.
+    #[inline]
+    pub fn display_row_to_wrap_row(&self, display_row: usize) -> Option<usize> {
+        self.fold_map.display_row_to_wrap_row(display_row)
+    }
+
+    /// Get the longest row index (by byte length).
+    #[inline]
+    pub(crate) fn longest_row(&self) -> usize {
+        self.wrap_map.wrapper().longest_row.row
+    }
+
+    // ==================== Access Methods ====================
 
     /// Get access to line items (for rendering)
     #[inline]

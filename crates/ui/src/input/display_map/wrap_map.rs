@@ -1,7 +1,7 @@
 /// WrapMap: Soft-wrapping layer (Buffer → Wrap rows).
 ///
 /// This module wraps the existing TextWrapper and provides:
-/// - BufferPos ↔ WrapPos mapping
+/// - BufferPoint ↔ WrapPoint mapping
 /// - Efficient buffer_line → wrap_row queries via prefix sum cache
 /// - Incremental updates when text or layout changes
 use std::ops::Range;
@@ -10,8 +10,8 @@ use gpui::{App, Font, Pixels};
 use ropey::Rope;
 
 use super::fold_map::FoldMap;
-use super::text_wrapper::{DisplayPoint, LineItem, TextWrapper};
-use super::{BufferPos, WrapPos};
+use super::text_wrapper::{LineItem, TextWrapper, WrapDisplayPoint};
+use super::{BufferPoint, WrapPoint};
 use crate::input::rope_ext::RopeExt;
 
 /// WrapMap manages soft-wrapping and provides buffer ↔ wrap coordinate mapping.
@@ -50,8 +50,8 @@ impl WrapMap {
     }
 
     /// Convert buffer position to wrap position
-    pub(super) fn buffer_pos_to_wrap_pos(&self, pos: BufferPos) -> WrapPos {
-        let BufferPos { line, col } = pos;
+    pub(super) fn buffer_pos_to_wrap_pos(&self, pos: BufferPoint) -> WrapPoint {
+        let BufferPoint { line, col } = pos;
 
         // Clamp to valid range
         let line = line.min(self.buffer_line_count().saturating_sub(1));
@@ -70,18 +70,18 @@ impl WrapMap {
         // Use TextWrapper's existing conversion
         let display_point = self.wrapper.offset_to_display_point(offset);
 
-        WrapPos::new(display_point.row, display_point.column)
+        WrapPoint::new(display_point.row, display_point.column)
     }
 
     /// Convert wrap position to buffer position
-    pub(super) fn wrap_pos_to_buffer_pos(&self, pos: WrapPos) -> BufferPos {
-        let WrapPos { row, col } = pos;
+    pub(super) fn wrap_pos_to_buffer_pos(&self, pos: WrapPoint) -> BufferPoint {
+        let WrapPoint { row, col } = pos;
 
         // Clamp wrap_row to valid range
         let row = row.min(self.wrap_row_count().saturating_sub(1));
 
         // Use TextWrapper's existing conversion
-        let display_point = DisplayPoint::new(row, 0, col);
+        let display_point = WrapDisplayPoint::new(row, 0, col);
         let offset = self.wrapper.display_point_to_offset(display_point);
 
         // Convert offset to buffer position
@@ -89,7 +89,7 @@ impl WrapMap {
         let line_start = self.wrapper.text().line_start_offset(point.row);
         let col = offset.saturating_sub(line_start);
 
-        BufferPos::new(point.row, col)
+        BufferPoint::new(point.row, col)
     }
 
     /// Get the buffer line for a given wrap row
@@ -122,15 +122,6 @@ impl WrapMap {
             self.wrap_row_count()
         };
         start..end
-    }
-
-    /// Get the number of wrap rows for a buffer line
-    pub fn buffer_line_wrap_count(&self, line: usize) -> usize {
-        if let Some(line_item) = self.wrapper.lines.get(line) {
-            line_item.lines_len()
-        } else {
-            0
-        }
     }
 
     /// Update text (incremental or full)

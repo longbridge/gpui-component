@@ -83,7 +83,6 @@ impl TextElement {
         let line_height = last_layout.line_height;
         let visible_range = &last_layout.visible_range;
         let lines = &last_layout.lines;
-        let text_wrapper = state.display_map.wrap_map().wrapper();
         let line_number_width = last_layout.line_number_width;
 
         let mut selected_range = state.selected_range;
@@ -121,7 +120,8 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
-        for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
+        let buffer_lines = state.display_map.lines();
+        for (ix, wrap_line) in buffer_lines.iter().enumerate() {
             let row = ix;
             let line_origin = point(px(0.), offset_y);
 
@@ -555,7 +555,7 @@ impl TextElement {
 
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
-        for (ix, _line) in state.display_map.wrap_map().lines().iter().enumerate() {
+        for (ix, _line) in state.display_map.lines().iter().enumerate() {
             // 获取该 buffer line 中可见的 wrap rows 数量
             let visible_wrap_rows = state.display_map.visible_wrap_row_count_for_buffer_line(ix);
 
@@ -926,7 +926,7 @@ impl TextElement {
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
-        let text_wrapper = state.display_map.wrap_map().wrapper();
+        let buffer_lines = state.display_map.lines();
         let visible_range = &last_layout.visible_range;
         let visible_range_offset = &last_layout.visible_range_offset;
 
@@ -971,8 +971,7 @@ impl TextElement {
         let mut offset = 0;
         for (ix, line) in visible_text.split("\n").enumerate() {
             let buffer_line = visible_range.start + ix;
-            let line_item = text_wrapper
-                .lines
+            let line_item = buffer_lines
                 .get(buffer_line)
                 .expect("line should exists in wrapper");
 
@@ -1374,7 +1373,7 @@ impl Element for TextElement {
         // 1. Single line
         // 2. Multi-line with soft wrap disabled.
         if state.mode.is_single_line() || !state.soft_wrap {
-            let longest_row = state.display_map.wrap_map().wrapper().longest_row.row;
+            let longest_row = state.display_map.longest_row();
             let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
                 .text_system()

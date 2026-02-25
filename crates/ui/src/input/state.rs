@@ -1438,7 +1438,7 @@ impl InputState {
         let row = point.row;
 
         let mut row_offset_y = px(0.);
-        for (ix, _wrap_line) in self.display_map.wrap_map().lines().iter().enumerate() {
+        for (ix, _wrap_line) in self.display_map.lines().iter().enumerate() {
             if ix == row {
                 break;
             }
