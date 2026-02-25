@@ -4,8 +4,7 @@
 /// - Filtering out wrap rows that belong to folded regions
 /// - Maintaining bidirectional mapping: wrap_row ↔ display_row
 /// - Handling fold state changes and rebuilding the projection
-
-use crate::highlighter::FoldRange;
+use super::folding::FoldRange;
 use super::wrap_map::WrapMap;
 
 /// FoldMap projects wrap rows to display rows by hiding folded regions.
@@ -117,11 +116,7 @@ impl FoldMap {
     pub fn set_folded(&mut self, start_line: usize, folded: bool) {
         if folded {
             // Find the candidate range for this start_line
-            if let Some(candidate) = self
-                .candidates
-                .iter()
-                .find(|c| c.start_line == start_line)
-            {
+            if let Some(candidate) = self.candidates.iter().find(|c| c.start_line == start_line) {
                 // Add to folded if not already present
                 if !self.folded.iter().any(|f| f.start_line == start_line) {
                     self.folded.push(candidate.clone());
@@ -227,8 +222,8 @@ impl FoldMap {
                     // Overlapping or adjacent, merge
                     *last = (*last).max(range.end);
                 } else {
-                    merged_hidden.push(range.end);
                     merged_hidden.push(range.start);
+                    merged_hidden.push(range.end);
                 }
             } else {
                 merged_hidden.push(range.start);

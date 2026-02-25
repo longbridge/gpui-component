@@ -9,6 +9,7 @@
 /// about `BufferPos ↔ DisplayPos` mapping, without worrying about internal wrap/fold complexity.
 mod display_map;
 mod fold_map;
+mod folding;
 mod text_wrapper;
 mod types;
 mod wrap_map;
@@ -18,8 +19,8 @@ pub use self::display_map::DisplayMap;
 pub(crate) use self::text_wrapper::{LineItem, LineLayout};
 pub use self::types::{BufferPos, DisplayPos};
 
-// Re-export FoldRange from highlighter module
-pub use crate::highlighter::FoldRange;
+// Re-export FoldRange and extract_fold_ranges
+pub use folding::{FoldRange, extract_fold_ranges};
 
 // Re-export for gradual migration (TODO: remove after full migration)
 pub use self::fold_map::FoldMap;

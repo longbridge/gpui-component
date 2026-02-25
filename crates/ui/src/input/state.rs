@@ -976,10 +976,12 @@ impl InputState {
         // FIXME: Avoid to_string
         let left_part = self.text.slice(0..offset).to_string();
 
-        UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
+        let result = UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
             .rfind(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, _)| i)
-            .unwrap_or(0)
+            .unwrap_or(0);
+
+        self.clamp_offset_to_visible_backward(result)
     }
 
     /// Return the next end offset of the next word.
@@ -988,10 +990,12 @@ impl InputState {
         let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         let right_part = self.text.slice(offset..self.text.len()).to_string();
 
-        UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
+        let result = UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
             .find(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, s)| offset + i + s.len())
-            .unwrap_or(self.text.len())
+            .unwrap_or(self.text.len());
+
+        self.clamp_offset_to_visible_forward(result)
     }
 
     /// Get start of line byte offset of cursor
@@ -1110,7 +1114,7 @@ impl InputState {
 
         let mut offset = self.start_of_line();
         if offset == self.cursor() {
-            offset = offset.saturating_sub(1);
+            offset = self.clamp_offset_to_visible_backward(offset.saturating_sub(1));
         }
         self.replace_text_in_range_silent(
             Some(self.range_to_utf16(&(offset..self.cursor()))),
@@ -1135,7 +1139,9 @@ impl InputState {
 
         let mut offset = self.end_of_line();
         if offset == self.cursor() {
-            offset = (offset + 1).clamp(0, self.text.len());
+            offset = self.clamp_offset_to_visible_forward(
+                (offset + 1).clamp(0, self.text.len()),
+            );
         }
         self.replace_text_in_range_silent(
             Some(self.range_to_utf16(&(self.cursor()..offset))),
@@ -1727,6 +1733,34 @@ impl InputState {
         self.offset_from_utf16(range_utf16.start)..self.offset_from_utf16(range_utf16.end)
     }
 
+    /// If offset falls on a hidden (folded) line, clamp backward to the end of
+    /// the fold header line (last visible position before the fold).
+    fn clamp_offset_to_visible_backward(&self, offset: usize) -> usize {
+        let line = self.text.offset_to_point(offset).row;
+        if self.display_map.is_buffer_line_hidden(line) {
+            for fold in self.display_map.folded_ranges() {
+                if line > fold.start_line && line <= fold.end_line {
+                    return self.text.line_end_offset(fold.start_line);
+                }
+            }
+        }
+        offset
+    }
+
+    /// If offset falls on a hidden (folded) line, clamp forward to the start of
+    /// the fold end line (first visible position after the fold).
+    fn clamp_offset_to_visible_forward(&self, offset: usize) -> usize {
+        let line = self.text.offset_to_point(offset).row;
+        if self.display_map.is_buffer_line_hidden(line) {
+            for fold in self.display_map.folded_ranges() {
+                if line > fold.start_line && line <= fold.end_line {
+                    return self.text.line_start_offset(fold.end_line);
+                }
+            }
+        }
+        offset
+    }
+
     pub(super) fn previous_boundary(&self, offset: usize) -> usize {
         let mut offset = self.text.clip_offset(offset.saturating_sub(1), Bias::Left);
         if let Some(ch) = self.text.char_at(offset) {
@@ -1735,19 +1769,7 @@ impl InputState {
             }
         }
 
-        // Skip over folded (hidden) lines: jump to end of the fold header line
-        let line = self.text.offset_to_point(offset).row;
-        if self.display_map.is_buffer_line_hidden(line) {
-            for fold in self.display_map.folded_ranges() {
-                if line > fold.start_line && line <= fold.end_line {
-                    // Jump to the end of start_line (the last visible line before the fold)
-                    offset = self.text.line_end_offset(fold.start_line);
-                    break;
-                }
-            }
-        }
-
-        offset
+        self.clamp_offset_to_visible_backward(offset)
     }
 
     pub(super) fn next_boundary(&self, offset: usize) -> usize {
@@ -1758,19 +1780,7 @@ impl InputState {
             }
         }
 
-        // Skip over folded (hidden) lines: jump to start of the fold end line
-        let line = self.text.offset_to_point(offset).row;
-        if self.display_map.is_buffer_line_hidden(line) {
-            for fold in self.display_map.folded_ranges() {
-                if line > fold.start_line && line <= fold.end_line {
-                    // Jump to the start of end_line (the first visible line after the fold)
-                    offset = self.text.line_start_offset(fold.end_line);
-                    break;
-                }
-            }
-        }
-
-        offset
+        self.clamp_offset_to_visible_forward(offset)
     }
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
@@ -2009,7 +2019,7 @@ impl InputState {
         };
 
         // Extract fold ranges using tree-sitter
-        let fold_ranges = crate::highlighter::extract_fold_ranges(tree, &self.text);
+        let fold_ranges = crate::input::display_map::extract_fold_ranges(tree, &self.text);
 
         // Set the fold candidates in the display map
         self.display_map.set_fold_candidates(fold_ranges);

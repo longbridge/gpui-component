@@ -4,17 +4,16 @@
 /// - BufferPos ↔ DisplayPos conversion
 /// - Fold management (candidates, toggle, query)
 /// - Automatic projection updates on text/layout changes
-
 use std::ops::Range;
 
 use gpui::{App, Font, Pixels};
 use ropey::Rope;
 
 use super::fold_map::FoldMap;
+use super::folding::FoldRange;
 use super::text_wrapper::{LineItem, TextWrapper};
 use super::types::{BufferPos, DisplayPos};
 use super::wrap_map::WrapMap;
-use crate::highlighter::FoldRange;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
@@ -56,10 +55,7 @@ impl DisplayMap {
     /// Convert display position to buffer position
     pub fn display_pos_to_buffer_pos(&self, pos: DisplayPos) -> BufferPos {
         // Display → Wrap
-        let wrap_row = self
-            .fold_map
-            .display_row_to_wrap_row(pos.row)
-            .unwrap_or(0);
+        let wrap_row = self.fold_map.display_row_to_wrap_row(pos.row).unwrap_or(0);
 
         // Wrap → Buffer
         let wrap_pos = super::types::WrapPos::new(wrap_row, pos.col);
@@ -217,7 +213,8 @@ impl DisplayMap {
     fn rebuild_fold_projection(&mut self) {
         // Optimization: skip rebuild if no folds are active
         // This avoids expensive O(n) traversal of all wrap rows on every text change
-        if !self.fold_map.folded_ranges().is_empty() || !self.fold_map.fold_candidates().is_empty() {
+        if !self.fold_map.folded_ranges().is_empty() || !self.fold_map.fold_candidates().is_empty()
+        {
             self.fold_map.rebuild(&self.wrap_map);
         } else {
             // Fast path: mark dirty but don't rebuild yet
