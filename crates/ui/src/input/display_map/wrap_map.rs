@@ -24,8 +24,13 @@ pub struct WrapMap {
     buffer_line_starts: Vec<usize>,
 
     /// Cached line count from last rebuild
-    /// Used to detect if we need full or incremental cache update
     cached_line_count: usize,
+
+    /// Cached total wrap row count from last rebuild.
+    /// Used together with `cached_line_count` to detect if the cache is stale.
+    /// When soft wrap changes a line's wrap count without changing buffer line count,
+    /// this catches the staleness.
+    cached_wrap_row_count: usize,
 }
 
 impl WrapMap {
@@ -34,6 +39,7 @@ impl WrapMap {
             wrapper: TextWrapper::new(font, font_size, wrap_width),
             buffer_line_starts: Vec::new(),
             cached_line_count: 0,
+            cached_wrap_row_count: 0,
         }
     }
 
@@ -167,42 +173,28 @@ impl WrapMap {
     /// Rebuild the prefix sum cache: buffer_line_starts
     fn rebuild_cache(&mut self) {
         let line_count = self.wrapper.lines.len();
+        let wrap_row_count = self.wrapper.len();
 
-        // Performance optimization: skip if nothing changed
-        if line_count == self.cached_line_count && !self.buffer_line_starts.is_empty() {
+        // Skip if nothing changed: both buffer line count and total wrap row count must match.
+        // Checking wrap_row_count is essential because soft-wrap can change the number of
+        // wrap rows per line without changing the buffer line count.
+        if line_count == self.cached_line_count
+            && wrap_row_count == self.cached_wrap_row_count
+            && !self.buffer_line_starts.is_empty()
+        {
             return;
         }
 
-        // Check if we can do incremental update
-        let can_incremental = line_count > self.cached_line_count
-            && self.cached_line_count > 0
-            && self.buffer_line_starts.len() == self.cached_line_count;
+        self.buffer_line_starts.clear();
 
-        if can_incremental {
-            // Incremental update: only process new lines
-            let mut wrap_row = if let Some(&last) = self.buffer_line_starts.last() {
-                let last_line = &self.wrapper.lines[self.cached_line_count - 1];
-                last + last_line.lines_len()
-            } else {
-                0
-            };
-
-            for line_item in &self.wrapper.lines[self.cached_line_count..] {
-                self.buffer_line_starts.push(wrap_row);
-                wrap_row += line_item.lines_len();
-            }
-        } else {
-            // Full rebuild
-            self.buffer_line_starts.clear();
-
-            let mut wrap_row = 0;
-            for line_item in &self.wrapper.lines {
-                self.buffer_line_starts.push(wrap_row);
-                wrap_row += line_item.lines_len();
-            }
+        let mut wrap_row = 0;
+        for line_item in &self.wrapper.lines {
+            self.buffer_line_starts.push(wrap_row);
+            wrap_row += line_item.lines_len();
         }
 
         self.cached_line_count = line_count;
+        self.cached_wrap_row_count = wrap_row_count;
     }
 
     /// Get access to the underlying wrapper (for rendering/hit-testing)
