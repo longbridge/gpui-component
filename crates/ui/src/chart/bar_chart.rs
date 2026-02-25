@@ -7,12 +7,14 @@ use num_traits::{Num, ToPrimitive};
 use crate::{
     ActiveTheme,
     plot::{
-        AXIS_GAP, AxisText, Grid, Plot, PlotAxis,
+        AXIS_GAP, Grid, Plot, PlotAxis,
         label::Text,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::Bar,
     },
 };
+
+use super::build_band_x_labels;
 
 #[derive(IntoPlot)]
 pub struct BarChart<T, X, Y>
@@ -81,8 +83,9 @@ where
         self
     }
 
-    pub fn show_x_axis(mut self, show: bool) -> Self {
-        self.show_x_axis = show;
+    /// Hide the x-axis line and labels.
+    pub fn hide_x_axis(mut self) -> Self {
+        self.show_x_axis = false;
         self
     }
 }
@@ -118,27 +121,17 @@ where
         );
 
         // Draw X axis
-        let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
-            if (i + 1) % self.tick_margin == 0 {
-                x.tick(&x_fn(d)).map(|x_tick| {
-                    AxisText::new(
-                        x_fn(d).into(),
-                        x_tick + band_width / 2.,
-                        cx.theme().muted_foreground,
-                    )
-                    .align(TextAlign::Center)
-                })
-            } else {
-                None
-            }
-        });
-
-        let mut axis = PlotAxis::new()
-            .x(height)
-            .x_label(x_label)
-            .stroke(cx.theme().border);
-        if !self.show_x_axis {
-            axis = axis.hide_x_axis();
+        let mut axis = PlotAxis::new().stroke(cx.theme().border);
+        if self.show_x_axis {
+            let labels = build_band_x_labels(
+                &self.data,
+                x_fn.as_ref(),
+                &x,
+                band_width,
+                self.tick_margin,
+                cx.theme().muted_foreground,
+            );
+            axis = axis.x(height).x_label(labels);
         }
         axis.paint(&bounds, window, cx);
 
