@@ -10,10 +10,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
 
-const BUFFER_SIZE: usize = 8192;
+const BUFFER_SIZE: usize = 256 * 1024; // 256 KB
 
 fn ensure_not_cancelled(cancelled: &AtomicBool) -> Result<()> {
     if cancelled.load(Ordering::Relaxed) {
@@ -209,6 +209,9 @@ impl SftpClient for RusshSftpClient {
                 .keepalive_interval
                 .or(Some(Duration::from_secs(60))),
             keepalive_max: ssh_config.keepalive_max.unwrap_or(3),
+            window_size: 16 * 1024 * 1024,       // 16 MB
+            maximum_packet_size: 256 * 1024,      // 256 KB
+            nodelay: true,
             ..<_>::default()
         });
 
@@ -351,9 +354,10 @@ impl SftpClient for RusshSftpClient {
             .await
             .map_err(|e| anyhow!("Failed to open remote file {}: {}", remote_path, e))?;
 
-        let mut local_file = File::create(local_path)
+        let local_file = File::create(local_path)
             .await
             .map_err(|e| anyhow!("Failed to create local file {}: {}", local_path, e))?;
+        let mut local_file = BufWriter::with_capacity(BUFFER_SIZE, local_file);
 
         let mut buffer = vec![0u8; BUFFER_SIZE];
         let mut transferred = 0u64;
@@ -413,6 +417,11 @@ impl SftpClient for RusshSftpClient {
         });
 
         local_file
+            .flush()
+            .await
+            .map_err(|e| anyhow!("Failed to flush local file: {}", e))?;
+        local_file
+            .into_inner()
             .sync_all()
             .await
             .map_err(|e| anyhow!("Failed to sync local file: {}", e))?;
@@ -427,7 +436,7 @@ impl SftpClient for RusshSftpClient {
         cancelled: Arc<AtomicBool>,
         progress: ProgressCallback,
     ) -> Result<()> {
-        let mut local_file = File::open(local_path)
+        let local_file = File::open(local_path)
             .await
             .map_err(|e| anyhow!("Failed to open local file {}: {}", local_path, e))?;
 
@@ -437,6 +446,8 @@ impl SftpClient for RusshSftpClient {
             .map_err(|e| anyhow!("Failed to get local file metadata: {}", e))?;
 
         let total_size = metadata.len();
+
+        let mut local_file = BufReader::with_capacity(BUFFER_SIZE, local_file);
 
         let mut remote_file = self
             .sftp
@@ -774,9 +785,10 @@ impl SftpClient for RusshSftpClient {
                 .await
                 .map_err(|e| anyhow!("Failed to open remote file {}: {}", file_entry.path, e))?;
 
-            let mut local_file_handle = File::create(&local_file)
+            let local_file_handle = File::create(&local_file)
                 .await
                 .map_err(|e| anyhow!("Failed to create local file {:?}: {}", local_file, e))?;
+            let mut local_file_handle = BufWriter::with_capacity(BUFFER_SIZE, local_file_handle);
 
             let mut buffer = vec![0u8; BUFFER_SIZE];
             let mut current_file_transferred: u64 = 0;
@@ -818,6 +830,11 @@ impl SftpClient for RusshSftpClient {
             }
 
             local_file_handle
+                .flush()
+                .await
+                .map_err(|e| anyhow!("Failed to flush local file: {}", e))?;
+            local_file_handle
+                .into_inner()
                 .sync_all()
                 .await
                 .map_err(|e| anyhow!("Failed to sync local file: {}", e))?;
@@ -917,9 +934,10 @@ impl SftpClient for RusshSftpClient {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            let mut local_file = File::open(file_path)
+            let local_file = File::open(file_path)
                 .await
                 .map_err(|e| anyhow!("Failed to open local file {:?}: {}", file_path, e))?;
+            let mut local_file = BufReader::with_capacity(BUFFER_SIZE, local_file);
 
             let mut remote_file = self
                 .sftp
