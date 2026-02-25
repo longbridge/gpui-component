@@ -10,7 +10,7 @@ use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    ActiveTheme as _, Colorize, IconName, Root, Sizable as _,
+    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
     button::{Button, ButtonVariants as _},
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
 };
@@ -26,8 +26,8 @@ const FOLD_ICON_WIDTH: Pixels = px(16.);
 struct FoldIconLayout {
     /// Hitbox for the line number area (used for hover detection)
     line_number_hitbox: Hitbox,
-    /// List of (display_row, icon_element) pairs for each fold candidate
-    icons: Vec<(usize, gpui::AnyElement)>,
+    /// List of (display_row, is_folded, icon_element) pairs for each fold candidate
+    icons: Vec<(usize, bool, gpui::AnyElement)>,
 }
 
 pub(super) struct TextElement {
@@ -612,7 +612,14 @@ impl TextElement {
                 None,
             );
 
-            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
+            let mut width = empty_line_number.width + px(6.);
+            if state.mode.is_code_editor() {
+                width += FOLD_ICON_WIDTH;
+            } else {
+                width += LINE_NUMBER_RIGHT_MARGIN;
+            }
+
+            width
         } else {
             px(0.)
         };
@@ -847,6 +854,7 @@ impl TextElement {
                 .xsmall()
                 .rounded_xs()
                 .size(FOLD_ICON_WIDTH)
+                .selected(info.is_folded)
                 .on_mouse_down(MouseButton::Left, {
                     let state = self.state.clone();
                     let buffer_line = info.buffer_line;
@@ -870,7 +878,9 @@ impl TextElement {
                 cx,
             );
 
-            icon_layout.icons.push((info.display_row, icon));
+            icon_layout
+                .icons
+                .push((info.display_row, info.is_folded, icon));
         }
 
         icon_layout
@@ -891,11 +901,10 @@ impl TextElement {
         cx: &mut App,
     ) {
         let is_hovered = fold_icon_layout.line_number_hitbox.is_hovered(window);
-        for (display_row, icon) in fold_icon_layout.icons.iter_mut() {
+        for (display_row, is_folded, icon) in fold_icon_layout.icons.iter_mut() {
             let is_current_line = current_row == Some(*display_row);
 
-            // Only show icon when hovering over line number gutter or on current line
-            if !is_hovered && !is_current_line {
+            if !is_hovered && !is_current_line && !*is_folded {
                 continue;
             }
 
