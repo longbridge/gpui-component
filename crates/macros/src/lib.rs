@@ -4,19 +4,39 @@ use syn::parse::{Parse, ParseStream};
 
 mod derive_into_plot;
 
-/// Input for icon_name! macro: EnumName, "path"
+/// Input for icon_name! macro: EnumName, "path", [optional derives]
 struct IconNameInput {
     enum_name: syn::Ident,
     _comma: syn::Token![,],
     path: syn::LitStr,
+    derives: Option<(
+        syn::Token![,],
+        syn::punctuated::Punctuated<syn::Path, syn::Token![,]>,
+    )>,
 }
 
 impl Parse for IconNameInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let enum_name = input.parse()?;
+        let _comma = input.parse()?;
+        let path = input.parse()?;
+
+        // Check if there's an optional derives list
+        let derives = if input.peek(syn::Token![,]) {
+            let comma = input.parse()?;
+            let content;
+            syn::bracketed!(content in input);
+            let derives = content.parse_terminated(syn::Path::parse, syn::Token![,])?;
+            Some((comma, derives))
+        } else {
+            None
+        };
+
         Ok(IconNameInput {
-            enum_name: input.parse()?,
-            _comma: input.parse()?,
-            path: input.parse()?,
+            enum_name,
+            _comma,
+            path,
+            derives,
         })
     }
 }
@@ -62,19 +82,25 @@ fn pascal_case(filename: &str) -> String {
 
 /// Generate a custom icon enum and its `IconNamed` impl by scanning a directory of SVG files.
 ///
-/// Accepts an enum name and a path relative to the calling crate's `CARGO_MANIFEST_DIR`.
-/// Each `.svg` file becomes an enum variant using PascalCase conversion.
+/// Accepts an enum name, a path relative to the calling crate's `CARGO_MANIFEST_DIR`,
+/// and optionally a list of additional derive traits.
 ///
 /// # Example
 ///
 /// ```ignore
+/// // Basic usage (derives IntoElement, Clone by default)
 /// icon_named!(IconName, "../assets/assets/icons");
-/// icon_named!(MyCustomIcon, "icons");
+///
+/// // With custom derives
+/// icon_named!(IconName, "../assets/assets/icons", [Debug, Copy, PartialEq, Eq]);
 /// ```
 #[proc_macro]
 pub fn icon_named(input: TokenStream) -> TokenStream {
     let IconNameInput {
-        enum_name, path, ..
+        enum_name,
+        path,
+        derives,
+        ..
     } = syn::parse_macro_input!(input as IconNameInput);
 
     let relative_path = path.value();
@@ -110,8 +136,20 @@ pub fn icon_named(input: TokenStream) -> TokenStream {
         .collect();
     let paths: Vec<&str> = entries.iter().map(|(_, p)| p.as_str()).collect();
 
+    // Build derive list: always include IntoElement and Clone, then add custom derives
+    let derive_attrs = if let Some((_, custom_derives)) = derives {
+        let derives_vec: Vec<_> = custom_derives.iter().collect();
+        quote! {
+            #[derive(IntoElement, Clone, #(#derives_vec),*)]
+        }
+    } else {
+        quote! {
+            #[derive(IntoElement, Clone)]
+        }
+    };
+
     let expanded = quote! {
-        #[derive(IntoElement, Clone)]
+        #derive_attrs
         pub enum #enum_name {
             #(#variants,)*
         }

@@ -80,6 +80,7 @@ pub use element_ext::*;
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;
 pub use geometry::*;
+pub use gpui_component_macros::icon_named;
 pub use icon::*;
 pub use index_path::IndexPath;
 pub use input::{Rope, RopeExt, RopeLines};
@@ -166,7 +167,10 @@ pub struct Measure {
 impl Measure {
     #[track_caller]
     pub fn new(name: impl Into<SharedString>) -> Self {
-        Self { name: name.into(), start: std::time::Instant::now() }
+        Self {
+            name: name.into(),
+            start: std::time::Instant::now(),
+        }
     }
 
     #[track_caller]
