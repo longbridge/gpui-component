@@ -2,6 +2,7 @@ mod blink_cursor;
 mod change;
 mod clear_button;
 mod cursor;
+mod display_map;
 mod element;
 mod indent;
 mod input;
@@ -20,6 +21,7 @@ mod text_wrapper;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
+pub use display_map::{BufferPos, DisplayMap, DisplayPos, FoldMap, FoldRange, WrapMap};
 pub use indent::TabSize;
 pub use input::*;
 pub use lsp::*;

@@ -21,7 +21,7 @@ use unicode_segmentation::*;
 
 use super::{
     blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    mode::InputMode, number_input, text_wrapper::TextWrapper,
+    mode::InputMode, number_input, DisplayMap,
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -32,11 +32,11 @@ use crate::input::{
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
-    text_wrapper::LineLayout,
+    text_wrapper::{LineItem, LineLayout},
 };
 use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
-use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
+use crate::highlighter::DiagnosticSet;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -292,7 +292,7 @@ pub struct InputState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,
     pub(super) text: Rope,
-    pub(super) text_wrapper: TextWrapper,
+    pub(super) display_map: DisplayMap,
     pub(super) history: History<Change>,
     pub(super) blink_cursor: Entity<BlinkCursor>,
     pub(super) loading: bool,
@@ -401,7 +401,7 @@ impl InputState {
         Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
-            text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
+            display_map: DisplayMap::new(text_style.font(), window.rem_size(), None),
             blink_cursor,
             history,
             selected_range: Selection::default(),
@@ -764,14 +764,14 @@ impl InputState {
                 .and_then(|b| b.wrap_width)
                 .unwrap_or(self.input_bounds.size.width);
 
-            self.text_wrapper.set_wrap_width(Some(wrap_width), cx);
+            self.display_map.on_layout_changed(Some(wrap_width), cx);
 
             // Reset scroll to left 0
             let mut offset = self.scroll_handle.offset();
             offset.x = px(0.);
             self.scroll_handle.set_offset(offset);
         } else {
-            self.text_wrapper.set_wrap_width(None, cx);
+            self.display_map.on_layout_changed(None, cx);
         }
         cx.notify();
     }
@@ -829,7 +829,8 @@ impl InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
-        self.text_wrapper.set_default_text(&self.text);
+        // Note: We can't call display_map.set_text here because it needs cx.
+        // The text will be set during prepare_if_need in element.rs
         self._pending_update = true;
         self
     }
@@ -1426,7 +1427,7 @@ impl InputState {
         let row = point.row;
 
         let mut row_offset_y = px(0.);
-        for (ix, wrap_line) in self.text_wrapper.lines.iter().enumerate() {
+        for (ix, wrap_line) in self.display_map.wrap_map().lines().iter().enumerate() {
             if ix == row {
                 break;
             }
@@ -1608,8 +1609,9 @@ impl InputState {
         let mut index = last_layout.visible_range_offset.start;
         let mut y_offset = last_layout.visible_top;
         for (ix, line) in self
-            .text_wrapper
-            .lines
+            .display_map
+            .wrap_map()
+            .lines()
             .iter()
             .skip(last_layout.visible_range.start)
             .enumerate()
@@ -1889,7 +1891,7 @@ impl InputState {
         let wrap_width_changed = self.input_bounds.size.width != new_bounds.size.width;
         self.input_bounds = new_bounds;
 
-        // Update text_wrapper wrap_width if changed.
+        // Update display_map wrap_width if changed.
         if let Some(last_layout) = self.last_layout.as_ref() {
             if wrap_width_changed {
                 let wrap_width = if !self.soft_wrap {
@@ -1899,8 +1901,8 @@ impl InputState {
                     last_layout.wrap_width
                 };
 
-                self.text_wrapper.set_wrap_width(wrap_width, cx);
-                self.mode.update_auto_grow(&self.text_wrapper);
+                self.display_map.on_layout_changed(wrap_width, cx);
+                self.mode.update_auto_grow(self.display_map.wrap_map().wrapper());
                 cx.notify();
             }
         }
@@ -2065,8 +2067,8 @@ impl EntityInputHandler for InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
-        self.text_wrapper
-            .update(&self.text, &range, &Rope::from(new_text), cx);
+        self.display_map
+            .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.lsp.update(&self.text, window, cx);
@@ -2074,7 +2076,7 @@ impl EntityInputHandler for InputState {
         self.ime_marked_range.take();
         self.update_preferred_column();
         self.update_search(cx);
-        self.mode.update_auto_grow(&self.text_wrapper);
+        self.mode.update_auto_grow(self.display_map.wrap_map().wrapper());
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
         }
@@ -2120,8 +2122,8 @@ impl EntityInputHandler for InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
-        self.text_wrapper
-            .update(&self.text, &range, &Rope::from(new_text), cx);
+        self.display_map
+            .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
         self.lsp.update(&self.text, window, cx);
@@ -2138,7 +2140,7 @@ impl EntityInputHandler for InputState {
                 .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
                 .into();
         }
-        self.mode.update_auto_grow(&self.text_wrapper);
+        self.mode.update_auto_grow(self.display_map.wrap_map().wrapper());
         self.history.start_grouping();
         self.push_history(&old_text, &range, new_text);
         cx.notify();

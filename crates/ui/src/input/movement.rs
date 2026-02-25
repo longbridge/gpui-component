@@ -74,16 +74,17 @@ impl InputState {
         let offset = self.cursor();
         let was_preferred_column = self.preferred_column;
 
-        let mut display_point = self.text_wrapper.offset_to_display_point(offset);
+        let wrapper = self.display_map.wrap_map().wrapper();
+        let mut display_point = wrapper.offset_to_display_point(offset);
         display_point.row = display_point.row.saturating_add_signed(move_lines);
         display_point.column = 0;
-        let mut new_offset = self.text_wrapper.display_point_to_offset(display_point);
+        let mut new_offset = wrapper.display_point_to_offset(display_point);
 
         if let Some((preferred_x, column)) = was_preferred_column {
             // Get display point again to update local_row.
-            let mut next_display_point = self.text_wrapper.offset_to_display_point(new_offset);
+            let mut next_display_point = wrapper.offset_to_display_point(new_offset);
             next_display_point.column = 0;
-            let next_point = self.text_wrapper.display_point_to_point(next_display_point);
+            let next_point = wrapper.display_point_to_point(next_display_point);
             let line_start_offset = self.text.line_start_offset(next_point.row);
 
             // If in visible range, prefer to use position to get column.

@@ -72,7 +72,7 @@ impl TextElement {
         let line_height = last_layout.line_height;
         let visible_range = &last_layout.visible_range;
         let lines = &last_layout.lines;
-        let text_wrapper = &state.text_wrapper;
+        let text_wrapper = state.display_map.wrap_map().wrapper();
         let line_number_width = last_layout.line_number_width;
 
         let mut selected_range = state.selected_range;
@@ -507,7 +507,7 @@ impl TextElement {
             return (0..1, visible_top);
         }
 
-        let total_lines = state.text_wrapper.len();
+        let total_lines = state.display_map.wrap_row_count();
         let scroll_top = if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
             deferred_scroll_offset.y
         } else {
@@ -516,7 +516,7 @@ impl TextElement {
 
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
-        for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
+        for (ix, line) in state.display_map.wrap_map().lines().iter().enumerate() {
             let wrapped_height = line.height(line_height);
             line_bottom += wrapped_height;
 
@@ -727,7 +727,7 @@ impl TextElement {
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
-        let text_wrapper = &state.text_wrapper;
+        let text_wrapper = state.display_map.wrap_map().wrapper();
         let visible_range = &last_layout.visible_range;
         let visible_range_offset = &last_layout.visible_range_offset;
 
@@ -745,7 +745,7 @@ impl TextElement {
             return vec![line_layout];
         }
 
-        // Empty to use placeholder, the placeholder is not in the text_wrapper map.
+        // Empty to use placeholder, the placeholder is not in the wrapper map.
         if state.text.len() == 0 {
             return display_text
                 .to_string()
@@ -774,7 +774,7 @@ impl TextElement {
             let line_item = text_wrapper
                 .lines
                 .get(visible_range.start + ix)
-                .expect("line should exists in text_wrapper");
+                .expect("line should exists in wrapper");
 
             debug_assert_eq!(line_item.len(), line.len());
 
@@ -1004,8 +1004,8 @@ impl Element for TextElement {
         let text_size = style.font_size.to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
-            state.text_wrapper.set_font(font, text_size, cx);
-            state.text_wrapper.prepare_if_need(&state.text, cx);
+            state.display_map.set_font(font, text_size, cx);
+            state.display_map.ensure_text_prepared(&state.text, cx);
         });
 
         let state = self.state.read(cx);
@@ -1163,7 +1163,7 @@ impl Element for TextElement {
         // 1. Single line
         // 2. Multi-line with soft wrap disabled.
         if state.mode.is_single_line() || !state.soft_wrap {
-            let longest_row = state.text_wrapper.longest_row.row;
+            let longest_row = state.display_map.wrap_map().wrapper().longest_row.row;
             let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
                 .text_system()
@@ -1194,7 +1194,7 @@ impl Element for TextElement {
         let ghost_line_count = ghost_lines.len();
         let ghost_lines_height = ghost_line_count as f32 * line_height;
 
-        let total_wrapped_lines = state.text_wrapper.len();
+        let total_wrapped_lines = state.display_map.wrap_row_count();
         let empty_bottom_height = if state.mode.is_code_editor() {
             bounds
                 .size

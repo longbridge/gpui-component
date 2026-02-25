@@ -86,6 +86,12 @@ impl TextWrapper {
         self.text = text.clone();
     }
 
+    /// Get reference to the rope text.
+    #[inline]
+    pub(super) fn text(&self) -> &Rope {
+        &self.text
+    }
+
     /// Get the total number of lines including wrapped lines.
     #[inline]
     pub(super) fn len(&self) -> usize {
