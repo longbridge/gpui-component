@@ -27,6 +27,7 @@ where
     close: Option<Rc<dyn Fn(&T) -> Y>>,
     tick_margin: usize,
     body_width_ratio: f32,
+    show_x_axis: bool,
 }
 
 impl<T, X, Y> CandlestickChart<T, X, Y>
@@ -47,6 +48,7 @@ where
             close: None,
             tick_margin: 1,
             body_width_ratio: 0.8,
+            show_x_axis: true,
         }
     }
 
@@ -84,6 +86,11 @@ where
         self.body_width_ratio = ratio;
         self
     }
+
+    pub fn show_x_axis(mut self, show: bool) -> Self {
+        self.show_x_axis = show;
+        self
+    }
 }
 
 impl<T, X, Y> Plot for CandlestickChart<T, X, Y>
@@ -103,7 +110,8 @@ where
         };
 
         let width = bounds.size.width.as_f32();
-        let height = bounds.size.height.as_f32() - AXIS_GAP;
+        let axis_gap = if self.show_x_axis { AXIS_GAP } else { 0. };
+        let height = bounds.size.height.as_f32() - axis_gap;
 
         // X scale
         let x = ScaleBand::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width])
@@ -135,11 +143,14 @@ where
             }
         });
 
-        PlotAxis::new()
+        let mut axis = PlotAxis::new()
             .x(height)
             .x_label(x_label)
-            .stroke(cx.theme().border)
-            .paint(&bounds, window, cx);
+            .stroke(cx.theme().border);
+        if !self.show_x_axis {
+            axis = axis.hide_x_axis();
+        }
+        axis.paint(&bounds, window, cx);
 
         // Draw grid
         Grid::new()
