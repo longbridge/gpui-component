@@ -35,7 +35,8 @@ impl FoldRange {
 /// classes, blocks, etc.), so named nodes naturally correspond to meaningful
 /// foldable regions across all languages without a per-language node-type list.
 fn is_foldable_node(node: &Node) -> bool {
-    if !node.is_named() {
+    // Skip root node (e.g. `source_file`) and unnamed tokens
+    if !node.is_named() || node.parent().is_none() {
         return false;
     }
 
