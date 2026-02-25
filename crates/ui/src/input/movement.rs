@@ -76,7 +76,21 @@ impl InputState {
 
         let wrapper = self.display_map.wrap_map().wrapper();
         let mut display_point = wrapper.offset_to_display_point(offset);
-        display_point.row = display_point.row.saturating_add_signed(move_lines);
+
+        // Convert wrap row → display row (skips folded rows), move, then convert back
+        let fold_map = self.display_map.fold_map();
+        let current_display_row = fold_map
+            .wrap_row_to_display_row(display_point.row)
+            .unwrap_or_else(|| fold_map.nearest_visible_display_row(display_point.row));
+        let max_display_row = self.display_map.display_row_count().saturating_sub(1);
+        let target_display_row = current_display_row
+            .saturating_add_signed(move_lines)
+            .min(max_display_row);
+        let target_wrap_row = fold_map
+            .display_row_to_wrap_row(target_display_row)
+            .unwrap_or(display_point.row);
+
+        display_point.row = target_wrap_row;
         display_point.column = 0;
         let mut new_offset = wrapper.display_point_to_offset(display_point);
 

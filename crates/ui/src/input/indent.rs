@@ -131,12 +131,17 @@ impl TextElement {
 
         for buffer_line in visible_range {
             // visible_range contains buffer lines (not display rows)
-            let line = state.text.slice_line(buffer_line);
             let line_index = buffer_line - last_layout.visible_range.start;
             let Some(line_layout) = last_layout.lines.get(line_index) else {
                 continue;
             };
 
+            // Skip hidden (folded) lines
+            if state.display_map.is_buffer_line_hidden(buffer_line) {
+                continue;
+            }
+
+            let line = state.text.slice_line(buffer_line);
             let mut current_indents = vec![];
             if line.len() > 0 {
                 let indent_count = tab_size.indent_count(&line);
