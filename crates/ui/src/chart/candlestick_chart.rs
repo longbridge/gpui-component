@@ -87,8 +87,8 @@ where
         self
     }
 
-    pub fn show_grid(mut self, show: bool) -> Self {
-        self.show_grid = show;
+    pub fn hide_grid(mut self) -> Self {
+        self.show_grid = false;
         self
     }
 }
