@@ -46,20 +46,31 @@ impl FoldMap {
         }
     }
 
-    /// Mark that the fold projection needs rebuilding
-    /// This is called when wrap_map changes, but we defer the rebuild until needed
-    pub(super) fn mark_dirty(&mut self) {
+    /// Update cached wrap_row_count without full rebuild.
+    /// Used when no folds are active (identity mapping assumed).
+    pub(super) fn mark_dirty_with_wrap_count(&mut self, wrap_row_count: usize) {
         self.needs_rebuild = true;
+        self.cached_wrap_row_count = wrap_row_count;
     }
 
     /// Get total number of visible display rows
     pub fn display_row_count(&self) -> usize {
+        if self.folded.is_empty() {
+            return self.cached_wrap_row_count;
+        }
         self.visible_wrap_rows.len()
     }
 
     /// Convert wrap_row to display_row
     /// Returns None if the wrap_row is hidden by folding
     pub fn wrap_row_to_display_row(&self, wrap_row: usize) -> Option<usize> {
+        if self.folded.is_empty() {
+            return if wrap_row < self.cached_wrap_row_count {
+                Some(wrap_row)
+            } else {
+                None
+            };
+        }
         self.wrap_row_to_display_row
             .get(wrap_row)
             .copied()
@@ -68,22 +79,26 @@ impl FoldMap {
 
     /// Convert display_row to wrap_row
     pub fn display_row_to_wrap_row(&self, display_row: usize) -> Option<usize> {
+        if self.folded.is_empty() {
+            return if display_row < self.cached_wrap_row_count {
+                Some(display_row)
+            } else {
+                None
+            };
+        }
         self.visible_wrap_rows.get(display_row).copied()
     }
 
-    /// Check if a wrap_row is visible
-    pub fn is_wrap_row_visible(&self, wrap_row: usize) -> bool {
-        self.wrap_row_to_display_row(wrap_row).is_some()
-    }
-
     /// Find the nearest visible display_row for a given wrap_row
-    /// (used when cursor falls inside a folded region)
     pub fn nearest_visible_display_row(&self, wrap_row: usize) -> usize {
+        if self.folded.is_empty() {
+            return wrap_row.min(self.cached_wrap_row_count.saturating_sub(1));
+        }
+
         if let Some(dr) = self.wrap_row_to_display_row(wrap_row) {
             return dr;
         }
 
-        // Binary search for the largest visible wrap_row <= target wrap_row
         match self.visible_wrap_rows.binary_search(&wrap_row) {
             Ok(idx) => idx,
             Err(insert_pos) => insert_pos.saturating_sub(1),
@@ -326,5 +341,3 @@ impl FoldMap {
         self.needs_rebuild = false;
     }
 }
-
-// Tests omitted - requires GPUI test context setup

@@ -70,11 +70,6 @@ impl DisplayMap {
         self.fold_map.display_row_count()
     }
 
-    /// Check if a display row is visible
-    pub fn is_display_row_visible(&self, display_row: usize) -> bool {
-        display_row < self.display_row_count()
-    }
-
     // ==================== Buffer Line Queries ====================
 
     /// Get the buffer line for a given display row
@@ -187,7 +182,7 @@ impl DisplayMap {
         let edit_start_line = old_text.offset_to_point(range.start).row;
         let edit_end_line = old_text.offset_to_point(range.end.min(old_text.len())).row;
 
-        let old_lines_in_range = edit_end_line - edit_start_line;
+        let old_lines_in_range = edit_end_line.saturating_sub(edit_start_line);
         let new_lines_in_range = new_text.chars().filter(|c| *c == '\n').count();
         let line_delta = new_lines_in_range as isize - old_lines_in_range as isize;
 
@@ -260,14 +255,13 @@ impl DisplayMap {
     /// Rebuild fold projection after wrap_map or fold state changes
     /// Only rebuilds if there are actually folded ranges
     fn rebuild_fold_projection(&mut self) {
-        // Optimization: skip rebuild if no folds are active
-        // This avoids expensive O(n) traversal of all wrap rows on every text change
-        if !self.fold_map.folded_ranges().is_empty() || !self.fold_map.fold_candidates().is_empty()
-        {
+        if !self.fold_map.folded_ranges().is_empty() {
             self.fold_map.rebuild(&self.wrap_map);
         } else {
-            // Fast path: mark dirty but don't rebuild yet
-            self.fold_map.mark_dirty();
+            // No active folds: identity mapping (wrap_row == display_row).
+            // Just update cached count so query methods work without Vec allocation.
+            self.fold_map
+                .mark_dirty_with_wrap_count(self.wrap_map.wrap_row_count());
         }
     }
 
@@ -275,18 +269,10 @@ impl DisplayMap {
     // These are provided for gradual migration from TextWrapper to DisplayMap.
     // TODO: Remove these after full migration to DisplayMap API.
 
-    /// Get access to the underlying WrapMap (for gradual migration)
-    ///
-    /// This allows existing code to access wrap-related functionality
-    /// while we gradually migrate to the DisplayMap API.
     pub fn wrap_map(&self) -> &WrapMap {
         &self.wrap_map
     }
 
-    /// Get access to the underlying FoldMap (for gradual migration)
-    ///
-    /// This allows existing code to access fold-related functionality
-    /// while we gradually migrate to the DisplayMap API.
     pub fn fold_map(&self) -> &FoldMap {
         &self.fold_map
     }
@@ -319,5 +305,3 @@ impl DisplayMap {
         self.wrap_map.buffer_line_count()
     }
 }
-
-// Tests omitted - requires GPUI test context setup

@@ -235,5 +235,3 @@ impl WrapMap {
             .count()
     }
 }
-
-// Tests omitted - requires GPUI test context setup

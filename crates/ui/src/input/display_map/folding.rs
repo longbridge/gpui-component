@@ -24,14 +24,6 @@ impl FoldRange {
             end_line,
         }
     }
-
-    pub fn contains_line(&self, line: usize) -> bool {
-        line >= self.start_line && line <= self.end_line
-    }
-
-    pub fn line_count(&self) -> usize {
-        self.end_line - self.start_line + 1
-    }
 }
 
 /// Foldable node types in tree-sitter syntax trees.
@@ -158,40 +150,13 @@ fn collect_foldable_nodes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::highlighter::SyntaxHighlighter;
-    use ropey::Rope;
-
-    #[test]
-    #[cfg(feature = "tree-sitter-languages")]
-    fn test_extract_fold_ranges_rust() {
-        let code = r#"fn main() {
-    let x = 1;
-    if x > 0 {
-        println!("positive");
-    }
-}
-
-struct Point {
-    x: i32,
-    y: i32,
-}
-"#;
-
-        let rope = Rope::from_str(code);
-        let mut highlighter = SyntaxHighlighter::new("rust");
-        highlighter.update(None, &rope);
-
-        // 访问内部的 tree
-        // 注意：这需要 SyntaxHighlighter 提供访问 tree 的方法
-        // 暂时跳过实际测试，只是示例结构
-    }
 
     #[test]
     fn test_fold_range_ordering() {
         let mut ranges = vec![
             FoldRange { start_line: 10, end_line: 20 },
             FoldRange { start_line: 5, end_line: 15 },
-            FoldRange { start_line: 5, end_line: 15 }, // 重复
+            FoldRange { start_line: 5, end_line: 15 },
             FoldRange { start_line: 1, end_line: 30 },
         ];
 
