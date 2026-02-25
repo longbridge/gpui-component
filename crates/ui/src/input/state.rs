@@ -976,12 +976,10 @@ impl InputState {
         // FIXME: Avoid to_string
         let left_part = self.text.slice(0..offset).to_string();
 
-        let result = UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
+        UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
             .rfind(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, _)| i)
-            .unwrap_or(0);
-
-        self.clamp_offset_to_visible_backward(result)
+            .unwrap_or(0)
     }
 
     /// Return the next end offset of the next word.
@@ -990,12 +988,10 @@ impl InputState {
         let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         let right_part = self.text.slice(offset..self.text.len()).to_string();
 
-        let result = UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
+        UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
             .find(|(_, s)| !s.trim_start().is_empty())
             .map(|(i, s)| offset + i + s.len())
-            .unwrap_or(self.text.len());
-
-        self.clamp_offset_to_visible_forward(result)
+            .unwrap_or(self.text.len())
     }
 
     /// Get start of line byte offset of cursor
@@ -1114,7 +1110,7 @@ impl InputState {
 
         let mut offset = self.start_of_line();
         if offset == self.cursor() {
-            offset = self.clamp_offset_to_visible_backward(offset.saturating_sub(1));
+            offset = offset.saturating_sub(1);
         }
         self.replace_text_in_range_silent(
             Some(self.range_to_utf16(&(offset..self.cursor()))),
@@ -1139,9 +1135,7 @@ impl InputState {
 
         let mut offset = self.end_of_line();
         if offset == self.cursor() {
-            offset = self.clamp_offset_to_visible_forward(
-                (offset + 1).clamp(0, self.text.len()),
-            );
+            offset = (offset + 1).clamp(0, self.text.len());
         }
         self.replace_text_in_range_silent(
             Some(self.range_to_utf16(&(self.cursor()..offset))),
@@ -1433,12 +1427,14 @@ impl InputState {
         let row = point.row;
 
         let mut row_offset_y = px(0.);
-        for (ix, wrap_line) in self.display_map.wrap_map().lines().iter().enumerate() {
+        for (ix, _wrap_line) in self.display_map.wrap_map().lines().iter().enumerate() {
             if ix == row {
                 break;
             }
 
-            row_offset_y += wrap_line.height(line_height);
+            // Only accumulate height for visible (non-folded) wrap rows
+            let visible_wrap_rows = self.display_map.visible_wrap_row_count_for_buffer_line(ix);
+            row_offset_y += line_height * visible_wrap_rows;
         }
 
         // Apart from left alignment, just leave enough space for the cursor size on the right side.

@@ -2,9 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
-    HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels,
-    Point, ShapedLine, SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle,
-    UnderlineStyle, Window, fill, point, px, relative, size,
+    HighlightStyle, Hitbox, Hsla, InteractiveElement, IntoElement, LayoutId, MouseButton,
+    MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, Styled as _,
+    TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -435,7 +435,9 @@ impl TextElement {
 
         let mut paths = Vec::new();
         for (index, range) in ranges.as_ref().iter().enumerate() {
-            if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds, buffer_lines) {
+            if let Some(path) =
+                Self::layout_match_range(range.clone(), last_layout, bounds, buffer_lines)
+            {
                 paths.push((path, current_match_ix == index));
             }
         }
@@ -472,7 +474,9 @@ impl TextElement {
 
         let mut paths = vec![];
         for (range, color) in document_colors.iter() {
-            if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds, buffer_lines) {
+            if let Some(path) =
+                Self::layout_match_range(range.clone(), last_layout, bounds, buffer_lines)
+            {
                 paths.push((path, *color));
             }
         }
@@ -843,10 +847,11 @@ impl TextElement {
                 .xsmall()
                 .rounded_xs()
                 .size(FOLD_ICON_WIDTH)
-                .on_click({
+                .on_mouse_down(MouseButton::Left, {
                     let state = self.state.clone();
                     let buffer_line = info.buffer_line;
-                    move |_, _: &mut Window, cx: &mut App| {
+                    move |_, window: &mut Window, cx: &mut App| {
+                        window.prevent_default();
                         cx.stop_propagation();
                         let entity_id = state.entity_id();
                         state.update(cx, |state, cx| {
