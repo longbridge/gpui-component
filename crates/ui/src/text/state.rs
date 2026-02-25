@@ -7,8 +7,8 @@ use std::{
 
 use gpui::{
     App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
-    ListState, ParentElement as _, Pixels, Point, Render, SharedString, Styled as _, Task,
-    Window, prelude::FluentBuilder as _, px,
+    ListState, ParentElement as _, Pixels, Point, Render, SharedString, Styled as _, Task, Window,
+    prelude::FluentBuilder as _, px,
 };
 use smol::{Timer, stream::StreamExt as _};
 
@@ -480,6 +480,11 @@ mod tests {
             None
         );
 
+        // 10,10 start
+        //   |------|
+        //   |      |
+        //   |------|
+        //         50,50
         assert_eq!(
             selection_points(
                 Some(point(px(10.), px(10.))),
@@ -489,6 +494,12 @@ mod tests {
             ),
             Some((point(px(10.), px(10.)), point(px(50.), px(50.))))
         );
+
+        // 10,10
+        //   |------|
+        //   |      |
+        //   |------|
+        //         50,50 start
         assert_eq!(
             selection_points(
                 Some(point(px(50.), px(50.))),
@@ -498,6 +509,12 @@ mod tests {
             ),
             Some((point(px(50.), px(50.)), point(px(10.), px(10.))))
         );
+
+        //        50,10 start
+        //   |------|
+        //   |      |
+        //   |------|
+        // 10,50
         assert_eq!(
             selection_points(
                 Some(point(px(50.), px(10.))),
@@ -507,6 +524,12 @@ mod tests {
             ),
             Some((point(px(50.), px(10.)), point(px(10.), px(50.))))
         );
+
+        //        50,10
+        //   |------|
+        //   |      |
+        //   |------|
+        // 10,50 start
         assert_eq!(
             selection_points(
                 Some(point(px(10.), px(50.))),
