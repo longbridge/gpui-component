@@ -48,7 +48,7 @@ impl WrapMap {
     }
 
     /// Convert buffer position to wrap position
-    pub(crate) fn buffer_pos_to_wrap_pos(&self, pos: BufferPos) -> WrapPos {
+    pub(super) fn buffer_pos_to_wrap_pos(&self, pos: BufferPos) -> WrapPos {
         let BufferPos { line, col } = pos;
 
         // Clamp to valid range
@@ -72,7 +72,7 @@ impl WrapMap {
     }
 
     /// Convert wrap position to buffer position
-    pub(crate) fn wrap_pos_to_buffer_pos(&self, pos: WrapPos) -> BufferPos {
+    pub(super) fn wrap_pos_to_buffer_pos(&self, pos: WrapPos) -> BufferPos {
         let WrapPos { row, col } = pos;
 
         // Clamp wrap_row to valid range
@@ -213,12 +213,12 @@ impl WrapMap {
     }
 
     /// Get access to the underlying wrapper (for rendering/hit-testing)
-    pub fn wrapper(&self) -> &TextWrapper {
+    pub(crate) fn wrapper(&self) -> &TextWrapper {
         &self.wrapper
     }
 
     /// Get access to line items (for rendering)
-    pub fn lines(&self) -> &[LineItem] {
+    pub(crate) fn lines(&self) -> &[LineItem] {
         &self.wrapper.lines
     }
 

@@ -33,10 +33,6 @@ impl LineItem {
         self.wrapped_lines.len()
     }
 
-    /// Get the height of this line item with given line height.
-    pub(crate) fn height(&self, line_height: Pixels) -> Pixels {
-        self.lines_len() as f32 * line_height
-    }
 }
 
 #[derive(Debug, Default)]

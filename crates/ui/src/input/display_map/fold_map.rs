@@ -52,13 +52,6 @@ impl FoldMap {
         self.needs_rebuild = true;
     }
 
-    /// Ensure the fold projection is up-to-date (lazy rebuild)
-    fn ensure_rebuilt(&mut self, wrap_map: &WrapMap) {
-        if self.needs_rebuild {
-            self.rebuild(wrap_map);
-        }
-    }
-
     /// Get total number of visible display rows
     pub fn display_row_count(&self) -> usize {
         self.visible_wrap_rows.len()
@@ -119,7 +112,7 @@ impl FoldMap {
             if let Some(candidate) = self.candidates.iter().find(|c| c.start_line == start_line) {
                 // Add to folded if not already present
                 if !self.folded.iter().any(|f| f.start_line == start_line) {
-                    self.folded.push(candidate.clone());
+                    self.folded.push(*candidate);
                     self.folded.sort_by_key(|r| r.start_line);
                     self.needs_rebuild = true;
                 }

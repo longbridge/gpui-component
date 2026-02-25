@@ -2,9 +2,10 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
-    HighlightStyle, Hitbox, Hsla, InteractiveElement, IntoElement, LayoutId, MouseButton,
-    MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style, Styled as _,
-    TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
+    HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
+    Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point,
+    prelude::FluentBuilder as _, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -794,7 +795,7 @@ impl TextElement {
                 bounds.origin + point(px(0.), last_layout.visible_top),
                 size(last_layout.line_number_width, bounds.size.height),
             ),
-            gpui::HitboxBehavior::Normal,
+            HitboxBehavior::Normal,
         );
 
         let mut icon_layout = FoldIconLayout {
@@ -858,15 +859,13 @@ impl TextElement {
                 .on_mouse_down(MouseButton::Left, {
                     let state = self.state.clone();
                     let buffer_line = info.buffer_line;
-                    move |_, window: &mut Window, cx: &mut App| {
-                        window.prevent_default();
+                    move |_, _: &mut Window, cx: &mut App| {
                         cx.stop_propagation();
-                        let entity_id = state.entity_id();
+
                         state.update(cx, |state, cx| {
                             state.display_map.toggle_fold(buffer_line);
                             cx.notify();
                         });
-                        cx.notify(entity_id);
                     }
                 })
                 .into_any_element();

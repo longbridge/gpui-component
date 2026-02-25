@@ -22,6 +22,3 @@ pub use self::types::{BufferPos, DisplayPos};
 // Re-export FoldRange and extract_fold_ranges
 pub use folding::{FoldRange, extract_fold_ranges};
 
-// Re-export for gradual migration (TODO: remove after full migration)
-pub use self::fold_map::FoldMap;
-pub use self::wrap_map::WrapMap;

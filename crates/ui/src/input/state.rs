@@ -2015,7 +2015,7 @@ impl InputState {
         };
 
         // Extract fold ranges using tree-sitter
-        let fold_ranges = crate::input::display_map::extract_fold_ranges(tree, &self.text);
+        let fold_ranges = crate::input::display_map::extract_fold_ranges(tree);
 
         // Set the fold candidates in the display map
         self.display_map.set_fold_candidates(fold_ranges);

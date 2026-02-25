@@ -11,7 +11,7 @@ use ropey::Rope;
 
 use super::fold_map::FoldMap;
 use super::folding::FoldRange;
-use super::text_wrapper::{LineItem, TextWrapper};
+use super::text_wrapper::LineItem;
 use super::types::{BufferPos, DisplayPos};
 use super::wrap_map::WrapMap;
 use crate::input::rope_ext::RopeExt as _;
@@ -266,11 +266,6 @@ impl DisplayMap {
     /// while we gradually migrate to the DisplayMap API.
     pub fn fold_map(&self) -> &FoldMap {
         &self.fold_map
-    }
-
-    /// Get access to the underlying wrapper (for rendering/hit-testing)
-    pub(crate) fn wrapper(&self) -> &TextWrapper {
-        self.wrap_map.wrapper()
     }
 
     /// Get access to line items (for rendering)

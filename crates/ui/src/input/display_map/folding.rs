@@ -1,4 +1,3 @@
-use ropey::Rope;
 use std::collections::HashSet;
 use tree_sitter::{Node, Tree};
 
@@ -71,12 +70,12 @@ const FOLDABLE_NODE_TYPES: &[&str] = &[
 ///
 /// Traverses the syntax tree to find all foldable nodes and returns their line ranges.
 /// The fold range spans from the node's start line to end line (inclusive).
-pub fn extract_fold_ranges(tree: &Tree, rope: &Rope) -> Vec<FoldRange> {
+pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
     let mut ranges = Vec::new();
     let foldable_types: HashSet<&str> = FOLDABLE_NODE_TYPES.iter().copied().collect();
 
     let root_node = tree.root_node();
-    collect_foldable_nodes(root_node, &foldable_types, rope, &mut ranges);
+    collect_foldable_nodes(root_node, &foldable_types, &mut ranges);
 
     // Sort by start line and deduplicate
     ranges.sort_by_key(|r| r.start_line);
@@ -89,7 +88,6 @@ pub fn extract_fold_ranges(tree: &Tree, rope: &Rope) -> Vec<FoldRange> {
 fn collect_foldable_nodes(
     node: Node,
     foldable_types: &HashSet<&str>,
-    rope: &Rope,
     ranges: &mut Vec<FoldRange>,
 ) {
     let node_type = node.kind();
@@ -114,7 +112,7 @@ fn collect_foldable_nodes(
     // Recursively process child nodes
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        collect_foldable_nodes(child, foldable_types, rope, ranges);
+        collect_foldable_nodes(child, foldable_types, ranges);
     }
 }
 
@@ -122,6 +120,7 @@ fn collect_foldable_nodes(
 mod tests {
     use super::*;
     use crate::highlighter::SyntaxHighlighter;
+    use ropey::Rope;
 
     #[test]
     #[cfg(feature = "tree-sitter-languages")]

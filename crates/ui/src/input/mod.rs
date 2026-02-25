@@ -20,7 +20,7 @@ mod state;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
-pub use display_map::{BufferPos, DisplayMap, DisplayPos, FoldMap, FoldRange, WrapMap};
+pub use display_map::{BufferPos, DisplayMap, DisplayPos, FoldRange};
 pub use indent::TabSize;
 pub use input::*;
 pub use lsp::*;

@@ -4,7 +4,7 @@
 /// - Buffer coordinates (logical lines and columns in the actual text)
 /// - Wrap coordinates (soft-wrapped visual rows)
 /// - Display coordinates (final visible rows after folding)
-
+///
 /// Position in the buffer (logical text).
 ///
 /// - `line`: 0-based logical line number (split by `\n`)
@@ -42,9 +42,6 @@ impl WrapPos {
         Self { row, col }
     }
 
-    pub fn zero() -> Self {
-        Self { row: 0, col: 0 }
-    }
 }
 
 /// Final display position (after soft-wrapping and folding).
