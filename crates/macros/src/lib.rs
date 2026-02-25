@@ -1,49 +1,85 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse::{Parse, ParseStream};
 
 mod derive_into_plot;
+
+/// Input for icon_name! macro: EnumName, "path"
+struct IconNameInput {
+    enum_name: syn::Ident,
+    _comma: syn::Token![,],
+    path: syn::LitStr,
+}
+
+impl Parse for IconNameInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(IconNameInput {
+            enum_name: input.parse()?,
+            _comma: input.parse()?,
+            path: input.parse()?,
+        })
+    }
+}
 
 #[proc_macro_derive(IntoPlot)]
 pub fn derive_into_plot(input: TokenStream) -> TokenStream {
     derive_into_plot::derive_into_plot(input)
 }
 
-/// Convert an SVG filename to a PascalCase identifier.
+/// Convert an SVG filename to PascalCase identifier.
 ///
-/// Convention: lowercase the filename, strip `.svg`, split on `-`,
-/// capitalize the first letter of each segment, join.
-fn filename_to_pascal(filename: &str) -> String {
-    let name = filename.strip_suffix(".svg").unwrap_or(filename);
-    let lowered = name.to_lowercase();
-    lowered
-        .split('-')
-        .map(|part| {
-            let mut chars = part.chars();
+/// Strips `.svg` extension, splits on separators (`-`, `_`, `.`),
+/// and capitalizes each word following Rust naming conventions.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(pascal_case("arrow-right.svg"), "ArrowRight");
+/// assert_eq!(pascal_case("some_icon_name.svg"), "SomeIconName");
+/// assert_eq!(pascal_case("icon-123.svg"), "Icon123");
+/// ```
+fn pascal_case(filename: &str) -> String {
+    filename
+        .strip_suffix(".svg")
+        .unwrap_or(filename)
+        .split(|c: char| c == '-' || c == '_' || c == '.')
+        .filter(|part| !part.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
             match chars.next() {
                 None => String::new(),
-                Some(c) => c.to_uppercase().to_string() + chars.as_str(),
+                Some(first) if first.is_ascii_digit() => word.to_string(),
+                Some(first) => {
+                    let mut result = String::with_capacity(word.len());
+                    result.extend(first.to_uppercase());
+                    result.push_str(&chars.as_str().to_lowercase());
+                    result
+                }
             }
         })
         .collect()
 }
 
-/// Generate an `IconName` enum and its `IconNamed` impl by scanning a directory of SVG files.
+/// Generate a custom icon enum and its `IconNamed` impl by scanning a directory of SVG files.
 ///
-/// Accepts a path relative to the calling crate's `CARGO_MANIFEST_DIR`.
+/// Accepts an enum name and a path relative to the calling crate's `CARGO_MANIFEST_DIR`.
 /// Each `.svg` file becomes an enum variant using PascalCase conversion.
 ///
 /// # Example
 ///
 /// ```ignore
-/// generate_icon_enum!("../assets/assets/icons");
+/// icon_named!(IconName, "../assets/assets/icons");
+/// icon_named!(MyCustomIcon, "icons");
 /// ```
 #[proc_macro]
-pub fn generate_icon_enum(input: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(input as syn::LitStr);
-    let relative_path = input.value();
+pub fn icon_named(input: TokenStream) -> TokenStream {
+    let IconNameInput {
+        enum_name, path, ..
+    } = syn::parse_macro_input!(input as IconNameInput);
 
-    let manifest_dir =
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let relative_path = path.value();
+
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let icons_dir = std::path::Path::new(&manifest_dir).join(&relative_path);
 
     let mut entries: Vec<(String, String)> = Vec::new();
@@ -60,7 +96,7 @@ pub fn generate_icon_enum(input: TokenStream) -> TokenStream {
         let entry = entry.expect("failed to read directory entry");
         let filename = entry.file_name().to_string_lossy().to_string();
         if filename.ends_with(".svg") {
-            let variant_name = filename_to_pascal(&filename);
+            let variant_name = pascal_case(&filename);
             let path = format!("icons/{}", filename);
             entries.push((variant_name, path));
         }
@@ -76,11 +112,11 @@ pub fn generate_icon_enum(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #[derive(IntoElement, Clone)]
-        pub enum IconName {
+        pub enum #enum_name {
             #(#variants,)*
         }
 
-        impl IconNamed for IconName {
+        impl IconNamed for #enum_name {
             fn path(self) -> SharedString {
                 match self {
                     #(Self::#variants => #paths,)*
@@ -91,4 +127,43 @@ pub fn generate_icon_enum(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pascal_case_basic() {
+        assert_eq!(pascal_case("arrow-right.svg"), "ArrowRight");
+        assert_eq!(pascal_case("home.svg"), "Home");
+        assert_eq!(pascal_case("x-circle.svg"), "XCircle");
+
+        assert_eq!(pascal_case("some_icon_name.svg"), "SomeIconName");
+        assert_eq!(pascal_case("arrow_up_down.svg"), "ArrowUpDown");
+
+        assert_eq!(pascal_case("kebab-case_mixed.svg"), "KebabCaseMixed");
+        assert_eq!(pascal_case("icon-with_under.svg"), "IconWithUnder");
+
+        assert_eq!(pascal_case("icon-123.svg"), "Icon123");
+        assert_eq!(pascal_case("arrow-2x.svg"), "Arrow2x");
+        assert_eq!(pascal_case("24-hour.svg"), "24Hour");
+
+        assert_eq!(pascal_case("arrow--right.svg"), "ArrowRight");
+        assert_eq!(pascal_case("icon__name.svg"), "IconName");
+        assert_eq!(pascal_case("multiple---dash.svg"), "MultipleDash");
+
+        assert_eq!(pascal_case("a.svg"), "A");
+        assert_eq!(pascal_case("-leading.svg"), "Leading");
+        assert_eq!(pascal_case("trailing-.svg"), "Trailing");
+        assert_eq!(pascal_case("-.svg"), "");
+
+        assert_eq!(pascal_case("arrow-right"), "ArrowRight");
+        assert_eq!(pascal_case("home"), "Home");
+
+        assert_eq!(pascal_case("hello.svg"), "Hello");
+        assert_eq!(pascal_case("WORLD.svg"), "World");
+        assert_eq!(pascal_case("iOS-icon.svg"), "IosIcon");
+        assert_eq!(pascal_case("API-key.svg"), "ApiKey");
+    }
 }

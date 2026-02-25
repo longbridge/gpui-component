@@ -4,6 +4,7 @@ use gpui::{
     SharedString, StyleRefinement, Styled, Svg, Transformation, Window,
     prelude::FluentBuilder as _, svg,
 };
+use gpui_component_macros::icon_named;
 
 /// Types implementing this trait can automatically be converted to [`Icon`].
 ///
@@ -20,8 +21,7 @@ impl<T: IconNamed> From<T> for Icon {
     }
 }
 
-// Scans assets/icons/*.svg at compile time -> generates `enum IconName` + `impl IconNamed`
-gpui_component_macros::generate_icon_enum!("../assets/assets/icons");
+icon_named!(IconName, "../assets/assets/icons");
 
 impl IconName {
     /// Return the icon as a Entity<Icon>
