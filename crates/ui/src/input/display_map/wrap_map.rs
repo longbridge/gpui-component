@@ -11,7 +11,7 @@ use ropey::Rope;
 
 use super::fold_map::FoldMap;
 use super::text_wrapper::{DisplayPoint, LineItem, TextWrapper};
-use super::types::{BufferPos, WrapPos};
+use super::{BufferPos, WrapPos};
 use crate::input::rope_ext::RopeExt;
 
 /// WrapMap manages soft-wrapping and provides buffer ↔ wrap coordinate mapping.
@@ -38,11 +38,13 @@ impl WrapMap {
     }
 
     /// Get total number of wrap rows (visual rows after soft-wrapping)
+    #[inline]
     pub fn wrap_row_count(&self) -> usize {
         self.wrapper.len()
     }
 
     /// Get total number of buffer lines (logical lines)
+    #[inline]
     pub fn buffer_line_count(&self) -> usize {
         self.wrapper.lines.len()
     }

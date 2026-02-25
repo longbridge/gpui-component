@@ -12,8 +12,9 @@ use ropey::Rope;
 use super::fold_map::FoldMap;
 use super::folding::FoldRange;
 use super::text_wrapper::LineItem;
-use super::types::{BufferPos, DisplayPos};
 use super::wrap_map::WrapMap;
+use super::{BufferPos, DisplayPos};
+use crate::input::display_map::WrapPos;
 use crate::input::rope_ext::RopeExt as _;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
@@ -59,18 +60,15 @@ impl DisplayMap {
         let wrap_row = self.fold_map.display_row_to_wrap_row(pos.row).unwrap_or(0);
 
         // Wrap → Buffer
-        let wrap_pos = super::types::WrapPos::new(wrap_row, pos.col);
+        let wrap_pos = WrapPos::new(wrap_row, pos.col);
         self.wrap_map.wrap_pos_to_buffer_pos(wrap_pos)
     }
 
-    // ==================== Display Row Queries ====================
-
     /// Get total number of visible display rows
+    #[inline]
     pub fn display_row_count(&self) -> usize {
         self.fold_map.display_row_count()
     }
-
-    // ==================== Buffer Line Queries ====================
 
     /// Get the buffer line for a given display row
     pub fn display_row_to_buffer_line(&self, display_row: usize) -> usize {
@@ -111,11 +109,10 @@ impl DisplayMap {
     }
 
     /// Check if a buffer line is completely hidden
+    #[inline]
     pub fn is_buffer_line_hidden(&self, line: usize) -> bool {
         self.buffer_line_to_display_row_range(line).is_none()
     }
-
-    // ==================== Fold Management ====================
 
     /// Set fold candidates (from tree-sitter/LSP)
     pub fn set_fold_candidates(&mut self, candidates: Vec<FoldRange>) {
@@ -136,21 +133,19 @@ impl DisplayMap {
     }
 
     /// Check if a line is currently folded
+    #[inline]
     pub fn is_folded_at(&self, start_line: usize) -> bool {
         self.fold_map.is_folded_at(start_line)
     }
 
     /// Check if a line is a fold candidate
+    #[inline]
     pub fn is_fold_candidate(&self, start_line: usize) -> bool {
         self.fold_map.is_fold_candidate(start_line)
     }
 
-    /// Get all fold candidates
-    pub fn fold_candidates(&self) -> &[FoldRange] {
-        self.fold_map.fold_candidates()
-    }
-
     /// Get all currently folded ranges
+    #[inline]
     pub fn folded_ranges(&self) -> &[FoldRange] {
         self.fold_map.folded_ranges()
     }
@@ -167,15 +162,8 @@ impl DisplayMap {
     ///
     /// Must be called with the OLD text (before replacement) and the edit range/new_text
     /// so we can compute which old lines were affected.
-    pub fn adjust_folds_for_edit(
-        &mut self,
-        old_text: &Rope,
-        range: &Range<usize>,
-        new_text: &str,
-    ) {
-        if self.fold_map.folded_ranges().is_empty()
-            && self.fold_map.fold_candidates().is_empty()
-        {
+    pub fn adjust_folds_for_edit(&mut self, old_text: &Rope, range: &Range<usize>, new_text: &str) {
+        if self.fold_map.folded_ranges().is_empty() && self.fold_map.fold_candidates().is_empty() {
             return;
         }
 
@@ -205,8 +193,7 @@ impl DisplayMap {
             .offset_to_point(edit_byte_range.end.min(new_text.len()))
             .row;
 
-        let new_candidates =
-            super::folding::extract_fold_ranges_in_range(tree, edit_byte_range);
+        let new_candidates = super::folding::extract_fold_ranges_in_range(tree, edit_byte_range);
         self.fold_map
             .merge_candidates_for_edit(new_start_line, new_end_line, new_candidates);
     }
@@ -265,42 +252,43 @@ impl DisplayMap {
         }
     }
 
-    // ==================== Access to Underlying Layers ====================
-    // These are provided for gradual migration from TextWrapper to DisplayMap.
-    // TODO: Remove these after full migration to DisplayMap API.
-
+    #[inline]
     pub fn wrap_map(&self) -> &WrapMap {
         &self.wrap_map
     }
 
+    #[inline]
     pub fn fold_map(&self) -> &FoldMap {
         &self.fold_map
     }
 
     /// Get access to line items (for rendering)
+    #[inline]
     pub(crate) fn lines(&self) -> &[LineItem] {
         self.wrap_map.lines()
     }
 
     /// Get the rope text
+    #[inline]
     pub fn text(&self) -> &Rope {
         self.wrap_map.text()
     }
 
     /// Calculate how many wrap rows of a buffer line are visible (not folded)
+    #[inline]
     pub fn visible_wrap_row_count_for_buffer_line(&self, line: usize) -> usize {
         self.wrap_map
             .visible_wrap_row_count_for_line(line, &self.fold_map)
     }
 
-    // ==================== Row Count Queries ====================
-
     /// Get the wrap row count (before folding)
+    #[inline]
     pub fn wrap_row_count(&self) -> usize {
         self.wrap_map.wrap_row_count()
     }
 
     /// Get the buffer line count (logical lines)
+    #[inline]
     pub fn buffer_line_count(&self) -> usize {
         self.wrap_map.buffer_line_count()
     }

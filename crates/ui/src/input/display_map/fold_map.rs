@@ -132,9 +132,8 @@ impl FoldMap {
     ) {
         // Remove old candidates within the edit range (already done by adjust_folds_for_edit)
         // But do it again in case adjust wasn't called or range differs
-        self.candidates.retain(|c| {
-            c.start_line < edit_start_line || c.start_line > edit_end_line
-        });
+        self.candidates
+            .retain(|c| c.start_line < edit_start_line || c.start_line > edit_end_line);
 
         // Add new candidates
         self.candidates.extend(new_candidates);
@@ -178,16 +177,19 @@ impl FoldMap {
     }
 
     /// Get all fold candidates
+    #[inline]
     pub fn fold_candidates(&self) -> &[FoldRange] {
         &self.candidates
     }
 
     /// Get all currently folded ranges
+    #[inline]
     pub fn folded_ranges(&self) -> &[FoldRange] {
         &self.folded
     }
 
     /// Clear all folds
+    #[inline]
     pub fn clear_folds(&mut self) {
         self.folded.clear();
     }
@@ -213,8 +215,7 @@ impl FoldMap {
             if line_delta != 0 {
                 for fold in &mut self.folded {
                     if fold.start_line > edit_end_line {
-                        fold.start_line =
-                            (fold.start_line as isize + line_delta).max(0) as usize;
+                        fold.start_line = (fold.start_line as isize + line_delta).max(0) as usize;
                         fold.end_line = (fold.end_line as isize + line_delta).max(0) as usize;
                     }
                 }
@@ -223,9 +224,8 @@ impl FoldMap {
 
         // Adjust candidates the same way
         if !self.candidates.is_empty() {
-            self.candidates.retain(|c| {
-                !(c.start_line <= edit_end_line && c.end_line >= edit_start_line)
-            });
+            self.candidates
+                .retain(|c| !(c.start_line <= edit_end_line && c.end_line >= edit_start_line));
 
             if line_delta != 0 {
                 for c in &mut self.candidates {
