@@ -3,327 +3,347 @@ _version: 2
 # 通用文本
 Common:
   ok:
-    en: OK
-    zh-CN: 确定
-    zh-HK: 確定
+    en: "OK"
+    zh-CN: "确定"
+    zh-HK: "確定"
+  confirm:
+    en: "Confirm"
+    zh-CN: "确认"
+    zh-HK: "確認"
   cancel:
-    en: Cancel
-    zh-CN: 取消
-    zh-HK: 取消
+    en: "Cancel"
+    zh-CN: "取消"
+    zh-HK: "取消"
+  refresh:
+    en: "Refresh"
+    zh-CN: "刷新"
+    zh-HK: "刷新"
+  copy:
+    en: "Copy"
+    zh-CN: "复制"
+    zh-HK: "複製"
+  paste:
+    en: "Paste"
+    zh-CN: "粘贴"
+    zh-HK: "貼上"
   none:
-    en: None
-    zh-CN: 无
-    zh-HK: 無
+    en: "None"
+    zh-CN: "无"
+    zh-HK: "無"
 
 # 连接
 Connection:
   test:
-    en: Test
-    zh-CN: 测试
-    zh-HK: 測試
+    en: "Test"
+    zh-CN: "测试"
+    zh-HK: "測試"
   testing:
-    en: Testing...
-    zh-CN: 测试中...
-    zh-HK: 測試中...
+    en: "Testing..."
+    zh-CN: "测试中..."
+    zh-HK: "測試中..."
 
 # Redis 连接表单
 Redis:
   new:
-    en: New Redis Connection
-    zh-CN: 新建 Redis 连接
-    zh-HK: 新建 Redis 連線
+    en: "New Redis Connection"
+    zh-CN: "新建 Redis 连接"
+    zh-HK: "新建 Redis 連線"
   edit:
-    en: Edit Redis Connection
-    zh-CN: 编辑 Redis 连接
-    zh-HK: 編輯 Redis 連線
+    en: "Edit Redis Connection"
+    zh-CN: "编辑 Redis 连接"
+    zh-HK: "編輯 Redis 連線"
   name:
-    en: Connection Name
-    zh-CN: 连接名称
-    zh-HK: 連線名稱
+    en: "Connection Name"
+    zh-CN: "连接名称"
+    zh-HK: "連線名稱"
   name_placeholder:
-    en: Enter connection name
-    zh-CN: 请输入连接名称
-    zh-HK: 請輸入連線名稱
+    en: "Enter connection name"
+    zh-CN: "请输入连接名称"
+    zh-HK: "請輸入連線名稱"
   host:
-    en: Host
-    zh-CN: 主机地址
-    zh-HK: 主機地址
+    en: "Host"
+    zh-CN: "主机地址"
+    zh-HK: "主機地址"
   host_placeholder:
-    en: Enter host address
-    zh-CN: 请输入主机地址
-    zh-HK: 請輸入主機地址
+    en: "Enter host address"
+    zh-CN: "请输入主机地址"
+    zh-HK: "請輸入主機地址"
   port:
-    en: Port
-    zh-CN: 端口
-    zh-HK: 端口
+    en: "Port"
+    zh-CN: "端口"
+    zh-HK: "端口"
   username:
-    en: Username
-    zh-CN: 用户名
-    zh-HK: 用戶名
+    en: "Username"
+    zh-CN: "用户名"
+    zh-HK: "用戶名"
   username_placeholder:
-    en: Username (Redis 6.0+, optional)
-    zh-CN: 用户名（Redis 6.0+，可选）
-    zh-HK: 用戶名（Redis 6.0+，可選）
+    en: "Username (Redis 6.0+, optional)"
+    zh-CN: "用户名（Redis 6.0+，可选）"
+    zh-HK: "用戶名（Redis 6.0+，可選）"
   password:
-    en: Password
-    zh-CN: 密码
-    zh-HK: 密碼
+    en: "Password"
+    zh-CN: "密码"
+    zh-HK: "密碼"
   password_placeholder:
-    en: Enter password (optional)
-    zh-CN: 请输入密码（可选）
-    zh-HK: 請輸入密碼（可選）
+    en: "Enter password (optional)"
+    zh-CN: "请输入密码（可选）"
+    zh-HK: "請輸入密碼（可選）"
   db_index:
-    en: Database
-    zh-CN: 数据库
-    zh-HK: 數據庫
+    en: "Database"
+    zh-CN: "数据库"
+    zh-HK: "數據庫"
   db_index_placeholder:
-    en: Database index (0-15)
-    zh-CN: 数据库索引（0-15）
-    zh-HK: 數據庫索引（0-15）
+    en: "Database index (0-15)"
+    zh-CN: "数据库索引（0-15）"
+    zh-HK: "數據庫索引（0-15）"
   workspace:
-    en: Workspace
-    zh-CN: 工作区
-    zh-HK: 工作區
+    en: "Workspace"
+    zh-CN: "工作区"
+    zh-HK: "工作區"
   validation_error:
-    en: Please fill in all required fields
-    zh-CN: 请填写所有必填字段
-    zh-HK: 請填寫所有必填字段
+    en: "Please fill in all required fields"
+    zh-CN: "请填写所有必填字段"
+    zh-HK: "請填寫所有必填字段"
   test_success:
-    en: Connection test successful
-    zh-CN: 连接测试成功
-    zh-HK: 連線測試成功
+    en: "Connection test successful"
+    zh-CN: "连接测试成功"
+    zh-HK: "連線測試成功"
   # 标签页
   tab_basic:
-    en: Basic
-    zh-CN: 基本信息
-    zh-HK: 基本信息
+    en: "Basic"
+    zh-CN: "基本信息"
+    zh-HK: "基本信息"
   tab_mode:
-    en: Mode
-    zh-CN: 连接模式
-    zh-HK: 連接模式
+    en: "Mode"
+    zh-CN: "连接模式"
+    zh-HK: "連接模式"
   tab_advanced:
-    en: Advanced
-    zh-CN: 高级设置
-    zh-HK: 高級設定
+    en: "Advanced"
+    zh-CN: "高级设置"
+    zh-HK: "高級設定"
   tab_other:
-    en: Other
-    zh-CN: 其他设置
-    zh-HK: 其他設定
+    en: "Other"
+    zh-CN: "其他设置"
+    zh-HK: "其他設定"
   # 连接模式
   mode:
-    en: Connection Mode
-    zh-CN: 连接模式
-    zh-HK: 連接模式
+    en: "Connection Mode"
+    zh-CN: "连接模式"
+    zh-HK: "連接模式"
   mode_standalone:
-    en: Standalone
-    zh-CN: 单机
-    zh-HK: 單機
+    en: "Standalone"
+    zh-CN: "单机"
+    zh-HK: "單機"
   mode_sentinel:
-    en: Sentinel
-    zh-CN: 哨兵
-    zh-HK: 哨兵
+    en: "Sentinel"
+    zh-CN: "哨兵"
+    zh-HK: "哨兵"
   mode_cluster:
-    en: Cluster
-    zh-CN: 集群
-    zh-HK: 集群
+    en: "Cluster"
+    zh-CN: "集群"
+    zh-HK: "集群"
   # 哨兵模式
   sentinel_master_name:
-    en: Master Name
-    zh-CN: 主节点名称
-    zh-HK: 主節點名稱
+    en: "Master Name"
+    zh-CN: "主节点名称"
+    zh-HK: "主節點名稱"
   sentinel_master_name_placeholder:
-    en: Enter master name (e.g. mymaster)
-    zh-CN: 请输入主节点名称（如 mymaster）
-    zh-HK: 請輸入主節點名稱（如 mymaster）
+    en: "Enter master name (e.g. mymaster)"
+    zh-CN: "请输入主节点名称（如 mymaster）"
+    zh-HK: "請輸入主節點名稱（如 mymaster）"
   sentinel_nodes:
-    en: Sentinel Nodes
-    zh-CN: 哨兵节点
-    zh-HK: 哨兵節點
+    en: "Sentinel Nodes"
+    zh-CN: "哨兵节点"
+    zh-HK: "哨兵節點"
   sentinel_nodes_placeholder:
     en: "host:port, one per line"
     zh-CN: "host:port，每行一个"
     zh-HK: "host:port，每行一個"
   sentinel_password:
-    en: Sentinel Password
-    zh-CN: 哨兵密码
-    zh-HK: 哨兵密碼
+    en: "Sentinel Password"
+    zh-CN: "哨兵密码"
+    zh-HK: "哨兵密碼"
   sentinel_password_placeholder:
-    en: Sentinel password (optional)
-    zh-CN: 哨兵密码（可选）
-    zh-HK: 哨兵密碼（可選）
+    en: "Sentinel password (optional)"
+    zh-CN: "哨兵密码（可选）"
+    zh-HK: "哨兵密碼（可選）"
   # 集群模式
   cluster_nodes:
-    en: Cluster Nodes
-    zh-CN: 集群节点
-    zh-HK: 集群節點
+    en: "Cluster Nodes"
+    zh-CN: "集群节点"
+    zh-HK: "集群節點"
   cluster_nodes_placeholder:
     en: "host:port, one per line"
     zh-CN: "host:port，每行一个"
     zh-HK: "host:port，每行一個"
   # 高级设置
   use_tls:
-    en: Enable TLS
-    zh-CN: 启用 TLS
-    zh-HK: 啟用 TLS
+    en: "Enable TLS"
+    zh-CN: "启用 TLS"
+    zh-HK: "啟用 TLS"
   connect_timeout:
-    en: Connect Timeout (s)
-    zh-CN: 连接超时（秒）
-    zh-HK: 連接超時（秒）
+    en: "Connect Timeout (s)"
+    zh-CN: "连接超时（秒）"
+    zh-HK: "連接超時（秒）"
   # 其他设置
   remark:
-    en: Remark
-    zh-CN: 备注
-    zh-HK: 備註
+    en: "Remark"
+    zh-CN: "备注"
+    zh-HK: "備註"
   remark_placeholder:
-    en: Enter remark
-    zh-CN: 请输入备注
-    zh-HK: 請輸入備註
+    en: "Enter remark"
+    zh-CN: "请输入备注"
+    zh-HK: "請輸入備註"
 
 # 连接表单通用
 ConnectionForm:
   cloud_sync:
-    en: Cloud Sync
-    zh-CN: 云同步
-    zh-HK: 雲同步
+    en: "Cloud Sync"
+    zh-CN: "云同步"
+    zh-HK: "雲同步"
   cloud_sync_desc:
-    en: Sync this connection to cloud
-    zh-CN: 同步此连接到云端
-    zh-HK: 同步此連線到雲端
+    en: "Sync this connection to cloud"
+    zh-CN: "同步此连接到云端"
+    zh-HK: "同步此連線到雲端"
+  save_connection_failed:
+    en: "Failed to save Redis connection: %{error}"
+    zh-CN: "保存 Redis 连接失败：%{error}"
+    zh-HK: "保存 Redis 連線失敗：%{error}"
 
 # 键值视图
 KeyValueView:
   select_key_placeholder:
-    en: Select a key to view its value
-    zh-CN: 选择一个键以查看其值
-    zh-HK: 選擇一個鍵以查看其值
+    en: "Select a key to view its value"
+    zh-CN: "选择一个键以查看其值"
+    zh-HK: "選擇一個鍵以查看其值"
   filter_placeholder:
-    en: Filter...
-    zh-CN: 筛选...
-    zh-HK: 篩選...
+    en: "Filter..."
+    zh-CN: "筛选..."
+    zh-HK: "篩選..."
   connection_missing:
-    en: Connection not found
-    zh-CN: 连接不存在
-    zh-HK: 連線不存在
+    en: "Connection not found"
+    zh-CN: "连接不存在"
+    zh-HK: "連線不存在"
   view_mode:
     en: "View mode:"
     zh-CN: "查看方式:"
     zh-HK: "查看方式:"
   exact_match:
-    en: Exact match
-    zh-CN: 全文匹配
-    zh-HK: 全文匹配
+    en: "Exact match"
+    zh-CN: "全文匹配"
+    zh-HK: "全文匹配"
   sort_by_score:
-    en: Score
-    zh-CN: 分数
-    zh-HK: 分數
+    en: "Score"
+    zh-CN: "分数"
+    zh-HK: "分數"
   sort_by_member:
-    en: Member
-    zh-CN: 成员
-    zh-HK: 成員
+    en: "Member"
+    zh-CN: "成员"
+    zh-HK: "成員"
   sort_by:
-    en: Sort by %{by}
-    zh-CN: 按%{by}
-    zh-HK: 按%{by}
+    en: "Sort by %{by}"
+    zh-CN: "按%{by}"
+    zh-HK: "按%{by}"
   insert_row:
-    en: Insert row
-    zh-CN: 插入行
-    zh-HK: 插入行
+    en: "Insert row"
+    zh-CN: "插入行"
+    zh-HK: "插入行"
   copy_value:
-    en: Copy value
-    zh-CN: 复制值
-    zh-HK: 複製值
+    en: "Copy value"
+    zh-CN: "复制值"
+    zh-HK: "複製值"
   save:
-    en: Save
-    zh-CN: 保存
-    zh-HK: 保存
+    en: "Save"
+    zh-CN: "保存"
+    zh-HK: "保存"
   input_value_placeholder:
-    en: Enter value
-    zh-CN: 输入值
-    zh-HK: 輸入值
+    en: "Enter value"
+    zh-CN: "输入值"
+    zh-HK: "輸入值"
   list_insert_title:
-    en: Insert list item
-    zh-CN: 插入列表元素
-    zh-HK: 插入列表元素
+    en: "Insert list item"
+    zh-CN: "插入列表元素"
+    zh-HK: "插入列表元素"
   list_insert_head:
-    en: Head (LPUSH)
-    zh-CN: 头部 (LPUSH)
-    zh-HK: 頭部 (LPUSH)
+    en: "Head (LPUSH)"
+    zh-CN: "头部 (LPUSH)"
+    zh-HK: "頭部 (LPUSH)"
   list_insert_tail:
-    en: Tail (RPUSH)
-    zh-CN: 尾部 (RPUSH)
-    zh-HK: 尾部 (RPUSH)
+    en: "Tail (RPUSH)"
+    zh-CN: "尾部 (RPUSH)"
+    zh-HK: "尾部 (RPUSH)"
   value_label:
     en: "Value:"
     zh-CN: "值:"
     zh-HK: "值:"
   add:
-    en: Add
-    zh-CN: 添加
-    zh-HK: 添加
+    en: "Add"
+    zh-CN: "添加"
+    zh-HK: "添加"
   edit_list_item:
-    en: Edit list item #%{index}
-    zh-CN: 编辑列表元素 #%{index}
-    zh-HK: 編輯列表元素 #%{index}
+    en: "Edit list item #%{index}"
+    zh-CN: "编辑列表元素 #%{index}"
+    zh-HK: "編輯列表元素 #%{index}"
   set_member_placeholder:
-    en: Enter member
-    zh-CN: 输入成员值
-    zh-HK: 輸入成員值
+    en: "Enter member"
+    zh-CN: "输入成员值"
+    zh-HK: "輸入成員值"
   add_set_member:
-    en: Add set member
-    zh-CN: 添加集合成员
-    zh-HK: 添加集合成員
+    en: "Add set member"
+    zh-CN: "添加集合成员"
+    zh-HK: "添加集合成員"
   member_label:
     en: "Member:"
     zh-CN: "成员:"
     zh-HK: "成員:"
   score_placeholder:
-    en: Enter score
-    zh-CN: 输入分数
-    zh-HK: 輸入分數
+    en: "Enter score"
+    zh-CN: "输入分数"
+    zh-HK: "輸入分數"
   add_zset_member:
-    en: Add sorted set member
-    zh-CN: 添加有序集成员
-    zh-HK: 添加有序集成員
+    en: "Add sorted set member"
+    zh-CN: "添加有序集成员"
+    zh-HK: "添加有序集成員"
   score_label:
     en: "Score:"
     zh-CN: "分数:"
     zh-HK: "分數:"
   edit_zset_member:
-    en: Edit sorted set member
-    zh-CN: 编辑有序集成员
-    zh-HK: 編輯有序集成員
+    en: "Edit sorted set member"
+    zh-CN: "编辑有序集成员"
+    zh-HK: "編輯有序集成員"
   zset_member_placeholder:
-    en: Member value
-    zh-CN: 成员值
-    zh-HK: 成員值
+    en: "Member value"
+    zh-CN: "成员值"
+    zh-HK: "成員值"
   hash_field_placeholder:
-    en: Enter field name
-    zh-CN: 输入字段名
-    zh-HK: 輸入字段名
+    en: "Enter field name"
+    zh-CN: "输入字段名"
+    zh-HK: "輸入字段名"
   add_hash_field:
-    en: Add hash field
-    zh-CN: 添加哈希字段
-    zh-HK: 添加哈希字段
+    en: "Add hash field"
+    zh-CN: "添加哈希字段"
+    zh-HK: "添加哈希字段"
   field_label:
     en: "Field:"
     zh-CN: "字段名:"
     zh-HK: "字段名:"
   edit_hash_field:
-    en: Edit hash field
-    zh-CN: 编辑哈希字段
-    zh-HK: 編輯哈希字段
+    en: "Edit hash field"
+    zh-CN: "编辑哈希字段"
+    zh-HK: "編輯哈希字段"
   hash_field_placeholder_edit:
-    en: Field name
-    zh-CN: 字段名
-    zh-HK: 字段名
+    en: "Field name"
+    zh-CN: "字段名"
+    zh-HK: "字段名"
   ttl_placeholder:
-    en: Expiration (s)
-    zh-CN: 过期时间（秒）
-    zh-HK: 過期時間（秒）
+    en: "Expiration (s)"
+    zh-CN: "过期时间（秒）"
+    zh-HK: "過期時間（秒）"
   ttl_title:
-    en: Set expiration
-    zh-CN: 设置过期时间
-    zh-HK: 設定過期時間
+    en: "Set expiration"
+    zh-CN: "设置过期时间"
+    zh-HK: "設定過期時間"
   ttl_current_permanent:
     en: "Current: Permanent"
     zh-CN: "当前: 永久"
@@ -337,25 +357,25 @@ KeyValueView:
     zh-CN: "TTL (秒):"
     zh-HK: "TTL (秒):"
   ttl_hint:
-    en: Leave empty or enter -1 for no expiration
-    zh-CN: 留空或输入 -1 表示永久不过期
-    zh-HK: 留空或輸入 -1 表示永久不過期
+    en: "Leave empty or enter -1 for no expiration"
+    zh-CN: "留空或输入 -1 表示永久不过期"
+    zh-HK: "留空或輸入 -1 表示永久不過期"
   rename_key_title:
-    en: Rename key
-    zh-CN: 重命名键
-    zh-HK: 重命名鍵
+    en: "Rename key"
+    zh-CN: "重命名键"
+    zh-HK: "重命名鍵"
   new_key_name_placeholder:
-    en: New key name
-    zh-CN: 新的键名
-    zh-HK: 新的鍵名
+    en: "New key name"
+    zh-CN: "新的键名"
+    zh-HK: "新的鍵名"
   new_key_name_label:
     en: "New key name:"
     zh-CN: "新键名:"
     zh-HK: "新鍵名:"
   empty_value:
-    en: Key does not exist or is empty
-    zh-CN: 键不存在或为空
-    zh-HK: 鍵不存在或為空
+    en: "Key does not exist or is empty"
+    zh-CN: "键不存在或为空"
+    zh-HK: "鍵不存在或為空"
   status_memory:
     en: "Memory: %{memory} B"
     zh-CN: "内存占用: %{memory} B"
@@ -369,38 +389,257 @@ KeyValueView:
     zh-CN: "大小: %{size} B"
     zh-HK: "大小: %{size} B"
   column_rank:
-    en: Rank
-    zh-CN: 排名
-    zh-HK: 排名
+    en: "Rank"
+    zh-CN: "排名"
+    zh-HK: "排名"
   column_index:
     en: "#"
     zh-CN: "#"
     zh-HK: "#"
   column_value:
-    en: Value
-    zh-CN: 值
-    zh-HK: 值
+    en: "Value"
+    zh-CN: "值"
+    zh-HK: "值"
   column_action:
-    en: Actions
-    zh-CN: 操作
-    zh-HK: 操作
+    en: "Actions"
+    zh-CN: "操作"
+    zh-HK: "操作"
   column_member:
-    en: Member
-    zh-CN: 成员
-    zh-HK: 成員
+    en: "Member"
+    zh-CN: "成员"
+    zh-HK: "成員"
   column_score:
-    en: Score
-    zh-CN: 分数
-    zh-HK: 分數
+    en: "Score"
+    zh-CN: "分数"
+    zh-HK: "分數"
   column_field:
-    en: Field
-    zh-CN: 字段
-    zh-HK: 欄位
+    en: "Field"
+    zh-CN: "字段"
+    zh-HK: "欄位"
   load_failed:
     en: "Load failed: %{error}"
     zh-CN: "加载失败: %{error}"
     zh-HK: "載入失敗: %{error}"
   tab_title_default:
-    en: Key Value
-    zh-CN: 键值
-    zh-HK: 鍵值
+    en: "Key Value"
+    zh-CN: "键值"
+    zh-HK: "鍵值"
+
+
+RedisConnection:
+  create_client_failed:
+    en: "Failed to create Redis client."
+    zh-CN: "无法创建 Redis 客户端。"
+    zh-HK: "無法建立 Redis 客戶端。"
+  connect_failed:
+    en: "Failed to connect to Redis."
+    zh-CN: "无法连接到 Redis。"
+    zh-HK: "無法連接到 Redis。"
+  command_failed:
+    en: "%{command} failed."
+    zh-CN: "%{command} 失败。"
+    zh-HK: "%{command} 失敗。"
+  command_execute_failed:
+    en: "Command execution failed."
+    zh-CN: "命令执行失败。"
+    zh-HK: "命令執行失敗。"
+  empty_command:
+    en: "Empty command."
+    zh-CN: "空命令。"
+    zh-HK: "空命令。"
+  connection_id_required:
+    en: "Connection ID is required."
+    zh-CN: "连接 ID 不能为空。"
+    zh-HK: "連接 ID 不能為空。"
+
+RedisTree:
+  search_placeholder:
+    en: "Search keys..."
+    zh-CN: "搜索键..."
+    zh-HK: "搜尋鍵..."
+  connection_config_missing:
+    en: "Connection config not found: %{node_id}"
+    zh-CN: "未找到连接配置：%{node_id}"
+    zh-HK: "未找到連接配置：%{node_id}"
+  connecting:
+    en: "Connecting to Redis: %{name}"
+    zh-CN: "正在连接 Redis：%{name}"
+    zh-HK: "正在連接 Redis：%{name}"
+  connection_missing:
+    en: "Connection not found."
+    zh-CN: "连接不存在。"
+    zh-HK: "連線不存在。"
+  connection_error:
+    en: "Connection error"
+    zh-CN: "连接错误"
+    zh-HK: "連線錯誤"
+  menu_open_in_new_tab:
+    en: "Open in new tab"
+    zh-CN: "在新标签页中打开"
+    zh-HK: "在新分頁中開啟"
+  menu_open_cli:
+    en: "Open CLI"
+    zh-CN: "打开 CLI"
+    zh-HK: "開啟 CLI"
+  menu_create_key:
+    en: "New Key"
+    zh-CN: "新建 Key"
+    zh-HK: "新建 Key"
+  menu_disconnect:
+    en: "Disconnect"
+    zh-CN: "断开连接"
+    zh-HK: "斷開連線"
+  menu_connect:
+    en: "Connect"
+    zh-CN: "连接"
+    zh-HK: "連線"
+  no_data:
+    en: "No data."
+    zh-CN: "暂无数据。"
+    zh-HK: "暫無資料。"
+  confirm_delete_title:
+    en: "Confirm Delete"
+    zh-CN: "确认删除"
+    zh-HK: "確認刪除"
+  confirm_delete_key:
+    en: 'Delete key "%{key}"?'
+    zh-CN: '确定要删除键 "%{key}" 吗？'
+    zh-HK: '確定要刪除鍵 "%{key}" 嗎？'
+  irreversible:
+    en: "This action cannot be undone."
+    zh-CN: "此操作不可恢复。"
+    zh-HK: "此操作不可恢復。"
+  delete_key_failed:
+    en: "Failed to delete key: %{error}"
+    zh-CN: "删除键失败：%{error}"
+    zh-HK: "刪除鍵失敗：%{error}"
+  create_key_title:
+    en: "Create Key"
+    zh-CN: "添加新键"
+    zh-HK: "新增鍵"
+  key_name_required:
+    en: "Key name is required."
+    zh-CN: "键名不能为空。"
+    zh-HK: "鍵名不能為空。"
+  unsupported_key_type:
+    en: "Unsupported key type."
+    zh-CN: "不支持的键类型。"
+    zh-HK: "不支援的鍵類型。"
+  key_created:
+    en: "Key created."
+    zh-CN: "键创建成功。"
+    zh-HK: "鍵建立成功。"
+  create_key_failed:
+    en: "Failed to create key: %{error}"
+    zh-CN: "创建键失败：%{error}"
+    zh-HK: "建立鍵失敗：%{error}"
+  confirm_disconnect_title:
+    en: "Confirm Disconnect"
+    zh-CN: "确认关闭连接"
+    zh-HK: "確認關閉連線"
+  confirm_disconnect:
+    en: 'Disconnect "%{name}"?'
+    zh-CN: '确定要关闭连接 "%{name}" 吗？'
+    zh-HK: '確定要關閉連線 "%{name}" 嗎？'
+  disconnect_warning:
+    en: "This will disconnect Redis and clean up resources."
+    zh-CN: "这将断开 Redis 连接并清理相关资源。"
+    zh-HK: "這將斷開 Redis 連線並清理相關資源。"
+  disconnect_failed:
+    en: "Failed to disconnect: %{error}"
+    zh-CN: "关闭连接失败：%{error}"
+    zh-HK: "關閉連線失敗：%{error}"
+
+RedisCli:
+  welcome:
+    en: "Welcome to the Redis CLI console in ONetCli"
+    zh-CN: "欢迎使用 ONetCli 的 Redis 命令行控制台"
+    zh-HK: "歡迎使用 ONetCli 的 Redis 命令列控制台"
+  connection_missing:
+    en: "Connection not found."
+    zh-CN: "连接不存在。"
+    zh-HK: "連線不存在。"
+  clear_output:
+    en: "Clear output"
+    zh-CN: "清空输出"
+    zh-HK: "清空輸出"
+
+CreateKey:
+  key_placeholder:
+    en: "Enter key name"
+    zh-CN: "输入键名"
+    zh-HK: "輸入鍵名"
+  ttl_placeholder:
+    en: "TTL (seconds)"
+    zh-CN: "过期时间（秒）"
+    zh-HK: "過期時間（秒）"
+  value_placeholder:
+    en: "Enter value"
+    zh-CN: "输入值"
+    zh-HK: "輸入值"
+  hash_field_placeholder:
+    en: "Field name"
+    zh-CN: "字段名"
+    zh-HK: "欄位名"
+  zset_score_placeholder:
+    en: "Score"
+    zh-CN: "分数"
+    zh-HK: "分數"
+  label_key:
+    en: "Key:"
+    zh-CN: "键:"
+    zh-HK: "鍵:"
+  label_db:
+    en: "Database:"
+    zh-CN: "数据库编号:"
+    zh-HK: "資料庫編號:"
+  label_type:
+    en: "Type:"
+    zh-CN: "类型:"
+    zh-HK: "類型:"
+  unit_seconds:
+    en: "seconds"
+    zh-CN: "秒"
+    zh-HK: "秒"
+  ttl_permanent:
+    en: "Permanent"
+    zh-CN: "永久"
+    zh-HK: "永久"
+  label_value:
+    en: "Value:"
+    zh-CN: "值:"
+    zh-HK: "值:"
+  label_hash_field:
+    en: "Field (Hash):"
+    zh-CN: "字段名 (Hash):"
+    zh-HK: "欄位名 (Hash):"
+  label_zset_score:
+    en: "Score (ZSet):"
+    zh-CN: "分数 (ZSet):"
+    zh-HK: "分數 (ZSet):"
+
+RedisTTL:
+  not_found:
+    en: "Not found"
+    zh-CN: "不存在"
+    zh-HK: "不存在"
+  permanent:
+    en: "Permanent"
+    zh-CN: "永久"
+    zh-HK: "永久"
+  days:
+    en: "%{days}d"
+    zh-CN: "%{days}天"
+    zh-HK: "%{days}天"
+  hours:
+    en: "%{hours}h"
+    zh-CN: "%{hours}小时"
+    zh-HK: "%{hours}小時"
+  minutes:
+    en: "%{minutes}m"
+    zh-CN: "%{minutes}分钟"
+    zh-HK: "%{minutes}分鐘"
+  seconds:
+    en: "%{seconds}s"
+    zh-CN: "%{seconds}秒"
+    zh-HK: "%{seconds}秒"

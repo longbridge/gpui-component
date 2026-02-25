@@ -601,7 +601,10 @@ impl RedisFormWindow {
                     });
                 }
                 Err(e) => {
-                    tracing::error!("保存 Redis 连接失败: {}", e);
+                    tracing::error!(
+                        "{}",
+                        t!("Redis.save_connection_failed", error = e).to_string()
+                    );
                 }
             }
         })

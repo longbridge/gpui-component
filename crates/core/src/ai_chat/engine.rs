@@ -7,6 +7,7 @@
 //! - 滚动和加载控制
 
 use gpui::ScrollHandle;
+use rust_i18n::t;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 use uuid::Uuid;
@@ -105,7 +106,10 @@ impl<E: MessageExtension + Default> ChatEngine<E> {
                 Some(id)
             }
             Err(e) => {
-                warn!("创建会话失败: {}", e);
+                warn!(
+                    "{}",
+                    t!("AiChat.session_create_failed", error = e).to_string()
+                );
                 None
             }
         }
@@ -208,9 +212,10 @@ impl<E: MessageExtension + Default> ChatEngine<E> {
         if let Some(msg) = self.messages.iter_mut().rev().find(|m| m.is_streaming) {
             msg.is_streaming = false;
             if msg.content.is_empty() {
-                msg.content = "操作已取消".to_string();
+                msg.content = t!("AiChat.operation_cancelled").to_string();
             } else {
-                msg.content.push_str("\n\n*操作已取消*");
+                msg.content
+                    .push_str(&t!("AiChat.operation_cancelled_markdown").to_string());
             }
         }
     }

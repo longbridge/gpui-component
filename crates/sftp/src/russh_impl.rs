@@ -3,17 +3,25 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use russh::client::{self, Handle};
 use russh::keys::*;
+use russh_sftp::client::RawSftpSession;
 use russh_sftp::client::SftpSession;
-use russh_sftp::protocol::OpenFlags;
+use russh_sftp::client::error::Error as SftpError;
+use russh_sftp::client::rawsession::Limits;
+use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
 use ssh::{ProxyConnectConfig, ProxyType, SshConnectConfig};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
+use tokio::sync::Semaphore;
 
 const BUFFER_SIZE: usize = 256 * 1024; // 256 KB
+const PIPELINE_CHUNK_SIZE: u32 = 256 * 1024; // 每个请求 256 KB
+const MAX_INFLIGHT_REQUESTS: usize = 64; // 最多 64 个并发请求
+const PIPELINE_THRESHOLD: u64 = 512 * 1024; // 超过 512 KB 的文件才走流水线
 
 fn ensure_not_cancelled(cancelled: &AtomicBool) -> Result<()> {
     if cancelled.load(Ordering::Relaxed) {
@@ -195,9 +203,416 @@ fn base64_encode(input: &str) -> String {
 
 pub struct RusshSftpClient {
     sftp: SftpSession,
-    _session: Handle<SftpHandler>,
+    session: Handle<SftpHandler>,
     /// 跳板机会话（如果使用跳板机连接）
     _jump_session: Option<Handle<SftpHandler>>,
+    /// 懒初始化的原始 SFTP 会话，用于流水线下载
+    raw_sftp: Option<Arc<RawSftpSession>>,
+}
+
+impl RusshSftpClient {
+    /// 在已有 SSH 连接上创建一个新的 RawSftpSession 用于流水线操作
+    async fn get_or_create_raw_session(&mut self) -> Result<Arc<RawSftpSession>> {
+        if let Some(ref raw) = self.raw_sftp {
+            return Ok(Arc::clone(raw));
+        }
+
+        let channel = self.session.channel_open_session().await?;
+        channel.request_subsystem(true, "sftp").await?;
+
+        let mut raw = RawSftpSession::new(channel.into_stream());
+        raw.init().await.map_err(|e| anyhow!("Failed to init raw SFTP session: {}", e))?;
+
+        // 尝试查询 limits@openssh.com 扩展并设置限制
+        if let Ok(limits_ext) = raw.limits().await {
+            let limits: Limits = limits_ext.into();
+            raw.set_limits(Arc::new(limits));
+        }
+
+        raw.set_timeout(300).await;
+
+        let raw = Arc::new(raw);
+        self.raw_sftp = Some(Arc::clone(&raw));
+        Ok(raw)
+    }
+
+    /// 流水线下载：通过 RawSftpSession 发起多个并发读请求
+    async fn pipelined_download(
+        raw_session: Arc<RawSftpSession>,
+        remote_path: &str,
+        local_path: &str,
+        total_size: u64,
+        cancelled: &AtomicBool,
+        progress: &(dyn Fn(TransferProgress) + Send + Sync),
+    ) -> Result<()> {
+        // 打开远程文件
+        let handle_result = raw_session
+            .open(remote_path, OpenFlags::READ, FileAttributes::default())
+            .await
+            .map_err(|e| anyhow!("Failed to open remote file {}: {}", remote_path, e))?;
+        let file_handle = handle_result.handle;
+
+        let local_file = File::create(local_path)
+            .await
+            .map_err(|e| anyhow!("Failed to create local file {}: {}", local_path, e))?;
+        let mut writer = BufWriter::with_capacity(BUFFER_SIZE, local_file);
+
+        let chunk_size = PIPELINE_CHUNK_SIZE as u64;
+        let total_chunks = total_size.div_ceil(chunk_size);
+
+        let semaphore = Arc::new(Semaphore::new(MAX_INFLIGHT_REQUESTS));
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<(u64, Vec<u8>)>(MAX_INFLIGHT_REQUESTS);
+
+        // 生产者：发起所有并发读请求
+        let raw_for_producer = Arc::clone(&raw_session);
+        let handle_for_producer = file_handle.clone();
+        let producer = tokio::spawn(async move {
+            for i in 0..total_chunks {
+                let offset = i * chunk_size;
+                let len = std::cmp::min(
+                    PIPELINE_CHUNK_SIZE,
+                    (total_size - offset) as u32,
+                );
+
+                let permit = semaphore.clone().acquire_owned().await;
+                if permit.is_err() {
+                    break;
+                }
+                let permit = permit.unwrap();
+
+                let raw = Arc::clone(&raw_for_producer);
+                let handle = handle_for_producer.clone();
+                let tx = tx.clone();
+
+                tokio::spawn(async move {
+                    let result = raw.read(handle, offset, len).await;
+                    drop(permit);
+
+                    match result {
+                        Ok(data) => {
+                            let _ = tx.send((offset, data.data)).await;
+                        }
+                        Err(SftpError::Status(status))
+                            if status.status_code == StatusCode::Eof =>
+                        {
+                            // EOF 表示文件读完，发送空数据标记此 offset
+                            let _ = tx.send((offset, Vec::new())).await;
+                        }
+                        Err(_e) => {
+                            // 读取错误，发送空数据让 writer 侧处理
+                            let _ = tx.send((offset, Vec::new())).await;
+                        }
+                    }
+                });
+            }
+            // 丢弃 producer 持有的 tx，让 rx 能在所有 spawn 的任务完成后结束
+            drop(tx);
+        });
+
+        // 消费者：按顺序写入本地文件
+        let mut pending: BTreeMap<u64, Vec<u8>> = BTreeMap::new();
+        let mut next_offset: u64 = 0;
+        let mut transferred: u64 = 0;
+        let mut last_update = Instant::now();
+        let start_time = Instant::now();
+
+        while let Some((offset, data)) = rx.recv().await {
+            ensure_not_cancelled(cancelled)?;
+
+            if !data.is_empty() {
+                pending.insert(offset, data);
+            } else if offset >= total_size {
+                // EOF 超出文件范围，忽略
+            } else {
+                // 空数据但在范围内 — 可能是 EOF 在最后一个 chunk
+                pending.insert(offset, Vec::new());
+            }
+
+            // 按顺序写入已就绪的 chunks
+            while let Some(data) = pending.remove(&next_offset) {
+                if !data.is_empty() {
+                    writer
+                        .write_all(&data)
+                        .await
+                        .map_err(|e| anyhow!("Failed to write to local file: {}", e))?;
+                    transferred += data.len() as u64;
+                }
+                next_offset += chunk_size;
+            }
+
+            // 限制进度更新频率
+            let now = Instant::now();
+            if now.duration_since(last_update).as_millis() >= 100 {
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 {
+                    transferred as f64 / elapsed
+                } else {
+                    0.0
+                };
+
+                progress(TransferProgress {
+                    transferred,
+                    total: total_size,
+                    speed,
+                    current_file: None,
+                    current_file_transferred: 0,
+                    current_file_total: 0,
+                });
+                last_update = now;
+            }
+        }
+
+        // 等待 producer 完成
+        let _ = producer.await;
+
+        // 最终进度回调
+        progress(TransferProgress {
+            transferred,
+            total: total_size,
+            speed: 0.0,
+            current_file: None,
+            current_file_transferred: 0,
+            current_file_total: 0,
+        });
+
+        writer
+            .flush()
+            .await
+            .map_err(|e| anyhow!("Failed to flush local file: {}", e))?;
+        writer
+            .into_inner()
+            .sync_all()
+            .await
+            .map_err(|e| anyhow!("Failed to sync local file: {}", e))?;
+
+        // 关闭远程文件 handle
+        let _ = raw_session.close(file_handle).await;
+
+        Ok(())
+    }
+
+    /// 流水线下载（目录内文件），带 current_file 进度信息
+    #[allow(clippy::too_many_arguments)]
+    async fn pipelined_download_with_file_progress(
+        raw_session: Arc<RawSftpSession>,
+        remote_path: &str,
+        local_path: &str,
+        total_size: u64,
+        file_name: &str,
+        file_total: u64,
+        dir_transferred: &mut u64,
+        dir_total: u64,
+        start_time: Instant,
+        cancelled: &AtomicBool,
+        progress: &(dyn Fn(TransferProgress) + Send + Sync),
+    ) -> Result<()> {
+        let handle_result = raw_session
+            .open(remote_path, OpenFlags::READ, FileAttributes::default())
+            .await
+            .map_err(|e| anyhow!("Failed to open remote file {}: {}", remote_path, e))?;
+        let file_handle = handle_result.handle;
+
+        let local_file = File::create(local_path)
+            .await
+            .map_err(|e| anyhow!("Failed to create local file {}: {}", local_path, e))?;
+        let mut writer = BufWriter::with_capacity(BUFFER_SIZE, local_file);
+
+        let chunk_size = PIPELINE_CHUNK_SIZE as u64;
+        let total_chunks = total_size.div_ceil(chunk_size);
+
+        let semaphore = Arc::new(Semaphore::new(MAX_INFLIGHT_REQUESTS));
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<(u64, Vec<u8>)>(MAX_INFLIGHT_REQUESTS);
+
+        let raw_for_producer = Arc::clone(&raw_session);
+        let handle_for_producer = file_handle.clone();
+
+        let producer = tokio::spawn(async move {
+            for i in 0..total_chunks {
+                let offset = i * chunk_size;
+                let len = std::cmp::min(PIPELINE_CHUNK_SIZE, (total_size - offset) as u32);
+
+                let permit = semaphore.clone().acquire_owned().await;
+                if permit.is_err() {
+                    break;
+                }
+                let permit = permit.unwrap();
+
+                let raw = Arc::clone(&raw_for_producer);
+                let handle = handle_for_producer.clone();
+                let tx = tx.clone();
+
+                tokio::spawn(async move {
+                    let result = raw.read(handle, offset, len).await;
+                    drop(permit);
+
+                    match result {
+                        Ok(data) => {
+                            let _ = tx.send((offset, data.data)).await;
+                        }
+                        Err(SftpError::Status(status))
+                            if status.status_code == StatusCode::Eof =>
+                        {
+                            let _ = tx.send((offset, Vec::new())).await;
+                        }
+                        Err(_e) => {
+                            let _ = tx.send((offset, Vec::new())).await;
+                        }
+                    }
+                });
+            }
+            drop(tx);
+        });
+
+        let mut pending: BTreeMap<u64, Vec<u8>> = BTreeMap::new();
+        let mut next_offset: u64 = 0;
+        let mut current_file_transferred: u64 = 0;
+
+        while let Some((offset, data)) = rx.recv().await {
+            ensure_not_cancelled(cancelled)?;
+
+            if !data.is_empty() {
+                pending.insert(offset, data);
+            } else {
+                pending.insert(offset, Vec::new());
+            }
+
+            while let Some(data) = pending.remove(&next_offset) {
+                if !data.is_empty() {
+                    writer
+                        .write_all(&data)
+                        .await
+                        .map_err(|e| anyhow!("Failed to write to local file: {}", e))?;
+                    let bytes = data.len() as u64;
+                    *dir_transferred += bytes;
+                    current_file_transferred += bytes;
+                }
+                next_offset += chunk_size;
+            }
+
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let speed = if elapsed > 0.0 {
+                *dir_transferred as f64 / elapsed
+            } else {
+                0.0
+            };
+
+            progress(TransferProgress {
+                transferred: *dir_transferred,
+                total: dir_total,
+                speed,
+                current_file: Some(file_name.to_string()),
+                current_file_transferred,
+                current_file_total: file_total,
+            });
+        }
+
+        let _ = producer.await;
+
+        writer
+            .flush()
+            .await
+            .map_err(|e| anyhow!("Failed to flush local file: {}", e))?;
+        writer
+            .into_inner()
+            .sync_all()
+            .await
+            .map_err(|e| anyhow!("Failed to sync local file: {}", e))?;
+
+        let _ = raw_session.close(file_handle).await;
+
+        Ok(())
+    }
+
+    /// 串行下载（小文件或 raw session 不可用时的后备）
+    async fn serial_download_file(
+        &mut self,
+        remote_path: &str,
+        local_path: &str,
+        total_size: u64,
+        cancelled: Arc<AtomicBool>,
+        progress: ProgressCallback,
+    ) -> Result<()> {
+        let mut remote_file = self
+            .sftp
+            .open_with_flags(remote_path, OpenFlags::READ)
+            .await
+            .map_err(|e| anyhow!("Failed to open remote file {}: {}", remote_path, e))?;
+
+        let local_file = File::create(local_path)
+            .await
+            .map_err(|e| anyhow!("Failed to create local file {}: {}", local_path, e))?;
+        let mut local_file = BufWriter::with_capacity(BUFFER_SIZE, local_file);
+
+        let mut buffer = vec![0u8; BUFFER_SIZE];
+        let mut transferred = 0u64;
+        let mut last_update = Instant::now();
+        let mut speed_samples: Vec<f64> = Vec::new();
+
+        loop {
+            ensure_not_cancelled(&cancelled)?;
+            let bytes_read = remote_file
+                .read(&mut buffer)
+                .await
+                .map_err(|e| anyhow!("Failed to read from remote file: {}", e))?;
+
+            if bytes_read == 0 {
+                break;
+            }
+
+            local_file
+                .write_all(&buffer[..bytes_read])
+                .await
+                .map_err(|e| anyhow!("Failed to write to local file: {}", e))?;
+
+            transferred += bytes_read as u64;
+
+            let now = Instant::now();
+            let elapsed = now.duration_since(last_update).as_secs_f64();
+
+            if elapsed >= 0.1 {
+                let speed = bytes_read as f64 / elapsed;
+                speed_samples.push(speed);
+                if speed_samples.len() > 10 {
+                    speed_samples.remove(0);
+                }
+
+                let avg_speed =
+                    speed_samples.iter().sum::<f64>() / speed_samples.len() as f64;
+
+                progress(TransferProgress {
+                    transferred,
+                    total: total_size,
+                    speed: avg_speed,
+                    current_file: None,
+                    current_file_transferred: 0,
+                    current_file_total: 0,
+                });
+
+                last_update = now;
+            }
+        }
+
+        progress(TransferProgress {
+            transferred,
+            total: total_size,
+            speed: 0.0,
+            current_file: None,
+            current_file_transferred: 0,
+            current_file_total: 0,
+        });
+
+        local_file
+            .flush()
+            .await
+            .map_err(|e| anyhow!("Failed to flush local file: {}", e))?;
+        local_file
+            .into_inner()
+            .sync_all()
+            .await
+            .map_err(|e| anyhow!("Failed to sync local file: {}", e))?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -279,8 +694,9 @@ impl SftpClient for RusshSftpClient {
 
         Ok(Self {
             sftp,
-            _session: session,
+            session,
             _jump_session: jump_session,
+            raw_sftp: None,
         })
     }
 
@@ -348,85 +764,39 @@ impl SftpClient for RusshSftpClient {
 
         let total_size = metadata.size.unwrap_or(0);
 
-        let mut remote_file = self
-            .sftp
-            .open_with_flags(remote_path, OpenFlags::READ)
-            .await
-            .map_err(|e| anyhow!("Failed to open remote file {}: {}", remote_path, e))?;
-
-        let local_file = File::create(local_path)
-            .await
-            .map_err(|e| anyhow!("Failed to create local file {}: {}", local_path, e))?;
-        let mut local_file = BufWriter::with_capacity(BUFFER_SIZE, local_file);
-
-        let mut buffer = vec![0u8; BUFFER_SIZE];
-        let mut transferred = 0u64;
-        let mut last_update = Instant::now();
-        let mut speed_samples: Vec<f64> = Vec::new();
-
-        loop {
-            ensure_not_cancelled(&cancelled)?;
-            let bytes_read = remote_file
-                .read(&mut buffer)
-                .await
-                .map_err(|e| anyhow!("Failed to read from remote file: {}", e))?;
-
-            if bytes_read == 0 {
-                break;
-            }
-
-            local_file
-                .write_all(&buffer[..bytes_read])
-                .await
-                .map_err(|e| anyhow!("Failed to write to local file: {}", e))?;
-
-            transferred += bytes_read as u64;
-
-            let now = Instant::now();
-            let elapsed = now.duration_since(last_update).as_secs_f64();
-
-            if elapsed >= 0.1 {
-                let speed = bytes_read as f64 / elapsed;
-                speed_samples.push(speed);
-                if speed_samples.len() > 10 {
-                    speed_samples.remove(0);
+        // 大文件走流水线下载
+        if total_size > PIPELINE_THRESHOLD {
+            let raw_session = match self.get_or_create_raw_session().await {
+                Ok(raw) => raw,
+                Err(e) => {
+                    tracing::warn!("Failed to create raw SFTP session, falling back to serial: {}", e);
+                    self.raw_sftp = None;
+                    return self
+                        .serial_download_file(remote_path, local_path, total_size, cancelled, progress)
+                        .await;
                 }
+            };
 
-                let avg_speed = speed_samples.iter().sum::<f64>() / speed_samples.len() as f64;
+            let result = Self::pipelined_download(
+                raw_session,
+                remote_path,
+                local_path,
+                total_size,
+                &cancelled,
+                &progress,
+            )
+            .await;
 
-                progress(TransferProgress {
-                    transferred,
-                    total: total_size,
-                    speed: avg_speed,
-                    current_file: None,
-                    current_file_transferred: 0,
-                    current_file_total: 0,
-                });
-
-                last_update = now;
+            if result.is_err() {
+                // raw session 出错时置空，下次重建
+                self.raw_sftp = None;
             }
+
+            return result;
         }
 
-        progress(TransferProgress {
-            transferred,
-            total: total_size,
-            speed: 0.0,
-            current_file: None,
-            current_file_transferred: 0,
-            current_file_total: 0,
-        });
-
-        local_file
-            .flush()
+        self.serial_download_file(remote_path, local_path, total_size, cancelled, progress)
             .await
-            .map_err(|e| anyhow!("Failed to flush local file: {}", e))?;
-        local_file
-            .into_inner()
-            .sync_all()
-            .await
-            .map_err(|e| anyhow!("Failed to sync local file: {}", e))?;
-
-        Ok(())
     }
 
     async fn upload_with_progress(
@@ -761,6 +1131,21 @@ impl SftpClient for RusshSftpClient {
         let files: Vec<&FileEntry> = entries.iter().filter(|e| !e.is_dir).collect();
         let start_time = Instant::now();
 
+        // 检查是否有大文件需要流水线下载
+        let has_large_files = files.iter().any(|f| f.size > PIPELINE_THRESHOLD);
+        let raw_session = if has_large_files {
+            match self.get_or_create_raw_session().await {
+                Ok(raw) => Some(raw),
+                Err(e) => {
+                    tracing::warn!("Failed to create raw SFTP session, falling back to serial: {}", e);
+                    self.raw_sftp = None;
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         for file_entry in files {
             ensure_not_cancelled(&cancelled)?;
             let relative = file_entry
@@ -779,6 +1164,35 @@ impl SftpClient for RusshSftpClient {
                 })?;
             }
 
+            let local_file_str = local_file.to_string_lossy().to_string();
+
+            // 大文件走流水线
+            if file_entry.size > PIPELINE_THRESHOLD {
+                if let Some(ref raw) = raw_session {
+                    let result = Self::pipelined_download_with_file_progress(
+                        Arc::clone(raw),
+                        &file_entry.path,
+                        &local_file_str,
+                        file_entry.size,
+                        &current_file_name,
+                        current_file_total,
+                        &mut transferred,
+                        total_size,
+                        start_time,
+                        &cancelled,
+                        &progress,
+                    )
+                    .await;
+
+                    if result.is_err() {
+                        self.raw_sftp = None;
+                        return result;
+                    }
+                    continue;
+                }
+            }
+
+            // 小文件或没有 raw session 时走串行下载
             let mut remote_file = self
                 .sftp
                 .open_with_flags(&file_entry.path, OpenFlags::READ)

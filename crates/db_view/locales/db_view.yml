@@ -1808,6 +1808,315 @@ TableData:
     en: Unable to refresh data
     zh-CN: 无法刷新数据
     zh-HK: 無法重新整理資料
+TableDataGrid:
+  load_data_failed:
+    en: "Failed to load data: {error}"
+    zh-CN: "数据加载失败: {error}"
+    zh-HK: "資料載入失敗: {error}"
+  export_not_supported:
+    en: Export is not supported for the current result
+    zh-CN: 当前结果不支持导出
+    zh-HK: 目前結果不支援匯出
+  export_table:
+    en: Export Table
+    zh-CN: 导出表
+    zh-HK: 匯出表
+  export_loading:
+    en: Data is loading; export is not available yet
+    zh-CN: 数据加载中，暂无法导出
+    zh-HK: 資料載入中，暫無法匯出
+  select_export_directory:
+    en: Select export directory
+    zh-CN: 选择导出目录
+    zh-HK: 選擇匯出目錄
+  export_failed:
+    en: "Export failed: {error}"
+    zh-CN: "导出失败: {error}"
+    zh-HK: "匯出失敗: {error}"
+  no_data_to_export:
+    en: No data to export
+    zh-CN: 没有可导出的数据
+    zh-HK: 沒有可匯出的資料
+  export_complete:
+    en: "Export completed: {path}"
+    zh-CN: "导出完成: {path}"
+    zh-HK: "匯出完成: {path}"
+  column_label:
+    en: "Column {index}"
+    zh-CN: "列 {index}"
+    zh-HK: "欄 {index}"
+  edit_cell_title:
+    en: "Edit Cell - {column} (Row {row})"
+    zh-CN: "编辑单元格 - {column} (行 {row})"
+    zh-HK: "編輯儲存格 - {column} (列 {row})"
+  error_message:
+    en: "Error: {error}"
+    zh-CN: "错误: {error}"
+    zh-HK: "錯誤: {error}"
+  no_changes:
+    en: No changes to apply
+    zh-CN: 没有变更数据
+    zh-HK: 沒有變更資料
+  no_changes_sql_marker:
+    en: "-- No data changes"
+    zh-CN: "-- 没有变更数据"
+    zh-HK: "-- 沒有變更資料"
+  plugin_unavailable:
+    en: Unable to get database plugin
+    zh-CN: 无法获取数据库插件
+    zh-HK: 無法取得資料庫外掛
+  change_sql_preview:
+    en: Change SQL Preview
+    zh-CN: 变更SQL预览
+    zh-HK: 變更SQL預覽
+  execute_sql:
+    en: Execute SQL
+    zh-CN: 执行SQL
+    zh-HK: 執行SQL
+  sql_empty:
+    en: SQL content is empty
+    zh-CN: SQL内容为空
+    zh-HK: SQL內容為空
+  execute_failed:
+    en: "Execution failed: {error}"
+    zh-CN: "执行失败: {error}"
+    zh-HK: "執行失敗: {error}"
+  execute_success:
+    en: Execution succeeded
+    zh-CN: 执行成功
+    zh-HK: 執行成功
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 重新整理
+  add_row:
+    en: Add Row
+    zh-CN: 添加行
+    zh-HK: 新增列
+  delete_row:
+    en: Delete Row
+    zh-CN: 删除行
+    zh-HK: 刪除列
+  undo:
+    en: Undo
+    zh-CN: 撤销
+    zh-HK: 復原
+  sql_preview:
+    en: SQL Preview
+    zh-CN: SQL预览
+    zh-HK: SQL預覽
+  commit_changes:
+    en: Commit Changes
+    zh-CN: 提交更改
+    zh-HK: 提交變更
+  large_text_editor:
+    en: Large Text Editor
+    zh-CN: 大文本编辑器
+    zh-HK: 大文字編輯器
+  export:
+    en: Export
+    zh-CN: 导出
+    zh-HK: 匯出
+  export_result_xlsx:
+    en: Export result set (.xlsx)
+    zh-CN: 导出结果集(.xlsx)
+    zh-HK: 匯出結果集(.xlsx)
+  export_result_csv:
+    en: Export result set (.csv)
+    zh-CN: 导出结果集(.csv)
+    zh-HK: 匯出結果集(.csv)
+  export_result_insert_sql:
+    en: Export result set (insert sql)
+    zh-CN: 导出结果集(insert sql)
+    zh-HK: 匯出結果集(insert sql)
+  export_current_page_xlsx:
+    en: Export current page result set (.xlsx)
+    zh-CN: 导出当前页结果集(.xlsx)
+    zh-HK: 匯出當前頁結果集(.xlsx)
+  export_current_page_csv:
+    en: Export current page result set (.csv)
+    zh-CN: 导出当前页结果集(.csv)
+    zh-HK: 匯出當前頁結果集(.csv)
+  export_current_page_insert_sql:
+    en: Export current page result set (insert sql)
+    zh-CN: 导出当前页结果集(insert sql)
+    zh-HK: 匯出當前頁結果集(insert sql)
+  page_info:
+    en: "Showing {page_size} (of {page_count}, total {total_count})"
+    zh-CN: "显示 {page_size} 条（共 {page_count} 条，总计 {total_count} 条）"
+    zh-HK: "顯示 {page_size} 條（共 {page_count} 條，總計 {total_count} 條）"
+  page_number:
+    en: "Page {page} (total {total})"
+    zh-CN: "第 {page} 页（共 {total} 条）"
+    zh-HK: "第 {page} 頁（共 {total} 條）"
+  query_elapsed:
+    en: "Query time {duration}ms"
+    zh-CN: "查询耗时 {duration}ms"
+    zh-HK: "查詢耗時 {duration}ms"
+  all:
+    en: All
+    zh-CN: 全部
+    zh-HK: 全部
+  total_records:
+    en: "Total {count} records"
+    zh-CN: "共 {count} 条记录"
+    zh-HK: "共 {count} 條記錄"
+SqlRun:
+  select_sql_file:
+    en: Select SQL file
+    zh-CN: 选择SQL文件
+    zh-HK: 選擇SQL檔案
+  selected_file:
+    en: "Selected: {path}"
+    zh-CN: "已选择: {path}"
+    zh-HK: "已選擇: {path}"
+  select_sql_file_required:
+    en: Please select an SQL file
+    zh-CN: 请选择SQL文件
+    zh-HK: 請選擇SQL檔案
+  start_processing_file:
+    en: "Start processing file ({current}/{total})"
+    zh-CN: "开始处理文件 ({current}/{total})"
+    zh-HK: "開始處理檔案 ({current}/{total})"
+  execute_failed:
+    en: "Execution failed: {error}"
+    zh-CN: "执行失败: {error}"
+    zh-HK: "執行失敗: {error}"
+  unknown_error:
+    en: Unknown error
+    zh-CN: 未知错误
+    zh-HK: 未知錯誤
+  statement_failed:
+    en: "Statement {statement} failed: {error}"
+    zh-CN: "语句 {statement} 执行失败: {error}"
+    zh-HK: "語句 {statement} 執行失敗: {error}"
+  executed_statements:
+    en: "Executed {count} statements ({progress}%)"
+    zh-CN: "已执行 {count} 条语句 ({progress}%)"
+    zh-HK: "已執行 {count} 條語句 ({progress}%)"
+  file_completed:
+    en: File execution completed
+    zh-CN: 文件执行完成
+    zh-HK: 檔案執行完成
+  all_completed:
+    en: "All executions completed, elapsed {elapsed}s"
+    zh-CN: "全部执行完成，耗时 {elapsed}s"
+    zh-HK: "全部執行完成，耗時 {elapsed}s"
+  sql_file_label:
+    en: "SQL File:"
+    zh-CN: "SQL文件:"
+    zh-HK: "SQL檔案:"
+  browse:
+    en: Browse
+    zh-CN: 浏览
+    zh-HK: 瀏覽
+  stop_on_error:
+    en: Stop on error
+    zh-CN: 遇错停止
+    zh-HK: 遇錯停止
+  use_transaction:
+    en: Use transaction
+    zh-CN: 使用事务
+    zh-HK: 使用事務
+  total_statements:
+    en: "Total statements:"
+    zh-CN: "总语句:"
+    zh-HK: "總語句:"
+  success_label:
+    en: "Success:"
+    zh-CN: "成功:"
+    zh-HK: "成功:"
+  error_label:
+    en: "Error:"
+    zh-CN: "错误:"
+    zh-HK: "錯誤:"
+  time_label:
+    en: "Time:"
+    zh-CN: "时间:"
+    zh-HK: "時間:"
+  execute:
+    en: Execute
+    zh-CN: 执行
+    zh-HK: 執行
+  executing:
+    en: Executing...
+    zh-CN: 执行中...
+    zh-HK: 執行中...
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+SqlDump:
+  export_table:
+    en: "Export table: {table}"
+    zh-CN: "导出表: {table}"
+    zh-HK: "匯出表: {table}"
+  fetching_tables:
+    en: Fetching table list...
+    zh-CN: 正在获取表列表...
+    zh-HK: 正在取得表列表...
+  found_tables:
+    en: "Found {count} tables"
+    zh-CN: "找到 {count} 个表"
+    zh-HK: "找到 {count} 個表"
+  fetch_tables_failed:
+    en: "Failed to fetch table list: {error}"
+    zh-CN: "获取表列表失败: {error}"
+    zh-HK: "取得表列表失敗: {error}"
+  server_label:
+    en: "Server:"
+    zh-CN: "服务器:"
+    zh-HK: "伺服器:"
+  database_label:
+    en: "Database:"
+    zh-CN: "数据库:"
+    zh-HK: "資料庫:"
+  dump_to_label:
+    en: "Dump to:"
+    zh-CN: "转储到:"
+    zh-HK: "轉儲到:"
+  processed_records:
+    en: "Processed records:"
+    zh-CN: "已处理记录:"
+    zh-HK: "已處理記錄:"
+  error_label:
+    en: "Error:"
+    zh-CN: "错误:"
+    zh-HK: "錯誤:"
+  transferred_records:
+    en: "Transferred records:"
+    zh-CN: "已传输记录:"
+    zh-HK: "已傳輸記錄:"
+  time_label:
+    en: "Time:"
+    zh-CN: "时间:"
+    zh-HK: "時間:"
+  start:
+    en: Start
+    zh-CN: 开始
+    zh-HK: 開始
+  exporting:
+    en: Exporting...
+    zh-CN: 导出中...
+    zh-HK: 匯出中...
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+SqlEditorView:
+  create_dir_failed:
+    en: "Failed to create directory {path}: {error}"
+    zh-CN: "创建目录失败 {path}: {error}"
+    zh-HK: "建立目錄失敗 {path}: {error}"
+  auto_save_failed:
+    en: "Failed to auto-save SQL file {path}: {error}"
+    zh-CN: "自动保存SQL文件失败 {path}: {error}"
+    zh-HK: "自動儲存SQL檔案失敗 {path}: {error}"
+DbTreeView:
+  parse_connection_config_failed:
+    en: "Failed to parse connection config {id}: {error}"
+    zh-CN: "无法解析连接配置 {id}: {error}"
+    zh-HK: "無法解析連線設定 {id}: {error}"
 ChatDbSelector:
   select_source:
     en: Select data source
@@ -2075,6 +2384,103 @@ SqlEditor:
     en: Table
     zh-CN: 表
     zh-HK: 表
+QueryWorkflow:
+  warning_block:
+    en: "> ⚠️ {warning}\n\n"
+    zh-CN: "> ⚠️ {warning}\n\n"
+    zh-HK: "> ⚠️ {warning}\n\n"
+  source_user:
+    en: User specified
+    zh-CN: 用户指定
+    zh-HK: 使用者指定
+  source_ai:
+    en: AI analysis
+    zh-CN: AI 分析
+    zh-HK: AI 分析
+  related_tables_header:
+    en: "**Related Tables** ({source}):\n"
+    zh-CN: "**相关表**（{source}）：\n"
+    zh-HK: "**相關表**（{source}）：\n"
+  sql_prompt_intro:
+    en: "You are a {db_type} database expert. Generate an accurate SQL query based on the user's question.\n\n"
+    zh-CN: "你是一个 {db_type} 数据库专家。请根据用户问题生成准确的 SQL 查询语句。\n\n"
+    zh-HK: "你是一位 {db_type} 資料庫專家。請根據使用者問題產生準確的 SQL 查詢語句。\n\n"
+  sql_prompt_tables_header:
+    en: "## Available Table Schemas\n\n"
+    zh-CN: "## 可用表结构\n\n"
+    zh-HK: "## 可用表結構\n\n"
+  sql_prompt_table_header:
+    en: "### Table: `{table}`"
+    zh-CN: "### 表: `{table}`"
+    zh-HK: "### 表: `{table}`"
+  sql_prompt_no_columns:
+    en: "(No column info available)\n\n"
+    zh-CN: "（列信息暂无）\n\n"
+    zh-HK: "（暫無欄位資訊）\n\n"
+  sql_prompt_columns_header:
+    en: "| Column | Type | Nullable | PK | Comment |\n"
+    zh-CN: "| 列名 | 类型 | 可空 | 主键 | 说明 |\n"
+    zh-HK: "| 欄名 | 類型 | 可空 | 主鍵 | 說明 |\n"
+  sql_prompt_columns_divider:
+    en: "|------|------|------|------|------|\n"
+    zh-CN: "|------|------|------|------|------|\n"
+    zh-HK: "|------|------|------|------|------|\n"
+  sql_prompt_requirements_header:
+    en: "## Requirements\n\n"
+    zh-CN: "## 要求\n\n"
+    zh-HK: "## 要求\n\n"
+  sql_prompt_requirement_1:
+    en: "1. Put the SQL in a ```sql code block\n"
+    zh-CN: "1. 生成的 SQL 必须放在 ```sql 代码块中\n"
+    zh-HK: "1. 產生的 SQL 必須放在 ```sql 程式碼區塊中\n"
+  sql_prompt_requirement_2:
+    en: "2. Only use columns that exist in the tables above\n"
+    zh-CN: "2. 只使用上述表中存在的列名\n"
+    zh-HK: "2. 僅使用上述表中存在的欄位名稱\n"
+  sql_prompt_requirement_3:
+    en: "3. Briefly explain the SQL's purpose and logic\n"
+    zh-CN: "3. 简要解释 SQL 的作用和逻辑\n"
+    zh-HK: "3. 簡要解釋 SQL 的作用與邏輯\n"
+  sql_prompt_requirement_4:
+    en: "4. If multiple queries are needed, wrap each in its own code block\n"
+    zh-CN: "4. 如果需要多个查询，分别用代码块包裹\n"
+    zh-HK: "4. 若需要多個查詢，分別用程式碼區塊包裹\n"
+  table_select_intro:
+    en: "You are a database expert. Based on the user's question, select the most relevant tables from the list below.\n\n"
+    zh-CN: "你是一个数据库专家。根据用户的问题，从以下表列表中选择最相关的表。\n\n"
+    zh-HK: "你是一位資料庫專家。根據使用者問題，從以下表列表中選擇最相關的表。\n\n"
+  table_select_tables_header:
+    en: "## Available Tables\n\n"
+    zh-CN: "## 可用表\n\n"
+    zh-HK: "## 可用表\n\n"
+  table_select_table_header_row:
+    en: "| Table | Comment |\n"
+    zh-CN: "| 表名 | 说明 |\n"
+    zh-HK: "| 表名 | 說明 |\n"
+  table_select_table_divider:
+    en: "|------|------|\n"
+    zh-CN: "|------|------|\n"
+    zh-HK: "|------|------|\n"
+  table_select_user_question_header:
+    en: "\n## User Question\n\n"
+    zh-CN: "\n## 用户问题\n\n"
+    zh-HK: "\n## 使用者問題\n\n"
+  table_select_requirements_header:
+    en: "\n\n## Requirements\n\n"
+    zh-CN: "\n\n## 要求\n\n"
+    zh-HK: "\n\n## 要求\n\n"
+  table_select_requirement_1:
+    en: "Return a JSON array containing the table names you believe are relevant.\n"
+    zh-CN: "请返回一个 JSON 数组，包含你认为与问题相关的表名。\n"
+    zh-HK: "請返回一個 JSON 陣列，包含你認為與問題相關的表名。\n"
+  table_select_requirement_2:
+    en: "Return JSON only, no other explanation.\n\n"
+    zh-CN: "只返回 JSON，不要其他解释。\n\n"
+    zh-HK: "只返回 JSON，不要其他解釋。\n\n"
+  table_select_example:
+    en: "Example format:\n```json\n[\"table1\", \"table2\"]\n```\n"
+    zh-CN: "示例格式：\n```json\n[\"table1\", \"table2\"]\n```\n"
+    zh-HK: "示例格式：\n```json\n[\"table1\", \"table2\"]\n```\n"
 SqlService:
   execution_error:
     en: "Execution error: {message}"

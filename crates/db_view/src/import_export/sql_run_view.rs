@@ -17,6 +17,7 @@ use gpui_component::{
     v_flex, v_virtual_list,
 };
 use std::rc::Rc;
+use rust_i18n::t;
 
 // 3. 当前 crate 导入（按模块分组）
 use db::{ExecOptions, GlobalDbState, SqlResult, SqlSource};
@@ -118,7 +119,7 @@ impl SqlRunView {
             files: true,
             multiple: true,
             directories: false,
-            prompt: Some("选择SQL文件".into()),
+            prompt: Some(t!("SqlRun.select_sql_file").into()),
         });
 
         cx.spawn(async move |cx: &mut AsyncApp| {
@@ -141,7 +142,7 @@ impl SqlRunView {
                     &logs,
                     &scroll_handle,
                     "".to_string(),
-                    format!("已选择: {}", path),
+                    t!("SqlRun.selected_file", path = path).to_string(),
                     false,
                 );
             }
@@ -183,7 +184,7 @@ impl SqlRunView {
             self.logs.update(cx, |l, cx| {
                 l.push(LogEntry {
                     file: "".to_string(),
-                    message: "请选择SQL文件".to_string(),
+                    message: t!("SqlRun.select_sql_file_required").to_string(),
                     is_error: true,
                 });
                 cx.notify();
@@ -212,7 +213,12 @@ impl SqlRunView {
                     &logs,
                     &scroll_handle,
                     file_path.clone(),
-                    format!("开始处理文件 ({}/{})", file_index + 1, total_files),
+                    t!(
+                        "SqlRun.start_processing_file",
+                        current = file_index + 1,
+                        total = total_files
+                    )
+                    .to_string(),
                     false,
                 );
 
@@ -241,7 +247,7 @@ impl SqlRunView {
                             &logs,
                             &scroll_handle,
                             file_path.clone(),
-                            format!("执行失败: {}", e),
+                            t!("SqlRun.execute_failed", error = e).to_string(),
                             true,
                         );
                         let _ = cx.update(|cx| {
@@ -272,7 +278,7 @@ impl SqlRunView {
                         let error_msg = if let SqlResult::Error(e) = &streaming_progress.result {
                             e.message.clone()
                         } else {
-                            "未知错误".to_string()
+                            t!("SqlRun.unknown_error").to_string()
                         };
 
                         Self::add_log(
@@ -280,10 +286,12 @@ impl SqlRunView {
                             &logs,
                             &scroll_handle,
                             file_path.clone(),
-                            format!(
-                                "语句 {} 执行失败: {}",
-                                streaming_progress.current, error_msg
-                            ),
+                            t!(
+                                "SqlRun.statement_failed",
+                                statement = streaming_progress.current,
+                                error = error_msg
+                            )
+                            .to_string(),
                             true,
                         );
 
@@ -327,10 +335,12 @@ impl SqlRunView {
                                 &logs,
                                 &scroll_handle,
                                 file_path.clone(),
-                                format!(
-                                    "已执行 {} 条语句 ({:.1}%)",
-                                    streaming_progress.current, file_progress
-                                ),
+                                t!(
+                                    "SqlRun.executed_statements",
+                                    count = streaming_progress.current,
+                                    progress = format!("{:.1}", file_progress)
+                                )
+                                .to_string(),
                                 false,
                             );
                         }
@@ -359,7 +369,7 @@ impl SqlRunView {
                     &logs,
                     &scroll_handle,
                     file_path.clone(),
-                    "文件执行完成".to_string(),
+                    t!("SqlRun.file_completed").to_string(),
                     false,
                 );
             }
@@ -371,7 +381,7 @@ impl SqlRunView {
                 &logs,
                 &scroll_handle,
                 "".to_string(),
-                format!("全部执行完成，耗时 {:.2}s", elapsed),
+                t!("SqlRun.all_completed", elapsed = format!("{:.2}", elapsed)).to_string(),
                 false,
             );
 
@@ -461,13 +471,13 @@ impl Render for SqlRunView {
                         div()
                             .w_24()
                             .text_color(cx.theme().muted_foreground)
-                            .child("SQL文件:"),
+                            .child(t!("SqlRun.sql_file_label").to_string()),
                     )
                     .child(Input::new(&self.file_path).w_full())
                     .child(
                         Button::new("select_file")
                             .small()
-                            .child("浏览")
+                            .child(t!("SqlRun.browse").to_string())
                             .disabled(is_running)
                             .on_click(window.listener_for(
                                 &cx.entity(),
@@ -495,7 +505,7 @@ impl Render for SqlRunView {
                                         });
                                     })),
                             )
-                            .child("遇错停止"),
+                            .child(t!("SqlRun.stop_on_error").to_string()),
                     )
                     .child(
                         h_flex()
@@ -512,7 +522,7 @@ impl Render for SqlRunView {
                                         });
                                     })),
                             )
-                            .child("使用事务"),
+                            .child(t!("SqlRun.use_transaction").to_string()),
                     ),
             )
             .child(div().h_px().bg(cx.theme().border))
@@ -525,20 +535,28 @@ impl Render for SqlRunView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("总语句:"),
+                                    .child(t!("SqlRun.total_statements").to_string()),
                             )
                             .child(div().child(total_stmts.to_string())),
                     )
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(div().text_color(cx.theme().muted_foreground).child("成功:"))
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(t!("SqlRun.success_label").to_string())
+                            )
                             .child(div().child(success.to_string())),
                     )
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(div().text_color(cx.theme().muted_foreground).child("错误:"))
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(t!("SqlRun.error_label").to_string())
+                            )
                             .child(
                                 div()
                                     .text_color(if errors > 0 {
@@ -552,7 +570,11 @@ impl Render for SqlRunView {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(div().text_color(cx.theme().muted_foreground).child("时间:"))
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(t!("SqlRun.time_label").to_string())
+                            )
                             .child(div().child(elapsed)),
                     ),
             )
@@ -660,7 +682,11 @@ impl Render for SqlRunView {
                     .gap_2()
                     .justify_end()
                     .when(!is_running && !is_finished, |this| {
-                        this.child(Button::new("start").primary().child("执行").on_click(
+                        this.child(
+                            Button::new("start")
+                                .primary()
+                                .child(t!("SqlRun.execute").to_string())
+                                .on_click(
                             window.listener_for(
                                 &cx.entity(),
                                 |view, _: &ClickEvent, window, cx| {
@@ -670,12 +696,16 @@ impl Render for SqlRunView {
                         ))
                     })
                     .when(is_running, |this| {
-                        this.child(Button::new("running").loading(true).child("执行中..."))
+                        this.child(
+                            Button::new("running")
+                                .loading(true)
+                                .child(t!("SqlRun.executing").to_string())
+                        )
                     })
                     .when(is_finished, |this| {
                         this.child(
                             Button::new("close")
-                                .child("关闭")
+                                .child(t!("SqlRun.close").to_string())
                                 .on_click(|_, window, _cx| {
                                     window.remove_window();
                                 }),

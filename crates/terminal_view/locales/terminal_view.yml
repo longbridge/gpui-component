@@ -314,3 +314,46 @@ ContextMenu:
     en: Save as Quick Command
     zh-CN: 保存为快捷命令
     zh-HK: 保存為快捷命令
+
+
+TerminalAddon:
+  path_regex_build_failed:
+    en: "Failed to build file path regex: %{error}"
+    zh-CN: "文件路径正则构建失败: %{error}"
+    zh-HK: "文件路徑正則構建失敗: %{error}"
+  open_local_path_failed:
+    en: "Failed to open local path: %{error}"
+    zh-CN: "无法打开本地路径: %{error}"
+    zh-HK: "無法打開本地路徑: %{error}"
+
+TerminalView:
+  terminal_size_changed:
+    en: "Terminal size changed: %{old} -> %{new}, cell_width=%{cell_width}, line_height=%{line_height}, bounds=%{bounds}"
+    zh-CN: "终端尺寸变化: %{old} -> %{new}, cell_width=%{cell_width}, line_height=%{line_height}, bounds=%{bounds}"
+    zh-HK: "終端尺寸變化: %{old} -> %{new}, cell_width=%{cell_width}, line_height=%{line_height}, bounds=%{bounds}"
+  cell_width_changed:
+    en: "cell_width changed: %{old} -> %{new}, font=%{font}, size=%{size}"
+    zh-CN: "cell_width 变化: %{old} -> %{new}, font=%{font}, size=%{size}"
+    zh-HK: "cell_width 變化: %{old} -> %{new}, font=%{font}, size=%{size}"
+  ask_ai_selection_template:
+    en: "Here is the text I selected in the terminal. Please analyze:
+
+```
+%{content}
+```"
+    zh-CN: "以下是我在终端中选中的内容，请帮我分析：
+
+```
+%{content}
+```"
+    zh-HK: "以下是我在終端中選中的內容，請幫我分析：
+
+```
+%{content}
+```"
+
+TerminalSidebar:
+  paste_to_terminal:
+    en: "Paste to terminal"
+    zh-CN: "粘贴到终端"
+    zh-HK: "貼上到終端"

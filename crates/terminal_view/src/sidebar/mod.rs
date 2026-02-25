@@ -18,6 +18,7 @@ use gpui_component::{
 };
 use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use crate::theme::{TerminalColors, TerminalTheme};
+use rust_i18n::t;
 
 /// 侧边栏面板类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,7 +124,7 @@ impl TerminalSidebar {
             // 注册粘贴到终端操作
             if let Some(paste_action) = CodeBlockAction::new("paste-to-terminal")
                 .icon(IconName::SquareTerminal)
-                .label("粘贴到终端")
+                .label(t!("TerminalSidebar.paste_to_terminal").to_string())
                 .matcher(LanguageMatcher::shell())
                 .on_click({
                     let sidebar = sidebar_entity.clone();

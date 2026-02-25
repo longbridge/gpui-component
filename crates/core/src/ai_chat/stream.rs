@@ -6,6 +6,7 @@
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
+use rust_i18n::t;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -61,9 +62,15 @@ pub enum StreamError {
 impl std::fmt::Display for StreamError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StreamError::ProviderNotFound => write!(f, "AI 模型未找到"),
-            StreamError::ApiError(msg) => write!(f, "API 错误: {}", msg),
-            StreamError::StorageError(msg) => write!(f, "存储错误: {}", msg),
+            StreamError::ProviderNotFound => {
+                write!(f, "{}", t!("AiChat.stream_provider_not_found"))
+            }
+            StreamError::ApiError(msg) => {
+                write!(f, "{}", t!("AiChat.stream_api_error", error = msg))
+            }
+            StreamError::StorageError(msg) => {
+                write!(f, "{}", t!("AiChat.stream_storage_error", error = msg))
+            }
         }
     }
 }

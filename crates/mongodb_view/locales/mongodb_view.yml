@@ -1,0 +1,861 @@
+_version: 2
+
+Common:
+  none:
+    en: "None"
+    zh-CN: "无"
+    zh-HK: "無"
+  create:
+    en: "Create"
+    zh-CN: "新建"
+    zh-HK: "新建"
+  cancel:
+    en: "Cancel"
+    zh-CN: "取消"
+    zh-HK: "取消"
+  delete:
+    en: "Delete"
+    zh-CN: "删除"
+    zh-HK: "刪除"
+  close:
+    en: "Close"
+    zh-CN: "关闭"
+    zh-HK: "關閉"
+  copy:
+    en: "Copy"
+    zh-CN: "复制"
+    zh-HK: "複製"
+  edit:
+    en: "Edit"
+    zh-CN: "编辑"
+    zh-HK: "編輯"
+  save:
+    en: "Save"
+    zh-CN: "保存"
+    zh-HK: "保存"
+  irreversible:
+    en: "This action cannot be undone."
+    zh-CN: "此操作不可撤销。"
+    zh-HK: "此操作不可撤銷。"
+
+MongoTree:
+  search_connections:
+    en: "Search connections..."
+    zh-CN: "搜索连接..."
+    zh-HK: "搜尋連接..."
+  connection_config_not_found:
+    en: "Connection config not found: %{node_id}"
+    zh-CN: "未找到连接配置：%{node_id}"
+    zh-HK: "未找到連接配置：%{node_id}"
+  connecting_mongo:
+    en: "Connecting to MongoDB: %{name}"
+    zh-CN: "正在连接 MongoDB：%{name}"
+    zh-HK: "正在連接 MongoDB：%{name}"
+  connection_missing:
+    en: "Connection not found."
+    zh-CN: "连接不存在。"
+    zh-HK: "連接不存在。"
+  collection_name_placeholder:
+    en: "Collection name"
+    zh-CN: "集合名称"
+    zh-HK: "集合名稱"
+  create_collection_title:
+    en: "Create Collection"
+    zh-CN: "新建集合"
+    zh-HK: "新建集合"
+  collection_name_label:
+    en: "Collection name"
+    zh-CN: "集合名称"
+    zh-HK: "集合名稱"
+  collection_name_required:
+    en: "Collection name is required."
+    zh-CN: "集合名称不能为空。"
+    zh-HK: "集合名稱不能為空。"
+  database_name_placeholder:
+    en: "Database name"
+    zh-CN: "数据库名称"
+    zh-HK: "資料庫名稱"
+  initial_collection_placeholder:
+    en: "Initial collection"
+    zh-CN: "初始集合"
+    zh-HK: "初始集合"
+  create_database_title:
+    en: "Create Database"
+    zh-CN: "新建数据库"
+    zh-HK: "新建資料庫"
+  database_name_label:
+    en: "Database name"
+    zh-CN: "数据库名称"
+    zh-HK: "資料庫名稱"
+  initial_collection_label:
+    en: "Initial collection"
+    zh-CN: "初始集合"
+    zh-HK: "初始集合"
+  database_and_collection_required:
+    en: "Database and collection are required."
+    zh-CN: "数据库和集合不能为空。"
+    zh-HK: "資料庫和集合不能為空。"
+  delete_database_title:
+    en: "Delete Database"
+    zh-CN: "删除数据库"
+    zh-HK: "刪除資料庫"
+  confirm_delete_database:
+    en: "Delete database %{name}?"
+    zh-CN: "确定删除数据库 %{name} 吗？"
+    zh-HK: "確定刪除資料庫 %{name} 嗎？"
+  connection_info_not_found:
+    en: "Connection info not found."
+    zh-CN: "未找到连接信息。"
+    zh-HK: "未找到連接資訊。"
+  read_connection_info_failed:
+    en: "Failed to read connection info: %{error}"
+    zh-CN: "读取连接信息失败：%{error}"
+    zh-HK: "讀取連接資訊失敗：%{error}"
+  parse_connection_params_failed:
+    en: "Failed to parse connection parameters: %{error}"
+    zh-CN: "解析连接参数失败：%{error}"
+    zh-HK: "解析連接參數失敗：%{error}"
+  connection_info_title:
+    en: "Connection Info"
+    zh-CN: "连接信息"
+    zh-HK: "連接資訊"
+  connection_name_display:
+    en: "Connection: %{name}"
+    zh-CN: "连接：%{name}"
+    zh-HK: "連接：%{name}"
+  connection_string_label:
+    en: "Connection string"
+    zh-CN: "连接字符串"
+    zh-HK: "連接字串"
+  connection_params_label:
+    en: "Connection parameters"
+    zh-CN: "连接参数"
+    zh-HK: "連接參數"
+  copy_connection_string:
+    en: "Copy connection string"
+    zh-CN: "复制连接字符串"
+    zh-HK: "複製連接字串"
+  connection_string_copied:
+    en: "Connection string copied."
+    zh-CN: "已复制连接字符串。"
+    zh-HK: "已複製連接字串。"
+  collection_created:
+    en: "Collection created."
+    zh-CN: "集合已创建。"
+    zh-HK: "集合已建立。"
+  create_collection_failed:
+    en: "Create collection failed: %{error}"
+    zh-CN: "创建集合失败：%{error}"
+    zh-HK: "建立集合失敗：%{error}"
+  database_created:
+    en: "Database created."
+    zh-CN: "数据库已创建。"
+    zh-HK: "資料庫已建立。"
+  create_database_failed:
+    en: "Create database failed: %{error}"
+    zh-CN: "创建数据库失败：%{error}"
+    zh-HK: "建立資料庫失敗：%{error}"
+  database_deleted:
+    en: "Database deleted."
+    zh-CN: "数据库已删除。"
+    zh-HK: "資料庫已刪除。"
+  delete_database_failed:
+    en: "Delete database failed: %{error}"
+    zh-CN: "删除数据库失败：%{error}"
+    zh-HK: "刪除資料庫失敗：%{error}"
+  connection_disconnected:
+    en: "Connection disconnected."
+    zh-CN: "连接已断开。"
+    zh-HK: "連接已斷開。"
+  disconnect_failed:
+    en: "Disconnect failed: %{error}"
+    zh-CN: "断开连接失败：%{error}"
+    zh-HK: "斷開連接失敗：%{error}"
+  menu_connect:
+    en: "Connect"
+    zh-CN: "连接"
+    zh-HK: "連接"
+  menu_refresh_databases:
+    en: "Refresh databases"
+    zh-CN: "刷新数据库"
+    zh-HK: "刷新資料庫"
+  menu_create_collection:
+    en: "Create collection"
+    zh-CN: "新建集合"
+    zh-HK: "新建集合"
+  menu_create_database:
+    en: "Create database"
+    zh-CN: "新建数据库"
+    zh-HK: "新建資料庫"
+  menu_delete_database:
+    en: "Delete database"
+    zh-CN: "删除数据库"
+    zh-HK: "刪除資料庫"
+  menu_open_shell:
+    en: "Open shell"
+    zh-CN: "打开 Shell"
+    zh-HK: "開啟 Shell"
+  shell_not_implemented:
+    en: "Shell is not implemented yet."
+    zh-CN: "Shell 功能尚未实现。"
+    zh-HK: "Shell 功能尚未實作。"
+  menu_show_metrics:
+    en: "Show metrics"
+    zh-CN: "查看指标"
+    zh-HK: "檢視指標"
+  metrics_not_implemented:
+    en: "Metrics are not implemented yet."
+    zh-CN: "指标功能尚未实现。"
+    zh-HK: "指標功能尚未實作。"
+  menu_show_connection_info:
+    en: "Show connection info"
+    zh-CN: "查看连接信息"
+    zh-HK: "檢視連接資訊"
+  menu_disconnect:
+    en: "Disconnect"
+    zh-CN: "断开连接"
+    zh-HK: "斷開連接"
+  menu_open_collection:
+    en: "Open collection"
+    zh-CN: "打开集合"
+    zh-HK: "開啟集合"
+  menu_open_in_new_tab:
+    en: "Open in new tab"
+    zh-CN: "在新标签页打开"
+    zh-HK: "在新分頁開啟"
+  no_matching_connections:
+    en: "No matching connections."
+    zh-CN: "没有匹配的连接。"
+    zh-HK: "沒有符合的連接。"
+  no_connections:
+    en: "No connections."
+    zh-CN: "暂无连接。"
+    zh-HK: "暫無連接。"
+  connections_header:
+    en: "CONNECTIONS"
+    zh-CN: "连接"
+    zh-HK: "連接"
+
+MongoConnection:
+  connect_failed:
+    en: "Failed to connect to MongoDB."
+    zh-CN: "连接 MongoDB 失败。"
+    zh-HK: "連接 MongoDB 失敗。"
+  ping_failed:
+    en: "MongoDB ping failed."
+    zh-CN: "MongoDB ping 失败。"
+    zh-HK: "MongoDB ping 失敗。"
+  list_databases_failed:
+    en: "Failed to list databases."
+    zh-CN: "读取数据库列表失败。"
+    zh-HK: "讀取資料庫列表失敗。"
+  list_collections_failed:
+    en: "Failed to list collections."
+    zh-CN: "读取集合列表失败。"
+    zh-HK: "讀取集合列表失敗。"
+  create_collection_failed:
+    en: "Failed to create collection."
+    zh-CN: "创建集合失败。"
+    zh-HK: "建立集合失敗。"
+  drop_database_failed:
+    en: "Failed to drop database."
+    zh-CN: "删除数据库失败。"
+    zh-HK: "刪除資料庫失敗。"
+  aggregate_failed:
+    en: "Aggregation failed."
+    zh-CN: "执行聚合失败。"
+    zh-HK: "執行聚合失敗。"
+  list_indexes_failed:
+    en: "Failed to list indexes."
+    zh-CN: "读取索引列表失败。"
+    zh-HK: "讀取索引列表失敗。"
+  create_index_failed:
+    en: "Failed to create index."
+    zh-CN: "创建索引失败。"
+    zh-HK: "建立索引失敗。"
+  drop_index_failed:
+    en: "Failed to drop index."
+    zh-CN: "删除索引失败。"
+    zh-HK: "刪除索引失敗。"
+  get_validation_failed:
+    en: "Failed to read validation rules."
+    zh-CN: "读取校验规则失败。"
+    zh-HK: "讀取校驗規則失敗。"
+  update_validation_failed:
+    en: "Failed to update validation rules."
+    zh-CN: "更新校验规则失败。"
+    zh-HK: "更新校驗規則失敗。"
+  find_documents_failed:
+    en: "Failed to read documents."
+    zh-CN: "读取文档失败。"
+    zh-HK: "讀取文件失敗。"
+  count_documents_failed:
+    en: "Failed to count documents."
+    zh-CN: "统计文档数量失败。"
+    zh-HK: "統計文件數量失敗。"
+  insert_document_failed:
+    en: "Failed to insert document."
+    zh-CN: "新增文档失败。"
+    zh-HK: "新增文件失敗。"
+  replace_document_failed:
+    en: "Failed to update document."
+    zh-CN: "更新文档失败。"
+    zh-HK: "更新文件失敗。"
+  delete_document_failed:
+    en: "Failed to delete document."
+    zh-CN: "删除文档失败。"
+    zh-HK: "刪除文件失敗。"
+  explain_failed:
+    en: "Explain query failed."
+    zh-CN: "执行计划查询失败。"
+    zh-HK: "執行計畫查詢失敗。"
+
+MongoManager:
+  connection_id_required:
+    en: "Connection ID is required."
+    zh-CN: "连接 ID 不能为空。"
+    zh-HK: "連接 ID 不能為空。"
+  host_required:
+    en: "Host is required."
+    zh-CN: "主机不能为空。"
+    zh-HK: "主機不能為空。"
+
+MongoForm:
+  edit_connection_title:
+    en: "Edit MongoDB Connection"
+    zh-CN: "编辑 MongoDB 连接"
+    zh-HK: "編輯 MongoDB 連接"
+  new_connection_title:
+    en: "New MongoDB Connection"
+    zh-CN: "新建 MongoDB 连接"
+    zh-HK: "新建 MongoDB 連接"
+  name_placeholder:
+    en: "Name"
+    zh-CN: "名称"
+    zh-HK: "名稱"
+  host_placeholder:
+    en: "Host"
+    zh-CN: "主机"
+    zh-HK: "主機"
+  port_placeholder:
+    en: "Port"
+    zh-CN: "端口"
+    zh-HK: "端口"
+  database_placeholder:
+    en: "Database"
+    zh-CN: "数据库"
+    zh-HK: "資料庫"
+  username_placeholder:
+    en: "Username"
+    zh-CN: "用户名"
+    zh-HK: "使用者名稱"
+  password_placeholder:
+    en: "Password"
+    zh-CN: "密码"
+    zh-HK: "密碼"
+  auth_source_placeholder:
+    en: "Authentication source"
+    zh-CN: "认证源"
+    zh-HK: "認證來源"
+  replica_set_placeholder:
+    en: "Replica set"
+    zh-CN: "副本集"
+    zh-HK: "副本集"
+  read_preference_placeholder:
+    en: "Read preference"
+    zh-CN: "读取偏好"
+    zh-HK: "讀取偏好"
+  connect_timeout_placeholder:
+    en: "Connect timeout (seconds)"
+    zh-CN: "连接超时（秒）"
+    zh-HK: "連接逾時（秒）"
+  app_name_placeholder:
+    en: "Application name"
+    zh-CN: "应用名称"
+    zh-HK: "應用名稱"
+  remark_placeholder:
+    en: "Remark"
+    zh-CN: "备注"
+    zh-HK: "備註"
+  host_required:
+    en: "Host is required."
+    zh-CN: "主机不能为空。"
+    zh-HK: "主機不能為空。"
+  port_must_be_number:
+    en: "Port must be a number."
+    zh-CN: "端口必须是数字。"
+    zh-HK: "端口必須是數字。"
+  timeout_must_be_number:
+    en: "Timeout must be a number."
+    zh-CN: "超时时间必须是数字。"
+    zh-HK: "逾時時間必須是數字。"
+  default_name:
+    en: "MongoDB"
+    zh-CN: "MongoDB"
+    zh-HK: "MongoDB"
+  save_connection_failed:
+    en: "Failed to save connection: %{error}"
+    zh-CN: "保存连接失败：%{error}"
+    zh-HK: "保存連接失敗：%{error}"
+  name_label:
+    en: "Name"
+    zh-CN: "名称"
+    zh-HK: "名稱"
+  host_label:
+    en: "Host"
+    zh-CN: "主机"
+    zh-HK: "主機"
+  port_label:
+    en: "Port"
+    zh-CN: "端口"
+    zh-HK: "端口"
+  database_label:
+    en: "Database"
+    zh-CN: "数据库"
+    zh-HK: "資料庫"
+  username_label:
+    en: "Username"
+    zh-CN: "用户名"
+    zh-HK: "使用者名稱"
+  password_label:
+    en: "Password"
+    zh-CN: "密码"
+    zh-HK: "密碼"
+  auth_source_label:
+    en: "Auth source"
+    zh-CN: "认证源"
+    zh-HK: "認證來源"
+  workspace_label:
+    en: "Workspace"
+    zh-CN: "工作区"
+    zh-HK: "工作區"
+  cloud_sync_label:
+    en: "Cloud sync"
+    zh-CN: "云同步"
+    zh-HK: "雲端同步"
+  cloud_sync_enabled:
+    en: "Enable cloud sync"
+    zh-CN: "启用云同步"
+    zh-HK: "啟用雲端同步"
+  use_srv:
+    en: "Use SRV record"
+    zh-CN: "使用 SRV 记录"
+    zh-HK: "使用 SRV 記錄"
+  direct_connection:
+    en: "Direct connection"
+    zh-CN: "直接连接"
+    zh-HK: "直接連接"
+  replica_set_label:
+    en: "Replica set"
+    zh-CN: "副本集"
+    zh-HK: "副本集"
+  read_preference_label:
+    en: "Read preference"
+    zh-CN: "读取偏好"
+    zh-HK: "讀取偏好"
+  tls_label:
+    en: "TLS"
+    zh-CN: "TLS"
+    zh-HK: "TLS"
+  connect_timeout_label:
+    en: "Connect timeout (seconds)"
+    zh-CN: "连接超时（秒）"
+    zh-HK: "連接逾時（秒）"
+  app_name_label:
+    en: "Application name"
+    zh-CN: "应用名称"
+    zh-HK: "應用名稱"
+  remark_label:
+    en: "Remark"
+    zh-CN: "备注"
+    zh-HK: "備註"
+  test_success:
+    en: "Connection succeeded."
+    zh-CN: "连接成功。"
+    zh-HK: "連接成功。"
+  tab_basic:
+    en: "Basic"
+    zh-CN: "基本信息"
+    zh-HK: "基本資訊"
+  tab_cluster:
+    en: "Cluster / Topology"
+    zh-CN: "集群/拓扑"
+    zh-HK: "叢集/拓撲"
+  tab_advanced:
+    en: "Advanced"
+    zh-CN: "高级"
+    zh-HK: "進階"
+  tab_remark:
+    en: "Remark"
+    zh-CN: "备注"
+    zh-HK: "備註"
+  testing:
+    en: "Testing..."
+    zh-CN: "测试中"
+    zh-HK: "測試中"
+  test:
+    en: "Test"
+    zh-CN: "测试"
+    zh-HK: "測試"
+
+MongoCollection:
+  parse_failed:
+    en: "%{label} parse failed: %{error}"
+    zh-CN: "%{label}解析失败：%{error}"
+    zh-HK: "%{label}解析失敗：%{error}"
+  must_be_json_object:
+    en: "%{label} must be a JSON object."
+    zh-CN: "%{label}必须是 JSON 对象。"
+    zh-HK: "%{label}必須是 JSON 物件。"
+  required:
+    en: "%{label} cannot be empty."
+    zh-CN: "%{label}不能为空。"
+    zh-HK: "%{label}不能為空。"
+  must_be_min_int:
+    en: "%{label} must be an integer >= %{min}."
+    zh-CN: "%{label}必须是大于等于 %{min} 的整数。"
+    zh-HK: "%{label}必須是大於等於 %{min} 的整數。"
+  pipeline_parse_failed:
+    en: "Aggregation pipeline parse failed: %{error}"
+    zh-CN: "聚合管道解析失败：%{error}"
+    zh-HK: "聚合管道解析失敗：%{error}"
+  pipeline_must_be_array:
+    en: "Aggregation pipeline must be a JSON array."
+    zh-CN: "聚合管道必须是 JSON 数组。"
+    zh-HK: "聚合管道必須是 JSON 陣列。"
+  pipeline_item_parse_failed:
+    en: "Aggregation pipeline item %{index} parse failed: %{error}"
+    zh-CN: "聚合管道第 %{index} 项解析失败：%{error}"
+    zh-HK: "聚合管道第 %{index} 項解析失敗：%{error}"
+  pipeline_item_must_be_object:
+    en: "Aggregation pipeline item %{index} must be a JSON object."
+    zh-CN: "聚合管道第 %{index} 项必须是 JSON 对象。"
+    zh-HK: "聚合管道第 %{index} 項必須是 JSON 物件。"
+  filter_placeholder:
+    en: "Filter (JSON)"
+    zh-CN: "过滤条件 (JSON)"
+    zh-HK: "過濾條件 (JSON)"
+  sort_placeholder:
+    en: "Sort (JSON)"
+    zh-CN: "排序条件 (JSON)"
+    zh-HK: "排序條件 (JSON)"
+  projection_placeholder:
+    en: "Projection (JSON)"
+    zh-CN: "投影字段 (JSON)"
+    zh-HK: "投影欄位 (JSON)"
+  page_size_placeholder:
+    en: "Page size"
+    zh-CN: "每页数量"
+    zh-HK: "每頁數量"
+  skip_placeholder:
+    en: "Base skip"
+    zh-CN: "基础跳过"
+    zh-HK: "基礎跳過"
+  document_placeholder:
+    en: "Document (JSON)"
+    zh-CN: "文档内容 (JSON)"
+    zh-HK: "文件內容 (JSON)"
+  explain_placeholder:
+    en: "Explain result"
+    zh-CN: "执行计划结果"
+    zh-HK: "執行計畫結果"
+  pipeline_placeholder:
+    en: "Pipeline (JSON array)"
+    zh-CN: "聚合管道 (JSON 数组)"
+    zh-HK: "聚合管道 (JSON 陣列)"
+  aggregation_output_placeholder:
+    en: "Aggregation preview"
+    zh-CN: "聚合结果预览"
+    zh-HK: "聚合結果預覽"
+  schema_placeholder:
+    en: "Schema inference"
+    zh-CN: "Schema 推断结果"
+    zh-HK: "Schema 推斷結果"
+  index_name_optional:
+    en: "Index name (optional)"
+    zh-CN: "索引名称（可选）"
+    zh-HK: "索引名稱（可選）"
+  index_keys_placeholder:
+    en: "Index keys (JSON)"
+    zh-CN: "索引键 (JSON)"
+    zh-HK: "索引鍵 (JSON)"
+  index_name_placeholder:
+    en: "Index name"
+    zh-CN: "索引名称"
+    zh-HK: "索引名稱"
+  indexes_placeholder:
+    en: "Index list"
+    zh-CN: "索引列表"
+    zh-HK: "索引列表"
+  validation_placeholder:
+    en: "Validation rules (JSON)"
+    zh-CN: "校验规则 (JSON)"
+    zh-HK: "校驗規則 (JSON)"
+  filter_label:
+    en: "Filter"
+    zh-CN: "过滤条件"
+    zh-HK: "過濾條件"
+  sort_label:
+    en: "Sort"
+    zh-CN: "排序条件"
+    zh-HK: "排序條件"
+  projection_label:
+    en: "Projection"
+    zh-CN: "投影条件"
+    zh-HK: "投影條件"
+  page_size_label:
+    en: "Page size"
+    zh-CN: "每页数量"
+    zh-HK: "每頁數量"
+  skip_label:
+    en: "Base skip"
+    zh-CN: "基础跳过"
+    zh-HK: "基礎跳過"
+  document_label:
+    en: "Document"
+    zh-CN: "文档内容"
+    zh-HK: "文件內容"
+  document_created:
+    en: "Document created."
+    zh-CN: "文档已新增。"
+    zh-HK: "文件已新增。"
+  document_updated:
+    en: "Document updated."
+    zh-CN: "文档已更新。"
+    zh-HK: "文件已更新。"
+  operation_done:
+    en: "Operation completed."
+    zh-CN: "操作完成。"
+    zh-HK: "操作完成。"
+  id_required_for_update:
+    en: "Missing _id. Unable to update document."
+    zh-CN: "缺少 _id，无法更新文档。"
+    zh-HK: "缺少 _id，無法更新文件。"
+  connection_missing:
+    en: "Connection not found."
+    zh-CN: "连接不存在。"
+    zh-HK: "連接不存在。"
+  id_missing:
+    en: "Missing _id."
+    zh-CN: "缺少 _id。"
+    zh-HK: "缺少 _id。"
+  id_required_for_delete:
+    en: "Missing _id. Unable to delete document."
+    zh-CN: "缺少 _id，无法删除文档。"
+    zh-HK: "缺少 _id，無法刪除文件。"
+  document_deleted:
+    en: "Document deleted."
+    zh-CN: "文档已删除。"
+    zh-HK: "文件已刪除。"
+  document_copied:
+    en: "Document copied."
+    zh-CN: "文档内容已复制。"
+    zh-HK: "文件內容已複製。"
+  export_data_title:
+    en: "Export Data"
+    zh-CN: "导出数据"
+    zh-HK: "匯出資料"
+  export_code_title:
+    en: "Export Code"
+    zh-CN: "导出代码"
+    zh-HK: "匯出程式碼"
+  copied_to_clipboard:
+    en: "Copied to clipboard."
+    zh-CN: "已复制到剪贴板。"
+    zh-HK: "已複製到剪貼簿。"
+  no_aggregation_to_export:
+    en: "No aggregation results to export."
+    zh-CN: "暂无可导出的聚合结果。"
+    zh-HK: "暫無可匯出的聚合結果。"
+  export_aggregation_title:
+    en: "Export Aggregation Results"
+    zh-CN: "导出聚合结果"
+    zh-HK: "匯出聚合結果"
+  index_keys_label:
+    en: "Index keys"
+    zh-CN: "索引键"
+    zh-HK: "索引鍵"
+  index_created:
+    en: "Index created."
+    zh-CN: "索引已创建。"
+    zh-HK: "索引已建立。"
+  index_name_required:
+    en: "Index name is required."
+    zh-CN: "索引名称不能为空。"
+    zh-HK: "索引名稱不能為空。"
+  index_deleted:
+    en: "Index deleted."
+    zh-CN: "索引已删除。"
+    zh-HK: "索引已刪除。"
+  validation_label:
+    en: "Validation rules"
+    zh-CN: "校验规则"
+    zh-HK: "校驗規則"
+  validation_updated:
+    en: "Validation rules updated."
+    zh-CN: "校验规则已更新。"
+    zh-HK: "校驗規則已更新。"
+  validation_cleared:
+    en: "Validation rules cleared."
+    zh-CN: "校验规则已清除。"
+    zh-HK: "校驗規則已清除。"
+  select_collection:
+    en: "Select a collection."
+    zh-CN: "请选择集合。"
+    zh-HK: "請選擇集合。"
+  tab_documents:
+    en: "Documents"
+    zh-CN: "文档"
+    zh-HK: "文件"
+  tab_aggregations:
+    en: "Aggregations"
+    zh-CN: "聚合"
+    zh-HK: "聚合"
+  tab_schema:
+    en: "Schema"
+    zh-CN: "结构"
+    zh-HK: "結構"
+  tab_indexes:
+    en: "Indexes"
+    zh-CN: "索引"
+    zh-HK: "索引"
+  tab_validation:
+    en: "Validation"
+    zh-CN: "校验"
+    zh-HK: "校驗"
+  explain:
+    en: "Explain"
+    zh-CN: "执行计划"
+    zh-HK: "執行計畫"
+  reset:
+    en: "Reset"
+    zh-CN: "重置"
+    zh-HK: "重置"
+  query:
+    en: "Query"
+    zh-CN: "查询"
+    zh-HK: "查詢"
+  options:
+    en: "Options"
+    zh-CN: "选项"
+    zh-HK: "選項"
+  add:
+    en: "Add"
+    zh-CN: "新增"
+    zh-HK: "新增"
+  update:
+    en: "Update"
+    zh-CN: "更新"
+    zh-HK: "更新"
+  export_data:
+    en: "Export Data"
+    zh-CN: "导出数据"
+    zh-HK: "匯出資料"
+  export_code:
+    en: "Export Code"
+    zh-CN: "导出代码"
+    zh-HK: "匯出程式碼"
+  result_count:
+    en: "Returned %{count} results"
+    zh-CN: "返回 %{count} 条结果"
+    zh-HK: "返回 %{count} 條結果"
+  run:
+    en: "Run"
+    zh-CN: "运行"
+    zh-HK: "執行"
+  export_result:
+    en: "Export Results"
+    zh-CN: "导出结果"
+    zh-HK: "匯出結果"
+  pipeline_label:
+    en: "Pipeline"
+    zh-CN: "聚合管道"
+    zh-HK: "聚合管道"
+  result_preview_label:
+    en: "Result preview"
+    zh-CN: "结果预览"
+    zh-HK: "結果預覽"
+  sample_count:
+    en: "Samples %{count}"
+    zh-CN: "样本数量 %{count}"
+    zh-HK: "樣本數量 %{count}"
+  resample:
+    en: "Resample"
+    zh-CN: "重新采样"
+    zh-HK: "重新取樣"
+  index_count:
+    en: "Indexes %{count}"
+    zh-CN: "索引数量 %{count}"
+    zh-HK: "索引數量 %{count}"
+  refresh_indexes:
+    en: "Refresh indexes"
+    zh-CN: "刷新索引"
+    zh-HK: "刷新索引"
+  create_index_label:
+    en: "Create index"
+    zh-CN: "创建索引"
+    zh-HK: "建立索引"
+  drop_index_label:
+    en: "Drop index"
+    zh-CN: "删除索引"
+    zh-HK: "刪除索引"
+  refresh_validation:
+    en: "Refresh rules"
+    zh-CN: "刷新规则"
+    zh-HK: "刷新規則"
+  save_validation:
+    en: "Save rules"
+    zh-CN: "保存规则"
+    zh-HK: "保存規則"
+  clear_validation:
+    en: "Clear rules"
+    zh-CN: "清除规则"
+    zh-HK: "清除規則"
+  clone:
+    en: "Clone"
+    zh-CN: "克隆"
+    zh-HK: "複製"
+  no_documents:
+    en: "No documents."
+    zh-CN: "暂无文档。"
+    zh-HK: "暫無文件。"
+  documents_title:
+    en: "Documents (%{total})"
+    zh-CN: "文档 (%{total})"
+    zh-HK: "文件 (%{total})"
+  explain_result_title:
+    en: "Explain result"
+    zh-CN: "执行计划结果"
+    zh-HK: "執行計畫結果"
+  new_document:
+    en: "New document"
+    zh-CN: "新建文档"
+    zh-HK: "新建文件"
+  edit_document:
+    en: "Edit document"
+    zh-CN: "编辑文档"
+    zh-HK: "編輯文件"
+  document_detail:
+    en: "Document details"
+    zh-CN: "文档详情"
+    zh-HK: "文件詳情"
+  document_with_id:
+    en: "Document %{id}"
+    zh-CN: "文档 %{id}"
+    zh-HK: "文件 %{id}"
+  select_document:
+    en: "Select a document."
+    zh-CN: "请选择文档。"
+    zh-HK: "請選擇文件。"
+  pagination_summary:
+    en: "Showing %{start}-%{end} / %{total}"
+    zh-CN: "显示 %{start}-%{end} / %{total}"
+    zh-HK: "顯示 %{start}-%{end} / %{total}"
+  page_summary:
+    en: "Page %{current} / %{total}"
+    zh-CN: "第 %{current} / %{total} 页"
+    zh-HK: "第 %{current} / %{total} 頁"
+  select_collection_prompt:
+    en: "Please select a collection."
+    zh-CN: "请选择一个集合。"
+    zh-HK: "請選擇一個集合。"

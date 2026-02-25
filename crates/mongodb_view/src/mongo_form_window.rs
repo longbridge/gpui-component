@@ -7,6 +7,7 @@ use one_core::connection_notifier::{get_notifier, ConnectionDataEvent};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{MongoDBParams, StoredConnection, Workspace};
+use rust_i18n::t;
 use tracing::error;
 
 use crate::MongoManager;
@@ -27,7 +28,7 @@ impl WorkspaceSelectItem {
     fn none() -> Self {
         Self {
             id: None,
-            name: "无".to_string(),
+            name: t!("Common.none").to_string(),
         }
     }
 
@@ -95,9 +96,9 @@ impl MongoFormWindow {
         let editing_last_synced_at = config.editing_connection.as_ref().and_then(|c| c.last_synced_at);
 
         let title: SharedString = if is_editing {
-            "编辑 MongoDB 连接".to_string()
+            t!("MongoForm.edit_connection_title").to_string()
         } else {
-            "新建 MongoDB 连接".to_string()
+            t!("MongoForm.new_connection_title").to_string()
         }
         .into();
 
@@ -107,7 +108,8 @@ impl MongoFormWindow {
             .and_then(|connection| connection.to_mongodb_params().ok());
 
         let name_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("名称");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.name_placeholder").to_string());
             if let Some(connection) = &config.editing_connection {
                 state.set_value(connection.name.clone(), window, cx);
             }
@@ -120,7 +122,8 @@ impl MongoFormWindow {
             .unwrap_or_default();
 
         let host_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("主机 (例如 localhost 或 host1,host2)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.host_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if !parameters.host.is_empty() {
                     state.set_value(parameters.host.clone(), window, cx);
@@ -130,7 +133,8 @@ impl MongoFormWindow {
         });
 
         let port_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("端口 (默认 27017)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.port_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(port_value) = parameters.port {
                     state.set_value(port_value.to_string(), window, cx);
@@ -144,7 +148,8 @@ impl MongoFormWindow {
         });
 
         let database_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("默认数据库 (可选)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.database_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(database) = &parameters.database {
                     if !database.is_empty() {
@@ -156,7 +161,8 @@ impl MongoFormWindow {
         });
 
         let username_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("用户名 (可选)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.username_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(username) = &parameters.username {
                     if !username.is_empty() {
@@ -168,7 +174,9 @@ impl MongoFormWindow {
         });
 
         let password_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("密码 (可选)").masked(true);
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.password_placeholder").to_string())
+                .masked(true);
             if let Some(parameters) = &existing_parameters {
                 if let Some(password) = &parameters.password {
                     if !password.is_empty() {
@@ -180,7 +188,8 @@ impl MongoFormWindow {
         });
 
         let authentication_source_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("认证数据库 (authSource)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.auth_source_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(auth_source) = &parameters.auth_source {
                     if !auth_source.is_empty() {
@@ -192,7 +201,8 @@ impl MongoFormWindow {
         });
 
         let replica_set_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("副本集名称 (replicaSet)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.replica_set_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(replica_set) = &parameters.replica_set {
                     if !replica_set.is_empty() {
@@ -204,7 +214,8 @@ impl MongoFormWindow {
         });
 
         let read_preference_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("读偏好 (readPreference)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.read_preference_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(read_preference) = &parameters.read_preference {
                     if !read_preference.is_empty() {
@@ -216,7 +227,8 @@ impl MongoFormWindow {
         });
 
         let connect_timeout_seconds_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("连接超时 (秒)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.connect_timeout_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(timeout_seconds) = parameters.connect_timeout_seconds {
                     state.set_value(timeout_seconds.to_string(), window, cx);
@@ -226,7 +238,8 @@ impl MongoFormWindow {
         });
 
         let application_name_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("应用名 (appName)");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.app_name_placeholder").to_string());
             if let Some(parameters) = &existing_parameters {
                 if let Some(application_name) = &parameters.application_name {
                     if !application_name.is_empty() {
@@ -238,7 +251,8 @@ impl MongoFormWindow {
         });
 
         let remark_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("备注");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoForm.remark_placeholder").to_string());
             if let Some(connection) = &config.editing_connection {
                 if let Some(remark) = &connection.remark {
                     state.set_value(remark.clone(), window, cx);
@@ -327,7 +341,7 @@ impl MongoFormWindow {
         let host_value = self.host_input.read(cx).text().to_string();
         let host_value = host_value.trim().to_string();
         if host_value.is_empty() && self.existing_connection_string.is_empty() {
-            return Err("主机不能为空".to_string());
+            return Err(t!("MongoForm.host_required").to_string());
         }
 
         let port_text = self.port_input.read(cx).text().to_string();
@@ -338,7 +352,7 @@ impl MongoFormWindow {
             Some(
                 port_text
                     .parse::<u16>()
-                    .map_err(|_| "端口必须是数字".to_string())?,
+                    .map_err(|_| t!("MongoForm.port_must_be_number").to_string())?,
             )
         };
 
@@ -402,7 +416,7 @@ impl MongoFormWindow {
             Some(
                 connect_timeout_text
                     .parse::<u64>()
-                    .map_err(|_| "连接超时必须是数字".to_string())?,
+                    .map_err(|_| t!("MongoForm.timeout_must_be_number").to_string())?,
             )
         };
 
@@ -445,7 +459,7 @@ impl MongoFormWindow {
         };
 
         let test_name = if name.is_empty() {
-            "MongoDB".to_string()
+            t!("MongoForm.default_name").to_string()
         } else {
             name
         };
@@ -484,7 +498,7 @@ impl MongoFormWindow {
         };
         let name = self.name_input.read(cx).text().to_string();
         let name = if name.is_empty() {
-            "MongoDB".to_string()
+            t!("MongoForm.default_name").to_string()
         } else {
             name
         };
@@ -551,7 +565,10 @@ impl MongoFormWindow {
                     });
                 }
                 Err(error) => {
-                    error!("保存 MongoDB 连接失败: {}", error);
+                    error!(
+                        "{}",
+                        t!("MongoForm.save_connection_failed", error = error).to_string()
+                    );
                 }
             }
         })
@@ -577,26 +594,26 @@ impl MongoFormWindow {
     fn render_basic_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_2()
-            .child(self.render_form_row("名称", Input::new(&self.name_input)))
-            .child(self.render_form_row("主机", Input::new(&self.host_input)))
-            .child(self.render_form_row("端口", Input::new(&self.port_input)))
-            .child(self.render_form_row("默认数据库", Input::new(&self.database_input)))
-            .child(self.render_form_row("用户名", Input::new(&self.username_input)))
+            .child(self.render_form_row(t!("MongoForm.name_label").as_ref(), Input::new(&self.name_input)))
+            .child(self.render_form_row(t!("MongoForm.host_label").as_ref(), Input::new(&self.host_input)))
+            .child(self.render_form_row(t!("MongoForm.port_label").as_ref(), Input::new(&self.port_input)))
+            .child(self.render_form_row(t!("MongoForm.database_label").as_ref(), Input::new(&self.database_input)))
+            .child(self.render_form_row(t!("MongoForm.username_label").as_ref(), Input::new(&self.username_input)))
             .child(self.render_form_row(
-                "密码",
+                t!("MongoForm.password_label").as_ref(),
                 Input::new(&self.password_input).mask_toggle(),
             ))
             .child(self.render_form_row(
-                "认证数据库",
+                t!("MongoForm.auth_source_label").as_ref(),
                 Input::new(&self.authentication_source_input),
             ))
             .child(self.render_form_row(
-                "工作区",
+                t!("MongoForm.workspace_label").as_ref(),
                 Select::new(&self.workspace_select).w_full(),
             ))
             .child(
                 self.render_form_row(
-                    "云同步",
+                    t!("MongoForm.cloud_sync_label").as_ref(),
                     h_flex()
                         .gap_2()
                         .child(
@@ -611,7 +628,7 @@ impl MongoFormWindow {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("启用云同步"),
+                                .child(t!("MongoForm.cloud_sync_enabled").to_string()),
                         ),
                 ),
             )
@@ -622,7 +639,7 @@ impl MongoFormWindow {
             .gap_2()
             .child(
                 self.render_form_row(
-                    "使用 SRV",
+                    t!("MongoForm.use_srv").as_ref(),
                     Checkbox::new("mongo-use-srv")
                         .checked(self.use_srv_record)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -633,7 +650,7 @@ impl MongoFormWindow {
             )
             .child(
                 self.render_form_row(
-                    "直连",
+                    t!("MongoForm.direct_connection").as_ref(),
                     Checkbox::new("mongo-direct-connection")
                         .checked(self.direct_connection)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -642,9 +659,12 @@ impl MongoFormWindow {
                         })),
                 ),
             )
-            .child(self.render_form_row("副本集", Input::new(&self.replica_set_input)))
             .child(self.render_form_row(
-                "读偏好",
+                t!("MongoForm.replica_set_label").as_ref(),
+                Input::new(&self.replica_set_input),
+            ))
+            .child(self.render_form_row(
+                t!("MongoForm.read_preference_label").as_ref(),
                 Input::new(&self.read_preference_input),
             ))
     }
@@ -654,7 +674,7 @@ impl MongoFormWindow {
             .gap_2()
             .child(
                 self.render_form_row(
-                    "TLS",
+                    t!("MongoForm.tls_label").as_ref(),
                     Checkbox::new("mongo-use-tls")
                         .checked(self.use_tls)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -664,11 +684,11 @@ impl MongoFormWindow {
                 ),
             )
             .child(self.render_form_row(
-                "连接超时(秒)",
+                t!("MongoForm.connect_timeout_label").as_ref(),
                 Input::new(&self.connect_timeout_seconds_input),
             ))
             .child(self.render_form_row(
-                "应用名",
+                t!("MongoForm.app_name_label").as_ref(),
                 Input::new(&self.application_name_input),
             ))
     }
@@ -676,7 +696,7 @@ impl MongoFormWindow {
     fn render_remark_tab(&self) -> impl IntoElement {
         v_flex()
             .gap_2()
-            .child(self.render_form_row("备注", Input::new(&self.remark_input)))
+            .child(self.render_form_row(t!("MongoForm.remark_label").as_ref(), Input::new(&self.remark_input)))
     }
 }
 
@@ -696,7 +716,7 @@ impl Render for MongoFormWindow {
                 div()
                     .text_sm()
                     .text_color(cx.theme().success)
-                    .child("连接成功"),
+                    .child(t!("MongoForm.test_success").to_string()),
             ),
             Some(Err(error)) => Some(
                 div()
@@ -733,10 +753,10 @@ impl Render for MongoFormWindow {
                             this.active_tab = *ix;
                             cx.notify();
                         }))
-                        .child(Tab::new().label("基本信息"))
-                        .child(Tab::new().label("集群/拓扑"))
-                        .child(Tab::new().label("高级"))
-                        .child(Tab::new().label("备注")),
+                        .child(Tab::new().label(t!("MongoForm.tab_basic").to_string()))
+                        .child(Tab::new().label(t!("MongoForm.tab_cluster").to_string()))
+                        .child(Tab::new().label(t!("MongoForm.tab_advanced").to_string()))
+                        .child(Tab::new().label(t!("MongoForm.tab_remark").to_string())),
                 ),
             )
             .child(
@@ -767,7 +787,7 @@ impl Render for MongoFormWindow {
                     .child(
                         Button::new("cancel")
                             .small()
-                            .label("取消")
+                            .label(t!("Common.cancel").to_string())
                             .on_click(|_, window, _cx| {
                                 window.remove_window();
                             }),
@@ -777,7 +797,11 @@ impl Render for MongoFormWindow {
                             .small()
                             .outline()
                             .icon(IconName::Refresh)
-                            .label(if is_testing { "测试中" } else { "测试" })
+                            .label(if is_testing {
+                                t!("MongoForm.testing").to_string()
+                            } else {
+                                t!("MongoForm.test").to_string()
+                            })
                             .disabled(is_testing)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.on_test(window, cx);
@@ -787,7 +811,7 @@ impl Render for MongoFormWindow {
                         Button::new("ok")
                             .small()
                             .primary()
-                            .label("保存")
+                            .label(t!("Common.save").to_string())
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.on_save(window, cx);
                             })),

@@ -6,6 +6,7 @@ use gpui::{AnyElement, App, AppContext, AsyncApp, ClipboardItem, Context, Entity
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, dialog::DialogButtonProps, h_flex, input::{Input, InputEvent, InputState}, menu::{ContextMenuExt, PopupMenu, PopupMenuItem}, notification::Notification, spinner::Spinner, v_flex, WindowExt as _};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::{ActiveConnections, StoredConnection};
+use rust_i18n::t;
 use tracing::{info, warn};
 
 use crate::{GlobalMongoState, MongoManager, MongoNode, MongoNodeType};
@@ -51,7 +52,7 @@ impl MongoTreeView {
         let scroll_handle = UniformListScrollHandle::new();
         let search_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("搜索连接")
+                .placeholder(t!("MongoTree.search_connections").to_string())
                 .clean_on_escape()
         });
         let search_sub = cx.subscribe(&search_input, |this, input, event: &InputEvent, cx| {
@@ -134,11 +135,21 @@ impl MongoTreeView {
         }
 
         let Some(connection) = self.stored_connections.get(&node_id).cloned() else {
-            warn!("未找到 MongoDB 连接配置: {}", node_id);
+            warn!(
+                "{}",
+                t!(
+                    "MongoTree.connection_config_not_found",
+                    node_id = node_id
+                )
+                .to_string()
+            );
             return;
         };
 
-        info!("正在连接 MongoDB: {}", connection.name);
+        info!(
+            "{}",
+            t!("MongoTree.connecting_mongo", name = connection.name).to_string()
+        );
 
         self.loading_nodes.insert(node_id.clone());
         self.error_nodes.remove(&node_id);
@@ -212,7 +223,7 @@ impl MongoTreeView {
                 async move {
                     let connection = global_state
                         .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        .ok_or_else(|| anyhow::anyhow!(t!("MongoTree.connection_missing")))?;
                     let guard = connection.read().await;
                     guard
                         .list_databases()
@@ -270,7 +281,7 @@ impl MongoTreeView {
                 async move {
                     let connection = global_state
                         .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        .ok_or_else(|| anyhow::anyhow!(t!("MongoTree.connection_missing")))?;
                     let guard = connection.read().await;
                     guard
                         .list_collections(&database_name)
@@ -577,7 +588,7 @@ impl MongoTreeView {
 
         let collection_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("集合名称")
+                .placeholder(t!("MongoTree.collection_name_placeholder").to_string())
                 .clean_on_escape()
         });
         collection_input.update(cx, |state, cx| {
@@ -593,26 +604,29 @@ impl MongoTreeView {
             let database_name_for_ok = database_name.clone();
 
             dialog
-                .title("创建集合")
+                .title(t!("MongoTree.create_collection_title").to_string())
                 .w(px(420.0))
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(div().text_sm().child("集合名称"))
+                        .child(div().text_sm().child(t!("MongoTree.collection_name_label")))
                         .child(Input::new(&collection_input).w_full()),
                 )
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("创建".to_string())
-                        .cancel_text("取消".to_string()),
+                        .ok_text(t!("Common.create").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
                 )
                 .on_ok(move |_, window, cx| {
                     let name = input_for_ok.read(cx).text().to_string();
                     let name = name.trim().to_string();
                     if name.is_empty() {
                         window.push_notification(
-                            Notification::warning("集合名称不能为空").autohide(true),
+                            Notification::warning(
+                                t!("MongoTree.collection_name_required").to_string()
+                            )
+                            .autohide(true),
                             cx,
                         );
                         return false;
@@ -639,12 +653,12 @@ impl MongoTreeView {
     ) {
         let database_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("数据库名称")
+                .placeholder(t!("MongoTree.database_name_placeholder").to_string())
                 .clean_on_escape()
         });
         let collection_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("初始集合名称")
+                .placeholder(t!("MongoTree.initial_collection_placeholder").to_string())
                 .clean_on_escape()
         });
 
@@ -660,21 +674,21 @@ impl MongoTreeView {
             let connection_id_for_ok = connection_id.clone();
 
             dialog
-                .title("创建数据库")
+                .title(t!("MongoTree.create_database_title").to_string())
                 .w(px(460.0))
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(div().text_sm().child("数据库名称"))
+                        .child(div().text_sm().child(t!("MongoTree.database_name_label")))
                         .child(Input::new(&database_input).w_full())
-                        .child(div().text_sm().child("初始集合名称"))
+                        .child(div().text_sm().child(t!("MongoTree.initial_collection_label")))
                         .child(Input::new(&collection_input).w_full()),
                 )
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("创建".to_string())
-                        .cancel_text("取消".to_string()),
+                        .ok_text(t!("Common.create").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
                 )
                 .on_ok(move |_, window, cx| {
                     let database_name = db_input_for_ok.read(cx).text().to_string();
@@ -683,7 +697,10 @@ impl MongoTreeView {
                     let collection_name = collection_name.trim().to_string();
                     if database_name.is_empty() || collection_name.is_empty() {
                         window.push_notification(
-                            Notification::warning("数据库名称与集合名称不能为空").autohide(true),
+                            Notification::warning(
+                                t!("MongoTree.database_and_collection_required").to_string()
+                            )
+                            .autohide(true),
                             cx,
                         );
                         return false;
@@ -726,18 +743,24 @@ impl MongoTreeView {
             let database_name_for_ok = database_name.clone();
 
             dialog
-                .title("删除数据库")
+                .title(t!("MongoTree.delete_database_title").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除数据库 \"{}\" 吗？", database_name))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "MongoTree.confirm_delete_database",
+                                name = database_name
+                            )
+                            .to_string()
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("删除".to_string())
-                        .cancel_text("取消".to_string()),
+                        .ok_text(t!("Common.delete").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
                 )
                 .on_ok(move |_, window, cx| {
                     view_for_ok.update(cx, |view, cx| {
@@ -760,20 +783,34 @@ impl MongoTreeView {
         cx: &mut Context<Self>,
     ) {
         let Some(stored) = self.stored_connections.get(&connection_id).cloned() else {
-            Self::notify_error("未找到连接信息", cx);
+            Self::notify_error(t!("MongoTree.connection_info_not_found").as_ref(), cx);
             return;
         };
         let config = match MongoManager::config_from_stored(&stored) {
             Ok(config) => config,
             Err(error) => {
-                Self::notify_error(&format!("读取连接信息失败: {}", error), cx);
+                Self::notify_error(
+                    &t!(
+                        "MongoTree.read_connection_info_failed",
+                        error = error
+                    )
+                    .to_string(),
+                    cx,
+                );
                 return;
             }
         };
         let params = match stored.to_mongodb_params() {
             Ok(params) => params,
             Err(error) => {
-                Self::notify_error(&format!("解析连接参数失败: {}", error), cx);
+                Self::notify_error(
+                    &t!(
+                        "MongoTree.parse_connection_params_failed",
+                        error = error
+                    )
+                    .to_string(),
+                    cx,
+                );
                 return;
             }
         };
@@ -805,37 +842,50 @@ impl MongoTreeView {
             let connection_string = connection_string.clone();
 
             dialog
-                .title("连接信息")
+                .title(t!("MongoTree.connection_info_title").to_string())
                 .w(px(720.0))
                 .child(
                     v_flex()
                         .gap_3()
-                        .child(div().text_sm().child(format!("连接名称：{}", connection_name)))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(
+                                    t!(
+                                        "MongoTree.connection_name_display",
+                                        name = connection_name
+                                    )
+                                    .to_string()
+                                )
+                        )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child("连接字符串"))
+                                .child(div().text_sm().child(t!("MongoTree.connection_string_label")))
                                 .child(Input::new(&connection_input).w_full().disabled(true)),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child("连接参数"))
+                                .child(div().text_sm().child(t!("MongoTree.connection_params_label")))
                                 .child(Input::new(&params_input).w_full().disabled(true)),
                         ),
                 )
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("复制连接字符串".to_string())
-                        .cancel_text("关闭".to_string()),
+                        .ok_text(t!("MongoTree.copy_connection_string").to_string())
+                        .cancel_text(t!("Common.close").to_string()),
                 )
                 .on_ok(move |_, window, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(
                         connection_string.clone(),
                     ));
                     window.push_notification(
-                        Notification::success("已复制连接字符串").autohide(true),
+                        Notification::success(
+                            t!("MongoTree.connection_string_copied").to_string()
+                        )
+                        .autohide(true),
                         cx,
                     );
                     window.close_dialog(cx);
@@ -858,7 +908,7 @@ impl MongoTreeView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| anyhow::anyhow!(t!("MongoTree.connection_missing")))?;
                 let guard = connection.read().await;
                 guard
                     .create_collection(&database_name, &collection_name)
@@ -869,10 +919,13 @@ impl MongoTreeView {
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
                     view.refresh_database_by_id(&database_node_id, cx);
-                    Self::notify_success("集合创建成功", cx);
+                    Self::notify_success(t!("MongoTree.collection_created").as_ref(), cx);
                 }
                 Err(error) => {
-                    Self::notify_error(&format!("创建集合失败: {}", error), cx);
+                    Self::notify_error(
+                        &t!("MongoTree.create_collection_failed", error = error).to_string(),
+                        cx,
+                    );
                 }
             });
         })
@@ -894,7 +947,7 @@ impl MongoTreeView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id_for_task)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| anyhow::anyhow!(t!("MongoTree.connection_missing")))?;
                 let guard = connection.read().await;
                 guard
                     .create_collection(&database_name, &collection_name)
@@ -905,10 +958,13 @@ impl MongoTreeView {
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
                     view.refresh_connection(&connection_id_for_update, cx);
-                    Self::notify_success("数据库创建成功", cx);
+                    Self::notify_success(t!("MongoTree.database_created").as_ref(), cx);
                 }
                 Err(error) => {
-                    Self::notify_error(&format!("创建数据库失败: {}", error), cx);
+                    Self::notify_error(
+                        &t!("MongoTree.create_database_failed", error = error).to_string(),
+                        cx,
+                    );
                 }
             });
         })
@@ -931,7 +987,7 @@ impl MongoTreeView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id_for_task)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| anyhow::anyhow!(t!("MongoTree.connection_missing")))?;
                 let guard = connection.read().await;
                 guard
                     .drop_database(&database_name_for_task)
@@ -949,10 +1005,13 @@ impl MongoTreeView {
                     if view.selected_node.as_deref() == Some(database_node_id.as_str()) {
                         view.selected_node = None;
                     }
-                    Self::notify_success("数据库已删除", cx);
+                    Self::notify_success(t!("MongoTree.database_deleted").as_ref(), cx);
                 }
                 Err(error) => {
-                    Self::notify_error(&format!("删除数据库失败: {}", error), cx);
+                    Self::notify_error(
+                        &t!("MongoTree.delete_database_failed", error = error).to_string(),
+                        cx,
+                    );
                 }
             });
         })
@@ -982,10 +1041,16 @@ impl MongoTreeView {
                 match result {
                     Ok(_) => {
                         view.clear_connection_state(&connection_id_for_update, cx);
-                        Self::notify_success("已断开连接", cx);
+                        Self::notify_success(
+                            t!("MongoTree.connection_disconnected").as_ref(),
+                            cx,
+                        );
                     }
                     Err(error) => {
-                        Self::notify_error(&format!("断开连接失败: {}", error), cx);
+                        Self::notify_error(
+                            &t!("MongoTree.disconnect_failed", error = error).to_string(),
+                            cx,
+                        );
                     }
                 }
             });
@@ -1234,7 +1299,7 @@ impl MongoTreeView {
                 let node_id_for_action = node_id.to_string();
                 if !is_connected {
                     menu = menu.item(
-                        PopupMenuItem::new("连接").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_connect").to_string()).on_click(window.listener_for(
                             &view_for_action,
                             move |view, _, _, cx| {
                                 view.connect_node(node_id_for_action.clone(), cx);
@@ -1243,7 +1308,7 @@ impl MongoTreeView {
                     );
                 } else {
                     menu = menu.item(
-                        PopupMenuItem::new("刷新数据库").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_refresh_databases").to_string()).on_click(window.listener_for(
                             &view_for_action,
                             move |view, _, _, cx| {
                                 view.refresh_connection(&node_id_for_action, cx);
@@ -1271,7 +1336,7 @@ impl MongoTreeView {
 
                 menu = menu
                     .item(
-                        PopupMenuItem::new("创建集合").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_create_collection").to_string()).on_click(window.listener_for(
                             &view_for_create_collection,
                             move |view, _, window, cx| {
                                 view.open_create_collection_dialog(
@@ -1283,7 +1348,7 @@ impl MongoTreeView {
                         )),
                     )
                     .item(
-                        PopupMenuItem::new("创建数据库").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_create_database").to_string()).on_click(window.listener_for(
                             &view_for_create_database,
                             move |view, _, window, cx| {
                                 view.open_create_database_dialog(
@@ -1295,7 +1360,7 @@ impl MongoTreeView {
                         )),
                     )
                     .item(
-                        PopupMenuItem::new("删除数据库").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_delete_database").to_string()).on_click(window.listener_for(
                             &view_for_drop_database,
                             move |view, _, window, cx| {
                                 view.open_drop_database_dialog(
@@ -1308,23 +1373,29 @@ impl MongoTreeView {
                     )
                     .separator()
                     .item(
-                        PopupMenuItem::new("打开 MongoDB Shell").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_open_shell").to_string()).on_click(window.listener_for(
                             &view_for_shell,
                             move |_, _, _, cx| {
-                                Self::notify_info("打开 MongoDB Shell 功能暂未实现", cx);
+                                Self::notify_info(
+                                    t!("MongoTree.shell_not_implemented").as_ref(),
+                                    cx,
+                                );
                             },
                         )),
                     )
                     .item(
-                        PopupMenuItem::new("查看性能指标").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_show_metrics").to_string()).on_click(window.listener_for(
                             &view_for_metrics,
                             move |_, _, _, cx| {
-                                Self::notify_info("性能指标视图暂未实现", cx);
+                                Self::notify_info(
+                                    t!("MongoTree.metrics_not_implemented").as_ref(),
+                                    cx,
+                                );
                             },
                         )),
                     )
                     .item(
-                        PopupMenuItem::new("显示连接信息").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_show_connection_info").to_string()).on_click(window.listener_for(
                             &view_for_connection_info,
                             move |view, _, window, cx| {
                                 view.open_connection_info_dialog(
@@ -1337,7 +1408,7 @@ impl MongoTreeView {
                     )
                     .separator()
                     .item(
-                        PopupMenuItem::new("刷新数据库").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_refresh_databases").to_string()).on_click(window.listener_for(
                             &view_for_refresh,
                             move |view, _, _, cx| {
                                 view.refresh_connection(&connection_id_for_refresh, cx);
@@ -1345,7 +1416,7 @@ impl MongoTreeView {
                         )),
                     )
                     .item(
-                        PopupMenuItem::new("断开连接").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_disconnect").to_string()).on_click(window.listener_for(
                             &view_for_disconnect,
                             move |view, _, _, cx| {
                                 view.disconnect_connection(
@@ -1363,7 +1434,7 @@ impl MongoTreeView {
                 let node_id_for_tab = node_id.to_string();
                 menu = menu
                     .item(
-                        PopupMenuItem::new("打开集合").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_open_collection").to_string()).on_click(window.listener_for(
                             &view_for_action,
                             move |view, _, _, cx| {
                                 view.open_collection(&node_id_for_action, cx);
@@ -1371,7 +1442,7 @@ impl MongoTreeView {
                         )),
                     )
                     .item(
-                        PopupMenuItem::new("在新标签页打开").on_click(window.listener_for(
+                        PopupMenuItem::new(t!("MongoTree.menu_open_in_new_tab").to_string()).on_click(window.listener_for(
                             &view_for_tab,
                             move |view, _, _, cx| {
                                 view.open_collection_in_tab(&node_id_for_tab, cx);
@@ -1399,9 +1470,9 @@ impl Render for MongoTreeView {
         let connection_count = self.connection_order.len();
         let is_filtering = !self.search_query.trim().is_empty();
         let empty_message = if is_filtering {
-            "未找到匹配的连接"
+            t!("MongoTree.no_matching_connections").to_string()
         } else {
-            "暂无连接"
+            t!("MongoTree.no_connections").to_string()
         };
 
         v_flex()
@@ -1425,7 +1496,7 @@ impl Render for MongoTreeView {
                                     .gap_1()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("CONNECTIONS")
+                                    .child(t!("MongoTree.connections_header").to_string())
                                     .child(format!("({})", connection_count)),
                             ),
                     )

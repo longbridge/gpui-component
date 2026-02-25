@@ -12,6 +12,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     slider::{Slider, SliderEvent, SliderState},
 };
+use rust_i18n::t;
 
 // ============================================================================
 // 模型设置数据结构
@@ -117,14 +118,14 @@ pub struct ModelSettingsLabels {
 impl Default for ModelSettingsLabels {
     fn default() -> Self {
         Self {
-            title: "模型设置".to_string(),
-            temperature_label: "温度".to_string(),
-            temperature_desc: "控制输出随机性，值越高越随机".to_string(),
-            history_label: "历史记录".to_string(),
-            history_desc: "对话时携带的历史消息数".to_string(),
-            max_tokens_label: "最大 Token".to_string(),
-            max_tokens_desc: "模型输出的最大 token 数".to_string(),
-            footer_notice: "设置将立即生效".to_string(),
+            title: t!("AiChat.model_settings_title").to_string(),
+            temperature_label: t!("AiChat.temperature_label").to_string(),
+            temperature_desc: t!("AiChat.temperature_desc").to_string(),
+            history_label: t!("AiChat.history_label").to_string(),
+            history_desc: t!("AiChat.history_desc").to_string(),
+            max_tokens_label: t!("AiChat.max_tokens_label").to_string(),
+            max_tokens_desc: t!("AiChat.max_tokens_desc").to_string(),
+            footer_notice: t!("AiChat.settings_footer_notice").to_string(),
         }
     }
 }

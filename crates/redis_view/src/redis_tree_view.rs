@@ -18,6 +18,7 @@ use gpui_component::{
     spinner::Spinner,
 };
 use one_core::gpui_tokio::Tokio;
+use rust_i18n::t;
 use one_core::storage::{ActiveConnections, StoredConnection};
 use tracing::{info, warn};
 
@@ -89,7 +90,7 @@ impl RedisTreeView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("搜索键...")
+                .placeholder(t!("RedisTree.search_placeholder").to_string())
         });
 
         cx.subscribe(&search_state, |this, _, event: &InputEvent, cx| {
@@ -213,11 +214,17 @@ impl RedisTreeView {
         }
 
         let Some(connection) = self.stored_connections.get(&node_id).cloned() else {
-            warn!("未找到连接配置: {}", node_id);
+            warn!(
+                "{}",
+                t!("RedisTree.connection_config_missing", node_id = node_id).to_string()
+            );
             return;
         };
 
-        info!("正在连接 Redis: {}", connection.name);
+        info!(
+            "{}",
+            t!("RedisTree.connecting", name = connection.name).to_string()
+        );
 
         // 标记为正在加载
         self.loading_nodes.insert(node_id.clone());
@@ -290,9 +297,9 @@ impl RedisTreeView {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        let conn = global_state
+                            .get_connection(&connection_id)
+                            .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                     let guard = conn.read().await;
                     guard.get_databases_info().await
                         .map_err(|e| anyhow::anyhow!("{}", e))
@@ -987,7 +994,7 @@ impl RedisTreeView {
                                                         .with_size(Size::Small)
                                                         .text_color(cx.theme().warning),
                                                 )
-                                                .child("连接错误"),
+                                                .child(t!("RedisTree.connection_error").to_string()),
                                         )
                                         .child(
                                             Clipboard::new(SharedString::from(format!(
@@ -1059,7 +1066,9 @@ impl RedisTreeView {
                                 let view_for_open = view_for_context.clone();
                                 let node_id_for_open = node_id_for_context.clone();
                                 menu.item(
-                                    PopupMenuItem::new("在新标签页中打开")
+                                    PopupMenuItem::new(
+                                        t!("RedisTree.menu_open_in_new_tab").to_string(),
+                                    )
                                         .on_click(window.listener_for(&view_for_open, move |_view, _, _, cx| {
                                             cx.emit(RedisTreeViewEvent::OpenKeyInNewTab {
                                                 node_id: node_id_for_open.clone(),
@@ -1079,7 +1088,9 @@ impl RedisTreeView {
                                     let node_id_for_refresh = node_id_for_context.clone();
                                     let node_id_for_disconnect = node_id_for_context.clone();
                                     menu.item(
-                                        PopupMenuItem::new("打开 CLI")
+                                        PopupMenuItem::new(
+                                            t!("RedisTree.menu_open_cli").to_string(),
+                                        )
                                             .on_click(window.listener_for(&view_for_cli, move |_view, _, _, cx| {
                                                 cx.emit(RedisTreeViewEvent::OpenCli {
                                                     connection_id: connection_id_for_cli.clone(),
@@ -1089,7 +1100,9 @@ impl RedisTreeView {
                                     )
                                     .separator()
                                     .item(
-                                        PopupMenuItem::new("新建 Key")
+                                        PopupMenuItem::new(
+                                            t!("RedisTree.menu_create_key").to_string(),
+                                        )
                                             .on_click(window.listener_for(&view_for_create, move |_view, _, _, cx| {
                                                 cx.emit(RedisTreeViewEvent::CreateKey {
                                                     node_id: node_id_for_create.clone(),
@@ -1098,7 +1111,9 @@ impl RedisTreeView {
                                     )
                                     .separator()
                                     .item(
-                                        PopupMenuItem::new("刷新")
+                                        PopupMenuItem::new(
+                                            t!("Common.refresh").to_string(),
+                                        )
                                             .on_click(window.listener_for(&view_for_refresh, move |view, _, _, cx| {
                                                 if let Some(node) = view.nodes.get_mut(&node_id_for_refresh) {
                                                     node.children_loaded = false;
@@ -1110,7 +1125,9 @@ impl RedisTreeView {
                                     )
                                     .separator()
                                     .item(
-                                        PopupMenuItem::new("断开连接")
+                                        PopupMenuItem::new(
+                                            t!("RedisTree.menu_disconnect").to_string(),
+                                        )
                                             .on_click(window.listener_for(&view_for_disconnect, move |view, _, _, cx| {
                                                 view.disconnect_connection(&node_id_for_disconnect, cx);
                                                 cx.emit(RedisTreeViewEvent::CloseConnection {
@@ -1123,7 +1140,9 @@ impl RedisTreeView {
                                     let view_for_connect = view_for_context.clone();
                                     let node_id_for_connect = node_id_for_context.clone();
                                     menu.item(
-                                        PopupMenuItem::new("连接")
+                                        PopupMenuItem::new(
+                                            t!("RedisTree.menu_connect").to_string(),
+                                        )
                                             .on_click(window.listener_for(&view_for_connect, move |view, _, _, cx| {
                                                 view.connect_node(node_id_for_connect.clone(), cx);
                                             }))
@@ -1140,7 +1159,9 @@ impl RedisTreeView {
                                 let node_id_for_create = node_id_for_context.clone();
                                 let node_id_for_refresh = node_id_for_context.clone();
                                 menu.item(
-                                    PopupMenuItem::new("打开 CLI")
+                                    PopupMenuItem::new(
+                                        t!("RedisTree.menu_open_cli").to_string(),
+                                    )
                                         .on_click(window.listener_for(&view_for_cli, move |_view, _, _, cx| {
                                             cx.emit(RedisTreeViewEvent::OpenCli {
                                                 connection_id: connection_id_for_cli.clone(),
@@ -1150,7 +1171,9 @@ impl RedisTreeView {
                                 )
                                 .separator()
                                 .item(
-                                    PopupMenuItem::new("新建 Key")
+                                    PopupMenuItem::new(
+                                        t!("RedisTree.menu_create_key").to_string(),
+                                    )
                                         .on_click(window.listener_for(&view_for_create, move |_view, _, _, cx| {
                                             cx.emit(RedisTreeViewEvent::CreateKey {
                                                 node_id: node_id_for_create.clone(),
@@ -1159,7 +1182,9 @@ impl RedisTreeView {
                                 )
                                 .separator()
                                 .item(
-                                    PopupMenuItem::new("刷新")
+                                    PopupMenuItem::new(
+                                        t!("Common.refresh").to_string(),
+                                    )
                                         .on_click(window.listener_for(&view_for_refresh, move |view, _, _, cx| {
                                             if let Some(node) = view.nodes.get_mut(&node_id_for_refresh) {
                                                 node.children_loaded = false;
@@ -1175,7 +1200,9 @@ impl RedisTreeView {
                                 let view_for_refresh = view_for_context.clone();
                                 let node_id_for_refresh = node_id_for_context.clone();
                                 menu.item(
-                                    PopupMenuItem::new("刷新")
+                                    PopupMenuItem::new(
+                                        t!("Common.refresh").to_string(),
+                                    )
                                         .on_click(window.listener_for(&view_for_refresh, move |view, _, _, cx| {
                                             // 刷新命名空间所在的数据库
                                             if let Some(node) = view.nodes.get(&node_id_for_refresh) {
@@ -1238,7 +1265,7 @@ impl Render for RedisTreeView {
                                 .items_center()
                                 .justify_center()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("暂无数据"),
+                                .child(t!("RedisTree.no_data").to_string()),
                         )
                     })
                     .when(!self.is_loading && entry_count > 0, |this| {

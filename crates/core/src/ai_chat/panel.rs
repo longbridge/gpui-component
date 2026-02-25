@@ -15,6 +15,7 @@ use gpui_component::{
     WindowExt as _,
 };
 use tracing::{info, warn};
+use rust_i18n::t;
 use tokio_util::sync::CancellationToken;
 use crate::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
 use crate::agent::registry::AgentRegistry;
@@ -308,7 +309,7 @@ impl AiChatPanel {
         // Agent 模式输入框
         let agent_input_state = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("向 AI 提问... (Enter 发送)")
+                .placeholder(t!("AiChat.input_placeholder").to_string())
                 .auto_grow(2, 6)
                 .default_value("")
         });
@@ -501,7 +502,9 @@ impl AiChatPanel {
 
     /// 确保会话存在，如果不存在则创建新会话
     fn ensure_session_id(&mut self, provider_id: &str, cx: &mut Context<Self>) -> Option<i64> {
-        let result = self.engine.ensure_session_id(provider_id, "新会话");
+        let result = self
+            .engine
+            .ensure_session_id(provider_id, t!("AiChat.new_session_name").as_ref());
         if result.is_some() && self.engine.is_new_session {
             // 新创建的会话，需要刷新历史列表（ensure_session_id 已经设置了 is_new_session）
             self.load_history_sessions(cx);
@@ -623,7 +626,7 @@ impl AiChatPanel {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(&current_name)
-                .placeholder("会话名称")
+                .placeholder(t!("AiChat.session_name_placeholder").to_string())
         });
 
         let panel_entity = cx.entity();
@@ -634,13 +637,13 @@ impl AiChatPanel {
             let panel_for_ok = panel_entity.clone();
 
             dialog
-                .title("重命名会话")
+                .title(t!("AiChat.rename_session_title").to_string())
                 .w(px(360.0))
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("保存")
-                        .cancel_text("取消")
+                        .ok_text(t!("Common.save").to_string())
+                        .cancel_text(t!("Common.cancel").to_string())
                 )
                 .on_ok(move |_, _window, cx| {
                     let new_name = input_for_ok.read(cx).value().to_string();
@@ -657,7 +660,7 @@ impl AiChatPanel {
                         .child(
                             div()
                                 .text_sm()
-                                .child("请输入新的会话名称：")
+                                .child(t!("AiChat.rename_session_prompt").to_string())
                         )
                         .child(
                             Input::new(&input_for_dialog)
@@ -732,7 +735,8 @@ impl AiChatPanel {
         }
 
         let Some(provider_id_str) = self.engine.provider_id.clone() else {
-            self.engine.push_assistant("请先选择 AI 提供商");
+            self.engine
+                .push_assistant(t!("AiChat.select_provider_first").to_string());
             cx.notify();
             return;
         };
@@ -740,7 +744,8 @@ impl AiChatPanel {
         let provider_id: i64 = match provider_id_str.parse() {
             Ok(id) => id,
             Err(_) => {
-                self.engine.push_assistant("无效的提供商 ID");
+                self.engine
+                    .push_assistant(t!("AiChat.invalid_provider_id").to_string());
                 cx.notify();
                 return;
             }
@@ -988,7 +993,7 @@ impl AiChatPanel {
                     .text_sm()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(fg)
-                    .child("AI 助手")
+                    .child(t!("AiChat.title").to_string())
             )
             .child(
                 h_flex()
@@ -1157,7 +1162,7 @@ impl AiChatPanel {
                                 .with_size(Size::Small)
                                 .danger()
                                 .icon(IconName::CircleX)
-                                .label("终止")
+                                .label(t!("AiChat.cancel").to_string())
                                 .on_click(cx.listener(|this, _, _window, cx| {
                                     this.cancel_current_operation(cx);
                                 }))
@@ -1167,7 +1172,7 @@ impl AiChatPanel {
                                 .with_size(Size::Small)
                                 .primary()
                                 .icon(IconName::ArrowRight)
-                                .label("发送")
+                                .label(t!("AiChat.send").to_string())
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.submit(window, cx);
                                 }))

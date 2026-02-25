@@ -456,7 +456,15 @@ impl DbTreeView {
                 let conn_config = match conn.to_db_connection() {
                     Ok(config) => config,
                     Err(e) => {
-                        tracing::error!("无法解析连接配置 {}: {}", id, e);
+                        tracing::error!(
+                            "{}",
+                            t!(
+                                "DbTreeView.parse_connection_config_failed",
+                                id = id,
+                                error = e
+                            )
+                            .to_string()
+                        );
                         continue;
                     }
                 };

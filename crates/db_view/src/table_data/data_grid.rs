@@ -12,6 +12,7 @@ use gpui_component::{
 };
 use one_ui::edit_table::{Column, EditTable, EditTableEvent, EditTableState};
 use tracing::{error, log::trace};
+use rust_i18n::t;
 
 use crate::table_data::copy_format::{CopyFormat, CopyFormatter, TableMetadata};
 use crate::sql_editor::SqlEditor;
@@ -395,7 +396,9 @@ impl DataGrid {
                     tracing::error!("load_data_with_clauses failed: {}", err);
                     cx.update(|cx| {
                         table_data_info.update(cx, |info, cx| {
-                            info.error_message = Some(format!("数据加载失败: {}", err));
+                            info.error_message = Some(
+                                t!("TableDataGrid.load_data_failed", error = err).to_string()
+                            );
                             cx.notify();
                         });
                         table.update(cx, |state, cx| {
@@ -520,7 +523,7 @@ impl DataGrid {
 
     pub fn open_export_view(&self, window: &mut Window, cx: &mut App) {
         if self.config.usage != DataGridUsage::TableData {
-            window.push_notification("当前结果不支持导出".to_string(), cx);
+            window.push_notification(t!("TableDataGrid.export_not_supported").to_string(), cx);
             return;
         }
 
@@ -581,7 +584,8 @@ impl DataGrid {
         }
 
         open_popup_window(
-            PopupWindowOptions::new("导出表").size(800.0, 600.0),
+            PopupWindowOptions::new(t!("TableDataGrid.export_table").to_string())
+                .size(800.0, 600.0),
             move |_window, _cx| export_view.clone(),
             cx,
         );
@@ -595,7 +599,7 @@ impl DataGrid {
         cx: &mut App,
     ) {
         if self.table.read(cx).delegate().is_loading() {
-            window.push_notification("数据加载中，暂无法导出".to_string(), cx);
+            window.push_notification(t!("TableDataGrid.export_loading").to_string(), cx);
             return;
         }
 
@@ -616,7 +620,7 @@ impl DataGrid {
             files: false,
             multiple: false,
             directories: true,
-            prompt: Some("选择导出目录".into()),
+            prompt: Some(t!("TableDataGrid.select_export_directory").into()),
         });
 
         cx.spawn(async move |cx: &mut AsyncApp| {
@@ -660,7 +664,11 @@ impl DataGrid {
                                         if let Some(window_id) = window_id {
                                             let _ = cx.update_window(window_id, |_entity, window, cx| {
                                                 window.push_notification(
-                                                    format!("导出失败: {}", error),
+                                                    t!(
+                                                        "TableDataGrid.export_failed",
+                                                        error = error
+                                                    )
+                                                    .to_string(),
                                                     cx,
                                                 );
                                             });
@@ -679,7 +687,10 @@ impl DataGrid {
                 let _ = cx.update(|cx| {
                     if let Some(window_id) = window_id {
                         let _ = cx.update_window(window_id, |_entity, window, cx| {
-                            window.push_notification("没有可导出的数据".to_string(), cx);
+                            window.push_notification(
+                                t!("TableDataGrid.no_data_to_export").to_string(),
+                                cx
+                            );
                         });
                     }
                 });
@@ -697,7 +708,10 @@ impl DataGrid {
                     let _ = cx.update(|cx| {
                         if let Some(window_id) = window_id {
                             let _ = cx.update_window(window_id, |_entity, window, cx| {
-                                window.push_notification("没有可导出的数据".to_string(), cx);
+                                window.push_notification(
+                                    t!("TableDataGrid.no_data_to_export").to_string(),
+                                    cx
+                                );
                             });
                         }
                     });
@@ -741,13 +755,21 @@ impl DataGrid {
                         match write_result {
                             Ok(()) => {
                                 window.push_notification(
-                                    format!("导出完成: {}", full_path.display()),
+                                    t!(
+                                        "TableDataGrid.export_complete",
+                                        path = full_path.display()
+                                    )
+                                    .to_string(),
                                     cx,
                                 );
                             }
                             Err(error) => {
                                 window.push_notification(
-                                    format!("导出失败: {}", error),
+                                    t!(
+                                        "TableDataGrid.export_failed",
+                                        error = error
+                                    )
+                                    .to_string(),
                                     cx,
                                 );
                             }
@@ -1076,7 +1098,7 @@ impl DataGrid {
     fn show_large_text_editor(&self, window: &mut Window, cx: &mut App) {
         let table = self.table.read(cx);
         let Some((row_ix, col_ix)) = table.selected_cell() else {
-            window.push_notification("请选择一个单元格".to_string(), cx);
+            window.push_notification(t!("TableData.select_cell").to_string(), cx);
             return;
         };
 
@@ -1098,8 +1120,13 @@ impl DataGrid {
             .columns
             .get(col_ix.saturating_sub(1))
             .map(|col| col.name.to_string())
-            .unwrap_or_else(|| format!("列 {}", col_ix));
-        let title = format!("编辑单元格 - {} (行 {})", column_name, row_ix + 1);
+            .unwrap_or_else(|| t!("TableDataGrid.column_label", index = col_ix).to_string());
+        let title = t!(
+            "TableDataGrid.edit_cell_title",
+            column = column_name,
+            row = row_ix + 1
+        )
+        .to_string();
         let editable = self.config.editable;
 
         self.show_text_editor_dialog(
@@ -1168,7 +1195,10 @@ impl DataGrid {
                                 true
                             }
                             Err(err) => {
-                                window.push_notification(format!("错误: {}", err), cx);
+                                window.push_notification(
+                                    t!("TableDataGrid.error_message", error = err).to_string(),
+                                    cx
+                                );
                                 false
                             }
                         };
@@ -1527,7 +1557,7 @@ impl DataGrid {
 
             let save_result = cx.update(|cx| {
                 let Some(save_request) = this.create_save_request(columns, index_infos, cx) else {
-                    return Err("没有变更数据".to_string());
+                    return Err(t!("TableDataGrid.no_changes").to_string());
                 };
                 let change_count = save_request.changes.len();
 
@@ -1536,13 +1566,15 @@ impl DataGrid {
                     Ok(plugin) => {
                         let sql = plugin.generate_table_changes_sql(&save_request);
                         let trimmed = sql.trim();
-                        if trimmed.is_empty() || trimmed == "-- 没有变更数据" {
-                            Err("没有变更数据".to_string())
+                        if trimmed.is_empty()
+                            || trimmed == t!("TableDataGrid.no_changes_sql_marker")
+                        {
+                            Err(t!("TableDataGrid.no_changes").to_string())
                         } else {
                             Ok((sql, change_count))
                         }
                     }
-                    Err(_) => Err("无法获取数据库插件".to_string()),
+                    Err(_) => Err(t!("TableDataGrid.plugin_unavailable").to_string()),
                 }
             });
 
@@ -1643,7 +1675,7 @@ impl DataGrid {
 
             let save_result = cx.update(|cx| {
                 let Some(save_request) = this.create_save_request(columns, index_infos, cx) else {
-                    return Err("没有变更数据".to_string());
+                    return Err(t!("TableDataGrid.no_changes").to_string());
                 };
                 let change_count = save_request.changes.len();
 
@@ -1652,13 +1684,15 @@ impl DataGrid {
                     Ok(plugin) => {
                         let sql = plugin.generate_table_changes_sql(&save_request);
                         let trimmed = sql.trim();
-                        if trimmed.is_empty() || trimmed == "-- 没有变更数据" {
-                            Err("没有变更数据".to_string())
+                        if trimmed.is_empty()
+                            || trimmed == t!("TableDataGrid.no_changes_sql_marker")
+                        {
+                            Err(t!("TableDataGrid.no_changes").to_string())
                         } else {
                             Ok((sql, change_count))
                         }
                     }
-                    Err(_) => Err("无法获取数据库插件".to_string()),
+                    Err(_) => Err(t!("TableDataGrid.plugin_unavailable").to_string()),
                 }
             });
 
@@ -1711,7 +1745,7 @@ impl DataGrid {
     pub fn show_sql_preview(&self, window: &mut Window, cx: &mut App) {
         let changes = self.get_changes(cx);
         if changes.is_empty() {
-            window.push_notification("没有变更数据".to_string(), cx);
+            window.push_notification(t!("TableDataGrid.no_changes").to_string(), cx);
             return;
         }
 
@@ -1756,7 +1790,7 @@ impl DataGrid {
                         let Some(save_request) =
                             this.create_save_request(columns.clone(), index_infos.clone(), cx)
                         else {
-                            window.push_notification("没有变更数据".to_string(), cx);
+                            window.push_notification(t!("TableDataGrid.no_changes").to_string(), cx);
                             return;
                         };
 
@@ -1768,7 +1802,12 @@ impl DataGrid {
                             }
                         };
 
-                        this.show_sql_editor_dialog(sql_content, "变更SQL预览", window, cx);
+                        this.show_sql_editor_dialog(
+                            sql_content,
+                            t!("TableDataGrid.change_sql_preview").as_ref(),
+                            window,
+                            cx
+                        );
                     });
                 }
             });
@@ -1809,12 +1848,14 @@ impl DataGrid {
                 .close_button(true)
                 .overlay(false)
                 .content_center()
-                .button_props(DialogButtonProps::default().ok_text("执行SQL"))
+                .button_props(
+                    DialogButtonProps::default().ok_text(t!("TableDataGrid.execute_sql").to_string())
+                )
                 .footer(|ok, cancel, window, cx| vec![ok(window, cx), cancel(window, cx)])
                 .on_ok(move |_, window, cx| {
                     let sql_text = editor.read(cx).get_text(cx);
                     if sql_text.trim().is_empty() {
-                        window.push_notification("SQL内容为空", cx);
+                        window.push_notification(t!("TableDataGrid.sql_empty").to_string(), cx);
                         return false;
                     }
                     data_grid.execute_sql_and_refresh(
@@ -1861,12 +1902,12 @@ impl DataGrid {
                     SqlResult::Error(err) => Some(err.message.clone()),
                     _ => None,
                 }) {
-                    Err(format!("执行失败: {}", err_msg))
+                    Err(t!("TableDataGrid.execute_failed", error = err_msg).to_string())
                 } else {
                     Ok(())
                 }
             }
-            Err(e) => Err(format!("执行失败: {}", e)),
+            Err(e) => Err(t!("TableDataGrid.execute_failed", error = e).to_string()),
         }
     }
 
@@ -1897,7 +1938,10 @@ impl DataGrid {
                             let _ = cx.update_window(window_id, |_entity, window, cx| {
                                 data_grid.clear_changes(cx);
                                 window.close_dialog(cx);
-                                window.push_notification("执行成功".to_string(), cx);
+                                window.push_notification(
+                                    t!("TableDataGrid.execute_success").to_string(),
+                                    cx
+                                );
                             });
                         }
                     });
@@ -1925,13 +1969,15 @@ impl DataGrid {
             Ok(plugin) => {
                 let sql = plugin.generate_table_changes_sql(request);
                 let trimmed = sql.trim();
-                if trimmed.is_empty() || trimmed == "-- 没有变更数据" {
-                    Err("没有变更数据".to_string())
+                if trimmed.is_empty()
+                    || trimmed == t!("TableDataGrid.no_changes_sql_marker")
+                {
+                    Err(t!("TableDataGrid.no_changes").to_string())
                 } else {
                     Ok(plugin.format_sql(&sql))
                 }
             }
-            Err(_) => Err("无法获取数据库插件".to_string()),
+            Err(_) => Err(t!("TableDataGrid.plugin_unavailable").to_string()),
         }
     }
 
@@ -1954,7 +2000,7 @@ impl DataGrid {
                 Button::new("refresh-data")
                     .with_size(Size::Medium)
                     .icon(IconName::Refresh)
-                    .tooltip("刷新")
+                    .tooltip(t!("TableDataGrid.refresh").to_string())
                     .disabled(loading)
                     .on_click(cx.listener(Self::handle_toolbar_refresh)),
             )
@@ -1963,7 +2009,7 @@ impl DataGrid {
                     Button::new("add-row")
                         .with_size(Size::Medium)
                         .icon(IconName::Plus)
-                        .tooltip("添加行")
+                        .tooltip(t!("TableDataGrid.add_row").to_string())
                         .disabled(loading)
                         .on_click(cx.listener(Self::handle_add_row)),
                 )
@@ -1973,7 +2019,7 @@ impl DataGrid {
                     Button::new("delete-row")
                         .with_size(Size::Medium)
                         .icon(IconName::Minus)
-                        .tooltip("删除行")
+                        .tooltip(t!("TableDataGrid.delete_row").to_string())
                         .disabled(loading)
                         .on_click(cx.listener(Self::handle_delete_row)),
                 )
@@ -1983,7 +2029,7 @@ impl DataGrid {
                     Button::new("undo-changes")
                         .with_size(Size::Medium)
                         .icon(IconName::Undo)
-                        .tooltip("撤销")
+                        .tooltip(t!("TableDataGrid.undo").to_string())
                         .disabled(loading)
                         .on_click(cx.listener(Self::handle_revert_changes)),
                 )
@@ -1993,7 +2039,7 @@ impl DataGrid {
                     Button::new("sql-preview")
                         .with_size(Size::Medium)
                         .icon(IconName::Eye)
-                        .tooltip("SQL预览")
+                        .tooltip(t!("TableDataGrid.sql_preview").to_string())
                         .disabled(loading)
                         .on_click(cx.listener(Self::handle_sql_preview)),
                 )
@@ -2003,7 +2049,7 @@ impl DataGrid {
                     Button::new("commit-changes")
                         .with_size(Size::Medium)
                         .icon(IconName::ArrowUp)
-                        .tooltip("提交更改")
+                        .tooltip(t!("TableDataGrid.commit_changes").to_string())
                         .disabled(loading)
                         .on_click(cx.listener(Self::handle_commit_changes)),
                 )
@@ -2013,7 +2059,7 @@ impl DataGrid {
                 Button::new("toggle-editor")
                     .with_size(Size::Medium)
                     .icon(IconName::EditBorder)
-                    .tooltip("大文本编辑器")
+                    .tooltip(t!("TableDataGrid.large_text_editor").to_string())
                     .disabled(loading)
                     .on_click(cx.listener(Self::handle_large_text_editor)),
             )
@@ -2021,11 +2067,14 @@ impl DataGrid {
                 Button::new("export-data")
                     .with_size(Size::Medium)
                     .icon(IconName::File)
-                    .tooltip("导出")
+                    .tooltip(t!("TableDataGrid.export").to_string())
                     .disabled(loading)
                     .dropdown_menu(move |menu, window, _cx| {
                         menu.item(
-                            PopupMenuItem::new("导出结果集(.xlsx)").on_click(window.listener_for(
+                            PopupMenuItem::new(
+                                t!("TableDataGrid.export_result_xlsx").to_string()
+                            )
+                            .on_click(window.listener_for(
                                 &data_grid,
                                 |this, _, window, cx| {
                                     this.export_result_set(
@@ -2038,7 +2087,10 @@ impl DataGrid {
                             )),
                         )
                             .item(
-                                PopupMenuItem::new("导出结果集(.csv)").on_click(window.listener_for(
+                                PopupMenuItem::new(
+                                    t!("TableDataGrid.export_result_csv").to_string()
+                                )
+                                .on_click(window.listener_for(
                                     &data_grid,
                                     |this, _, window, cx| {
                                         this.export_result_set(
@@ -2051,7 +2103,10 @@ impl DataGrid {
                                 )),
                             )
                             .item(
-                                PopupMenuItem::new("导出结果集(insert sql)").on_click(
+                                PopupMenuItem::new(
+                                    t!("TableDataGrid.export_result_insert_sql").to_string()
+                                )
+                                .on_click(
                                     window.listener_for(&data_grid, |this, _, window, cx| {
                                         this.export_result_set(
                                             ExportScope::All,
@@ -2064,7 +2119,10 @@ impl DataGrid {
                             )
                             .separator()
                             .item(
-                                PopupMenuItem::new("导出当前页结果集(.xlsx)").on_click(
+                                PopupMenuItem::new(
+                                    t!("TableDataGrid.export_current_page_xlsx").to_string()
+                                )
+                                .on_click(
                                     window.listener_for(&data_grid, |this, _, window, cx| {
                                         this.export_result_set(
                                             ExportScope::CurrentPage,
@@ -2076,7 +2134,10 @@ impl DataGrid {
                                 ),
                             )
                             .item(
-                                PopupMenuItem::new("导出当前页结果集(.csv)").on_click(
+                                PopupMenuItem::new(
+                                    t!("TableDataGrid.export_current_page_csv").to_string()
+                                )
+                                .on_click(
                                     window.listener_for(&data_grid, |this, _, window, cx| {
                                         this.export_result_set(
                                             ExportScope::CurrentPage,
@@ -2088,7 +2149,10 @@ impl DataGrid {
                                 ),
                             )
                             .item(
-                                PopupMenuItem::new("导出当前页结果集(insert sql)").on_click(
+                                PopupMenuItem::new(
+                                    t!("TableDataGrid.export_current_page_insert_sql").to_string()
+                                )
+                                .on_click(
                                     window.listener_for(&data_grid, |this, _, window, cx| {
                                         this.export_result_set(
                                             ExportScope::CurrentPage,
@@ -2158,13 +2222,22 @@ impl DataGrid {
             .child(div().text_sm().text_color(cx.theme().foreground).child({
                 if filtered_count < total_rows {
                     format!(
-                        "显示 {} 条（共 {} 条，总计 {} 条）",
-                        filtered_count, total_rows, table_data_info.total_count
+                        "{}",
+                        t!(
+                            "TableDataGrid.page_info",
+                            page_size = filtered_count,
+                            page_count = total_rows,
+                            total_count = table_data_info.total_count
+                        )
                     )
                 } else {
                     format!(
-                        "第 {} 页（共 {} 条）",
-                        table_data_info.current_page, table_data_info.total_count
+                        "{}",
+                        t!(
+                            "TableDataGrid.page_number",
+                            page = table_data_info.current_page,
+                            total = table_data_info.total_count
+                        )
                     )
                 }
             }))
@@ -2172,7 +2245,13 @@ impl DataGrid {
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!("查询耗时 {}ms", table_data_info.duration)),
+                    .child(
+                        t!(
+                            "TableDataGrid.query_elapsed",
+                            duration = table_data_info.duration
+                        )
+                        .to_string()
+                    ),
             )
             .child(
                 div()
@@ -2195,7 +2274,7 @@ impl DataGrid {
                     )
                     .child({
                         let label = match current_page_size {
-                            0 => "全部".to_string(),
+                            0 => t!("TableDataGrid.all").to_string(),
                             n => format!("{}", n),
                         };
 
@@ -2238,13 +2317,21 @@ impl DataGrid {
                 div()
                     .text_sm()
                     .text_color(cx.theme().foreground)
-                    .child(format!("共 {} 条记录", row_count)),
+                    .child(
+                        t!("TableDataGrid.total_records", count = row_count).to_string()
+                    ),
             )
             .child(
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!("查询耗时 {}ms", execution_time)),
+                    .child(
+                        t!(
+                            "TableDataGrid.query_elapsed",
+                            duration = execution_time
+                        )
+                        .to_string()
+                    ),
             )
             .child(
                 div()

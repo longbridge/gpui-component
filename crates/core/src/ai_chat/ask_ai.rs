@@ -5,6 +5,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     IconName, Sizable, Size,
 };
+use rust_i18n::t;
 
 /// AI 请求事件 - 直接发送格式化后的消息
 #[derive(Clone, Debug)]
@@ -85,17 +86,20 @@ impl AskAiButton {
     }
 
     fn format_message(&self) -> String {
-        let mut message = format!(
-            "我在执行以下SQL时遇到了错误：\n\n```sql\n{}\n```\n\n错误信息：\n```\n{}\n```",
-            self.sql.trim(),
-            self.error_message.trim()
-        );
+        let mut message = t!(
+            "AiChat.ask_ai_template",
+            sql = self.sql.trim(),
+            error = self.error_message.trim()
+        )
+        .to_string();
 
         if let Some(ctx) = &self.context {
-            message.push_str(&format!("\n\n上下文信息：\n{}", ctx));
+            message.push_str(
+                &t!("AiChat.ask_ai_context", context = ctx).to_string(),
+            );
         }
 
-        message.push_str("\n\n请帮我分析这个错误并提供解决方案。");
+        message.push_str(&t!("AiChat.ask_ai_request_help").to_string());
         message
     }
 }
@@ -108,7 +112,7 @@ impl IntoElement for AskAiButton {
 
         Button::new(self.id)
             .icon(IconName::Bot)
-            .label("询问AI")
+            .label(t!("AiChat.ask_ai_button").to_string())
             .ghost()
             .with_size(self.size)
             .on_click(move |_event, _window, cx| {

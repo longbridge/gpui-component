@@ -4,6 +4,7 @@ use gpui::{px, App, AppContext, Context, Entity, EventEmitter, ParentElement, St
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::{notification::Notification, WindowExt};
 use one_core::gpui_tokio::Tokio;
+use rust_i18n::t;
 
 use crate::create_key_dialog::CreateKeyDialog;
 use crate::key_value_view::KeyValueView;
@@ -260,7 +261,7 @@ impl RedisEventHandler {
                 async move {
                     let conn = global_state
                         .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                     let guard = conn.read().await;
                     guard
                         .get_databases_info()
@@ -315,7 +316,7 @@ impl RedisEventHandler {
                 async move {
                     let conn = global_state
                         .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                     let guard = conn.read().await;
 
                     // 切换到目标数据库
@@ -447,13 +448,15 @@ impl RedisEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("RedisTree.confirm_delete_title").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除键 \"{}\" 吗？", key))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!("RedisTree.confirm_delete_key", key = key).to_string(),
+                        )
+                        .child(t!("RedisTree.irreversible").to_string()),
                 )
                 .on_ok(move |_, _window, cx: &mut App| {
                     let conn_id = conn_id.clone();
@@ -469,7 +472,7 @@ impl RedisEventHandler {
                         async move {
                             let conn = state
                                 .get_connection(&conn_id)
-                                .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                                .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                             let guard = conn.read().await;
                             guard.del(&[key.as_str()]).await
                                 .map_err(|e| anyhow::anyhow!("{}", e))
@@ -489,7 +492,15 @@ impl RedisEventHandler {
                                 let _ = cx.update(|cx| {
                                     if let Some(window) = cx.active_window() {
                                         _ = window.update(cx, |_, window, cx| {
-                                            Self::show_error(window, format!("删除键失败: {}", e), cx);
+                                            Self::show_error(
+                                                window,
+                                                t!(
+                                                    "RedisTree.delete_key_failed",
+                                                    error = e
+                                                )
+                                                .to_string(),
+                                                cx,
+                                            );
                                         });
                                     }
                                 });
@@ -533,21 +544,22 @@ impl RedisEventHandler {
             let state_for_ok = state.clone();
 
             dialog
-                .title("添加新键")
+                .title(t!("RedisTree.create_key_title").to_string())
                 .w(px(500.))
                 .child(create_key_dialog.clone())
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("确认")
-                        .cancel_text("取消"),
+                        .ok_text(t!("Common.confirm").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
                 )
                 .on_ok(move |_, window, cx: &mut App| {
                     let form_data = create_key_dialog_for_ok.read(cx).form_data(cx);
                     let key = form_data.key;
                     if key.is_empty() {
                         window.push_notification(
-                            Notification::error("键名不能为空").autohide(true),
+                            Notification::error(t!("RedisTree.key_name_required").to_string())
+                                .autohide(true),
                             cx,
                         );
                         return false;
@@ -599,7 +611,7 @@ impl RedisEventHandler {
                 async move {
                     let conn = global_state
                         .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                     let guard = conn.read().await;
 
                     // 切换到目标数据库
@@ -668,7 +680,9 @@ impl RedisEventHandler {
                             }
                         }
                         _ => {
-                            return Err(anyhow::anyhow!("不支持的键类型"));
+                            return Err(anyhow::anyhow!(
+                                t!("RedisTree.unsupported_key_type")
+                            ));
                         }
                     }
 
@@ -690,7 +704,10 @@ impl RedisEventHandler {
                         if let Some(window) = cx.active_window() {
                             _ = window.update(cx, |_, window, cx| {
                                 window.push_notification(
-                                    Notification::success("键创建成功").autohide(true),
+                                    Notification::success(
+                                        t!("RedisTree.key_created").to_string(),
+                                    )
+                                    .autohide(true),
                                     cx,
                                 );
                             });
@@ -702,7 +719,10 @@ impl RedisEventHandler {
                         if let Some(window) = cx.active_window() {
                             _ = window.update(cx, |_, window, cx| {
                                 window.push_notification(
-                                    Notification::error(format!("创建键失败: {}", e)).autohide(true),
+                                    Notification::error(
+                                        t!("RedisTree.create_key_failed", error = e).to_string(),
+                                    )
+                                    .autohide(true),
                                     cx,
                                 );
                             });
@@ -736,13 +756,15 @@ impl RedisEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认关闭连接")
+                .title(t!("RedisTree.confirm_disconnect_title").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要关闭连接 \"{}\" 吗？", conn_name))
-                        .child("这将断开 Redis 连接并清理相关资源。"),
+                        .child(
+                            t!("RedisTree.confirm_disconnect", name = conn_name).to_string(),
+                        )
+                        .child(t!("RedisTree.disconnect_warning").to_string()),
                 )
                 .on_ok(move |_, _window, cx: &mut App| {
                     let conn_id = conn_id.clone();
@@ -771,7 +793,15 @@ impl RedisEventHandler {
                                 let _ = cx.update(|cx| {
                                     if let Some(window) = cx.active_window() {
                                         _ = window.update(cx, |_, window, cx| {
-                                            Self::show_error(window, format!("关闭连接失败: {}", e), cx);
+                                            Self::show_error(
+                                                window,
+                                                t!(
+                                                    "RedisTree.disconnect_failed",
+                                                    error = e
+                                                )
+                                                .to_string(),
+                                                cx,
+                                            );
                                         });
                                     }
                                 });

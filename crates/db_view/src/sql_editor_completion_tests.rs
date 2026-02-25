@@ -996,7 +996,7 @@ mod tests {
         // 分号应触发请求，completions 返回空列表以关闭菜单
         assert!(
             provider.is_completion_trigger_check(";"),
-            "分号应触发自动完成请求（用于关闭菜单）"
+            "Semicolon should trigger completion (to close menu)"
         );
     }
 
@@ -1009,7 +1009,7 @@ mod tests {
         // 逗号应触发请求，completions 返回空列表以关闭菜单
         assert!(
             provider.is_completion_trigger_check(","),
-            "逗号应触发自动完成请求（用于关闭菜单）"
+            "Comma should trigger completion (to close menu)"
         );
     }
 
@@ -1022,7 +1022,7 @@ mod tests {
         // 右括号应触发请求，completions 返回空列表以关闭菜单
         assert!(
             provider.is_completion_trigger_check(")"),
-            "右括号应触发自动完成请求（用于关闭菜单）"
+            "Right paren should trigger completion (to close menu)"
         );
     }
 
@@ -1035,15 +1035,15 @@ mod tests {
         // 换行符后不应触发
         assert!(
             !provider.is_completion_trigger_check("\n"),
-            "换行符后不应触发自动完成"
+            "Newline should not trigger completion"
         );
         assert!(
             !provider.is_completion_trigger_check("\r"),
-            "回车符后不应触发自动完成"
+            "Carriage return should not trigger completion"
         );
         assert!(
             !provider.is_completion_trigger_check("\t"),
-            "制表符后不应触发自动完成"
+            "Tab should not trigger completion"
         );
     }
 
@@ -1056,7 +1056,7 @@ mod tests {
         // 点号应触发
         assert!(
             provider.is_completion_trigger_check("."),
-            "点号应触发自动完成（用于 table.column）"
+            "Dot should trigger completion (table.column)"
         );
     }
 
@@ -1069,7 +1069,7 @@ mod tests {
         // 左括号应触发
         assert!(
             provider.is_completion_trigger_check("("),
-            "左括号应触发自动完成（用于函数参数）"
+            "Left paren should trigger completion (function args)"
         );
     }
 
@@ -1082,7 +1082,7 @@ mod tests {
         // 空格应触发
         assert!(
             provider.is_completion_trigger_check(" "),
-            "空格应触发自动完成（如 SELECT 后）"
+            "Space should trigger completion (e.g. after SELECT)"
         );
     }
 
@@ -1095,21 +1095,21 @@ mod tests {
         // 字母应触发
         assert!(
             provider.is_completion_trigger_check("a"),
-            "字母应触发自动完成"
+            "Letters should trigger completion"
         );
         assert!(
             provider.is_completion_trigger_check("Z"),
-            "大写字母应触发自动完成"
+            "Uppercase letters should trigger completion"
         );
         // 数字应触发
         assert!(
             provider.is_completion_trigger_check("5"),
-            "数字应触发自动完成"
+            "Digits should trigger completion"
         );
         // 下划线应触发
         assert!(
             provider.is_completion_trigger_check("_"),
-            "下划线应触发自动完成"
+            "Underscore should trigger completion"
         );
     }
 
@@ -1122,11 +1122,11 @@ mod tests {
         // 引号触发请求，completions 控制返回内容
         assert!(
             provider.is_completion_trigger_check("'"),
-            "单引号应触发自动完成请求"
+            "Single quote should trigger completion"
         );
         assert!(
             provider.is_completion_trigger_check("\""),
-            "双引号应触发自动完成请求"
+            "Double quote should trigger completion"
         );
     }
 
@@ -1139,7 +1139,7 @@ mod tests {
         // 星号触发请求
         assert!(
             provider.is_completion_trigger_check("*"),
-            "星号应触发自动完成请求"
+            "Asterisk should trigger completion"
         );
     }
 
@@ -1160,7 +1160,7 @@ mod tests {
         assert_eq!(
             context,
             SqlContext::CreateTable,
-            "CREATE TABLE 后应该是 CreateTable 上下文"
+            "After CREATE TABLE should be CreateTable context"
         );
     }
 
@@ -1176,7 +1176,7 @@ mod tests {
         assert_eq!(
             context,
             SqlContext::CreateTable,
-            "CREATE TABLE 表名后应该是 CreateTable 上下文"
+            "After table name should be CreateTable context"
         );
     }
 
@@ -1192,7 +1192,7 @@ mod tests {
         assert_eq!(
             context,
             SqlContext::CreateTable,
-            "CREATE TABLE ( 后应该是 CreateTable 上下文"
+            "After ( should be CreateTable context"
         );
     }
 
@@ -1208,7 +1208,7 @@ mod tests {
         assert_eq!(
             context,
             SqlContext::CreateTable,
-            "CREATE TABLE 字段名后应该是 CreateTable 上下文"
+            "After column name should be CreateTable context"
         );
     }
 
@@ -1224,7 +1224,7 @@ mod tests {
         assert_eq!(
             context,
             SqlContext::CreateTable,
-            "CREATE TABLE 类型后逗号应该是 CreateTable 上下文"
+            "After type comma should be CreateTable context"
         );
     }
 
@@ -1245,7 +1245,7 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("sub"),
             Some("#subquery"),
-            "子查询别名应该解析为 #subquery 标记"
+            "Subquery alias should resolve to #subquery"
         );
     }
 
@@ -1260,7 +1260,7 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("sub"),
             Some("#subquery"),
-            "无 AS 的子查询别名也应该解析为 #subquery"
+            "Subquery alias without AS should resolve to #subquery"
         );
     }
 
@@ -1275,7 +1275,7 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("outer_sub"),
             Some("#subquery"),
-            "外层子查询别名应该解析为 #subquery"
+            "Outer subquery alias should resolve to #subquery"
         );
     }
 
@@ -1290,12 +1290,12 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("u"),
             Some("users"),
-            "普通表别名应该正常解析"
+            "Regular table alias should resolve normally"
         );
         assert_eq!(
             symbol_table.resolve("o"),
             Some("#subquery"),
-            "JOIN 中的子查询别名应该解析为 #subquery"
+            "Subquery alias in JOIN should resolve to #subquery"
         );
     }
 
@@ -1315,7 +1315,7 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("cte"),
             Some("#cte"),
-            "CTE 别名应该解析为 #cte 标记"
+            "CTE alias should resolve to #cte"
         );
     }
 
@@ -1330,12 +1330,12 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("cte1"),
             Some("#cte"),
-            "第一个 CTE 应该解析为 #cte"
+            "First CTE should resolve to #cte"
         );
         assert_eq!(
             symbol_table.resolve("cte2"),
             Some("#cte"),
-            "第二个 CTE 应该解析为 #cte"
+            "Second CTE should resolve to #cte"
         );
     }
 
@@ -1350,12 +1350,12 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("u"),
             Some("users"),
-            "普通表别名应该正常解析"
+            "Regular table alias should resolve normally"
         );
         assert_eq!(
             symbol_table.resolve("cte"),
             Some("#cte"),
-            "CTE 名称应该解析为 #cte"
+            "CTE name should resolve to #cte"
         );
     }
 
@@ -1399,8 +1399,8 @@ mod tests {
         let users_has_id = users_cols.iter().any(|(name, _, _)| name == "id");
         let orders_has_id = orders_cols.iter().any(|(name, _, _)| name == "id");
 
-        assert!(users_has_id, "users 表应该有 id 列");
-        assert!(orders_has_id, "orders 表应该有 id 列");
+        assert!(users_has_id, "users should have id column");
+        assert!(orders_has_id, "orders should have id column");
     }
 
     /// 测试：Symbol Table 正确解析多表别名
@@ -1414,12 +1414,12 @@ mod tests {
         assert_eq!(
             symbol_table.resolve("u"),
             Some("users"),
-            "u 应该解析为 users"
+            "u should resolve to users"
         );
         assert_eq!(
             symbol_table.resolve("o"),
             Some("orders"),
-            "o 应该解析为 orders"
+            "o should resolve to orders"
         );
     }
 
@@ -1531,7 +1531,7 @@ mod tests {
             .find(|(k, _)| k.to_lowercase() == lower)
             .map(|(_, v)| v);
 
-        assert!(found.is_some(), "应该能用小写找到大写表名的列");
+        assert!(found.is_some(), "Should find columns with case-insensitive table lookup");
     }
 
     /// 测试：别名大小写不敏感
@@ -1575,7 +1575,7 @@ mod tests {
         // 验证：数据类型应该比关键词优先（分数更低）
         assert!(
             data_type_score < keyword_score,
-            "在 CreateTable 上下文中，数据类型 (score={}) 应该比关键词 (score={}) 优先",
+            "In CreateTable context, data types (score={}) should rank above keywords (score={})",
             data_type_score, keyword_score
         );
     }
@@ -1594,7 +1594,7 @@ mod tests {
         // 数据类型基础分数应该是 1500
         assert_eq!(
             data_type_score, 1500,
-            "数据类型基础分数应该是 1500"
+            "Base data type score should be 1500"
         );
     }
 
@@ -1620,14 +1620,14 @@ mod tests {
         // 验证：CreateTable 上下文应该有加成
         assert!(
             boosted_score < base_score,
-            "CreateTable 上下文中数据类型应该获得加成: boosted={} < base={}",
+            "In CreateTable context, data types should be boosted: boosted={} < base={}",
             boosted_score, base_score
         );
 
         // 验证：加成值应该是 CONTEXT_BOOST (2500)
         assert_eq!(
             base_score - boosted_score, 2500,
-            "数据类型加成应该是 2500"
+            "Data type boost should be 2500"
         );
     }
 
@@ -1651,7 +1651,7 @@ mod tests {
         // 验证：前缀匹配应该进一步提升优先级
         assert!(
             score_with_prefix < score_no_prefix,
-            "前缀匹配应该提升数据类型优先级: with_prefix={} < no_prefix={}",
+            "Prefix match should boost data types: with_prefix={} < no_prefix={}",
             score_with_prefix, score_no_prefix
         );
     }

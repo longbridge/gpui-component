@@ -6,6 +6,7 @@
 use crate::llm::chat_history::{ChatMessage, ChatSession, MessageRepository, SessionRepository};
 use crate::storage::traits::Repository;
 use crate::storage::StorageManager;
+use rust_i18n::t;
 
 // ============================================================================
 // 错误类型
@@ -25,9 +26,13 @@ pub enum SessionError {
 impl std::fmt::Display for SessionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SessionError::RepositoryNotAvailable => write!(f, "会话仓库不可用"),
-            SessionError::SessionNotFound => write!(f, "会话未找到"),
-            SessionError::StorageError(msg) => write!(f, "存储错误: {}", msg),
+            SessionError::RepositoryNotAvailable => {
+                write!(f, "{}", t!("AiChat.session_repo_unavailable"))
+            }
+            SessionError::SessionNotFound => write!(f, "{}", t!("AiChat.session_not_found")),
+            SessionError::StorageError(msg) => {
+                write!(f, "{}", t!("AiChat.session_storage_error", error = msg))
+            }
         }
     }
 }

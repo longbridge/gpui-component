@@ -6,30 +6,30 @@ use thiserror::Error;
 /// MongoDB 错误类型
 #[derive(Debug, Error)]
 pub enum MongoError {
-    #[error("连接错误: {message}")]
+    #[error("Connection error: {message}")]
     Connection {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("命令执行错误: {message}")]
+    #[error("Command error: {message}")]
     Command {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("序列化错误: {0}")]
+    #[error("Serialization error: {0}")]
     Serialization(String),
 
-    #[error("无效过滤条件: {0}")]
+    #[error("Invalid filter: {0}")]
     InvalidFilter(String),
 
-    #[error("未连接到 MongoDB")]
+    #[error("Not connected to MongoDB")]
     NotConnected,
 
-    #[error("内部错误: {0}")]
+    #[error("Internal error: {0}")]
     Internal(String),
 }
 

@@ -8,6 +8,7 @@ use gpui_component::{
     input::{Input, InputState},
     select::{Select, SelectEvent, SelectItem, SelectState},
 };
+use rust_i18n::t;
 
 use crate::RedisKeyType;
 
@@ -52,24 +53,28 @@ pub struct CreateKeyDialog {
 impl CreateKeyDialog {
     pub fn new(db_index: u8, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let key_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("输入键名")
+            InputState::new(window, cx)
+                .placeholder(t!("CreateKey.key_placeholder").to_string())
         });
         let ttl_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("过期时间（秒）");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("CreateKey.ttl_placeholder").to_string());
             state.set_value("-1", window, cx);
             state
         });
         let value_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("输入值")
+                .placeholder(t!("CreateKey.value_placeholder").to_string())
                 .multi_line(true)
                 .auto_grow(3, 8)
         });
         let hash_field_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("字段名")
+            InputState::new(window, cx)
+                .placeholder(t!("CreateKey.hash_field_placeholder").to_string())
         });
         let zset_score_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("分数");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("CreateKey.zset_score_placeholder").to_string());
             state.set_value("0", window, cx);
             state
         });
@@ -154,7 +159,7 @@ impl Render for CreateKeyDialog {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_sm().child("键:"))
+                    .child(div().text_sm().child(t!("CreateKey.label_key").to_string()))
                     .child(Input::new(&self.key_input).w_full()),
             )
             // 数据库编号
@@ -162,7 +167,7 @@ impl Render for CreateKeyDialog {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(div().text_sm().child("数据库编号:"))
+                    .child(div().text_sm().child(t!("CreateKey.label_db").to_string()))
                     .child(
                         div()
                             .text_sm()
@@ -174,7 +179,7 @@ impl Render for CreateKeyDialog {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_sm().child("类型:"))
+                    .child(div().text_sm().child(t!("CreateKey.label_type").to_string()))
                     .child(
                         Select::new(&self.type_select)
                             .w_full()
@@ -191,10 +196,10 @@ impl Render for CreateKeyDialog {
                             .gap_2()
                             .items_center()
                             .child(Input::new(&self.ttl_input).flex_1())
-                            .child(div().text_sm().child("秒"))
+                            .child(div().text_sm().child(t!("CreateKey.unit_seconds").to_string()))
                             .child(
                                 Button::new("ttl-permanent")
-                                    .label("永久")
+                                    .label(t!("CreateKey.ttl_permanent").to_string())
                                     .ghost()
                                     .xsmall()
                                     .on_click({
@@ -212,7 +217,7 @@ impl Render for CreateKeyDialog {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_sm().child("值:"))
+                    .child(div().text_sm().child(t!("CreateKey.label_value").to_string()))
                     .child(Input::new(&self.value_input).w_full()),
             )
             // Hash 字段名（Hash 类型专用）
@@ -220,7 +225,7 @@ impl Render for CreateKeyDialog {
                 this.child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child("字段名 (Hash):"))
+                        .child(div().text_sm().child(t!("CreateKey.label_hash_field").to_string()))
                         .child(Input::new(&self.hash_field_input).w_full()),
                 )
             })
@@ -229,7 +234,7 @@ impl Render for CreateKeyDialog {
                 this.child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child("分数 (ZSet):"))
+                        .child(div().text_sm().child(t!("CreateKey.label_zset_score").to_string()))
                         .child(Input::new(&self.zset_score_input).w_full()),
                 )
             })

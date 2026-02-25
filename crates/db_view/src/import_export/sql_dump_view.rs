@@ -15,6 +15,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 use tokio::sync::mpsc;
+use rust_i18n::t;
 
 #[derive(Debug, Clone)]
 struct LogEntry {
@@ -150,7 +151,7 @@ impl SqlDumpView {
                     &logs,
                     &scroll_handle,
                     "".to_string(),
-                    format!("导出表: {}", table),
+                    t!("SqlDump.export_table", table = table).to_string(),
                 );
                 vec![table]
             } else {
@@ -159,7 +160,7 @@ impl SqlDumpView {
                     &logs,
                     &scroll_handle,
                     "".to_string(),
-                    "正在获取表列表...".to_string(),
+                    t!("SqlDump.fetching_tables").to_string(),
                 );
 
                 let tables_result = global_state
@@ -178,7 +179,7 @@ impl SqlDumpView {
                             &logs,
                             &scroll_handle,
                             "".to_string(),
-                            format!("找到 {} 个表", tables.len()),
+                            t!("SqlDump.found_tables", count = tables.len()).to_string(),
                         );
                         tables
                     }
@@ -188,7 +189,7 @@ impl SqlDumpView {
                             &logs,
                             &scroll_handle,
                             "".to_string(),
-                            format!("获取表列表失败: {}", e),
+                            t!("SqlDump.fetch_tables_failed", error = e).to_string(),
                         );
                         let _ = cx.update(|cx| {
                             error_count.update(cx, |e, cx| {
@@ -521,7 +522,7 @@ impl Render for SqlDumpView {
                                 div()
                                     .w_24()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("服务器:"),
+                                    .child(t!("SqlDump.server_label").to_string()),
                             )
                             .child(div().child(self.server_info.clone())),
                     )
@@ -532,7 +533,7 @@ impl Render for SqlDumpView {
                                 div()
                                     .w_24()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("数据库:"),
+                                    .child(t!("SqlDump.database_label").to_string()),
                             )
                             .child(div().child(self.database.clone())),
                     )
@@ -543,7 +544,7 @@ impl Render for SqlDumpView {
                                 div()
                                     .w_24()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("转储到:"),
+                                    .child(t!("SqlDump.dump_to_label").to_string()),
                             )
                             .child(div().child(self.output_path.display().to_string())),
                     ),
@@ -558,14 +559,18 @@ impl Render for SqlDumpView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("已处理记录:"),
+                                    .child(t!("SqlDump.processed_records").to_string()),
                             )
                             .child(div().child(processed.to_string())),
                     )
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(div().text_color(cx.theme().muted_foreground).child("错误:"))
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(t!("SqlDump.error_label").to_string())
+                            )
                             .child(div().child(errors.to_string())),
                     )
                     .child(
@@ -574,14 +579,18 @@ impl Render for SqlDumpView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("已传输记录:"),
+                                    .child(t!("SqlDump.transferred_records").to_string()),
                             )
                             .child(div().child(transferred.to_string())),
                     )
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(div().text_color(cx.theme().muted_foreground).child("时间:"))
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(t!("SqlDump.time_label").to_string())
+                            )
                             .child(div().child(elapsed)),
                     ),
             )
@@ -671,22 +680,29 @@ impl Render for SqlDumpView {
                     .gap_2()
                     .justify_end()
                     .when(!is_running && !is_finished, |this| {
-                        this.child(Button::new("start").primary().child("开始").on_click(
-                            window.listener_for(
-                                &cx.entity(),
-                                |view, _: &ClickEvent, window, cx| {
-                                    view.start_dump(window, cx);
-                                },
-                            ),
-                        ))
+                        this.child(
+                            Button::new("start")
+                                .primary()
+                                .child(t!("SqlDump.start").to_string())
+                                .on_click(window.listener_for(
+                                    &cx.entity(),
+                                    |view, _: &ClickEvent, window, cx| {
+                                        view.start_dump(window, cx);
+                                    },
+                                ))
+                        )
                     })
                     .when(is_running, |this| {
-                        this.child(Button::new("running").loading(true).child("导出中..."))
+                        this.child(
+                            Button::new("running")
+                                .loading(true)
+                                .child(t!("SqlDump.exporting").to_string())
+                        )
                     })
                     .when(is_finished, |this| {
                         this.child(
                             Button::new("close")
-                                .child("关闭")
+                                .child(t!("SqlDump.close").to_string())
                                 .on_click(|_, window, _cx| {
                                     window.remove_window();
                                 }),

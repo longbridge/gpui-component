@@ -8,6 +8,7 @@ use gpui_component::{
     select::{Select, SelectEvent, SelectItem, SelectState},
     IndexPath, Sizable, Size,
 };
+use rust_i18n::t;
 
 use crate::llm::ProviderConfig;
 
@@ -482,7 +483,7 @@ impl ProviderSelectState {
         Select::new(&self.provider_select)
             .with_size(Size::Small)
             .min_w(px(140.0))
-            .placeholder("选择提供商")
+            .placeholder(t!("AiChat.select_provider_placeholder").to_string())
     }
 
     /// 渲染 Model 选择器
@@ -490,7 +491,7 @@ impl ProviderSelectState {
         Select::new(&self.model_select)
             .with_size(Size::Small)
             .min_w(px(140.0))
-            .placeholder("选择模型")
+            .placeholder(t!("AiChat.select_model_placeholder").to_string())
     }
 
     /// 渲染 Provider 和 Model 选择器组合

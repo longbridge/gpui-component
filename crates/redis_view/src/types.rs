@@ -3,40 +3,41 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
+use rust_i18n::t;
 
 /// Redis 错误类型
 #[derive(Debug, Error)]
 pub enum RedisError {
-    #[error("连接错误: {message}")]
+    #[error("Connection error: {message}")]
     Connection {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("命令执行错误: {message}")]
+    #[error("Command error: {message}")]
     Command {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("序列化错误: {0}")]
+    #[error("Serialization error: {0}")]
     Serialization(String),
 
-    #[error("未连接到 Redis")]
+    #[error("Not connected to Redis")]
     NotConnected,
 
-    #[error("操作不支持: {0}")]
+    #[error("Operation not supported: {0}")]
     NotSupported(String),
 
-    #[error("内部错误: {0}")]
+    #[error("Internal error: {0}")]
     Internal(String),
 
-    #[error("键不存在: {0}")]
+    #[error("Key not found: {0}")]
     KeyNotFound(String),
 
-    #[error("类型不匹配: 期望 {expected}, 实际 {actual}")]
+    #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch { expected: String, actual: String },
 }
 
@@ -244,12 +245,18 @@ impl KeyInfo {
     /// TTL 显示文本
     pub fn ttl_display(&self) -> String {
         match self.ttl {
-            -2 => "不存在".to_string(),
-            -1 => "永久".to_string(),
-            ttl if ttl >= 86400 => format!("{}天", ttl / 86400),
-            ttl if ttl >= 3600 => format!("{}小时", ttl / 3600),
-            ttl if ttl >= 60 => format!("{}分钟", ttl / 60),
-            ttl => format!("{}秒", ttl),
+            -2 => t!("RedisTTL.not_found").to_string(),
+            -1 => t!("RedisTTL.permanent").to_string(),
+            ttl if ttl >= 86400 => {
+                t!("RedisTTL.days", days = ttl / 86400).to_string()
+            }
+            ttl if ttl >= 3600 => {
+                t!("RedisTTL.hours", hours = ttl / 3600).to_string()
+            }
+            ttl if ttl >= 60 => {
+                t!("RedisTTL.minutes", minutes = ttl / 60).to_string()
+            }
+            ttl => t!("RedisTTL.seconds", seconds = ttl).to_string(),
         }
     }
 }
@@ -373,9 +380,9 @@ impl RedisConnectionMode {
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            RedisConnectionMode::Standalone => "单机",
-            RedisConnectionMode::Sentinel => "哨兵",
-            RedisConnectionMode::Cluster => "集群",
+            RedisConnectionMode::Standalone => "Standalone",
+            RedisConnectionMode::Sentinel => "Sentinel",
+            RedisConnectionMode::Cluster => "Cluster",
         }
     }
 }

@@ -5,6 +5,7 @@
 
 use gpui::{div, AnyElement, App, InteractiveElement, IntoElement, ParentElement, SharedString, Styled};
 use gpui_component::{button::ButtonVariants, h_flex, text::TextView, ActiveTheme, Icon, IconName, Sizable, Size};
+use rust_i18n::t;
 
 use crate::ai_chat::panel::CodeBlockActionRegistry;
 use crate::ai_chat::types::{ChatMessageUIGeneric, ChatRole, MessageExtension, MessageVariant};
@@ -98,7 +99,7 @@ impl ChatMessageRenderer {
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("思考中..."),
+                    .child(t!("AiChat.thinking").to_string()),
             )
             .into_any_element()
     }
@@ -211,7 +212,7 @@ impl ChatMessageRenderer {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("SQL 结果"),
+                                .child(t!("AiChat.sql_result").to_string()),
                         )
                         .into_any_element()
                 }

@@ -18,7 +18,6 @@ use one_core::storage::DatabaseType;
 use one_core::storage::manager::get_queries_dir;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
-use rust_i18n::t;
 use smol::Timer;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -26,6 +25,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 use tracing::log::error;
+use rust_i18n::t;
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
 const RESULT_PANEL_DEFAULT_SIZE: Pixels = px(400.0);
@@ -285,14 +285,30 @@ impl SqlEditorTab {
                         // 创建目录
                         if let Some(parent) = file_path_clone.parent() {
                             if let Err(e) = std::fs::create_dir_all(parent) {
-                                error!("创建目录失败 {:?}: {}", parent, e);
+                                error!(
+                                    "{}",
+                                    t!(
+                                        "SqlEditorView.create_dir_failed",
+                                        path = format!("{:?}", parent),
+                                        error = e
+                                    )
+                                    .to_string()
+                                );
                                 return;
                             }
                         }
 
                         // 写入文件
                         if let Err(e) = std::fs::write(&file_path_clone, &sql) {
-                            error!("自动保存SQL文件失败 {:?}: {}", file_path_clone, e);
+                            error!(
+                                "{}",
+                                t!(
+                                    "SqlEditorView.auto_save_failed",
+                                    path = format!("{:?}", file_path_clone),
+                                    error = e
+                                )
+                                .to_string()
+                            );
                         } else {
                             // 保存成功，清除脏标记
                             dirty_clone.store(false, Ordering::Relaxed);

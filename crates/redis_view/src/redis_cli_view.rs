@@ -16,6 +16,7 @@ use gpui_component::{
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContent, TabContentEvent};
+use rust_i18n::t;
 use crate::{GlobalRedisState, RedisValue};
 use crate::redis_cli_element::{
     cell_column_for_char_index, cell_len, char_index_for_cell_column, CliLine, CliLineType,
@@ -608,7 +609,7 @@ impl RedisCliView {
         let mut lines = Vec::new();
 
         // 欢迎信息
-        lines.push("欢迎使用 ONetCli 的 Redis 命令行控制台".to_string());
+        lines.push(t!("RedisCli.welcome").to_string());
         lines.push(String::new());
 
         // 历史命令和结果
@@ -968,7 +969,7 @@ impl RedisCliView {
                 async move {
                     let conn = global_state
                         .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                        .ok_or_else(|| anyhow::anyhow!(t!("RedisCli.connection_missing")))?;
                     let guard = conn.read().await;
                     guard.execute_command(&command).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
@@ -1387,7 +1388,7 @@ impl RedisCliView {
         // 欢迎信息
         lines.push(CliLine {
             line_type: CliLineType::Welcome {
-                text: "欢迎使用 ONetCli 的 Redis 命令行控制台".to_string(),
+                text: t!("RedisCli.welcome").to_string(),
             },
         });
         lines.push(CliLine {
@@ -1525,7 +1526,7 @@ impl RedisCliView {
 
         menu
             .item(
-                PopupMenuItem::new("复制")
+                PopupMenuItem::new(t!("Common.copy").to_string())
                     .icon(IconName::Copy)
                     .action(Box::new(Copy))
                     .on_click(move |_, window, cx| {
@@ -1535,7 +1536,7 @@ impl RedisCliView {
                     }),
             )
             .item(
-                PopupMenuItem::new("粘贴")
+                PopupMenuItem::new(t!("Common.paste").to_string())
                     .action(Box::new(Paste))
                     .on_click(move |_, window, cx| {
                         view_paste.update(cx, |this, cx| {
@@ -1545,7 +1546,7 @@ impl RedisCliView {
             )
             .separator()
             .item(
-                PopupMenuItem::new("清空输出")
+                PopupMenuItem::new(t!("RedisCli.clear_output").to_string())
                     .icon(IconName::Delete)
                     .action(Box::new(ClearOutput))
                     .on_click(move |_, window, cx| {

@@ -6,6 +6,7 @@
 use one_core::storage::DatabaseType;
 use regex::Regex;
 use std::sync::LazyLock;
+use rust_i18n::t;
 
 // ============================================================================
 // 配置常量
@@ -64,17 +65,25 @@ impl QueryContext {
 
         // 警告信息
         if let Some(warning) = &self.warning {
-            summary.push_str(&format!("> ⚠️ {}\n\n", warning));
+            summary.push_str(
+                &t!("QueryWorkflow.warning_block", warning = warning).to_string()
+            );
         }
 
         // 选择的表
         if !self.selected_table_names.is_empty() {
             let source = if self.is_user_mentioned {
-                "用户指定"
+                t!("QueryWorkflow.source_user").to_string()
             } else {
-                "AI 分析"
+                t!("QueryWorkflow.source_ai").to_string()
             };
-            summary.push_str(&format!("**相关表**（{}）：\n", source));
+            summary.push_str(
+                &t!(
+                    "QueryWorkflow.related_tables_header",
+                    source = source
+                )
+                .to_string()
+            );
             summary.push_str("```json\n");
             let json_array = serde_json::to_string(&self.selected_table_names)
                 .unwrap_or_else(|_| format!("{:?}", self.selected_table_names));
@@ -153,14 +162,15 @@ impl QueryContext {
     /// 生成SQL生成的system prompt
     pub fn to_sql_generation_prompt(&self) -> String {
         let db_type = format!("{:?}", self.database_type);
-        let mut prompt = format!(
-            "你是一个 {db_type} 数据库专家。请根据用户问题生成准确的 SQL 查询语句。\n\n"
-        );
+        let mut prompt =
+            t!("QueryWorkflow.sql_prompt_intro", db_type = db_type).to_string();
 
-        prompt.push_str("## 可用表结构\n\n");
+        prompt.push_str(t!("QueryWorkflow.sql_prompt_tables_header").as_ref());
 
         for table in &self.tables {
-            prompt.push_str(&format!("### 表: `{}`", table.name));
+            prompt.push_str(
+                &t!("QueryWorkflow.sql_prompt_table_header", table = table.name).to_string()
+            );
             if let Some(comment) = &table.comment {
                 if !comment.is_empty() {
                     prompt.push_str(&format!(" - {}", comment));
@@ -169,19 +179,23 @@ impl QueryContext {
             prompt.push_str("\n\n");
 
             if table.columns.is_empty() {
-                prompt.push_str("（列信息暂无）\n\n");
+                prompt.push_str(t!("QueryWorkflow.sql_prompt_no_columns").as_ref());
                 continue;
             }
 
-            prompt.push_str("| 列名 | 类型 | 可空 | 主键 | 说明 |\n");
-            prompt.push_str("|------|------|------|------|------|\n");
+            prompt.push_str(t!("QueryWorkflow.sql_prompt_columns_header").as_ref());
+            prompt.push_str(t!("QueryWorkflow.sql_prompt_columns_divider").as_ref());
 
             for col in &table.columns {
                 prompt.push_str(&format!(
                     "| `{}` | {} | {} | {} | {} |\n",
                     col.name,
                     col.data_type,
-                    if col.nullable { "是" } else { "否" },
+                    if col.nullable {
+                        t!("Common.yes")
+                    } else {
+                        t!("Common.no")
+                    },
                     if col.is_primary_key { "🔑" } else { "" },
                     col.comment.as_deref().unwrap_or("-")
                 ));
@@ -189,11 +203,11 @@ impl QueryContext {
             prompt.push_str("\n");
         }
 
-        prompt.push_str("## 要求\n\n");
-        prompt.push_str("1. 生成的 SQL 必须放在 ```sql 代码块中\n");
-        prompt.push_str("2. 只使用上述表中存在的列名\n");
-        prompt.push_str("3. 简要解释 SQL 的作用和逻辑\n");
-        prompt.push_str("4. 如果需要多个查询，分别用代码块包裹\n");
+        prompt.push_str(t!("QueryWorkflow.sql_prompt_requirements_header").as_ref());
+        prompt.push_str(t!("QueryWorkflow.sql_prompt_requirement_1").as_ref());
+        prompt.push_str(t!("QueryWorkflow.sql_prompt_requirement_2").as_ref());
+        prompt.push_str(t!("QueryWorkflow.sql_prompt_requirement_3").as_ref());
+        prompt.push_str(t!("QueryWorkflow.sql_prompt_requirement_4").as_ref());
 
         prompt
     }
@@ -201,26 +215,24 @@ impl QueryContext {
 
 /// 生成AI选表的prompt
 pub fn build_table_selection_prompt(tables: &[TableBrief], user_question: &str) -> String {
-    let mut prompt = String::from(
-        "你是一个数据库专家。根据用户的问题，从以下表列表中选择最相关的表。\n\n",
-    );
+    let mut prompt = t!("QueryWorkflow.table_select_intro").to_string();
 
-    prompt.push_str("## 可用表\n\n");
-    prompt.push_str("| 表名 | 说明 |\n");
-    prompt.push_str("|------|------|\n");
+    prompt.push_str(t!("QueryWorkflow.table_select_tables_header").as_ref());
+    prompt.push_str(t!("QueryWorkflow.table_select_table_header_row").as_ref());
+    prompt.push_str(t!("QueryWorkflow.table_select_table_divider").as_ref());
 
     for table in tables {
         let comment = table.comment.as_deref().unwrap_or("-");
         prompt.push_str(&format!("| `{}` | {} |\n", table.name, comment));
     }
 
-    prompt.push_str("\n## 用户问题\n\n");
+    prompt.push_str(t!("QueryWorkflow.table_select_user_question_header").as_ref());
     prompt.push_str(user_question);
 
-    prompt.push_str("\n\n## 要求\n\n");
-    prompt.push_str("请返回一个 JSON 数组，包含你认为与问题相关的表名。\n");
-    prompt.push_str("只返回 JSON，不要其他解释。\n\n");
-    prompt.push_str("示例格式：\n```json\n[\"table1\", \"table2\"]\n```\n");
+    prompt.push_str(t!("QueryWorkflow.table_select_requirements_header").as_ref());
+    prompt.push_str(t!("QueryWorkflow.table_select_requirement_1").as_ref());
+    prompt.push_str(t!("QueryWorkflow.table_select_requirement_2").as_ref());
+    prompt.push_str(t!("QueryWorkflow.table_select_example").as_ref());
 
     prompt
 }

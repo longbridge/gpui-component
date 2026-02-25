@@ -4,6 +4,7 @@ use crate::connection::{RedisConnection, RedisConnectionImpl};
 use crate::types::{RedisConnectionConfig, RedisError};
 use dashmap::DashMap;
 use gpui::Global;
+use rust_i18n::t;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -33,7 +34,9 @@ impl GlobalRedisState {
     ) -> Result<String, RedisError> {
         let connection_id = config.id.clone();
         if connection_id.is_empty() {
-            return Err(RedisError::Internal("连接 ID 不能为空".to_string()));
+            return Err(RedisError::Internal(
+                t!("RedisConnection.connection_id_required").to_string(),
+            ));
         }
 
         let mut conn = RedisConnectionImpl::new(config);

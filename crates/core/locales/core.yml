@@ -1,0 +1,205 @@
+_version: 2
+
+Common:
+  save:
+    en: "Save"
+    zh-CN: "保存"
+    zh-HK: "保存"
+  cancel:
+    en: "Cancel"
+    zh-CN: "取消"
+    zh-HK: "取消"
+
+AiChat:
+  title:
+    en: "AI Assistant"
+    zh-CN: "AI 助手"
+    zh-HK: "AI 助手"
+  input_placeholder:
+    en: "Ask AI... (Enter to send)"
+    zh-CN: "向 AI 提问... (Enter 发送)"
+    zh-HK: "向 AI 提問... (Enter 發送)"
+  send:
+    en: "Send"
+    zh-CN: "发送"
+    zh-HK: "發送"
+  cancel:
+    en: "Stop"
+    zh-CN: "终止"
+    zh-HK: "終止"
+  new_session_name:
+    en: "New session"
+    zh-CN: "新会话"
+    zh-HK: "新會話"
+  session_name_placeholder:
+    en: "Session name"
+    zh-CN: "会话名称"
+    zh-HK: "會話名稱"
+  rename_session_title:
+    en: "Rename session"
+    zh-CN: "重命名会话"
+    zh-HK: "重命名會話"
+  rename_session_prompt:
+    en: "Enter a new session name:"
+    zh-CN: "请输入新的会话名称："
+    zh-HK: "請輸入新的會話名稱："
+  select_provider_first:
+    en: "Please select an AI provider first."
+    zh-CN: "请先选择 AI 提供商"
+    zh-HK: "請先選擇 AI 提供商"
+  invalid_provider_id:
+    en: "Invalid provider ID."
+    zh-CN: "无效的提供商 ID"
+    zh-HK: "無效的提供商 ID"
+  session_create_failed:
+    en: "Failed to create session: %{error}"
+    zh-CN: "创建会话失败：%{error}"
+    zh-HK: "建立會話失敗：%{error}"
+  operation_cancelled:
+    en: "Operation cancelled."
+    zh-CN: "操作已取消"
+    zh-HK: "操作已取消"
+  operation_cancelled_markdown:
+    en: "
+
+*Operation cancelled*"
+    zh-CN: "
+
+*操作已取消*"
+    zh-HK: "
+
+*操作已取消*"
+  stream_provider_not_found:
+    en: "AI model not found."
+    zh-CN: "AI 模型未找到"
+    zh-HK: "AI 模型未找到"
+  stream_api_error:
+    en: "API error: %{error}"
+    zh-CN: "API 错误: %{error}"
+    zh-HK: "API 錯誤: %{error}"
+  stream_storage_error:
+    en: "Storage error: %{error}"
+    zh-CN: "存储错误: %{error}"
+    zh-HK: "存儲錯誤: %{error}"
+  session_repo_unavailable:
+    en: "Session repository unavailable."
+    zh-CN: "会话仓库不可用"
+    zh-HK: "會話倉庫不可用"
+  session_not_found:
+    en: "Session not found."
+    zh-CN: "会话未找到"
+    zh-HK: "會話未找到"
+  session_storage_error:
+    en: "Storage error: %{error}"
+    zh-CN: "存储错误: %{error}"
+    zh-HK: "存儲錯誤: %{error}"
+  thinking:
+    en: "Thinking..."
+    zh-CN: "思考中..."
+    zh-HK: "思考中..."
+  sql_result:
+    en: "SQL result"
+    zh-CN: "SQL 结果"
+    zh-HK: "SQL 結果"
+  unknown_time:
+    en: "Unknown time"
+    zh-CN: "未知时间"
+    zh-HK: "未知時間"
+  ask_ai_template:
+    en: "I encountered an error while running the following SQL:
+
+```sql
+%{sql}
+```
+
+Error message:
+```
+%{error}
+```"
+    zh-CN: "我在执行以下SQL时遇到了错误：
+
+```sql
+%{sql}
+```
+
+错误信息：
+```
+%{error}
+```"
+    zh-HK: "我在執行以下SQL時遇到了錯誤：
+
+```sql
+%{sql}
+```
+
+錯誤信息：
+```
+%{error}
+```"
+  ask_ai_context:
+    en: "
+
+Context:
+%{context}"
+    zh-CN: "
+
+上下文信息：
+%{context}"
+    zh-HK: "
+
+上下文資訊：
+%{context}"
+  ask_ai_request_help:
+    en: "
+
+Please help me analyze this error and provide a solution."
+    zh-CN: "
+
+请帮我分析这个错误并提供解决方案。"
+    zh-HK: "
+
+請幫我分析這個錯誤並提供解決方案。"
+  ask_ai_button:
+    en: "Ask AI"
+    zh-CN: "询问AI"
+    zh-HK: "詢問AI"
+  select_provider_placeholder:
+    en: "Select provider"
+    zh-CN: "选择提供商"
+    zh-HK: "選擇提供商"
+  select_model_placeholder:
+    en: "Select model"
+    zh-CN: "选择模型"
+    zh-HK: "選擇模型"
+  model_settings_title:
+    en: "Model settings"
+    zh-CN: "模型设置"
+    zh-HK: "模型設定"
+  temperature_label:
+    en: "Temperature"
+    zh-CN: "温度"
+    zh-HK: "溫度"
+  temperature_desc:
+    en: "Controls randomness. Higher values produce more random output."
+    zh-CN: "控制输出随机性，值越高越随机"
+    zh-HK: "控制輸出隨機性，值越高越隨機"
+  history_label:
+    en: "History"
+    zh-CN: "历史记录"
+    zh-HK: "歷史記錄"
+  history_desc:
+    en: "Number of history messages to include."
+    zh-CN: "对话时携带的历史消息数"
+    zh-HK: "對話時攜帶的歷史消息數"
+  max_tokens_label:
+    en: "Max tokens"
+    zh-CN: "最大 Token"
+    zh-HK: "最大 Token"
+  max_tokens_desc:
+    en: "Maximum number of tokens in the output."
+    zh-CN: "模型输出的最大 token 数"
+    zh-HK: "模型輸出的最大 token 數"
+  settings_footer_notice:
+    en: "Settings take effect immediately."
+    zh-CN: "设置将立即生效"
+    zh-HK: "設定將立即生效"

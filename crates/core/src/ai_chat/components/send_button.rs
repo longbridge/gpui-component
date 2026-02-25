@@ -10,6 +10,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     IconName, Sizable, Size,
 };
+use rust_i18n::t;
 
 // ============================================================================
 // 事件定义
@@ -44,8 +45,8 @@ impl SendButtonState {
     pub fn new() -> Self {
         Self {
             is_loading: false,
-            send_label: "发送".to_string(),
-            cancel_label: "终止".to_string(),
+            send_label: t!("AiChat.send").to_string(),
+            cancel_label: t!("AiChat.cancel").to_string(),
         }
     }
 

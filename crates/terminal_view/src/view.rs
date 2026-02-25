@@ -741,13 +741,15 @@ impl TerminalView {
         let new_size = (cols, rows);
         if self.last_size != Some(new_size) {
             tracing::info!(
-                "终端尺寸变化: {:?} -> {:?}, cell_width={:.2}, line_height={:.2}, bounds={:.0}x{:.0}",
-                self.last_size,
-                new_size,
-                self.cell_width,
-                self.line_height,
-                bounds.size.width,
-                bounds.size.height
+                "{}",
+                t!(
+                    "TerminalView.terminal_size_changed",
+                    old = format!("{:?}", self.last_size),
+                    new = format!("{:?}", new_size),
+                    cell_width = format!("{:.2}", self.cell_width),
+                    line_height = format!("{:.2}", self.line_height),
+                    bounds = format!("{:.0}x{:.0}", bounds.size.width, bounds.size.height)
+                )
             );
             self.last_size = Some(new_size);
             self.terminal.update(cx, |terminal, _| {
@@ -886,8 +888,11 @@ impl TerminalView {
         // 询问AI（仅在有选中文本时可用）
         if let Some(text) = selection_text {
             let message = format!(
-                "以下是我在终端中选中的内容，请帮我分析：\n\n```\n{}\n```",
-                text.trim()
+                "{}",
+                t!(
+                    "TerminalView.ask_ai_selection_template",
+                    content = text.trim()
+                )
             );
             let sidebar_clone = sidebar.clone();
             menu = menu.separator().item(
@@ -1399,11 +1404,14 @@ impl Render for TerminalView {
 
         if self.cell_width != new_cell_width {
             tracing::info!(
-                "cell_width 变化: {:.2} -> {:.2}, font={}, size={:.1}",
-                self.cell_width,
-                new_cell_width,
-                self.current_theme.font_family,
-                self.current_theme.font_size
+                "{}",
+                t!(
+                    "TerminalView.cell_width_changed",
+                    old = format!("{:.2}", self.cell_width),
+                    new = format!("{:.2}", new_cell_width),
+                    font = self.current_theme.font_family,
+                    size = format!("{:.1}", self.current_theme.font_size)
+                )
             );
             self.cell_width = new_cell_width;
         }

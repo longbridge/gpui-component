@@ -24,6 +24,7 @@ use mongodb::bson::{Bson, Document};
 use mongodb::options::FindOptions;
 use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContent, TabContentEvent};
+use rust_i18n::t;
 
 use crate::types::{bson_to_string, document_to_pretty_json, MongoError};
 use crate::GlobalMongoState;
@@ -89,39 +90,48 @@ fn parse_optional_document(text: &str, label: &str) -> Result<Option<Document>, 
     }
 
     let value: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
-        MongoError::InvalidFilter(format!("{}解析失败: {}", label, e))
+        MongoError::InvalidFilter(
+            t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
+        )
     })?;
     let bson = mongodb::bson::to_bson(&value)
-        .map_err(|e| MongoError::InvalidFilter(format!("{}解析失败: {}", label, e)))?;
+        .map_err(|e| {
+            MongoError::InvalidFilter(
+                t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
+            )
+        })?;
     match bson {
         Bson::Document(document) => Ok(Some(document)),
-        _ => Err(MongoError::InvalidFilter(format!(
-            "{}必须是 JSON 对象",
-            label
-        ))),
+        _ => Err(MongoError::InvalidFilter(
+            t!("MongoCollection.must_be_json_object", label = label).to_string(),
+        )),
     }
 }
 
 fn parse_required_document(text: &str, label: &str) -> Result<Document, MongoError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
-        return Err(MongoError::InvalidFilter(format!(
-            "{}不能为空",
-            label
-        )));
+        return Err(MongoError::InvalidFilter(
+            t!("MongoCollection.required", label = label).to_string(),
+        ));
     }
 
     let value: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
-        MongoError::InvalidFilter(format!("{}解析失败: {}", label, e))
+        MongoError::InvalidFilter(
+            t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
+        )
     })?;
     let bson = mongodb::bson::to_bson(&value)
-        .map_err(|e| MongoError::InvalidFilter(format!("{}解析失败: {}", label, e)))?;
+        .map_err(|e| {
+            MongoError::InvalidFilter(
+                t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
+            )
+        })?;
     match bson {
         Bson::Document(document) => Ok(document),
-        _ => Err(MongoError::InvalidFilter(format!(
-            "{}必须是 JSON 对象",
-            label
-        ))),
+        _ => Err(MongoError::InvalidFilter(
+            t!("MongoCollection.must_be_json_object", label = label).to_string(),
+        )),
     }
 }
 
@@ -133,10 +143,9 @@ fn parse_i64_input(text: &str, label: &str, default: i64, min: i64) -> Result<i6
 
     match trimmed.parse::<i64>() {
         Ok(value) if value >= min => Ok(value),
-        _ => Err(MongoError::InvalidFilter(format!(
-            "{}必须是大于等于 {} 的整数",
-            label, min
-        ))),
+        _ => Err(MongoError::InvalidFilter(
+            t!("MongoCollection.must_be_min_int", label = label, min = min).to_string(),
+        )),
     }
 }
 
@@ -147,13 +156,15 @@ fn parse_pipeline(text: &str) -> Result<Vec<Document>, MongoError> {
     }
 
     let value: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
-        MongoError::InvalidFilter(format!("聚合管道解析失败: {}", e))
+        MongoError::InvalidFilter(
+            t!("MongoCollection.pipeline_parse_failed", error = e).to_string(),
+        )
     })?;
     let array = match value {
         serde_json::Value::Array(items) => items,
         _ => {
             return Err(MongoError::InvalidFilter(
-                "聚合管道必须是 JSON 数组".to_string(),
+                t!("MongoCollection.pipeline_must_be_array").to_string(),
             ))
         }
     };
@@ -161,15 +172,25 @@ fn parse_pipeline(text: &str) -> Result<Vec<Document>, MongoError> {
     let mut pipeline = Vec::with_capacity(array.len());
     for (index, item) in array.into_iter().enumerate() {
         let bson = mongodb::bson::to_bson(&item).map_err(|e| {
-            MongoError::InvalidFilter(format!("聚合管道第 {} 项解析失败: {}", index + 1, e))
+            MongoError::InvalidFilter(
+                t!(
+                    "MongoCollection.pipeline_item_parse_failed",
+                    index = index + 1,
+                    error = e
+                )
+                .to_string(),
+            )
         })?;
         match bson {
             Bson::Document(document) => pipeline.push(document),
             _ => {
-                return Err(MongoError::InvalidFilter(format!(
-                    "聚合管道第 {} 项必须是 JSON 对象",
-                    index + 1
-                )))
+                return Err(MongoError::InvalidFilter(
+                    t!(
+                        "MongoCollection.pipeline_item_must_be_object",
+                        index = index + 1
+                    )
+                    .to_string(),
+                ))
             }
         }
     }
@@ -321,18 +342,25 @@ pub struct CollectionView {
 impl CollectionView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let filter_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("过滤条件 (JSON)")
+            InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.filter_placeholder").to_string())
         });
-        let sort_input = cx.new(|cx| InputState::new(window, cx).placeholder("排序条件 (JSON)"));
+        let sort_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.sort_placeholder").to_string())
+        });
         let projection_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("投影字段 (JSON)"));
+            cx.new(|cx| InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.projection_placeholder").to_string()));
         let page_size_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("每页数量");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.page_size_placeholder").to_string());
             state.set_value(DEFAULT_PAGE_SIZE.to_string(), window, cx);
             state
         });
         let skip_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("基础跳过");
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.skip_placeholder").to_string());
             state.set_value(DEFAULT_SKIP.to_string(), window, cx);
             state
         });
@@ -342,7 +370,7 @@ impl CollectionView {
                 .line_number(false)
                 .rows(16)
                 .soft_wrap(false)
-                .placeholder("文档内容 (JSON)")
+                .placeholder(t!("MongoCollection.document_placeholder").to_string())
         });
         let explain_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -350,7 +378,7 @@ impl CollectionView {
                 .line_number(false)
                 .rows(16)
                 .soft_wrap(false)
-                .placeholder("执行计划结果")
+                .placeholder(t!("MongoCollection.explain_placeholder").to_string())
         });
         let aggregation_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
@@ -358,7 +386,7 @@ impl CollectionView {
                 .line_number(false)
                 .rows(10)
                 .soft_wrap(false)
-                .placeholder("聚合管道 (JSON 数组)");
+                .placeholder(t!("MongoCollection.pipeline_placeholder").to_string());
             state.set_value("[]".to_string(), window, cx);
             state
         });
@@ -368,7 +396,7 @@ impl CollectionView {
                 .line_number(false)
                 .rows(16)
                 .soft_wrap(false)
-                .placeholder("聚合结果预览")
+                .placeholder(t!("MongoCollection.aggregation_output_placeholder").to_string())
         });
         let schema_output = cx.new(|cx| {
             InputState::new(window, cx)
@@ -376,10 +404,11 @@ impl CollectionView {
                 .line_number(false)
                 .rows(16)
                 .soft_wrap(false)
-                .placeholder("Schema 推断结果")
+                .placeholder(t!("MongoCollection.schema_placeholder").to_string())
         });
         let index_name_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("索引名称（可选）")
+            InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.index_name_optional").to_string())
         });
         let index_keys_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -387,16 +416,19 @@ impl CollectionView {
                 .line_number(false)
                 .rows(6)
                 .soft_wrap(false)
-                .placeholder("索引键 (JSON)")
+                .placeholder(t!("MongoCollection.index_keys_placeholder").to_string())
         });
-        let index_drop_input = cx.new(|cx| InputState::new(window, cx).placeholder("索引名称"));
+        let index_drop_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.index_name_placeholder").to_string())
+        });
         let indexes_output = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
                 .line_number(false)
                 .rows(16)
                 .soft_wrap(false)
-                .placeholder("索引列表")
+                .placeholder(t!("MongoCollection.indexes_placeholder").to_string())
         });
         let validation_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -404,7 +436,7 @@ impl CollectionView {
                 .line_number(false)
                 .rows(16)
                 .soft_wrap(false)
-                .placeholder("校验规则 (JSON)")
+                .placeholder(t!("MongoCollection.validation_placeholder").to_string())
         });
         let mut subscriptions = Vec::new();
         let mut subscribe_enter = |subscriptions: &mut Vec<Subscription>,
@@ -513,15 +545,34 @@ impl CollectionView {
 
     fn read_query_inputs(&self, cx: &mut Context<Self>) -> Result<QueryInputs, MongoError> {
         let filter_text = self.filter_input.read(cx).text().to_string();
-        let filter = parse_optional_document(&filter_text, "过滤条件")?;
+        let filter = parse_optional_document(
+            &filter_text,
+            t!("MongoCollection.filter_label").as_ref(),
+        )?;
         let sort_text = self.sort_input.read(cx).text().to_string();
-        let sort = parse_optional_document(&sort_text, "排序条件")?;
+        let sort = parse_optional_document(
+            &sort_text,
+            t!("MongoCollection.sort_label").as_ref(),
+        )?;
         let projection_text = self.projection_input.read(cx).text().to_string();
-        let projection = parse_optional_document(&projection_text, "投影条件")?;
+        let projection = parse_optional_document(
+            &projection_text,
+            t!("MongoCollection.projection_label").as_ref(),
+        )?;
         let page_size_text = self.page_size_input.read(cx).text().to_string();
-        let page_size = parse_i64_input(&page_size_text, "每页数量", DEFAULT_PAGE_SIZE, 1)?;
+        let page_size = parse_i64_input(
+            &page_size_text,
+            t!("MongoCollection.page_size_label").as_ref(),
+            DEFAULT_PAGE_SIZE,
+            1,
+        )?;
         let skip_text = self.skip_input.read(cx).text().to_string();
-        let skip_base = parse_i64_input(&skip_text, "基础跳过", DEFAULT_SKIP, 0)?;
+        let skip_base = parse_i64_input(
+            &skip_text,
+            t!("MongoCollection.skip_label").as_ref(),
+            DEFAULT_SKIP,
+            0,
+        )?;
 
         Ok(QueryInputs {
             filter,
@@ -741,7 +792,10 @@ impl CollectionView {
 
     fn save_edit(&mut self, cx: &mut Context<Self>) {
         let content = self.editor_input.read(cx).text().to_string();
-        let mut document = match parse_required_document(&content, "文档内容") {
+        let mut document = match parse_required_document(
+            &content,
+            t!("MongoCollection.document_label").as_ref(),
+        ) {
             Ok(document) => document,
             Err(error) => {
                 self.set_error(error.to_string(), cx);
@@ -761,9 +815,9 @@ impl CollectionView {
 
         let editor_mode = self.editor_mode;
         let success_message = match editor_mode {
-            EditorMode::Create => "文档已新增",
-            EditorMode::Update => "文档已更新",
-            EditorMode::View => "操作完成",
+            EditorMode::Create => t!("MongoCollection.document_created").to_string(),
+            EditorMode::Update => t!("MongoCollection.document_updated").to_string(),
+            EditorMode::View => t!("MongoCollection.operation_done").to_string(),
         };
         let target_id = if editor_mode == EditorMode::Update {
             let target_id = self.editing_id.clone().or_else(|| {
@@ -772,7 +826,10 @@ impl CollectionView {
                     .and_then(|item| item.id_bson.clone())
             });
             let Some(target_id) = target_id else {
-                self.set_error("缺少 _id，无法更新文档".to_string(), cx);
+                self.set_error(
+                    t!("MongoCollection.id_required_for_update").to_string(),
+                    cx,
+                );
                 return;
             };
             document.insert("_id", target_id.clone());
@@ -798,7 +855,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 match editor_mode {
                     EditorMode::Create => guard
@@ -807,7 +866,9 @@ impl CollectionView {
                         .map(|_| ()),
                     EditorMode::Update => {
                         let target_id =
-                            target_id.ok_or_else(|| anyhow::anyhow!("缺少 _id"))?;
+                            target_id.ok_or_else(|| {
+                                anyhow::anyhow!(t!("MongoCollection.id_missing").to_string())
+                            })?;
                         guard
                             .replace_document(&database_name, &collection_name, target_id, document)
                             .await
@@ -856,7 +917,10 @@ impl CollectionView {
             return;
         };
         let Some(id_bson) = item.id_bson.clone() else {
-            self.set_error("缺少 _id，无法删除文档".to_string(), cx);
+            self.set_error(
+                t!("MongoCollection.id_required_for_delete").to_string(),
+                cx,
+            );
             return;
         };
         self.pending_select_id = self
@@ -875,7 +939,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .delete_document(&database_name, &collection_name, id_bson)
@@ -892,7 +958,10 @@ impl CollectionView {
                         view.selected_index = None;
                         view.show_explain = false;
                         view.pending_reload = true;
-                        Self::notify_success("文档已删除", cx);
+                        Self::notify_success(
+                            t!("MongoCollection.document_deleted").as_ref(),
+                            cx,
+                        );
                     }
                     Err(error) => {
                         view.error_message = Some(error.to_string());
@@ -913,13 +982,19 @@ impl CollectionView {
             return;
         };
         cx.write_to_clipboard(ClipboardItem::new_string(item.pretty_json.clone()));
-        Self::notify_success("文档内容已复制", cx);
+        Self::notify_success(t!("MongoCollection.document_copied").as_ref(), cx);
     }
 
     fn export_data(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.build_export_data() {
             Ok(payload) => {
-                self.show_export_dialog("导出数据", payload, "json", window, cx);
+                self.show_export_dialog(
+                    t!("MongoCollection.export_data_title").as_ref(),
+                    payload,
+                    "json",
+                    window,
+                    cx,
+                );
             }
             Err(error) => self.set_error(error.to_string(), cx),
         }
@@ -939,7 +1014,13 @@ impl CollectionView {
         let skip = inputs.skip(self.page_index);
         match self.build_query_code(&collection_name, &inputs, skip) {
             Ok(code) => {
-                self.show_export_dialog("导出代码", code, "javascript", window, cx);
+                self.show_export_dialog(
+                    t!("MongoCollection.export_code_title").as_ref(),
+                    code,
+                    "javascript",
+                    window,
+                    cx,
+                );
             }
             Err(error) => self.set_error(error.to_string(), cx),
         }
@@ -982,13 +1063,16 @@ impl CollectionView {
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("复制".to_string())
-                        .cancel_text("关闭".to_string()),
+                        .ok_text(t!("Common.copy").to_string())
+                        .cancel_text(t!("Common.close").to_string()),
                 )
                 .on_ok(move |_, window, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(content.clone()));
                     window.push_notification(
-                        Notification::success("已复制到剪贴板").autohide(true),
+                        Notification::success(
+                            t!("MongoCollection.copied_to_clipboard").to_string(),
+                        )
+                        .autohide(true),
                         cx,
                     );
                     window.close_dialog(cx);
@@ -1072,7 +1156,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .explain_find(&database_name, &collection_name, inputs.filter, options)
@@ -1138,7 +1224,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .aggregate_documents(&database_name, &collection_name, pipeline)
@@ -1173,10 +1261,19 @@ impl CollectionView {
     fn export_aggregation_result(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let content = self.aggregation_output.read(cx).text().to_string();
         if content.trim().is_empty() {
-            Self::notify_error("暂无可导出的聚合结果", cx);
+            Self::notify_error(
+                t!("MongoCollection.no_aggregation_to_export").as_ref(),
+                cx,
+            );
             return;
         }
-        self.show_export_dialog("导出聚合结果", content, "json", window, cx);
+        self.show_export_dialog(
+            t!("MongoCollection.export_aggregation_title").as_ref(),
+            content,
+            "json",
+            window,
+            cx,
+        );
     }
 
     fn load_schema(&mut self, cx: &mut Context<Self>) {
@@ -1201,7 +1298,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 let mut options = FindOptions::default();
                 options.limit = Some(100);
@@ -1257,7 +1356,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .list_indexes(&database_name, &collection_name)
@@ -1291,7 +1392,10 @@ impl CollectionView {
 
     fn create_index(&mut self, cx: &mut Context<Self>) {
         let keys_text = self.index_keys_input.read(cx).text().to_string();
-        let keys = match parse_required_document(&keys_text, "索引键") {
+        let keys = match parse_required_document(
+            &keys_text,
+            t!("MongoCollection.index_keys_label").as_ref(),
+        ) {
             Ok(keys) => keys,
             Err(error) => {
                 self.indexes_error = Some(error.to_string());
@@ -1326,7 +1430,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .create_index(&database_name, &collection_name, keys, name)
@@ -1338,7 +1444,7 @@ impl CollectionView {
                 view.indexes_loading = false;
                 match result {
                     Ok(_) => {
-                        Self::notify_success("索引已创建", cx);
+                        Self::notify_success(t!("MongoCollection.index_created").as_ref(), cx);
                         view.load_indexes(cx);
                     }
                     Err(error) => {
@@ -1356,8 +1462,12 @@ impl CollectionView {
         let name = self.index_drop_input.read(cx).text().to_string();
         let name = name.trim().to_string();
         if name.is_empty() {
-            self.indexes_error = Some("索引名称不能为空".to_string());
-            Self::notify_error("索引名称不能为空", cx);
+            self.indexes_error =
+                Some(t!("MongoCollection.index_name_required").to_string());
+            Self::notify_error(
+                t!("MongoCollection.index_name_required").as_ref(),
+                cx,
+            );
             cx.notify();
             return;
         }
@@ -1381,7 +1491,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .drop_index(&database_name, &collection_name, &name)
@@ -1393,7 +1505,7 @@ impl CollectionView {
                 view.indexes_loading = false;
                 match result {
                     Ok(_) => {
-                        Self::notify_success("索引已删除", cx);
+                        Self::notify_success(t!("MongoCollection.index_deleted").as_ref(), cx);
                         view.load_indexes(cx);
                     }
                     Err(error) => {
@@ -1428,7 +1540,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .get_collection_validation(&database_name, &collection_name)
@@ -1460,7 +1574,10 @@ impl CollectionView {
 
     fn save_validation(&mut self, cx: &mut Context<Self>) {
         let text = self.validation_input.read(cx).text().to_string();
-        let validator = match parse_optional_document(&text, "校验规则") {
+        let validator = match parse_optional_document(
+            &text,
+            t!("MongoCollection.validation_label").as_ref(),
+        ) {
             Ok(validator) => validator,
             Err(error) => {
                 self.validation_error = Some(error.to_string());
@@ -1489,7 +1606,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .update_collection_validation(&database_name, &collection_name, validator)
@@ -1501,7 +1620,10 @@ impl CollectionView {
                 view.validation_loading = false;
                 match result {
                     Ok(_) => {
-                        Self::notify_success("校验规则已更新", cx);
+                        Self::notify_success(
+                            t!("MongoCollection.validation_updated").as_ref(),
+                            cx,
+                        );
                         view.load_validation(cx);
                     }
                     Err(error) => {
@@ -1536,7 +1658,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 guard
                     .update_collection_validation(&database_name, &collection_name, None)
@@ -1549,7 +1673,10 @@ impl CollectionView {
                 match result {
                     Ok(_) => {
                         view.pending_validation_value = Some("{}".to_string());
-                        Self::notify_success("校验规则已清除", cx);
+                        Self::notify_success(
+                            t!("MongoCollection.validation_cleared").as_ref(),
+                            cx,
+                        );
                         view.load_validation(cx);
                     }
                     Err(error) => {
@@ -1622,7 +1749,9 @@ impl CollectionView {
             let result = Tokio::spawn_result(cx, async move {
                 let connection = global_state
                     .get_connection(&connection_id)
-                    .ok_or_else(|| anyhow::anyhow!("连接不存在"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                    })?;
                 let guard = connection.read().await;
                 let documents = guard
                     .find_documents(&database_name, &collection_name, inputs.filter.clone(), options)
@@ -1715,7 +1844,7 @@ impl CollectionView {
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let title = match (&self.database_name, &self.collection_name) {
             (Some(database), Some(collection)) => format!("{} / {}", database, collection),
-            _ => "请选择集合".to_string(),
+            _ => t!("MongoCollection.select_collection").to_string(),
         };
 
         h_flex()
@@ -1731,11 +1860,11 @@ impl CollectionView {
     }
 
     fn render_tab_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let document_label = "文档".to_string();
-        let aggregation_label = "聚合".to_string();
-        let schema_label = "结构".to_string();
-        let index_label = "索引".to_string();
-        let validation_label = "校验".to_string();
+        let document_label = t!("MongoCollection.tab_documents").to_string();
+        let aggregation_label = t!("MongoCollection.tab_aggregations").to_string();
+        let schema_label = t!("MongoCollection.tab_schema").to_string();
+        let index_label = t!("MongoCollection.tab_indexes").to_string();
+        let validation_label = t!("MongoCollection.tab_validation").to_string();
 
         TabBar::new("mongo-collection-tabs")
             .with_size(Size::Large)
@@ -1761,7 +1890,7 @@ impl CollectionView {
                 Button::new("mongo-explain")
                     .small()
                     .outline()
-                    .label("执行计划")
+                    .label(t!("MongoCollection.explain").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, _window, cx| {
                         if this.show_explain {
@@ -1776,7 +1905,7 @@ impl CollectionView {
                 Button::new("mongo-reset")
                     .small()
                     .outline()
-                    .label("重置")
+                    .label(t!("MongoCollection.reset").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.reset_inputs(window, cx);
@@ -1786,7 +1915,7 @@ impl CollectionView {
                 Button::new("mongo-find")
                     .small()
                     .primary()
-                    .label("查询")
+                    .label(t!("MongoCollection.query").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, _window, cx| {
                         this.page_index = 0;
@@ -1802,7 +1931,7 @@ impl CollectionView {
                     } else {
                         IconName::ChevronDown
                     })
-                    .label("选项")
+                    .label(t!("MongoCollection.options").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.show_options = !this.show_options;
@@ -1830,28 +1959,28 @@ impl CollectionView {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("排序"),
+                            .child(t!("MongoCollection.sort_label").to_string()),
                     )
                     .child(Input::new(&self.sort_input).w(px(220.0)))
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("投影"),
+                            .child(t!("MongoCollection.projection_label").to_string()),
                     )
                     .child(Input::new(&self.projection_input).w(px(220.0)))
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("跳过"),
+                            .child(t!("MongoCollection.skip_label").to_string()),
                     )
                     .child(Input::new(&self.skip_input).w(px(100.0)))
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("每页"),
+                            .child(t!("MongoCollection.page_size_label").to_string()),
                     )
                     .child(Input::new(&self.page_size_input).w(px(100.0))),
             )
@@ -1869,7 +1998,7 @@ impl CollectionView {
                     .small()
                     .outline()
                     .icon(IconName::Plus)
-                    .label("新增")
+                    .label(t!("MongoCollection.add").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.start_create(window, cx);
@@ -1880,7 +2009,7 @@ impl CollectionView {
                     .small()
                     .outline()
                     .icon(IconName::Edit)
-                    .label("更新")
+                    .label(t!("MongoCollection.update").to_string())
                     .disabled(is_loading || !has_selection)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.start_update(window, cx);
@@ -1891,7 +2020,7 @@ impl CollectionView {
                     .small()
                     .outline()
                     .icon(IconName::Remove)
-                    .label("删除")
+                    .label(t!("Common.delete").to_string())
                     .disabled(is_loading || !has_selection)
                     .on_click(cx.listener(|this, _, _window, cx| {
                         this.delete_selected(cx);
@@ -1902,7 +2031,7 @@ impl CollectionView {
                     .small()
                     .outline()
                     .icon(IconName::ExternalLink)
-                    .label("导出数据")
+                    .label(t!("MongoCollection.export_data").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.export_data(window, cx);
@@ -1913,7 +2042,7 @@ impl CollectionView {
                     .small()
                     .outline()
                     .icon(IconName::Query)
-                    .label("导出代码")
+                    .label(t!("MongoCollection.export_code").to_string())
                     .disabled(is_loading)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.export_code(window, cx);
@@ -1943,7 +2072,7 @@ impl CollectionView {
     fn render_aggregation_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let result_summary = self
             .aggregation_count
-            .map(|count| format!("返回 {} 条结果", count));
+            .map(|count| t!("MongoCollection.result_count", count = count).to_string());
 
         let result_body = if self.aggregation_loading {
             div()
@@ -1981,7 +2110,7 @@ impl CollectionView {
                         Button::new("mongo-aggregation-run")
                             .small()
                             .primary()
-                            .label("运行")
+                            .label(t!("MongoCollection.run").to_string())
                             .disabled(self.aggregation_loading)
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.run_aggregation(cx);
@@ -1991,7 +2120,7 @@ impl CollectionView {
                         Button::new("mongo-aggregation-export")
                             .small()
                             .outline()
-                            .label("导出结果")
+                            .label(t!("MongoCollection.export_result").to_string())
                             .disabled(self.aggregation_loading)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.export_aggregation_result(window, cx);
@@ -2023,7 +2152,7 @@ impl CollectionView {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("聚合管道"),
+                                    .child(t!("MongoCollection.pipeline_label").to_string()),
                             )
                             .child(Input::new(&self.aggregation_input).h_full()),
                     )
@@ -2039,7 +2168,7 @@ impl CollectionView {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("结果预览"),
+                                    .child(t!("MongoCollection.result_preview_label").to_string()),
                             )
                             .child(result_body),
                     ),
@@ -2049,7 +2178,7 @@ impl CollectionView {
     fn render_schema_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let summary = self
             .schema_sample_count
-            .map(|count| format!("样本数量 {}", count));
+            .map(|count| t!("MongoCollection.sample_count", count = count).to_string());
 
         let body = if self.schema_loading {
             div()
@@ -2087,7 +2216,7 @@ impl CollectionView {
                         Button::new("mongo-schema-refresh")
                             .small()
                             .outline()
-                            .label("重新采样")
+                            .label(t!("MongoCollection.resample").to_string())
                             .disabled(self.schema_loading)
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.load_schema(cx);
@@ -2117,7 +2246,7 @@ impl CollectionView {
     fn render_indexes_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let summary = self
             .indexes_count
-            .map(|count| format!("索引数量 {}", count));
+            .map(|count| t!("MongoCollection.index_count", count = count).to_string());
 
         let list_body = if self.indexes_loading {
             div()
@@ -2158,7 +2287,7 @@ impl CollectionView {
                                 Button::new("mongo-index-refresh")
                                     .small()
                                     .outline()
-                                    .label("刷新索引")
+                                    .label(t!("MongoCollection.refresh_indexes").to_string())
                                     .disabled(self.indexes_loading)
                                     .on_click(cx.listener(|this, _, _window, cx| {
                                         this.load_indexes(cx);
@@ -2180,7 +2309,7 @@ impl CollectionView {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("创建索引"),
+                                    .child(t!("MongoCollection.create_index_label").to_string()),
                             )
                             .child(
                                 h_flex()
@@ -2191,7 +2320,7 @@ impl CollectionView {
                                         Button::new("mongo-index-create")
                                             .small()
                                             .primary()
-                                            .label("创建")
+                                            .label(t!("Common.create").to_string())
                                             .disabled(self.indexes_loading)
                                             .on_click(cx.listener(|this, _, _window, cx| {
                                                 this.create_index(cx);
@@ -2207,7 +2336,7 @@ impl CollectionView {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("删除索引"),
+                                    .child(t!("MongoCollection.drop_index_label").to_string()),
                             )
                             .child(
                                 h_flex()
@@ -2218,7 +2347,7 @@ impl CollectionView {
                                         Button::new("mongo-index-drop")
                                             .small()
                                             .outline()
-                                            .label("删除")
+                                            .label(t!("Common.delete").to_string())
                                             .disabled(self.indexes_loading)
                                             .on_click(cx.listener(|this, _, _window, cx| {
                                                 this.drop_index(cx);
@@ -2276,7 +2405,7 @@ impl CollectionView {
                         Button::new("mongo-validation-refresh")
                             .small()
                             .outline()
-                            .label("刷新规则")
+                            .label(t!("MongoCollection.refresh_validation").to_string())
                             .disabled(self.validation_loading)
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.load_validation(cx);
@@ -2286,7 +2415,7 @@ impl CollectionView {
                         Button::new("mongo-validation-save")
                             .small()
                             .primary()
-                            .label("保存规则")
+                            .label(t!("MongoCollection.save_validation").to_string())
                             .disabled(self.validation_loading)
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.save_validation(cx);
@@ -2296,7 +2425,7 @@ impl CollectionView {
                         Button::new("mongo-validation-clear")
                             .small()
                             .outline()
-                            .label("清除规则")
+                            .label(t!("MongoCollection.clear_validation").to_string())
                             .disabled(self.validation_loading)
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.clear_validation(cx);
@@ -2367,7 +2496,7 @@ impl CollectionView {
                         .ghost()
                         .xsmall()
                         .icon(IconName::Edit)
-                        .tooltip("编辑")
+                        .tooltip(t!("Common.edit").to_string())
                         .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
                             this.select_document(index, window, cx);
@@ -2382,7 +2511,7 @@ impl CollectionView {
                         .ghost()
                         .xsmall()
                         .icon(IconName::Remove)
-                        .tooltip("删除")
+                        .tooltip(t!("Common.delete").to_string())
                         .on_click(cx.listener(move |this, _, _window, cx| {
                             cx.stop_propagation();
                             this.selected_index = Some(index);
@@ -2397,7 +2526,7 @@ impl CollectionView {
                         .ghost()
                         .xsmall()
                         .icon(IconName::Copy)
-                        .tooltip("复制")
+                        .tooltip(t!("Common.copy").to_string())
                         .on_click(cx.listener(move |this, _, _window, cx| {
                             cx.stop_propagation();
                             this.selected_index = Some(index);
@@ -2412,7 +2541,7 @@ impl CollectionView {
                         .ghost()
                         .xsmall()
                         .icon(IconName::Plus)
-                        .tooltip("克隆")
+                        .tooltip(t!("MongoCollection.clone").to_string())
                         .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
                             this.start_clone(index, window, cx);
@@ -2446,7 +2575,7 @@ impl CollectionView {
 
         let item_count = self.documents.len();
         if item_count == 0 {
-            return self.render_empty_state("暂无文档", cx);
+            return self.render_empty_state(t!("MongoCollection.no_documents").as_ref(), cx);
         }
 
         uniform_list(
@@ -2465,7 +2594,7 @@ impl CollectionView {
 
     fn render_document_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let total = self.total_count.unwrap_or(self.documents.len() as i64);
-        let title = format!("文档 ({})", total);
+        let title = t!("MongoCollection.documents_title", total = total).to_string();
 
         v_flex()
             .flex_1()
@@ -2500,18 +2629,18 @@ impl CollectionView {
     fn render_detail_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let is_editing = matches!(self.editor_mode, EditorMode::Create | EditorMode::Update);
         let header_title = if self.show_explain {
-            "执行计划结果".to_string()
+            t!("MongoCollection.explain_result_title").to_string()
         } else if is_editing {
             match self.editor_mode {
-                EditorMode::Create => "新建文档".to_string(),
-                EditorMode::Update => "编辑文档".to_string(),
-                EditorMode::View => "文档详情".to_string(),
+                EditorMode::Create => t!("MongoCollection.new_document").to_string(),
+                EditorMode::Update => t!("MongoCollection.edit_document").to_string(),
+                EditorMode::View => t!("MongoCollection.document_detail").to_string(),
             }
         } else {
             self.selected_index
                 .and_then(|index| self.documents.get(index))
-                .map(|item| format!("文档 {}", item.id))
-                .unwrap_or_else(|| "请选择文档".to_string())
+                .map(|item| t!("MongoCollection.document_with_id", id = item.id).to_string())
+                .unwrap_or_else(|| t!("MongoCollection.select_document").to_string())
         };
 
         let body = if self.show_explain {
@@ -2531,7 +2660,7 @@ impl CollectionView {
                 )
                 .into_any_element()
         } else {
-            self.render_empty_state("请选择文档", cx)
+            self.render_empty_state(t!("MongoCollection.select_document").as_ref(), cx)
         };
 
         v_flex()
@@ -2561,7 +2690,7 @@ impl CollectionView {
                                     Button::new("mongo-save")
                                         .small()
                                         .primary()
-                                        .label("保存")
+                                        .label(t!("Common.save").to_string())
                                         .on_click(cx.listener(|this, _, _window, cx| {
                                             this.save_edit(cx);
                                         })),
@@ -2570,7 +2699,7 @@ impl CollectionView {
                                     Button::new("mongo-cancel")
                                         .small()
                                         .outline()
-                                        .label("取消")
+                                        .label(t!("Common.cancel").to_string())
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.cancel_edit(window, cx);
                                         })),
@@ -2582,7 +2711,7 @@ impl CollectionView {
                                         .small()
                                         .outline()
                                         .icon(IconName::Copy)
-                                        .label("复制")
+                                        .label(t!("Common.copy").to_string())
                                         .disabled(self.selected_index.is_none())
                                         .on_click(cx.listener(|this, _, _window, cx| {
                                             this.copy_selected(cx);
@@ -2634,14 +2763,17 @@ impl CollectionView {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!(
-                        "显示 {}-{} / {}",
-                        start_index,
-                        end_index,
-                        if self.total_count.is_some() {
-                            total_count.to_string()
-                        } else {
-                            "?".to_string()
-                        }
+                        "{}",
+                        t!(
+                            "MongoCollection.pagination_summary",
+                            start = start_index,
+                            end = end_index,
+                            total = if self.total_count.is_some() {
+                                total_count.to_string()
+                            } else {
+                                "?".to_string()
+                            }
+                        )
                     )),
             )
             .child(
@@ -2665,15 +2797,18 @@ impl CollectionView {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!(
-                                "第 {} / {} 页",
-                                current_page_display,
-                                if total_pages == 0 {
-                                    "?".to_string()
-                                } else {
-                                    total_pages.to_string()
-                                }
-                            )),
+                            .child(
+                                t!(
+                                    "MongoCollection.page_summary",
+                                    current = current_page_display,
+                                    total = if total_pages == 0 {
+                                        "?".to_string()
+                                    } else {
+                                        total_pages.to_string()
+                                    }
+                                )
+                                .to_string(),
+                            ),
                     )
                     .child(
                         Button::new("mongo-next")
@@ -2704,7 +2839,7 @@ impl TabContent for CollectionView {
     }
 
     fn title(&self, _cx: &App) -> SharedString {
-        "文档".to_string().into()
+        t!("MongoCollection.tab_documents").to_string().into()
     }
 
     fn icon(&self, _cx: &App) -> Option<Icon> {
@@ -2790,7 +2925,8 @@ impl Render for CollectionView {
         self.apply_pending_reload(cx);
 
         let body = if self.collection_name.is_none() {
-            self.render_empty_state("请选择一个集合", cx).into_any_element()
+            self.render_empty_state(t!("MongoCollection.select_collection_prompt").as_ref(), cx)
+                .into_any_element()
         } else {
             match self.active_tab {
                 TAB_DOCUMENTS => self.render_documents_tab(cx).into_any_element(),

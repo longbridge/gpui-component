@@ -6,6 +6,7 @@ use futures_util::stream::TryStreamExt;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Client;
+use rust_i18n::t;
 
 /// MongoDB 连接 trait
 #[async_trait]
@@ -151,7 +152,9 @@ impl MongoConnection for MongoConnectionImpl {
 
         let client = Client::with_uri_str(&self.config.connection_string)
             .await
-            .map_err(|e| MongoError::connection_with_source("MongoDB 连接失败", e))?;
+            .map_err(|e| {
+                MongoError::connection_with_source(t!("MongoConnection.connect_failed").to_string(), e)
+            })?;
         self.client = Some(client);
         Ok(())
     }
@@ -167,7 +170,9 @@ impl MongoConnection for MongoConnectionImpl {
         database
             .run_command(doc! { "ping": 1 })
             .await
-            .map_err(|e| MongoError::command_with_source("MongoDB ping 失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.ping_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -180,7 +185,9 @@ impl MongoConnection for MongoConnectionImpl {
         client
             .list_database_names()
             .await
-            .map_err(|e| MongoError::command_with_source("读取数据库列表失败", e))
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.list_databases_failed").to_string(), e)
+            })
     }
 
     async fn list_collections(&self, database_name: &str) -> Result<Vec<String>, MongoError> {
@@ -189,7 +196,9 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .list_collection_names()
             .await
-            .map_err(|e| MongoError::command_with_source("读取集合列表失败", e))
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.list_collections_failed").to_string(), e)
+            })
     }
 
     async fn create_collection(
@@ -202,7 +211,9 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .create_collection(collection_name)
             .await
-            .map_err(|e| MongoError::command_with_source("创建集合失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.create_collection_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -212,7 +223,9 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .drop()
             .await
-            .map_err(|e| MongoError::command_with_source("删除数据库失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.drop_database_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -227,13 +240,17 @@ impl MongoConnection for MongoConnectionImpl {
         let mut cursor = collection
             .aggregate(pipeline)
             .await
-            .map_err(|e| MongoError::command_with_source("执行聚合失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.aggregate_failed").to_string(), e)
+            })?;
 
         let mut documents = Vec::new();
         while let Some(document) = cursor
             .try_next()
             .await
-            .map_err(|e| MongoError::command_with_source("执行聚合失败", e))?
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.aggregate_failed").to_string(), e)
+            })?
         {
             documents.push(document);
         }
@@ -250,13 +267,19 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .run_command(doc! { "listIndexes": collection_name })
             .await
-            .map_err(|e| MongoError::command_with_source("读取索引列表失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.list_indexes_failed").to_string(), e)
+            })?;
         let cursor = result
             .get_document("cursor")
-            .map_err(|e| MongoError::command_with_source("读取索引列表失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.list_indexes_failed").to_string(), e)
+            })?;
         let first_batch = cursor
             .get_array("firstBatch")
-            .map_err(|e| MongoError::command_with_source("读取索引列表失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.list_indexes_failed").to_string(), e)
+            })?;
         let mut indexes = Vec::new();
         for item in first_batch {
             if let Bson::Document(document) = item {
@@ -282,7 +305,9 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .run_command(doc! { "createIndexes": collection_name, "indexes": [index_doc] })
             .await
-            .map_err(|e| MongoError::command_with_source("创建索引失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.create_index_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -297,7 +322,9 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .run_command(doc! { "dropIndexes": collection_name, "index": name })
             .await
-            .map_err(|e| MongoError::command_with_source("删除索引失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.drop_index_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -314,13 +341,19 @@ impl MongoConnection for MongoConnectionImpl {
                 "filter": { "name": collection_name },
             })
             .await
-            .map_err(|e| MongoError::command_with_source("读取校验规则失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.get_validation_failed").to_string(), e)
+            })?;
         let cursor = result
             .get_document("cursor")
-            .map_err(|e| MongoError::command_with_source("读取校验规则失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.get_validation_failed").to_string(), e)
+            })?;
         let first_batch = cursor
             .get_array("firstBatch")
-            .map_err(|e| MongoError::command_with_source("读取校验规则失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.get_validation_failed").to_string(), e)
+            })?;
         let Some(Bson::Document(collection_doc)) = first_batch.first() else {
             return Ok(None);
         };
@@ -348,7 +381,9 @@ impl MongoConnection for MongoConnectionImpl {
                 "validationAction": "error",
             })
             .await
-            .map_err(|e| MongoError::command_with_source("更新校验规则失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.update_validation_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -365,13 +400,17 @@ impl MongoConnection for MongoConnectionImpl {
             .find(filter.unwrap_or_else(Document::new))
             .with_options(options)
             .await
-            .map_err(|e| MongoError::command_with_source("读取文档失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.find_documents_failed").to_string(), e)
+            })?;
 
         let mut documents = Vec::new();
         while let Some(document) = cursor
             .try_next()
             .await
-            .map_err(|e| MongoError::command_with_source("读取文档失败", e))?
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.find_documents_failed").to_string(), e)
+            })?
         {
             documents.push(document);
         }
@@ -389,7 +428,9 @@ impl MongoConnection for MongoConnectionImpl {
         collection
             .count_documents(filter.unwrap_or_else(Document::new))
             .await
-            .map_err(|e| MongoError::command_with_source("统计文档数量失败", e))
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.count_documents_failed").to_string(), e)
+            })
             .map(|count| count as i64)
     }
 
@@ -404,7 +445,9 @@ impl MongoConnection for MongoConnectionImpl {
         collection
             .insert_one(document)
             .await
-            .map_err(|e| MongoError::command_with_source("新增文档失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.insert_document_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -420,7 +463,9 @@ impl MongoConnection for MongoConnectionImpl {
         collection
             .replace_one(doc! { "_id": id }, document)
             .await
-            .map_err(|e| MongoError::command_with_source("更新文档失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.replace_document_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -435,7 +480,9 @@ impl MongoConnection for MongoConnectionImpl {
         collection
             .delete_one(doc! { "_id": id })
             .await
-            .map_err(|e| MongoError::command_with_source("删除文档失败", e))?;
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.delete_document_failed").to_string(), e)
+            })?;
         Ok(())
     }
 
@@ -469,6 +516,8 @@ impl MongoConnection for MongoConnectionImpl {
             .database(database_name)
             .run_command(doc! { "explain": find_doc })
             .await
-            .map_err(|e| MongoError::command_with_source("执行计划查询失败", e))
+            .map_err(|e| {
+                MongoError::command_with_source(t!("MongoConnection.explain_failed").to_string(), e)
+            })
     }
 }

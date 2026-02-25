@@ -4,6 +4,7 @@ use crate::connection::{MongoConnection, MongoConnectionImpl};
 use crate::types::{MongoConnectionConfig, MongoError};
 use dashmap::DashMap;
 use gpui::Global;
+use rust_i18n::t;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use one_core::storage::MongoDBParams;
@@ -32,7 +33,9 @@ impl GlobalMongoState {
     ) -> Result<String, MongoError> {
         let connection_id = config.id.clone();
         if connection_id.is_empty() {
-            return Err(MongoError::Internal("连接 ID 不能为空".to_string()));
+            return Err(MongoError::Internal(
+                t!("MongoManager.connection_id_required").to_string(),
+            ));
         }
 
         let mut connection = MongoConnectionImpl::new(config);
@@ -100,7 +103,7 @@ impl MongoManager {
 
         let host_value = params.host.trim().to_string();
         if host_value.is_empty() {
-            return Err(MongoError::Internal("主机不能为空".to_string()));
+            return Err(MongoError::Internal(t!("MongoManager.host_required").to_string()));
         }
 
         let scheme = if params.use_srv_record {

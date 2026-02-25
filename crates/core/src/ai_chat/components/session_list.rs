@@ -15,6 +15,7 @@ use gpui_component::{
     list::{ListDelegate, ListState},
     ActiveTheme, IconName, IndexPath, Selectable, Sizable,
 };
+use rust_i18n::t;
 
 // ============================================================================
 // 会话数据
@@ -378,6 +379,6 @@ fn format_timestamp(timestamp: i64) -> String {
                 dt.format("%Y-%m-%d").to_string()
             }
         }
-        None => "未知时间".to_string(),
+        None => t!("AiChat.unknown_time").to_string(),
     }
 }

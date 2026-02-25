@@ -36,3 +36,4 @@ urlencoding = "2.1"
 keyring = "3"
 parking_lot.workspace = true
 util.workspace = true
+rust-i18n.workspace = true

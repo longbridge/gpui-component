@@ -48,7 +48,7 @@ impl std::fmt::Display for TransferCancelled {
 
 impl std::error::Error for TransferCancelled {}
 
-pub type ProgressCallback = Box<dyn Fn(TransferProgress) + Send + 'static>;
+pub type ProgressCallback = Box<dyn Fn(TransferProgress) + Send + Sync + 'static>;
 
 #[async_trait]
 pub trait SftpClient: Send + Sync {
