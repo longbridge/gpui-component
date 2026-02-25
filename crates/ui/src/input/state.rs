@@ -30,7 +30,7 @@ use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
     HoverDefinition, Lsp, Position,
-    display_map::{LineItem, LineLayout},
+    display_map::LineLayout,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
@@ -1606,52 +1606,54 @@ impl InputState {
         // - included the scroll offset.
         let inner_position = position - bounds.origin - point(line_number_width, px(0.));
 
-        let mut index = last_layout.visible_range_offset.start;
         let mut y_offset = last_layout.visible_top;
-        for (ix, line) in self
-            .display_map
-            .wrap_map()
-            .lines()
-            .iter()
-            .skip(last_layout.visible_range.start)
-            .enumerate()
-        {
-            let line_origin = self.line_origin_with_y_offset(&mut y_offset, line, line_height);
+
+        // Traverse visible display rows (which respects folding)
+        for (line_index, line_layout) in last_layout.lines.iter().enumerate() {
+            let display_row = last_layout.visible_range.start + line_index;
+
+            // Map display row to buffer line to get the text offset
+            let buffer_line = self.display_map.display_row_to_buffer_line(display_row);
+            let line_start_offset = self.text.line_start_offset(buffer_line);
+
+            // Calculate line origin for this display row
+            let line_origin = point(px(0.), y_offset);
             let pos = inner_position - line_origin;
-
-            let Some(line_layout) = last_layout.lines.get(ix) else {
-                if pos.y < line_origin.y + line_height {
-                    break;
-                }
-
-                continue;
-            };
 
             // Return offset by use closest_index_for_x if is single line mode.
             if self.mode.is_single_line() {
-                index = line_layout.closest_index_for_x(pos.x, last_layout);
-                break;
+                let local_index = line_layout.closest_index_for_x(pos.x, last_layout);
+                let index = line_start_offset + local_index;
+                return if self.masked {
+                    self.text.char_index_to_offset(index)
+                } else {
+                    index.min(self.text.len())
+                };
             }
 
-            if let Some(v) = line_layout.closest_index_for_position(pos, last_layout) {
-                index += v;
-                break;
+            // Check if mouse is in this line's bounds
+            if let Some(local_index) = line_layout.closest_index_for_position(pos, last_layout) {
+                let index = line_start_offset + local_index;
+                return if self.masked {
+                    self.text.char_index_to_offset(index)
+                } else {
+                    index.min(self.text.len())
+                };
             } else if pos.y < px(0.) {
-                break;
+                // Mouse is above this line, return start of this line
+                return if self.masked {
+                    self.text.char_index_to_offset(line_start_offset)
+                } else {
+                    line_start_offset
+                };
             }
 
-            // +1 for `\n`
-            index += line_layout.len() + 1;
+            y_offset += line_layout.size(line_height).height;
         }
 
-        let index = if index > self.text.len() {
-            self.text.len()
-        } else {
-            index
-        };
-
+        // Mouse is below all visible lines, return end of text
+        let index = self.text.len();
         if self.masked {
-            // When is masked, the index is char index, need convert to byte index.
             self.text.char_index_to_offset(index)
         } else {
             index
@@ -1659,25 +1661,6 @@ impl InputState {
     }
 
     /// Returns a y offsetted point for the line origin.
-    fn line_origin_with_y_offset(
-        &self,
-        y_offset: &mut Pixels,
-        line: &LineItem,
-        line_height: Pixels,
-    ) -> Point<Pixels> {
-        // NOTE: About line.wrap_boundaries.len()
-        //
-        // If only 1 line, the value is 0
-        // If have 2 line, the value is 1
-        if self.mode.is_multi_line() {
-            let p = point(px(0.), *y_offset);
-            *y_offset += line.height(line_height);
-            p
-        } else {
-            point(px(0.), px(0.))
-        }
-    }
-
     /// Select the text from the current cursor position to the given offset.
     ///
     /// The offset is the UTF-8 offset.
@@ -1974,6 +1957,35 @@ impl InputState {
         self.replace_text_in_range(range_utf16, new_text, window, cx);
         self.silent_replace_text = false;
     }
+
+    /// Update fold candidates from tree-sitter syntax tree
+    fn update_fold_candidates(&mut self) {
+        // Only update fold candidates in code editor mode
+        if !self.mode.is_code_editor() {
+            return;
+        }
+
+        // Get the highlighter from the mode
+        let Some(highlighter_rc) = self.mode.highlighter() else {
+            return;
+        };
+
+        let highlighter = highlighter_rc.borrow();
+        let Some(highlighter) = highlighter.as_ref() else {
+            return;
+        };
+
+        // Get the tree from the highlighter
+        let Some(tree) = highlighter.tree() else {
+            return;
+        };
+
+        // Extract fold ranges using tree-sitter
+        let fold_ranges = crate::highlighter::extract_fold_ranges(tree, &self.text);
+
+        // Set the fold candidates in the display map
+        self.display_map.set_fold_candidates(fold_ranges);
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -2071,6 +2083,7 @@ impl EntityInputHandler for InputState {
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        self.update_fold_candidates();
         self.lsp.update(&self.text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
@@ -2126,6 +2139,7 @@ impl EntityInputHandler for InputState {
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        self.update_fold_candidates();
         self.lsp.update(&self.text, window, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
@@ -2233,6 +2247,7 @@ impl Render for InputState {
         if self._pending_update {
             self.mode
                 .update_highlighter(&(0..0), &self.text, "", false, cx);
+            self.update_fold_candidates();
             self.lsp.update(&self.text, window, cx);
             self._pending_update = false;
         }

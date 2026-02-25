@@ -5,7 +5,7 @@
 /// - Maintaining bidirectional mapping: wrap_row ↔ display_row
 /// - Handling fold state changes and rebuilding the projection
 
-use super::types::FoldRange;
+use crate::highlighter::FoldRange;
 use super::wrap_map::WrapMap;
 
 /// FoldMap projects wrap rows to display rows by hiding folded regions.

@@ -715,6 +715,145 @@ impl TextElement {
         (first_line, ghost_lines)
     }
 
+    /// Return (line_number_width, line_number_len)
+    /// Layout fold icon hitboxes during prepaint phase.
+    ///
+    /// This creates hitboxes for the fold icon area, positioned to the right of line numbers.
+    /// Icons are created and prepainted here to avoid panics.
+    fn layout_fold_icons(
+        &self,
+        bounds: &Bounds<Pixels>,
+        last_layout: &LastLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> FoldIconLayout {
+        // First pass: collect fold information from state
+        struct FoldInfo {
+            buffer_line: usize,
+            is_folded: bool,
+            display_row: usize,
+            offset_y: Pixels,
+        }
+
+        let line_number_hitbox = window.insert_hitbox(
+            Bounds::new(
+                bounds.origin + point(px(0.), last_layout.visible_top),
+                size(last_layout.line_number_width, bounds.size.height),
+            ),
+            gpui::HitboxBehavior::Normal,
+        );
+
+        let mut icon_layout = FoldIconLayout {
+            line_number_hitbox,
+            icons: vec![],
+        };
+
+        let fold_infos: Vec<FoldInfo> = {
+            let state = self.state.read(cx);
+            if !state.mode.is_code_editor() {
+                return icon_layout;
+            }
+
+            let mut infos = Vec::new();
+            let mut offset_y = last_layout.visible_top;
+
+            for (ix, line) in last_layout.lines.iter().enumerate() {
+                let row = last_layout.visible_range.start + ix;
+                let buffer_line = state.display_map.display_row_to_buffer_line(row);
+
+                if state.display_map.is_fold_candidate(buffer_line) {
+                    let is_folded = state.display_map.is_folded_at(buffer_line);
+                    infos.push(FoldInfo {
+                        buffer_line,
+                        is_folded,
+                        display_row: row,
+                        offset_y,
+                    });
+                }
+
+                offset_y += line.wrapped_lines.len() * last_layout.line_height;
+            }
+
+            infos
+        }; // state is dropped here
+
+        // Second pass: create and prepaint icons
+        let line_height = last_layout.line_height;
+        let line_number_width = last_layout.line_number_width - FOLD_ICON_WIDTH - px(4.);
+
+        for (ix, info) in fold_infos.iter().enumerate() {
+            // Position fold icon to the right of line numbers
+            let p = point(
+                bounds.origin.x + line_number_width,
+                bounds.origin.y + info.offset_y + px(2.),
+            );
+            let fold_icon_bounds = Bounds::new(p, size(FOLD_ICON_WIDTH, line_height));
+
+            // Create and prepaint icon
+            let mut icon = Button::new(("fold", ix))
+                .ghost()
+                .icon(if info.is_folded {
+                    IconName::ChevronRight
+                } else {
+                    IconName::ChevronDown
+                })
+                .xsmall()
+                .rounded_xs()
+                .size(FOLD_ICON_WIDTH)
+                .on_click({
+                    let state = self.state.clone();
+                    let buffer_line = info.buffer_line;
+                    move |_, _, cx| {
+                        cx.stop_propagation();
+                        let entity_id = state.entity_id();
+                        state.update(cx, |state, _cx| {
+                            state.display_map.toggle_fold(buffer_line);
+                        });
+                        cx.notify(entity_id);
+                    }
+                })
+                .into_any_element();
+
+            icon.prepaint_as_root(
+                fold_icon_bounds.origin,
+                fold_icon_bounds.size.into(),
+                window,
+                cx,
+            );
+
+            icon_layout.icons.push((info.display_row, icon));
+        }
+
+        icon_layout
+    }
+
+    /// Paint fold icons using prepaint hitboxes.
+    ///
+    /// This handles:
+    /// - Rendering fold icons (chevron-right for folded, chevron-down for expanded)
+    /// - Mouse click handling to toggle fold state
+    /// - Cursor style changes on hover
+    /// - Only show icon on hover or for current line
+    fn paint_fold_icons(
+        &mut self,
+        fold_icon_layout: &mut FoldIconLayout,
+        current_row: Option<usize>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let is_hovered = fold_icon_layout.line_number_hitbox.is_hovered(window);
+        for (display_row, icon) in fold_icon_layout.icons.iter_mut() {
+            let is_current_line = current_row == Some(*display_row);
+
+            // Only show icon when hovering over line number gutter or on current line
+            if !is_hovered && !is_current_line {
+                continue;
+            }
+
+            icon.paint(window, cx);
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn layout_lines(
         state: &InputState,

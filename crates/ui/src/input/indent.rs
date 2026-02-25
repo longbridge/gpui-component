@@ -128,9 +128,13 @@ impl TextElement {
         let mut builder = PathBuilder::stroke(px(1.));
         let mut offset_y = last_layout.visible_top;
         let mut last_indents = vec![];
-        for ix in visible_range {
-            let line = state.text.slice_line(ix);
-            let Some(line_layout) = last_layout.line(ix) else {
+
+        for display_row in visible_range {
+            // Map display_row to buffer_line
+            let buffer_line = state.display_map.display_row_to_buffer_line(display_row);
+            let line = state.text.slice_line(buffer_line);
+            let line_index = display_row - last_layout.visible_range.start;
+            let Some(line_layout) = last_layout.lines.get(line_index) else {
                 continue;
             };
 

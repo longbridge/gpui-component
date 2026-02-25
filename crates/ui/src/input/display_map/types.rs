@@ -67,35 +67,8 @@ impl DisplayPos {
     }
 }
 
-/// A range in the buffer that can be folded.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FoldRange {
-    /// Start line (inclusive)
-    pub start_line: usize,
-    /// End line (inclusive)
-    pub end_line: usize,
-}
-
-impl FoldRange {
-    pub fn new(start_line: usize, end_line: usize) -> Self {
-        assert!(
-            start_line <= end_line,
-            "fold start_line must be <= end_line"
-        );
-        Self {
-            start_line,
-            end_line,
-        }
-    }
-
-    pub fn contains_line(&self, line: usize) -> bool {
-        line >= self.start_line && line <= self.end_line
-    }
-
-    pub fn line_count(&self) -> usize {
-        self.end_line - self.start_line + 1
-    }
-}
+// FoldRange is now defined in crate::highlighter::folding
+// and re-exported from this module via mod.rs
 
 #[cfg(test)]
 mod tests {
@@ -110,22 +83,5 @@ mod tests {
         let zero = BufferPos::zero();
         assert_eq!(zero.line, 0);
         assert_eq!(zero.col, 0);
-    }
-
-    #[test]
-    fn test_fold_range() {
-        let range = FoldRange::new(5, 10);
-        assert!(range.contains_line(5));
-        assert!(range.contains_line(7));
-        assert!(range.contains_line(10));
-        assert!(!range.contains_line(4));
-        assert!(!range.contains_line(11));
-        assert_eq!(range.line_count(), 6);
-    }
-
-    #[test]
-    #[should_panic(expected = "fold start_line must be <= end_line")]
-    fn test_fold_range_invalid() {
-        FoldRange::new(10, 5);
     }
 }

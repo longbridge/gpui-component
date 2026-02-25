@@ -260,6 +260,14 @@ impl InputMode {
             _ => None,
         }
     }
+
+    /// Get a reference to the highlighter (if available)
+    pub(super) fn highlighter(&self) -> Option<&Rc<RefCell<Option<SyntaxHighlighter>>>> {
+        match self {
+            InputMode::CodeEditor { highlighter, .. } => Some(highlighter),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

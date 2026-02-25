@@ -12,8 +12,9 @@ use ropey::Rope;
 
 use super::fold_map::FoldMap;
 use super::text_wrapper::{LineItem, TextWrapper};
-use super::types::{BufferPos, DisplayPos, FoldRange};
+use super::types::{BufferPos, DisplayPos};
 use super::wrap_map::WrapMap;
+use crate::highlighter::FoldRange;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
