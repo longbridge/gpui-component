@@ -25,12 +25,13 @@ GPUI Component is a comprehensive UI component library for building fantastic de
 
 ## Quick Example
 
-Add `gpui` and `gpui-component` to your `Cargo.toml`:
+Add `gpui`, `gpui-component` and `anyhow` to your `Cargo.toml`:
 
 ```toml-vue
 [dependencies]
 gpui = "{{ VERSION }}"
 gpui-component = "{{ VERSION }}"
+anyhow = "{{ VERSION }}"
 ```
 
 Then create a simple "Hello, World!" application with a button:
