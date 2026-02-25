@@ -193,6 +193,10 @@ Delete:
     en: "Delete %{count} items"
     zh-CN: "删除 %{count} 项"
     zh-HK: "刪除 %{count} 項"
+  items_count:
+    en: "%{count} items"
+    zh-CN: "%{count} 个项目"
+    zh-HK: "%{count} 個項目"
 
 # 连接状态
 Connection:

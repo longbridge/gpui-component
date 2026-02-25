@@ -925,7 +925,7 @@ impl Render for DraggedFileItems {
                 .child(
                     div()
                         .text_sm()
-                        .child(format!("{} 个项目", count)),
+                        .child(t!("File.items_count", count = count).to_string()),
                 )
                 .into_any_element()
         }

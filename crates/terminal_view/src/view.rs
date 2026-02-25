@@ -741,15 +741,13 @@ impl TerminalView {
         let new_size = (cols, rows);
         if self.last_size != Some(new_size) {
             tracing::info!(
-                "{}",
-                t!(
-                    "TerminalView.terminal_size_changed",
-                    old = format!("{:?}", self.last_size),
-                    new = format!("{:?}", new_size),
-                    cell_width = format!("{:.2}", self.cell_width),
-                    line_height = format!("{:.2}", self.line_height),
-                    bounds = format!("{:.0}x{:.0}", bounds.size.width, bounds.size.height)
-                )
+                "终端尺寸变化: {:?} -> {:?}, cell_width={:.2}, line_height={:.2}, bounds={:.0}x{:.0}",
+                self.last_size,
+                new_size,
+                self.cell_width,
+                self.line_height,
+                bounds.size.width,
+                bounds.size.height
             );
             self.last_size = Some(new_size);
             self.terminal.update(cx, |terminal, _| {
@@ -1404,14 +1402,11 @@ impl Render for TerminalView {
 
         if self.cell_width != new_cell_width {
             tracing::info!(
-                "{}",
-                t!(
-                    "TerminalView.cell_width_changed",
-                    old = format!("{:.2}", self.cell_width),
-                    new = format!("{:.2}", new_cell_width),
-                    font = self.current_theme.font_family,
-                    size = format!("{:.1}", self.current_theme.font_size)
-                )
+                "cell_width 变化: {:.2} -> {:.2}, font={}, size={:.1}",
+                self.cell_width,
+                new_cell_width,
+                self.current_theme.font_family,
+                self.current_theme.font_size
             );
             self.cell_width = new_cell_width;
         }
