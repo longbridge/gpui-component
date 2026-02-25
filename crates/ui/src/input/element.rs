@@ -5,7 +5,7 @@ use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
     MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
     Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point,
-    prelude::FluentBuilder as _, px, relative, size,
+    px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -816,7 +816,10 @@ impl TextElement {
                 // visible_range contains buffer lines (not display rows)
                 let buffer_line = last_layout.visible_range.start + ix;
 
-                if state.display_map.is_fold_candidate(buffer_line) {
+                // Skip hidden (folded) lines - they should not show fold icons
+                if !state.display_map.is_buffer_line_hidden(buffer_line)
+                    && state.display_map.is_fold_candidate(buffer_line)
+                {
                     let is_folded = state.display_map.is_folded_at(buffer_line);
                     infos.push(FoldInfo {
                         buffer_line,

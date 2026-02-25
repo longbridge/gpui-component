@@ -168,7 +168,7 @@ impl DisplayMap {
 
     // ==================== Text and Layout Updates ====================
 
-    /// Adjust folds for a text edit before updating the wrap map.
+    /// Adjust folds and candidates for a text edit before updating the wrap map.
     ///
     /// Must be called with the OLD text (before replacement) and the edit range/new_text
     /// so we can compute which old lines were affected.
@@ -178,7 +178,9 @@ impl DisplayMap {
         range: &Range<usize>,
         new_text: &str,
     ) {
-        if self.fold_map.folded_ranges().is_empty() {
+        if self.fold_map.folded_ranges().is_empty()
+            && self.fold_map.fold_candidates().is_empty()
+        {
             return;
         }
 
@@ -191,6 +193,27 @@ impl DisplayMap {
 
         self.fold_map
             .adjust_folds_for_edit(edit_start_line, edit_end_line, line_delta);
+    }
+
+    /// Incrementally update fold candidates after a text edit.
+    ///
+    /// Extracts new fold candidates only within the edited byte range
+    /// and merges them with existing (already adjusted) candidates.
+    pub fn update_fold_candidates_for_edit(
+        &mut self,
+        tree: &tree_sitter::Tree,
+        edit_byte_range: Range<usize>,
+        new_text: &Rope,
+    ) {
+        let new_start_line = new_text.offset_to_point(edit_byte_range.start).row;
+        let new_end_line = new_text
+            .offset_to_point(edit_byte_range.end.min(new_text.len()))
+            .row;
+
+        let new_candidates =
+            super::folding::extract_fold_ranges_in_range(tree, edit_byte_range);
+        self.fold_map
+            .merge_candidates_for_edit(new_start_line, new_end_line, new_candidates);
     }
 
     /// Update text (incremental or full)

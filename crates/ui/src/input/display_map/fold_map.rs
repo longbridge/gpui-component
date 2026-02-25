@@ -90,7 +90,7 @@ impl FoldMap {
         }
     }
 
-    /// Set fold candidates (from tree-sitter/LSP)
+    /// Set fold candidates (from tree-sitter/LSP), full replacement.
     pub fn set_candidates(&mut self, mut candidates: Vec<FoldRange>) {
         // Sort and deduplicate by start_line
         candidates.sort_by_key(|r| r.start_line);
@@ -103,6 +103,28 @@ impl FoldMap {
                 .iter()
                 .any(|c| c.start_line == fold.start_line)
         });
+    }
+
+    /// Merge new candidates extracted from an edited region into existing candidates.
+    ///
+    /// Replaces candidates within [edit_start_line, edit_end_line] with `new_candidates`,
+    /// keeping candidates outside the edit range intact.
+    pub fn merge_candidates_for_edit(
+        &mut self,
+        edit_start_line: usize,
+        edit_end_line: usize,
+        new_candidates: Vec<FoldRange>,
+    ) {
+        // Remove old candidates within the edit range (already done by adjust_folds_for_edit)
+        // But do it again in case adjust wasn't called or range differs
+        self.candidates.retain(|c| {
+            c.start_line < edit_start_line || c.start_line > edit_end_line
+        });
+
+        // Add new candidates
+        self.candidates.extend(new_candidates);
+        self.candidates.sort_by_key(|r| r.start_line);
+        self.candidates.dedup_by_key(|r| r.start_line);
     }
 
     /// Set a fold at the given start_line (must be in candidates)
@@ -155,31 +177,47 @@ impl FoldMap {
         self.folded.clear();
     }
 
-    /// Adjust folds after a text edit.
+    /// Adjust folds and candidates after a text edit.
     ///
-    /// - Folds overlapping the edited line range are removed
-    /// - Folds after the edit are shifted by line_delta
+    /// - Folds/candidates overlapping the edited line range are removed
+    /// - Folds/candidates after the edit are shifted by line_delta
+    ///
+    /// This avoids expensive full tree traversal on every keystroke.
     pub fn adjust_folds_for_edit(
         &mut self,
         edit_start_line: usize,
         edit_end_line: usize,
         line_delta: isize,
     ) {
-        if self.folded.is_empty() {
-            return;
+        // Adjust folded ranges
+        if !self.folded.is_empty() {
+            self.folded.retain(|fold| {
+                !(fold.start_line <= edit_end_line && fold.end_line >= edit_start_line)
+            });
+
+            if line_delta != 0 {
+                for fold in &mut self.folded {
+                    if fold.start_line > edit_end_line {
+                        fold.start_line =
+                            (fold.start_line as isize + line_delta).max(0) as usize;
+                        fold.end_line = (fold.end_line as isize + line_delta).max(0) as usize;
+                    }
+                }
+            }
         }
 
-        // Remove folds that overlap with the edited range
-        self.folded.retain(|fold| {
-            !(fold.start_line <= edit_end_line && fold.end_line >= edit_start_line)
-        });
+        // Adjust candidates the same way
+        if !self.candidates.is_empty() {
+            self.candidates.retain(|c| {
+                !(c.start_line <= edit_end_line && c.end_line >= edit_start_line)
+            });
 
-        // Shift folds after the edit
-        if line_delta != 0 {
-            for fold in &mut self.folded {
-                if fold.start_line > edit_end_line {
-                    fold.start_line = (fold.start_line as isize + line_delta).max(0) as usize;
-                    fold.end_line = (fold.end_line as isize + line_delta).max(0) as usize;
+            if line_delta != 0 {
+                for c in &mut self.candidates {
+                    if c.start_line > edit_end_line {
+                        c.start_line = (c.start_line as isize + line_delta).max(0) as usize;
+                        c.end_line = (c.end_line as isize + line_delta).max(0) as usize;
+                    }
                 }
             }
         }

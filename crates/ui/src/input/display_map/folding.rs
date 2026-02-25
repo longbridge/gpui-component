@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ops::Range;
 use tree_sitter::{Node, Tree};
 
 /// A fold range representing a foldable code region.
@@ -84,23 +85,38 @@ pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
     ranges
 }
 
-/// Recursively collect foldable nodes from the syntax tree.
-fn collect_foldable_nodes(
+/// Extract fold ranges only within a byte range (for incremental updates after edits).
+///
+/// Skips subtrees entirely outside the range, making it O(nodes in range)
+/// instead of O(all nodes in tree).
+pub fn extract_fold_ranges_in_range(tree: &Tree, byte_range: Range<usize>) -> Vec<FoldRange> {
+    let mut ranges = Vec::new();
+    let foldable_types: HashSet<&str> = FOLDABLE_NODE_TYPES.iter().copied().collect();
+
+    let root_node = tree.root_node();
+    collect_foldable_nodes_in_range(root_node, &foldable_types, &byte_range, &mut ranges);
+
+    ranges.sort_by_key(|r| r.start_line);
+    ranges.dedup_by_key(|r| r.start_line);
+    ranges
+}
+
+/// Recursively collect foldable nodes, skipping subtrees outside byte_range.
+fn collect_foldable_nodes_in_range(
     node: Node,
     foldable_types: &HashSet<&str>,
+    byte_range: &Range<usize>,
     ranges: &mut Vec<FoldRange>,
 ) {
-    let node_type = node.kind();
+    // Skip subtrees entirely outside the target range
+    if node.end_byte() <= byte_range.start || node.start_byte() >= byte_range.end {
+        return;
+    }
 
-    // Check if current node is foldable
-    if foldable_types.contains(node_type) {
+    if foldable_types.contains(node.kind()) {
         let start_pos = node.start_position();
         let end_pos = node.end_position();
 
-        // Only fold if:
-        // 1. Spans multiple lines (end_line > start_line)
-        // 2. Has at least 2+ lines to fold (end_line - start_line >= 2)
-        //    This ensures we don't fold single-line or empty blocks
         if end_pos.row > start_pos.row && (end_pos.row - start_pos.row) >= 2 {
             ranges.push(FoldRange {
                 start_line: start_pos.row,
@@ -109,7 +125,30 @@ fn collect_foldable_nodes(
         }
     }
 
-    // Recursively process child nodes
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_foldable_nodes_in_range(child, foldable_types, byte_range, ranges);
+    }
+}
+
+/// Recursively collect foldable nodes from the syntax tree (full traversal).
+fn collect_foldable_nodes(
+    node: Node,
+    foldable_types: &HashSet<&str>,
+    ranges: &mut Vec<FoldRange>,
+) {
+    if foldable_types.contains(node.kind()) {
+        let start_pos = node.start_position();
+        let end_pos = node.end_position();
+
+        if end_pos.row > start_pos.row && (end_pos.row - start_pos.row) >= 2 {
+            ranges.push(FoldRange {
+                start_line: start_pos.row,
+                end_line: end_pos.row,
+            });
+        }
+    }
+
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         collect_foldable_nodes(child, foldable_types, ranges);

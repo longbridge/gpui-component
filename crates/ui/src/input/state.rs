@@ -1992,14 +1992,13 @@ impl InputState {
         self.silent_replace_text = false;
     }
 
-    /// Update fold candidates from tree-sitter syntax tree
+    /// Update fold candidates from tree-sitter syntax tree (full extraction).
+    /// Used only on initial load or language changes.
     fn update_fold_candidates(&mut self) {
-        // Only update fold candidates in code editor mode
         if !self.mode.is_code_editor() {
             return;
         }
 
-        // Get the highlighter from the mode
         let Some(highlighter_rc) = self.mode.highlighter() else {
             return;
         };
@@ -2009,16 +2008,45 @@ impl InputState {
             return;
         };
 
-        // Get the tree from the highlighter
         let Some(tree) = highlighter.tree() else {
             return;
         };
 
-        // Extract fold ranges using tree-sitter
         let fold_ranges = crate::input::display_map::extract_fold_ranges(tree);
-
-        // Set the fold candidates in the display map
         self.display_map.set_fold_candidates(fold_ranges);
+    }
+
+    /// Incrementally update fold candidates after a text edit.
+    /// Only traverses the edited region of the syntax tree instead of the full tree.
+    fn update_fold_candidates_incremental(
+        &mut self,
+        edit_range: &Range<usize>,
+        new_text: &str,
+    ) {
+        if !self.mode.is_code_editor() {
+            return;
+        }
+
+        let Some(highlighter_rc) = self.mode.highlighter() else {
+            return;
+        };
+
+        let highlighter = highlighter_rc.borrow();
+        let Some(highlighter) = highlighter.as_ref() else {
+            return;
+        };
+
+        let Some(tree) = highlighter.tree() else {
+            return;
+        };
+
+        // The new byte range in the updated text after the edit
+        let new_end = edit_range.start + new_text.len();
+        self.display_map.update_fold_candidates_for_edit(
+            tree,
+            edit_range.start..new_end,
+            &self.text,
+        );
     }
 }
 
@@ -2120,7 +2148,7 @@ impl EntityInputHandler for InputState {
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
-        self.update_fold_candidates();
+        self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
@@ -2179,7 +2207,7 @@ impl EntityInputHandler for InputState {
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
-        self.update_fold_candidates();
+        self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
