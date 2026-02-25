@@ -49,7 +49,13 @@ impl TextareaStory {
             InputState::new(window, cx)
                 .multi_line(true)
                 .rows(10)
-                .placeholder("Enter text here...")
+                .placeholder("This is a long \
+                    long long long long long long long long \
+                    long long long long long long long long \
+                    long long long long long long long long \
+                    placeholder for testing the \
+                    placeholder wrapping"
+                )
                 .searchable(true)
                 .default_value(
                     unindent::unindent(

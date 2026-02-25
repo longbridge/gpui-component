@@ -118,6 +118,11 @@ impl TextWrapper {
     }
 
     pub(super) fn prepare_if_need(&mut self, text: &Rope, cx: &mut App) {
+        // Check if text content changed, if so, reset initialized flag
+        if self._initialized && !self.text.eq(text) {
+            self._initialized = false;
+        }
+
         if self._initialized {
             return;
         }
