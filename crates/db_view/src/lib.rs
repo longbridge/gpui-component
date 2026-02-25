@@ -15,6 +15,7 @@ pub mod oracle;
 pub mod postgresql;
 mod sidebar;
 pub mod sql_editor;
+pub(crate) mod sql_inline_completion;
 #[cfg(test)]
 mod sql_editor_completion_tests;
 pub mod sql_editor_view;

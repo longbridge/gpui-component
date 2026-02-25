@@ -10,11 +10,7 @@ use gpui_component::input::{
     CodeActionProvider, CompletionProvider, HoverProvider, Input, InputEvent, InputState, TabSize,
 };
 use gpui_component::{Rope, RopeExt};
-use lsp_types::{
-    CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
-    InsertReplaceEdit, Range as LspRange,
-};
-
+use lsp_types::{CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse, InsertReplaceEdit, InsertTextFormat, Range as LspRange};
 use db::sql_editor::sql_context_inferrer::{ContextInferrer, SqlContext as InferredSqlContext};
 use db::sql_editor::sql_symbol_table::SymbolTable;
 use db::sql_editor::sql_tokenizer::SqlTokenizer;
@@ -202,7 +198,7 @@ pub mod completion_priority {
 }
 
 // Built-in SQL keywords and docs
-const SQL_KEYWORDS: &[(&str, &str)] = &[
+pub(crate) const SQL_KEYWORDS: &[(&str, &str)] = &[
     ("SELECT", "Query rows from table(s)"),
     ("INSERT", "Insert new rows"),
     ("UPDATE", "Update existing rows"),
@@ -295,7 +291,7 @@ const SQL_FUNCTIONS: &[(&str, &str)] = &[
 ];
 
 /// 内置 SQL 数据类型（通用标准 SQL 类型）
-const SQL_DATA_TYPES: &[(&str, &str)] = &[
+pub(crate) const SQL_DATA_TYPES: &[(&str, &str)] = &[
     ("INT", "32-bit integer"),
     ("INTEGER", "32-bit integer"),
     ("BIGINT", "64-bit integer"),
@@ -1047,7 +1043,7 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                                     replace: replace_range,
                                 },
                             )),
-                            insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                            insert_text_format: Some(InsertTextFormat::SNIPPET),
                             filter_text: Some(matched_prefix(label)),
                             documentation: Some(lsp_types::Documentation::String(doc.to_string())),
                             sort_text: Some(completion_priority::score_to_sort_text(score, label)),
@@ -1076,7 +1072,7 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                                         replace: replace_range,
                                     },
                                 )),
-                                insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+                                insert_text_format: Some(InsertTextFormat::SNIPPET),
                                 filter_text: Some(matched_prefix(label)),
                                 documentation: Some(lsp_types::Documentation::String(
                                     doc.to_string(),
@@ -1099,6 +1095,38 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
             });
             items.truncate(50);
             Ok(CompletionResponse::Array(items))
+        })
+    }
+
+    fn inline_completion(
+        &self,
+        rope: &Rope,
+        offset: usize,
+        _trigger: InlineCompletionContext,
+        _window: &mut Window,
+        cx: &mut Context<InputState>,
+    ) -> Task<Result<InlineCompletionResponse>> {
+        let rope = rope.clone();
+        let schema = self.schema.clone();
+        let db_info = self.db_completion_info.clone();
+
+        cx.background_spawn(async move {
+            let text = rope.to_string();
+            let completer =
+                crate::sql_inline_completion::SqlInlineCompleter::new(&schema, db_info.as_ref());
+
+            match completer.suggest(&text, offset) {
+                Some(insert_text) => Ok(InlineCompletionResponse::Array(vec![
+                    InlineCompletionItem {
+                        insert_text,
+                        filter_text: None,
+                        range: None,
+                        command: None,
+                        insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                    },
+                ])),
+                None => Ok(InlineCompletionResponse::Array(vec![])),
+            }
         })
     }
 
@@ -1299,7 +1327,7 @@ impl SqlEditor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor = cx.new(|cx| {
             let mut editor = InputState::new(window, cx)
-                .code_editor(Language::from_str("sql"))
+                .code_editor(Language::Sql)
                 .line_number(true)
                 .searchable(true)
                 .indent_guides(true)
