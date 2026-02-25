@@ -91,23 +91,6 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages (session_id);
 
--- Terminal Commands
-CREATE TABLE IF NOT EXISTS terminal_commands (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER,
-    connection_id INTEGER,
-    command TEXT NOT NULL,
-    working_directory TEXT,
-    executed_at INTEGER NOT NULL,
-    exit_code INTEGER,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_terminal_commands_connection ON terminal_commands(connection_id);
-CREATE INDEX IF NOT EXISTS idx_terminal_commands_executed ON terminal_commands(executed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_terminal_commands_command ON terminal_commands(command);
-
 -- Quick Commands
 CREATE TABLE IF NOT EXISTS quick_commands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

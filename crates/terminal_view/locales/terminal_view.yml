@@ -310,3 +310,7 @@ ContextMenu:
     en: Ask AI
     zh-CN: 询问AI
     zh-HK: 詢問AI
+  save_quick_command:
+    en: Save as Quick Command
+    zh-CN: 保存为快捷命令
+    zh-HK: 保存為快捷命令

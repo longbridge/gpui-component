@@ -2,15 +2,12 @@
 //!
 //! 提供终端视图的侧边栏功能，包括：
 //! - 设置面板（搜索、字体、主题）
-//! - 命令历史面板
 //! - 快捷命令面板
 //! - AI 聊天面板
 
-mod command_history_panel;
 mod quick_command_panel;
 mod settings_panel;
 
-pub use command_history_panel::CommandHistoryPanel;
 pub use quick_command_panel::QuickCommandPanel;
 pub use settings_panel::SettingsPanel;
 
@@ -27,8 +24,6 @@ use crate::theme::{TerminalColors, TerminalTheme};
 pub enum SidebarPanel {
     /// 设置面板（搜索 + 字体 + 主题）
     Settings,
-    /// 命令历史面板
-    CommandHistory,
     /// 快捷命令面板
     QuickCommand,
     /// AI 聊天面板
@@ -40,7 +35,6 @@ impl SidebarPanel {
     pub fn icon(&self) -> IconName {
         match self {
             SidebarPanel::Settings => IconName::Settings,
-            SidebarPanel::CommandHistory => IconName::BookOpen,
             SidebarPanel::QuickCommand => IconName::SquareTerminal,
             SidebarPanel::AiChat => IconName::Bot,
         }
@@ -50,7 +44,6 @@ impl SidebarPanel {
     pub fn title(&self) -> &'static str {
         match self {
             SidebarPanel::Settings => "Settings",
-            SidebarPanel::CommandHistory => "History",
             SidebarPanel::QuickCommand => "Quick Commands",
             SidebarPanel::AiChat => "AI Chat",
         }
@@ -99,8 +92,6 @@ pub struct TerminalSidebar {
     active_panel: Option<SidebarPanel>,
     /// 设置面板
     settings_panel: Entity<SettingsPanel>,
-    /// 命令历史面板
-    command_history_panel: Entity<CommandHistoryPanel>,
     /// 快捷命令面板
     quick_command_panel: Entity<QuickCommandPanel>,
     /// AI 聊天面板
@@ -122,7 +113,6 @@ impl TerminalSidebar {
     ) -> Self {
         let colors = initial_theme.colors();
         let settings_panel = cx.new(|cx| SettingsPanel::new(initial_theme, window, cx));
-        let command_history_panel = cx.new(|cx| CommandHistoryPanel::new(connection_id, window, cx));
         let quick_command_panel = cx.new(|cx| QuickCommandPanel::new(connection_id, window, cx));
         let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
 
@@ -180,18 +170,6 @@ impl TerminalSidebar {
             }
         });
 
-        // 订阅命令历史面板事件
-        let history_sub = cx.subscribe(&command_history_panel, |this, _, event: &command_history_panel::CommandHistoryEvent, cx| {
-            match event {
-                command_history_panel::CommandHistoryEvent::Close => {
-                    this.set_active_panel(None, cx);
-                }
-                command_history_panel::CommandHistoryEvent::ExecuteCommand(cmd) => {
-                    cx.emit(TerminalSidebarEvent::ExecuteCommand(cmd.clone()));
-                }
-            }
-        });
-
         // 订阅快捷命令面板事件
         let quick_sub = cx.subscribe(&quick_command_panel, |this, _, event: &quick_command_panel::QuickCommandPanelEvent, cx| {
             match event {
@@ -216,12 +194,11 @@ impl TerminalSidebar {
         Self {
             active_panel: None,
             settings_panel,
-            command_history_panel,
             quick_command_panel,
             ai_chat_panel,
             focus_handle: cx.focus_handle(),
             colors,
-            _subs: vec![set_sub, history_sub, quick_sub, ai_chat_sub],
+            _subs: vec![set_sub, quick_sub, ai_chat_sub],
         }
     }
 
@@ -277,20 +254,6 @@ impl TerminalSidebar {
         self.settings_panel.read(cx).search_value(cx)
     }
 
-    /// 加载命令历史
-    pub fn load_command_history(&self, cx: &mut Context<Self>) {
-        self.command_history_panel.update(cx, |panel, cx| {
-            panel.load_history(cx);
-        });
-    }
-
-    /// 添加命令到历史
-    pub fn add_command_to_history(&self, command: String, cx: &mut Context<Self>) {
-        self.command_history_panel.update(cx, |panel, cx| {
-            panel.add_command(command, cx);
-        });
-    }
-
     /// 询问 AI
     pub fn ask_ai(&mut self, message: String, cx: &mut Context<Self>) {
         // 打开 AI 聊天面板
@@ -305,6 +268,13 @@ impl TerminalSidebar {
 
         cx.emit(TerminalSidebarEvent::AskAi);
         cx.notify();
+    }
+
+    /// 添加快捷命令（外部调用）
+    pub fn add_quick_command(&self, command: String, cx: &mut Context<Self>) {
+        self.quick_command_panel.update(cx, |panel, cx| {
+            panel.add_command_external(command, cx);
+        });
     }
 
     /// 渲染工具栏按钮
@@ -361,7 +331,6 @@ impl TerminalSidebar {
             .py_2()
             .gap_1()
             .child(self.render_toolbar_button(SidebarPanel::Settings, window, cx))
-            .child(self.render_toolbar_button(SidebarPanel::CommandHistory, window, cx))
             .child(self.render_toolbar_button(SidebarPanel::QuickCommand, window, cx))
             .child(self.render_toolbar_button(SidebarPanel::AiChat, window, cx))
             .into_any_element()
@@ -372,9 +341,6 @@ impl TerminalSidebar {
         match panel {
             SidebarPanel::Settings => {
                 self.settings_panel.clone().into_any_element()
-            }
-            SidebarPanel::CommandHistory => {
-                self.command_history_panel.clone().into_any_element()
             }
             SidebarPanel::QuickCommand => {
                 self.quick_command_panel.clone().into_any_element()

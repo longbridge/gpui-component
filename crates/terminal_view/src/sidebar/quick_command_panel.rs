@@ -174,6 +174,11 @@ impl QuickCommandPanel {
         }
     }
 
+    /// 从外部添加快捷命令（例如右键菜单）
+    pub fn add_command_external(&mut self, command: String, cx: &mut Context<Self>) {
+        self.add_command(command, cx);
+    }
+
     /// 删除快捷命令
     fn delete_command(&mut self, id: i64, cx: &mut Context<Self>) {
         let storage = cx.global::<GlobalStorageState>().storage.clone();

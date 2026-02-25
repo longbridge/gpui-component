@@ -6,7 +6,6 @@ use crate::storage::connection::SqliteConnection;
 use crate::storage::manager::{GlobalStorageState, now};
 use crate::storage::row_mapping::FromSqliteRow;
 use crate::storage::traits::Repository;
-use crate::storage::terminal_history::TerminalCommandRepository;
 use crate::storage::quick_command::QuickCommandRepository;
 use crate::storage::{ConnectionType, StoredConnection, Workspace};
 
@@ -562,13 +561,11 @@ pub fn init(cx: &mut App) {
     let conn = storage.connection();
     let conn_repo = ConnectionRepository::new(conn.clone());
     let workspace_repo = WorkspaceRepository::new(conn.clone());
-    let terminal_cmd_repo = TerminalCommandRepository::new(conn.clone());
     let quick_cmd_repo = QuickCommandRepository::new(conn.clone());
     let pending_deletion_repo = PendingCloudDeletionRepository::new(conn.clone());
 
     storage.register(workspace_repo);
     storage.register(conn_repo);
-    storage.register(terminal_cmd_repo);
     storage.register(quick_cmd_repo);
     storage.register(pending_deletion_repo);
 }

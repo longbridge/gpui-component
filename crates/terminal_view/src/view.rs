@@ -2,7 +2,6 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line, Point as AlacPoint, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
-use alacritty_terminal::term::cell::Flags;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
@@ -111,8 +110,6 @@ pub struct TerminalView {
     ime_state: Option<ImeState>,
 
     current_theme: TerminalTheme,
-    /// 当前命令输入起点（用于更稳妥地截取命令）
-    command_input_start: Option<AlacPoint>,
 
     /// 标签页序号（用于多实例显示）
     tab_index: Option<usize>,
@@ -241,7 +238,6 @@ impl TerminalView {
             terminal_bounds: Bounds::default(),
             ime_state: None,
             current_theme: default_theme,
-            command_input_start: None,
             tab_index,
             cursor_blink_enabled: false,
             sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
@@ -435,9 +431,6 @@ impl TerminalView {
     }
 
     fn write_to_pty(&mut self, data: Vec<u8>, cx: &mut Context<Self>) {
-        // 追踪输入用于命令历史
-        self.update_command_tracking_state(&data, cx);
-        self.track_pty_write_for_history(&data, cx);
         self.terminal.read(cx).write(&data);
     }
 
@@ -445,215 +438,6 @@ impl TerminalView {
         if !text.is_empty() {
             self.write_to_pty(text.as_bytes().to_vec(), cx);
         }
-    }
-
-    /// 追踪 PTY 写入用于命令历史
-    ///
-    /// 当检测到回车时，从终端屏幕中提取光标所在行的命令内容。
-    /// 这种方式可以正确捕获：
-    /// - Tab 补全后的完整命令
-    /// - 通过上下键选择的历史命令
-    /// - 粘贴的命令
-    fn track_pty_write_for_history(&mut self, data: &[u8], cx: &mut Context<Self>) {
-        // 检测是否包含回车（命令提交）
-        let has_enter = data.iter().any(|&b| b == b'\r' || b == b'\n');
-
-        if has_enter {
-            // 从终端屏幕中提取当前光标行的命令
-            let command = self.command_input_start
-                .and_then(|start| self.extract_command_from_input_start(start, cx))
-                .or_else(|| self.extract_command_from_cursor_line(cx));
-            self.command_input_start = None;
-            if let Some(command) = command {
-                let command = command.trim().to_string();
-                if !command.is_empty() {
-                    self.sidebar.update(cx, |sidebar, cx| {
-                        sidebar.add_command_to_history(command, cx);
-                    });
-                }
-            }
-        }
-    }
-
-    fn update_command_tracking_state(&mut self, data: &[u8], cx: &Context<Self>) {
-        if data.iter().any(|&byte| byte == 0x03 || byte == 0x04) {
-            self.command_input_start = None;
-            return;
-        }
-
-        if self.command_input_start.is_some() {
-            return;
-        }
-
-        let has_non_enter = data.iter().any(|&byte| byte != b'\r' && byte != b'\n');
-        if !has_non_enter {
-            return;
-        }
-
-        let term = self.terminal.read(cx).term().lock();
-        if term.mode().contains(TermMode::ALT_SCREEN) {
-            return;
-        }
-
-        self.command_input_start = Some(term.grid().cursor.point);
-    }
-
-    fn extract_command_from_input_start(&self, start: AlacPoint, cx: &Context<Self>) -> Option<String> {
-        let term = self.terminal.read(cx).term().lock();
-        if term.mode().contains(TermMode::ALT_SCREEN) {
-            return None;
-        }
-
-        let grid = term.grid();
-        let cursor = grid.cursor.point;
-        if cursor.line < start.line {
-            return None;
-        }
-
-        let min_line = -(term.history_size() as i32);
-        let max_line = term.screen_lines() as i32;
-        if start.line < Line(min_line) || start.line >= Line(max_line) {
-            return None;
-        }
-        if cursor.line < Line(min_line) || cursor.line >= Line(max_line) {
-            return None;
-        }
-
-        let last_column = Column(term.columns().saturating_sub(1));
-        let mut command = String::new();
-        let mut line = start.line;
-
-        while line < cursor.line {
-            let start_column = if line == start.line { start.column } else { Column(0) };
-            let line_text = self.collect_line_text(&grid[line], start_column, last_column);
-            command.push_str(&line_text);
-
-            if !grid[line][last_column].flags.contains(Flags::WRAPLINE) {
-                return None;
-            }
-
-            line = Line(line.0 + 1);
-        }
-
-        let start_column = if line == start.line { start.column } else { Column(0) };
-        if start_column > cursor.column {
-            return None;
-        }
-        let line_text = self.collect_line_text(&grid[line], start_column, cursor.column);
-        command.push_str(&line_text);
-
-        let command = command.trim().to_string();
-        if command.is_empty() {
-            None
-        } else {
-            Some(command)
-        }
-    }
-
-    fn collect_line_text(
-        &self,
-        line: &alacritty_terminal::grid::Row<alacritty_terminal::term::cell::Cell>,
-        start: Column,
-        end: Column,
-    ) -> String {
-        let mut line_text = String::new();
-        for col in start.0..=end.0 {
-            let cell = &line[Column(col)];
-            if cell.c != '\0' && cell.c != ' ' || !line_text.is_empty() {
-                line_text.push(cell.c);
-            }
-        }
-        line_text.trim_end().to_string()
-    }
-
-    /// 从终端屏幕的光标行提取命令
-    ///
-    /// 返回光标所在行的文本内容（去除提示符后的命令部分）
-    fn extract_command_from_cursor_line(&self, cx: &Context<Self>) -> Option<String> {
-        let term = self.terminal.read(cx).term().lock();
-        let grid = term.grid();
-        let cursor = grid.cursor.point;
-
-        // 获取光标所在行的文本
-        let line = &grid[cursor.line];
-        let mut line_text = String::new();
-
-        for col in 0..term.columns() {
-            let cell = &line[Column(col)];
-            if cell.c != '\0' && cell.c != ' ' || !line_text.is_empty() {
-                line_text.push(cell.c);
-            }
-        }
-
-        // 去除末尾空格
-        let line_text = line_text.trim_end().to_string();
-
-        if line_text.is_empty() {
-            return None;
-        }
-
-        // 尝试识别并去除常见的 shell 提示符
-        // 常见模式：
-        // - "user@host:path$ command"
-        // - "user@host:path# command"
-        // - "[user@host path]$ command"
-        // - "➜ path git:(branch) command"
-        // - "$ command"
-        // - "# command"
-        // - "> command"
-        // - "% command"
-
-        let command = self.strip_shell_prompt(&line_text);
-        if command.is_empty() {
-            None
-        } else {
-            Some(command)
-        }
-    }
-
-    /// 去除 shell 提示符，提取命令部分
-    fn strip_shell_prompt(&self, line: &str) -> String {
-        // 定义提示符结束标记（按优先级排序）
-        let prompt_markers = [
-            "$ ",   // 最常见的普通用户提示符
-            "# ",   // root 用户提示符
-            "> ",   // 某些 shell 的提示符
-            "% ",   // zsh 默认提示符
-            "❯ ",   // starship 等现代提示符
-            "➜ ",   // oh-my-zsh 主题
-            "→ ",   // 某些主题
-        ];
-
-        // 尝试找到最后一个提示符标记
-        let mut best_pos = None;
-        for marker in &prompt_markers {
-            if let Some(pos) = line.rfind(marker) {
-                match best_pos {
-                    None => best_pos = Some((pos, marker.len())),
-                    Some((prev_pos, _)) if pos > prev_pos => {
-                        best_pos = Some((pos, marker.len()));
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if let Some((pos, len)) = best_pos {
-            let command = &line[pos + len..];
-            return command.trim().to_string();
-        }
-
-        // 如果没有找到标准提示符，尝试使用正则模式
-        // 匹配 "user@host:path$ " 或 "[user@host path]$ " 等格式
-        if let Some(pos) = line.find(|c| c == '$' || c == '#' || c == '%' || c == '>') {
-            let after = &line[pos + 1..];
-            if after.starts_with(' ') {
-                return after[1..].trim().to_string();
-            }
-        }
-
-        // 如果都没找到，返回整行（可能是没有提示符的情况）
-        line.trim().to_string()
     }
 
     fn set_marked_text(
@@ -1115,6 +899,20 @@ impl TerminalView {
                         });
                     }),
             );
+
+            let save_text = text.trim().to_string();
+            let sidebar_quick = sidebar.clone();
+            if !save_text.is_empty() {
+                menu = menu.item(
+                    PopupMenuItem::new(t!("ContextMenu.save_quick_command"))
+                        .icon(IconName::SquareTerminal)
+                        .on_click(move |_, _window, cx| {
+                            sidebar_quick.update(cx, |sidebar, cx| {
+                                sidebar.add_quick_command(save_text.clone(), cx);
+                            });
+                        }),
+                );
+            }
         }
 
         menu
