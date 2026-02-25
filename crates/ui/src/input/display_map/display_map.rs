@@ -260,6 +260,12 @@ impl DisplayMap {
         self.wrap_map.text()
     }
 
+    /// Calculate how many wrap rows of a buffer line are visible (not folded)
+    pub fn visible_wrap_row_count_for_buffer_line(&self, line: usize) -> usize {
+        self.wrap_map
+            .visible_wrap_row_count_for_line(line, &self.fold_map)
+    }
+
     // ==================== Row Count Queries ====================
 
     /// Get the wrap row count (before folding)

@@ -126,11 +126,13 @@ impl FoldMap {
                 if !self.folded.iter().any(|f| f.start_line == start_line) {
                     self.folded.push(candidate.clone());
                     self.folded.sort_by_key(|r| r.start_line);
+                    self.needs_rebuild = true;
                 }
             }
         } else {
             // Remove from folded
             self.folded.retain(|f| f.start_line != start_line);
+            self.needs_rebuild = true;
         }
     }
 
@@ -187,19 +189,20 @@ impl FoldMap {
             for (display_row, &wrap_row) in self.visible_wrap_rows.iter().enumerate() {
                 self.wrap_row_to_display_row[wrap_row] = Some(display_row);
             }
+            self.needs_rebuild = false;
             return;
         }
 
         // Build set of hidden wrap_row ranges from folded buffer lines
         let mut hidden_ranges = Vec::new();
         for fold in &self.folded {
-            // Hide wrap rows from (start_line + 1) to end_line (inclusive)
-            // The first line of the fold remains visible
+            // Hide wrap rows from (start_line + 1) to (end_line - 1) (inclusive)
+            // Both the first line and last line of the fold remain visible
             let hide_start_line = fold.start_line + 1;
-            let hide_end_line = fold.end_line;
+            let hide_end_line = fold.end_line.saturating_sub(1);
 
             if hide_start_line > hide_end_line {
-                continue; // Single-line fold, nothing to hide
+                continue; // No middle lines to hide (0 or 1 lines between start and end)
             }
 
             // Get wrap_row ranges for the hidden buffer lines

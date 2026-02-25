@@ -1608,12 +1608,16 @@ impl InputState {
 
         let mut y_offset = last_layout.visible_top;
 
-        // Traverse visible display rows (which respects folding)
+        // Traverse visible buffer lines
         for (line_index, line_layout) in last_layout.lines.iter().enumerate() {
-            let display_row = last_layout.visible_range.start + line_index;
+            // visible_range is based on buffer lines, so this gives us the buffer line directly
+            let buffer_line = last_layout.visible_range.start + line_index;
 
-            // Map display row to buffer line to get the text offset
-            let buffer_line = self.display_map.display_row_to_buffer_line(display_row);
+            // Skip hidden (folded) lines - they have 0 height
+            if self.display_map.is_buffer_line_hidden(buffer_line) {
+                continue;
+            }
+
             let line_start_offset = self.text.line_start_offset(buffer_line);
 
             // Calculate line origin for this display row

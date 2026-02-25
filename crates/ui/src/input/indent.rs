@@ -129,11 +129,10 @@ impl TextElement {
         let mut offset_y = last_layout.visible_top;
         let mut last_indents = vec![];
 
-        for display_row in visible_range {
-            // Map display_row to buffer_line
-            let buffer_line = state.display_map.display_row_to_buffer_line(display_row);
+        for buffer_line in visible_range {
+            // visible_range contains buffer lines (not display rows)
             let line = state.text.slice_line(buffer_line);
-            let line_index = display_row - last_layout.visible_range.start;
+            let line_index = buffer_line - last_layout.visible_range.start;
             let Some(line_layout) = last_layout.lines.get(line_index) else {
                 continue;
             };

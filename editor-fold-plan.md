@@ -2,6 +2,8 @@
 
 ---
 
+commit: 6903579a 为修改之前正确的版本，里面有很多核心关于 input 算法的细节例如 soft wrap，indent, ghost line 的处理等，后续 fold 的设计需要基于这个版本的 TextWrapper 来演进，才能保证软换行和命中测试的能力不丢失。以前的算法性能很高，能支持 20 万行编辑。
+
 # WrapMap & FoldMap：显示映射管线设计文档
 
 ## 背景与动机
