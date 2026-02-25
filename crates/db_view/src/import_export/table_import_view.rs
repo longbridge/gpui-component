@@ -868,7 +868,7 @@ impl Render for TableImportView {
                                     div()
                                         .text_sm()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .child(t!("ImportExport.file_format")),
+                                        .child(t!("ImportExport.file_format").to_string()),
                                 )
                                 .child(
                                     h_flex()
@@ -952,7 +952,7 @@ impl Render for TableImportView {
                                     div()
                                         .text_sm()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .child(t!("ImportExport.import_options")),
+                                        .child(t!("ImportExport.import_options").to_string()),
                                 )
                                 .child(
                                     v_flex().gap_2().child(
@@ -978,7 +978,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child(t!("ImportExport.has_header")),
+                                                    .child(t!("ImportExport.has_header").to_string()),
                                             )
                                             .child(
                                                 h_flex()
@@ -1000,7 +1000,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child(t!("ImportExport.stop_on_error")),
+                                                    .child(t!("ImportExport.stop_on_error").to_string()),
                                             )
                                             .child(
                                                 h_flex()
@@ -1022,7 +1022,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child(t!("ImportExport.use_transaction")),
+                                                    .child(t!("ImportExport.use_transaction").to_string()),
                                             )
                                             .child(
                                                 h_flex()
@@ -1043,7 +1043,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child(t!("ImportExport.truncate_before_import")),
+                                                    .child(t!("ImportExport.truncate_before_import").to_string()),
                                             ),
                                     ),
                                 )
@@ -1053,7 +1053,7 @@ impl Render for TableImportView {
                                             div()
                                                 .text_sm()
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .child(t!("ImportExport.delimiter_config")),
+                                                .child(t!("ImportExport.delimiter_config").to_string()),
                                         )
                                         .child(
                                             h_flex()
@@ -1068,7 +1068,7 @@ impl Render for TableImportView {
                                                             .text_color(
                                                                 cx.theme().muted_foreground,
                                                             )
-                                                            .child(t!("ImportExport.record_delimiter")),
+                                                            .child(t!("ImportExport.record_delimiter").to_string()),
                                                         )
                                                         .child(
                                                             Select::new(&self.record_separator)
@@ -1085,7 +1085,7 @@ impl Render for TableImportView {
                                                             .text_color(
                                                                 cx.theme().muted_foreground,
                                                             )
-                                                            .child(t!("ImportExport.field_delimiter")),
+                                                            .child(t!("ImportExport.field_delimiter").to_string()),
                                                         )
                                                         .child(
                                                             Select::new(&self.field_separator)
@@ -1102,7 +1102,7 @@ impl Render for TableImportView {
                                                             .text_color(
                                                                 cx.theme().muted_foreground,
                                                             )
-                                                            .child(t!("ImportExport.text_qualifier")),
+                                                            .child(t!("ImportExport.text_qualifier").to_string()),
                                                         )
                                                         .child(
                                                             Select::new(&self.text_qualifier)
@@ -1283,7 +1283,7 @@ impl Render for TableImportView {
                     .justify_end()
                     .child(
                         Button::new("cancel")
-                            .child(t!("Common.cancel"))
+                            .child(t!("Common.cancel").to_string())
                             .on_click(|_, window, _cx| {
                                 window.remove_window();
                             }),
@@ -1291,7 +1291,7 @@ impl Render for TableImportView {
                     .when(current_step == ImportStep::Execute && !is_running, |this| {
                         this.child(
                             Button::new("prev")
-                                .child(t!("Common.previous"))
+                                .child(t!("Common.previous").to_string())
                                 .disabled(is_finished)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.current_step = ImportStep::Config;
@@ -1300,7 +1300,7 @@ impl Render for TableImportView {
                         )
                     })
                     .when(current_step == ImportStep::Config, |this| {
-                        this.child(Button::new("next").primary().child(t!("Common.next")).on_click(
+                        this.child(Button::new("next").primary().child(t!("Common.next").to_string()).on_click(
                             cx.listener(|view, _, _, cx| {
                                 let file_path = view.file_path.read(cx).text().to_string();
                                 if file_path.is_empty() {
@@ -1319,7 +1319,7 @@ impl Render for TableImportView {
                     .when(
                         current_step == ImportStep::Execute && !is_running && !is_finished,
                         |this| {
-                            this.child(Button::new("start").primary().child(t!("ImportExport.start_import")).on_click(
+                            this.child(Button::new("start").primary().child(t!("ImportExport.start_import").to_string()).on_click(
                                 window.listener_for(&cx.entity(), |view, _, window, cx| {
                                     view.start_import(window, cx);
                                 }),
@@ -1327,10 +1327,10 @@ impl Render for TableImportView {
                         },
                     )
                     .when(is_running, |this| {
-                        this.child(Button::new("running").loading(true).child(t!("ImportExport.importing")))
+                        this.child(Button::new("running").loading(true).child(t!("ImportExport.importing").to_string()))
                     })
                     .when(is_finished, |this| {
-                        this.child(Button::new("close").primary().child(t!("Common.finish")).on_click(
+                        this.child(Button::new("close").primary().child(t!("Common.finish").to_string()).on_click(
                             |_, window, cx| {
                                 gpui_component::WindowExt::close_dialog(window, cx);
                             },

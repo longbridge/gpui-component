@@ -890,9 +890,9 @@ impl Render for DataExportView {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .child(if current_step == ExportStep::Config {
-                        t!("ImportExport.export_hint")
+                        t!("ImportExport.export_hint").to_string()
                     } else {
-                        t!("ImportExport.export_ready_hint")
+                        t!("ImportExport.export_ready_hint").to_string()
                     })
             )
             .when(current_step == ExportStep::Config, |this| {
@@ -1039,7 +1039,7 @@ impl Render for DataExportView {
                                                     div()
                                                         .text_sm()
                                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                        .child(t!("ImportExport.export_columns")),
+                                                        .child(t!("ImportExport.export_columns").to_string()),
                                                 )
                                                 .child(
                                                     h_flex()
@@ -1047,7 +1047,7 @@ impl Render for DataExportView {
                                                         .child(
                                                             Button::new("select_all")
                                                                 .small()
-                                                                .child(t!("Common.select_all"))
+                                                                .child(t!("Common.select_all").to_string())
                                                                 .on_click(window.listener_for(&cx.entity(), |view, _, window, cx| {
                                                                     view.select_all_columns(window, cx);
                                                                 }))
@@ -1055,7 +1055,7 @@ impl Render for DataExportView {
                                                         .child(
                                                             Button::new("deselect_all")
                                                                 .small()
-                                                                .child(t!("Common.deselect_all"))
+                                                                .child(t!("Common.deselect_all").to_string())
                                                                 .on_click(window.listener_for(&cx.entity(), |view, _, window, cx| {
                                                                     view.deselect_all_columns(window, cx);
                                                                 }))
@@ -1082,7 +1082,7 @@ impl Render for DataExportView {
                                                 div()
                                                     .text_sm()
                                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .child(t!("ImportExport.delimiter_config")),
+                                                    .child(t!("ImportExport.delimiter_config").to_string()),
                                             )
                                             .child(
                                                 v_flex()
@@ -1099,7 +1099,7 @@ impl Render for DataExportView {
                                                                 div()
                                                                     .text_xs()
                                                                     .text_color(cx.theme().muted_foreground)
-                                                                    .child(t!("ImportExport.record_delimiter")),
+                                                                    .child(t!("ImportExport.record_delimiter").to_string()),
                                                             )
                                                             .child(Select::new(&self.record_separator).w_full())
                                                     )
@@ -1110,7 +1110,7 @@ impl Render for DataExportView {
                                                                 div()
                                                                     .text_xs()
                                                                     .text_color(cx.theme().muted_foreground)
-                                                                    .child(t!("ImportExport.field_delimiter")),
+                                                                    .child(t!("ImportExport.field_delimiter").to_string()),
                                                             )
                                                             .child(Select::new(&self.field_separator).w_full())
                                                     )
@@ -1121,7 +1121,7 @@ impl Render for DataExportView {
                                                                 div()
                                                                     .text_xs()
                                                                     .text_color(cx.theme().muted_foreground)
-                                                                    .child(t!("ImportExport.text_qualifier")),
+                                                                    .child(t!("ImportExport.text_qualifier").to_string()),
                                                             )
                                                             .child(Select::new(&self.text_qualifier).w_full())
                                                     )
@@ -1143,7 +1143,7 @@ impl Render for DataExportView {
                                                                 div()
                                                                     .text_xs()
                                                                     .text_color(cx.theme().muted_foreground)
-                                                                    .child(t!("ImportExport.has_header")),
+                                                                    .child(t!("ImportExport.has_header").to_string()),
                                                             )
                                                     )
                                             )
@@ -1300,7 +1300,7 @@ impl Render for DataExportView {
                     .justify_end()
                     .child(
                         Button::new("cancel")
-                            .child(t!("Common.cancel"))
+                            .child(t!("Common.cancel").to_string())
                             .on_click(|_, window, _cx| {
                                 window.remove_window();
                             })
@@ -1308,7 +1308,7 @@ impl Render for DataExportView {
                     .when(current_step == ExportStep::Execute && !is_running, |this| {
                         this.child(
                             Button::new("prev")
-                                .child(t!("Common.previous"))
+                                .child(t!("Common.previous").to_string())
                                 .disabled(is_finished)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.current_step = ExportStep::Config;
@@ -1320,7 +1320,7 @@ impl Render for DataExportView {
                         this.child(
                             Button::new("next")
                                 .primary()
-                                .child(t!("Common.next"))
+                                .child(t!("Common.next").to_string())
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.current_step = ExportStep::Execute;
                                     cx.notify();
@@ -1331,7 +1331,7 @@ impl Render for DataExportView {
                         this.child(
                             Button::new("start")
                                 .primary()
-                                .child(t!("ImportExport.start_export"))
+                                .child(t!("ImportExport.start_export").to_string())
                                 .on_click(window.listener_for(&cx.entity(), |view, _, window, cx| {
                                     view.start_export(window, cx);
                                 }))
@@ -1341,14 +1341,14 @@ impl Render for DataExportView {
                         this.child(
                             Button::new("running")
                                 .loading(true)
-                                .child(t!("ImportExport.exporting"))
+                                .child(t!("ImportExport.exporting").to_string())
                         )
                     })
                     .when(is_finished, |this| {
                         this.child(
                             Button::new("close")
                                 .primary()
-                                .child(t!("Common.finish"))
+                                .child(t!("Common.finish").to_string())
                                 .on_click(|_, window, _cx| {
                                     window.remove_window();
                                 })

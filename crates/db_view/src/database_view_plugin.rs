@@ -30,7 +30,7 @@ pub enum ToolbarButtonType {
 pub struct ToolbarButton {
     pub id: &'static str,
     pub icon: IconName,
-    pub tooltip: &'static str,
+    pub tooltip: String,
     pub button_type: ToolbarButtonType,
     pub event_fn: fn(db::DbNode) -> DatabaseObjectsEvent,
 }
@@ -39,13 +39,13 @@ impl ToolbarButton {
     pub fn current_node(
         id: &'static str,
         icon: IconName,
-        tooltip: &'static str,
+        tooltip: impl Into<String>,
         event_fn: fn(db::DbNode) -> DatabaseObjectsEvent,
     ) -> Self {
         Self {
             id,
             icon,
-            tooltip,
+            tooltip: tooltip.into(),
             button_type: ToolbarButtonType::CurrentNode,
             event_fn,
         }
@@ -54,13 +54,13 @@ impl ToolbarButton {
     pub fn selected_row(
         id: &'static str,
         icon: IconName,
-        tooltip: &'static str,
+        tooltip: impl Into<String>,
         event_fn: fn(db::DbNode) -> DatabaseObjectsEvent,
     ) -> Self {
         Self {
             id,
             icon,
-            tooltip,
+            tooltip: tooltip.into(),
             button_type: ToolbarButtonType::SelectedRow,
             event_fn,
         }

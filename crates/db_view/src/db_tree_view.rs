@@ -1434,7 +1434,7 @@ impl DbTreeView {
                                         });
                                     })
                             })
-                            .child(div().text_sm().child(t!("Common.select_all"))),
+                            .child(div().text_sm().child(t!("Common.select_all").to_string())),
                     )
                     .child({
                         let view_clear = view_clone.clone();
@@ -1960,7 +1960,7 @@ impl Render for DbTreeView {
                                         .child(
                                             div()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child(t!("Common.not_found")),
+                                                .child(t!("Common.not_found").to_string()),
                                         ),
                                 )
                             } else {
@@ -2333,7 +2333,7 @@ impl DbTreeView {
                                                                 .with_size(ComponentSize::Small)
                                                                 .text_color(cx.theme().warning),
                                                         )
-                                                        .child(t!("Common.error_info")),
+                                                        .child(t!("Common.error_info").to_string()),
                                                 )
                                                 .child(
                                                     Clipboard::new(SharedString::from(format!(

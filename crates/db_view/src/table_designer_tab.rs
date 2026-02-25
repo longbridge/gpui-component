@@ -1123,7 +1123,7 @@ impl TabContent for TableDesigner {
 
                     vec![
                         Button::new("cancel")
-                            .label(t!("Common.cancel"))
+                            .label(t!("Common.cancel").to_string())
                             .on_click(move |_, window, cx| {
                                 window.close_dialog(cx);
                                 if let Some(tx) = tx_cancel.lock().ok().and_then(|mut g| g.take()) {
@@ -1132,7 +1132,7 @@ impl TabContent for TableDesigner {
                             })
                             .into_any_element(),
                         Button::new("discard")
-                            .label(t!("Common.discard"))
+                            .label(t!("Common.discard").to_string())
                             .on_click(move |_, window, cx| {
                                 window.close_dialog(cx);
                                 if let Some(tx) = tx_discard.lock().ok().and_then(|mut g| g.take())
@@ -1142,7 +1142,7 @@ impl TabContent for TableDesigner {
                             })
                             .into_any_element(),
                         Button::new("save")
-                            .label(t!("Common.save"))
+                            .label(t!("Common.save").to_string())
                             .primary()
                             .on_click(move |_, window, cx| {
                                 window.close_dialog(cx);
@@ -1242,8 +1242,9 @@ impl ColumnsEditor {
     ) -> Self {
         let focus_handle = cx.focus_handle();
         let data_types = Self::get_data_types(&database_type, cx);
-        let search_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.search_column")));
+        let search_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.search_column").to_string())
+        });
 
         let search_sub = cx.subscribe_in(
             &search_input,
@@ -1320,19 +1321,27 @@ impl ColumnsEditor {
     }
 
     fn add_column(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.column_name")));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.column_name").to_string())
+        });
         let type_items = SearchableVec::new(self.data_types.clone());
         let type_select = cx.new(|cx| {
             SelectState::new(type_items, Some(IndexPath::new(0)), window, cx).searchable(true)
         });
-        let length_input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.length")));
+        let length_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.length").to_string()));
         let scale_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.decimal_places")));
+            cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("Table.decimal_places").to_string())
+            });
         let default_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.default_value")));
+            cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("Table.default_value").to_string())
+            });
         let comment_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.comment")));
+            cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("Table.comment").to_string())
+            });
 
         let charset_items: Vec<CharsetSelectItem> = std::iter::once(CharsetSelectItem {
             info: CharsetInfo {
@@ -1363,7 +1372,9 @@ impl ColumnsEditor {
         });
 
         let enum_values_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.value_list_hint")));
+            cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("Table.value_list_hint").to_string())
+            });
 
         let name_sub = cx.subscribe_in(
             &name_input,
@@ -1611,7 +1622,8 @@ impl ColumnsEditor {
 
         for col in columns {
             let name_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(t!("Table.column_name"));
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.column_name").to_string());
                 input.set_value(col.name.clone(), window, cx);
                 input
             });
@@ -1636,7 +1648,8 @@ impl ColumnsEditor {
             });
 
             let length_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(t!("Table.length"));
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.length").to_string());
                 if let Some(len) = Self::extract_length_from_type(&col.data_type) {
                     input.set_value(len.to_string(), window, cx);
                 }
@@ -1645,7 +1658,7 @@ impl ColumnsEditor {
 
             let scale_input = cx.new(|cx| {
                 let mut input =
-                    InputState::new(window, cx).placeholder(t!("Table.decimal_places"));
+                    InputState::new(window, cx).placeholder(t!("Table.decimal_places").to_string());
                 if let Some(scale) = Self::extract_scale_from_type(&col.data_type) {
                     input.set_value(scale.to_string(), window, cx);
                 }
@@ -1654,7 +1667,7 @@ impl ColumnsEditor {
 
             let default_input = cx.new(|cx| {
                 let mut input =
-                    InputState::new(window, cx).placeholder(t!("Table.default_value"));
+                    InputState::new(window, cx).placeholder(t!("Table.default_value").to_string());
                 if let Some(ref default) = col.default_value {
                     input.set_value(default.clone(), window, cx);
                 }
@@ -1662,7 +1675,8 @@ impl ColumnsEditor {
             });
 
             let comment_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(t!("Table.comment"));
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.comment").to_string());
                 if let Some(ref comment) = col.comment {
                     input.set_value(comment.clone(), window, cx);
                 }
@@ -1699,7 +1713,7 @@ impl ColumnsEditor {
 
             let enum_values_input = cx.new(|cx| {
                 let mut input =
-                    InputState::new(window, cx).placeholder(t!("Table.value_list_hint"));
+                    InputState::new(window, cx).placeholder(t!("Table.value_list_hint").to_string());
                 if let Some(values) = Self::extract_enum_values(&col.data_type) {
                     input.set_value(values, window, cx);
                 }
@@ -1864,7 +1878,7 @@ impl ColumnsEditor {
                     .small()
                     .icon(IconName::Plus)
                     .ghost()
-                    .tooltip(t!("Table.add_column"))
+                    .tooltip(t!("Table.add_column").to_string())
                     .on_click(cx.listener(|this, _, window, cx| this.add_column(window, cx))),
             )
             .child(
@@ -1872,7 +1886,7 @@ impl ColumnsEditor {
                     .small()
                     .icon(IconName::Minus)
                     .ghost()
-                    .tooltip(t!("Table.delete_column"))
+                    .tooltip(t!("Table.delete_column").to_string())
                     .on_click(cx.listener(|this, _, _window, cx| this.remove_column(cx))),
             )
             .child(div().flex_1())
@@ -1904,28 +1918,28 @@ impl ColumnsEditor {
                     .w(px(160.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(t!("Table.column_name")),
+                    .child(t!("Table.column_name").to_string()),
             )
             .child(
                 div()
                     .w(px(140.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(t!("Table.type")),
+                    .child(t!("Table.type").to_string()),
             )
             .child(
                 div()
                     .w(px(60.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(t!("Table.length")),
+                    .child(t!("Table.length").to_string()),
             )
             .child(
                 div()
                     .w(px(60.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(t!("Table.decimal_places")),
+                    .child(t!("Table.decimal_places").to_string()),
             )
             .child(
                 div()
@@ -1933,7 +1947,7 @@ impl ColumnsEditor {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .text_center()
-                    .child(t!("Table.nullable")),
+                    .child(t!("Table.nullable").to_string()),
             )
             .child(
                 div()
@@ -1941,7 +1955,7 @@ impl ColumnsEditor {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .text_center()
-                    .child(t!("Table.primary_key")),
+                    .child(t!("Table.primary_key").to_string()),
             )
             .child(
                 div()
@@ -1949,14 +1963,14 @@ impl ColumnsEditor {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .text_center()
-                    .child(t!("Table.auto_increment_column")),
+                    .child(t!("Table.auto_increment_column").to_string()),
             )
             .child(
                 div()
                     .flex_1()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(t!("Table.comment")),
+                    .child(t!("Table.comment").to_string()),
             )
             .into_any_element()
     }
@@ -2076,7 +2090,7 @@ impl ColumnsEditor {
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child(t!("Table.select_column_hint")),
+                        .child(t!("Table.select_column_hint").to_string()),
                 )
                 .into_any_element();
         };
@@ -2247,9 +2261,12 @@ impl IndexesEditor {
 
     fn add_index(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.index_name")));
+            cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("Table.index_name").to_string())
+            });
         let columns_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder(t!("Table.columns_comma_separated"))
+            InputState::new(window, cx)
+                .placeholder(t!("Table.columns_comma_separated").to_string())
         });
 
         // Subscribe to input changes
@@ -2347,7 +2364,8 @@ impl IndexesEditor {
             }
 
             let name_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(t!("Table.index_name"));
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.index_name").to_string());
                 input.set_value(idx.name.clone(), window, cx);
                 input
             });
@@ -2355,7 +2373,8 @@ impl IndexesEditor {
             let columns_str = idx.columns.join(", ");
             let columns_input = cx.new(|cx| {
                 let mut input =
-                    InputState::new(window, cx).placeholder(t!("Table.columns_comma_separated"));
+                    InputState::new(window, cx)
+                        .placeholder(t!("Table.columns_comma_separated").to_string());
                 input.set_value(columns_str, window, cx);
                 input
             });
@@ -2418,7 +2437,7 @@ impl Render for IndexesEditor {
                             .small()
                             .icon(IconName::Plus)
                             .ghost()
-                            .tooltip(t!("Table.add_index"))
+                            .tooltip(t!("Table.add_index").to_string())
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.add_index(window, cx)),
                             ),
@@ -2428,7 +2447,7 @@ impl Render for IndexesEditor {
                             .small()
                             .icon(IconName::Minus)
                             .ghost()
-                            .tooltip(t!("Table.delete_index"))
+                            .tooltip(t!("Table.delete_index").to_string())
                             .on_click(cx.listener(|this, _, _window, cx| this.remove_index(cx))),
                     ),
             )
@@ -2445,14 +2464,14 @@ impl Render for IndexesEditor {
                             .w(px(160.))
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child(t!("Table.index_name")),
+                            .child(t!("Table.index_name").to_string()),
                     )
                     .child(
                         div()
                             .flex_1()
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child(t!("Table.columns")),
+                            .child(t!("Table.columns").to_string()),
                     )
                     .child(
                         div()
@@ -2460,7 +2479,7 @@ impl Render for IndexesEditor {
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
                             .text_center()
-                            .child(t!("Table.unique")),
+                            .child(t!("Table.unique").to_string()),
                     ),
             )
             .child(
@@ -2632,7 +2651,9 @@ impl TableOptionsEditor {
         });
 
         let comment_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.table_comment")));
+            cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("Table.table_comment").to_string())
+            });
 
         let engine_sub = cx.observe(&engine_select, |_this, _, cx| {
             cx.emit(TableOptionsEvent::Changed);
@@ -2723,28 +2744,28 @@ impl Render for TableOptionsEditor {
                 .label_width(px(80.))
                 .child(
                     field()
-                        .label(t!("Table.engine"))
+                        .label(t!("Table.engine").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.engine_select).w(px(200.))),
                 )
                 .child(
                     field()
-                        .label(t!("Table.charset"))
+                        .label(t!("Table.charset").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.charset_select).w(px(200.))),
                 )
                 .child(
                     field()
-                        .label(t!("Table.collation"))
+                        .label(t!("Table.collation").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.collation_select).w(px(200.))),
                 )
                 .child(
                     field()
-                        .label(t!("Table.table_comment"))
+                        .label(t!("Table.table_comment").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Input::new(&self.comment_input).w(px(300.))),

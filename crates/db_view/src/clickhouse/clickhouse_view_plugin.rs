@@ -92,28 +92,28 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::Connection => {
                 vec![
                     ContextMenuItem::item(
-                        t!("ImportExport.run_sql_file"),
+                        t!("ImportExport.run_sql_file").to_string(),
                         DbTreeViewEvent::RunSqlFile {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("Connection.close_connection"),
+                        t!("Connection.close_connection").to_string(),
                         DbTreeViewEvent::CloseConnection {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("Connection.delete_connection"),
+                        t!("Connection.delete_connection").to_string(),
                         DbTreeViewEvent::DeleteConnection {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("Database.new_database"),
+                        t!("Database.new_database").to_string(),
                         DbTreeViewEvent::CreateDatabase {
                             node_id: node_id.to_string(),
                         },
@@ -123,27 +123,27 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::Database => {
                 vec![
                     ContextMenuItem::item(
-                        t!("Query.new_query"),
+                        t!("Query.new_query").to_string(),
                         DbTreeViewEvent::CreateNewQuery {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("ImportExport.run_sql_file"),
+                        t!("ImportExport.run_sql_file").to_string(),
                         DbTreeViewEvent::RunSqlFile {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("Database.close_database"),
+                        t!("Database.close_database").to_string(),
                         DbTreeViewEvent::CloseDatabase {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        t!("Database.delete_database"),
+                        t!("Database.delete_database").to_string(),
                         DbTreeViewEvent::DeleteDatabase {
                             node_id: node_id.to_string(),
                         },
@@ -153,32 +153,32 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::Table => {
                 vec![
                     ContextMenuItem::item(
-                        t!("Table.view_data"),
+                        t!("Table.view_data").to_string(),
                         DbTreeViewEvent::OpenTableData {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        t!("Table.design_table"),
+                        t!("Table.design_table").to_string(),
                         DbTreeViewEvent::DesignTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("Table.rename_table"),
+                        t!("Table.rename_table").to_string(),
                         DbTreeViewEvent::RenameTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        t!("Table.truncate_table"),
+                        t!("Table.truncate_table").to_string(),
                         DbTreeViewEvent::TruncateTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        t!("Table.delete_table"),
+                        t!("Table.delete_table").to_string(),
                         DbTreeViewEvent::DeleteTable {
                             node_id: node_id.to_string(),
                         },
@@ -189,14 +189,14 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::View => {
                 vec![
                     ContextMenuItem::item(
-                        t!("View.view_data"),
+                        t!("View.view_data").to_string(),
                         DbTreeViewEvent::OpenViewData {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("View.delete_view"),
+                        t!("View.delete_view").to_string(),
                         DbTreeViewEvent::DeleteView {
                             node_id: node_id.to_string(),
                         },
@@ -207,7 +207,7 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::TablesFolder => {
                 vec![
                     ContextMenuItem::item(
-                        t!("Table.new_table"),
+                        t!("Table.new_table").to_string(),
                         DbTreeViewEvent::DesignTable {
                             node_id: node_id.to_string(),
                         },
@@ -218,7 +218,7 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::QueriesFolder => {
                 vec![
                     ContextMenuItem::item(
-                        t!("Query.new_query"),
+                        t!("Query.new_query").to_string(),
                         DbTreeViewEvent::CreateNewQuery {
                             node_id: node_id.to_string(),
                         },
@@ -229,20 +229,20 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::NamedQuery => {
                 vec![
                     ContextMenuItem::item(
-                        t!("Query.open_query"),
+                        t!("Query.open_query").to_string(),
                         DbTreeViewEvent::OpenNamedQuery {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        t!("Query.rename_query"),
+                        t!("Query.rename_query").to_string(),
                         DbTreeViewEvent::RenameQuery {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        t!("Query.delete_query"),
+                        t!("Query.delete_query").to_string(),
                         DbTreeViewEvent::DeleteQuery {
                             node_id: node_id.to_string(),
                         },
@@ -266,13 +266,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                         ToolbarButton::selected_row(
                             "delete-connection",
                             IconName::Minus,
-                            t!("Connection.delete_connection"),
+                            t!("Connection.delete_connection").to_string(),
                             |node| DatabaseObjectsEvent::DeleteConnection { node },
                         ),
                         ToolbarButton::selected_row(
                             "close-connection",
                             IconName::CircleX,
-                            t!("Connection.close_connection"),
+                            t!("Connection.close_connection").to_string(),
                             |node| DatabaseObjectsEvent::CloseConnection { node },
                         ),
                     ]
@@ -281,13 +281,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                         ToolbarButton::current_node(
                             "create-database",
                             IconName::Plus,
-                            t!("Database.new_database"),
+                            t!("Database.new_database").to_string(),
                             |node| DatabaseObjectsEvent::CreateDatabase { node },
                         ),
                         ToolbarButton::selected_row(
                             "delete-database",
                             IconName::Minus,
-                            t!("Database.delete_database"),
+                            t!("Database.delete_database").to_string(),
                             |node| DatabaseObjectsEvent::DeleteDatabase { node },
                         ),
                     ]
@@ -298,25 +298,25 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "create-table",
                         IconName::Plus,
-                        t!("Table.new_table"),
+                        t!("Table.new_table").to_string(),
                         |node| DatabaseObjectsEvent::DesignTable { node },
                     ),
                     ToolbarButton::selected_row(
                         "open-table",
                         IconName::Eye,
-                        t!("Table.view_data"),
+                        t!("Table.view_data").to_string(),
                         |node| DatabaseObjectsEvent::OpenTableData { node },
                     ),
                     ToolbarButton::selected_row(
                         "design-table",
                         IconName::Edit,
-                        t!("Table.design_table"),
+                        t!("Table.design_table").to_string(),
                         |node| DatabaseObjectsEvent::DesignTable { node },
                     ),
                     ToolbarButton::selected_row(
                         "drop-table",
                         IconName::Minus,
-                        t!("Table.delete_table"),
+                        t!("Table.delete_table").to_string(),
                         |node| DatabaseObjectsEvent::DeleteTable { node },
                     ),
                 ]
@@ -326,19 +326,19 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "open-table",
                         IconName::Eye,
-                        t!("Table.view_data"),
+                        t!("Table.view_data").to_string(),
                         |node| DatabaseObjectsEvent::OpenTableData { node },
                     ),
                     ToolbarButton::current_node(
                         "design-table",
                         IconName::Edit,
-                        t!("Table.design_table"),
+                        t!("Table.design_table").to_string(),
                         |node| DatabaseObjectsEvent::DesignTable { node },
                     ),
                     ToolbarButton::current_node(
                         "drop-table",
                         IconName::Minus,
-                        t!("Table.delete_table"),
+                        t!("Table.delete_table").to_string(),
                         |node| DatabaseObjectsEvent::DeleteTable { node },
                     ),
                 ]
@@ -348,13 +348,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::selected_row(
                         "open-view",
                         IconName::Eye,
-                        t!("View.view_data"),
+                        t!("View.view_data").to_string(),
                         |node| DatabaseObjectsEvent::OpenViewData { node },
                     ),
                     ToolbarButton::selected_row(
                         "drop-view",
                         IconName::Minus,
-                        t!("View.delete_view"),
+                        t!("View.delete_view").to_string(),
                         |node| DatabaseObjectsEvent::DeleteView { node },
                     ),
                 ]
@@ -364,13 +364,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "open-view",
                         IconName::Eye,
-                        t!("View.view_data"),
+                        t!("View.view_data").to_string(),
                         |node| DatabaseObjectsEvent::OpenViewData { node },
                     ),
                     ToolbarButton::current_node(
                         "drop-view",
                         IconName::Minus,
-                        t!("View.delete_view"),
+                        t!("View.delete_view").to_string(),
                         |node| DatabaseObjectsEvent::DeleteView { node },
                     ),
                 ]
@@ -380,25 +380,25 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "create-query",
                         IconName::Plus,
-                        t!("Query.new_query"),
+                        t!("Query.new_query").to_string(),
                         |node| DatabaseObjectsEvent::CreateNewQuery { node },
                     ),
                     ToolbarButton::selected_row(
                         "open-query",
                         IconName::Eye,
-                        t!("Query.open_query"),
+                        t!("Query.open_query").to_string(),
                         |node| DatabaseObjectsEvent::OpenNamedQuery { node },
                     ),
                     ToolbarButton::selected_row(
                         "rename-query",
                         IconName::Edit,
-                        t!("Query.rename_query"),
+                        t!("Query.rename_query").to_string(),
                         |node| DatabaseObjectsEvent::RenameQuery { node },
                     ),
                     ToolbarButton::selected_row(
                         "delete-query",
                         IconName::Minus,
-                        t!("Query.delete_query"),
+                        t!("Query.delete_query").to_string(),
                         |node| DatabaseObjectsEvent::DeleteQuery { node },
                     ),
                 ]
