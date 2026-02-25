@@ -18,6 +18,7 @@ use gpui_component::{
 };
 use gpui_component::IndexPath;
 use one_core::llm::chat_history::ChatSession;
+use rust_i18n::t;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // ============================================================================
@@ -272,7 +273,7 @@ impl SessionSidebar {
                         div()
                             .text_sm()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("历史会话"),
+                            .child(t!("ChatSession.history_title")),
                     )
                     .child(
                         Button::new("sql-new-session")
@@ -316,14 +317,14 @@ pub fn format_timestamp(timestamp: i64) -> String {
     let diff = now.saturating_sub(timestamp);
 
     if diff < 60 {
-        "刚刚".to_string()
+        t!("ChatSession.time_just_now").to_string()
     } else if diff < 3600 {
-        format!("{} 分钟前", diff / 60)
+        t!("ChatSession.time_minutes_ago", minutes = diff / 60).to_string()
     } else if diff < 86400 {
-        format!("{} 小时前", diff / 3600)
+        t!("ChatSession.time_hours_ago", hours = diff / 3600).to_string()
     } else if diff < 604800 {
-        format!("{} 天前", diff / 86400)
+        t!("ChatSession.time_days_ago", days = diff / 86400).to_string()
     } else {
-        format!("{} 周前", diff / 604800)
+        t!("ChatSession.time_weeks_ago", weeks = diff / 604800).to_string()
     }
 }

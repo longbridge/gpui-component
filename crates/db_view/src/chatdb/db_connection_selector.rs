@@ -13,6 +13,7 @@ use gpui_component::{
 };
 use one_core::storage::{ConnectionRepository, ConnectionType, DatabaseType, GlobalStorageState};
 use one_core::storage::traits::Repository;
+use rust_i18n::t;
 
 // ========================================================================
 // 数据类型
@@ -381,27 +382,27 @@ impl DbConnectionSelector {
 
     fn selection_label(&self) -> String {
         let Some(connection) = &self.selected_connection else {
-            return "选择数据源".to_string();
+            return t!("ChatDbSelector.select_source").to_string();
         };
 
         let mut parts = vec![connection.name.clone()];
         if self.uses_schema_as_database {
             match &self.selected_schema {
                 Some(schema) => parts.push(schema.clone()),
-                None => parts.push("选择架构".to_string()),
+                None => parts.push(t!("ChatDbSelector.select_schema").to_string()),
             }
             return parts.join(" / ");
         }
 
         match &self.selected_database {
             Some(database) => parts.push(database.clone()),
-            None => parts.push("选择数据库".to_string()),
+            None => parts.push(t!("ChatDbSelector.select_database").to_string()),
         }
 
         if self.supports_schema {
             match &self.selected_schema {
                 Some(schema) => parts.push(schema.clone()),
-                None => parts.push("选择架构".to_string()),
+                None => parts.push(t!("ChatDbSelector.select_schema").to_string()),
             }
         }
 
@@ -462,7 +463,7 @@ impl DbConnectionSelector {
 
     fn render_column(
         column_id: &str,
-        title: &str,
+        title: String,
         items: Vec<AnyColumnItem>,
         is_loading: bool,
         width: f32,
@@ -481,7 +482,7 @@ impl DbConnectionSelector {
                     .py_2()
                     .text_sm()
                     .text_color(colors.muted_foreground)
-                    .child(title.to_string()),
+                    .child(title),
             )
             .child(
                 div()
@@ -506,7 +507,7 @@ impl DbConnectionSelector {
                                 .py_4()
                                 .text_sm()
                                 .text_color(colors.muted_foreground)
-                                .child("暂无数据"),
+                                .child(t!("ChatDbSelector.no_data")),
                         )
                     })
                     .children(items.into_iter().map(|item| item.element)),
@@ -604,16 +605,16 @@ impl DbConnectionSelector {
             .collect::<Vec<_>>();
 
         let database_title = if uses_schema_as_database {
-            "架构"
+            t!("ChatDbSelector.schema_title").to_string()
         } else {
-            "数据库"
+            t!("ChatDbSelector.database_title").to_string()
         };
 
         h_flex()
             .gap_0()
             .child(Self::render_column(
                 "connections",
-                "连接",
+                t!("ChatDbSelector.connection_title").to_string(),
                 connection_items,
                 loading_connections,
                 200.0,
@@ -630,7 +631,7 @@ impl DbConnectionSelector {
             .when(supports_schema && !uses_schema_as_database, |this| {
                 this.child(Self::render_column(
                     "schemas",
-                    "架构",
+                    t!("ChatDbSelector.schema_title").to_string(),
                     schema_items,
                     loading_schemas,
                     200.0,

@@ -37,6 +37,7 @@ use one_core::tab_container::{TabContent, TabContentEvent};
 use std::collections::HashMap;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use rust_i18n::t;
 use crate::chatdb::ai_input::{AIInput, AIInputEvent};
 use crate::chatdb::agents::{CAP_DB_METADATA, DatabaseMetadataProvider};
 use crate::chatdb::chat_markdown::SqlCodeBlock;
@@ -346,7 +347,7 @@ impl ChatPanel {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(&current_name)
-                .placeholder("会话名称")
+                .placeholder(t!("ChatPanel.session_name_placeholder").to_string())
         });
 
         let panel_entity = cx.entity();
@@ -357,13 +358,13 @@ impl ChatPanel {
             let panel_for_ok = panel_entity.clone();
 
             dialog
-                .title("重命名会话")
+                .title(t!("ChatPanel.rename_session_title").to_string())
                 .w(px(360.0))
                 .confirm()
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text("保存")
-                        .cancel_text("取消"),
+                        .ok_text(t!("Common.save").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
                 )
                 .on_ok(move |_, _window, cx| {
                     let new_name = input_for_ok.read(cx).value().to_string();
@@ -376,7 +377,9 @@ impl ChatPanel {
                 })
                 .child(
                     v_flex().gap_2().child(
-                        div().text_sm().child("请输入新的会话名称："),
+                        div()
+                            .text_sm()
+                            .child(t!("ChatPanel.rename_session_prompt").to_string()),
                     ).child(
                         Input::new(&input_for_dialog).w_full(),
                     ),
@@ -517,7 +520,8 @@ impl ChatPanel {
         });
 
         // 添加取消消息
-        self.messages.push(ChatMessageUI::status("操作已取消", true));
+        self.messages
+            .push(ChatMessageUI::status(t!("ChatPanel.action_cancelled").to_string(), true));
 
         cx.notify();
     }
@@ -530,7 +534,12 @@ impl ChatPanel {
 
         // 移除错误消息
         self.messages.retain(|m| {
-            !matches!(&m.variant, MessageVariant::Status { title, .. } if title.contains("错误") || title.contains("失败"))
+            !matches!(
+                &m.variant,
+                MessageVariant::Status { title, .. }
+                    if title.contains(t!("ChatPanel.error_keyword").as_ref())
+                        || title.contains(t!("ChatPanel.failed_keyword").as_ref())
+            )
         });
 
         // 重新发送
@@ -550,7 +559,9 @@ impl ChatPanel {
     /// 统一 AI 发送入口 — 通过 AgentDispatcher 路由到合适的 Agent
     fn send_to_ai(&mut self, content: String, cx: &mut Context<Self>) {
         let Some(provider_id_str) = self.provider_id.clone() else {
-            self.messages.push(ChatMessageUI::assistant("请先选择 AI 模型".to_string()));
+            self.messages.push(ChatMessageUI::assistant(
+                t!("ChatPanel.select_ai_model_first").to_string()
+            ));
             cx.notify();
             return;
         };
@@ -558,7 +569,9 @@ impl ChatPanel {
         let provider_id: i64 = match provider_id_str.parse() {
             Ok(id) => id,
             Err(_) => {
-                self.messages.push(ChatMessageUI::assistant("无效的模型 ID".to_string()));
+                self.messages.push(ChatMessageUI::assistant(
+                    t!("ChatPanel.invalid_model_id").to_string()
+                ));
                 cx.notify();
                 return;
             }
@@ -636,7 +649,11 @@ impl ChatPanel {
 
             // 确保 session 存在
             let is_new_session = session_id.is_none();
-            let session_db_id = match session_service.ensure_session(session_id, &provider_id_str_clone, "SQL 会话") {
+            let session_db_id = match session_service.ensure_session(
+                session_id,
+                &provider_id_str_clone,
+                t!("ChatPanel.sql_session_name").as_ref()
+            ) {
                 Ok(id) => {
                     if session_id.is_none() {
                         if let Some(entity) = this.upgrade() {
@@ -652,7 +669,8 @@ impl ChatPanel {
                     id
                 }
                 Err(e) => {
-                    let error_msg = format!("会话错误: {}", e);
+                    let error_msg =
+                        t!("ChatPanel.session_error", error = format!("{}", e)).to_string();
                     if let Some(entity) = this.upgrade() {
                         let _ = cx.update(|cx| {
                             entity.update(cx, |content, cx| {
@@ -806,7 +824,11 @@ impl ChatPanel {
                                             if let Some(msg) = content.messages.iter_mut().find(|m| m.id == msg_id) {
                                                 msg.is_streaming = false;
                                                 msg.variant = MessageVariant::Text;
-                                                msg.content = format!("错误: {}", message);
+                                                msg.content = t!(
+                                                    "ChatPanel.error_message",
+                                                    message = message
+                                                )
+                                                .to_string();
                                             }
                                             content.is_loading = false;
                                             content.cancel_token = None;
@@ -831,7 +853,7 @@ impl ChatPanel {
                                             if let Some(msg) = content.messages.iter_mut().find(|m| m.id == msg_id) {
                                                 msg.is_streaming = false;
                                                 msg.variant = MessageVariant::Text;
-                                                msg.content = "操作已取消".to_string();
+                                                msg.content = t!("ChatPanel.action_cancelled").to_string();
                                             }
                                             content.is_loading = false;
                                             content.cancel_token = None;
@@ -872,7 +894,7 @@ impl ChatPanel {
         // 添加状态消息
         let result_msg_id = Uuid::new_v4().to_string();
         self.messages.push(
-            ChatMessageUI::status("执行中...", false)
+            ChatMessageUI::status(t!("ChatPanel.executing").to_string(), false)
                 .with_id(result_msg_id.clone())
         );
 
@@ -918,7 +940,11 @@ impl ChatPanel {
                                             content.collapse_old_sql_results(3, cx);
                                         }
                                         Err(e) => {
-                                            msg.content = format!("执行错误: {}", e);
+                                            msg.content = t!(
+                                                "ChatPanel.execution_error",
+                                                error = e
+                                            )
+                                            .to_string();
                                             msg.variant = MessageVariant::Text;
                                             msg.is_streaming = false;
                                         }
@@ -1129,7 +1155,7 @@ impl ChatPanel {
                 .get_mut(message_id)
                 .and_then(|map| map.get_mut(&block.key))
             {
-                state.set_error("请先选择数据库或架构".to_string());
+                state.set_error(t!("ChatPanel.select_database_or_schema_first").to_string());
             }
             cx.notify();
             return;
@@ -1205,7 +1231,13 @@ impl ChatPanel {
                                                     this.child(
                                                         Button::new("chat-load-more")
                                                             .ghost()
-                                                            .label(format!("加载更早消息（剩余 {} 条）", hidden_count))
+                                                            .label(
+                                                                t!(
+                                                                    "ChatMessageList.load_more",
+                                                                    hidden_count = hidden_count
+                                                                )
+                                                                .to_string()
+                                                            )
                                                             .on_click(cx.listener(|this, _event, _window, cx| {
                                                                 let total = this.messages.len();
                                                                 this.render_limit =
@@ -1220,7 +1252,7 @@ impl ChatPanel {
                                                     this.child(
                                                         Button::new("chat-collapse-history")
                                                             .ghost()
-                                                            .label("收起历史消息")
+                                                            .label(t!("ChatMessageList.collapse_history").to_string())
                                                             .on_click(cx.listener(|this, _event, _window, cx| {
                                                                 this.render_limit = MESSAGE_RENDER_LIMIT;
                                                                 this.scroll_to_bottom_and_mark();
@@ -1281,7 +1313,7 @@ impl ChatPanel {
                         div()
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("历史会话"),
+                            .child(t!("ChatSession.history_title")),
                     )
                     .child(
                         Button::new("sql-new-session")
@@ -1359,7 +1391,10 @@ impl ChatPanel {
     fn render_status_message(&self, id: &str, title: &str, is_done: bool, panel: &Entity<Self>, cx: &mut Context<Self>) -> AnyElement {
         let icon = if is_done { IconName::Check } else { IconName::Loader };
         let can_cancel = !is_done && self.can_cancel();
-        let can_retry = is_done && self.can_retry() && (title.contains("错误") || title.contains("失败"));
+        let can_retry = is_done
+            && self.can_retry()
+            && (title.contains(t!("ChatPanel.error_keyword").as_ref())
+                || title.contains(t!("ChatPanel.failed_keyword").as_ref()));
 
         h_flex()
             .id(SharedString::from(id.to_string()))
@@ -1395,7 +1430,7 @@ impl ChatPanel {
                                     .ghost()
                                     .xsmall()
                                     .icon(IconName::Close)
-                                    .label("取消")
+                                    .label(t!("Common.cancel").to_string())
                                     .on_click({
                                         let panel = panel.clone();
                                         move |_, window, cx| {
@@ -1415,7 +1450,7 @@ impl ChatPanel {
                                     .ghost()
                                     .xsmall()
                                     .icon(IconName::Refresh)
-                                    .label("重试")
+                                    .label(t!("ChatPanel.retry").to_string())
                                     .on_click({
                                         let panel = panel.clone();
                                         move |_, window, cx| {
@@ -1440,7 +1475,7 @@ impl ChatPanel {
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child("思考中..."),
+                        .child(t!("ChatPanel.thinking")),
                 )
                 .into_any_element();
         }
@@ -1482,7 +1517,7 @@ impl ChatPanel {
                                                     .icon(IconName::SquareTerminal)
                                                     .ghost()
                                                     .xsmall()
-                                                    .label("运行")
+                                                    .label(t!("ChatSqlBlock.run").to_string())
                                                     .on_click({
                                                         let panel = panel.clone();
                                                         let message_id = message_id.clone();
@@ -1607,9 +1642,9 @@ impl ChatPanel {
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
                             .child(if collapsed {
-                                summary.unwrap_or_else(|| "查看结果".to_string())
+                                summary.unwrap_or_else(|| t!("ChatPanel.view_result").to_string())
                             } else {
-                                "收起结果".to_string()
+                                t!("ChatPanel.collapse_result").to_string()
                             }),
                     )
                     .into_any_element(),
@@ -1651,7 +1686,7 @@ impl ChatPanel {
             div()
                 .w_full()
                 .text_sm()
-                .child("加载中...")
+                .child(t!("ChatMessageList.loading"))
                 .into_any_element()
         }
     }
@@ -1729,7 +1764,7 @@ impl TabContent for ChatPanel {
     }
 
     fn title(&self, _cx: &App) -> SharedString {
-        SharedString::from("SQL 助手")
+        SharedString::from(t!("ChatPanel.title").to_string())
     }
 
     fn icon(&self, _cx: &App) -> Option<Icon> {
@@ -1740,4 +1775,3 @@ impl TabContent for ChatPanel {
         true
     }
 }
-

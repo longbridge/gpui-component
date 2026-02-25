@@ -704,9 +704,9 @@ impl DatabaseEventHandler {
                     if let Some(schema) = schema_name {
                         config = config.with_schema_name(schema);
                     }
-                    let mut tab_title = "新建表".to_string();
+                    let mut tab_title = t!("Table.new_table").to_string();
                     if let Some(table) = table_name {
-                        tab_title = format!("设计表: {}", table);
+                        tab_title = t!("DbTreeEvent.design_table_title", table = table).to_string();
                         config = config.with_table_name(table);
                     }
                     let designer = cx.new(|cx| TableDesigner::new(tab_title, config, window, cx));
@@ -783,7 +783,8 @@ impl DatabaseEventHandler {
         );
 
         open_popup_window(
-            PopupWindowOptions::new("导入数据到表").size(900.0, 600.0),
+            PopupWindowOptions::new(t!("Table.import_data_to_table").to_string())
+                .size(900.0, 600.0),
             move |_window, _cx| import_view.clone(),
             cx,
         );
@@ -844,7 +845,8 @@ impl DatabaseEventHandler {
         .detach();
 
         open_popup_window(
-            PopupWindowOptions::new("导出表").size(800.0, 600.0),
+            PopupWindowOptions::new(t!("ImportExport.export_table").to_string())
+                .size(800.0, 600.0),
             move |_window, _cx| export_view.clone(),
             cx,
         );
@@ -896,13 +898,22 @@ impl DatabaseEventHandler {
 
                             dialog
                                 .overlay(false)
-                                .title("确认关闭连接")
+                                .title(t!("DbTreeEvent.confirm_close_connection_title").to_string())
                                 .confirm()
                                 .child(
                                     v_flex()
                                         .gap_2()
-                                        .child(format!("确定要关闭连接 \"{}\" 吗？", conn_name))
-                                        .child("这将断开数据库连接并清理相关资源。"),
+                                        .child(
+                                            t!(
+                                                "DbTreeEvent.confirm_close_connection_message",
+                                                name = conn_name
+                                            )
+                                            .to_string(),
+                                        )
+                                        .child(
+                                            t!("DbTreeEvent.confirm_close_connection_desc")
+                                                .to_string(),
+                                        ),
                                 )
                                 .on_ok(move |_, _window, cx| {
                                     let conn_id = conn_id.clone();
@@ -925,14 +936,22 @@ impl DatabaseEventHandler {
                                                             panel.refresh(state_for_refresh, cx);
                                                         });
                                                     }
-                                                    Self::show_success_async(cx, "连接已成功关闭");
+                                                    Self::show_success_async(
+                                                        cx,
+                                                        t!("DbTreeEvent.close_connection_success")
+                                                            .to_string(),
+                                                    );
                                                 });
                                             }
                                             Err(e) => {
                                                 let _ = cx.update(|cx| {
                                                     Self::show_error_async(
                                                         cx,
-                                                        format!("关闭连接失败: {}", e),
+                                                        t!(
+                                                            "DbTreeEvent.close_connection_failed",
+                                                            error = e
+                                                        )
+                                                        .to_string(),
                                                     );
                                                 });
                                             }
@@ -974,14 +993,20 @@ impl DatabaseEventHandler {
             let state = global_state.clone();
 
             dialog
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .overlay(false)
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除连接 \"{}\" 吗？", conn_name))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_delete_connection_message",
+                                name = conn_name
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let conn_id = conn_id.clone();
@@ -1004,21 +1029,33 @@ impl DatabaseEventHandler {
                                                     panel.refresh(state_for_refresh, cx);
                                                 });
                                             }
-                                            Self::show_success_async(cx, "连接已成功删除");
+                                            Self::show_success_async(
+                                                cx,
+                                                t!("DbTreeEvent.delete_connection_success")
+                                                    .to_string(),
+                                            );
                                         });
                                     }
                                     Err(e) => {
                                         let _ = cx.update(|cx| {
                                             Self::show_error_async(
                                                 cx,
-                                                format!("删除连接失败: {}", e),
+                                                t!(
+                                                    "DbTreeEvent.delete_connection_failed",
+                                                    error = e
+                                                )
+                                                .to_string(),
                                             );
                                         });
                                     }
                                 }
                             } else {
                                 let _ = cx.update(|cx| {
-                                    Self::show_error_async(cx, "删除连接失败：无法获取存储库");
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_connection_repo_missing")
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -1026,7 +1063,11 @@ impl DatabaseEventHandler {
                             let _ = cx.update(|cx| {
                                 Self::show_error_async(
                                     cx,
-                                    format!("删除连接失败：无效的连接ID {}", e),
+                                    t!(
+                                        "DbTreeEvent.delete_connection_invalid_id",
+                                        error = e
+                                    )
+                                    .to_string(),
                                 );
                             });
                         }
@@ -1057,7 +1098,8 @@ impl DatabaseEventHandler {
         } else {
             Self::show_error(
                 window,
-                format!("不支持的数据库类型: {:?}", database_type),
+                t!("DbTreeEvent.unsupported_database_type", db_type = format!("{:?}", database_type))
+                    .to_string(),
                 cx,
             );
             return;
@@ -1076,18 +1118,20 @@ impl DatabaseEventHandler {
             let panel = objects_panel.clone();
 
             dialog
-                .title("创建数据库")
+                .title(t!("DbTreeEvent.create_database_title").to_string())
                 .overlay(false)
                 .child(editor_view.clone())
                 .width(px(700.0))
-                .button_props(DialogButtonProps::default().ok_text("创建"))
+                .button_props(
+                    DialogButtonProps::default().ok_text(t!("Common.create").to_string()),
+                )
                 .footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
                 .on_ok(move |_, _window, cx| {
                     let sql = editor_view_ok.read(cx).get_sql(cx);
                     let database_name = editor_view_ok.read(cx).get_database_name(cx);
                     if sql.trim().is_empty() {
                         editor_view_ok.update(cx, |view, cx| {
-                            view.set_save_error("SQL 语句不能为空".to_string(), cx);
+                            view.set_save_error(t!("DbTreeEvent.sql_empty").to_string(), cx);
                         });
                         return false;
                     }
@@ -1130,7 +1174,11 @@ impl DatabaseEventHandler {
                                             });
                                         }
                                         window.push_notification(
-                                            Notification::success("数据库创建成功").autohide(true),
+                                            Notification::success(
+                                                t!("DbTreeEvent.create_database_success")
+                                                    .to_string(),
+                                            )
+                                            .autohide(true),
                                             cx,
                                         );
                                     });
@@ -1138,7 +1186,11 @@ impl DatabaseEventHandler {
                                 SqlResult::Error(err) => {
                                     let _ = editor_view.update(cx, |view, cx| {
                                         view.set_save_error(
-                                            format!("创建数据库失败: {}", err.message),
+                                            t!(
+                                                "DbTreeEvent.create_database_failed",
+                                                error = err.message
+                                            )
+                                            .to_string(),
                                             cx,
                                         );
                                     });
@@ -1146,7 +1198,11 @@ impl DatabaseEventHandler {
                             },
                             Err(e) => {
                                 let _ = editor_view.update(cx, |view, cx| {
-                                    view.set_save_error(format!("创建数据库失败: {}", e), cx);
+                                    view.set_save_error(
+                                        t!("DbTreeEvent.create_database_failed", error = e)
+                                            .to_string(),
+                                        cx,
+                                    );
                                 });
                             }
                         }
@@ -1185,7 +1241,8 @@ impl DatabaseEventHandler {
         } else {
             Self::show_error(
                 window,
-                format!("不支持的数据库类型: {:?}", database_type),
+                t!("DbTreeEvent.unsupported_database_type", db_type = format!("{:?}", database_type))
+                    .to_string(),
                 cx,
             );
             return;
@@ -1204,17 +1261,21 @@ impl DatabaseEventHandler {
             let panel = objects_panel.clone();
 
             dialog
-                .title(format!("编辑数据库: {}", database_name))
+                .title(
+                    t!("DbTreeEvent.edit_database_title", name = database_name).to_string(),
+                )
                 .child(editor_view.clone())
                 .overlay(false)
                 .width(px(700.0))
-                .button_props(DialogButtonProps::default().ok_text("保存"))
+                .button_props(
+                    DialogButtonProps::default().ok_text(t!("Common.save").to_string()),
+                )
                 .footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
                 .on_ok(move |_, _window, cx| {
                     let sql = editor_view_ok.read(cx).get_sql(cx);
                     if sql.trim().is_empty() {
                         editor_view_ok.update(cx, |view, cx| {
-                            view.set_save_error("SQL 语句不能为空".to_string(), cx);
+                            view.set_save_error(t!("DbTreeEvent.sql_empty").to_string(), cx);
                         });
                         return false;
                     }
@@ -1248,7 +1309,11 @@ impl DatabaseEventHandler {
                                             });
                                         }
                                         window.push_notification(
-                                            Notification::success("数据库修改成功").autohide(true),
+                                            Notification::success(
+                                                t!("DbTreeEvent.edit_database_success")
+                                                    .to_string(),
+                                            )
+                                            .autohide(true),
                                             cx,
                                         );
                                     });
@@ -1256,7 +1321,11 @@ impl DatabaseEventHandler {
                                 SqlResult::Error(err) => {
                                     let _ = editor_view.update(cx, |view, cx| {
                                         view.set_save_error(
-                                            format!("修改数据库失败: {}", err.message),
+                                            t!(
+                                                "DbTreeEvent.edit_database_failed",
+                                                error = err.message
+                                            )
+                                            .to_string(),
                                             cx,
                                         );
                                     });
@@ -1264,7 +1333,11 @@ impl DatabaseEventHandler {
                             },
                             Err(e) => {
                                 let _ = editor_view.update(cx, |view, cx| {
-                                    view.set_save_error(format!("修改数据库失败: {}", e), cx);
+                                    view.set_save_error(
+                                        t!("DbTreeEvent.edit_database_failed", error = e)
+                                            .to_string(),
+                                        cx,
+                                    );
                                 });
                             }
                         }
@@ -1320,7 +1393,10 @@ impl DatabaseEventHandler {
                     tree.update(cx, |tree_view, cx| {
                         tree_view.close_database(&db_node_id, cx);
                     });
-                    Self::show_success_async(cx, format!("数据库 {} 已关闭", db_name_log));
+                    Self::show_success_async(
+                        cx,
+                        t!("DbTreeEvent.close_database_success", name = db_name_log).to_string(),
+                    );
                     true
                 })
         });
@@ -1348,13 +1424,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除数据库 \"{}\" 吗？", db_name_display))
-                        .child("此操作将删除数据库中的所有数据，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_delete_database_message",
+                                name = db_name_display
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.delete_database_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let conn_id = conn_id.clone();
@@ -1387,13 +1469,21 @@ impl DatabaseEventHandler {
                                     }
                                     Self::show_success_async(
                                         cx,
-                                        format!("数据库 {} 已删除", db_name_log),
+                                        t!(
+                                            "DbTreeEvent.delete_database_success",
+                                            name = db_name_log
+                                        )
+                                        .to_string(),
                                     );
                                 });
                             }
                             Err(e) => {
                                 let _ = cx.update(|cx| {
-                                    Self::show_error_async(cx, format!("删除数据库失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_database_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -1431,7 +1521,11 @@ impl DatabaseEventHandler {
             } else {
                 Self::show_error(
                     window,
-                    format!("该数据库类型不支持创建模式: {:?}", database_type),
+                    t!(
+                        "DbTreeEvent.create_schema_unsupported",
+                        db_type = format!("{:?}", database_type)
+                    )
+                    .to_string(),
                     cx,
                 );
                 return;
@@ -1439,7 +1533,8 @@ impl DatabaseEventHandler {
         } else {
             Self::show_error(
                 window,
-                format!("不支持的数据库类型: {:?}", database_type),
+                t!("DbTreeEvent.unsupported_database_type", db_type = format!("{:?}", database_type))
+                    .to_string(),
                 cx,
             );
             return;
@@ -1461,16 +1556,20 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title(format!("新建模式 - {}", database_name))
+                .title(
+                    t!("DbTreeEvent.create_schema_title", name = database_name).to_string(),
+                )
                 .child(editor_view.clone())
                 .width(px(600.0))
-                .button_props(DialogButtonProps::default().ok_text("创建"))
+                .button_props(
+                    DialogButtonProps::default().ok_text(t!("Common.create").to_string()),
+                )
                 .footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
                 .on_ok(move |_, _window, cx| {
                     let sql = editor_view_ok.read(cx).get_sql(cx);
                     if sql.trim().is_empty() {
                         editor_view_ok.update(cx, |view, cx| {
-                            view.set_save_error("SQL 语句不能为空".to_string(), cx);
+                            view.set_save_error(t!("DbTreeEvent.sql_empty").to_string(), cx);
                         });
                         return false;
                     }
@@ -1512,7 +1611,11 @@ impl DatabaseEventHandler {
                                             });
                                         }
                                         window.push_notification(
-                                            Notification::success("模式创建成功").autohide(true),
+                                            Notification::success(
+                                                t!("DbTreeEvent.create_schema_success")
+                                                    .to_string(),
+                                            )
+                                            .autohide(true),
                                             cx,
                                         );
                                     });
@@ -1520,7 +1623,11 @@ impl DatabaseEventHandler {
                                 SqlResult::Error(err) => {
                                     let _ = editor_view.update(cx, |view, cx| {
                                         view.set_save_error(
-                                            format!("创建模式失败: {}", err.message),
+                                            t!(
+                                                "DbTreeEvent.create_schema_failed",
+                                                error = err.message
+                                            )
+                                            .to_string(),
                                             cx,
                                         );
                                     });
@@ -1528,7 +1635,11 @@ impl DatabaseEventHandler {
                             },
                             Err(e) => {
                                 let _ = editor_view.update(cx, |view, cx| {
-                                    view.set_save_error(format!("创建模式失败: {}", e), cx);
+                                    view.set_save_error(
+                                        t!("DbTreeEvent.create_schema_failed", error = e)
+                                            .to_string(),
+                                        cx,
+                                    );
                                 });
                             }
                         }
@@ -1566,13 +1677,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除模式 \"{}\" 吗？", schema_display))
-                        .child("此操作将删除模式中的所有对象，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_delete_schema_message",
+                                name = schema_display
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.delete_schema_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let conn_id = conn_id.clone();
@@ -1620,7 +1737,11 @@ impl DatabaseEventHandler {
                                         }
                                         Self::show_success_async(
                                             cx,
-                                            format!("模式 {} 已删除", schema_log),
+                                            t!(
+                                                "DbTreeEvent.delete_schema_success",
+                                                name = schema_log
+                                            )
+                                            .to_string(),
                                         );
                                     });
                                 }
@@ -1628,14 +1749,22 @@ impl DatabaseEventHandler {
                                     let _ = cx.update(|cx| {
                                         Self::show_error_async(
                                             cx,
-                                            format!("删除模式失败: {}", err.message),
+                                            t!(
+                                                "DbTreeEvent.delete_schema_failed",
+                                                error = err.message
+                                            )
+                                            .to_string(),
                                         );
                                     });
                                 }
                             },
                             Err(e) => {
                                 let _ = cx.update(|cx| {
-                                    Self::show_error_async(cx, format!("删除模式失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_schema_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -1737,14 +1866,20 @@ impl DatabaseEventHandler {
             let nodes = nodes.clone();
 
             dialog
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .overlay(false)
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除选中的 {} 个连接吗？", delete_count))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_batch_delete_connections",
+                                count = delete_count
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let storage = storage.clone();
@@ -1769,11 +1904,23 @@ impl DatabaseEventHandler {
                                             )),
                                         }
                                     } else {
-                                        errors.push(format!("{}: 无法获取存储库", node.name));
+                                        errors.push(
+                                            t!(
+                                                "DbTreeEvent.delete_connection_repo_missing_named",
+                                                name = node.name
+                                            )
+                                            .to_string(),
+                                        );
                                     }
                                 }
-                                Err(error) => errors
-                                    .push(format!("{}: 无效的连接ID {}", node.name, error)),
+                                Err(error) => errors.push(
+                                    t!(
+                                        "DbTreeEvent.delete_connection_invalid_id_named",
+                                        name = node.name,
+                                        error = error
+                                    )
+                                    .to_string(),
+                                ),
                             }
                         }
 
@@ -1795,12 +1942,20 @@ impl DatabaseEventHandler {
                             if errors.is_empty() {
                                 Self::show_success_async(
                                     cx,
-                                    format!("已删除 {} 个连接", removed_ids.len()),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_connections_success",
+                                        count = removed_ids.len()
+                                    )
+                                    .to_string(),
                                 );
                             } else {
                                 Self::show_error_async(
                                     cx,
-                                    format!("删除连接失败: {}", errors.join("; ")),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_connections_failed",
+                                        errors = errors.join("; ")
+                                    )
+                                    .to_string(),
                                 );
                             }
                         });
@@ -1829,13 +1984,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除选中的 {} 个数据库吗？", delete_count))
-                        .child("此操作将删除数据库中的所有数据，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_batch_delete_databases",
+                                count = delete_count
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.delete_database_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let state = state.clone();
@@ -1879,12 +2040,20 @@ impl DatabaseEventHandler {
                             if errors.is_empty() {
                                 Self::show_success_async(
                                     cx,
-                                    format!("已删除 {} 个数据库", removed.len()),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_databases_success",
+                                        count = removed.len()
+                                    )
+                                    .to_string(),
                                 );
                             } else {
                                 Self::show_error_async(
                                     cx,
-                                    format!("删除数据库失败: {}", errors.join("; ")),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_databases_failed",
+                                        errors = errors.join("; ")
+                                    )
+                                    .to_string(),
                                 );
                             }
                         });
@@ -1913,13 +2082,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除选中的 {} 个模式吗？", delete_count))
-                        .child("此操作将删除模式中的所有对象，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_batch_delete_schemas",
+                                count = delete_count
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.delete_schema_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let state = state.clone();
@@ -1989,12 +2164,20 @@ impl DatabaseEventHandler {
                             if errors.is_empty() {
                                 Self::show_success_async(
                                     cx,
-                                    format!("已删除 {} 个模式", removed.len()),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_schemas_success",
+                                        count = removed.len()
+                                    )
+                                    .to_string(),
                                 );
                             } else {
                                 Self::show_error_async(
                                     cx,
-                                    format!("删除模式失败: {}", errors.join("; ")),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_schemas_failed",
+                                        errors = errors.join("; ")
+                                    )
+                                    .to_string(),
                                 );
                             }
                         });
@@ -2024,13 +2207,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除选中的 {} 个表吗？", delete_count))
-                        .child("此操作将删除表中的所有数据，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_batch_delete_tables",
+                                count = delete_count
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.delete_table_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let state = state.clone();
@@ -2099,12 +2288,20 @@ impl DatabaseEventHandler {
                             if errors.is_empty() {
                                 Self::show_success_async(
                                     cx,
-                                    format!("已删除 {} 个表", removed.len()),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_tables_success",
+                                        count = removed.len()
+                                    )
+                                    .to_string(),
                                 );
                             } else {
                                 Self::show_error_async(
                                     cx,
-                                    format!("删除表失败: {}", errors.join("; ")),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_tables_failed",
+                                        errors = errors.join("; ")
+                                    )
+                                    .to_string(),
                                 );
                             }
                         });
@@ -2133,13 +2330,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除选中的 {} 个视图吗？", delete_count))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_batch_delete_views",
+                                count = delete_count
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let state = state.clone();
@@ -2191,12 +2394,20 @@ impl DatabaseEventHandler {
                             if errors.is_empty() {
                                 Self::show_success_async(
                                     cx,
-                                    format!("已删除 {} 个视图", removed.len()),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_views_success",
+                                        count = removed.len()
+                                    )
+                                    .to_string(),
                                 );
                             } else {
                                 Self::show_error_async(
                                     cx,
-                                    format!("删除视图失败: {}", errors.join("; ")),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_views_failed",
+                                        errors = errors.join("; ")
+                                    )
+                                    .to_string(),
                                 );
                             }
                         });
@@ -2228,13 +2439,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除选中的 {} 个查询吗？", delete_count))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_batch_delete_queries",
+                                count = delete_count
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let tree = tree.clone();
@@ -2258,7 +2475,11 @@ impl DatabaseEventHandler {
                     });
 
                     cx.spawn(async move |cx| {
-                        let errors = task.await.unwrap_or_else(|error| vec![format!("删除查询失败: {}", error)]);
+                        let errors = task.await.unwrap_or_else(|error| {
+                            vec![
+                                t!("DbTreeEvent.delete_query_failed", error = error).to_string()
+                            ]
+                        });
 
                         let mut parent_ids: HashSet<String> = HashSet::new();
                         for node in &nodes {
@@ -2286,12 +2507,20 @@ impl DatabaseEventHandler {
                             if errors.is_empty() {
                                 Self::show_success_async(
                                     cx,
-                                    format!("已删除 {} 个查询", delete_count),
+                                    t!(
+                                        "DbTreeEvent.batch_delete_queries_success",
+                                        count = delete_count
+                                    )
+                                    .to_string(),
                                 );
                                 } else {
                                     Self::show_error_async(
                                         cx,
-                                        format!("删除查询失败: {}", errors.join("; ")),
+                                        t!(
+                                            "DbTreeEvent.batch_delete_queries_failed",
+                                            errors = errors.join("; ")
+                                        )
+                                        .to_string(),
                                     );
                                 }
                             });
@@ -2331,14 +2560,20 @@ impl DatabaseEventHandler {
             let sch_name = schema_name.clone();
 
             dialog
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .overlay(false)
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除表 \"{}\" 吗？", tbl_name_display))
-                        .child("此操作将删除表中的所有数据，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_delete_table_message",
+                                name = tbl_name_display
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.delete_table_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let conn_id = conn_id.clone();
@@ -2382,14 +2617,22 @@ impl DatabaseEventHandler {
                                     }
                                     Self::show_success_async(
                                         cx,
-                                        format!("表 {} 已删除", tbl_name_value),
+                                        t!(
+                                            "DbTreeEvent.delete_table_success",
+                                            name = tbl_name_value
+                                        )
+                                        .to_string(),
                                     );
                                 });
                             }
                             Err(e) => {
                                 let _ = cx.update_window(window_id, |_entity, window, cx| {
                                     window.close_dialog(cx);
-                                    Self::show_error_async(cx, format!("删除表失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_table_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -2419,7 +2662,8 @@ impl DatabaseEventHandler {
 
         // 创建输入框状态
         let input_state = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("输入新表名");
+            let mut state =
+                InputState::new(window, cx).placeholder(t!("DbTreeEvent.rename_table_placeholder").to_string());
             state.set_value(old_table_name.clone(), window, cx);
             state
         });
@@ -2434,7 +2678,7 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("重命名表")
+                .title(t!("DbTreeEvent.rename_table_title").to_string())
                 .confirm()
                 .child(
                     v_flex()
@@ -2444,14 +2688,22 @@ impl DatabaseEventHandler {
                             h_flex()
                                 .gap_2()
                                 .items_center()
-                                .child(div().w(px(80.)).child("原表名:"))
+                                .child(
+                                    div()
+                                        .w(px(80.))
+                                        .child(t!("DbTreeEvent.rename_table_old_label").to_string()),
+                                )
                                 .child(div().flex_1().child(old_name.clone())),
                         )
                         .child(
                             h_flex()
                                 .gap_2()
                                 .items_center()
-                                .child(div().w(px(80.)).child("新表名:"))
+                                .child(
+                                    div()
+                                        .w(px(80.))
+                                        .child(t!("DbTreeEvent.rename_table_new_label").to_string()),
+                                )
                                 .child(div().flex_1().child(Input::new(&input))),
                         ),
                 )
@@ -2494,13 +2746,22 @@ impl DatabaseEventHandler {
                                     });
                                     Self::show_success_async(
                                         cx,
-                                        format!("表已重命名: {} -> {}", old_name_log, new_name_log),
+                                        t!(
+                                            "DbTreeEvent.rename_table_success",
+                                            old = old_name_log,
+                                            new = new_name_log
+                                        )
+                                        .to_string(),
                                     );
                                 });
                             }
                             Err(e) => {
                                 let _ = cx.update(|cx| {
-                                    Self::show_error_async(cx, format!("重命名表失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.rename_table_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -2532,13 +2793,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认清空")
+                .title(t!("Common.confirm_clear").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要清空表 \"{}\" 吗？", tbl_name_display))
-                        .child("此操作将删除表中的所有数据，但保留表结构，不可恢复！"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_truncate_table_message",
+                                name = tbl_name_display
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("DbTreeEvent.truncate_table_desc").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let conn_id = conn_id.clone();
@@ -2561,13 +2828,21 @@ impl DatabaseEventHandler {
                                 let _ = cx.update(|cx| {
                                     Self::show_success_async(
                                         cx,
-                                        format!("表 {} 已清空", tbl_name_log),
+                                        t!(
+                                            "DbTreeEvent.truncate_table_success",
+                                            name = tbl_name_log
+                                        )
+                                        .to_string(),
                                     );
                                 });
                             }
                             Err(e) => {
                                 let _ = cx.update(|cx| {
-                                    Self::show_error_async(cx, format!("清空表失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.truncate_table_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -2604,13 +2879,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除视图 \"{}\" 吗？", v_name_display))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_delete_view_message",
+                                name = v_name_display
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let conn_id = conn_id.clone();
@@ -2645,13 +2926,21 @@ impl DatabaseEventHandler {
                                     }
                                     Self::show_success_async(
                                         cx,
-                                        format!("视图 {} 已删除", v_name_log),
+                                        t!(
+                                            "DbTreeEvent.delete_view_success",
+                                            name = v_name_log
+                                        )
+                                        .to_string(),
                                     );
                                 });
                             }
                             Err(e) => {
                                 let _ = cx.update(|cx| {
-                                    Self::show_error_async(cx, format!("删除视图失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_view_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -2733,7 +3022,8 @@ impl DatabaseEventHandler {
         let window_id = cx.active_window().expect("No active window");
 
         let input_state = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).placeholder("输入新查询名");
+            let mut state =
+                InputState::new(window, cx).placeholder(t!("DbTreeEvent.rename_query_placeholder").to_string());
             state.set_value(old_name.clone(), window, cx);
             state
         });
@@ -2747,7 +3037,7 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("重命名查询")
+                .title(t!("DbTreeEvent.rename_query_title").to_string())
                 .confirm()
                 .child(
                     v_flex()
@@ -2757,14 +3047,22 @@ impl DatabaseEventHandler {
                             h_flex()
                                 .gap_2()
                                 .items_center()
-                                .child(div().w(px(80.)).child("原名称:"))
+                                .child(
+                                    div()
+                                        .w(px(80.))
+                                        .child(t!("DbTreeEvent.rename_query_old_label").to_string()),
+                                )
                                 .child(div().flex_1().child(old_name.clone())),
                         )
                         .child(
                             h_flex()
                                 .gap_2()
                                 .items_center()
-                                .child(div().w(px(80.)).child("新名称:"))
+                                .child(
+                                    div()
+                                        .w(px(80.))
+                                        .child(t!("DbTreeEvent.rename_query_new_label").to_string()),
+                                )
                                 .child(div().flex_1().child(Input::new(&input))),
                         ),
                 )
@@ -2800,14 +3098,21 @@ impl DatabaseEventHandler {
                                         });
                                     }
                                     window.close_dialog(cx);
-                                    Self::show_success_async(cx, "查询已重命名");
+                                    Self::show_success_async(
+                                        cx,
+                                        t!("DbTreeEvent.rename_query_success").to_string(),
+                                    );
                                 });
                             }
                             Err(e) => {
                                 error!("Failed to rename query file: {}", e);
                                 _ = cx.update_window(window_id, |_entity, window, cx| {
                                     window.close_dialog(cx);
-                                    Self::show_error_async(cx, format!("重命名失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.rename_query_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -2845,13 +3150,19 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title("确认删除")
+                .title(t!("Common.confirm_delete").to_string())
                 .confirm()
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(format!("确定要删除查询 \"{}\" 吗？", query_name))
-                        .child("此操作不可恢复。"),
+                        .child(
+                            t!(
+                                "DbTreeEvent.confirm_delete_query_message",
+                                name = query_name
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("Common.irreversible").to_string()),
                 )
                 .on_ok(move |_, _, cx| {
                     let tree = tree.clone();
@@ -2881,14 +3192,21 @@ impl DatabaseEventHandler {
                                         });
                                     }
                                     window.close_dialog(cx);
-                                    Self::show_success_async(cx, "查询已删除");
+                                    Self::show_success_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_query_success").to_string(),
+                                    );
                                 });
                             }
                             Err(e) => {
                                 error!("Failed to delete query file: {}", e);
                                 _ = cx.update_window(window_id, |_entity, window, cx| {
                                     window.close_dialog(cx);
-                                    Self::show_error_async(cx, format!("删除查询失败: {}", e));
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.delete_query_failed", error = e)
+                                            .to_string(),
+                                    );
                                 });
                             }
                         }
@@ -2922,7 +3240,8 @@ impl DatabaseEventHandler {
         };
 
         open_popup_window(
-            PopupWindowOptions::new("运行SQL文件").size(800.0, 520.0),
+            PopupWindowOptions::new(t!("ImportExport.run_sql_file").to_string())
+                .size(800.0, 520.0),
             move |window, cx| SqlRunView::new(connection_id, database, schema, window, cx),
             cx,
         );
@@ -2953,7 +3272,7 @@ impl DatabaseEventHandler {
             files: false,
             multiple: false,
             directories: true,
-            prompt: Some("选择导出目录".into()),
+            prompt: Some(t!("ImportExport.select_export_directory").into()),
         });
 
         cx.spawn(async move |cx: &mut AsyncApp| {
@@ -2979,7 +3298,8 @@ impl DatabaseEventHandler {
 
                     cx.update_window(window_id, |_entity, _window, cx| {
                         open_popup_window(
-                            PopupWindowOptions::new("转储 SQL 文件").size(800.0, 510.0),
+                            PopupWindowOptions::new(t!("ImportExport.dump_sql_file").to_string())
+                                .size(800.0, 510.0),
                             move |window, cx| {
                                 SqlDumpView::new(
                                     config_id,
@@ -3004,7 +3324,11 @@ impl DatabaseEventHandler {
                         cx.update_window(window_id, |_entity, window, cx| {
                             Self::show_error(
                                 window,
-                                format!("转储 SQL 文件失败：无法获取连接配置 {}", connection_id),
+                                t!(
+                                    "DbTreeEvent.dump_sql_config_missing",
+                                    id = connection_id
+                                )
+                                .to_string(),
                                 cx,
                             );
                         })

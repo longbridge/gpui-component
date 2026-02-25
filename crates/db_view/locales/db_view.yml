@@ -94,6 +94,10 @@ Common:
     en: None
     zh-CN: 无
     zh-HK: 無
+  default:
+    en: Default
+    zh-CN: 默认
+    zh-HK: 預設
   yes:
     en: "Yes"
     zh-CN: 是
@@ -118,6 +122,22 @@ Common:
     en: "{selected} of {total}"
     zh-CN: "{selected} / {total}"
     zh-HK: "{selected} / {total}"
+  confirm:
+    en: Confirm
+    zh-CN: 确认
+    zh-HK: 確認
+  confirm_delete:
+    en: Confirm Delete
+    zh-CN: 确认删除
+    zh-HK: 確認刪除
+  confirm_clear:
+    en: Confirm Clear
+    zh-CN: 确认清空
+    zh-HK: 確認清空
+  irreversible:
+    en: This action cannot be undone.
+    zh-CN: 此操作不可恢复。
+    zh-HK: 此操作不可恢復。
 
 # 连接操作
 Connection:
@@ -372,6 +392,10 @@ Database:
     en: Close Database
     zh-CN: 关闭数据库
     zh-HK: 關閉資料庫
+  close_hint:
+    en: This will disconnect the database and clean up related resources.
+    zh-CN: 这将断开数据库连接并清理相关资源。
+    zh-HK: 這將斷開資料庫連線並清理相關資源。
   database_name:
     en: Database Name
     zh-CN: 数据库名称
@@ -400,10 +424,18 @@ Database:
     en: Comment
     zh-CN: 注释
     zh-HK: 註釋
+  remark:
+    en: Remark
+    zh-CN: 备注
+    zh-HK: 備註
   file_path:
     en: File Path
     zh-CN: 文件路径
     zh-HK: 檔案路徑
+  file_path_placeholder:
+    en: "Database file path (e.g., /path/to/database.db)"
+    zh-CN: "数据库文件路径 (如: /path/to/database.db)"
+    zh-HK: "資料庫檔案路徑 (如: /path/to/database.db)"
   schema_name:
     en: Schema Name
     zh-CN: 模式名称
@@ -1312,3 +1344,809 @@ DbTree:
     en: Checks
     zh-CN: 检查约束
     zh-HK: 檢查約束
+
+DbTreeEvent:
+  design_table_title:
+    en: "Design Table: {table}"
+    zh-CN: "设计表: {table}"
+    zh-HK: "設計表: {table}"
+  confirm_close_connection_title:
+    en: Confirm Close Connection
+    zh-CN: 确认关闭连接
+    zh-HK: 確認關閉連線
+  confirm_close_connection_message:
+    en: "Are you sure you want to close connection \"{name}\"?"
+    zh-CN: "确定要关闭连接 \"{name}\" 吗？"
+    zh-HK: "確定要關閉連線 \"{name}\" 嗎？"
+  confirm_close_connection_desc:
+    en: This will disconnect and clean up related resources.
+    zh-CN: 这将断开数据库连接并清理相关资源。
+    zh-HK: 這將斷開資料庫連線並清理相關資源。
+  close_connection_success:
+    en: Connection closed successfully
+    zh-CN: 连接已成功关闭
+    zh-HK: 連線已成功關閉
+  close_connection_failed:
+    en: "Failed to close connection: {error}"
+    zh-CN: "关闭连接失败: {error}"
+    zh-HK: "關閉連線失敗: {error}"
+  confirm_delete_connection_message:
+    en: "Are you sure you want to delete connection \"{name}\"?"
+    zh-CN: "确定要删除连接 \"{name}\" 吗？"
+    zh-HK: "確定要刪除連線 \"{name}\" 嗎？"
+  delete_connection_success:
+    en: Connection deleted successfully
+    zh-CN: 连接已成功删除
+    zh-HK: 連線已成功刪除
+  delete_connection_failed:
+    en: "Failed to delete connection: {error}"
+    zh-CN: "删除连接失败: {error}"
+    zh-HK: "刪除連線失敗: {error}"
+  delete_connection_repo_missing:
+    en: "Failed to delete connection: repository unavailable"
+    zh-CN: 删除连接失败：无法获取存储库
+    zh-HK: 刪除連線失敗：無法取得儲存庫
+  delete_connection_invalid_id:
+    en: "Failed to delete connection: invalid connection ID {error}"
+    zh-CN: "删除连接失败：无效的连接ID {error}"
+    zh-HK: "刪除連線失敗：無效的連線ID {error}"
+  delete_connection_repo_missing_named:
+    en: "{name}: repository unavailable"
+    zh-CN: "{name}: 无法获取存储库"
+    zh-HK: "{name}: 無法取得儲存庫"
+  delete_connection_invalid_id_named:
+    en: "{name}: invalid connection ID {error}"
+    zh-CN: "{name}: 无效的连接ID {error}"
+    zh-HK: "{name}: 無效的連線ID {error}"
+  unsupported_database_type:
+    en: "Unsupported database type: {db_type}"
+    zh-CN: "不支持的数据库类型: {db_type}"
+    zh-HK: "不支援的資料庫類型: {db_type}"
+  create_database_title:
+    en: Create Database
+    zh-CN: 创建数据库
+    zh-HK: 建立資料庫
+  sql_empty:
+    en: SQL statement cannot be empty
+    zh-CN: SQL 语句不能为空
+    zh-HK: SQL 語句不能為空
+  create_database_success:
+    en: Database created successfully
+    zh-CN: 数据库创建成功
+    zh-HK: 資料庫建立成功
+  create_database_failed:
+    en: "Failed to create database: {error}"
+    zh-CN: "创建数据库失败: {error}"
+    zh-HK: "建立資料庫失敗: {error}"
+  edit_database_title:
+    en: "Edit Database: {name}"
+    zh-CN: "编辑数据库: {name}"
+    zh-HK: "編輯資料庫: {name}"
+  edit_database_success:
+    en: Database updated successfully
+    zh-CN: 数据库修改成功
+    zh-HK: 資料庫修改成功
+  edit_database_failed:
+    en: "Failed to update database: {error}"
+    zh-CN: "修改数据库失败: {error}"
+    zh-HK: "修改資料庫失敗: {error}"
+  close_database_success:
+    en: "Database {name} closed"
+    zh-CN: "数据库 {name} 已关闭"
+    zh-HK: "資料庫 {name} 已關閉"
+  confirm_delete_database_message:
+    en: "Are you sure you want to delete database \"{name}\"?"
+    zh-CN: "确定要删除数据库 \"{name}\" 吗？"
+    zh-HK: "確定要刪除資料庫 \"{name}\" 嗎？"
+  delete_database_desc:
+    en: This will delete all data in the database and cannot be undone!
+    zh-CN: 此操作将删除数据库中的所有数据，不可恢复！
+    zh-HK: 此操作將刪除資料庫中的所有資料，不可恢復！
+  delete_database_success:
+    en: "Database {name} deleted"
+    zh-CN: "数据库 {name} 已删除"
+    zh-HK: "資料庫 {name} 已刪除"
+  delete_database_failed:
+    en: "Failed to delete database: {error}"
+    zh-CN: "删除数据库失败: {error}"
+    zh-HK: "刪除資料庫失敗: {error}"
+  create_schema_unsupported:
+    en: "This database type does not support schema creation: {db_type}"
+    zh-CN: "该数据库类型不支持创建模式: {db_type}"
+    zh-HK: "該資料庫類型不支援建立模式: {db_type}"
+  create_schema_title:
+    en: "Create Schema - {name}"
+    zh-CN: "新建模式 - {name}"
+    zh-HK: "新建模式 - {name}"
+  create_schema_success:
+    en: Schema created successfully
+    zh-CN: 模式创建成功
+    zh-HK: 模式建立成功
+  create_schema_failed:
+    en: "Failed to create schema: {error}"
+    zh-CN: "创建模式失败: {error}"
+    zh-HK: "建立模式失敗: {error}"
+  confirm_delete_schema_message:
+    en: "Are you sure you want to delete schema \"{name}\"?"
+    zh-CN: "确定要删除模式 \"{name}\" 吗？"
+    zh-HK: "確定要刪除模式 \"{name}\" 嗎？"
+  delete_schema_desc:
+    en: This will delete all objects in the schema and cannot be undone!
+    zh-CN: 此操作将删除模式中的所有对象，不可恢复！
+    zh-HK: 此操作將刪除模式中的所有物件，不可恢復！
+  delete_schema_success:
+    en: "Schema {name} deleted"
+    zh-CN: "模式 {name} 已删除"
+    zh-HK: "模式 {name} 已刪除"
+  delete_schema_failed:
+    en: "Failed to delete schema: {error}"
+    zh-CN: "删除模式失败: {error}"
+    zh-HK: "刪除模式失敗: {error}"
+  confirm_batch_delete_connections:
+    en: "Are you sure you want to delete {count} selected connections?"
+    zh-CN: "确定要删除选中的 {count} 个连接吗？"
+    zh-HK: "確定要刪除選中的 {count} 個連線嗎？"
+  batch_delete_connections_success:
+    en: "Deleted {count} connections"
+    zh-CN: "已删除 {count} 个连接"
+    zh-HK: "已刪除 {count} 個連線"
+  batch_delete_connections_failed:
+    en: "Failed to delete connections: {errors}"
+    zh-CN: "删除连接失败: {errors}"
+    zh-HK: "刪除連線失敗: {errors}"
+  confirm_batch_delete_databases:
+    en: "Are you sure you want to delete {count} selected databases?"
+    zh-CN: "确定要删除选中的 {count} 个数据库吗？"
+    zh-HK: "確定要刪除選中的 {count} 個資料庫嗎？"
+  batch_delete_databases_success:
+    en: "Deleted {count} databases"
+    zh-CN: "已删除 {count} 个数据库"
+    zh-HK: "已刪除 {count} 個資料庫"
+  batch_delete_databases_failed:
+    en: "Failed to delete databases: {errors}"
+    zh-CN: "删除数据库失败: {errors}"
+    zh-HK: "刪除資料庫失敗: {errors}"
+  confirm_batch_delete_schemas:
+    en: "Are you sure you want to delete {count} selected schemas?"
+    zh-CN: "确定要删除选中的 {count} 个模式吗？"
+    zh-HK: "確定要刪除選中的 {count} 個模式嗎？"
+  batch_delete_schemas_success:
+    en: "Deleted {count} schemas"
+    zh-CN: "已删除 {count} 个模式"
+    zh-HK: "已刪除 {count} 個模式"
+  batch_delete_schemas_failed:
+    en: "Failed to delete schemas: {errors}"
+    zh-CN: "删除模式失败: {errors}"
+    zh-HK: "刪除模式失敗: {errors}"
+  confirm_batch_delete_tables:
+    en: "Are you sure you want to delete {count} selected tables?"
+    zh-CN: "确定要删除选中的 {count} 个表吗？"
+    zh-HK: "確定要刪除選中的 {count} 個表嗎？"
+  delete_table_desc:
+    en: This will delete all data in the table and cannot be undone!
+    zh-CN: 此操作将删除表中的所有数据，不可恢复！
+    zh-HK: 此操作將刪除表中的所有資料，不可恢復！
+  batch_delete_tables_success:
+    en: "Deleted {count} tables"
+    zh-CN: "已删除 {count} 个表"
+    zh-HK: "已刪除 {count} 個表"
+  batch_delete_tables_failed:
+    en: "Failed to delete tables: {errors}"
+    zh-CN: "删除表失败: {errors}"
+    zh-HK: "刪除表失敗: {errors}"
+  confirm_batch_delete_views:
+    en: "Are you sure you want to delete {count} selected views?"
+    zh-CN: "确定要删除选中的 {count} 个视图吗？"
+    zh-HK: "確定要刪除選中的 {count} 個視圖嗎？"
+  batch_delete_views_success:
+    en: "Deleted {count} views"
+    zh-CN: "已删除 {count} 个视图"
+    zh-HK: "已刪除 {count} 個視圖"
+  batch_delete_views_failed:
+    en: "Failed to delete views: {errors}"
+    zh-CN: "删除视图失败: {errors}"
+    zh-HK: "刪除視圖失敗: {errors}"
+  confirm_batch_delete_queries:
+    en: "Are you sure you want to delete {count} selected queries?"
+    zh-CN: "确定要删除选中的 {count} 个查询吗？"
+    zh-HK: "確定要刪除選中的 {count} 個查詢嗎？"
+  batch_delete_queries_success:
+    en: "Deleted {count} queries"
+    zh-CN: "已删除 {count} 个查询"
+    zh-HK: "已刪除 {count} 個查詢"
+  batch_delete_queries_failed:
+    en: "Failed to delete queries: {errors}"
+    zh-CN: "删除查询失败: {errors}"
+    zh-HK: "刪除查詢失敗: {errors}"
+  confirm_delete_table_message:
+    en: "Are you sure you want to delete table \"{name}\"?"
+    zh-CN: "确定要删除表 \"{name}\" 吗？"
+    zh-HK: "確定要刪除表 \"{name}\" 嗎？"
+  delete_table_success:
+    en: "Table {name} deleted"
+    zh-CN: "表 {name} 已删除"
+    zh-HK: "表 {name} 已刪除"
+  delete_table_failed:
+    en: "Failed to delete table: {error}"
+    zh-CN: "删除表失败: {error}"
+    zh-HK: "刪除表失敗: {error}"
+  rename_table_placeholder:
+    en: Enter new table name
+    zh-CN: 输入新表名
+    zh-HK: 輸入新表名
+  rename_table_title:
+    en: Rename Table
+    zh-CN: 重命名表
+    zh-HK: 重新命名表
+  rename_table_old_label:
+    en: "Old Name:"
+    zh-CN: "原表名:"
+    zh-HK: "原表名:"
+  rename_table_new_label:
+    en: "New Name:"
+    zh-CN: "新表名:"
+    zh-HK: "新表名:"
+  rename_table_success:
+    en: "Table renamed: {old} -> {new}"
+    zh-CN: "表已重命名: {old} -> {new}"
+    zh-HK: "表已重新命名: {old} -> {new}"
+  rename_table_failed:
+    en: "Failed to rename table: {error}"
+    zh-CN: "重命名表失败: {error}"
+    zh-HK: "重新命名表失敗: {error}"
+  confirm_truncate_table_message:
+    en: "Are you sure you want to truncate table \"{name}\"?"
+    zh-CN: "确定要清空表 \"{name}\" 吗？"
+    zh-HK: "確定要清空表 \"{name}\" 嗎？"
+  truncate_table_desc:
+    en: This will delete all data in the table but keep the structure. This action cannot be undone!
+    zh-CN: 此操作将删除表中的所有数据，但保留表结构，不可恢复！
+    zh-HK: 此操作將刪除表中的所有資料，但保留表結構，不可恢復！
+  truncate_table_success:
+    en: "Table {name} truncated"
+    zh-CN: "表 {name} 已清空"
+    zh-HK: "表 {name} 已清空"
+  truncate_table_failed:
+    en: "Failed to truncate table: {error}"
+    zh-CN: "清空表失败: {error}"
+    zh-HK: "清空表失敗: {error}"
+  confirm_delete_view_message:
+    en: "Are you sure you want to delete view \"{name}\"?"
+    zh-CN: "确定要删除视图 \"{name}\" 吗？"
+    zh-HK: "確定要刪除視圖 \"{name}\" 嗎？"
+  delete_view_success:
+    en: "View {name} deleted"
+    zh-CN: "视图 {name} 已删除"
+    zh-HK: "視圖 {name} 已刪除"
+  delete_view_failed:
+    en: "Failed to delete view: {error}"
+    zh-CN: "删除视图失败: {error}"
+    zh-HK: "刪除視圖失敗: {error}"
+  rename_query_placeholder:
+    en: Enter new query name
+    zh-CN: 输入新查询名
+    zh-HK: 輸入新查詢名
+  rename_query_title:
+    en: Rename Query
+    zh-CN: 重命名查询
+    zh-HK: 重新命名查詢
+  rename_query_old_label:
+    en: "Old Name:"
+    zh-CN: "原名称:"
+    zh-HK: "原名稱:"
+  rename_query_new_label:
+    en: "New Name:"
+    zh-CN: "新名称:"
+    zh-HK: "新名稱:"
+  rename_query_success:
+    en: Query renamed
+    zh-CN: 查询已重命名
+    zh-HK: 查詢已重新命名
+  rename_query_failed:
+    en: "Failed to rename query: {error}"
+    zh-CN: "重命名失败: {error}"
+    zh-HK: "重新命名失敗: {error}"
+  confirm_delete_query_message:
+    en: "Are you sure you want to delete query \"{name}\"?"
+    zh-CN: "确定要删除查询 \"{name}\" 吗？"
+    zh-HK: "確定要刪除查詢 \"{name}\" 嗎？"
+  delete_query_success:
+    en: Query deleted
+    zh-CN: 查询已删除
+    zh-HK: 查詢已刪除
+  delete_query_failed:
+    en: "Failed to delete query: {error}"
+    zh-CN: "删除查询失败: {error}"
+    zh-HK: "刪除查詢失敗: {error}"
+  dump_sql_config_missing:
+    en: "Failed to dump SQL file: unable to get connection config {id}"
+    zh-CN: "转储 SQL 文件失败：无法获取连接配置 {id}"
+    zh-HK: "轉儲 SQL 檔案失敗：無法取得連線設定 {id}"
+SqlResultTab:
+  processed_queries_label:
+    en: "Processed Queries:"
+    zh-CN: "已处理的查询:"
+    zh-HK: "已處理的查詢:"
+  success_label:
+    en: "Success:"
+    zh-CN: "成功:"
+    zh-HK: "成功:"
+  error_label:
+    en: "Error:"
+    zh-CN: "错误:"
+    zh-HK: "錯誤:"
+  execution_time_label:
+    en: "Execution Time:"
+    zh-CN: "运行时间:"
+    zh-HK: "運行時間:"
+  show_errors_only:
+    en: Show Errors Only
+    zh-CN: 仅显示错误
+    zh-HK: 僅顯示錯誤
+  parsing_and_executing:
+    en: Parsing and executing queries...
+    zh-CN: 正在解析并执行查询...
+    zh-HK: 正在解析並執行查詢...
+  query_header:
+    en: Query
+    zh-CN: 查询
+    zh-HK: 查詢
+  message_header:
+    en: Message
+    zh-CN: 消息
+    zh-HK: 消息
+  execution_time_header:
+    en: Execution Time
+    zh-CN: 执行时间
+    zh-HK: 執行時間
+  query_executing_wait:
+    en: Query executing, please wait...
+    zh-CN: 查询执行中，请稍候...
+    zh-HK: 查詢執行中，請稍候...
+  sql_statement:
+    en: SQL Statement
+    zh-CN: SQL 语句
+    zh-HK: SQL 語句
+  error_info:
+    en: Error Information
+    zh-CN: 错误信息
+    zh-HK: 錯誤資訊
+  summary_with_counts:
+    en: "Summary ({current}/{total})"
+    zh-CN: "摘要 ({current}/{total})"
+    zh-HK: "摘要 ({current}/{total})"
+  summary:
+    en: Summary
+    zh-CN: 摘要
+    zh-HK: 摘要
+  result_tab:
+    en: "Result {index}"
+    zh-CN: "结果{index}"
+    zh-HK: "結果{index}"
+  hide_results_panel:
+    en: Hide Results Panel
+    zh-CN: 隐藏结果面板
+    zh-HK: 隱藏結果面板
+TableData:
+  select_cell:
+    en: Please select a cell
+    zh-CN: 请选择一个单元格
+    zh-HK: 請選擇一個儲存格
+  uuid_standard:
+    en: "UUID (standard)"
+    zh-CN: UUID (标准)
+    zh-HK: UUID (標準)
+  uuid_simple:
+    en: "UUID (no hyphen)"
+    zh-CN: UUID (无-)
+    zh-HK: UUID (無-)
+  sql_in_clause:
+    en: IN clause
+    zh-CN: IN 子句
+    zh-HK: IN 子句
+  set_empty_string:
+    en: Set to empty string
+    zh-CN: 设置为空白字符串
+    zh-HK: 設定為空白字串
+  set_null:
+    en: Set to NULL
+    zh-CN: 设置为 NULL
+    zh-HK: 設定為 NULL
+  generate_uuid:
+    en: Generate UUID
+    zh-CN: 生成 UUID
+    zh-HK: 生成 UUID
+  edit_in_cell_editor:
+    en: Edit in cell editor
+    zh-CN: 在单元格编辑器中编辑
+    zh-HK: 在儲存格編輯器中編輯
+  open_cell_editor_failed:
+    en: Unable to open cell editor
+    zh-CN: 无法打开单元格编辑器
+    zh-HK: 無法開啟儲存格編輯器
+  clone_row:
+    en: Clone Row
+    zh-CN: 克隆行
+    zh-HK: 複製列
+  clone_row_failed:
+    en: Unable to clone this row
+    zh-CN: 无法克隆该行
+    zh-HK: 無法複製此列
+  delete_record:
+    en: Delete Record...
+    zh-CN: 删除记录...
+    zh-HK: 刪除記錄...
+  paste:
+    en: Paste
+    zh-CN: 粘贴
+    zh-HK: 貼上
+  copy:
+    en: Copy
+    zh-CN: 复制
+    zh-HK: 複製
+  copy_column_name:
+    en: Copy Column Name
+    zh-CN: 复制字段名称
+    zh-HK: 複製欄位名稱
+  copy_as:
+    en: Copy As
+    zh-CN: 复制为
+    zh-HK: 複製為
+  save_data_as:
+    en: Save Data As...
+    zh-CN: 保存数据为...
+    zh-HK: 儲存資料為...
+  export_data_failed:
+    en: Unable to export data
+    zh-CN: 无法导出数据
+    zh-HK: 無法匯出資料
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 重新整理
+  refresh_data_failed:
+    en: Unable to refresh data
+    zh-CN: 无法刷新数据
+    zh-HK: 無法重新整理資料
+ChatDbSelector:
+  select_source:
+    en: Select data source
+    zh-CN: 选择数据源
+    zh-HK: 選擇資料來源
+  select_database:
+    en: Select database
+    zh-CN: 选择数据库
+    zh-HK: 選擇資料庫
+  select_schema:
+    en: Select schema
+    zh-CN: 选择架构
+    zh-HK: 選擇架構
+  no_data:
+    en: No data
+    zh-CN: 暂无数据
+    zh-HK: 暫無資料
+  connection_title:
+    en: Connection
+    zh-CN: 连接
+    zh-HK: 連線
+  database_title:
+    en: Database
+    zh-CN: 数据库
+    zh-HK: 資料庫
+  schema_title:
+    en: Schema
+    zh-CN: 架构
+    zh-HK: 架構
+ChatMessageList:
+  load_more:
+    en: "Load earlier messages ({hidden_count} remaining)"
+    zh-CN: "加载更早消息（剩余 {hidden_count} 条）"
+    zh-HK: "載入更早訊息（剩餘 {hidden_count} 條）"
+  collapse_history:
+    en: Collapse history
+    zh-CN: 收起历史消息
+    zh-HK: 收起歷史訊息
+  loading:
+    en: Loading...
+    zh-CN: 加载中...
+    zh-HK: 載入中...
+ChatSqlResult:
+  rows_info:
+    en: "{rows} rows"
+    zh-CN: "{rows} 行"
+    zh-HK: "{rows} 行"
+  exec_success_rows:
+    en: "Execution succeeded, affected {rows} rows"
+    zh-CN: "执行成功，影响 {rows} 行"
+    zh-HK: "執行成功，影響 {rows} 行"
+  elapsed_ms:
+    en: "Elapsed {ms}ms"
+    zh-CN: "耗时 {ms}ms"
+    zh-HK: "耗時 {ms}ms"
+  exec_failed:
+    en: Execution failed
+    zh-CN: 执行失败
+    zh-HK: 執行失敗
+  result_tab:
+    en: "Result {index}"
+    zh-CN: "结果 {index}"
+    zh-HK: "結果 {index}"
+AIInput:
+  send:
+    en: Send
+    zh-CN: 发送
+    zh-HK: 傳送
+  cancel:
+    en: Cancel
+    zh-CN: 终止
+    zh-HK: 終止
+  execute:
+    en: Execute
+    zh-CN: 执行
+    zh-HK: 執行
+  placeholder_agent:
+    en: Ask AI... (Enter to send)
+    zh-CN: 向 AI 提问...（回车发送）
+    zh-HK: 向 AI 提問...（按 Enter 送出）
+  placeholder_sql:
+    en: Enter SQL... (Enter to run)
+    zh-CN: 请输入 SQL...（回车执行）
+    zh-HK: 請輸入 SQL...（按 Enter 執行）
+ChatSqlBlock:
+  run:
+    en: Run
+    zh-CN: 运行
+    zh-HK: 執行
+ChatSession:
+  history_title:
+    en: Session History
+    zh-CN: 历史会话
+    zh-HK: 歷史會話
+  time_just_now:
+    en: Just now
+    zh-CN: 刚刚
+    zh-HK: 剛剛
+  time_minutes_ago:
+    en: "{minutes} minutes ago"
+    zh-CN: "{minutes} 分钟前"
+    zh-HK: "{minutes} 分鐘前"
+  time_hours_ago:
+    en: "{hours} hours ago"
+    zh-CN: "{hours} 小时前"
+    zh-HK: "{hours} 小時前"
+  time_days_ago:
+    en: "{days} days ago"
+    zh-CN: "{days} 天前"
+    zh-HK: "{days} 天前"
+  time_weeks_ago:
+    en: "{weeks} weeks ago"
+    zh-CN: "{weeks} 周前"
+    zh-HK: "{weeks} 週前"
+ChatPanel:
+  title:
+    en: SQL Assistant
+    zh-CN: SQL 助手
+    zh-HK: SQL 助手
+  session_name_placeholder:
+    en: Session name
+    zh-CN: 会话名称
+    zh-HK: 會話名稱
+  rename_session_title:
+    en: Rename Session
+    zh-CN: 重命名会话
+    zh-HK: 重新命名會話
+  rename_session_prompt:
+    en: "Enter a new session name:"
+    zh-CN: 请输入新的会话名称：
+    zh-HK: 請輸入新的會話名稱：
+  action_cancelled:
+    en: Operation cancelled
+    zh-CN: 操作已取消
+    zh-HK: 操作已取消
+  select_ai_model_first:
+    en: Please select an AI model first
+    zh-CN: 请先选择 AI 模型
+    zh-HK: 請先選擇 AI 模型
+  invalid_model_id:
+    en: Invalid model ID
+    zh-CN: 无效的模型 ID
+    zh-HK: 無效的模型 ID
+  sql_session_name:
+    en: SQL Session
+    zh-CN: SQL 会话
+    zh-HK: SQL 會話
+  session_error:
+    en: "Session error: {error}"
+    zh-CN: "会话错误: {error}"
+    zh-HK: "會話錯誤: {error}"
+  error_message:
+    en: "Error: {message}"
+    zh-CN: "错误: {message}"
+    zh-HK: "錯誤: {message}"
+  executing:
+    en: Executing...
+    zh-CN: 执行中...
+    zh-HK: 執行中...
+  execution_error:
+    en: "Execution error: {error}"
+    zh-CN: "执行错误: {error}"
+    zh-HK: "執行錯誤: {error}"
+  select_database_or_schema_first:
+    en: Please select a database or schema first
+    zh-CN: 请先选择数据库或架构
+    zh-HK: 請先選擇資料庫或架構
+  retry:
+    en: Retry
+    zh-CN: 重试
+    zh-HK: 重試
+  thinking:
+    en: Thinking...
+    zh-CN: 思考中...
+    zh-HK: 思考中...
+  view_result:
+    en: View result
+    zh-CN: 查看结果
+    zh-HK: 檢視結果
+  collapse_result:
+    en: Collapse result
+    zh-CN: 收起结果
+    zh-HK: 收起結果
+  error_keyword:
+    en: Error
+    zh-CN: 错误
+    zh-HK: 錯誤
+  failed_keyword:
+    en: Failed
+    zh-CN: 失败
+    zh-HK: 失敗
+EditorView:
+  form_tab:
+    en: Form
+    zh-CN: 表单
+    zh-HK: 表單
+  sql_preview_tab:
+    en: SQL Preview
+    zh-CN: SQL 预览
+    zh-HK: SQL 預覽
+DatabaseObjects:
+  batch_not_supported:
+    en: This action does not support batch operations
+    zh-CN: 该操作不支持批量执行
+    zh-HK: 該操作不支援批量執行
+MsSqlCollation:
+  latin1_general_ci_default:
+    en: Latin1 General, case-insensitive (Default)
+    zh-CN: Latin1 General, case-insensitive (默认)
+    zh-HK: Latin1 General, case-insensitive (預設)
+  latin1_general_cs:
+    en: Latin1 General, case-sensitive
+    zh-CN: Latin1 General, case-sensitive
+    zh-HK: Latin1 General, case-sensitive
+  chinese_prc_ci:
+    en: Simplified Chinese, case-insensitive
+    zh-CN: 简体中文, case-insensitive
+    zh-HK: 簡體中文, case-insensitive
+  chinese_prc_cs:
+    en: Simplified Chinese, case-sensitive
+    zh-CN: 简体中文, case-sensitive
+    zh-HK: 簡體中文, case-sensitive
+  chinese_taiwan_ci:
+    en: Traditional Chinese, case-insensitive
+    zh-CN: 繁体中文, case-insensitive
+    zh-HK: 繁體中文, case-insensitive
+  japanese_ci:
+    en: Japanese, case-insensitive
+    zh-CN: 日文, case-insensitive
+    zh-HK: 日文, case-insensitive
+  korean_ci:
+    en: Korean, case-insensitive
+    zh-CN: 韩文, case-insensitive
+    zh-HK: 韓文, case-insensitive
+  latin1_general_windows:
+    en: Latin1 General (Windows)
+    zh-CN: Latin1 General (Windows)
+    zh-HK: Latin1 General (Windows)
+  latin1_general_windows_cs:
+    en: Latin1 General (Windows), case-sensitive
+    zh-CN: Latin1 General (Windows), case-sensitive
+    zh-HK: Latin1 General (Windows), case-sensitive
+  latin1_general_100_unicode:
+    en: Latin1 General 100 (Unicode)
+    zh-CN: Latin1 General 100 (Unicode)
+    zh-HK: Latin1 General 100 (Unicode)
+SqlEditor:
+  subquery_column_uninferable:
+    en: Subquery columns - cannot infer automatically
+    zh-CN: 子查询列 - 无法自动推断
+    zh-HK: 子查詢列 - 無法自動推斷
+  subquery_doc:
+    en: "'{alias}' is a subquery alias; column info must be derived from the subquery definition"
+    zh-CN: "'{alias}' 是子查询的别名，列信息需要从子查询定义中获取"
+    zh-HK: "'{alias}' 是子查詢的別名，欄位資訊需從子查詢定義取得"
+  cte_column_uninferable:
+    en: CTE columns - cannot infer automatically
+    zh-CN: CTE 列 - 无法自动推断
+    zh-HK: CTE 列 - 無法自動推斷
+  cte_doc:
+    en: "'{alias}' is a CTE (WITH clause) name; column info must be derived from the CTE definition"
+    zh-CN: "'{alias}' 是 CTE (WITH 子句) 的名称，列信息需要从 CTE 定义中获取"
+    zh-HK: "'{alias}' 是 CTE (WITH 子句) 的名稱，欄位資訊需從 CTE 定義取得"
+  table_detail:
+    en: Table
+    zh-CN: 表
+    zh-HK: 表
+SqlService:
+  execution_error:
+    en: "Execution error: {message}"
+    zh-CN: "执行错误: {message}"
+    zh-HK: "執行錯誤: {message}"
+  cancelled:
+    en: Request cancelled
+    zh-CN: 请求已取消
+    zh-HK: 請求已取消
+  connection_not_found:
+    en: Connection not found
+    zh-CN: 连接未找到
+    zh-HK: 連線未找到
+SqlWorkflow:
+  fetch_tables:
+    en: Fetching table list...
+    zh-CN: 获取表列表...
+    zh-HK: 取得表列表...
+  fetch_tables_failed:
+    en: "Failed to fetch table list: {error}"
+    zh-CN: "获取表列表失败: {error}"
+    zh-HK: "取得表列表失敗: {error}"
+  table_count_warning:
+    en: "Table count ({count}) exceeds threshold ({threshold}); AI output may be inaccurate. Use @table to specify targets."
+    zh-CN: "表数量 ({count}) 超过阈值 ({threshold})，AI 输出结果可能不准确，建议使用 @表名 功能指定目标表"
+    zh-HK: "表數量 ({count}) 超過閾值 ({threshold})，AI 輸出結果可能不準確，建議使用 @表名 功能指定目標表"
+  ai_select_tables:
+    en: AI selecting relevant tables...
+    zh-CN: AI 选择相关表...
+    zh-HK: AI 選擇相關表...
+  no_tables_selected:
+    en: AI did not select any related tables
+    zh-CN: AI 未能选择任何相关表
+    zh-HK: AI 未能選擇任何相關表
+  fetch_table_schema:
+    en: "Fetching table schema ({current}/{total})..."
+    zh-CN: "获取表结构 ({current}/{total})..."
+    zh-HK: "取得表結構 ({current}/{total})..."
+  fetch_table_metadata_failed:
+    en: "Failed to fetch metadata for table {table}: {error}"
+    zh-CN: "获取表 {table} 元数据失败: {error}"
+    zh-HK: "取得表 {table} 元資料失敗: {error}"
+  no_table_metadata:
+    en: Failed to fetch metadata for any tables
+    zh-CN: 未能获取任何表的元数据
+    zh-HK: 未能取得任何表的元資料
+  get_ai_provider_failed:
+    en: "Failed to get AI provider: {error}"
+    zh-CN: "获取 AI 提供者失败: {error}"
+    zh-HK: "取得 AI 提供者失敗: {error}"
+  operation_cancelled:
+    en: Operation cancelled
+    zh-CN: 操作已取消
+    zh-HK: 操作已取消
+  ai_select_failed:
+    en: "AI table selection failed: {error}"
+    zh-CN: "AI 选表调用失败: {error}"
+    zh-HK: "AI 選表呼叫失敗: {error}"
+  start_stream_failed:
+    en: "Failed to start streaming generation: {error}"
+    zh-CN: "启动流式生成失败: {error}"
+    zh-HK: "啟動串流生成失敗: {error}"
+  stream_error:
+    en: "Streaming error: {error}"
+    zh-CN: "流式生成错误: {error}"
+    zh-HK: "串流生成錯誤: {error}"
+DatabaseTab:
+  insert_editor:
+    en: Insert into Editor
+    zh-CN: 插入编辑器
+    zh-HK: 插入編輯器
+  open_new_editor:
+    en: Open New Editor
+    zh-CN: 打开新编辑器
+    zh-HK: 打開新編輯器

@@ -29,6 +29,7 @@ use crate::table_data::data_grid::{DataGrid, DataGridConfig, DataGridUsage};
 // 3. 当前 crate 导入（按模块分组）
 use db::{GlobalDbState, SqlResult, SqlSource};
 use gpui_component::checkbox::Checkbox;
+use rust_i18n::t;
 
 // Structure to hold a single SQL result with its metadata
 #[derive(Clone)]
@@ -670,7 +671,7 @@ impl SqlResultTabContainer {
                                 div()
                                     .text_sm()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("已处理的查询:"),
+                                    .child(t!("SqlResultTab.processed_queries_label")),
                             )
                             .child(
                                 div()
@@ -686,7 +687,7 @@ impl SqlResultTabContainer {
                                 div()
                                     .text_sm()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("成功:"),
+                                    .child(t!("SqlResultTab.success_label")),
                             )
                             .child(
                                 div()
@@ -703,7 +704,7 @@ impl SqlResultTabContainer {
                                 div()
                                     .text_sm()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("错误:"),
+                                    .child(t!("SqlResultTab.error_label")),
                             )
                             .child(
                                 div()
@@ -720,7 +721,7 @@ impl SqlResultTabContainer {
                                 div()
                                     .text_sm()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("运行时间:"),
+                                    .child(t!("SqlResultTab.execution_time_label")),
                             )
                             .child(div().text_lg().font_semibold().child(
                                 format!("{:.3}s", total_elapsed_ms / 1000.0)
@@ -730,7 +731,7 @@ impl SqlResultTabContainer {
             .child(
                 h_flex().gap_2().items_center().child(
                     Checkbox::new("show-errors-only")
-                        .label("仅显示错误")
+                        .label(t!("SqlResultTab.show_errors_only").to_string())
                         .checked(show_errors_only)
                         .on_click({
                             let container = clone_self.clone();
@@ -774,7 +775,7 @@ impl SqlResultTabContainer {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("正在解析并执行查询...")
+                                .child(t!("SqlResultTab.parsing_and_executing"))
                         )
                 );
         }
@@ -798,16 +799,16 @@ impl SqlResultTabContainer {
                     .flex_shrink_0()
                     .text_sm()
                     .font_semibold()
-                    .child("查询"),
+                    .child(t!("SqlResultTab.query_header")),
             )
-            .child(div().flex_1().text_sm().font_semibold().child("消息"))
+            .child(div().flex_1().text_sm().font_semibold().child(t!("SqlResultTab.message_header")))
             .child(
                 div()
                     .w(px(80.))
                     .flex_shrink_0()
                     .text_sm()
                     .font_semibold()
-                    .child("执行时间"),
+                    .child(t!("SqlResultTab.execution_time_header")),
             )
     }
 
@@ -836,7 +837,7 @@ impl SqlResultTabContainer {
                             div()
                                 .text_base()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("查询执行中，请稍候...")
+                                .child(t!("SqlResultTab.query_executing_wait"))
                         )
                 );
         }
@@ -974,7 +975,7 @@ impl SqlResultTabContainer {
                                 Icon::new(IconName::File)
                                     .with_size(Size::Small),
                             )
-                            .child("SQL 语句"),
+                            .child(t!("SqlResultTab.sql_statement")),
                     )
                     .child(Clipboard::new(("copy-sql", idx)).value(sql_for_copy)),
             )
@@ -1053,7 +1054,7 @@ impl SqlResultTabContainer {
                                 Icon::new(IconName::TriangleAlert)
                                     .with_size(Size::Small),
                             )
-                            .child("错误信息"),
+                            .child(t!("SqlResultTab.error_info")),
                     )
                     .child(
                         h_flex()
@@ -1177,14 +1178,23 @@ impl Render for SqlResultTabContainer {
                         })
                         .child(Tab::new().label(match &execution_state {
                             ExecutionState::Executing { current, total } => {
-                                format!("摘要 ({}/{})", current, total)
+                                t!(
+                                    "SqlResultTab.summary_with_counts",
+                                    current = current,
+                                    total = total
+                                )
+                                .to_string()
                             }
-                            _ => "摘要".to_string(),
+                            _ => t!("SqlResultTab.summary").to_string(),
                         }))
                         .children({
                             let mut tabs = vec![];
                             for idx in 0..query_tabs.len() {
-                                tabs.push(Tab::new().label(format!("结果{}", idx + 1)))
+                                tabs.push(
+                                    Tab::new().label(
+                                        t!("SqlResultTab.result_tab", index = idx + 1).to_string(),
+                                    )
+                                )
                             }
                             tabs
                         })
@@ -1193,7 +1203,7 @@ impl Render for SqlResultTabContainer {
                                 .with_size(Size::Small)
                                 .ghost()
                                 .icon(IconName::Close)
-                                .tooltip("隐藏结果面板")
+                                .tooltip(t!("SqlResultTab.hide_results_panel").to_string())
                                 .on_click({
                                     let close_self = clone_self.clone();
                                     move |_, _, cx| {

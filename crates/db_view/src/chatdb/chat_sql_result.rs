@@ -15,6 +15,7 @@ use crate::table_data::data_grid::{DataGrid, DataGridConfig, DataGridUsage};
 use db::SqlResult;
 use gpui_component::button::ButtonVariants;
 use one_core::storage::DatabaseType;
+use rust_i18n::t;
 
 /// SQL 结果项
 pub struct SqlResultItem {
@@ -262,7 +263,7 @@ impl ChatSqlResultView {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(format!("{} 行", rows_info))
+                                .child(t!("ChatSqlResult.rows_info", rows = rows_info).to_string())
                         )
                     })
                     .child(
@@ -291,14 +292,22 @@ impl ChatSqlResultView {
                             .child(
                                 div()
                                     .text_sm()
-                                    .child(format!("执行成功，影响 {} 行", e.rows_affected))
+                                    .child(
+                                        t!(
+                                            "ChatSqlResult.exec_success_rows",
+                                            rows = e.rows_affected
+                                        )
+                                        .to_string()
+                                    )
                             )
                     )
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("耗时 {}ms", e.elapsed_ms))
+                            .child(
+                                t!("ChatSqlResult.elapsed_ms", ms = e.elapsed_ms).to_string()
+                            )
                     )
                     .into_any_element()
             }
@@ -316,7 +325,7 @@ impl ChatSqlResultView {
                                 div()
                                     .text_sm()
                                     .text_color(cx.theme().danger)
-                                    .child("执行失败")
+                                    .child(t!("ChatSqlResult.exec_failed"))
                             )
                     )
                     .child(
@@ -359,7 +368,13 @@ impl Render for ChatSqlResultView {
                                 .selected_index(active_tab)
                                 .children(
                                     query_indices.iter().enumerate().map(|(tab_idx, _)| {
-                                        Tab::new().label(format!("结果 {}", tab_idx + 1))
+                                        Tab::new().label(
+                                            t!(
+                                                "ChatSqlResult.result_tab",
+                                                index = tab_idx + 1
+                                            )
+                                            .to_string()
+                                        )
                                     })
                                 )
                         )
@@ -374,4 +389,3 @@ impl Render for ChatSqlResultView {
             })
     }
 }
-

@@ -12,6 +12,7 @@ use gpui_component::{
     select::{Select, SelectEvent, SelectItem, SelectState},
     v_flex,
 };
+use rust_i18n::t;
 
 use crate::DatabaseFormEvent;
 use db::plugin::DatabaseOperationRequest;
@@ -56,15 +57,18 @@ impl OracleDatabaseForm {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入用户名/Schema"));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Connection.enter_username_schema").to_string())
+        });
 
         let charset_items = vec![
-            CharsetSelectItem::new("AL32UTF8", "Unicode UTF-8 (推荐)"),
-            CharsetSelectItem::new("UTF8", "Unicode UTF-8 (旧版)"),
-            CharsetSelectItem::new("ZHS16GBK", "简体中文 GBK"),
-            CharsetSelectItem::new("ZHT16MSWIN950", "繁体中文 Big5"),
-            CharsetSelectItem::new("JA16SJIS", "日文 Shift-JIS"),
-            CharsetSelectItem::new("KO16MSWIN949", "韩文"),
+            CharsetSelectItem::new("AL32UTF8", t!("Connection.charset_utf8").to_string()),
+            CharsetSelectItem::new("UTF8", t!("Connection.charset_utf8_old").to_string()),
+            CharsetSelectItem::new("ZHS16GBK", t!("Connection.charset_gbk").to_string()),
+            CharsetSelectItem::new("ZHT16MSWIN950", t!("Connection.charset_big5").to_string()),
+            CharsetSelectItem::new("JA16SJIS", t!("Connection.charset_shift_jis").to_string()),
+            CharsetSelectItem::new("KO16MSWIN949", t!("Connection.charset_korean").to_string()),
             CharsetSelectItem::new("US7ASCII", "US ASCII"),
             CharsetSelectItem::new("WE8ISO8859P1", "Western European ISO 8859-1"),
             CharsetSelectItem::new("WE8MSWIN1252", "Western European Windows"),
@@ -74,7 +78,10 @@ impl OracleDatabaseForm {
         let charset_select =
             cx.new(|cx| SelectState::new(charset_items, Some(IndexPath::new(0)), window, cx));
 
-        let tablespace_input = cx.new(|cx| InputState::new(window, cx).placeholder("USERS (可选)"));
+        let tablespace_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Connection.tablespace_users").to_string())
+        });
 
         let name_sub = cx.observe(&name_input, |this, _, cx| {
             this.trigger_form_changed(cx);
@@ -160,7 +167,7 @@ impl Render for OracleDatabaseForm {
                 .label_width(px(100.))
                 .child(
                     field()
-                        .label("用户名/Schema")
+                        .label(t!("Connection.username_schema").to_string())
                         .required(true)
                         .items_center()
                         .label_justify_end()
@@ -172,14 +179,14 @@ impl Render for OracleDatabaseForm {
                 )
                 .child(
                     field()
-                        .label("字符集")
+                        .label(t!("Database.charset").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.charset_select).w_full()),
                 )
                 .child(
                     field()
-                        .label("默认表空间")
+                        .label(t!("Connection.default_tablespace").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Input::new(&self.tablespace_input).w_full()),

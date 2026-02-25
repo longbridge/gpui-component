@@ -160,7 +160,9 @@ impl AIInput {
             ModelSettingsPanel::with_labels(model_settings.clone(), labels, window, cx)
         });
 
-        let send_button_state = SendButtonState::new().with_send_label("发送").with_cancel_label("终止");
+        let send_button_state = SendButtonState::new()
+            .with_send_label(t!("AIInput.send").to_string())
+            .with_cancel_label(t!("AIInput.cancel").to_string());
 
         let mut subscriptions = Vec::new();
 
@@ -301,15 +303,23 @@ impl AIInput {
         match self.mode {
             InputMode::Agent => {
                 self.sql_editor.update(cx, |editor, cx| {
-                    editor.set_placeholder("向 AI 提问...（回车发送）", window, cx);
+                    editor.set_placeholder(
+                        t!("AIInput.placeholder_agent").to_string(),
+                        window,
+                        cx
+                    );
                 });
-                self.send_button_state.send_label = "发送".to_string();
+                self.send_button_state.send_label = t!("AIInput.send").to_string();
             }
             InputMode::Sql => {
                 self.sql_editor.update(cx, |editor, cx| {
-                    editor.set_placeholder("请输入 SQL...（回车执行）", window, cx);
+                    editor.set_placeholder(
+                        t!("AIInput.placeholder_sql").to_string(),
+                        window,
+                        cx
+                    );
                 });
-                self.send_button_state.send_label = "执行".to_string();
+                self.send_button_state.send_label = t!("AIInput.execute").to_string();
             }
         }
         self.apply_completion_provider(window, cx);

@@ -9,6 +9,7 @@ use gpui_component::{
     clipboard::Clipboard,
     h_flex, v_flex, ActiveTheme, IconName, Sizable,
 };
+use rust_i18n::t;
 use std::collections::HashMap;
 
 use crate::chatdb::chat_markdown::SqlCodeBlock;
@@ -40,7 +41,7 @@ impl SqlBlockRenderer {
                         .icon(IconName::SquareTerminal)
                         .ghost()
                         .xsmall()
-                        .label("运行")
+                        .label(t!("ChatSqlBlock.run").to_string())
                         .on_click(move |_, _, _| on_run()),
                 )
             })

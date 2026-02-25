@@ -18,6 +18,7 @@ use gpui_component::{
 };
 use one_core::ai_chat::{CodeBlockAction, LanguageMatcher};
 use one_core::storage::{ActiveConnections, Workspace};
+use rust_i18n::t;
 use one_core::{
     storage::StoredConnection,
     tab_container::{TabContainer, TabContent, TabContentEvent, TabItem},
@@ -172,7 +173,7 @@ impl DatabaseTabView {
         let tab_container_for_insert = tab_container.clone();
         if let Some(insert_action) = CodeBlockAction::new("sql-insert-to-editor")
             .icon(IconName::Edit)
-            .label("插入编辑器")
+            .label(t!("DatabaseTab.insert_editor").to_string())
             .matcher(LanguageMatcher::sql())
             .on_click(move |code, _lang, window, cx| {
                 // 获取当前激活的 tab
@@ -198,7 +199,7 @@ impl DatabaseTabView {
         let tab_container_for_new = tab_container.clone();
         if let Some(new_editor_action) = CodeBlockAction::new("sql-open-new-editor")
             .icon(IconName::Query)
-            .label("打开新编辑器")
+            .label(t!("DatabaseTab.open_new_editor").to_string())
             .matcher(LanguageMatcher::sql())
             .on_click(move |code, _lang, window, cx| {
                 let Some(conn) = first_conn.as_ref() else {

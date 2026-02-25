@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use anyhow::Result;
+use rust_i18n::t;
 use db::plugin::SqlCompletionInfo;
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, Render, Styled as _, Subscription, Task, Window,
@@ -454,9 +455,13 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                     items.push(CompletionItem {
                         label: "(subquery)".to_string(),
                         kind: Some(CompletionItemKind::TEXT),
-                        detail: Some("子查询列 - 无法自动推断".to_string()),
+                        detail: Some(t!("SqlEditor.subquery_column_uninferable").to_string()),
                         documentation: Some(lsp_types::Documentation::String(
-                            format!("'{}' 是子查询的别名，列信息需要从子查询定义中获取", alias_or_table),
+                            t!(
+                                "SqlEditor.subquery_doc",
+                                alias = alias_or_table
+                            )
+                            .to_string(),
                         )),
                         ..Default::default()
                     });
@@ -468,9 +473,13 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                     items.push(CompletionItem {
                         label: "(CTE)".to_string(),
                         kind: Some(CompletionItemKind::TEXT),
-                        detail: Some("CTE 列 - 无法自动推断".to_string()),
+                        detail: Some(t!("SqlEditor.cte_column_uninferable").to_string()),
                         documentation: Some(lsp_types::Documentation::String(
-                            format!("'{}' 是 CTE (WITH 子句) 的名称，列信息需要从 CTE 定义中获取", alias_or_table),
+                            t!(
+                                "SqlEditor.cte_doc",
+                                alias = alias_or_table
+                            )
+                            .to_string(),
                         )),
                         ..Default::default()
                     });
@@ -1274,7 +1283,7 @@ impl CompletionProvider for TableMentionCompletionProvider {
                 items.push(CompletionItem {
                     label: mention_text.clone(),
                     kind: Some(CompletionItemKind::STRUCT),
-                    detail: Some("表".to_string()),
+                    detail: Some(t!("SqlEditor.table_detail").to_string()),
                     documentation,
                     text_edit: Some(CompletionTextEdit::InsertAndReplace(
                         InsertReplaceEdit {

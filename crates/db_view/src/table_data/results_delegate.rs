@@ -12,6 +12,7 @@ use one_ui::edit_table::{
     filter_panel::FilterValue,
 };
 use one_core::storage::DatabaseType;
+use rust_i18n::t;
 use uuid::Uuid;
 use gpui_component::date_picker::{DatePickerEvent, DatePickerState};
 use gpui_component::datetime_picker::{DateTimePickerEvent, DateTimePickerState};
@@ -845,7 +846,7 @@ impl EditTableDelegate for EditorTableDelegate {
                 selection.active.or(state.selected_cell())
             };
             let Some(start) = start else {
-                window.push_notification("请选择一个单元格".to_string(), cx);
+                window.push_notification(t!("TableData.select_cell").to_string(), cx);
                 return;
             };
 
@@ -904,7 +905,7 @@ impl EditTableDelegate for EditorTableDelegate {
             move |submenu, _window, _cx| {
                 submenu
                     .item(
-                        PopupMenuItem::new("UUID (标准)").on_click({
+                        PopupMenuItem::new(t!("TableData.uuid_standard").to_string()).on_click({
                             let table = table_uuid.clone();
                             move |_, _window, cx| {
                                 table.update(cx, |state, cx| {
@@ -918,7 +919,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         }),
                     )
                     .item(
-                        PopupMenuItem::new("UUID (无-)").on_click({
+                        PopupMenuItem::new(t!("TableData.uuid_simple").to_string()).on_click({
                             let table = table_uuid_simple.clone();
                             move |_, _window, cx| {
                                 table.update(cx, |state, cx| {
@@ -991,7 +992,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         }),
                     )
                     .item(
-                        PopupMenuItem::new("IN 子句").on_click({
+                        PopupMenuItem::new(t!("TableData.sql_in_clause").to_string()).on_click({
                             let t = table_in.clone();
                             move |_, _window, cx| {
                                 copy_with_format(&t, CopyFormat::SqlIn, cx);
@@ -1002,7 +1003,7 @@ impl EditTableDelegate for EditorTableDelegate {
         });
 
         menu.item(
-            PopupMenuItem::new("设置为空白字符串")
+            PopupMenuItem::new(t!("TableData.set_empty_string").to_string())
                 .disabled(edit_disabled)
                 .on_click({
                     let table = table_empty.clone();
@@ -1014,7 +1015,7 @@ impl EditTableDelegate for EditorTableDelegate {
                 }),
         )
         .item(
-            PopupMenuItem::new("设置为 NULL")
+            PopupMenuItem::new(t!("TableData.set_null").to_string())
                 .disabled(edit_disabled)
                 .on_click({
                     let table = table_null.clone();
@@ -1025,29 +1026,38 @@ impl EditTableDelegate for EditorTableDelegate {
                     }
                 }),
         )
-        .item(PopupMenuItem::submenu("生成 UUID", uuid_menu).disabled(edit_disabled))
         .item(
-            PopupMenuItem::new("在单元格编辑器中编辑")
+            PopupMenuItem::submenu(t!("TableData.generate_uuid").to_string(), uuid_menu)
+                .disabled(edit_disabled)
+        )
+        .item(
+            PopupMenuItem::new(t!("TableData.edit_in_cell_editor").to_string())
                 .disabled(edit_disabled)
                 .on_click({
                     let data_grid = data_grid.clone();
                     move |_, window, cx| {
                         let Some(data_grid) = data_grid.clone() else {
-                            window.push_notification("无法打开单元格编辑器".to_string(), cx);
+                            window.push_notification(
+                                t!("TableData.open_cell_editor_failed").to_string(),
+                                cx
+                            );
                             return;
                         };
                         if let Err(error) = data_grid.update(cx, |grid, cx| {
                             grid.open_large_text_editor(window, cx);
                         }) {
                             tracing::error!("Failed to open cell editor: {}", error);
-                            window.push_notification("无法打开单元格编辑器".to_string(), cx);
+                            window.push_notification(
+                                t!("TableData.open_cell_editor_failed").to_string(),
+                                cx
+                            );
                         }
                     }
                 }),
         )
         .separator()
         .item(
-            PopupMenuItem::new("克隆行")
+            PopupMenuItem::new(t!("TableData.clone_row").to_string())
                 .disabled(edit_disabled)
                 .on_click({
                     let table = table_clone_row.clone();
@@ -1063,13 +1073,16 @@ impl EditTableDelegate for EditorTableDelegate {
                             }
                         });
                         if !cloned {
-                            window.push_notification("无法克隆该行".to_string(), cx);
+                            window.push_notification(
+                                t!("TableData.clone_row_failed").to_string(),
+                                cx
+                            );
                         }
                     }
                 }),
         )
         .item(
-            PopupMenuItem::new("删除记录...")
+            PopupMenuItem::new(t!("TableData.delete_record").to_string())
                 .disabled(edit_disabled)
                 .on_click({
                     let table = table_delete.clone();
@@ -1082,7 +1095,7 @@ impl EditTableDelegate for EditorTableDelegate {
         )
         .separator()
         .item(
-            PopupMenuItem::new("粘贴")
+            PopupMenuItem::new(t!("TableData.paste").to_string())
                 .disabled(edit_disabled)
                 .on_click({
                     let table = table_paste.clone();
@@ -1095,7 +1108,7 @@ impl EditTableDelegate for EditorTableDelegate {
         )
         .separator()
         .item(
-            PopupMenuItem::new("复制").on_click({
+            PopupMenuItem::new(t!("TableData.copy").to_string()).on_click({
                 let t = table_tsv.clone();
                 move |_, _window, cx| {
                     copy_with_format(&t, CopyFormat::Tsv, cx);
@@ -1103,7 +1116,7 @@ impl EditTableDelegate for EditorTableDelegate {
             }),
         )
         .item(
-            PopupMenuItem::new("复制字段名称").on_click({
+            PopupMenuItem::new(t!("TableData.copy_column_name").to_string()).on_click({
                 let table = table_copy_columns.clone();
                 move |_, _window, cx| {
                     table.update(cx, |state, cx| {
@@ -1134,39 +1147,51 @@ impl EditTableDelegate for EditorTableDelegate {
             }),
         )
         .separator()
-        .item(PopupMenuItem::submenu("复制为", copy_sql_menu))
+        .item(PopupMenuItem::submenu(t!("TableData.copy_as").to_string(), copy_sql_menu))
         .separator()
         .item(
-            PopupMenuItem::new("保存数据为...").on_click({
+            PopupMenuItem::new(t!("TableData.save_data_as").to_string()).on_click({
                 let data_grid = data_grid.clone();
                 move |_, window, cx| {
                     let Some(data_grid) = data_grid.clone() else {
-                        window.push_notification("无法导出数据".to_string(), cx);
+                        window.push_notification(
+                            t!("TableData.export_data_failed").to_string(),
+                            cx
+                        );
                         return;
                     };
                     if let Err(error) = data_grid.update(cx, |grid, cx| {
                         grid.open_export_view(window, cx);
                     }) {
                         tracing::error!("Failed to open export view: {}", error);
-                        window.push_notification("无法导出数据".to_string(), cx);
+                        window.push_notification(
+                            t!("TableData.export_data_failed").to_string(),
+                            cx
+                        );
                     }
                 }
             }),
         )
         .separator()
         .item(
-            PopupMenuItem::new("刷新").on_click({
+            PopupMenuItem::new(t!("TableData.refresh").to_string()).on_click({
                 let data_grid = data_grid.clone();
                 move |_, window, cx| {
                     let Some(data_grid) = data_grid.clone() else {
-                        window.push_notification("无法刷新数据".to_string(), cx);
+                        window.push_notification(
+                            t!("TableData.refresh_data_failed").to_string(),
+                            cx
+                        );
                         return;
                     };
                     if let Err(error) = data_grid.update(cx, |grid, cx| {
                         grid.refresh_data(cx);
                     }) {
                         tracing::error!("Failed to refresh data grid: {}", error);
-                        window.push_notification("无法刷新数据".to_string(), cx);
+                        window.push_notification(
+                            t!("TableData.refresh_data_failed").to_string(),
+                            cx
+                        );
                     }
                 }
             }),

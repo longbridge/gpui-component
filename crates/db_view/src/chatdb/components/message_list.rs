@@ -18,6 +18,7 @@ use gpui_component::{
     scroll::Scrollbar,
     v_flex, ActiveTheme,
 };
+use rust_i18n::t;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -197,7 +198,13 @@ impl MessageListRenderer {
                         this.child(
                             Button::new("chat-load-more")
                                 .ghost()
-                                .label(format!("加载更早消息（剩余 {} 条）", hidden_count))
+                                .label(
+                                    t!(
+                                        "ChatMessageList.load_more",
+                                        hidden_count = hidden_count
+                                    )
+                                    .to_string()
+                                )
                                 .on_click(move |_, _, _| on_load_more()),
                         )
                     })
@@ -205,7 +212,7 @@ impl MessageListRenderer {
                         this.child(
                             Button::new("chat-collapse-history")
                                 .ghost()
-                                .label("收起历史消息")
+                                .label(t!("ChatMessageList.collapse_history").to_string())
                                 .on_click(move |_, _, _| on_collapse()),
                         )
                     }),
@@ -268,7 +275,7 @@ impl MessageListRenderer {
             div()
                 .w_full()
                 .text_sm()
-                .child("加载中...")
+                .child(t!("ChatMessageList.loading"))
                 .into_any_element()
         }
     }

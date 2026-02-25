@@ -7,6 +7,7 @@ use gpui::AsyncApp;
 use one_core::storage::DatabaseType;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
+use rust_i18n::t;
 
 // ============================================================================
 // 错误类型
@@ -26,9 +27,11 @@ pub enum SqlError {
 impl std::fmt::Display for SqlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SqlError::ExecutionError(msg) => write!(f, "执行错误: {}", msg),
-            SqlError::Cancelled => write!(f, "请求已取消"),
-            SqlError::ConnectionNotFound => write!(f, "连接未找到"),
+            SqlError::ExecutionError(msg) => {
+                write!(f, "{}", t!("SqlService.execution_error", message = msg))
+            }
+            SqlError::Cancelled => write!(f, "{}", t!("SqlService.cancelled")),
+            SqlError::ConnectionNotFound => write!(f, "{}", t!("SqlService.connection_not_found")),
         }
     }
 }

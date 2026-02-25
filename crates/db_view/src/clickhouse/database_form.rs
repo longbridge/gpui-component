@@ -12,6 +12,7 @@ use gpui_component::{
     select::{Select, SelectEvent, SelectItem, SelectState},
     v_flex,
 };
+use rust_i18n::t;
 
 use crate::DatabaseFormEvent;
 use db::plugin::DatabaseOperationRequest;
@@ -56,22 +57,27 @@ impl ClickHouseDatabaseForm {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入数据库名称"));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Database.enter_database_name").to_string())
+        });
 
         let engine_items = vec![
-            EngineSelectItem::new("Atomic", "原子数据库引擎 (默认, ClickHouse 20.5+)"),
-            EngineSelectItem::new("Ordinary", "普通数据库引擎"),
-            EngineSelectItem::new("Memory", "内存数据库引擎"),
-            EngineSelectItem::new("Lazy", "懒加载数据库引擎 (日志表)"),
-            EngineSelectItem::new("MySQL", "MySQL 引擎 (连接外部 MySQL)"),
-            EngineSelectItem::new("PostgreSQL", "PostgreSQL 引擎 (连接外部 PostgreSQL)"),
+            EngineSelectItem::new("Atomic", t!("Database.engine_atomic").to_string()),
+            EngineSelectItem::new("Ordinary", t!("Database.engine_ordinary").to_string()),
+            EngineSelectItem::new("Memory", t!("Database.engine_memory").to_string()),
+            EngineSelectItem::new("Lazy", t!("Database.engine_lazy").to_string()),
+            EngineSelectItem::new("MySQL", t!("Database.engine_mysql").to_string()),
+            EngineSelectItem::new("PostgreSQL", t!("Database.engine_postgresql").to_string()),
         ];
 
         let engine_select =
             cx.new(|cx| SelectState::new(engine_items, Some(IndexPath::new(0)), window, cx));
 
-        let comment_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("数据库注释 (可选)"));
+        let comment_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Database.engine_comment").to_string())
+        });
 
         let name_sub = cx.observe(&name_input, |this, _, cx| {
             this.trigger_form_changed(cx);
@@ -157,7 +163,7 @@ impl Render for ClickHouseDatabaseForm {
                 .label_width(px(100.))
                 .child(
                     field()
-                        .label("数据库名称")
+                        .label(t!("Database.database_name").to_string())
                         .required(true)
                         .items_center()
                         .label_justify_end()
@@ -169,14 +175,14 @@ impl Render for ClickHouseDatabaseForm {
                 )
                 .child(
                     field()
-                        .label("数据库引擎")
+                        .label(t!("Database.engine").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.engine_select).w_full()),
                 )
                 .child(
                     field()
-                        .label("注释")
+                        .label(t!("Database.comment").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Input::new(&self.comment_input).w_full()),

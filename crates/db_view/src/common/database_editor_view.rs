@@ -12,6 +12,7 @@ use gpui_component::{
     v_flex,
 };
 use one_core::storage::DatabaseType;
+use rust_i18n::t;
 
 pub struct DatabaseEditorView {
     focus_handle: FocusHandle,
@@ -136,15 +137,23 @@ impl Focusable for DatabaseEditorView {
 impl Render for DatabaseEditorView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let form_button = if self.current_tab == EditorTab::Form {
-            Button::new("tab_form").label("表单").primary()
+            Button::new("tab_form")
+                .label(t!("EditorView.form_tab").to_string())
+                .primary()
         } else {
-            Button::new("tab_form").label("表单").ghost()
+            Button::new("tab_form")
+                .label(t!("EditorView.form_tab").to_string())
+                .ghost()
         };
 
         let sql_button = if self.current_tab == EditorTab::SqlPreview {
-            Button::new("tab_sql").label("SQL 预览").primary()
+            Button::new("tab_sql")
+                .label(t!("EditorView.sql_preview_tab").to_string())
+                .primary()
         } else {
-            Button::new("tab_sql").label("SQL 预览").ghost()
+            Button::new("tab_sql")
+                .label(t!("EditorView.sql_preview_tab").to_string())
+                .ghost()
         };
 
         let main_content = if self.current_tab == EditorTab::Form {

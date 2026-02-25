@@ -12,6 +12,7 @@ use gpui_component::{
     select::{Select, SelectEvent, SelectItem, SelectState},
     v_flex,
 };
+use rust_i18n::t;
 
 use crate::DatabaseFormEvent;
 use db::plugin::DatabaseOperationRequest;
@@ -55,30 +56,51 @@ impl MsSqlDatabaseForm {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入数据库名称"));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Database.enter_database_name").to_string())
+        });
 
         let collation_items = vec![
             CollationSelectItem::new(
                 "SQL_Latin1_General_CP1_CI_AS",
-                "Latin1 General, case-insensitive (默认)",
+                t!("MsSqlCollation.latin1_general_ci_default").to_string(),
             ),
             CollationSelectItem::new(
                 "SQL_Latin1_General_CP1_CS_AS",
-                "Latin1 General, case-sensitive",
+                t!("MsSqlCollation.latin1_general_cs").to_string(),
             ),
-            CollationSelectItem::new("Chinese_PRC_CI_AS", "简体中文, case-insensitive"),
-            CollationSelectItem::new("Chinese_PRC_CS_AS", "简体中文, case-sensitive"),
-            CollationSelectItem::new("Chinese_Taiwan_Stroke_CI_AS", "繁体中文, case-insensitive"),
-            CollationSelectItem::new("Japanese_CI_AS", "日文, case-insensitive"),
-            CollationSelectItem::new("Korean_Wansung_CI_AS", "韩文, case-insensitive"),
-            CollationSelectItem::new("Latin1_General_CI_AS", "Latin1 General (Windows)"),
+            CollationSelectItem::new(
+                "Chinese_PRC_CI_AS",
+                t!("MsSqlCollation.chinese_prc_ci").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Chinese_PRC_CS_AS",
+                t!("MsSqlCollation.chinese_prc_cs").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Chinese_Taiwan_Stroke_CI_AS",
+                t!("MsSqlCollation.chinese_taiwan_ci").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Japanese_CI_AS",
+                t!("MsSqlCollation.japanese_ci").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Korean_Wansung_CI_AS",
+                t!("MsSqlCollation.korean_ci").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Latin1_General_CI_AS",
+                t!("MsSqlCollation.latin1_general_windows").to_string(),
+            ),
             CollationSelectItem::new(
                 "Latin1_General_CS_AS",
-                "Latin1 General (Windows), case-sensitive",
+                t!("MsSqlCollation.latin1_general_windows_cs").to_string(),
             ),
             CollationSelectItem::new(
                 "Latin1_General_100_CI_AS_SC",
-                "Latin1 General 100 (Unicode)",
+                t!("MsSqlCollation.latin1_general_100_unicode").to_string(),
             ),
         ];
 
@@ -159,7 +181,7 @@ impl Render for MsSqlDatabaseForm {
                 .label_width(px(100.))
                 .child(
                     field()
-                        .label("数据库名称")
+                        .label(t!("Database.database_name").to_string())
                         .required(true)
                         .items_center()
                         .label_justify_end()
@@ -171,7 +193,7 @@ impl Render for MsSqlDatabaseForm {
                 )
                 .child(
                     field()
-                        .label("排序规则")
+                        .label(t!("Database.collation").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.collation_select).w_full()),

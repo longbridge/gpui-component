@@ -9,6 +9,7 @@ use gpui_component::{
     input::{Input, InputState},
     v_flex,
 };
+use rust_i18n::t;
 
 use crate::common::{SchemaFormEvent, SchemaOperationRequest};
 
@@ -23,11 +24,14 @@ impl MsSqlSchemaForm {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入模式名称"));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Database.enter_schema_name").to_string())
+        });
 
         let comment_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("输入备注信息（可选）")
+                .placeholder(t!("Database.enter_remark").to_string())
                 .multi_line(true)
                 .rows(3)
         });
@@ -97,7 +101,7 @@ impl Render for MsSqlSchemaForm {
                 .label_width(px(80.))
                 .child(
                     field()
-                        .label("模式名称")
+                        .label(t!("Database.schema_name").to_string())
                         .required(true)
                         .items_center()
                         .label_justify_end()
@@ -105,7 +109,7 @@ impl Render for MsSqlSchemaForm {
                 )
                 .child(
                     field()
-                        .label("备注")
+                        .label(t!("Database.remark").to_string())
                         .items_start()
                         .label_justify_end()
                         .child(Input::new(&self.comment_input).w_full()),

@@ -11,6 +11,7 @@ use gpui_component::{
     input::{Input, InputState},
     v_flex,
 };
+use rust_i18n::t;
 
 use crate::DatabaseFormEvent;
 use db::plugin::DatabaseOperationRequest;
@@ -27,10 +28,14 @@ impl SqliteDatabaseForm {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入数据库名称"));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Database.enter_database_name").to_string())
+        });
 
         let path_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("数据库文件路径 (如: /path/to/database.db)")
+            InputState::new(window, cx)
+                .placeholder(t!("Database.file_path_placeholder").to_string())
         });
 
         let name_sub = cx.observe(&name_input, |this, _, cx| {
@@ -97,7 +102,7 @@ impl Render for SqliteDatabaseForm {
                 .label_width(px(100.))
                 .child(
                     field()
-                        .label("数据库名称")
+                        .label(t!("Database.database_name").to_string())
                         .required(true)
                         .items_center()
                         .label_justify_end()
@@ -109,7 +114,7 @@ impl Render for SqliteDatabaseForm {
                 )
                 .child(
                     field()
-                        .label("文件路径")
+                        .label(t!("Database.file_path").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Input::new(&self.path_input).w_full()),

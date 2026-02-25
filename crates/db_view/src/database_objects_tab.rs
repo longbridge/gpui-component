@@ -905,7 +905,10 @@ impl DatabaseObjects {
 
                                     if !Self::allow_multi_event(&sample_event) {
                                         window.push_notification(
-                                            Notification::warning("该操作不支持批量执行"),
+                                            Notification::warning(
+                                                t!("DatabaseObjects.batch_not_supported")
+                                                    .to_string()
+                                            ),
                                             cx,
                                         );
                                         return;

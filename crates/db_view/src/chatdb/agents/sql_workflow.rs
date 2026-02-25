@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
+use rust_i18n::t;
 
 use one_core::agent::types::{Agent, AgentContext, AgentDescriptor, AgentEvent, AgentResult};
 use one_core::llm::{ChatRequest, Message, Role};
@@ -88,7 +89,7 @@ impl SqlWorkflowAgent {
         } else {
             // Need to discover tables
             let _ = tx
-                .send(AgentEvent::Progress("获取表列表...".to_string()))
+                .send(AgentEvent::Progress(t!("SqlWorkflow.fetch_tables").to_string()))
                 .await;
 
             if ctx.cancel_token.is_cancelled() {
@@ -99,21 +100,25 @@ impl SqlWorkflowAgent {
             let tables = db_meta
                 .list_tables()
                 .await
-                .map_err(|e| format!("获取表列表失败: {}", e))?;
+                .map_err(|e| t!("SqlWorkflow.fetch_tables_failed", error = e).to_string())?;
 
             let table_count = tables.len();
             let warning = if table_count > TABLE_COUNT_THRESHOLD {
-                Some(format!(
-                    "表数量 ({}) 超过阈值 ({})，AI 输出结果可能不准确，建议使用 @表名 功能指定目标表",
-                    table_count, TABLE_COUNT_THRESHOLD
-                ))
+                Some(
+                    t!(
+                        "SqlWorkflow.table_count_warning",
+                        count = table_count,
+                        threshold = TABLE_COUNT_THRESHOLD
+                    )
+                    .to_string()
+                )
             } else {
                 None
             };
 
             // AI selects relevant tables
             let _ = tx
-                .send(AgentEvent::Progress("AI 选择相关表...".to_string()))
+                .send(AgentEvent::Progress(t!("SqlWorkflow.ai_select_tables").to_string()))
                 .await;
 
             let selected = self
@@ -121,7 +126,7 @@ impl SqlWorkflowAgent {
                 .await?;
 
             if selected.is_empty() {
-                return Err("AI 未能选择任何相关表".to_string());
+                return Err(t!("SqlWorkflow.no_tables_selected").to_string());
             }
 
             info!(tables = ?selected, "AI selected tables");
@@ -139,23 +144,33 @@ impl SqlWorkflowAgent {
             }
 
             let _ = tx
-                .send(AgentEvent::Progress(format!(
-                    "获取表结构 ({}/{})...",
-                    i + 1,
-                    total
-                )))
+                .send(AgentEvent::Progress(
+                    t!(
+                        "SqlWorkflow.fetch_table_schema",
+                        current = i + 1,
+                        total = total
+                    )
+                    .to_string()
+                ))
                 .await;
 
             match db_meta.fetch_table_metadata(table_name).await {
                 Ok(meta) => table_metas.push(meta),
                 Err(e) => {
-                    warn!("获取表 {} 元数据失败: {}", table_name, e);
+                    warn!(
+                        "{}",
+                        t!(
+                            "SqlWorkflow.fetch_table_metadata_failed",
+                            table = table_name,
+                            error = e
+                        )
+                    );
                 }
             }
         }
 
         if table_metas.is_empty() {
-            return Err("未能获取任何表的元数据".to_string());
+            return Err(t!("SqlWorkflow.no_table_metadata").to_string());
         }
 
         // Step 4: Build QueryContext
@@ -192,7 +207,7 @@ impl SqlWorkflowAgent {
             .manager()
             .get_provider(&ctx.provider_config)
             .await
-            .map_err(|e| format!("获取 AI 提供者失败: {}", e))?;
+            .map_err(|e| t!("SqlWorkflow.get_ai_provider_failed", error = e).to_string())?;
 
         let request = ChatRequest {
             model: ctx.provider_config.model.clone(),
@@ -205,10 +220,10 @@ impl SqlWorkflowAgent {
 
         let response = tokio::select! {
             _ = ctx.cancel_token.cancelled() => {
-                return Err("操作已取消".to_string());
+                return Err(t!("SqlWorkflow.operation_cancelled").to_string());
             }
             result = provider.chat(&request) => {
-                result.map_err(|e| format!("AI 选表调用失败: {}", e))?
+                result.map_err(|e| t!("SqlWorkflow.ai_select_failed", error = e).to_string())?
             }
         };
 
@@ -251,12 +266,12 @@ impl SqlWorkflowAgent {
             .manager()
             .get_provider(&ctx.provider_config)
             .await
-            .map_err(|e| format!("获取 AI 提供者失败: {}", e))?;
+            .map_err(|e| t!("SqlWorkflow.get_ai_provider_failed", error = e).to_string())?;
 
         let mut stream = provider
             .chat_stream(&request)
             .await
-            .map_err(|e| format!("启动流式生成失败: {}", e))?;
+            .map_err(|e| t!("SqlWorkflow.start_stream_failed", error = e).to_string())?;
 
         let mut full_content = workflow_summary.to_string();
         let mut pending_delta = String::new();
@@ -305,7 +320,7 @@ impl SqlWorkflowAgent {
                             }
                         }
                         Some(Err(e)) => {
-                            return Err(format!("流式生成错误: {}", e));
+                            return Err(t!("SqlWorkflow.stream_error", error = e).to_string());
                         }
                         None => {
                             if !pending_delta.is_empty() {

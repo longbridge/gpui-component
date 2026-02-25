@@ -15,6 +15,7 @@ use gpui_component::{
     select::{Select, SelectEvent, SelectItem, SelectState},
     v_flex,
 };
+use rust_i18n::t;
 
 use crate::DatabaseFormEvent;
 
@@ -57,7 +58,7 @@ impl SelectItem for CollationSelectItem {
 
     fn title(&self) -> gpui::SharedString {
         if self.info.is_default {
-            format!("{} (default)", self.info.name).into()
+            format!("{} ({})", self.info.name, t!("Common.default")).into()
         } else {
             self.info.name.clone().into()
         }
@@ -83,7 +84,10 @@ impl MySqlDatabaseForm {
         let focus_handle = cx.focus_handle();
         let plugin = MySqlPlugin::new();
 
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("输入数据库名称"));
+        let name_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Database.enter_database_name").to_string())
+        });
 
         let charset_items: Vec<CharsetSelectItem> = plugin
             .get_charsets()
@@ -244,7 +248,7 @@ impl Render for MySqlDatabaseForm {
                 .label_width(px(100.))
                 .child(
                     field()
-                        .label("数据库名称")
+                        .label(t!("Database.database_name").to_string())
                         .required(true)
                         .items_center()
                         .label_justify_end()
@@ -256,14 +260,14 @@ impl Render for MySqlDatabaseForm {
                 )
                 .child(
                     field()
-                        .label("字符集")
+                        .label(t!("Database.charset").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.charset_select).w_full()),
                 )
                 .child(
                     field()
-                        .label("排序规则")
+                        .label(t!("Database.collation").to_string())
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.collation_select).w_full()),
