@@ -615,8 +615,10 @@ impl TextElement {
             );
 
             empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
-        } else {
+        } else if state.mode.is_code_editor() {
             LINE_NUMBER_RIGHT_MARGIN
+        } else {
+            px(0.)
         };
 
         if state.mode.is_folding() {
