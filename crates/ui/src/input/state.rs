@@ -503,6 +503,17 @@ impl InputState {
         self
     }
 
+    /// Set enable/disable code folding, only for [`InputMode::CodeEditor`] mode.
+    ///
+    /// Default: true
+    pub fn folding(mut self, folding: bool) -> Self {
+        debug_assert!(self.mode.is_code_editor());
+        if let InputMode::CodeEditor { folding: f, .. } = &mut self.mode {
+            *f = folding;
+        }
+        self
+    }
+
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
     pub fn line_number(mut self, line_number: bool) -> Self {
         debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
@@ -1995,7 +2006,7 @@ impl InputState {
     /// Update fold candidates from tree-sitter syntax tree (full extraction).
     /// Used only on initial load or language changes.
     fn update_fold_candidates(&mut self) {
-        if !self.mode.is_code_editor() {
+        if !self.mode.is_folding() {
             return;
         }
 
@@ -2018,12 +2029,8 @@ impl InputState {
 
     /// Incrementally update fold candidates after a text edit.
     /// Only traverses the edited region of the syntax tree instead of the full tree.
-    fn update_fold_candidates_incremental(
-        &mut self,
-        edit_range: &Range<usize>,
-        new_text: &str,
-    ) {
-        if !self.mode.is_code_editor() {
+    fn update_fold_candidates_incremental(&mut self, edit_range: &Range<usize>, new_text: &str) {
+        if !self.mode.is_folding() {
             return;
         }
 

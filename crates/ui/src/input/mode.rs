@@ -33,6 +33,7 @@ pub(crate) enum InputMode {
         line_number: bool,
         language: SharedString,
         indent_guides: bool,
+        folding: bool,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         diagnostics: DiagnosticSet,
     },
@@ -65,6 +66,7 @@ impl InputMode {
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
             indent_guides: true,
+            folding: true,
             diagnostics: DiagnosticSet::new(&Rope::new()),
         }
     }
@@ -95,6 +97,11 @@ impl InputMode {
     #[inline]
     pub(super) fn is_code_editor(&self) -> bool {
         matches!(self, InputMode::CodeEditor { .. })
+    }
+
+    #[inline]
+    pub(crate) fn is_folding(&self) -> bool {
+        matches!(self, InputMode::CodeEditor { folding: true, .. })
     }
 
     #[inline]
@@ -294,6 +301,7 @@ mod tests {
             multi_line: false,
             line_number: true,
             indent_guides: true,
+            folding: true,
             rows: 0,
             tab: Default::default(),
             language: "rust".into(),

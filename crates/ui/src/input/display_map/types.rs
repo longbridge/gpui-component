@@ -1,8 +1,8 @@
-/// Core coordinate types for the display mapping system.
-///
-/// - Buffer coordinates (logical lines and columns in the actual text)
-/// - Wrap coordinates (soft-wrapped visual rows)
-/// - Display coordinates (final visible rows after folding)
+//! Core coordinate types for the display mapping system.
+//!
+//! - Buffer coordinates (logical lines and columns in the actual text)
+//! - Wrap coordinates (soft-wrapped visual rows)
+//! - Display coordinates (final visible rows after folding)
 
 /// Position in the buffer (logical text).
 ///

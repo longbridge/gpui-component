@@ -614,7 +614,7 @@ impl TextElement {
             );
 
             let mut width = empty_line_number.width + px(6.);
-            if state.mode.is_code_editor() {
+            if state.mode.is_folding() {
                 width += FOLD_ICON_WIDTH;
             } else {
                 width += LINE_NUMBER_RIGHT_MARGIN;
@@ -805,7 +805,7 @@ impl TextElement {
 
         let fold_infos: Vec<FoldInfo> = {
             let state = self.state.read(cx);
-            if !state.mode.is_code_editor() {
+            if !state.mode.is_folding() {
                 return icon_layout;
             }
 
