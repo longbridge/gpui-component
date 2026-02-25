@@ -2113,6 +2113,9 @@ impl EntityInputHandler for InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
+        // Adjust folds before updating wrap map: remove overlapping folds and shift others
+        self.display_map
+            .adjust_folds_for_edit(&old_text, &range, new_text);
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode
@@ -2169,6 +2172,9 @@ impl EntityInputHandler for InputState {
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
+        // Adjust folds before updating wrap map: remove overlapping folds and shift others
+        self.display_map
+            .adjust_folds_for_edit(&old_text, &range, new_text);
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
         self.mode

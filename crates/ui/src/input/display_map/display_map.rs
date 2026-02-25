@@ -14,6 +14,7 @@ use super::folding::FoldRange;
 use super::text_wrapper::{LineItem, TextWrapper};
 use super::types::{BufferPos, DisplayPos};
 use super::wrap_map::WrapMap;
+use crate::input::rope_ext::RopeExt as _;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
@@ -166,6 +167,31 @@ impl DisplayMap {
     }
 
     // ==================== Text and Layout Updates ====================
+
+    /// Adjust folds for a text edit before updating the wrap map.
+    ///
+    /// Must be called with the OLD text (before replacement) and the edit range/new_text
+    /// so we can compute which old lines were affected.
+    pub fn adjust_folds_for_edit(
+        &mut self,
+        old_text: &Rope,
+        range: &Range<usize>,
+        new_text: &str,
+    ) {
+        if self.fold_map.folded_ranges().is_empty() {
+            return;
+        }
+
+        let edit_start_line = old_text.offset_to_point(range.start).row;
+        let edit_end_line = old_text.offset_to_point(range.end.min(old_text.len())).row;
+
+        let old_lines_in_range = edit_end_line - edit_start_line;
+        let new_lines_in_range = new_text.chars().filter(|c| *c == '\n').count();
+        let line_delta = new_lines_in_range as isize - old_lines_in_range as isize;
+
+        self.fold_map
+            .adjust_folds_for_edit(edit_start_line, edit_end_line, line_delta);
+    }
 
     /// Update text (incremental or full)
     pub fn on_text_changed(

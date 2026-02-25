@@ -162,6 +162,38 @@ impl FoldMap {
         self.folded.clear();
     }
 
+    /// Adjust folds after a text edit.
+    ///
+    /// - Folds overlapping the edited line range are removed
+    /// - Folds after the edit are shifted by line_delta
+    pub fn adjust_folds_for_edit(
+        &mut self,
+        edit_start_line: usize,
+        edit_end_line: usize,
+        line_delta: isize,
+    ) {
+        if self.folded.is_empty() {
+            return;
+        }
+
+        // Remove folds that overlap with the edited range
+        self.folded.retain(|fold| {
+            !(fold.start_line <= edit_end_line && fold.end_line >= edit_start_line)
+        });
+
+        // Shift folds after the edit
+        if line_delta != 0 {
+            for fold in &mut self.folded {
+                if fold.start_line > edit_end_line {
+                    fold.start_line = (fold.start_line as isize + line_delta).max(0) as usize;
+                    fold.end_line = (fold.end_line as isize + line_delta).max(0) as usize;
+                }
+            }
+        }
+
+        self.needs_rebuild = true;
+    }
+
     /// Rebuild the fold mapping after wrap_map or fold state changes
     ///
     /// This is the core algorithm that projects wrap rows to display rows.
