@@ -1,6 +1,7 @@
 //! SQL 代码块结果状态 - 复用 SQLResultTabContainer 并保存执行信息
 
 use gpui::{App, Entity};
+use rust_i18n::t;
 
 use crate::sql_result_tab::SqlResultTabContainer;
 
@@ -78,9 +79,16 @@ impl SqlBlockResultState {
         }
 
         if error_count > 0 {
-            Some(format!("{} 成功, {} 失败", success_count, error_count))
+            Some(
+                t!(
+                    "ChatSqlBlock.summary_success_error",
+                    success = success_count,
+                    error = error_count
+                )
+                .to_string(),
+            )
         } else {
-            Some(format!("{} 行结果", total_rows))
+            Some(t!("ChatSqlBlock.summary_rows", rows = total_rows).to_string())
         }
     }
 

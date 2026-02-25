@@ -10,6 +10,7 @@ tokio = { workspace = true, features = ["fs", "net"] }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+rust-i18n = { workspace = true }
 # SSH and SFTP
 russh.workspace = true
 russh-sftp.workspace = true

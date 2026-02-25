@@ -9,6 +9,7 @@ tokio = { workspace = true, features = ["fs", "io-util", "net"] }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+rust-i18n = { workspace = true }
 russh = { workspace = true }
 russh-sftp = { workspace = true }
 russh-keys = { workspace = true }

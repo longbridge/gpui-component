@@ -1,3 +1,5 @@
+rust_i18n::i18n!("locales", fallback = "en");
+
 mod russh_impl;
 
 use anyhow::Result;

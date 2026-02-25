@@ -425,9 +425,10 @@ impl TableDesigner {
     pub fn has_unsaved_changes(&self, cx: &App) -> bool {
         let sql = self.sql_preview_input.read(cx).text().to_string();
         let trimmed = sql.trim();
+        let no_changes_localized = t!("SqlEditor.no_changes").to_string();
         !trimmed.is_empty()
             && !trimmed.starts_with("-- No changes")
-            && !trimmed.starts_with("-- 没有")
+            && !trimmed.starts_with(no_changes_localized.as_str())
     }
 
     pub fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -479,7 +480,11 @@ impl TableDesigner {
                 }
             };
 
-            if sql.trim().is_empty() || sql.starts_with("-- No changes") {
+            let no_changes_localized = t!("SqlEditor.no_changes").to_string();
+            if sql.trim().is_empty()
+                || sql.starts_with("-- No changes")
+                || sql.starts_with(no_changes_localized.as_str())
+            {
                 let _ = cx.update(|cx: &mut App| {
                     if let Some(window_id) = cx.active_window() {
                         let _ = cx.update_window(window_id, |_, _window, cx| {
@@ -784,7 +789,11 @@ impl TableDesigner {
                 }
             };
 
-            if sql.trim().is_empty() || sql.starts_with("-- No changes") {
+            let no_changes_localized = t!("SqlEditor.no_changes").to_string();
+            if sql.trim().is_empty()
+                || sql.starts_with("-- No changes")
+                || sql.starts_with(no_changes_localized.as_str())
+            {
                 let _ = cx.update(|cx: &mut App| {
                     if let Some(window_id) = cx.active_window() {
                         let _ = cx.update_window(window_id, |_, window, cx| {

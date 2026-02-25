@@ -2164,6 +2164,14 @@ ChatSqlResult:
     en: "{rows} rows"
     zh-CN: "{rows} 行"
     zh-HK: "{rows} 行"
+  success_count:
+    en: "{count} success"
+    zh-CN: "{count} 成功"
+    zh-HK: "{count} 成功"
+  error_count:
+    en: "{count} error"
+    zh-CN: "{count} 错误"
+    zh-HK: "{count} 錯誤"
   exec_success_rows:
     en: "Execution succeeded, affected {rows} rows"
     zh-CN: "执行成功，影响 {rows} 行"
@@ -2206,6 +2214,14 @@ ChatSqlBlock:
     en: Run
     zh-CN: 运行
     zh-HK: 執行
+  summary_success_error:
+    en: "{success} success, {error} failed"
+    zh-CN: "{success} 成功, {error} 失败"
+    zh-HK: "{success} 成功, {error} 失敗"
+  summary_rows:
+    en: "{rows} rows"
+    zh-CN: "{rows} 行结果"
+    zh-HK: "{rows} 行結果"
 ChatSession:
   history_title:
     en: Session History

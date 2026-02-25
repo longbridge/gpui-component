@@ -5,6 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use russh::keys::*;
 use russh::*;
+use rust_i18n::t;
 use tokio::net::TcpStream;
 
 #[derive(Clone)]
@@ -150,7 +151,7 @@ async fn authenticate(
         SshAuth::Password(password) => {
             let auth_result = session.authenticate_password(username, password).await?;
             if !auth_result.success() {
-                anyhow::bail!("密码认证失败");
+                anyhow::bail!(t!("Ssh.auth_password_failed"));
             }
         }
         SshAuth::PrivateKey {
@@ -166,7 +167,7 @@ async fn authenticate(
                     .authenticate_openssh_cert(username, Arc::new(key_pair), cert)
                     .await?;
                 if !auth_result.success() {
-                    anyhow::bail!("证书认证失败");
+                    anyhow::bail!(t!("Ssh.auth_certificate_failed"));
                 }
             } else {
                 let auth_result = session
@@ -179,7 +180,7 @@ async fn authenticate(
                     )
                     .await?;
                 if !auth_result.success() {
-                    anyhow::bail!("公钥认证失败");
+                    anyhow::bail!(t!("Ssh.auth_public_key_failed"));
                 }
             }
         }
@@ -209,11 +210,17 @@ async fn connect_via_proxy(
                     password,
                 )
                 .await
-                .map_err(|e| anyhow::anyhow!("SOCKS5代理连接失败: {}", e))?
+                .map_err(|e| {
+                    anyhow::anyhow!(t!("Ssh.socks5_proxy_connect_failed", error = e).to_string())
+                })?
             } else {
                 Socks5Stream::connect(proxy_addr.as_str(), (target_host, target_port))
                     .await
-                    .map_err(|e| anyhow::anyhow!("SOCKS5代理连接失败: {}", e))?
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            t!("Ssh.socks5_proxy_connect_failed", error = e).to_string()
+                        )
+                    })?
             };
 
             Ok(stream.into_inner())
@@ -222,7 +229,9 @@ async fn connect_via_proxy(
             // HTTP CONNECT代理实现
             let stream = TcpStream::connect(&proxy_addr)
                 .await
-                .map_err(|e| anyhow::anyhow!("连接HTTP代理失败: {}", e))?;
+                .map_err(|e| {
+                    anyhow::anyhow!(t!("Ssh.http_proxy_connect_failed", error = e).to_string())
+                })?;
 
             // 发送CONNECT请求
             let connect_request = if let (Some(username), Some(password)) =
@@ -251,7 +260,12 @@ async fn connect_via_proxy(
             reader.read_line(&mut response_line).await?;
 
             if !response_line.contains("200") {
-                anyhow::bail!("HTTP代理连接失败: {}", response_line.trim());
+                anyhow::bail!(
+                    t!(
+                        "Ssh.http_proxy_connection_failed",
+                        response = response_line.trim()
+                    )
+                );
             }
 
             // 读取剩余的响应头

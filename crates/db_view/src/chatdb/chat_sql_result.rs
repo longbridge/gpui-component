@@ -237,11 +237,17 @@ impl ChatSqlResultView {
                             .items_center()
                             .gap_1()
                             .child(Icon::new(IconName::Check).with_size(Size::Small).text_color(cx.theme().success))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(cx.theme().success)
-                                    .child(format!("{} 成功", self.success_count))
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().success)
+                                            .child(
+                                                t!(
+                                                    "ChatSqlResult.success_count",
+                                                    count = self.success_count
+                                                )
+                                                .to_string()
+                                            )
                             )
                     )
                     .when(self.error_count > 0, |this| {
@@ -254,7 +260,13 @@ impl ChatSqlResultView {
                                     div()
                                         .text_sm()
                                         .text_color(cx.theme().danger)
-                                        .child(format!("{} 错误", self.error_count))
+                                        .child(
+                                            t!(
+                                                "ChatSqlResult.error_count",
+                                                count = self.error_count
+                                            )
+                                            .to_string()
+                                        )
                                 )
                         )
                     })

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use gpui_component::table::Column;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
+use rust_i18n::t;
 
 use crate::connection::{DbConnection, DbError};
 use crate::executor::SqlResult;
@@ -141,7 +142,7 @@ impl DatabasePlugin for OraclePlugin {
 
         let query_result = match sql_result {
             SqlResult::Query(query_result) => Ok::<QueryResult, anyhow::Error>(query_result),
-            SqlResult::Exec(_) => anyhow::bail!("查询类型异常"),
+            SqlResult::Exec(_) => anyhow::bail!(t!("Error.query_type_error")),
             SqlResult::Error(sql_error_info) => anyhow::bail!(sql_error_info.message),
         }?;
 
