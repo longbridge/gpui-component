@@ -57,17 +57,28 @@ impl ParsedDocument {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        let options = NodeRenderOptions {
-            is_last: true,
-            ..Default::default()
-        };
-
         let Some(list_state) = list_state else {
+            let blocks_len = self.blocks.len();
             return div()
                 .id("document")
                 .children(self.blocks.iter().enumerate().map(move |(ix, node)| {
-                    node.render_block(NodeRenderOptions { ix, ..options }, node_cx, window, cx)
+                    let is_last = ix + 1 == blocks_len;
+                    node.render_block(
+                        NodeRenderOptions {
+                            ix,
+                            is_last,
+                            ..Default::default()
+                        },
+                        node_cx,
+                        window,
+                        cx,
+                    )
                 }));
+        };
+
+        let options = NodeRenderOptions {
+            is_last: true,
+            ..Default::default()
         };
 
         let blocks = &self.blocks;
