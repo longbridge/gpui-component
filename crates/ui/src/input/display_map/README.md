@@ -1,92 +1,92 @@
 # Display Mapping System
 
-显示映射系统为 Editor/Input 提供统一的坐标转换和代码折叠功能。
+The display mapping system provides unified coordinate conversion and code folding for Editor/Input.
 
-## 架构设计
+## Architecture
 
-基于分层投影模式：
+Based on a layered projection model:
 
 ```
-Buffer (Rope)              逻辑文本
+Buffer (Rope)              Logical text
     ↓
-WrapMap                    软换行层
+WrapMap                    Soft-wrapping layer
     ↓ (wrap_row)
-FoldMap                    折叠投影层
+FoldMap                    Fold projection layer
     ↓ (display_row)
-DisplayMap (Facade)        统一的公共 API
+DisplayMap (Facade)        Unified public API
 ```
 
-### 坐标系统
+### Coordinate Systems
 
-1. **BufferPos** `{ line, col }` - 缓冲区逻辑坐标
-   - line: 逻辑行号 (按 \n 分割)
-   - col: 列号（字节偏移）
+1. **BufferPos** `{ line, col }` - Buffer logical coordinates
+   - line: Logical line number (split by `\n`)
+   - col: Column (byte offset)
 
-2. **WrapPos** `{ row, col }` - 软换行后的坐标（内部使用）
-   - row: wrap_row（软换行后的视觉行）
-   - col: 视觉列
+2. **WrapPos** `{ row, col }` - Post-soft-wrap coordinates (internal)
+   - row: wrap_row (visual row after soft-wrapping)
+   - col: Visual column
 
-3. **DisplayPos** `{ row, col }` - 最终显示坐标（对外 API）
-   - row: display_row（折叠后的可见行）
-   - col: 显示列
+3. **DisplayPos** `{ row, col }` - Final display coordinates (public API)
+   - row: display_row (visible row after folding)
+   - col: Display column
 
-## 模块职责
+## Module Responsibilities
 
 ### DisplayMap (`display_map.rs`)
 
-**对外统一接口（Facade）**
+**Unified public interface (Facade)**
 
-主要功能：
-- BufferPos ↔ DisplayPos 转换
-- 折叠控制 (set_folded, toggle_fold, clear_folds)
-- 行数查询 (display_row_count, buffer_line_count)
-- 文本更新 (on_text_changed, on_layout_changed)
+Main features:
+- BufferPos ↔ DisplayPos conversion
+- Fold control (set_folded, toggle_fold, clear_folds)
+- Row count queries (display_row_count, buffer_line_count)
+- Text updates (on_text_changed, on_layout_changed)
 
-临时提供（用于渐进迁移）：
-- `wrap_map()` - 访问 WrapMap 层
-- `fold_map()` - 访问 FoldMap 层
+Temporary accessors (for gradual migration):
+- `wrap_map()` - Access the WrapMap layer
+- `fold_map()` - Access the FoldMap layer
 
 ### WrapMap (`wrap_map.rs`)
 
-**软换行映射层**
+**Soft-wrapping mapping layer**
 
-基于 TextWrapper 实现，提供：
-- Buffer ↔ Wrap 坐标转换
-- wrap_row ↔ buffer_line 查询
-- 前缀和缓存优化查询性能
+Built on TextWrapper, provides:
+- Buffer ↔ Wrap coordinate conversion
+- wrap_row ↔ buffer_line queries
+- Prefix sum cache for O(1) lookups
 
-核心方法：
+Core methods:
 - `buffer_pos_to_wrap_pos(pos)` - Buffer → Wrap
 - `wrap_pos_to_buffer_pos(pos)` - Wrap → Buffer
-- `buffer_line_to_first_wrap_row(line)` - 行号 → 首个 wrap_row
-- `wrap_row_to_buffer_line(row)` - wrap_row → 行号
+- `buffer_line_to_first_wrap_row(line)` - Line number → first wrap_row
+- `wrap_row_to_buffer_line(row)` - wrap_row → line number
 
 ### FoldMap (`fold_map.rs`)
 
-**折叠投影层**
+**Fold projection layer**
 
-通过过滤 wrap_row 实现折叠：
-- 维护可见 wrap_row 列表
-- Wrap ↔ Display 双向映射
-- 处理折叠状态变化
+Implements folding by filtering wrap rows:
+- Maintains a list of visible wrap rows
+- Bidirectional Wrap ↔ Display mapping
+- Handles fold state changes
 
-数据结构：
+Data structures:
 - `visible_wrap_rows: Vec<usize>` - display_row → wrap_row
 - `wrap_row_to_display_row: Vec<Option<usize>>` - wrap_row → display_row
-- `candidates: Vec<FoldRange>` - 折叠候选
-- `folded: Vec<FoldRange>` - 已折叠范围
+- `candidates: Vec<FoldRange>` - Fold candidates
+- `folded: Vec<FoldRange>` - Currently folded ranges
 
 ### Types (`types.rs`)
 
-定义核心坐标类型：
-- `BufferPos` - 缓冲区位置（公开）
-- `WrapPos` - 软换行位置（内部）
-- `DisplayPos` - 显示位置（公开）
-- `FoldRange` - 折叠范围（公开）
+Core coordinate types:
+- `BufferPos` - Buffer position (public)
+- `WrapPos` - Soft-wrap position (internal)
+- `DisplayPos` - Display position (public)
+- `FoldRange` - Fold range (public)
 
-## 使用示例
+## Usage Examples
 
-### 基本坐标转换
+### Basic Coordinate Conversion
 
 ```rust
 use crate::input::{DisplayMap, BufferPos, DisplayPos};
@@ -102,105 +102,100 @@ let display_pos = display_map.buffer_pos_to_display_pos(buffer_pos);
 let buffer_pos = display_map.display_pos_to_buffer_pos(display_pos);
 ```
 
-### 代码折叠
+### Code Folding
 
 ```rust
 use crate::input::FoldRange;
 
-// 设置折叠候选（来自 tree-sitter/LSP）
+// Set fold candidates (from tree-sitter/LSP)
 let candidates = vec![
-    FoldRange::new(10, 15),  // 折叠 10-15 行
-    FoldRange::new(20, 25),  // 折叠 20-25 行
+    FoldRange::new(10, 15),  // Fold lines 10-15
+    FoldRange::new(20, 25),  // Fold lines 20-25
 ];
 display_map.set_fold_candidates(candidates);
 
-// 切换折叠状态
-display_map.toggle_fold(10);  // 折叠/展开第 10 行
+// Toggle fold state
+display_map.toggle_fold(10);  // Fold/unfold line 10
 
-// 查询折叠状态
+// Query fold state
 if display_map.is_folded_at(10) {
-    println!("第 10 行已折叠");
+    println!("Line 10 is folded");
 }
 
-// 清除所有折叠
+// Clear all folds
 display_map.clear_folds();
 ```
 
-### 文本更新
+### Text Updates
 
 ```rust
-// 文本变化
+// Text changed
 display_map.on_text_changed(&changed_text, &range, &new_text, cx);
 
-// 布局变化（wrap width 改变）
+// Layout changed (wrap width changed)
 display_map.on_layout_changed(Some(new_width), cx);
 
-// 字体变化
+// Font changed
 display_map.set_font(font, font_size, cx);
 ```
 
-### 访问底层（渐进迁移期间）
+### Accessing Underlying Layers (during gradual migration)
 
 ```rust
-// 访问 TextWrapper (用于现有渲染代码)
+// Access TextWrapper (for existing rendering code)
 let wrapper = display_map.wrap_map().wrapper();
 let lines = wrapper.lines;
 let longest_row = wrapper.longest_row;
 
-// 访问 WrapMap
+// Access WrapMap
 let wrap_count = display_map.wrap_map().wrap_row_count();
 
-// 访问 FoldMap
+// Access FoldMap
 let folded_ranges = display_map.fold_map().folded_ranges();
 ```
 
-## 性能特性
+## Performance Characteristics
 
-### O(1) 操作
-- `display_row_count()` - 预计算缓存
-- `buffer_line_to_first_wrap_row()` - 前缀和数组
-- `wrap_row_to_display_row()` - 直接数组查询
+### O(1) Operations
+- `display_row_count()` - Precomputed cache
+- `buffer_line_to_first_wrap_row()` - Prefix sum array
+- `wrap_row_to_display_row()` - Direct array lookup
 
-### O(log n) 操作
-- `wrap_row_to_buffer_line()` - 二分搜索
+### O(log n) Operations
+- `wrap_row_to_buffer_line()` - Binary search
 
-### 增量更新
-- 文本变化：只重算受影响的行（由 TextWrapper 提供）
-- 折叠变化：重建 FoldMap 映射（通常很快）
+### Incremental Updates
+- Text changes: Only recomputes affected lines (provided by TextWrapper)
+- Fold changes: Rebuilds FoldMap mapping (typically fast)
 
-## 设计原则
+## Design Principles
 
-1. **分离关注点**
-   - WrapMap：只关心软换行
-   - FoldMap：只关心折叠
-   - DisplayMap：统一对外接口
+1. **Separation of Concerns**
+   - WrapMap: Only handles soft-wrapping
+   - FoldMap: Only handles folding
+   - DisplayMap: Unified public interface
 
-2. **单向依赖**
+2. **Unidirectional Dependencies**
    ```
    FoldMap → WrapMap → TextWrapper
-   (上层依赖下层，下层不知道上层)
+   (Upper layers depend on lower layers; lower layers are unaware of upper layers)
    ```
 
-3. **内部细节隐藏**
-   - WrapPos 不对外暴露
-   - 外部只需要知道 BufferPos 和 DisplayPos
+3. **Internal Detail Hiding**
+   - WrapPos is not exposed publicly
+   - External code only needs BufferPos and DisplayPos
 
-4. **渐进迁移支持**
-   - 提供 wrap_map()/fold_map() 访问器
-   - 允许现有代码平滑过渡
+4. **Gradual Migration Support**
+   - Provides wrap_map()/fold_map() accessors
+   - Allows existing code to transition smoothly
 
-## 未来扩展
+## Future Extensions
 
-本架构预留了扩展空间：
+The architecture is designed for extensibility:
 
-- **Inlay Hints** - 可作为新的映射层
-- **Block Decorations** - 插入虚拟行
-- **Tab Expansion** - 制表符展开
-- **Diff Mapping** - diff 视图的行映射
+- **Inlay Hints** - Can be added as a new mapping layer
+- **Block Decorations** - Insert virtual rows
+- **Tab Expansion** - Tab character expansion
+- **Diff Mapping** - Line mapping for diff views
 
-扩展方式：在 WrapMap 和 FoldMap 之间插入新层，DisplayMap 保持不变。
-
-## 参考文档
-
-- [设计文档](../../../../editor-fold-plan.md) - 完整的架构设计
-- [迁移指南](./MIGRATION.md) - 从 TextWrapper 迁移到 DisplayMap
+Extension approach: Insert new layers between WrapMap and FoldMap; DisplayMap remains unchanged.

@@ -1735,6 +1735,18 @@ impl InputState {
             }
         }
 
+        // Skip over folded (hidden) lines: jump to end of the fold header line
+        let line = self.text.offset_to_point(offset).row;
+        if self.display_map.is_buffer_line_hidden(line) {
+            for fold in self.display_map.folded_ranges() {
+                if line > fold.start_line && line <= fold.end_line {
+                    // Jump to the end of start_line (the last visible line before the fold)
+                    offset = self.text.line_end_offset(fold.start_line);
+                    break;
+                }
+            }
+        }
+
         offset
     }
 
@@ -1743,6 +1755,18 @@ impl InputState {
         if let Some(ch) = self.text.char_at(offset) {
             if ch == '\r' {
                 offset += 1;
+            }
+        }
+
+        // Skip over folded (hidden) lines: jump to start of the fold end line
+        let line = self.text.offset_to_point(offset).row;
+        if self.display_map.is_buffer_line_hidden(line) {
+            for fold in self.display_map.folded_ranges() {
+                if line > fold.start_line && line <= fold.end_line {
+                    // Jump to the start of end_line (the first visible line after the fold)
+                    offset = self.text.line_start_offset(fold.end_line);
+                    break;
+                }
             }
         }
 
