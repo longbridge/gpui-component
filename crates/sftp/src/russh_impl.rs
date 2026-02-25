@@ -8,6 +8,7 @@ use russh_sftp::client::SftpSession;
 use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::rawsession::Limits;
 use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
+use rust_i18n::t;
 use ssh::{ProxyConnectConfig, ProxyType, SshConnectConfig};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -19,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
 
 const BUFFER_SIZE: usize = 256 * 1024; // 256 KB
-const PIPELINE_CHUNK_SIZE: u32 = 256 * 1024; // 每个请求 256 KB
+const PIPELINE_CHUNK_SIZE: u32 = 61440; // 60 KB per read request (within 65535 packet limit)
 const MAX_INFLIGHT_REQUESTS: usize = 64; // 最多 64 个并发请求
 const PIPELINE_THRESHOLD: u64 = 512 * 1024; // 超过 512 KB 的文件才走流水线
 
@@ -53,7 +54,7 @@ async fn sftp_authenticate(
         ssh::SshAuth::Password(password) => {
             let auth_result = session.authenticate_password(username, password).await?;
             if !auth_result.success() {
-                anyhow::bail!("密码认证失败");
+                anyhow::bail!(t!("Sftp.auth_password_failed"));
             }
         }
         ssh::SshAuth::PrivateKey {
@@ -69,7 +70,7 @@ async fn sftp_authenticate(
                     .authenticate_openssh_cert(username, Arc::new(key_pair), cert)
                     .await?;
                 if !auth_result.success() {
-                    anyhow::bail!("证书认证失败");
+                    anyhow::bail!(t!("Sftp.auth_certificate_failed"));
                 }
             } else {
                 let auth_result = session
@@ -82,7 +83,7 @@ async fn sftp_authenticate(
                     )
                     .await?;
                 if !auth_result.success() {
-                    anyhow::bail!("公钥认证失败");
+                    anyhow::bail!(t!("Sftp.auth_public_key_failed"));
                 }
             }
         }
@@ -112,11 +113,17 @@ async fn sftp_connect_via_proxy(
                     password,
                 )
                 .await
-                .map_err(|e| anyhow::anyhow!("SOCKS5代理连接失败: {}", e))?
+                .map_err(|e| {
+                    anyhow::anyhow!(t!("Sftp.socks5_proxy_connect_failed", error = e).to_string())
+                })?
             } else {
                 Socks5Stream::connect(proxy_addr.as_str(), (target_host, target_port))
                     .await
-                    .map_err(|e| anyhow::anyhow!("SOCKS5代理连接失败: {}", e))?
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            t!("Sftp.socks5_proxy_connect_failed", error = e).to_string()
+                        )
+                    })?
             };
 
             Ok(stream.into_inner())
@@ -124,7 +131,9 @@ async fn sftp_connect_via_proxy(
         ProxyType::Http => {
             let stream = TcpStream::connect(&proxy_addr)
                 .await
-                .map_err(|e| anyhow::anyhow!("连接HTTP代理失败: {}", e))?;
+                .map_err(|e| {
+                    anyhow::anyhow!(t!("Sftp.http_proxy_connect_failed", error = e).to_string())
+                })?;
 
             let connect_request = if let (Some(username), Some(password)) =
                 (&proxy.username, &proxy.password)
@@ -152,7 +161,12 @@ async fn sftp_connect_via_proxy(
             reader.read_line(&mut response_line).await?;
 
             if !response_line.contains("200") {
-                anyhow::bail!("HTTP代理连接失败: {}", response_line.trim());
+                anyhow::bail!(
+                    t!(
+                        "Sftp.http_proxy_connection_failed",
+                        response = response_line.trim()
+                    )
+                );
             }
 
             loop {
@@ -625,7 +639,7 @@ impl SftpClient for RusshSftpClient {
                 .or(Some(Duration::from_secs(60))),
             keepalive_max: ssh_config.keepalive_max.unwrap_or(3),
             window_size: 16 * 1024 * 1024,       // 16 MB
-            maximum_packet_size: 256 * 1024,      // 256 KB
+            maximum_packet_size: 0xFFFF,           // 65535, max allowed by russh
             nodelay: true,
             ..<_>::default()
         });
