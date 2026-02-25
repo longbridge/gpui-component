@@ -21,7 +21,8 @@ use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
-const FOLD_ICON_WIDTH: Pixels = px(16.);
+const FOLD_ICON_WIDTH: Pixels = px(14.);
+const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
 
 /// Layout information for fold icons.
 struct FoldIconLayout {
@@ -598,7 +599,7 @@ impl TextElement {
             _ => 8,
         };
 
-        let line_number_width = if state.mode.line_number() {
+        let mut line_number_width = if state.mode.line_number() {
             let empty_line_number = window.text_system().shape_line(
                 "+".repeat(line_number_len).into(),
                 font_size,
@@ -613,17 +614,14 @@ impl TextElement {
                 None,
             );
 
-            let mut width = empty_line_number.width + px(6.);
-            if state.mode.is_folding() {
-                width += FOLD_ICON_WIDTH;
-            } else {
-                width += LINE_NUMBER_RIGHT_MARGIN;
-            }
-
-            width
+            empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
         } else {
-            px(0.)
+            LINE_NUMBER_RIGHT_MARGIN
         };
+
+        if state.mode.is_folding() {
+            line_number_width += FOLD_ICON_HITBOX_WIDTH;
+        }
 
         (line_number_width, line_number_len)
     }
@@ -837,15 +835,20 @@ impl TextElement {
 
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
-        let line_number_width = last_layout.line_number_width - FOLD_ICON_WIDTH - px(4.);
+        let line_number_width = last_layout.line_number_width
+            - LINE_NUMBER_RIGHT_MARGIN.half()
+            - FOLD_ICON_HITBOX_WIDTH;
+        let icon_relative_pos = point(
+            (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
+            (line_height - FOLD_ICON_WIDTH).half(),
+        );
 
         for (ix, info) in fold_infos.iter().enumerate() {
             // Position fold icon to the right of line numbers
-            let p = point(
-                bounds.origin.x + line_number_width,
-                bounds.origin.y + info.offset_y + px(2.),
+            let fold_icon_bounds = Bounds::new(
+                bounds.origin + icon_relative_pos + point(line_number_width, info.offset_y),
+                size(FOLD_ICON_HITBOX_WIDTH, line_height),
             );
-            let fold_icon_bounds = Bounds::new(p, size(FOLD_ICON_WIDTH, line_height));
 
             // Create and prepaint icon
             let mut icon = Button::new(("fold", ix))
