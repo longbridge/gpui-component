@@ -438,7 +438,7 @@ impl DbTreeView {
         if connections.is_empty() {
             let node = DbNode::new(
                 "root",
-                "No Database Connected",
+                t!("Connection.no_database_connected").to_string(),
                 DbNodeType::Connection,
                 "".to_string(),
                 DatabaseType::MySQL,
@@ -480,7 +480,7 @@ impl DbTreeView {
 
         let search_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("搜索...")
+                .placeholder(t!("Common.search").to_string())
                 .clean_on_escape()
         });
         let search_debouncer = Arc::new(Debouncer::new(Duration::from_millis(250)));
@@ -1434,7 +1434,7 @@ impl DbTreeView {
                                         });
                                     })
                             })
-                            .child(div().text_sm().child("全选")),
+                            .child(div().text_sm().child(t!("Common.select_all"))),
                     )
                     .child({
                         let view_clear = view_clone.clone();
@@ -1442,7 +1442,7 @@ impl DbTreeView {
                         Button::new("clear-filter")
                             .ghost()
                             .small()
-                            .label("清除筛选")
+                            .label(t!("Common.clear_filter"))
                             .on_click(move |_, _, cx| {
                                 view_clear.update(cx, |this, cx| {
                                     this.deselect_all_databases(&conn_clear, cx);
@@ -1927,7 +1927,7 @@ impl Render for DbTreeView {
                             .icon(IconName::ChevronsUpDown)
                             .ghost()
                             .small()
-                            .tooltip("折叠所有")
+                            .tooltip(t!("Common.collapse_all"))
                             .on_click(move |_, _, cx| {
                                 view_for_collapse.update(cx, |this, cx| {
                                     this.collapse_all(cx);
@@ -1960,7 +1960,7 @@ impl Render for DbTreeView {
                                         .child(
                                             div()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("未找到匹配项"),
+                                                .child(t!("Common.not_found")),
                                         ),
                                 )
                             } else {
@@ -2272,7 +2272,14 @@ impl DbTreeView {
                                         )))
                                         .ghost()
                                         .small()
-                                        .label(format!("{} of {}", selected, total)),
+                                        .label(
+                                            t!(
+                                                "Common.count_of",
+                                                selected = selected,
+                                                total = total
+                                            )
+                                            .to_string(),
+                                        ),
                                     )
                                     .when_some(db_filter_list, |popover, list| {
                                         let view_content = view_for_filter.clone();
@@ -2326,7 +2333,7 @@ impl DbTreeView {
                                                                 .with_size(ComponentSize::Small)
                                                                 .text_color(cx.theme().warning),
                                                         )
-                                                        .child("错误信息"),
+                                                        .child(t!("Common.error_info")),
                                                 )
                                                 .child(
                                                     Clipboard::new(SharedString::from(format!(
@@ -2394,7 +2401,7 @@ impl DbTreeView {
         // 添加通用的刷新菜单项
         let view_ref = view.clone();
         let node_id_for_refresh = node_id.to_string();
-        menu.item(PopupMenuItem::new("刷新").on_click(window.listener_for(
+        menu.item(PopupMenuItem::new(t!("Common.refresh")).on_click(window.listener_for(
             &view_ref,
             move |this, _, _, cx| {
                 this.refresh_tree(node_id_for_refresh.clone(), cx);

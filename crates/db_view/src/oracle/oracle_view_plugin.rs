@@ -10,6 +10,7 @@ use db::DbNodeType;
 use gpui::{App, AppContext, Entity, Window};
 use gpui_component::IconName;
 use one_core::storage::DatabaseType;
+use rust_i18n::t;
 
 pub struct OracleDatabaseViewPlugin;
 
@@ -76,21 +77,21 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::Connection => {
                 vec![
                     ContextMenuItem::item(
-                        "运行SQL文件",
+                        t!("ImportExport.run_sql_file"),
                         DbTreeViewEvent::RunSqlFile {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "关闭连接",
+                        t!("Connection.close_connection"),
                         DbTreeViewEvent::CloseConnection {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "删除连接",
+                        t!("Connection.delete_connection"),
                         DbTreeViewEvent::DeleteConnection {
                             node_id: node_id.to_string(),
                         },
@@ -100,45 +101,45 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::Schema => {
                 vec![
                     ContextMenuItem::item(
-                        "新建查询",
+                        t!("Query.new_query"),
                         DbTreeViewEvent::CreateNewQuery {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "运行SQL文件",
+                        t!("ImportExport.run_sql_file"),
                         DbTreeViewEvent::RunSqlFile {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "新建表",
+                        t!("Table.new_table"),
                         DbTreeViewEvent::DesignTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::submenu(
-                        "转储SQL文件",
+                        t!("ImportExport.dump_sql_file"),
                         vec![
                             ContextMenuItem::item(
-                                "导出结构",
+                                t!("ImportExport.export_structure"),
                                 DbTreeViewEvent::DumpSqlFile {
                                     node_id: node_id.to_string(),
                                     mode: SqlDumpMode::StructureOnly,
                                 },
                             ),
                             ContextMenuItem::item(
-                                "导出数据",
+                                t!("ImportExport.export_data"),
                                 DbTreeViewEvent::DumpSqlFile {
                                     node_id: node_id.to_string(),
                                     mode: SqlDumpMode::DataOnly,
                                 },
                             ),
                             ContextMenuItem::item(
-                                "导出结构和数据",
+                                t!("ImportExport.export_structure_and_data"),
                                 DbTreeViewEvent::DumpSqlFile {
                                     node_id: node_id.to_string(),
                                     mode: SqlDumpMode::StructureAndData,
@@ -151,45 +152,45 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::Table => {
                 vec![
                     ContextMenuItem::item(
-                        "查看表数据",
+                        t!("Table.view_data"),
                         DbTreeViewEvent::OpenTableData {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        "设计表",
+                        t!("Table.design_table"),
                         DbTreeViewEvent::DesignTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "重命名表",
+                        t!("Table.rename_table"),
                         DbTreeViewEvent::RenameTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        "清空表",
+                        t!("Table.truncate_table"),
                         DbTreeViewEvent::TruncateTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        "删除表",
+                        t!("Table.delete_table"),
                         DbTreeViewEvent::DeleteTable {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "导入数据",
+                        t!("ImportExport.import_data"),
                         DbTreeViewEvent::ImportData {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        "导出表",
+                        t!("ImportExport.export_table"),
                         DbTreeViewEvent::ExportData {
                             node_id: node_id.to_string(),
                         },
@@ -200,14 +201,14 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::View => {
                 vec![
                     ContextMenuItem::item(
-                        "查看视图数据",
+                        t!("View.view_data"),
                         DbTreeViewEvent::OpenViewData {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "删除视图",
+                        t!("View.delete_view"),
                         DbTreeViewEvent::DeleteView {
                             node_id: node_id.to_string(),
                         },
@@ -218,7 +219,7 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::TablesFolder => {
                 vec![
                     ContextMenuItem::item(
-                        "新建表",
+                        t!("Table.new_table"),
                         DbTreeViewEvent::DesignTable {
                             node_id: node_id.to_string(),
                         },
@@ -229,7 +230,7 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::QueriesFolder => {
                 vec![
                     ContextMenuItem::item(
-                        "新建查询",
+                        t!("Query.new_query"),
                         DbTreeViewEvent::CreateNewQuery {
                             node_id: node_id.to_string(),
                         },
@@ -240,20 +241,20 @@ impl DatabaseViewPlugin for OracleDatabaseViewPlugin {
             DbNodeType::NamedQuery => {
                 vec![
                     ContextMenuItem::item(
-                        "打开查询",
+                        t!("Query.open_query"),
                         DbTreeViewEvent::OpenNamedQuery {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
-                        "重命名查询",
+                        t!("Query.rename_query"),
                         DbTreeViewEvent::RenameQuery {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::item(
-                        "删除查询",
+                        t!("Query.delete_query"),
                         DbTreeViewEvent::DeleteQuery {
                             node_id: node_id.to_string(),
                         },

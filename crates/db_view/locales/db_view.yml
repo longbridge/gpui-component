@@ -106,6 +106,10 @@ Common:
     en: No {item} Available
     zh-CN: 无可用的{item}
     zh-HK: 無可用的{item}
+  count_of:
+    en: "{selected} of {total}"
+    zh-CN: "{selected} / {total}"
+    zh-HK: "{selected} / {total}"
 
 # 连接操作
 Connection:
@@ -121,6 +125,18 @@ Connection:
     en: Connection List
     zh-CN: 连接列表
     zh-HK: 連接列表
+  close_connection:
+    en: Close Connection
+    zh-CN: 关闭连接
+    zh-HK: 關閉連線
+  delete_connection:
+    en: Delete Connection
+    zh-CN: 删除连接
+    zh-HK: 刪除連線
+  no_database_connected:
+    en: No Database Connected
+    zh-CN: 未连接数据库
+    zh-HK: 未連接資料庫
 
 # 连接表单
 ConnectionForm:
