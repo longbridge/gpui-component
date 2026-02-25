@@ -19,6 +19,7 @@ use tokio::sync::mpsc;
 
 use db::{CsvImportConfig, DataFormat, GlobalDbState, ImportConfig, ImportProgressEvent};
 use gpui_component::tooltip::Tooltip;
+use rust_i18n::t;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportStep {
@@ -93,10 +94,10 @@ impl SelectItem for FieldSeparator {
 
     fn title(&self) -> gpui::SharedString {
         match self {
-            FieldSeparator::Comma => "逗号 (,)".into(),
-            FieldSeparator::Tab => "制表符 (\\t)".into(),
-            FieldSeparator::Semicolon => "分号 (;)".into(),
-            FieldSeparator::Pipe => "管道符 (|)".into(),
+            FieldSeparator::Comma => t!("ImportExport.delimiter_comma").into(),
+            FieldSeparator::Tab => t!("ImportExport.delimiter_tab").into(),
+            FieldSeparator::Semicolon => t!("ImportExport.delimiter_semicolon").into(),
+            FieldSeparator::Pipe => t!("ImportExport.delimiter_pipe").into(),
         }
     }
 
@@ -214,9 +215,9 @@ impl TableImportView {
         let config = global_db_state.get_config(&connection_id);
 
         let text_qualifier_items = vec![
-            TextQualifierItem::new("无", ""),
-            TextQualifierItem::new("双引号 (\")", "\""),
-            TextQualifierItem::new("单引号 (')", "'"),
+            TextQualifierItem::new(t!("ImportExport.qualifier_none"), ""),
+            TextQualifierItem::new(t!("ImportExport.qualifier_double_quote"), "\""),
+            TextQualifierItem::new(t!("ImportExport.qualifier_single_quote"), "'"),
         ];
 
         cx.new(|cx| Self {
@@ -229,7 +230,8 @@ impl TableImportView {
             current_step: ImportStep::Config,
             format: cx.new(|_| DataImportFormat::Csv),
 
-            file_path: cx.new(|cx| InputState::new(window, cx).placeholder("选择导入文件")),
+            file_path: cx
+                .new(|cx| InputState::new(window, cx).placeholder(t!("ImportExport.select_import_file"))),
             pending_file_path: cx.new(|_| None),
 
             record_separator: cx.new(|cx| {
@@ -299,7 +301,7 @@ impl TableImportView {
             files: true,
             multiple: false,
             directories: false,
-            prompt: Some("选择导入文件".into()),
+            prompt: Some(t!("ImportExport.select_import_file").into()),
         });
 
         cx.spawn(async move |cx| {
@@ -328,7 +330,7 @@ impl TableImportView {
             self.logs.update(cx, |l, cx| {
                 l.push(LogEntry {
                     table: "".to_string(),
-                    message: "请选择导入文件".to_string(),
+                    message: t!("ImportExport.please_select_file").to_string(),
                 });
                 cx.notify();
             });
@@ -340,7 +342,7 @@ impl TableImportView {
             self.logs.update(cx, |l, cx| {
                 l.push(LogEntry {
                     table: "".to_string(),
-                    message: "请输入表名".to_string(),
+                    message: t!("ImportExport.please_enter_table_name").to_string(),
                 });
                 cx.notify();
             });
@@ -414,7 +416,7 @@ impl TableImportView {
                 &logs,
                 &scroll_handle,
                 "".to_string(),
-                format!("导入表: {}", table),
+                t!("ImportExport.import_table_log", table = table).to_string(),
             );
 
             let data = match std::fs::read_to_string(&file_path_str) {
@@ -425,7 +427,7 @@ impl TableImportView {
                         &logs,
                         &scroll_handle,
                         "".to_string(),
-                        format!("文件读取错误: {}", e),
+                        t!("ImportExport.file_read_error_with_message", error = e).to_string(),
                     );
                     let _ = cx.update(|cx| {
                         is_running.update(cx, |r, cx| {
@@ -501,10 +503,13 @@ impl TableImportView {
                                 l.push(LogEntry {
                                     table: "".to_string(),
                                     message: format!(
-                                        "开始文件 {} ({}/{})",
-                                        file,
-                                        file_index + 1,
-                                        total_files
+                                        "{}",
+                                        t!(
+                                            "ImportExport.file_start",
+                                            file = file,
+                                            current = file_index + 1,
+                                            total = total_files
+                                        )
                                     ),
                                 });
                                 cx.notify();
@@ -514,7 +519,8 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!("读取文件: {}", file),
+                                    message: t!("ImportExport.reading_file", file = file)
+                                        .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -523,7 +529,7 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!("解析文件: {}", file),
+                                    message: t!("ImportExport.parsing_file", file = file).to_string(),
                                 });
                                 cx.notify();
                             });
@@ -553,7 +559,11 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!("执行完成，影响 {} 行", rows_affected),
+                                    message: t!(
+                                        "ImportExport.execution_done_rows",
+                                        rows = rows_affected
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -565,10 +575,12 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!(
-                                        "文件 {} 完成，导入 {} 行",
-                                        file, rows_imported
-                                    ),
+                                    message: t!(
+                                        "ImportExport.file_finished_rows",
+                                        file = file,
+                                        rows = rows_imported
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -581,7 +593,11 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!("错误: {}", message),
+                                    message: t!(
+                                        "ImportExport.import_error_with_message",
+                                        message = message
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -597,10 +613,12 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!(
-                                        "导入完成: {} 行, 耗时 {}ms",
-                                        total_rows, elapsed_ms
-                                    ),
+                                    message: t!(
+                                        "ImportExport.import_complete_summary",
+                                        rows = total_rows,
+                                        elapsed_ms = elapsed_ms
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -629,10 +647,12 @@ impl TableImportView {
                             logs.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!(
-                                        "导入成功: {} 行, 耗时 {}ms",
-                                        import_result.rows_imported, import_result.elapsed_ms
-                                    ),
+                                    message: t!(
+                                        "ImportExport.import_success_summary",
+                                        rows = import_result.rows_imported,
+                                        elapsed_ms = import_result.elapsed_ms
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -640,11 +660,12 @@ impl TableImportView {
                             logs.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!(
-                                        "部分成功: {} 行导入, {} 个错误",
-                                        import_result.rows_imported,
-                                        import_result.errors.len()
-                                    ),
+                                    message: t!(
+                                        "ImportExport.import_partial_summary",
+                                        rows = import_result.rows_imported,
+                                        errors = import_result.errors.len()
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -658,7 +679,7 @@ impl TableImportView {
                         logs.update(cx, |l, cx| {
                             l.push(LogEntry {
                                 table: "".to_string(),
-                                message: format!("导入错误: {}", e),
+                                message: t!("ImportExport.import_failed", error = e).to_string(),
                             });
                             cx.notify();
                         });
@@ -747,9 +768,9 @@ impl Render for TableImportView {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .child(if current_step == ImportStep::Config {
-                        "注：请选择导入文件并配置选项，然后点击 [下一步] 继续。"
+                        t!("ImportExport.import_hint")
                     } else {
-                        "我们已收集导入数据时所需的所有信息。点击 [开始] 按钮开始导入。"
+                        t!("ImportExport.import_ready_hint")
                     }),
             )
             .when(current_step == ImportStep::Config, |this| {
@@ -768,7 +789,7 @@ impl Render for TableImportView {
                                         .child(
                                             div()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("服务器:"),
+                                                .child(format!("{}:", t!("TreeView.server"))),
                                         )
                                         .child(
                                             div()
@@ -783,7 +804,7 @@ impl Render for TableImportView {
                                         .child(
                                             div()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("数据库:"),
+                                                .child(format!("{}:", t!("Database.database"))),
                                         )
                                         .child(
                                             div()
@@ -798,7 +819,7 @@ impl Render for TableImportView {
                                         .child(
                                             div()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("表:"),
+                                                .child(format!("{}:", t!("Common.table"))),
                                         )
                                         .child(
                                             div()
@@ -847,7 +868,7 @@ impl Render for TableImportView {
                                     div()
                                         .text_sm()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .child("文件格式"),
+                                        .child(t!("ImportExport.file_format")),
                                 )
                                 .child(
                                     h_flex()
@@ -931,7 +952,7 @@ impl Render for TableImportView {
                                     div()
                                         .text_sm()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .child("导入选项"),
+                                        .child(t!("ImportExport.import_options")),
                                 )
                                 .child(
                                     v_flex().gap_2().child(
@@ -957,7 +978,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child("包含标题行"),
+                                                    .child(t!("ImportExport.has_header")),
                                             )
                                             .child(
                                                 h_flex()
@@ -979,7 +1000,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child("遇错停止"),
+                                                    .child(t!("ImportExport.stop_on_error")),
                                             )
                                             .child(
                                                 h_flex()
@@ -1001,7 +1022,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child("使用事务"),
+                                                    .child(t!("ImportExport.use_transaction")),
                                             )
                                             .child(
                                                 h_flex()
@@ -1022,7 +1043,7 @@ impl Render for TableImportView {
                                                                 },
                                                             )),
                                                     )
-                                                    .child("导入前清空表"),
+                                                    .child(t!("ImportExport.truncate_before_import")),
                                             ),
                                     ),
                                 )
@@ -1032,7 +1053,7 @@ impl Render for TableImportView {
                                             div()
                                                 .text_sm()
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .child("分隔符配置"),
+                                                .child(t!("ImportExport.delimiter_config")),
                                         )
                                         .child(
                                             h_flex()
@@ -1044,10 +1065,10 @@ impl Render for TableImportView {
                                                         .child(
                                                             div()
                                                                 .text_xs()
-                                                                .text_color(
-                                                                    cx.theme().muted_foreground,
-                                                                )
-                                                                .child("记录分隔符"),
+                                                            .text_color(
+                                                                cx.theme().muted_foreground,
+                                                            )
+                                                            .child(t!("ImportExport.record_delimiter")),
                                                         )
                                                         .child(
                                                             Select::new(&self.record_separator)
@@ -1061,10 +1082,10 @@ impl Render for TableImportView {
                                                         .child(
                                                             div()
                                                                 .text_xs()
-                                                                .text_color(
-                                                                    cx.theme().muted_foreground,
-                                                                )
-                                                                .child("字段分隔符"),
+                                                            .text_color(
+                                                                cx.theme().muted_foreground,
+                                                            )
+                                                            .child(t!("ImportExport.field_delimiter")),
                                                         )
                                                         .child(
                                                             Select::new(&self.field_separator)
@@ -1078,10 +1099,10 @@ impl Render for TableImportView {
                                                         .child(
                                                             div()
                                                                 .text_xs()
-                                                                .text_color(
-                                                                    cx.theme().muted_foreground,
-                                                                )
-                                                                .child("文本识别符"),
+                                                            .text_color(
+                                                                cx.theme().muted_foreground,
+                                                            )
+                                                            .child(t!("ImportExport.text_qualifier")),
                                                         )
                                                         .child(
                                                             Select::new(&self.text_qualifier)
@@ -1109,7 +1130,7 @@ impl Render for TableImportView {
                                         .child(
                                             div()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("文件:"),
+                                                .child(format!("{}:", t!("ImportExport.file"))),
                                         )
                                         .child(
                                             div()
@@ -1133,7 +1154,7 @@ impl Render for TableImportView {
                                                 .child(
                                                     div()
                                                         .text_color(cx.theme().muted_foreground)
-                                                        .child("已处理:"),
+                                                        .child(format!("{}:", t!("ImportExport.processed"))),
                                                 )
                                                 .child(div().child(processed.to_string())),
                                         )
@@ -1143,7 +1164,7 @@ impl Render for TableImportView {
                                                 .child(
                                                     div()
                                                         .text_color(cx.theme().muted_foreground)
-                                                        .child("时间:"),
+                                                        .child(format!("{}:", t!("ImportExport.time"))),
                                                 )
                                                 .child(div().child(elapsed)),
                                         ),
@@ -1153,7 +1174,11 @@ impl Render for TableImportView {
                             this.child(
                                 h_flex()
                                     .gap_1()
-                                    .child(div().text_color(cx.theme().danger).child("错误:"))
+                                    .child(
+                                        div()
+                                            .text_color(cx.theme().danger)
+                                            .child(format!("{}:", t!("ImportExport.errors"))),
+                                    )
                                     .child(
                                         div()
                                             .text_color(cx.theme().danger)
@@ -1258,7 +1283,7 @@ impl Render for TableImportView {
                     .justify_end()
                     .child(
                         Button::new("cancel")
-                            .child("取消")
+                            .child(t!("Common.cancel"))
                             .on_click(|_, window, _cx| {
                                 window.remove_window();
                             }),
@@ -1266,7 +1291,7 @@ impl Render for TableImportView {
                     .when(current_step == ImportStep::Execute && !is_running, |this| {
                         this.child(
                             Button::new("prev")
-                                .child("上一步")
+                                .child(t!("Common.previous"))
                                 .disabled(is_finished)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.current_step = ImportStep::Config;
@@ -1275,12 +1300,12 @@ impl Render for TableImportView {
                         )
                     })
                     .when(current_step == ImportStep::Config, |this| {
-                        this.child(Button::new("next").primary().child("下一步").on_click(
+                        this.child(Button::new("next").primary().child(t!("Common.next")).on_click(
                             cx.listener(|view, _, _, cx| {
                                 let file_path = view.file_path.read(cx).text().to_string();
                                 if file_path.is_empty() {
                                     view.validation_error.update(cx, |e, cx| {
-                                        *e = Some("请选择导入文件".to_string());
+                                        *e = Some(t!("ImportExport.please_select_file").to_string());
                                         cx.notify();
                                     });
                                     return;
@@ -1294,7 +1319,7 @@ impl Render for TableImportView {
                     .when(
                         current_step == ImportStep::Execute && !is_running && !is_finished,
                         |this| {
-                            this.child(Button::new("start").primary().child("开始导入").on_click(
+                            this.child(Button::new("start").primary().child(t!("ImportExport.start_import")).on_click(
                                 window.listener_for(&cx.entity(), |view, _, window, cx| {
                                     view.start_import(window, cx);
                                 }),
@@ -1302,10 +1327,10 @@ impl Render for TableImportView {
                         },
                     )
                     .when(is_running, |this| {
-                        this.child(Button::new("running").loading(true).child("导入中..."))
+                        this.child(Button::new("running").loading(true).child(t!("ImportExport.importing")))
                     })
                     .when(is_finished, |this| {
-                        this.child(Button::new("close").primary().child("完成").on_click(
+                        this.child(Button::new("close").primary().child(t!("Common.finish")).on_click(
                             |_, window, cx| {
                                 gpui_component::WindowExt::close_dialog(window, cx);
                             },

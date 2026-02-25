@@ -266,13 +266,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                         ToolbarButton::selected_row(
                             "delete-connection",
                             IconName::Minus,
-                            "删除连接",
+                            t!("Connection.delete_connection"),
                             |node| DatabaseObjectsEvent::DeleteConnection { node },
                         ),
                         ToolbarButton::selected_row(
                             "close-connection",
                             IconName::CircleX,
-                            "关闭连接",
+                            t!("Connection.close_connection"),
                             |node| DatabaseObjectsEvent::CloseConnection { node },
                         ),
                     ]
@@ -281,13 +281,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                         ToolbarButton::current_node(
                             "create-database",
                             IconName::Plus,
-                            "新建数据库",
+                            t!("Database.new_database"),
                             |node| DatabaseObjectsEvent::CreateDatabase { node },
                         ),
                         ToolbarButton::selected_row(
                             "delete-database",
                             IconName::Minus,
-                            "删除数据库",
+                            t!("Database.delete_database"),
                             |node| DatabaseObjectsEvent::DeleteDatabase { node },
                         ),
                     ]
@@ -298,25 +298,25 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "create-table",
                         IconName::Plus,
-                        "新建表",
+                        t!("Table.new_table"),
                         |node| DatabaseObjectsEvent::DesignTable { node },
                     ),
                     ToolbarButton::selected_row(
                         "open-table",
                         IconName::Eye,
-                        "查看表数据",
+                        t!("Table.view_data"),
                         |node| DatabaseObjectsEvent::OpenTableData { node },
                     ),
                     ToolbarButton::selected_row(
                         "design-table",
                         IconName::Edit,
-                        "设计表",
+                        t!("Table.design_table"),
                         |node| DatabaseObjectsEvent::DesignTable { node },
                     ),
                     ToolbarButton::selected_row(
                         "drop-table",
                         IconName::Minus,
-                        "删除表",
+                        t!("Table.delete_table"),
                         |node| DatabaseObjectsEvent::DeleteTable { node },
                     ),
                 ]
@@ -326,19 +326,19 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "open-table",
                         IconName::Eye,
-                        "查看表数据",
+                        t!("Table.view_data"),
                         |node| DatabaseObjectsEvent::OpenTableData { node },
                     ),
                     ToolbarButton::current_node(
                         "design-table",
                         IconName::Edit,
-                        "设计表",
+                        t!("Table.design_table"),
                         |node| DatabaseObjectsEvent::DesignTable { node },
                     ),
                     ToolbarButton::current_node(
                         "drop-table",
                         IconName::Minus,
-                        "删除表",
+                        t!("Table.delete_table"),
                         |node| DatabaseObjectsEvent::DeleteTable { node },
                     ),
                 ]
@@ -348,13 +348,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::selected_row(
                         "open-view",
                         IconName::Eye,
-                        "查看视图数据",
+                        t!("View.view_data"),
                         |node| DatabaseObjectsEvent::OpenViewData { node },
                     ),
                     ToolbarButton::selected_row(
                         "drop-view",
                         IconName::Minus,
-                        "删除视图",
+                        t!("View.delete_view"),
                         |node| DatabaseObjectsEvent::DeleteView { node },
                     ),
                 ]
@@ -364,13 +364,13 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "open-view",
                         IconName::Eye,
-                        "查看视图数据",
+                        t!("View.view_data"),
                         |node| DatabaseObjectsEvent::OpenViewData { node },
                     ),
                     ToolbarButton::current_node(
                         "drop-view",
                         IconName::Minus,
-                        "删除视图",
+                        t!("View.delete_view"),
                         |node| DatabaseObjectsEvent::DeleteView { node },
                     ),
                 ]
@@ -380,25 +380,25 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                     ToolbarButton::current_node(
                         "create-query",
                         IconName::Plus,
-                        "新建查询",
+                        t!("Query.new_query"),
                         |node| DatabaseObjectsEvent::CreateNewQuery { node },
                     ),
                     ToolbarButton::selected_row(
                         "open-query",
                         IconName::Eye,
-                        "打开查询",
+                        t!("Query.open_query"),
                         |node| DatabaseObjectsEvent::OpenNamedQuery { node },
                     ),
                     ToolbarButton::selected_row(
                         "rename-query",
                         IconName::Edit,
-                        "重命名查询",
+                        t!("Query.rename_query"),
                         |node| DatabaseObjectsEvent::RenameQuery { node },
                     ),
                     ToolbarButton::selected_row(
                         "delete-query",
                         IconName::Minus,
-                        "删除查询",
+                        t!("Query.delete_query"),
                         |node| DatabaseObjectsEvent::DeleteQuery { node },
                     ),
                 ]

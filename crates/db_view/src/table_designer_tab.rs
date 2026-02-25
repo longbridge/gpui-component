@@ -1194,7 +1194,7 @@ impl Render for DragColumn {
             .text_color(cx.theme().primary_foreground)
             .text_sm()
             .child(if self.name.is_empty() {
-                format!("列 {}", self.index + 1)
+                t!("Table.column_number", index = self.index + 1).to_string()
             } else {
                 self.name.clone()
             })
@@ -1242,7 +1242,8 @@ impl ColumnsEditor {
     ) -> Self {
         let focus_handle = cx.focus_handle();
         let data_types = Self::get_data_types(&database_type, cx);
-        let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("搜索列名..."));
+        let search_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.search_column")));
 
         let search_sub = cx.subscribe_in(
             &search_input,
@@ -1319,20 +1320,24 @@ impl ColumnsEditor {
     }
 
     fn add_column(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("列名"));
+        let name_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.column_name")));
         let type_items = SearchableVec::new(self.data_types.clone());
         let type_select = cx.new(|cx| {
             SelectState::new(type_items, Some(IndexPath::new(0)), window, cx).searchable(true)
         });
-        let length_input = cx.new(|cx| InputState::new(window, cx).placeholder("长度"));
-        let scale_input = cx.new(|cx| InputState::new(window, cx).placeholder("小数位"));
-        let default_input = cx.new(|cx| InputState::new(window, cx).placeholder("默认值"));
-        let comment_input = cx.new(|cx| InputState::new(window, cx).placeholder("注释"));
+        let length_input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.length")));
+        let scale_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.decimal_places")));
+        let default_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.default_value")));
+        let comment_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.comment")));
 
         let charset_items: Vec<CharsetSelectItem> = std::iter::once(CharsetSelectItem {
             info: CharsetInfo {
                 name: "".to_string(),
-                description: "默认".to_string(),
+                description: t!("Table.default").to_string(),
                 default_collation: "".to_string(),
             },
         })
@@ -1358,7 +1363,7 @@ impl ColumnsEditor {
         });
 
         let enum_values_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("值列表，如: 'a','b','c'"));
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.value_list_hint")));
 
         let name_sub = cx.subscribe_in(
             &name_input,
@@ -1606,7 +1611,7 @@ impl ColumnsEditor {
 
         for col in columns {
             let name_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("列名");
+                let mut input = InputState::new(window, cx).placeholder(t!("Table.column_name"));
                 input.set_value(col.name.clone(), window, cx);
                 input
             });
@@ -1631,7 +1636,7 @@ impl ColumnsEditor {
             });
 
             let length_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("长度");
+                let mut input = InputState::new(window, cx).placeholder(t!("Table.length"));
                 if let Some(len) = Self::extract_length_from_type(&col.data_type) {
                     input.set_value(len.to_string(), window, cx);
                 }
@@ -1639,7 +1644,8 @@ impl ColumnsEditor {
             });
 
             let scale_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("小数位");
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.decimal_places"));
                 if let Some(scale) = Self::extract_scale_from_type(&col.data_type) {
                     input.set_value(scale.to_string(), window, cx);
                 }
@@ -1647,7 +1653,8 @@ impl ColumnsEditor {
             });
 
             let default_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("默认值");
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.default_value"));
                 if let Some(ref default) = col.default_value {
                     input.set_value(default.clone(), window, cx);
                 }
@@ -1655,7 +1662,7 @@ impl ColumnsEditor {
             });
 
             let comment_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("注释");
+                let mut input = InputState::new(window, cx).placeholder(t!("Table.comment"));
                 if let Some(ref comment) = col.comment {
                     input.set_value(comment.clone(), window, cx);
                 }
@@ -1665,7 +1672,7 @@ impl ColumnsEditor {
             let charset_items: Vec<CharsetSelectItem> = std::iter::once(CharsetSelectItem {
                 info: CharsetInfo {
                     name: "".to_string(),
-                    description: "默认".to_string(),
+                    description: t!("Table.default").to_string(),
                     default_collation: "".to_string(),
                 },
             })
@@ -1691,7 +1698,8 @@ impl ColumnsEditor {
             });
 
             let enum_values_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("值列表，如: 'a','b','c'");
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.value_list_hint"));
                 if let Some(values) = Self::extract_enum_values(&col.data_type) {
                     input.set_value(values, window, cx);
                 }
@@ -1856,7 +1864,7 @@ impl ColumnsEditor {
                     .small()
                     .icon(IconName::Plus)
                     .ghost()
-                    .tooltip("添加列")
+                    .tooltip(t!("Table.add_column"))
                     .on_click(cx.listener(|this, _, window, cx| this.add_column(window, cx))),
             )
             .child(
@@ -1864,7 +1872,7 @@ impl ColumnsEditor {
                     .small()
                     .icon(IconName::Minus)
                     .ghost()
-                    .tooltip("删除列")
+                    .tooltip(t!("Table.delete_column"))
                     .on_click(cx.listener(|this, _, _window, cx| this.remove_column(cx))),
             )
             .child(div().flex_1())
@@ -1896,28 +1904,28 @@ impl ColumnsEditor {
                     .w(px(160.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("列名"),
+                    .child(t!("Table.column_name")),
             )
             .child(
                 div()
                     .w(px(140.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("类型"),
+                    .child(t!("Table.type")),
             )
             .child(
                 div()
                     .w(px(60.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("长度"),
+                    .child(t!("Table.length")),
             )
             .child(
                 div()
                     .w(px(60.))
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("小数位"),
+                    .child(t!("Table.decimal_places")),
             )
             .child(
                 div()
@@ -1925,7 +1933,7 @@ impl ColumnsEditor {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .text_center()
-                    .child("空"),
+                    .child(t!("Table.nullable")),
             )
             .child(
                 div()
@@ -1933,7 +1941,7 @@ impl ColumnsEditor {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .text_center()
-                    .child("主键"),
+                    .child(t!("Table.primary_key")),
             )
             .child(
                 div()
@@ -1941,14 +1949,14 @@ impl ColumnsEditor {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .text_center()
-                    .child("自增"),
+                    .child(t!("Table.auto_increment_column")),
             )
             .child(
                 div()
                     .flex_1()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("注释"),
+                    .child(t!("Table.comment")),
             )
             .into_any_element()
     }
@@ -2068,7 +2076,7 @@ impl ColumnsEditor {
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child("选择一列以查看详细配置"),
+                        .child(t!("Table.select_column_hint")),
                 )
                 .into_any_element();
         };
@@ -2107,7 +2115,7 @@ impl ColumnsEditor {
                             .w(px(70.))
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child("默认值:"),
+                            .child(format!("{}:", t!("Table.default_value"))),
                     )
                     .child(Input::new(&row.default_input).w(px(200.)).small()),
             )
@@ -2121,7 +2129,7 @@ impl ColumnsEditor {
                                 .w(px(70.))
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("字符集:"),
+                                .child(format!("{}:", t!("Table.charset"))),
                         )
                         .child(Select::new(&row.charset_select).w(px(200.)).small()),
                 )
@@ -2136,7 +2144,7 @@ impl ColumnsEditor {
                                 .w(px(70.))
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("排序规则:"),
+                                .child(format!("{}:", t!("Table.collation"))),
                         )
                         .child(Select::new(&row.collation_select).w(px(200.)).small()),
                 )
@@ -2148,9 +2156,9 @@ impl ColumnsEditor {
                         .items_center()
                         .child(
                             div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("值:"),
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!("{}:", t!("Table.value"))),
                         )
                         .child(Input::new(&row.enum_values_input).w(px(400.)).small()),
                 )
@@ -2238,8 +2246,11 @@ impl IndexesEditor {
     }
 
     fn add_index(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("索引名"));
-        let columns_input = cx.new(|cx| InputState::new(window, cx).placeholder("列名(逗号分隔)"));
+        let name_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.index_name")));
+        let columns_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.columns_comma_separated"))
+        });
 
         // Subscribe to input changes
         let name_sub = cx.subscribe_in(
@@ -2336,14 +2347,15 @@ impl IndexesEditor {
             }
 
             let name_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("索引名");
+                let mut input = InputState::new(window, cx).placeholder(t!("Table.index_name"));
                 input.set_value(idx.name.clone(), window, cx);
                 input
             });
 
             let columns_str = idx.columns.join(", ");
             let columns_input = cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder("列名(逗号分隔)");
+                let mut input =
+                    InputState::new(window, cx).placeholder(t!("Table.columns_comma_separated"));
                 input.set_value(columns_str, window, cx);
                 input
             });
@@ -2406,7 +2418,7 @@ impl Render for IndexesEditor {
                             .small()
                             .icon(IconName::Plus)
                             .ghost()
-                            .tooltip("添加索引")
+                            .tooltip(t!("Table.add_index"))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.add_index(window, cx)),
                             ),
@@ -2416,7 +2428,7 @@ impl Render for IndexesEditor {
                             .small()
                             .icon(IconName::Minus)
                             .ghost()
-                            .tooltip("删除索引")
+                            .tooltip(t!("Table.delete_index"))
                             .on_click(cx.listener(|this, _, _window, cx| this.remove_index(cx))),
                     ),
             )
@@ -2433,14 +2445,14 @@ impl Render for IndexesEditor {
                             .w(px(160.))
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child("索引名"),
+                            .child(t!("Table.index_name")),
                     )
                     .child(
                         div()
                             .flex_1()
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child("列"),
+                            .child(t!("Table.columns")),
                     )
                     .child(
                         div()
@@ -2448,7 +2460,7 @@ impl Render for IndexesEditor {
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
                             .text_center()
-                            .child("唯一"),
+                            .child(t!("Table.unique")),
                     ),
             )
             .child(
@@ -2619,7 +2631,8 @@ impl TableOptionsEditor {
             )
         });
 
-        let comment_input = cx.new(|cx| InputState::new(window, cx).placeholder("表注释"));
+        let comment_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.table_comment")));
 
         let engine_sub = cx.observe(&engine_select, |_this, _, cx| {
             cx.emit(TableOptionsEvent::Changed);
@@ -2710,28 +2723,28 @@ impl Render for TableOptionsEditor {
                 .label_width(px(80.))
                 .child(
                     field()
-                        .label("引擎")
+                        .label(t!("Table.engine"))
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.engine_select).w(px(200.))),
                 )
                 .child(
                     field()
-                        .label("字符集")
+                        .label(t!("Table.charset"))
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.charset_select).w(px(200.))),
                 )
                 .child(
                     field()
-                        .label("排序规则")
+                        .label(t!("Table.collation"))
                         .items_center()
                         .label_justify_end()
                         .child(Select::new(&self.collation_select).w(px(200.))),
                 )
                 .child(
                     field()
-                        .label("注释")
+                        .label(t!("Table.table_comment"))
                         .items_center()
                         .label_justify_end()
                         .child(Input::new(&self.comment_input).w(px(300.))),

@@ -70,6 +70,10 @@ Common:
     en: Select All
     zh-CN: 全选
     zh-HK: 全選
+  deselect_all:
+    en: Deselect All
+    zh-CN: 全不选
+    zh-HK: 全不選
   select_row:
     en: Select Row
     zh-CN: 选择行
@@ -102,6 +106,10 @@ Common:
     en: Type
     zh-CN: 类型
     zh-HK: 類型
+  table:
+    en: Table
+    zh-CN: 表
+    zh-HK: 表
   no_available:
     en: No {item} Available
     zh-CN: 无可用的{item}
@@ -589,6 +597,58 @@ Table:
     en: Table Comment
     zh-CN: 表注释
     zh-HK: 表註釋
+  add_column:
+    en: Add Column
+    zh-CN: 添加列
+    zh-HK: 新增列
+  delete_column:
+    en: Delete Column
+    zh-CN: 删除列
+    zh-HK: 刪除列
+  nullable:
+    en: Nullable
+    zh-CN: 空
+    zh-HK: 空
+  primary_key:
+    en: Primary Key
+    zh-CN: 主键
+    zh-HK: 主鍵
+  auto_increment_column:
+    en: Auto Increment
+    zh-CN: 自增
+    zh-HK: 自增
+  select_column_hint:
+    en: Select a column to view details
+    zh-CN: 选择一列以查看详细配置
+    zh-HK: 選擇一列以查看詳細設定
+  value:
+    en: Value
+    zh-CN: 值
+    zh-HK: 值
+  column_number:
+    en: "Column {index}"
+    zh-CN: "列 {index}"
+    zh-HK: "列 {index}"
+  index_name:
+    en: Index Name
+    zh-CN: 索引名
+    zh-HK: 索引名
+  columns_comma_separated:
+    en: Columns (comma-separated)
+    zh-CN: 列名(逗号分隔)
+    zh-HK: 列名(逗號分隔)
+  add_index:
+    en: Add Index
+    zh-CN: 添加索引
+    zh-HK: 新增索引
+  delete_index:
+    en: Delete Index
+    zh-CN: 删除索引
+    zh-HK: 刪除索引
+  unique:
+    en: Unique
+    zh-CN: 唯一
+    zh-HK: 唯一
 
   # 列字段
   column_name:
@@ -912,10 +972,58 @@ ImportExport:
     en: File read error
     zh-CN: 文件读取错误
     zh-HK: 檔案讀取錯誤
+  file_read_error_with_message:
+    en: "File read error: {error}"
+    zh-CN: "文件读取错误: {error}"
+    zh-HK: "檔案讀取錯誤: {error}"
   file_read_success:
     en: "File read successfully, starting execution..."
     zh-CN: 文件读取成功，开始执行...
     zh-HK: 檔案讀取成功，開始執行...
+  import_table_log:
+    en: "Import table: {table}"
+    zh-CN: "导入表: {table}"
+    zh-HK: "匯入表: {table}"
+  file_start:
+    en: "Start file {file} ({current}/{total})"
+    zh-CN: "开始文件 {file} ({current}/{total})"
+    zh-HK: "開始檔案 {file} ({current}/{total})"
+  reading_file:
+    en: "Reading file: {file}"
+    zh-CN: "读取文件: {file}"
+    zh-HK: "讀取檔案: {file}"
+  parsing_file:
+    en: "Parsing file: {file}"
+    zh-CN: "解析文件: {file}"
+    zh-HK: "解析檔案: {file}"
+  execution_done_rows:
+    en: "Execution completed, affected {rows} rows"
+    zh-CN: "执行完成，影响 {rows} 行"
+    zh-HK: "執行完成，影響 {rows} 行"
+  file_finished_rows:
+    en: "File {file} completed, imported {rows} rows"
+    zh-CN: "文件 {file} 完成，导入 {rows} 行"
+    zh-HK: "檔案 {file} 完成，匯入 {rows} 行"
+  import_error_with_message:
+    en: "Error: {message}"
+    zh-CN: "错误: {message}"
+    zh-HK: "錯誤: {message}"
+  import_complete_summary:
+    en: "Import complete: {rows} rows, {elapsed_ms} ms"
+    zh-CN: "导入完成: {rows} 行, 耗时 {elapsed_ms}ms"
+    zh-HK: "匯入完成: {rows} 行, 耗時 {elapsed_ms}ms"
+  import_success_summary:
+    en: "Import successful: {rows} rows, {elapsed_ms} ms"
+    zh-CN: "导入成功: {rows} 行, 耗时 {elapsed_ms}ms"
+    zh-HK: "匯入成功: {rows} 行, 耗時 {elapsed_ms}ms"
+  import_partial_summary:
+    en: "Partial success: {rows} rows, {errors} errors"
+    zh-CN: "部分成功: {rows} 行导入, {errors} 个错误"
+    zh-HK: "部分成功: {rows} 行匯入, {errors} 個錯誤"
+  import_failed:
+    en: "Import error: {error}"
+    zh-CN: "导入错误: {error}"
+    zh-HK: "匯入錯誤: {error}"
 
   # 导入统计
   file:
@@ -1010,6 +1118,86 @@ ImportExport:
     en: Export Table
     zh-CN: 导出表
     zh-HK: 匯出表
+  export_directory_placeholder:
+    en: Enter export directory path
+    zh-CN: 输入导出目录路径
+    zh-HK: 輸入匯出目錄路徑
+  select_export_directory:
+    en: Select export directory
+    zh-CN: 选择导出目录
+    zh-HK: 選擇匯出目錄
+  select_at_least_one_column:
+    en: Please select at least one column
+    zh-CN: 请至少选择一列
+    zh-HK: 請至少選擇一列
+  export_table_log:
+    en: "Export table: {table}"
+    zh-CN: "导出表: {table}"
+    zh-HK: "匯出表: {table}"
+  write_file_failed:
+    en: "Failed to write file: {error}"
+    zh-CN: "写入文件失败: {error}"
+    zh-HK: "寫入檔案失敗: {error}"
+  export_start:
+    en: "Start ({current}/{total})"
+    zh-CN: "开始 ({current}/{total})"
+    zh-HK: "開始 ({current}/{total})"
+  fetching_data:
+    en: Fetching data
+    zh-CN: 获取数据中
+    zh-HK: 取得資料中
+  transfer_records:
+    en: "Transferred ({rows})"
+    zh-CN: "传输记录 ({rows})"
+    zh-HK: "傳輸記錄 ({rows})"
+  export_finished:
+    en: "Finished ({seconds} s)"
+    zh-CN: "完成 ({seconds} s)"
+    zh-HK: "完成 ({seconds} s)"
+  export_error_with_message:
+    en: "Error: {message}"
+    zh-CN: "错误: {message}"
+    zh-HK: "錯誤: {message}"
+  export_complete_summary:
+    en: "Export complete: {rows} rows, {elapsed_ms} ms"
+    zh-CN: "导出完成: {rows} 行, 耗时 {elapsed_ms}ms"
+    zh-HK: "匯出完成: {rows} 行, 耗時 {elapsed_ms}ms"
+  file_saved:
+    en: "File saved: {path}"
+    zh-CN: "文件已保存: {path}"
+    zh-HK: "檔案已儲存: {path}"
+  export_failed:
+    en: "Export error: {error}"
+    zh-CN: "导出错误: {error}"
+    zh-HK: "匯出錯誤: {error}"
+  export_hint:
+    en: "Note: Please select the export format and configure options, then click [Next] to continue."
+    zh-CN: "注：请选择导出格式并配置选项，然后点击 [下一步] 继续。"
+    zh-HK: "注：請選擇匯出格式並設定選項，然後點擊 [下一步] 繼續。"
+  export_ready_hint:
+    en: "We have collected all the information needed to export data. Click the [Start] button to begin exporting."
+    zh-CN: "我们已收集导出数据时所需的所有信息。点击 [开始] 按钮开始导出。"
+    zh-HK: "我們已收集匯出資料時所需的所有資訊。點擊 [開始] 按鈕開始匯出。"
+  export_columns:
+    en: Export Columns
+    zh-CN: 导出列
+    zh-HK: 匯出欄位
+  source_object:
+    en: Source
+    zh-CN: 源对象
+    zh-HK: 來源對象
+  total:
+    en: Total
+    zh-CN: 总计
+    zh-HK: 總計
+  start_export:
+    en: Start Export
+    zh-CN: 开始导出
+    zh-HK: 開始匯出
+  exporting:
+    en: Exporting...
+    zh-CN: 导出中...
+    zh-HK: 匯出中...
 
   # SQL 文件运行
   run_sql_file:

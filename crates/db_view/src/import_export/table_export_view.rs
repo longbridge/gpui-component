@@ -25,6 +25,7 @@ use db::{
     ColumnInfo, CsvExportConfig, DataFormat, ExportConfig, ExportProgressEvent, GlobalDbState,
 };
 use one_core::storage::get_download_dir;
+use rust_i18n::t;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataExportFormat {
@@ -125,10 +126,10 @@ impl SelectItem for FieldSeparator {
 
     fn title(&self) -> gpui::SharedString {
         match self {
-            FieldSeparator::Comma => "逗号 (,)".into(),
-            FieldSeparator::Tab => "制表符 (\\t)".into(),
-            FieldSeparator::Semicolon => "分号 (;)".into(),
-            FieldSeparator::Pipe => "管道符 (|)".into(),
+            FieldSeparator::Comma => t!("ImportExport.delimiter_comma").into(),
+            FieldSeparator::Tab => t!("ImportExport.delimiter_tab").into(),
+            FieldSeparator::Semicolon => t!("ImportExport.delimiter_semicolon").into(),
+            FieldSeparator::Pipe => t!("ImportExport.delimiter_pipe").into(),
         }
     }
 
@@ -339,9 +340,9 @@ impl DataExportView {
         let delegate = ColumnListDelegate::new(vec![]);
 
         let text_qualifier_items = vec![
-            TextQualifierItem::new("无", ""),
-            TextQualifierItem::new("双引号 (\")", "\""),
-            TextQualifierItem::new("单引号 (')", "'"),
+            TextQualifierItem::new(t!("ImportExport.qualifier_none"), ""),
+            TextQualifierItem::new(t!("ImportExport.qualifier_double_quote"), "\""),
+            TextQualifierItem::new(t!("ImportExport.qualifier_single_quote"), "'"),
         ];
 
         let default_path = get_download_dir()
@@ -360,7 +361,7 @@ impl DataExportView {
             table: table.into(),
             output_path: cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("输入导出目录路径")
+                    .placeholder(t!("ImportExport.export_directory_placeholder"))
                     .default_value(default_path)
             }),
             current_step: ExportStep::Config,
@@ -456,7 +457,7 @@ impl DataExportView {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("选择导出目录".into()),
+            prompt: Some(t!("ImportExport.select_export_directory").into()),
         });
         cx.spawn(async move |_this, cx| {
             if let Ok(Ok(Some(paths))) = future.await {
@@ -488,7 +489,7 @@ impl DataExportView {
             self.logs.update(cx, |l, cx| {
                 l.push(LogEntry {
                     table: "".to_string(),
-                    message: "请至少选择一列".to_string(),
+                    message: t!("ImportExport.select_at_least_one_column").to_string(),
                 });
                 cx.notify();
             });
@@ -572,7 +573,7 @@ impl DataExportView {
                 &logs,
                 &scroll_handle,
                 "".to_string(),
-                format!("导出表: {}", table),
+                t!("ImportExport.export_table_log", table = table).to_string(),
             );
 
             let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<ExportProgressEvent>();
@@ -636,7 +637,11 @@ impl DataExportView {
                                     logs_for_error.update(cx, |l, cx| {
                                         l.push(LogEntry {
                                             table: "".to_string(),
-                                            message: format!("写入文件失败: {}", e),
+                                            message: t!(
+                                                "ImportExport.write_file_failed",
+                                                error = e
+                                            )
+                                            .to_string(),
                                         });
                                         cx.notify();
                                     });
@@ -669,7 +674,12 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: table.clone(),
-                                    message: format!("开始 ({}/{})", table_index + 1, total_tables),
+                                    message: t!(
+                                        "ImportExport.export_start",
+                                        current = table_index + 1,
+                                        total = total_tables
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -683,7 +693,7 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: table.clone(),
-                                    message: "获取数据中".to_string(),
+                                    message: t!("ImportExport.fetching_data").to_string(),
                                 });
                                 cx.notify();
                             });
@@ -700,7 +710,11 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: table.clone(),
-                                    message: format!("传输记录 ({})", rows),
+                                    message: t!(
+                                        "ImportExport.transfer_records",
+                                        rows = rows
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -711,7 +725,11 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: table.clone(),
-                                    message: format!("完成 ({:.3} s)", elapsed),
+                                    message: t!(
+                                        "ImportExport.export_finished",
+                                        seconds = format!("{:.3}", elapsed)
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -724,7 +742,11 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: table.clone(),
-                                    message: format!("错误: {}", message),
+                                    message: t!(
+                                        "ImportExport.export_error_with_message",
+                                        message = message
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -740,10 +762,12 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!(
-                                        "导出完成: {} 行, 耗时 {}ms",
-                                        total_rows, elapsed_ms
-                                    ),
+                                    message: t!(
+                                        "ImportExport.export_complete_summary",
+                                        rows = total_rows,
+                                        elapsed_ms = elapsed_ms
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -773,7 +797,11 @@ impl DataExportView {
                             logs.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: format!("文件已保存: {}", full_path.display()),
+                                    message: t!(
+                                        "ImportExport.file_saved",
+                                        path = full_path.display()
+                                    )
+                                    .to_string(),
                                 });
                                 cx.notify();
                             });
@@ -783,7 +811,7 @@ impl DataExportView {
                         logs.update(cx, |l, cx| {
                             l.push(LogEntry {
                                 table: "".to_string(),
-                                message: format!("导出错误: {}", e),
+                                message: t!("ImportExport.export_failed", error = e).to_string(),
                             });
                             cx.notify();
                         });
@@ -862,9 +890,9 @@ impl Render for DataExportView {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .child(if current_step == ExportStep::Config {
-                        "注：请选择导出格式并配置选项，然后点击 [下一步] 继续。"
+                        t!("ImportExport.export_hint")
                     } else {
-                        "我们已收集导出数据时所需的所有信息。点击 [开始] 按钮开始导出。"
+                        t!("ImportExport.export_ready_hint")
                     })
             )
             .when(current_step == ExportStep::Config, |this| {
@@ -879,22 +907,34 @@ impl Render for DataExportView {
                                 .rounded_md()
                                 .child(
                                     h_flex()
-                                        .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("服务器:"))
-                                        .child(div().text_ellipsis().overflow_hidden().child(self.server_info.clone()))
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(format!("{}:", t!("TreeView.server"))),
                                 )
+                                .child(div().text_ellipsis().overflow_hidden().child(self.server_info.clone()))
+                        )
                                 .child(
                                     h_flex()
-                                        .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("数据库:"))
-                                        .child(div().text_ellipsis().overflow_hidden().child(self.database.clone()))
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(format!("{}:", t!("Database.database"))),
                                 )
+                                .child(div().text_ellipsis().overflow_hidden().child(self.database.clone()))
+                        )
                                 .child(
                                     h_flex()
-                                        .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("表:"))
-                                        .child(div().text_ellipsis().overflow_hidden().child(self.table.clone()))
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(format!("{}:", t!("Common.table"))),
                                 )
+                                .child(div().text_ellipsis().overflow_hidden().child(self.table.clone()))
+                        )
                         )
                         .child(
                             v_flex()
@@ -995,14 +1035,19 @@ impl Render for DataExportView {
                                         .child(
                                             h_flex()
                                                 .justify_between()
-                                                .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).child("导出列"))
+                                                .child(
+                                                    div()
+                                                        .text_sm()
+                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                        .child(t!("ImportExport.export_columns")),
+                                                )
                                                 .child(
                                                     h_flex()
                                                         .gap_1()
                                                         .child(
                                                             Button::new("select_all")
                                                                 .small()
-                                                                .child("全选")
+                                                                .child(t!("Common.select_all"))
                                                                 .on_click(window.listener_for(&cx.entity(), |view, _, window, cx| {
                                                                     view.select_all_columns(window, cx);
                                                                 }))
@@ -1010,7 +1055,7 @@ impl Render for DataExportView {
                                                         .child(
                                                             Button::new("deselect_all")
                                                                 .small()
-                                                                .child("全不选")
+                                                                .child(t!("Common.deselect_all"))
                                                                 .on_click(window.listener_for(&cx.entity(), |view, _, window, cx| {
                                                                     view.deselect_all_columns(window, cx);
                                                                 }))
@@ -1033,7 +1078,12 @@ impl Render for DataExportView {
                                             .w(px(200.0))
                                             .h_full()
                                             .gap_1()
-                                            .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).child("分隔符配置"))
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .child(t!("ImportExport.delimiter_config")),
+                                            )
                                             .child(
                                                 v_flex()
                                                     .flex_1()
@@ -1045,19 +1095,34 @@ impl Render for DataExportView {
                                                     .child(
                                                         v_flex()
                                                             .gap_1()
-                                                            .child(div().text_xs().text_color(cx.theme().muted_foreground).child("记录分隔符"))
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(cx.theme().muted_foreground)
+                                                                    .child(t!("ImportExport.record_delimiter")),
+                                                            )
                                                             .child(Select::new(&self.record_separator).w_full())
                                                     )
                                                     .child(
                                                         v_flex()
                                                             .gap_1()
-                                                            .child(div().text_xs().text_color(cx.theme().muted_foreground).child("字段分隔符"))
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(cx.theme().muted_foreground)
+                                                                    .child(t!("ImportExport.field_delimiter")),
+                                                            )
                                                             .child(Select::new(&self.field_separator).w_full())
                                                     )
                                                     .child(
                                                         v_flex()
                                                             .gap_1()
-                                                            .child(div().text_xs().text_color(cx.theme().muted_foreground).child("文本识别符"))
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(cx.theme().muted_foreground)
+                                                                    .child(t!("ImportExport.text_qualifier")),
+                                                            )
                                                             .child(Select::new(&self.text_qualifier).w_full())
                                                     )
                                                     .child(
@@ -1074,7 +1139,12 @@ impl Render for DataExportView {
                                                                         });
                                                                     }))
                                                             )
-                                                            .child(div().text_xs().text_color(cx.theme().muted_foreground).child("包含标题行"))
+                                                            .child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(cx.theme().muted_foreground)
+                                                                    .child(t!("ImportExport.has_header")),
+                                                            )
                                                     )
                                             )
                                     )
@@ -1093,25 +1163,41 @@ impl Render for DataExportView {
                                 .child(
                                     h_flex()
                                         .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("源对象:"))
+                                        .child(
+                                            div()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(format!("{}:", t!("ImportExport.source_object"))),
+                                        )
                                         .child(div().child("1")),
                                 )
                                 .child(
                                     h_flex()
                                         .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("总计:"))
+                                        .child(
+                                            div()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(format!("{}:", t!("ImportExport.total"))),
+                                        )
                                         .child(div().child(transferred.to_string())),
                                 )
                                 .child(
                                     h_flex()
                                         .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("已处理:"))
+                                        .child(
+                                            div()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(format!("{}:", t!("ImportExport.processed"))),
+                                        )
                                         .child(div().child(processed.to_string())),
                                 )
                                 .child(
                                     h_flex()
                                         .gap_1()
-                                        .child(div().text_color(cx.theme().muted_foreground).child("时间:"))
+                                        .child(
+                                            div()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(format!("{}:", t!("ImportExport.time"))),
+                                        )
                                         .child(div().child(elapsed)),
                                 ),
                         )
@@ -1119,7 +1205,11 @@ impl Render for DataExportView {
                             this.child(
                                 h_flex()
                                     .gap_1()
-                                    .child(div().text_color(cx.theme().danger).child("错误:"))
+                                    .child(
+                                        div()
+                                            .text_color(cx.theme().danger)
+                                            .child(format!("{}:", t!("ImportExport.errors"))),
+                                    )
                                     .child(div().text_color(cx.theme().danger).child(errors.to_string())),
                             )
                         })
@@ -1210,7 +1300,7 @@ impl Render for DataExportView {
                     .justify_end()
                     .child(
                         Button::new("cancel")
-                            .child("取消")
+                            .child(t!("Common.cancel"))
                             .on_click(|_, window, _cx| {
                                 window.remove_window();
                             })
@@ -1218,7 +1308,7 @@ impl Render for DataExportView {
                     .when(current_step == ExportStep::Execute && !is_running, |this| {
                         this.child(
                             Button::new("prev")
-                                .child("上一步")
+                                .child(t!("Common.previous"))
                                 .disabled(is_finished)
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.current_step = ExportStep::Config;
@@ -1230,7 +1320,7 @@ impl Render for DataExportView {
                         this.child(
                             Button::new("next")
                                 .primary()
-                                .child("下一步")
+                                .child(t!("Common.next"))
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.current_step = ExportStep::Execute;
                                     cx.notify();
@@ -1241,7 +1331,7 @@ impl Render for DataExportView {
                         this.child(
                             Button::new("start")
                                 .primary()
-                                .child("开始导出")
+                                .child(t!("ImportExport.start_export"))
                                 .on_click(window.listener_for(&cx.entity(), |view, _, window, cx| {
                                     view.start_export(window, cx);
                                 }))
@@ -1251,14 +1341,14 @@ impl Render for DataExportView {
                         this.child(
                             Button::new("running")
                                 .loading(true)
-                                .child("导出中...")
+                                .child(t!("ImportExport.exporting"))
                         )
                     })
                     .when(is_finished, |this| {
                         this.child(
                             Button::new("close")
                                 .primary()
-                                .child("完成")
+                                .child(t!("Common.finish"))
                                 .on_click(|_, window, _cx| {
                                     window.remove_window();
                                 })
