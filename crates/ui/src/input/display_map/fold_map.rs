@@ -25,6 +25,14 @@ pub struct FoldMap {
     /// Currently folded ranges
     /// Subset of candidates, sorted by start_line
     folded: Vec<FoldRange>,
+
+    /// Flag indicating if the fold projection needs rebuilding
+    /// Used for lazy evaluation to avoid expensive rebuilds on every text change
+    needs_rebuild: bool,
+
+    /// Cached wrap_row_count from last rebuild
+    /// Used to detect if WrapMap changed and rebuild is needed
+    cached_wrap_row_count: usize,
 }
 
 impl FoldMap {
@@ -34,6 +42,21 @@ impl FoldMap {
             wrap_row_to_display_row: Vec::new(),
             candidates: Vec::new(),
             folded: Vec::new(),
+            needs_rebuild: true,
+            cached_wrap_row_count: 0,
+        }
+    }
+
+    /// Mark that the fold projection needs rebuilding
+    /// This is called when wrap_map changes, but we defer the rebuild until needed
+    pub(super) fn mark_dirty(&mut self) {
+        self.needs_rebuild = true;
+    }
+
+    /// Ensure the fold projection is up-to-date (lazy rebuild)
+    fn ensure_rebuilt(&mut self, wrap_map: &WrapMap) {
+        if self.needs_rebuild {
+            self.rebuild(wrap_map);
         }
     }
 
@@ -148,6 +171,13 @@ impl FoldMap {
     pub fn rebuild(&mut self, wrap_map: &WrapMap) {
         let wrap_row_count = wrap_map.wrap_row_count();
 
+        // Performance optimization: skip rebuild if nothing changed
+        if !self.needs_rebuild && wrap_row_count == self.cached_wrap_row_count {
+            return;
+        }
+
+        self.cached_wrap_row_count = wrap_row_count;
+
         self.visible_wrap_rows.clear();
         self.wrap_row_to_display_row = vec![None; wrap_row_count];
 
@@ -231,6 +261,8 @@ impl FoldMap {
                 display_row += 1;
             }
         }
+
+        self.needs_rebuild = false;
     }
 }
 

@@ -11,7 +11,7 @@ use smallvec::SmallVec;
 
 use crate::{
     ActiveTheme as _, Colorize, Root,
-    input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout},
+    input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
 };
 
 use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};

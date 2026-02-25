@@ -20,23 +20,23 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
-    mode::InputMode, number_input, DisplayMap,
+    DisplayMap, blink_cursor::BlinkCursor, change::Change, element::TextElement,
+    mask_pattern::MaskPattern, mode::InputMode, number_input,
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::highlighter::DiagnosticSet;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
     HoverDefinition, Lsp, Position,
+    display_map::{LineItem, LineLayout},
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
-    text_wrapper::{LineItem, LineLayout},
 };
 use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
-use crate::highlighter::DiagnosticSet;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -1902,7 +1902,7 @@ impl InputState {
                 };
 
                 self.display_map.on_layout_changed(wrap_width, cx);
-                self.mode.update_auto_grow(self.display_map.wrap_map().wrapper());
+                self.mode.update_auto_grow(&self.display_map);
                 cx.notify();
             }
         }
@@ -2076,7 +2076,7 @@ impl EntityInputHandler for InputState {
         self.ime_marked_range.take();
         self.update_preferred_column();
         self.update_search(cx);
-        self.mode.update_auto_grow(self.display_map.wrap_map().wrapper());
+        self.mode.update_auto_grow(&self.display_map);
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
         }
@@ -2140,7 +2140,7 @@ impl EntityInputHandler for InputState {
                 .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
                 .into();
         }
-        self.mode.update_auto_grow(self.display_map.wrap_map().wrapper());
+        self.mode.update_auto_grow(&self.display_map);
         self.history.start_grouping();
         self.push_history(&old_text, &range, new_text);
         cx.notify();

@@ -11,9 +11,9 @@ use gpui::{App, Font, Pixels};
 use ropey::Rope;
 
 use super::fold_map::FoldMap;
+use super::text_wrapper::{LineItem, TextWrapper};
 use super::types::{BufferPos, DisplayPos, FoldRange};
 use super::wrap_map::WrapMap;
-use crate::input::text_wrapper::{LineItem, TextWrapper};
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
@@ -197,7 +197,10 @@ impl DisplayMap {
 
     /// Ensure text is prepared (initializes wrapper if needed)
     pub fn ensure_text_prepared(&mut self, text: &Rope, cx: &mut App) {
-        self.wrap_map.ensure_text_prepared(text, cx);
+        let did_initialize = self.wrap_map.ensure_text_prepared(text, cx);
+        if did_initialize {
+            self.rebuild_fold_projection();
+        }
     }
 
     /// Initialize with text
@@ -209,8 +212,16 @@ impl DisplayMap {
     // ==================== Internal Helpers ====================
 
     /// Rebuild fold projection after wrap_map or fold state changes
+    /// Only rebuilds if there are actually folded ranges
     fn rebuild_fold_projection(&mut self) {
-        self.fold_map.rebuild(&self.wrap_map);
+        // Optimization: skip rebuild if no folds are active
+        // This avoids expensive O(n) traversal of all wrap rows on every text change
+        if !self.fold_map.folded_ranges().is_empty() || !self.fold_map.fold_candidates().is_empty() {
+            self.fold_map.rebuild(&self.wrap_map);
+        } else {
+            // Fast path: mark dirty but don't rebuild yet
+            self.fold_map.mark_dirty();
+        }
     }
 
     // ==================== Access to Underlying Layers ====================

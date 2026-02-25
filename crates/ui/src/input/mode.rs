@@ -5,7 +5,7 @@ use gpui::{App, SharedString};
 use ropey::Rope;
 use tree_sitter::InputEdit;
 
-use super::text_wrapper::TextWrapper;
+use super::display_map::DisplayMap;
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
 use crate::input::{RopeExt as _, TabSize};
@@ -129,12 +129,12 @@ impl InputMode {
         }
     }
 
-    pub(super) fn update_auto_grow(&mut self, text_wrapper: &TextWrapper) {
+    pub(super) fn update_auto_grow(&mut self, display_map: &DisplayMap) {
         if self.is_single_line() {
             return;
         }
 
-        let wrapped_lines = text_wrapper.len();
+        let wrapped_lines = display_map.wrap_map().wrap_row_count();
         self.set_rows(wrapped_lines);
     }
 

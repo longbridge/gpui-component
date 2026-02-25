@@ -21,6 +21,10 @@ pub struct WrapMap {
     /// Prefix sum cache: buffer_line_starts[line] = first wrap_row for buffer line `line`
     /// This allows O(1) lookup of buffer_line → wrap_row
     buffer_line_starts: Vec<usize>,
+
+    /// Cached line count from last rebuild
+    /// Used to detect if we need full or incremental cache update
+    cached_line_count: usize,
 }
 
 impl WrapMap {
@@ -28,6 +32,7 @@ impl WrapMap {
         Self {
             wrapper: TextWrapper::new(font, font_size, wrap_width),
             buffer_line_starts: Vec::new(),
+            cached_line_count: 0,
         }
     }
 
@@ -150,9 +155,12 @@ impl WrapMap {
     }
 
     /// Ensure text is prepared (initializes wrapper if needed)
-    pub fn ensure_text_prepared(&mut self, text: &Rope, cx: &mut App) {
-        self.wrapper.prepare_if_need(text, cx);
-        self.rebuild_cache();
+    pub fn ensure_text_prepared(&mut self, text: &Rope, cx: &mut App) -> bool {
+        let did_initialize = self.wrapper.prepare_if_need(text, cx);
+        if did_initialize {
+            self.rebuild_cache();
+        }
+        did_initialize
     }
 
     /// Initialize with text
@@ -164,13 +172,43 @@ impl WrapMap {
 
     /// Rebuild the prefix sum cache: buffer_line_starts
     fn rebuild_cache(&mut self) {
-        self.buffer_line_starts.clear();
+        let line_count = self.wrapper.lines.len();
 
-        let mut wrap_row = 0;
-        for line_item in &self.wrapper.lines {
-            self.buffer_line_starts.push(wrap_row);
-            wrap_row += line_item.lines_len();
+        // Performance optimization: skip if nothing changed
+        if line_count == self.cached_line_count && !self.buffer_line_starts.is_empty() {
+            return;
         }
+
+        // Check if we can do incremental update
+        let can_incremental = line_count > self.cached_line_count
+            && self.cached_line_count > 0
+            && self.buffer_line_starts.len() == self.cached_line_count;
+
+        if can_incremental {
+            // Incremental update: only process new lines
+            let mut wrap_row = if let Some(&last) = self.buffer_line_starts.last() {
+                let last_line = &self.wrapper.lines[self.cached_line_count - 1];
+                last + last_line.lines_len()
+            } else {
+                0
+            };
+
+            for line_item in &self.wrapper.lines[self.cached_line_count..] {
+                self.buffer_line_starts.push(wrap_row);
+                wrap_row += line_item.lines_len();
+            }
+        } else {
+            // Full rebuild
+            self.buffer_line_starts.clear();
+
+            let mut wrap_row = 0;
+            for line_item in &self.wrapper.lines {
+                self.buffer_line_starts.push(wrap_row);
+                wrap_row += line_item.lines_len();
+            }
+        }
+
+        self.cached_line_count = line_count;
     }
 
     /// Get access to the underlying wrapper (for rendering/hit-testing)

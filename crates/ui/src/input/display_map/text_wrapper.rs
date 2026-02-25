@@ -11,36 +11,36 @@ use crate::input::{LastLayout, RopeExt, WhitespaceIndicators};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
-pub(super) struct LineItem {
+pub(crate) struct LineItem {
     /// The original line text, without end `\n`.
     line: Rope,
     /// The soft wrapped lines relative byte range (0..line.len) of this line (Include first line).
     ///
     /// Not contains the line end `\n`.
-    pub(super) wrapped_lines: Vec<Range<usize>>,
+    pub(crate) wrapped_lines: Vec<Range<usize>>,
 }
 
 impl LineItem {
     /// Get the bytes length of this line.
     #[inline]
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.line.len()
     }
 
     /// Get number of soft wrapped lines of this line (include the first line).
     #[inline]
-    pub(super) fn lines_len(&self) -> usize {
+    pub(crate) fn lines_len(&self) -> usize {
         self.wrapped_lines.len()
     }
 
     /// Get the height of this line item with given line height.
-    pub(super) fn height(&self, line_height: Pixels) -> Pixels {
+    pub(crate) fn height(&self, line_height: Pixels) -> Pixels {
         self.lines_len() as f32 * line_height
     }
 }
 
 #[derive(Debug, Default)]
-pub(super) struct LongestRow {
+pub(crate) struct LongestRow {
     /// The 0-based row index.
     pub row: usize,
     /// The bytes length of the longest line.
@@ -50,7 +50,7 @@ pub(super) struct LongestRow {
 /// Used to prepare the text with soft wrap to be get lines to displayed in the Editor.
 ///
 /// After use lines to calculate the scroll size of the Editor.
-pub(super) struct TextWrapper {
+pub(crate) struct TextWrapper {
     text: Rope,
     /// Total wrapped lines (Inlucde the first line), value is start and end index of the line.
     soft_lines: usize,
@@ -59,16 +59,16 @@ pub(super) struct TextWrapper {
     /// If is none, it means the text is not wrapped
     wrap_width: Option<Pixels>,
     /// The longest (row, bytes len) in characters, used to calculate the horizontal scroll width.
-    pub(super) longest_row: LongestRow,
+    pub(crate) longest_row: LongestRow,
     /// The lines by split \n
-    pub(super) lines: Vec<LineItem>,
+    pub(crate) lines: Vec<LineItem>,
 
     _initialized: bool,
 }
 
 #[allow(unused)]
 impl TextWrapper {
-    pub(super) fn new(font: Font, font_size: Pixels, wrap_width: Option<Pixels>) -> Self {
+    pub(crate) fn new(font: Font, font_size: Pixels, wrap_width: Option<Pixels>) -> Self {
         Self {
             text: Rope::new(),
             font,
@@ -82,29 +82,29 @@ impl TextWrapper {
     }
 
     #[inline]
-    pub(super) fn set_default_text(&mut self, text: &Rope) {
+    pub(crate) fn set_default_text(&mut self, text: &Rope) {
         self.text = text.clone();
     }
 
     /// Get reference to the rope text.
     #[inline]
-    pub(super) fn text(&self) -> &Rope {
+    pub(crate) fn text(&self) -> &Rope {
         &self.text
     }
 
     /// Get the total number of lines including wrapped lines.
     #[inline]
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.soft_lines
     }
 
     /// Get the line item by row index.
     #[inline]
-    pub(super) fn line(&self, row: usize) -> Option<&LineItem> {
+    pub(crate) fn line(&self, row: usize) -> Option<&LineItem> {
         self.lines.iter().skip(row).next()
     }
 
-    pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
+    pub(crate) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
         if wrap_width == self.wrap_width {
             return;
         }
@@ -113,7 +113,7 @@ impl TextWrapper {
         self.update_all(&self.text.clone(), cx);
     }
 
-    pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
+    pub(crate) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         if self.font.eq(&font) && self.font_size == font_size {
             return;
         }
@@ -123,12 +123,13 @@ impl TextWrapper {
         self.update_all(&self.text.clone(), cx);
     }
 
-    pub(super) fn prepare_if_need(&mut self, text: &Rope, cx: &mut App) {
+    pub(crate) fn prepare_if_need(&mut self, text: &Rope, cx: &mut App) -> bool {
         if self._initialized {
-            return;
+            return false;
         }
         self._initialized = true;
         self.update_all(text, cx);
+        true
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
@@ -140,7 +141,7 @@ impl TextWrapper {
     /// - `new_text`: The inserted text.
     /// - `force`: Whether to force the update, if false, the update will be skipped if the text is the same.
     /// - `cx`: The application context.
-    pub(super) fn update(
+    pub(crate) fn update(
         &mut self,
         changed_text: &Rope,
         range: &Range<usize>,
@@ -412,7 +413,7 @@ impl LineLayout {
     }
 
     #[inline]
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.len
     }
 
@@ -447,7 +448,7 @@ impl LineLayout {
     }
 
     /// Get the closest index for the given x in this line layout.
-    pub(super) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
+    pub(crate) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
         let mut acc_len = 0;
         let x_offset = last_layout.alignment_offset(self.longest_width);
         let x = x - x_offset;
@@ -474,7 +475,7 @@ impl LineLayout {
     ///
     /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
     /// The return value is a local byte index in this line layout, start from 0.
-    pub(super) fn closest_index_for_position(
+    pub(crate) fn closest_index_for_position(
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,
@@ -502,7 +503,7 @@ impl LineLayout {
         None
     }
 
-    pub(super) fn index_for_position(
+    pub(crate) fn index_for_position(
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,
@@ -524,11 +525,11 @@ impl LineLayout {
         None
     }
 
-    pub(super) fn size(&self, line_height: Pixels) -> Size<Pixels> {
+    pub(crate) fn size(&self, line_height: Pixels) -> Size<Pixels> {
         size(self.longest_width, self.wrapped_lines.len() * line_height)
     }
 
-    pub(super) fn paint(
+    pub(crate) fn paint(
         &self,
         pos: Point<Pixels>,
         line_height: Pixels,

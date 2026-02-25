@@ -15,6 +15,7 @@ mod wrap_map;
 
 // Re-export public API
 pub use self::display_map::DisplayMap;
+pub(crate) use self::text_wrapper::{DisplayPoint, LineItem, LineLayout};
 pub use self::types::{BufferPos, DisplayPos, FoldRange};
 
 // Re-export for gradual migration (TODO: remove after full migration)
