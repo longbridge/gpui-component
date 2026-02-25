@@ -745,25 +745,6 @@ impl TextElement {
             return vec![line_layout];
         }
 
-        // Empty to use placeholder, the placeholder is not in the text_wrapper map.
-        if state.text.len() == 0 {
-            return display_text
-                .to_string()
-                .split("\n")
-                .map(|line| {
-                    let shaped_line = window.text_system().shape_line(
-                        line.to_string().into(),
-                        font_size,
-                        &runs,
-                        None,
-                    );
-                    LineLayout::new()
-                        .lines(smallvec::smallvec![shaped_line])
-                        .with_whitespaces(whitespace_indicators.clone())
-                })
-                .collect();
-        }
-
         let visible_text = display_text
             .slice_lines(visible_range.start..visible_range.end)
             .to_string();
@@ -1003,9 +984,27 @@ impl Element for TextElement {
         let font = style.font();
         let text_size = style.font_size.to_pixels(window.rem_size());
 
+        let (text, is_empty, placeholder) = {
+            let state = self.state.read(cx);
+            (
+                state.text.clone(),
+                state.text.len() == 0,
+                self.placeholder.clone(),
+            )
+        };
+
+        // When text is empty, prepare text_wrapper with placeholder text
+        let display_text_rope = if is_empty {
+            Rope::from(placeholder.as_str())
+        } else if self.state.read(cx).masked {
+            Rope::from("*".repeat(text.chars().count()))
+        } else {
+            text.clone()
+        };
+
         self.state.update(cx, |state, cx| {
             state.text_wrapper.set_font(font, text_size, cx);
-            state.text_wrapper.prepare_if_need(&state.text, cx);
+            state.text_wrapper.prepare_if_need(&display_text_rope, cx);
         });
 
         let state = self.state.read(cx);
@@ -1013,10 +1012,9 @@ impl Element for TextElement {
 
         let (visible_range, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
-        let visible_start_offset = state.text.line_start_offset(visible_range.start);
-        let visible_end_offset = state
-            .text
-            .line_end_offset(visible_range.end.saturating_sub(1));
+        let visible_start_offset = display_text_rope.line_start_offset(visible_range.start);
+        let visible_end_offset =
+            display_text_rope.line_end_offset(visible_range.end.saturating_sub(1));
 
         let highlight_styles = self.highlight_lines(
             &visible_range,
@@ -1027,31 +1025,21 @@ impl Element for TextElement {
 
         let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();
-        let text = state.text.clone();
-        let is_empty = text.len() == 0;
-        let placeholder = self.placeholder.clone();
-
         let mut bounds = bounds;
 
         let (display_text, text_color) = if is_empty {
-            (
-                &Rope::from(placeholder.as_str()),
-                cx.theme().muted_foreground,
-            )
+            (&display_text_rope, cx.theme().muted_foreground)
         } else if state.masked {
-            (
-                &Rope::from("*".repeat(text.chars().count())),
-                cx.theme().foreground,
-            )
+            (&display_text_rope, cx.theme().foreground)
         } else {
-            (&text, cx.theme().foreground)
+            (&display_text_rope, cx.theme().foreground)
         };
 
         let text_style = window.text_style();
 
-        // Calculate the width of the line numbers
+        // Calculate the width of the line numbers (use original text for line numbers, not placeholder)
         let (line_number_width, line_number_len) =
-            Self::layout_line_numbers(&state, &text, text_size, &text_style, window);
+            Self::layout_line_numbers(&state, &state.text, text_size, &text_style, window);
 
         let wrap_width = if multi_line && state.soft_wrap {
             Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
