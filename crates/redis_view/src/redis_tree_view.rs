@@ -577,11 +577,33 @@ impl RedisTreeView {
             self.reset_db_key_count(node_id);
         }
 
-        if next_cursor != 0 {
-            if let Some(node) = self.nodes.get(node_id) {
-                let load_more = self.build_load_more_node(node_id, &node.connection_id, node.db_index);
-                self.append_node_children(node_id, vec![load_more], cx);
+        // 不再显示“加载更多”
+        let _ = next_cursor;
+    }
+
+    /// 更新已加载键的类型（异步补全）
+    pub fn update_key_types(
+        &mut self,
+        connection_id: &str,
+        db_index: u8,
+        key_types: Vec<(String, RedisKeyType)>,
+        cx: &mut Context<Self>,
+    ) {
+        let mut changed = false;
+        for (key, key_type) in key_types {
+            let node_id = format!("{}:db{}:{}", connection_id, db_index, key);
+            if let Some(node) = self.nodes.get_mut(&node_id) {
+                if let RedisNodeType::Key(existing) = node.node_type {
+                    if existing == key_type {
+                        continue;
+                    }
+                }
+                node.node_type = RedisNodeType::Key(key_type);
+                changed = true;
             }
+        }
+        if changed {
+            cx.notify();
         }
     }
 
@@ -641,6 +663,31 @@ impl RedisTreeView {
 
         self.rebuild_flat_entries();
         cx.notify();
+    }
+
+    fn count_loaded_keys(&self, node_id: &str) -> i64 {
+        let Some(node) = self.nodes.get(node_id) else {
+            return 0;
+        };
+        let mut count = 0i64;
+        let mut stack: Vec<&RedisNode> = Vec::new();
+        for child in &node.children {
+            stack.push(child);
+        }
+        while let Some(current) = stack.pop() {
+            match current.node_type {
+                RedisNodeType::Key(_) => {
+                    count += 1;
+                }
+                RedisNodeType::Namespace | RedisNodeType::Database(_) | RedisNodeType::Connection => {
+                    for child in &current.children {
+                        stack.push(child);
+                    }
+                }
+                RedisNodeType::LoadMore => {}
+            }
+        }
+        count
     }
 
     fn update_local_search_counts(&mut self) {
@@ -1182,6 +1229,15 @@ impl RedisTreeView {
 
         let view_for_arrow = cx.entity().clone();
         let node_id_for_arrow = entry.node_id.clone();
+        let loaded_count = match node.node_type {
+            RedisNodeType::Database(_) | RedisNodeType::Namespace => Some(self.count_loaded_keys(&node_id)),
+            _ => None,
+        };
+        let display_name = if let Some(count) = loaded_count {
+            format!("{} ({})", name, count)
+        } else {
+            name
+        };
 
         h_flex()
             .id(SharedString::from(format!("redis-node-{}", ix)))
@@ -1299,7 +1355,7 @@ impl RedisTreeView {
                     .when(is_connection && !is_connected && error_msg.is_none(), |el| {
                         el.text_color(cx.theme().muted_foreground)
                     })
-                    .child(name),
+                    .child(display_name),
             )
             // 加载中指示器
             .when(is_loading, |this| {

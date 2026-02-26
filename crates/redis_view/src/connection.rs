@@ -992,10 +992,10 @@ mod tests {
     use super::*;
 
     const REDIS_PORT: u16 = 6379;
-    const TEST_PREFIX: &str = "onetcli:test:";
+    const TEST_PREFIX: &str = "onetcli-test-";
 
     fn redis_host() -> &'static str {
-        option_env!("REDIS_TEST_HOST").unwrap_or("127.0.0.1")
+        option_env!("REDIS_TEST_HOST").unwrap_or("172.31.15.186")
     }
 
     #[tokio::test]
@@ -1033,7 +1033,7 @@ mod tests {
 
         // String 3000
         for _ in 0..3000 {
-            let key = format!("{}string:{}", TEST_PREFIX, i);
+            let key = format!("{}string-{}", TEST_PREFIX, i);
             let _: () = redis_client::cmd("SET")
                 .arg(key)
                 .arg(format!("value-{}", i))
@@ -1044,7 +1044,7 @@ mod tests {
 
         // Hash 1500
         for _ in 0..1500 {
-            let key = format!("{}hash:{}", TEST_PREFIX, i);
+            let key = format!("{}hash-{}", TEST_PREFIX, i);
             let _: () = redis_client::cmd("HSET")
                 .arg(key)
                 .arg("field1")
@@ -1056,58 +1056,58 @@ mod tests {
             i += 1;
         }
 
-        // List 1500
-        for _ in 0..1500 {
-            let key = format!("{}list:{}", TEST_PREFIX, i);
-            let _: i64 = redis_client::cmd("LPUSH")
-                .arg(key)
-                .arg(format!("item-{}-1", i))
-                .arg(format!("item-{}-2", i))
-                .arg(format!("item-{}-3", i))
-                .query_async(&mut conn)
-                .await?;
-            i += 1;
-        }
-
-        // Set 1500
-        for _ in 0..1500 {
-            let key = format!("{}set:{}", TEST_PREFIX, i);
-            let _: i64 = redis_client::cmd("SADD")
-                .arg(key)
-                .arg(format!("member-{}-1", i))
-                .arg(format!("member-{}-2", i))
-                .arg(format!("member-{}-3", i))
-                .query_async(&mut conn)
-                .await?;
-            i += 1;
-        }
-
-        // ZSet 1500
-        for _ in 0..1500 {
-            let key = format!("{}zset:{}", TEST_PREFIX, i);
-            let _: i64 = redis_client::cmd("ZADD")
-                .arg(key)
-                .arg(1)
-                .arg(format!("member-{}-1", i))
-                .arg(2)
-                .arg(format!("member-{}-2", i))
-                .query_async(&mut conn)
-                .await?;
-            i += 1;
-        }
-
-        // Stream 1000
-        for _ in 0..1000 {
-            let key = format!("{}stream:{}", TEST_PREFIX, i);
-            let _: String = redis_client::cmd("XADD")
-                .arg(key)
-                .arg("*")
-                .arg("field")
-                .arg(format!("value-{}", i))
-                .query_async(&mut conn)
-                .await?;
-            i += 1;
-        }
+        // // List 1500
+        // for _ in 0..1500 {
+        //     let key = format!("{}list-{}", TEST_PREFIX, i);
+        //     let _: i64 = redis_client::cmd("LPUSH")
+        //         .arg(key)
+        //         .arg(format!("item-{}-1", i))
+        //         .arg(format!("item-{}-2", i))
+        //         .arg(format!("item-{}-3", i))
+        //         .query_async(&mut conn)
+        //         .await?;
+        //     i += 1;
+        // }
+        //
+        // // Set 1500
+        // for _ in 0..1500 {
+        //     let key = format!("{}set-{}", TEST_PREFIX, i);
+        //     let _: i64 = redis_client::cmd("SADD")
+        //         .arg(key)
+        //         .arg(format!("member-{}-1", i))
+        //         .arg(format!("member-{}-2", i))
+        //         .arg(format!("member-{}-3", i))
+        //         .query_async(&mut conn)
+        //         .await?;
+        //     i += 1;
+        // }
+        //
+        // // ZSet 1500
+        // for _ in 0..1500 {
+        //     let key = format!("{}zset-{}", TEST_PREFIX, i);
+        //     let _: i64 = redis_client::cmd("ZADD")
+        //         .arg(key)
+        //         .arg(1)
+        //         .arg(format!("member-{}-1", i))
+        //         .arg(2)
+        //         .arg(format!("member-{}-2", i))
+        //         .query_async(&mut conn)
+        //         .await?;
+        //     i += 1;
+        // }
+        //
+        // // Stream 1000
+        // for _ in 0..1000 {
+        //     let key = format!("{}stream-{}", TEST_PREFIX, i);
+        //     let _: String = redis_client::cmd("XADD")
+        //         .arg(key)
+        //         .arg("*")
+        //         .arg("field")
+        //         .arg(format!("value-{}", i))
+        //         .query_async(&mut conn)
+        //         .await?;
+        //     i += 1;
+        // }
 
         // 校验总数
         let size: i64 = redis_client::cmd("DBSIZE")

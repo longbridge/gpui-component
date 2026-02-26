@@ -402,7 +402,7 @@ impl RedisEventHandler {
 
         cx.spawn(async move |cx: &mut gpui::AsyncApp| {
             let pattern_for_scan = pattern.clone();
-            let (keys_with_types, next_cursor) = match Tokio::spawn_result(cx, {
+            let (keys, next_cursor) = match Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -427,18 +427,7 @@ impl RedisEventHandler {
                     }
                     let next_cursor = current_cursor;
 
-                    // 批量获取每个键的类型（pipeline）
-                    let keys_with_types = guard.key_types_batch(&all_keys).await.unwrap_or_else(|_| {
-                        all_keys
-                            .into_iter()
-                            .map(|key| (key, RedisKeyType::None))
-                            .collect()
-                    });
-
-                    Ok::<(Vec<(String, RedisKeyType)>, u64), anyhow::Error>((
-                        keys_with_types,
-                        next_cursor,
-                    ))
+                    Ok::<(Vec<String>, u64), anyhow::Error>((all_keys, next_cursor))
                 }
             })
             .await {
@@ -453,8 +442,17 @@ impl RedisEventHandler {
                 }
             };
 
-            // 构建键节点（按 ":" 分割为树）
-            let key_nodes = Self::build_namespace_tree(&connection_id, db_index, keys_with_types);
+            // 构建键节点（按 ":" 分割为树），类型异步加载
+            let key_nodes = Self::build_namespace_tree(
+                &connection_id,
+                db_index,
+                keys.iter().cloned().map(|key| (key, RedisKeyType::None)).collect(),
+            );
+            let keys_for_types = keys.clone();
+            let connection_id_for_types = connection_id.clone();
+            let node_id_for_types = node_id.clone();
+            let tree_for_types = tree_view.clone();
+            let global_for_types = global_state.clone();
 
             _ = cx.update(|cx| {
                 tree_view.update(cx, |tree, cx| {
@@ -472,6 +470,43 @@ impl RedisEventHandler {
                     );
                 });
             });
+
+            if !keys_for_types.is_empty() {
+                cx.spawn(async move |cx: &mut gpui::AsyncApp| {
+                    let types_result = match Tokio::spawn_result(cx, {
+                        let global_state = global_for_types.clone();
+                        let connection_id = connection_id_for_types.clone();
+                        async move {
+                            let conn = global_state
+                                .get_connection(&connection_id)
+                                .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
+                            let guard = conn.read().await;
+                            Ok::<Vec<(String, RedisKeyType)>, anyhow::Error>(
+                                guard.key_types_batch(&keys_for_types).await.unwrap_or_else(|_| {
+                                    keys_for_types
+                                        .into_iter()
+                                        .map(|key| (key, RedisKeyType::None))
+                                        .collect()
+                                }),
+                            )
+                        }
+                    })
+                    .await {
+                        Ok(types) => types,
+                        Err(_) => return,
+                    };
+
+                    _ = cx.update(|cx| {
+                        tree_for_types.update(cx, |tree, cx| {
+                            if !tree.is_search_token_current(&node_id_for_types, token) {
+                                return;
+                            }
+                            tree.update_key_types(&connection_id_for_types, db_index, types_result, cx);
+                        });
+                    });
+                })
+                .detach();
+            }
         })
         .detach();
     }
