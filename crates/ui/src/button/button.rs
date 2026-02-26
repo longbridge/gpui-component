@@ -645,7 +645,7 @@ impl ButtonVariant {
             Self::Success => cx.theme().success.mix_oklab(cx.theme().transparent, 0.2),
             Self::Info => cx.theme().info.mix_oklab(cx.theme().transparent, 0.2),
             Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => colors.color,
+            Self::Custom(colors) => colors.color.mix_oklab(cx.theme().transparent, 0.2),
         }
     }
 
@@ -659,43 +659,13 @@ impl ButtonVariant {
                 }
             }
             Self::Secondary | Self::Ghost => cx.theme().secondary_foreground,
-            Self::Danger => {
-                if outline {
-                    cx.theme().danger
-                } else {
-                    cx.theme().danger
-                }
-            }
-            Self::Warning => {
-                if outline {
-                    cx.theme().warning
-                } else {
-                    cx.theme().warning
-                }
-            }
-            Self::Success => {
-                if outline {
-                    cx.theme().success
-                } else {
-                    cx.theme().success
-                }
-            }
-            Self::Info => {
-                if outline {
-                    cx.theme().info
-                } else {
-                    cx.theme().info
-                }
-            }
+            Self::Danger => cx.theme().danger,
+            Self::Warning => cx.theme().warning,
+            Self::Success => cx.theme().success,
+            Self::Info => cx.theme().info,
             Self::Link => cx.theme().link,
             Self::Text => cx.theme().foreground,
-            Self::Custom(colors) => {
-                if outline {
-                    colors.color
-                } else {
-                    colors.foreground
-                }
-            }
+            Self::Custom(colors) => colors.color,
         }
     }
 
@@ -708,7 +678,7 @@ impl ButtonVariant {
             Self::Warning => cx.theme().warning,
             Self::Success => cx.theme().success,
             Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => colors.border,
+            Self::Custom(colors) => colors.color,
         }
     }
 
@@ -819,7 +789,13 @@ impl ButtonVariant {
 
     fn active(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
-            Self::Primary => cx.theme().primary.mix_oklab(cx.theme().transparent, 0.4),
+            Self::Primary => {
+                if outline {
+                    cx.theme().primary.mix_oklab(cx.theme().transparent, 0.4)
+                } else {
+                    cx.theme().primary_active
+                }
+            }
             Self::Secondary => cx.theme().secondary_active,
             Self::Ghost => {
                 if cx.theme().mode.is_dark() {
@@ -832,15 +808,9 @@ impl ButtonVariant {
             Self::Warning => cx.theme().warning.mix_oklab(cx.theme().transparent, 0.4),
             Self::Success => cx.theme().success.mix_oklab(cx.theme().transparent, 0.4),
             Self::Info => cx.theme().info.mix_oklab(cx.theme().transparent, 0.4),
+            Self::Custom(colors) => colors.color.mix_oklab(cx.theme().transparent, 0.4),
             Self::Link => cx.theme().transparent,
             Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => {
-                if outline {
-                    colors.active.opacity(0.1)
-                } else {
-                    colors.active
-                }
-            }
         };
         let border = self.border_color(bg, outline, cx);
         let fg = match self {

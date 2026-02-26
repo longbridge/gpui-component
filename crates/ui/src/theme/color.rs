@@ -355,6 +355,9 @@ mod color_scales {
 /// Enum representing the available color names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ColorName {
+    White,
+    Black,
+    Neutral,
     Gray,
     Red,
     Orange,
@@ -386,6 +389,9 @@ impl TryFrom<&str> for ColorName {
     type Error = anyhow::Error;
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
+            "white" => Ok(ColorName::White),
+            "black" => Ok(ColorName::Black),
+            "neutral" => Ok(ColorName::Neutral),
             "gray" => Ok(ColorName::Gray),
             "red" => Ok(ColorName::Red),
             "orange" => Ok(ColorName::Orange),
@@ -418,8 +424,9 @@ impl TryFrom<SharedString> for ColorName {
 
 impl ColorName {
     /// Returns all available color names.
-    pub fn all() -> [Self; 18] {
+    pub fn all() -> [Self; 19] {
         [
+            ColorName::Neutral,
             ColorName::Gray,
             ColorName::Red,
             ColorName::Orange,
@@ -446,7 +453,15 @@ impl ColorName {
     /// The `scale` is any of `[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]`
     /// falls back to 500 if out of range.
     pub fn scale(&self, scale: usize) -> Hsla {
+        if self == &ColorName::White {
+            return DEFAULT_COLORS.white.hsla;
+        }
+        if self == &ColorName::Black {
+            return DEFAULT_COLORS.black.hsla;
+        }
+
         let colors = match self {
+            ColorName::Neutral => &DEFAULT_COLORS.neutral,
             ColorName::Gray => &DEFAULT_COLORS.gray,
             ColorName::Red => &DEFAULT_COLORS.red,
             ColorName::Orange => &DEFAULT_COLORS.orange,
@@ -465,6 +480,7 @@ impl ColorName {
             ColorName::Fuchsia => &DEFAULT_COLORS.fuchsia,
             ColorName::Pink => &DEFAULT_COLORS.pink,
             ColorName::Rose => &DEFAULT_COLORS.rose,
+            _ => unreachable!(),
         };
 
         if let Some(color) = colors.get(&scale) {
@@ -821,7 +837,10 @@ mod tests {
         let rgb_result = result.to_rgb();
         let rgb_red = red.to_rgb();
         // Allow some tolerance due to color space conversions
-        assert!((rgb_result.r - rgb_red.r).abs() < 0.05, "Red channel should be preserved");
+        assert!(
+            (rgb_result.r - rgb_red.r).abs() < 0.05,
+            "Red channel should be preserved"
+        );
         assert!(rgb_result.g < 0.05, "Green channel should be near 0");
         assert!(rgb_result.b < 0.05, "Blue channel should be near 0");
 
