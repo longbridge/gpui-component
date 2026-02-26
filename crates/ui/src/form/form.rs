@@ -1,11 +1,12 @@
 use gpui::{
-    px, App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled,
-    Window,
+    App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled,
+    Window, div, px,
 };
 
 use crate::{
+    Sizable, Size,
     form::{Field, FieldProps},
-    v_flex, Sizable, Size,
+    v_flex,
 };
 
 /// A form element that contains multiple form fields.
@@ -97,17 +98,20 @@ impl RenderOnce for Form {
             _ => px(8.),
         };
 
-        v_flex()
-            .w_full()
-            .gap_x(gap * 3.)
-            .gap_y(gap)
-            .grid()
-            .grid_cols(props.columns as u16)
-            .children(
-                self.fields
-                    .into_iter()
-                    .enumerate()
-                    .map(|(ix, field)| field.props(ix, props)),
-            )
+        // Add `div` wrapper to avoid sometime width not full issue.
+        div().child(
+            v_flex()
+                .w_full()
+                .gap_x(gap * 3.)
+                .gap_y(gap)
+                .grid()
+                .grid_cols(props.columns as u16)
+                .children(
+                    self.fields
+                        .into_iter()
+                        .enumerate()
+                        .map(|(ix, field)| field.props(ix, props)),
+                ),
+        )
     }
 }
