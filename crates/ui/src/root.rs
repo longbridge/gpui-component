@@ -9,8 +9,8 @@ use crate::{
 };
 use gpui::{
     AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, StyleRefinement, Styled, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    IntoElement, KeyBinding, ParentElement as _, Pixels, Render, StyleRefinement, Styled,
+    WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -28,13 +28,14 @@ pub(crate) fn init(cx: &mut App) {
 ///
 /// It is used to manage the Sheet, Dialog, and Notification.
 pub struct Root {
+    style: StyleRefinement,
+    view: AnyView,
     pub(crate) active_sheet: Option<ActiveSheet>,
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
-    view: AnyView,
-    style: StyleRefinement,
+    window_shadow_size: Pixels,
 }
 
 #[derive(Clone)]
@@ -72,14 +73,23 @@ impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            style: StyleRefinement::default(),
+            view: view.into(),
             active_sheet: None,
             active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
-            view: view.into(),
-            style: StyleRefinement::default(),
+            window_shadow_size: window_border::SHADOW_SIZE,
         }
+    }
+
+    /// Set the window border shadow size for Linux client-side decorations.
+    ///
+    /// Default: [`window_border::SHADOW_SIZE`]
+    pub fn window_shadow_size(mut self, size: impl Into<Pixels>) -> Self {
+        self.window_shadow_size = size.into();
+        self
     }
 
     pub fn update<F, R>(window: &mut Window, cx: &mut App, f: F) -> R
@@ -434,7 +444,7 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
-        window_border().child(
+        window_border().shadow_size(self.window_shadow_size).child(
             div()
                 .id("root")
                 .key_context(CONTEXT)
