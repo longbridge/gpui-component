@@ -1,16 +1,18 @@
 use std::rc::Rc;
 
-use gpui::{App, Bounds, Hsla, PathBuilder, Pixels, SharedString, TextAlign, Window, fill, px};
+use gpui::{App, Bounds, Hsla, PathBuilder, Pixels, SharedString, Window, fill, px};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
     ActiveTheme,
     plot::{
-        AXIS_GAP, AxisText, Grid, Plot, PlotAxis, origin_point,
+        AXIS_GAP, Grid, Plot, PlotAxis, origin_point,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
     },
 };
+
+use super::build_band_x_labels;
 
 #[derive(IntoPlot)]
 pub struct CandlestickChart<T, X, Y>
@@ -27,6 +29,7 @@ where
     close: Option<Rc<dyn Fn(&T) -> Y>>,
     tick_margin: usize,
     body_width_ratio: f32,
+    x_axis: bool,
     grid: bool,
 }
 
@@ -48,6 +51,7 @@ where
             close: None,
             tick_margin: 1,
             body_width_ratio: 0.8,
+            x_axis: true,
             grid: true,
         }
     }
@@ -87,6 +91,14 @@ where
         self
     }
 
+    /// Show or hide the x-axis line and labels.
+    ///
+    /// Default is true.
+    pub fn x_axis(mut self, x_axis: bool) -> Self {
+        self.x_axis = x_axis;
+        self
+    }
+
     pub fn grid(mut self, grid: bool) -> Self {
         self.grid = grid;
         self
@@ -110,7 +122,8 @@ where
         };
 
         let width = bounds.size.width.as_f32();
-        let height = bounds.size.height.as_f32() - AXIS_GAP;
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        let height = bounds.size.height.as_f32() - axis_gap;
 
         // X scale
         let x = ScaleBand::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width])
@@ -127,26 +140,19 @@ where
         let y = ScaleLinear::new(all_values, vec![height, 10.]);
 
         // Draw X axis
-        let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
-            if (i + 1) % self.tick_margin == 0 {
-                x.tick(&x_fn(d)).map(|x_tick| {
-                    AxisText::new(
-                        x_fn(d).into(),
-                        x_tick + band_width / 2.,
-                        cx.theme().muted_foreground,
-                    )
-                    .align(TextAlign::Center)
-                })
-            } else {
-                None
-            }
-        });
-
-        PlotAxis::new()
-            .x(height)
-            .x_label(x_label)
-            .stroke(cx.theme().border)
-            .paint(&bounds, window, cx);
+        let mut axis = PlotAxis::new().stroke(cx.theme().border);
+        if self.x_axis {
+            let labels = build_band_x_labels(
+                &self.data,
+                x_fn.as_ref(),
+                &x,
+                band_width,
+                self.tick_margin,
+                cx.theme().muted_foreground,
+            );
+            axis = axis.x(height).x_label(labels);
+        }
+        axis.paint(&bounds, window, cx);
 
         // Draw grid
         if self.grid {
