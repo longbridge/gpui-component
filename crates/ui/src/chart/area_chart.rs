@@ -27,7 +27,7 @@ where
     stroke_styles: Vec<StrokeStyle>,
     fills: Vec<Background>,
     tick_margin: usize,
-    show_grid: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> AreaChart<T, X, Y>
@@ -47,7 +47,7 @@ where
             tick_margin: 1,
             x: None,
             y: vec![],
-            show_grid: true,
+            grid: true,
         }
     }
 
@@ -91,8 +91,8 @@ where
         self
     }
 
-    pub fn hide_grid(mut self) -> Self {
-        self.show_grid = false;
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -156,7 +156,7 @@ where
             .paint(&bounds, window, cx);
 
         // Draw grid
-        if self.show_grid {
+        if self.grid {
             Grid::new()
                 .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
                 .stroke(cx.theme().border)

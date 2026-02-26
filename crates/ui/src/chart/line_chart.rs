@@ -27,7 +27,7 @@ where
     stroke_style: StrokeStyle,
     dot: bool,
     tick_margin: usize,
-    show_grid: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> LineChart<T, X, Y>
@@ -47,7 +47,7 @@ where
             x: None,
             y: None,
             tick_margin: 1,
-            show_grid: true,
+            grid: true,
         }
     }
 
@@ -91,8 +91,8 @@ where
         self
     }
 
-    pub fn hide_grid(mut self) -> Self {
-        self.show_grid = false;
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -153,7 +153,7 @@ where
             .paint(&bounds, window, cx);
 
         // Draw grid
-        if self.show_grid {
+        if self.grid {
             Grid::new()
                 .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
                 .stroke(cx.theme().border)

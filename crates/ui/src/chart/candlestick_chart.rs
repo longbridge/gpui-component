@@ -27,7 +27,7 @@ where
     close: Option<Rc<dyn Fn(&T) -> Y>>,
     tick_margin: usize,
     body_width_ratio: f32,
-    show_grid: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> CandlestickChart<T, X, Y>
@@ -48,7 +48,7 @@ where
             close: None,
             tick_margin: 1,
             body_width_ratio: 0.8,
-            show_grid: true,
+            grid: true,
         }
     }
 
@@ -87,8 +87,8 @@ where
         self
     }
 
-    pub fn hide_grid(mut self) -> Self {
-        self.show_grid = false;
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -149,7 +149,7 @@ where
             .paint(&bounds, window, cx);
 
         // Draw grid
-        if self.show_grid {
+        if self.grid {
             Grid::new()
                 .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
                 .stroke(cx.theme().border)

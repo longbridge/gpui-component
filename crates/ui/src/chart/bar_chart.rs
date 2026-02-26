@@ -27,7 +27,7 @@ where
     fill: Option<Rc<dyn Fn(&T) -> Hsla>>,
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
-    show_grid: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> BarChart<T, X, Y>
@@ -46,7 +46,7 @@ where
             fill: None,
             tick_margin: 1,
             label: None,
-            show_grid: true,
+            grid: true,
         }
     }
 
@@ -81,8 +81,8 @@ where
         self
     }
 
-    pub fn hide_grid(mut self) -> Self {
-        self.show_grid = false;
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -139,7 +139,7 @@ where
             .paint(&bounds, window, cx);
 
         // Draw grid
-        if self.show_grid {
+        if self.grid {
             Grid::new()
                 .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
                 .stroke(cx.theme().border)
