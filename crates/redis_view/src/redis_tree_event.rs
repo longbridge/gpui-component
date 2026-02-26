@@ -14,6 +14,9 @@ use crate::RedisManager;
 use crate::{GlobalRedisState, RedisKeyType, RedisNode, RedisNodeType};
 use one_core::tab_container::{TabContainer, TabItem};
 
+const SCAN_BATCH_SIZE: usize = 500;
+const SCAN_TARGET_KEYS: usize = 500;
+
 /// Redis 事件处理器
 pub struct RedisEventHandler {
     _tree_subscription: Subscription,
@@ -408,23 +411,29 @@ impl RedisEventHandler {
                         .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                     let guard = conn.read().await;
 
-                    // 切换到目标数据库
-                    guard.select(db_index).await.map_err(|e| anyhow::anyhow!("{}", e))?;
-
                     // 使用 SCAN 扫描键（分页）
-                    let result = guard
-                        .scan(cursor, &pattern_for_scan, 50)
-                        .await
-                        .map_err(|e| anyhow::anyhow!("{}", e))?;
-                    let all_keys = result.keys;
-                    let next_cursor = if result.finished { 0 } else { result.cursor };
-
-                    // 批量获取每个键的类型
-                    let mut keys_with_types = Vec::with_capacity(all_keys.len());
-                    for key in all_keys {
-                        let key_type = guard.key_type(&key).await.unwrap_or(RedisKeyType::None);
-                        keys_with_types.push((key, key_type));
+                    let mut all_keys = Vec::new();
+                    let mut current_cursor = cursor;
+                    loop {
+                        let result = guard
+                            .scan_in_db(db_index, current_cursor, &pattern_for_scan, SCAN_BATCH_SIZE)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("{}", e))?;
+                        all_keys.extend(result.keys);
+                        current_cursor = if result.finished { 0 } else { result.cursor };
+                        if current_cursor == 0 || all_keys.len() >= SCAN_TARGET_KEYS {
+                            break;
+                        }
                     }
+                    let next_cursor = current_cursor;
+
+                    // 批量获取每个键的类型（pipeline）
+                    let keys_with_types = guard.key_types_batch(&all_keys).await.unwrap_or_else(|_| {
+                        all_keys
+                            .into_iter()
+                            .map(|key| (key, RedisKeyType::None))
+                            .collect()
+                    });
 
                     Ok::<(Vec<(String, RedisKeyType)>, u64), anyhow::Error>((
                         keys_with_types,
@@ -858,16 +867,9 @@ impl RedisEventHandler {
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                         }
                         RedisKeyType::List => {
-                            if !value.is_empty() {
-                                guard.rpush(&key, &[value.as_str()]).await
-                                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-                            } else {
-                                // 创建空列表需要先 push 再 pop
-                                guard.rpush(&key, &[""]).await
-                                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-                                guard.execute_command(&format!("LPOP {}", key)).await
-                                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-                            }
+                            let push_value = if value.is_empty() { "" } else { value.as_str() };
+                            guard.rpush(&key, &[push_value]).await
+                                .map_err(|e| anyhow::anyhow!("{}", e))?;
                             if let Some(seconds) = ttl {
                                 if seconds > 0 {
                                     guard.expire(&key, seconds).await

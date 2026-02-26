@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+const MAX_COLLECTION_ELEMENTS: i64 = 1000;
+
 /// Redis 连接 trait
 #[async_trait]
 pub trait RedisConnection: Send + Sync {
@@ -57,8 +59,23 @@ pub trait RedisConnection: Send + Sync {
         count: usize,
     ) -> Result<ScanResult, RedisError>;
 
+    /// 在指定数据库中扫描键（SELECT + SCAN 原子执行）
+    async fn scan_in_db(
+        &self,
+        db: u8,
+        cursor: u64,
+        pattern: &str,
+        count: usize,
+    ) -> Result<ScanResult, RedisError>;
+
     /// 获取键的类型
     async fn key_type(&self, key: &str) -> Result<RedisKeyType, RedisError>;
+
+    /// 批量获取多个键的类型（Pipeline）
+    async fn key_types_batch(
+        &self,
+        keys: &[String],
+    ) -> Result<Vec<(String, RedisKeyType)>, RedisError>;
 
     /// 获取键的 TTL（秒）
     async fn ttl(&self, key: &str) -> Result<i64, RedisError>;
@@ -167,6 +184,13 @@ pub trait RedisConnection: Send + Sync {
     /// 执行原始命令
     async fn execute_command(&self, command: &str) -> Result<RedisValue, RedisError>;
 
+    /// 在指定数据库中执行原始命令（SELECT + COMMAND 原子执行）
+    async fn execute_command_in_db(
+        &self,
+        db: u8,
+        command: &str,
+    ) -> Result<RedisValue, RedisError>;
+
     // === 辅助方法 ===
 
     /// 获取键的详细信息
@@ -203,6 +227,16 @@ impl RedisConnectionImpl {
         guard
             .clone()
             .ok_or_else(|| RedisError::NotConnected)
+    }
+
+    async fn get_conn_write(
+        &self,
+    ) -> Result<tokio::sync::RwLockWriteGuard<'_, Option<MultiplexedConnection>>, RedisError> {
+        let guard = self.connection.write().await;
+        if guard.is_none() {
+            return Err(RedisError::NotConnected);
+        }
+        Ok(guard)
     }
 
     fn parse_info(info: &str) -> HashMap<String, String> {
@@ -256,7 +290,10 @@ impl RedisConnection for RedisConnectionImpl {
     }
 
     fn is_connected(&self) -> bool {
-        self.client.is_some()
+        match self.connection.try_read() {
+            Ok(guard) => guard.is_some(),
+            Err(_) => true,
+        }
     }
 
     async fn get(&self, key: &str) -> Result<Option<String>, RedisError> {
@@ -325,6 +362,37 @@ impl RedisConnection for RedisConnectionImpl {
         Ok(ScanResult::new(next_cursor, keys))
     }
 
+    async fn scan_in_db(
+        &self,
+        db: u8,
+        cursor: u64,
+        pattern: &str,
+        count: usize,
+    ) -> Result<ScanResult, RedisError> {
+        let mut guard = self.get_conn_write().await?;
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| RedisError::NotConnected)?;
+
+        redis_client::cmd("SELECT")
+            .arg(db)
+            .query_async::<()>(&mut *conn)
+            .await
+            .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "SELECT").to_string(), e))?;
+
+        let (next_cursor, keys): (u64, Vec<String>) = redis_client::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(pattern)
+            .arg("COUNT")
+            .arg(count)
+            .query_async(&mut *conn)
+            .await
+            .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "SCAN").to_string(), e))?;
+
+        Ok(ScanResult::new(next_cursor, keys))
+    }
+
     async fn key_type(&self, key: &str) -> Result<RedisKeyType, RedisError> {
         let mut conn = self.get_conn().await?;
         let type_str: String = redis_client::cmd("TYPE")
@@ -332,7 +400,39 @@ impl RedisConnection for RedisConnectionImpl {
             .query_async(&mut conn)
             .await
             .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "TYPE").to_string(), e))?;
-        Ok(RedisKeyType::from_str(&type_str))
+        Ok(type_str.parse::<RedisKeyType>().unwrap())
+    }
+
+    async fn key_types_batch(
+        &self,
+        keys: &[String],
+    ) -> Result<Vec<(String, RedisKeyType)>, RedisError> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut conn = self.get_conn().await?;
+        let mut pipe = redis_client::pipe();
+        for key in keys {
+            pipe.cmd("TYPE").arg(key);
+        }
+
+        let results: Vec<String> = pipe
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                RedisError::command_with_source(
+                    t!("RedisConnection.command_failed", command = "TYPE (batch)")
+                        .to_string(),
+                    e,
+                )
+            })?;
+
+        Ok(keys
+            .iter()
+            .cloned()
+            .zip(results.into_iter().map(|s| s.parse::<RedisKeyType>().unwrap()))
+            .collect())
     }
 
     async fn ttl(&self, key: &str) -> Result<i64, RedisError> {
@@ -558,10 +658,13 @@ impl RedisConnection for RedisConnectionImpl {
     }
 
     async fn select(&self, db: u8) -> Result<(), RedisError> {
-        let mut conn = self.get_conn().await?;
+        let mut guard = self.get_conn_write().await?;
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| RedisError::NotConnected)?;
         redis_client::cmd("SELECT")
             .arg(db)
-            .query_async::<()>(&mut conn)
+            .query_async::<()>(&mut *conn)
             .await
             .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "SELECT").to_string(), e))
     }
@@ -576,18 +679,52 @@ impl RedisConnection for RedisConnectionImpl {
 
     async fn execute_command(&self, command: &str) -> Result<RedisValue, RedisError> {
         let mut conn = self.get_conn().await?;
-        let parts: Vec<&str> = command.split_whitespace().collect();
+        let parts = parse_command_args(command);
         if parts.is_empty() {
             return Err(RedisError::command(t!("RedisConnection.empty_command").to_string()));
         }
 
-        let mut cmd = redis_client::cmd(parts[0]);
+        let mut cmd = redis_client::cmd(parts[0].as_str());
         for arg in &parts[1..] {
-            cmd.arg(*arg);
+            cmd.arg(arg.as_str());
         }
 
         let result: redis_client::Value = cmd
             .query_async(&mut conn)
+            .await
+            .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_execute_failed").to_string(), e))?;
+
+        Ok(convert_redis_value(result))
+    }
+
+    async fn execute_command_in_db(
+        &self,
+        db: u8,
+        command: &str,
+    ) -> Result<RedisValue, RedisError> {
+        let parts = parse_command_args(command);
+        if parts.is_empty() {
+            return Err(RedisError::command(t!("RedisConnection.empty_command").to_string()));
+        }
+
+        let mut guard = self.get_conn_write().await?;
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| RedisError::NotConnected)?;
+
+        redis_client::cmd("SELECT")
+            .arg(db)
+            .query_async::<()>(&mut *conn)
+            .await
+            .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "SELECT").to_string(), e))?;
+
+        let mut cmd = redis_client::cmd(parts[0].as_str());
+        for arg in &parts[1..] {
+            cmd.arg(arg.as_str());
+        }
+
+        let result: redis_client::Value = cmd
+            .query_async(&mut *conn)
             .await
             .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_execute_failed").to_string(), e))?;
 
@@ -637,20 +774,60 @@ impl RedisConnection for RedisConnectionImpl {
                 KeyValueContent::String(v.unwrap_or_default())
             }
             RedisKeyType::List => {
-                let v = self.lrange(key, 0, -1).await?;
+                let v = self
+                    .lrange(key, 0, MAX_COLLECTION_ELEMENTS - 1)
+                    .await?;
                 KeyValueContent::List(v)
             }
             RedisKeyType::Set => {
-                let v = self.smembers(key).await?;
-                KeyValueContent::Set(v)
+                let mut conn = self.get_conn().await?;
+                let mut cursor: u64 = 0;
+                let mut members: Vec<String> = Vec::new();
+                loop {
+                    let (next, batch): (u64, Vec<String>) = redis_client::cmd("SSCAN")
+                        .arg(key)
+                        .arg(cursor)
+                        .arg("COUNT")
+                        .arg(200)
+                        .query_async(&mut conn)
+                        .await
+                        .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "SSCAN").to_string(), e))?;
+                    members.extend(batch);
+                    cursor = next;
+                    if cursor == 0 || members.len() >= MAX_COLLECTION_ELEMENTS as usize {
+                        break;
+                    }
+                }
+                members.truncate(MAX_COLLECTION_ELEMENTS as usize);
+                KeyValueContent::Set(members)
             }
             RedisKeyType::ZSet => {
-                let v = self.zrange_with_scores(key, 0, -1).await?;
+                let v = self
+                    .zrange_with_scores(key, 0, MAX_COLLECTION_ELEMENTS - 1)
+                    .await?;
                 KeyValueContent::ZSet(v)
             }
             RedisKeyType::Hash => {
-                let v = self.hgetall(key).await?;
-                KeyValueContent::Hash(v)
+                let mut conn = self.get_conn().await?;
+                let mut cursor: u64 = 0;
+                let mut fields: Vec<HashField> = Vec::new();
+                loop {
+                    let (next, batch): (u64, Vec<(String, String)>) = redis_client::cmd("HSCAN")
+                        .arg(key)
+                        .arg(cursor)
+                        .arg("COUNT")
+                        .arg(200)
+                        .query_async(&mut conn)
+                        .await
+                        .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "HSCAN").to_string(), e))?;
+                    fields.extend(batch.into_iter().map(|(field, value)| HashField { field, value }));
+                    cursor = next;
+                    if cursor == 0 || fields.len() >= MAX_COLLECTION_ELEMENTS as usize {
+                        break;
+                    }
+                }
+                fields.truncate(MAX_COLLECTION_ELEMENTS as usize);
+                KeyValueContent::Hash(fields)
             }
             RedisKeyType::Stream => {
                 let v = self.xrange(key, "-", "+", Some(100)).await?;
@@ -748,6 +925,46 @@ impl RedisConnection for RedisConnectionImpl {
     }
 }
 
+fn parse_command_args(command: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+
+    for ch in command.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => {
+                escaped = true;
+            }
+            '\'' if !in_double => {
+                in_single = !in_single;
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+            }
+            c if c.is_whitespace() && !in_single && !in_double => {
+                if !current.is_empty() {
+                    args.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if !current.is_empty() {
+        args.push(current);
+    }
+
+    args
+}
+
 /// 转换 redis 库的 Value 到我们的 RedisValue
 fn convert_redis_value(value: redis_client::Value) -> RedisValue {
     match value {
@@ -774,14 +991,17 @@ fn convert_redis_value(value: redis_client::Value) -> RedisValue {
 mod tests {
     use super::*;
 
-    const REDIS_HOST: &str = "172.31.15.186";
     const REDIS_PORT: u16 = 6379;
     const TEST_PREFIX: &str = "onetcli:test:";
+
+    fn redis_host() -> &'static str {
+        option_env!("REDIS_TEST_HOST").unwrap_or("127.0.0.1")
+    }
 
     #[tokio::test]
     #[ignore]
     async fn seed_redis_test_keys() -> anyhow::Result<()> {
-        let url = format!("redis://{}:{}/0", REDIS_HOST, REDIS_PORT);
+        let url = format!("redis://{}:{}/0", redis_host(), REDIS_PORT);
         let client = Client::open(url.as_str())?;
         let mut conn = client.get_multiplexed_async_connection().await?;
 

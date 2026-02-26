@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::Infallible;
+use std::str::FromStr;
 use thiserror::Error;
 use rust_i18n::t;
 
@@ -90,18 +92,6 @@ pub enum RedisKeyType {
 }
 
 impl RedisKeyType {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "string" => RedisKeyType::String,
-            "list" => RedisKeyType::List,
-            "set" => RedisKeyType::Set,
-            "zset" => RedisKeyType::ZSet,
-            "hash" => RedisKeyType::Hash,
-            "stream" => RedisKeyType::Stream,
-            _ => RedisKeyType::None,
-        }
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             RedisKeyType::String => "string",
@@ -124,6 +114,22 @@ impl RedisKeyType {
             RedisKeyType::Stream => "Stream",
             RedisKeyType::None => "None",
         }
+    }
+}
+
+impl FromStr for RedisKeyType {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
+            "string" => RedisKeyType::String,
+            "list" => RedisKeyType::List,
+            "set" => RedisKeyType::Set,
+            "zset" => RedisKeyType::ZSet,
+            "hash" => RedisKeyType::Hash,
+            "stream" => RedisKeyType::Stream,
+            _ => RedisKeyType::None,
+        })
     }
 }
 
@@ -341,8 +347,12 @@ impl RedisConnectionConfig {
     pub fn to_url(&self) -> String {
         let scheme = if self.use_tls { "rediss" } else { "redis" };
         let auth = match (&self.username, &self.password) {
-            (Some(user), Some(pass)) => format!("{}:{}@", user, pass),
-            (None, Some(pass)) => format!("default:{}@", pass),
+            (Some(user), Some(pass)) => format!(
+                "{}:{}@",
+                percent_encode_userinfo(user),
+                percent_encode_userinfo(pass)
+            ),
+            (None, Some(pass)) => format!("default:{}@", percent_encode_userinfo(pass)),
             _ => String::new(),
         };
         format!(
@@ -385,6 +395,21 @@ impl RedisConnectionMode {
             RedisConnectionMode::Cluster => "Cluster",
         }
     }
+}
+
+fn percent_encode_userinfo(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for &byte in value.as_bytes() {
+        let needs_encoding = byte <= 0x1F
+            || byte == 0x7F
+            || matches!(byte, b'@' | b':' | b'/' | b'?' | b'#' | b'%');
+        if needs_encoding {
+            encoded.push_str(&format!("%{:02X}", byte));
+        } else {
+            encoded.push(byte as char);
+        }
+    }
+    encoded
 }
 
 /// Redis 服务器信息

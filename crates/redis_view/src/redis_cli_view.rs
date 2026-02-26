@@ -22,6 +22,7 @@ use crate::redis_cli_element::{
     cell_column_for_char_index, cell_len, char_index_for_cell_column, CliLine, CliLineType,
     CliTheme, RedisCliElement, SelectionType, TextPosition, TextSelection,
 };
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -225,13 +226,13 @@ pub struct RedisCliView {
     /// 光标位置
     cursor_pos: usize,
     /// 命令历史记录
-    command_history: Vec<String>,
+    command_history: VecDeque<String>,
     /// 当前历史索引（用于上下键导航）
     history_index: Option<usize>,
     /// 临时保存的输入（在浏览历史时）
     temp_input: String,
     /// 输出条目列表
-    output_entries: Vec<CliEntry>,
+    output_entries: VecDeque<CliEntry>,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 滚动偏移（行数）
@@ -276,10 +277,10 @@ impl RedisCliView {
             db_index,
             input_text: String::new(),
             cursor_pos: 0,
-            command_history: Vec::new(),
+            command_history: VecDeque::new(),
             history_index: None,
             temp_input: String::new(),
-            output_entries: Vec::new(),
+            output_entries: VecDeque::new(),
             focus_handle: focus_handle.clone(),
             scroll_offset: 0.0,
             is_executing: false,
@@ -930,7 +931,7 @@ impl RedisCliView {
     /// 显示帮助信息
     fn show_help(&mut self, cx: &mut Context<Self>) {
         // 先添加命令行
-        self.output_entries.push(CliEntry {
+        self.output_entries.push_back(CliEntry {
             command: "HELP".to_string(),
             result: CliResult::Success(RedisValue::String(r#"Redis CLI 帮助
 ================
@@ -976,9 +977,7 @@ impl RedisCliView {
                         .get_connection(&connection_id)
                         .ok_or_else(|| anyhow::anyhow!(t!("RedisCli.connection_missing")))?;
                     let guard = conn.read().await;
-                    guard.select(db_index).await
-                        .map_err(|e| anyhow::anyhow!("{}", e))?;
-                    guard.execute_command(&command).await
+                    guard.execute_command_in_db(db_index, &command).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
             }).await;
@@ -1006,11 +1005,11 @@ impl RedisCliView {
 
     /// 添加输出条目
     fn add_output_entry(&mut self, entry: CliEntry, cx: &mut Context<Self>) {
-        self.output_entries.push(entry);
+        self.output_entries.push_back(entry);
 
         // 限制输出条目数量
         while self.output_entries.len() > self.max_output_entries {
-            self.output_entries.remove(0);
+            self.output_entries.pop_front();
         }
 
         cx.notify();
@@ -1019,13 +1018,13 @@ impl RedisCliView {
     /// 添加到历史记录
     fn add_to_history(&mut self, command: String) {
         // 避免连续重复的命令
-        if self.command_history.last() != Some(&command) {
-            self.command_history.push(command);
+        if self.command_history.back() != Some(&command) {
+            self.command_history.push_back(command);
         }
 
         // 限制历史记录数量
         while self.command_history.len() > self.max_history {
-            self.command_history.remove(0);
+            self.command_history.pop_front();
         }
 
         // 重置历史索引
@@ -1128,7 +1127,7 @@ impl RedisCliView {
         // 复制当前输入文本
         if !self.input_text.is_empty() {
             cx.write_to_clipboard(ClipboardItem::new_string(self.input_text.clone()));
-        } else if let Some(entry) = self.output_entries.last() {
+        } else if let Some(entry) = self.output_entries.back() {
             // 复制最后一条命令的结果
             let text = match &entry.result {
                 CliResult::Success(value) => self.format_redis_value(value, 0),
