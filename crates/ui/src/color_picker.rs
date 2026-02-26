@@ -7,9 +7,8 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, Colorize as _, Icon, Sizable, Size, StyleSized,
+    ActiveTheme as _, Colorize as _, Icon, Selectable, Sizable, Size, StyleSized,
     actions::Confirm,
-    button::{Button, ButtonVariants},
     divider::Divider,
     h_flex,
     input::{Input, InputEvent, InputState},
@@ -757,40 +756,83 @@ impl RenderOnce for ColorPicker {
                             cx.notify();
                         }),
                     )
-                    .trigger(
-                        Button::new("trigger")
-                            .with_size(self.size)
-                            .text()
-                            .when_some(self.icon.clone(), |this, icon| this.icon(icon.clone()))
-                            .when_none(&self.icon, |this| {
-                                this.p_0().child(
-                                    div()
-                                        .id("square")
-                                        .bg(cx.theme().background)
-                                        .m_1()
-                                        .border_1()
-                                        .m_1()
-                                        .border_color(cx.theme().input)
-                                        .when(cx.theme().shadow, |this| this.shadow_xs())
-                                        .rounded(cx.theme().radius)
-                                        .overflow_hidden()
-                                        .size_with(self.size)
-                                        .when_some(state.value, |this, value| {
-                                            this.bg(value)
-                                                .border_color(value.darken(0.3))
-                                                .when(state.open, |this| this.border_2())
-                                        })
-                                        .when(!display_title.is_empty(), |this| {
-                                            this.tooltip(move |_, cx| {
-                                                cx.new(|_| Tooltip::new(display_title.clone()))
-                                                    .into()
-                                            })
-                                        }),
-                                )
-                            })
-                            .when_some(self.label.clone(), |this, label| this.child(label)),
-                    )
+                    .trigger(ColorPickerButton {
+                        id: "trigger".into(),
+                        size: self.size,
+                        label: self.label.clone(),
+                        value: state.value,
+                        tooltip: if display_title.is_empty() {
+                            None
+                        } else {
+                            Some(display_title.clone())
+                        },
+                        icon: self.icon.clone(),
+                        selected: false,
+                    })
                     .child(self.render_colors(window, cx)),
             )
+    }
+}
+
+#[derive(IntoElement)]
+struct ColorPickerButton {
+    id: ElementId,
+    selected: bool,
+    icon: Option<Icon>,
+    value: Option<Hsla>,
+    size: Size,
+    label: Option<SharedString>,
+    tooltip: Option<SharedString>,
+}
+
+impl Selectable for ColorPickerButton {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
+}
+
+impl Sizable for ColorPickerButton {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
+}
+
+impl RenderOnce for ColorPickerButton {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let has_icon = self.icon.is_some();
+        h_flex()
+            .id(self.id)
+            .gap_2()
+            .children(self.icon)
+            .when(!has_icon, |this| {
+                this.child(
+                    div()
+                        .id("square")
+                        .bg(cx.theme().background)
+                        .border_1()
+                        .border_color(cx.theme().input)
+                        .when(cx.theme().shadow, |this| this.shadow_xs())
+                        .rounded(cx.theme().radius)
+                        .overflow_hidden()
+                        .size_with(self.size)
+                        .when_some(self.value, |this, value| {
+                            this.bg(value)
+                                .border_color(value.darken(0.3))
+                                .when(self.selected, |this| this.border_2())
+                        })
+                        .when_some(self.tooltip, |this, tooltip| {
+                            this.tooltip(move |_, cx| {
+                                cx.new(|_| Tooltip::new(tooltip.clone())).into()
+                            })
+                        }),
+                )
+            })
+            .when_some(self.label, |this, label| this.child(label))
     }
 }
