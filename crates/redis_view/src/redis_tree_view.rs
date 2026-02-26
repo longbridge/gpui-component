@@ -15,6 +15,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenuItem},
     popover::Popover,
+    scroll::ScrollableElement,
     spinner::Spinner,
 };
 use one_core::gpui_tokio::Tokio;
@@ -577,8 +578,12 @@ impl RedisTreeView {
             self.reset_db_key_count(node_id);
         }
 
-        // 不再显示“加载更多”
-        let _ = next_cursor;
+        if next_cursor != 0 {
+            if let Some(node) = self.nodes.get(node_id) {
+                let load_more = self.build_load_more_node(node_id, &node.connection_id, node.db_index);
+                self.append_node_children(node_id, vec![load_more], cx);
+            }
+        }
     }
 
     /// 更新已加载键的类型（异步补全）
@@ -1655,6 +1660,7 @@ impl RedisTreeView {
             })
             .into_any_element()
     }
+
 }
 
 impl EventEmitter<RedisTreeViewEvent> for RedisTreeView {}
@@ -1677,6 +1683,7 @@ impl Render for RedisTreeView {
                 div()
                     .flex_1()
                     .overflow_hidden()
+                    .vertical_scrollbar(&self.scroll_handle)
                     .when(self.is_loading, |this| {
                         this.child(
                             div()

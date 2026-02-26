@@ -482,12 +482,15 @@ impl RedisEventHandler {
                                 .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
                             let guard = conn.read().await;
                             Ok::<Vec<(String, RedisKeyType)>, anyhow::Error>(
-                                guard.key_types_batch(&keys_for_types).await.unwrap_or_else(|_| {
-                                    keys_for_types
-                                        .into_iter()
-                                        .map(|key| (key, RedisKeyType::None))
-                                        .collect()
-                                }),
+                                guard
+                                    .key_types_batch_in_db(db_index, &keys_for_types)
+                                    .await
+                                    .unwrap_or_else(|_| {
+                                        keys_for_types
+                                            .into_iter()
+                                            .map(|key| (key, RedisKeyType::None))
+                                            .collect()
+                                    }),
                             )
                         }
                     })

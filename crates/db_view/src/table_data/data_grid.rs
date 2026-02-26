@@ -2221,24 +2221,18 @@ impl DataGrid {
             .bg(cx.theme().background)
             .child(div().text_sm().text_color(cx.theme().foreground).child({
                 if filtered_count < total_rows {
-                    format!(
-                        "{}",
-                        t!(
+                    t!(
                             "TableDataGrid.page_info",
                             page_size = filtered_count,
                             page_count = total_rows,
                             total_count = table_data_info.total_count
-                        )
-                    )
+                        ).to_string()
                 } else {
-                    format!(
-                        "{}",
-                        t!(
+                    t!(
                             "TableDataGrid.page_number",
                             page = table_data_info.current_page,
                             total = table_data_info.total_count
-                        )
-                    )
+                        ).to_string()
                 }
             }))
             .child(

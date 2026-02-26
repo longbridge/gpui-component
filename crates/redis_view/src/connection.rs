@@ -76,6 +76,12 @@ pub trait RedisConnection: Send + Sync {
         &self,
         keys: &[String],
     ) -> Result<Vec<(String, RedisKeyType)>, RedisError>;
+    /// 在指定数据库中批量获取键类型（SELECT + TYPE pipeline）
+    async fn key_types_batch_in_db(
+        &self,
+        db: u8,
+        keys: &[String],
+    ) -> Result<Vec<(String, RedisKeyType)>, RedisError>;
 
     /// 获取键的 TTL（秒）
     async fn ttl(&self, key: &str) -> Result<i64, RedisError>;
@@ -419,6 +425,49 @@ impl RedisConnection for RedisConnectionImpl {
 
         let results: Vec<String> = pipe
             .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                RedisError::command_with_source(
+                    t!("RedisConnection.command_failed", command = "TYPE (batch)")
+                        .to_string(),
+                    e,
+                )
+            })?;
+
+        Ok(keys
+            .iter()
+            .cloned()
+            .zip(results.into_iter().map(|s| s.parse::<RedisKeyType>().unwrap()))
+            .collect())
+    }
+
+    async fn key_types_batch_in_db(
+        &self,
+        db: u8,
+        keys: &[String],
+    ) -> Result<Vec<(String, RedisKeyType)>, RedisError> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut guard = self.get_conn_write().await?;
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| RedisError::NotConnected)?;
+
+        redis_client::cmd("SELECT")
+            .arg(db)
+            .query_async::<()>(&mut *conn)
+            .await
+            .map_err(|e| RedisError::command_with_source(t!("RedisConnection.command_failed", command = "SELECT").to_string(), e))?;
+
+        let mut pipe = redis_client::pipe();
+        for key in keys {
+            pipe.cmd("TYPE").arg(key);
+        }
+
+        let results: Vec<String> = pipe
+            .query_async(&mut *conn)
             .await
             .map_err(|e| {
                 RedisError::command_with_source(
