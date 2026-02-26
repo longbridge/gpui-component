@@ -444,21 +444,8 @@ impl RedisEventHandler {
                 }
             };
 
-            // 构建键节点
-            let key_nodes: Vec<RedisNode> = keys_with_types
-                .into_iter()
-                .map(|(key, key_type)| {
-                    let key_node_id = format!("{}:db{}:{}", connection_id, db_index, key);
-                    RedisNode::new(
-                        key_node_id,
-                        key.clone(),
-                        RedisNodeType::Key(key_type),
-                        connection_id.clone(),
-                        db_index,
-                    )
-                    .with_full_key(key)
-                })
-                .collect();
+            // 构建键节点（按 ":" 分割为树）
+            let key_nodes = Self::build_namespace_tree(&connection_id, db_index, keys_with_types);
 
             _ = cx.update(|cx| {
                 tree_view.update(cx, |tree, cx| {
@@ -478,6 +465,115 @@ impl RedisEventHandler {
             });
         })
         .detach();
+    }
+
+    fn build_namespace_tree(
+        connection_id: &str,
+        db_index: u8,
+        keys_with_types: Vec<(String, RedisKeyType)>,
+    ) -> Vec<RedisNode> {
+        #[derive(Default)]
+        struct NsNode {
+            name: String,
+            children: Vec<NsEntry>,
+        }
+
+        enum NsEntry {
+            Namespace(NsNode),
+            Key { name: String, full_key: String, key_type: RedisKeyType },
+        }
+
+        fn insert_entry(entries: &mut Vec<NsEntry>, parts: &[&str], full_key: &str, key_type: RedisKeyType) {
+            if parts.is_empty() {
+                return;
+            }
+            if parts.len() == 1 {
+                entries.push(NsEntry::Key {
+                    name: parts[0].to_string(),
+                    full_key: full_key.to_string(),
+                    key_type,
+                });
+                return;
+            }
+
+            let name = parts[0];
+            let mut index = None;
+            for (i, entry) in entries.iter().enumerate() {
+                if let NsEntry::Namespace(ns) = entry {
+                    if ns.name == name {
+                        index = Some(i);
+                        break;
+                    }
+                }
+            }
+
+            let idx = if let Some(i) = index {
+                i
+            } else {
+                entries.push(NsEntry::Namespace(NsNode {
+                    name: name.to_string(),
+                    children: Vec::new(),
+                }));
+                entries.len() - 1
+            };
+
+            if let NsEntry::Namespace(ns) = &mut entries[idx] {
+                insert_entry(&mut ns.children, &parts[1..], full_key, key_type);
+            }
+        }
+
+        fn build_nodes(
+            entries: Vec<NsEntry>,
+            connection_id: &str,
+            db_index: u8,
+            path: &str,
+        ) -> Vec<RedisNode> {
+            let mut nodes = Vec::new();
+            for entry in entries {
+                match entry {
+                    NsEntry::Namespace(ns) => {
+                        let next_path = if path.is_empty() {
+                            ns.name.clone()
+                        } else {
+                            format!("{}:{}", path, ns.name)
+                        };
+                        let node_id = format!("{}:db{}:ns:{}", connection_id, db_index, next_path);
+                        let children = build_nodes(ns.children, connection_id, db_index, &next_path);
+                        let mut node = RedisNode::new(
+                            node_id,
+                            ns.name,
+                            RedisNodeType::Namespace,
+                            connection_id.to_string(),
+                            db_index,
+                        );
+                        node.children = children;
+                        node.children_loaded = true;
+                        nodes.push(node);
+                    }
+                    NsEntry::Key { name, full_key, key_type } => {
+                        let key_node_id = format!("{}:db{}:{}", connection_id, db_index, full_key);
+                        let node = RedisNode::new(
+                            key_node_id,
+                            name,
+                            RedisNodeType::Key(key_type),
+                            connection_id.to_string(),
+                            db_index,
+                        )
+                        .with_full_key(full_key);
+                        nodes.push(node);
+                    }
+                }
+            }
+            nodes
+        }
+
+        let mut root_entries: Vec<NsEntry> = Vec::new();
+        for (key, key_type) in keys_with_types {
+            let parts: Vec<&str> = key.split(':').collect();
+            insert_entry(&mut root_entries, &parts, &key, key_type);
+        }
+
+        build_nodes(root_entries, connection_id, db_index, "")
     }
 
     /// 处理搜索键事件（服务端查询）

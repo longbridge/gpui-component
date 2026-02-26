@@ -465,6 +465,10 @@ RedisTree:
     en: "Server"
     zh-CN: "服务端"
     zh-HK: "服務端"
+  search_help:
+    en: "Type to filter current list. Press Enter or click search to scan server.\n*: matches zero or more characters, e.g. \"key*\".\n?: matches a single character, e.g. \"key?\".\n[]: matches a single character in range, e.g. \"key[1-3]\".\nEscape *, ?, [, ] with \\\\."
+    zh-CN: "直接输入筛选当前列表，回车或点击搜索可对服务器进行扫描。\n*: 匹配零个或多个字符，例如\"key*\"匹配以\"key\"开头的所有键。\n?: 匹配单个字符，例如\"key?\"匹配\"key1\"、\"key2\"。\n[]: 匹配指定范围内的单个字符，例如\"key[1-3]\"可匹配\"key1\"、\"key2\"、\"key3\"。\n转义字符：要匹配 *、?、[、]，需要使用反斜杠\"\\\\\"进行转义。"
+    zh-HK: "直接輸入篩選當前列表，回車或點擊搜尋可對伺服器進行掃描。\n*: 匹配零個或多個字符，例如\"key*\"匹配以\"key\"開頭的所有鍵。\n?: 匹配單個字符，例如\"key?\"匹配\"key1\"、\"key2\"。\n[]: 匹配指定範圍內的單個字符，例如\"key[1-3]\"可匹配\"key1\"、\"key2\"、\"key3\"。\n轉義字符：要匹配 *、?、[、]，需要使用反斜杠\"\\\\\"進行轉義。"
   load_more:
     en: "Load more"
     zh-CN: "加载更多"
