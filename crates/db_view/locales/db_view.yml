@@ -115,13 +115,13 @@ Common:
     zh-CN: 表
     zh-HK: 表
   no_available:
-    en: No {item} Available
-    zh-CN: 无可用的{item}
-    zh-HK: 無可用的{item}
+    en: No %{item} Available
+    zh-CN: 无可用的%{item}
+    zh-HK: 無可用的%{item}
   count_of:
-    en: "{selected} of {total}"
-    zh-CN: "{selected} / {total}"
-    zh-HK: "{selected} / {total}"
+    en: "%{selected} of %{total}"
+    zh-CN: "%{selected} / %{total}"
+    zh-HK: "%{selected} / %{total}"
   confirm:
     en: Confirm
     zh-CN: 确认
@@ -658,9 +658,9 @@ Table:
     zh-CN: 值
     zh-HK: 值
   column_number:
-    en: "Column {index}"
-    zh-CN: "列 {index}"
-    zh-HK: "列 {index}"
+    en: "Column %{index}"
+    zh-CN: "列 %{index}"
+    zh-HK: "列 %{index}"
   index_name:
     en: Index Name
     zh-CN: 索引名
@@ -1005,57 +1005,57 @@ ImportExport:
     zh-CN: 文件读取错误
     zh-HK: 檔案讀取錯誤
   file_read_error_with_message:
-    en: "File read error: {error}"
-    zh-CN: "文件读取错误: {error}"
-    zh-HK: "檔案讀取錯誤: {error}"
+    en: "File read error: %{error}"
+    zh-CN: "文件读取错误: %{error}"
+    zh-HK: "檔案讀取錯誤: %{error}"
   file_read_success:
     en: "File read successfully, starting execution..."
     zh-CN: 文件读取成功，开始执行...
     zh-HK: 檔案讀取成功，開始執行...
   import_table_log:
-    en: "Import table: {table}"
-    zh-CN: "导入表: {table}"
-    zh-HK: "匯入表: {table}"
+    en: "Import table: %{table}"
+    zh-CN: "导入表: %{table}"
+    zh-HK: "匯入表: %{table}"
   file_start:
-    en: "Start file {file} ({current}/{total})"
-    zh-CN: "开始文件 {file} ({current}/{total})"
-    zh-HK: "開始檔案 {file} ({current}/{total})"
+    en: "Start file %{file} (%{current}/%{total})"
+    zh-CN: "开始文件 %{file} (%{current}/%{total})"
+    zh-HK: "開始檔案 %{file} (%{current}/%{total})"
   reading_file:
-    en: "Reading file: {file}"
-    zh-CN: "读取文件: {file}"
-    zh-HK: "讀取檔案: {file}"
+    en: "Reading file: %{file}"
+    zh-CN: "读取文件: %{file}"
+    zh-HK: "讀取檔案: %{file}"
   parsing_file:
-    en: "Parsing file: {file}"
-    zh-CN: "解析文件: {file}"
-    zh-HK: "解析檔案: {file}"
+    en: "Parsing file: %{file}"
+    zh-CN: "解析文件: %{file}"
+    zh-HK: "解析檔案: %{file}"
   execution_done_rows:
-    en: "Execution completed, affected {rows} rows"
-    zh-CN: "执行完成，影响 {rows} 行"
-    zh-HK: "執行完成，影響 {rows} 行"
+    en: "Execution completed, affected %{rows} rows"
+    zh-CN: "执行完成，影响 %{rows} 行"
+    zh-HK: "執行完成，影響 %{rows} 行"
   file_finished_rows:
-    en: "File {file} completed, imported {rows} rows"
-    zh-CN: "文件 {file} 完成，导入 {rows} 行"
-    zh-HK: "檔案 {file} 完成，匯入 {rows} 行"
+    en: "File %{file} completed, imported %{rows} rows"
+    zh-CN: "文件 %{file} 完成，导入 %{rows} 行"
+    zh-HK: "檔案 %{file} 完成，匯入 %{rows} 行"
   import_error_with_message:
-    en: "Error: {message}"
-    zh-CN: "错误: {message}"
-    zh-HK: "錯誤: {message}"
+    en: "Error: %{message}"
+    zh-CN: "错误: %{message}"
+    zh-HK: "錯誤: %{message}"
   import_complete_summary:
-    en: "Import complete: {rows} rows, {elapsed_ms} ms"
-    zh-CN: "导入完成: {rows} 行, 耗时 {elapsed_ms}ms"
-    zh-HK: "匯入完成: {rows} 行, 耗時 {elapsed_ms}ms"
+    en: "Import complete: %{rows} rows, %{elapsed_ms} ms"
+    zh-CN: "导入完成: %{rows} 行, 耗时 %{elapsed_ms}ms"
+    zh-HK: "匯入完成: %{rows} 行, 耗時 %{elapsed_ms}ms"
   import_success_summary:
-    en: "Import successful: {rows} rows, {elapsed_ms} ms"
-    zh-CN: "导入成功: {rows} 行, 耗时 {elapsed_ms}ms"
-    zh-HK: "匯入成功: {rows} 行, 耗時 {elapsed_ms}ms"
+    en: "Import successful: %{rows} rows, %{elapsed_ms} ms"
+    zh-CN: "导入成功: %{rows} 行, 耗时 %{elapsed_ms}ms"
+    zh-HK: "匯入成功: %{rows} 行, 耗時 %{elapsed_ms}ms"
   import_partial_summary:
-    en: "Partial success: {rows} rows, {errors} errors"
-    zh-CN: "部分成功: {rows} 行导入, {errors} 个错误"
-    zh-HK: "部分成功: {rows} 行匯入, {errors} 個錯誤"
+    en: "Partial success: %{rows} rows, %{errors} errors"
+    zh-CN: "部分成功: %{rows} 行导入, %{errors} 个错误"
+    zh-HK: "部分成功: %{rows} 行匯入, %{errors} 個錯誤"
   import_failed:
-    en: "Import error: {error}"
-    zh-CN: "导入错误: {error}"
-    zh-HK: "匯入錯誤: {error}"
+    en: "Import error: %{error}"
+    zh-CN: "导入错误: %{error}"
+    zh-HK: "匯入錯誤: %{error}"
 
   # 导入统计
   file:
@@ -1163,45 +1163,45 @@ ImportExport:
     zh-CN: 请至少选择一列
     zh-HK: 請至少選擇一列
   export_table_log:
-    en: "Export table: {table}"
-    zh-CN: "导出表: {table}"
-    zh-HK: "匯出表: {table}"
+    en: "Export table: %{table}"
+    zh-CN: "导出表: %{table}"
+    zh-HK: "匯出表: %{table}"
   write_file_failed:
-    en: "Failed to write file: {error}"
-    zh-CN: "写入文件失败: {error}"
-    zh-HK: "寫入檔案失敗: {error}"
+    en: "Failed to write file: %{error}"
+    zh-CN: "写入文件失败: %{error}"
+    zh-HK: "寫入檔案失敗: %{error}"
   export_start:
-    en: "Start ({current}/{total})"
-    zh-CN: "开始 ({current}/{total})"
-    zh-HK: "開始 ({current}/{total})"
+    en: "Start (%{current}/%{total})"
+    zh-CN: "开始 (%{current}/%{total})"
+    zh-HK: "開始 (%{current}/%{total})"
   fetching_data:
     en: Fetching data
     zh-CN: 获取数据中
     zh-HK: 取得資料中
   transfer_records:
-    en: "Transferred ({rows})"
-    zh-CN: "传输记录 ({rows})"
-    zh-HK: "傳輸記錄 ({rows})"
+    en: "Transferred (%{rows})"
+    zh-CN: "传输记录 (%{rows})"
+    zh-HK: "傳輸記錄 (%{rows})"
   export_finished:
-    en: "Finished ({seconds} s)"
-    zh-CN: "完成 ({seconds} s)"
-    zh-HK: "完成 ({seconds} s)"
+    en: "Finished (%{seconds} s)"
+    zh-CN: "完成 (%{seconds} s)"
+    zh-HK: "完成 (%{seconds} s)"
   export_error_with_message:
-    en: "Error: {message}"
-    zh-CN: "错误: {message}"
-    zh-HK: "錯誤: {message}"
+    en: "Error: %{message}"
+    zh-CN: "错误: %{message}"
+    zh-HK: "錯誤: %{message}"
   export_complete_summary:
-    en: "Export complete: {rows} rows, {elapsed_ms} ms"
-    zh-CN: "导出完成: {rows} 行, 耗时 {elapsed_ms}ms"
-    zh-HK: "匯出完成: {rows} 行, 耗時 {elapsed_ms}ms"
+    en: "Export complete: %{rows} rows, %{elapsed_ms} ms"
+    zh-CN: "导出完成: %{rows} 行, 耗时 %{elapsed_ms}ms"
+    zh-HK: "匯出完成: %{rows} 行, 耗時 %{elapsed_ms}ms"
   file_saved:
-    en: "File saved: {path}"
-    zh-CN: "文件已保存: {path}"
-    zh-HK: "檔案已儲存: {path}"
+    en: "File saved: %{path}"
+    zh-CN: "文件已保存: %{path}"
+    zh-HK: "檔案已儲存: %{path}"
   export_failed:
-    en: "Export error: {error}"
-    zh-CN: "导出错误: {error}"
-    zh-HK: "匯出錯誤: {error}"
+    en: "Export error: %{error}"
+    zh-CN: "导出错误: %{error}"
+    zh-HK: "匯出錯誤: %{error}"
   export_hint:
     en: "Note: Please select the export format and configure options, then click [Next] to continue."
     zh-CN: "注：请选择导出格式并配置选项，然后点击 [下一步] 继续。"
@@ -1347,17 +1347,17 @@ DbTree:
 
 DbTreeEvent:
   design_table_title:
-    en: "Design Table: {table}"
-    zh-CN: "设计表: {table}"
-    zh-HK: "設計表: {table}"
+    en: "Design Table: %{table}"
+    zh-CN: "设计表: %{table}"
+    zh-HK: "設計表: %{table}"
   confirm_close_connection_title:
     en: Confirm Close Connection
     zh-CN: 确认关闭连接
     zh-HK: 確認關閉連線
   confirm_close_connection_message:
-    en: "Are you sure you want to close connection \"{name}\"?"
-    zh-CN: "确定要关闭连接 \"{name}\" 吗？"
-    zh-HK: "確定要關閉連線 \"{name}\" 嗎？"
+    en: "Are you sure you want to close connection \"%{name}\"?"
+    zh-CN: "确定要关闭连接 \"%{name}\" 吗？"
+    zh-HK: "確定要關閉連線 \"%{name}\" 嗎？"
   confirm_close_connection_desc:
     en: This will disconnect and clean up related resources.
     zh-CN: 这将断开数据库连接并清理相关资源。
@@ -1367,41 +1367,41 @@ DbTreeEvent:
     zh-CN: 连接已成功关闭
     zh-HK: 連線已成功關閉
   close_connection_failed:
-    en: "Failed to close connection: {error}"
-    zh-CN: "关闭连接失败: {error}"
-    zh-HK: "關閉連線失敗: {error}"
+    en: "Failed to close connection: %{error}"
+    zh-CN: "关闭连接失败: %{error}"
+    zh-HK: "關閉連線失敗: %{error}"
   confirm_delete_connection_message:
-    en: "Are you sure you want to delete connection \"{name}\"?"
-    zh-CN: "确定要删除连接 \"{name}\" 吗？"
-    zh-HK: "確定要刪除連線 \"{name}\" 嗎？"
+    en: "Are you sure you want to delete connection \"%{name}\"?"
+    zh-CN: "确定要删除连接 \"%{name}\" 吗？"
+    zh-HK: "確定要刪除連線 \"%{name}\" 嗎？"
   delete_connection_success:
     en: Connection deleted successfully
     zh-CN: 连接已成功删除
     zh-HK: 連線已成功刪除
   delete_connection_failed:
-    en: "Failed to delete connection: {error}"
-    zh-CN: "删除连接失败: {error}"
-    zh-HK: "刪除連線失敗: {error}"
+    en: "Failed to delete connection: %{error}"
+    zh-CN: "删除连接失败: %{error}"
+    zh-HK: "刪除連線失敗: %{error}"
   delete_connection_repo_missing:
     en: "Failed to delete connection: repository unavailable"
     zh-CN: 删除连接失败：无法获取存储库
     zh-HK: 刪除連線失敗：無法取得儲存庫
   delete_connection_invalid_id:
-    en: "Failed to delete connection: invalid connection ID {error}"
-    zh-CN: "删除连接失败：无效的连接ID {error}"
-    zh-HK: "刪除連線失敗：無效的連線ID {error}"
+    en: "Failed to delete connection: invalid connection ID %{error}"
+    zh-CN: "删除连接失败：无效的连接ID %{error}"
+    zh-HK: "刪除連線失敗：無效的連線ID %{error}"
   delete_connection_repo_missing_named:
-    en: "{name}: repository unavailable"
-    zh-CN: "{name}: 无法获取存储库"
-    zh-HK: "{name}: 無法取得儲存庫"
+    en: "%{name}: repository unavailable"
+    zh-CN: "%{name}: 无法获取存储库"
+    zh-HK: "%{name}: 無法取得儲存庫"
   delete_connection_invalid_id_named:
-    en: "{name}: invalid connection ID {error}"
-    zh-CN: "{name}: 无效的连接ID {error}"
-    zh-HK: "{name}: 無效的連線ID {error}"
+    en: "%{name}: invalid connection ID %{error}"
+    zh-CN: "%{name}: 无效的连接ID %{error}"
+    zh-HK: "%{name}: 無效的連線ID %{error}"
   unsupported_database_type:
-    en: "Unsupported database type: {db_type}"
-    zh-CN: "不支持的数据库类型: {db_type}"
-    zh-HK: "不支援的資料庫類型: {db_type}"
+    en: "Unsupported database type: %{db_type}"
+    zh-CN: "不支持的数据库类型: %{db_type}"
+    zh-HK: "不支援的資料庫類型: %{db_type}"
   create_database_title:
     en: Create Database
     zh-CN: 创建数据库
@@ -1415,161 +1415,161 @@ DbTreeEvent:
     zh-CN: 数据库创建成功
     zh-HK: 資料庫建立成功
   create_database_failed:
-    en: "Failed to create database: {error}"
-    zh-CN: "创建数据库失败: {error}"
-    zh-HK: "建立資料庫失敗: {error}"
+    en: "Failed to create database: %{error}"
+    zh-CN: "创建数据库失败: %{error}"
+    zh-HK: "建立資料庫失敗: %{error}"
   edit_database_title:
-    en: "Edit Database: {name}"
-    zh-CN: "编辑数据库: {name}"
-    zh-HK: "編輯資料庫: {name}"
+    en: "Edit Database: %{name}"
+    zh-CN: "编辑数据库: %{name}"
+    zh-HK: "編輯資料庫: %{name}"
   edit_database_success:
     en: Database updated successfully
     zh-CN: 数据库修改成功
     zh-HK: 資料庫修改成功
   edit_database_failed:
-    en: "Failed to update database: {error}"
-    zh-CN: "修改数据库失败: {error}"
-    zh-HK: "修改資料庫失敗: {error}"
+    en: "Failed to update database: %{error}"
+    zh-CN: "修改数据库失败: %{error}"
+    zh-HK: "修改資料庫失敗: %{error}"
   close_database_success:
-    en: "Database {name} closed"
-    zh-CN: "数据库 {name} 已关闭"
-    zh-HK: "資料庫 {name} 已關閉"
+    en: "Database %{name} closed"
+    zh-CN: "数据库 %{name} 已关闭"
+    zh-HK: "資料庫 %{name} 已關閉"
   confirm_delete_database_message:
-    en: "Are you sure you want to delete database \"{name}\"?"
-    zh-CN: "确定要删除数据库 \"{name}\" 吗？"
-    zh-HK: "確定要刪除資料庫 \"{name}\" 嗎？"
+    en: "Are you sure you want to delete database \"%{name}\"?"
+    zh-CN: "确定要删除数据库 \"%{name}\" 吗？"
+    zh-HK: "確定要刪除資料庫 \"%{name}\" 嗎？"
   delete_database_desc:
     en: This will delete all data in the database and cannot be undone!
     zh-CN: 此操作将删除数据库中的所有数据，不可恢复！
     zh-HK: 此操作將刪除資料庫中的所有資料，不可恢復！
   delete_database_success:
-    en: "Database {name} deleted"
-    zh-CN: "数据库 {name} 已删除"
-    zh-HK: "資料庫 {name} 已刪除"
+    en: "Database %{name} deleted"
+    zh-CN: "数据库 %{name} 已删除"
+    zh-HK: "資料庫 %{name} 已刪除"
   delete_database_failed:
-    en: "Failed to delete database: {error}"
-    zh-CN: "删除数据库失败: {error}"
-    zh-HK: "刪除資料庫失敗: {error}"
+    en: "Failed to delete database: %{error}"
+    zh-CN: "删除数据库失败: %{error}"
+    zh-HK: "刪除資料庫失敗: %{error}"
   create_schema_unsupported:
-    en: "This database type does not support schema creation: {db_type}"
-    zh-CN: "该数据库类型不支持创建模式: {db_type}"
-    zh-HK: "該資料庫類型不支援建立模式: {db_type}"
+    en: "This database type does not support schema creation: %{db_type}"
+    zh-CN: "该数据库类型不支持创建模式: %{db_type}"
+    zh-HK: "該資料庫類型不支援建立模式: %{db_type}"
   create_schema_title:
-    en: "Create Schema - {name}"
-    zh-CN: "新建模式 - {name}"
-    zh-HK: "新建模式 - {name}"
+    en: "Create Schema - %{name}"
+    zh-CN: "新建模式 - %{name}"
+    zh-HK: "新建模式 - %{name}"
   create_schema_success:
     en: Schema created successfully
     zh-CN: 模式创建成功
     zh-HK: 模式建立成功
   create_schema_failed:
-    en: "Failed to create schema: {error}"
-    zh-CN: "创建模式失败: {error}"
-    zh-HK: "建立模式失敗: {error}"
+    en: "Failed to create schema: %{error}"
+    zh-CN: "创建模式失败: %{error}"
+    zh-HK: "建立模式失敗: %{error}"
   confirm_delete_schema_message:
-    en: "Are you sure you want to delete schema \"{name}\"?"
-    zh-CN: "确定要删除模式 \"{name}\" 吗？"
-    zh-HK: "確定要刪除模式 \"{name}\" 嗎？"
+    en: "Are you sure you want to delete schema \"%{name}\"?"
+    zh-CN: "确定要删除模式 \"%{name}\" 吗？"
+    zh-HK: "確定要刪除模式 \"%{name}\" 嗎？"
   delete_schema_desc:
     en: This will delete all objects in the schema and cannot be undone!
     zh-CN: 此操作将删除模式中的所有对象，不可恢复！
     zh-HK: 此操作將刪除模式中的所有物件，不可恢復！
   delete_schema_success:
-    en: "Schema {name} deleted"
-    zh-CN: "模式 {name} 已删除"
-    zh-HK: "模式 {name} 已刪除"
+    en: "Schema %{name} deleted"
+    zh-CN: "模式 %{name} 已删除"
+    zh-HK: "模式 %{name} 已刪除"
   delete_schema_failed:
-    en: "Failed to delete schema: {error}"
-    zh-CN: "删除模式失败: {error}"
-    zh-HK: "刪除模式失敗: {error}"
+    en: "Failed to delete schema: %{error}"
+    zh-CN: "删除模式失败: %{error}"
+    zh-HK: "刪除模式失敗: %{error}"
   confirm_batch_delete_connections:
-    en: "Are you sure you want to delete {count} selected connections?"
-    zh-CN: "确定要删除选中的 {count} 个连接吗？"
-    zh-HK: "確定要刪除選中的 {count} 個連線嗎？"
+    en: "Are you sure you want to delete %{count} selected connections?"
+    zh-CN: "确定要删除选中的 %{count} 个连接吗？"
+    zh-HK: "確定要刪除選中的 %{count} 個連線嗎？"
   batch_delete_connections_success:
-    en: "Deleted {count} connections"
-    zh-CN: "已删除 {count} 个连接"
-    zh-HK: "已刪除 {count} 個連線"
+    en: "Deleted %{count} connections"
+    zh-CN: "已删除 %{count} 个连接"
+    zh-HK: "已刪除 %{count} 個連線"
   batch_delete_connections_failed:
-    en: "Failed to delete connections: {errors}"
-    zh-CN: "删除连接失败: {errors}"
-    zh-HK: "刪除連線失敗: {errors}"
+    en: "Failed to delete connections: %{errors}"
+    zh-CN: "删除连接失败: %{errors}"
+    zh-HK: "刪除連線失敗: %{errors}"
   confirm_batch_delete_databases:
-    en: "Are you sure you want to delete {count} selected databases?"
-    zh-CN: "确定要删除选中的 {count} 个数据库吗？"
-    zh-HK: "確定要刪除選中的 {count} 個資料庫嗎？"
+    en: "Are you sure you want to delete %{count} selected databases?"
+    zh-CN: "确定要删除选中的 %{count} 个数据库吗？"
+    zh-HK: "確定要刪除選中的 %{count} 個資料庫嗎？"
   batch_delete_databases_success:
-    en: "Deleted {count} databases"
-    zh-CN: "已删除 {count} 个数据库"
-    zh-HK: "已刪除 {count} 個資料庫"
+    en: "Deleted %{count} databases"
+    zh-CN: "已删除 %{count} 个数据库"
+    zh-HK: "已刪除 %{count} 個資料庫"
   batch_delete_databases_failed:
-    en: "Failed to delete databases: {errors}"
-    zh-CN: "删除数据库失败: {errors}"
-    zh-HK: "刪除資料庫失敗: {errors}"
+    en: "Failed to delete databases: %{errors}"
+    zh-CN: "删除数据库失败: %{errors}"
+    zh-HK: "刪除資料庫失敗: %{errors}"
   confirm_batch_delete_schemas:
-    en: "Are you sure you want to delete {count} selected schemas?"
-    zh-CN: "确定要删除选中的 {count} 个模式吗？"
-    zh-HK: "確定要刪除選中的 {count} 個模式嗎？"
+    en: "Are you sure you want to delete %{count} selected schemas?"
+    zh-CN: "确定要删除选中的 %{count} 个模式吗？"
+    zh-HK: "確定要刪除選中的 %{count} 個模式嗎？"
   batch_delete_schemas_success:
-    en: "Deleted {count} schemas"
-    zh-CN: "已删除 {count} 个模式"
-    zh-HK: "已刪除 {count} 個模式"
+    en: "Deleted %{count} schemas"
+    zh-CN: "已删除 %{count} 个模式"
+    zh-HK: "已刪除 %{count} 個模式"
   batch_delete_schemas_failed:
-    en: "Failed to delete schemas: {errors}"
-    zh-CN: "删除模式失败: {errors}"
-    zh-HK: "刪除模式失敗: {errors}"
+    en: "Failed to delete schemas: %{errors}"
+    zh-CN: "删除模式失败: %{errors}"
+    zh-HK: "刪除模式失敗: %{errors}"
   confirm_batch_delete_tables:
-    en: "Are you sure you want to delete {count} selected tables?"
-    zh-CN: "确定要删除选中的 {count} 个表吗？"
-    zh-HK: "確定要刪除選中的 {count} 個表嗎？"
+    en: "Are you sure you want to delete %{count} selected tables?"
+    zh-CN: "确定要删除选中的 %{count} 个表吗？"
+    zh-HK: "確定要刪除選中的 %{count} 個表嗎？"
   delete_table_desc:
     en: This will delete all data in the table and cannot be undone!
     zh-CN: 此操作将删除表中的所有数据，不可恢复！
     zh-HK: 此操作將刪除表中的所有資料，不可恢復！
   batch_delete_tables_success:
-    en: "Deleted {count} tables"
-    zh-CN: "已删除 {count} 个表"
-    zh-HK: "已刪除 {count} 個表"
+    en: "Deleted %{count} tables"
+    zh-CN: "已删除 %{count} 个表"
+    zh-HK: "已刪除 %{count} 個表"
   batch_delete_tables_failed:
-    en: "Failed to delete tables: {errors}"
-    zh-CN: "删除表失败: {errors}"
-    zh-HK: "刪除表失敗: {errors}"
+    en: "Failed to delete tables: %{errors}"
+    zh-CN: "删除表失败: %{errors}"
+    zh-HK: "刪除表失敗: %{errors}"
   confirm_batch_delete_views:
-    en: "Are you sure you want to delete {count} selected views?"
-    zh-CN: "确定要删除选中的 {count} 个视图吗？"
-    zh-HK: "確定要刪除選中的 {count} 個視圖嗎？"
+    en: "Are you sure you want to delete %{count} selected views?"
+    zh-CN: "确定要删除选中的 %{count} 个视图吗？"
+    zh-HK: "確定要刪除選中的 %{count} 個視圖嗎？"
   batch_delete_views_success:
-    en: "Deleted {count} views"
-    zh-CN: "已删除 {count} 个视图"
-    zh-HK: "已刪除 {count} 個視圖"
+    en: "Deleted %{count} views"
+    zh-CN: "已删除 %{count} 个视图"
+    zh-HK: "已刪除 %{count} 個視圖"
   batch_delete_views_failed:
-    en: "Failed to delete views: {errors}"
-    zh-CN: "删除视图失败: {errors}"
-    zh-HK: "刪除視圖失敗: {errors}"
+    en: "Failed to delete views: %{errors}"
+    zh-CN: "删除视图失败: %{errors}"
+    zh-HK: "刪除視圖失敗: %{errors}"
   confirm_batch_delete_queries:
-    en: "Are you sure you want to delete {count} selected queries?"
-    zh-CN: "确定要删除选中的 {count} 个查询吗？"
-    zh-HK: "確定要刪除選中的 {count} 個查詢嗎？"
+    en: "Are you sure you want to delete %{count} selected queries?"
+    zh-CN: "确定要删除选中的 %{count} 个查询吗？"
+    zh-HK: "確定要刪除選中的 %{count} 個查詢嗎？"
   batch_delete_queries_success:
-    en: "Deleted {count} queries"
-    zh-CN: "已删除 {count} 个查询"
-    zh-HK: "已刪除 {count} 個查詢"
+    en: "Deleted %{count} queries"
+    zh-CN: "已删除 %{count} 个查询"
+    zh-HK: "已刪除 %{count} 個查詢"
   batch_delete_queries_failed:
-    en: "Failed to delete queries: {errors}"
-    zh-CN: "删除查询失败: {errors}"
-    zh-HK: "刪除查詢失敗: {errors}"
+    en: "Failed to delete queries: %{errors}"
+    zh-CN: "删除查询失败: %{errors}"
+    zh-HK: "刪除查詢失敗: %{errors}"
   confirm_delete_table_message:
-    en: "Are you sure you want to delete table \"{name}\"?"
-    zh-CN: "确定要删除表 \"{name}\" 吗？"
-    zh-HK: "確定要刪除表 \"{name}\" 嗎？"
+    en: "Are you sure you want to delete table \"%{name}\"?"
+    zh-CN: "确定要删除表 \"%{name}\" 吗？"
+    zh-HK: "確定要刪除表 \"%{name}\" 嗎？"
   delete_table_success:
-    en: "Table {name} deleted"
-    zh-CN: "表 {name} 已删除"
-    zh-HK: "表 {name} 已刪除"
+    en: "Table %{name} deleted"
+    zh-CN: "表 %{name} 已删除"
+    zh-HK: "表 %{name} 已刪除"
   delete_table_failed:
-    en: "Failed to delete table: {error}"
-    zh-CN: "删除表失败: {error}"
-    zh-HK: "刪除表失敗: {error}"
+    en: "Failed to delete table: %{error}"
+    zh-CN: "删除表失败: %{error}"
+    zh-HK: "刪除表失敗: %{error}"
   rename_table_placeholder:
     en: Enter new table name
     zh-CN: 输入新表名
@@ -1587,41 +1587,41 @@ DbTreeEvent:
     zh-CN: "新表名:"
     zh-HK: "新表名:"
   rename_table_success:
-    en: "Table renamed: {old} -> {new}"
-    zh-CN: "表已重命名: {old} -> {new}"
-    zh-HK: "表已重新命名: {old} -> {new}"
+    en: "Table renamed: %{old} -> %{new}"
+    zh-CN: "表已重命名: %{old} -> %{new}"
+    zh-HK: "表已重新命名: %{old} -> %{new}"
   rename_table_failed:
-    en: "Failed to rename table: {error}"
-    zh-CN: "重命名表失败: {error}"
-    zh-HK: "重新命名表失敗: {error}"
+    en: "Failed to rename table: %{error}"
+    zh-CN: "重命名表失败: %{error}"
+    zh-HK: "重新命名表失敗: %{error}"
   confirm_truncate_table_message:
-    en: "Are you sure you want to truncate table \"{name}\"?"
-    zh-CN: "确定要清空表 \"{name}\" 吗？"
-    zh-HK: "確定要清空表 \"{name}\" 嗎？"
+    en: "Are you sure you want to truncate table \"%{name}\"?"
+    zh-CN: "确定要清空表 \"%{name}\" 吗？"
+    zh-HK: "確定要清空表 \"%{name}\" 嗎？"
   truncate_table_desc:
     en: This will delete all data in the table but keep the structure. This action cannot be undone!
     zh-CN: 此操作将删除表中的所有数据，但保留表结构，不可恢复！
     zh-HK: 此操作將刪除表中的所有資料，但保留表結構，不可恢復！
   truncate_table_success:
-    en: "Table {name} truncated"
-    zh-CN: "表 {name} 已清空"
-    zh-HK: "表 {name} 已清空"
+    en: "Table %{name} truncated"
+    zh-CN: "表 %{name} 已清空"
+    zh-HK: "表 %{name} 已清空"
   truncate_table_failed:
-    en: "Failed to truncate table: {error}"
-    zh-CN: "清空表失败: {error}"
-    zh-HK: "清空表失敗: {error}"
+    en: "Failed to truncate table: %{error}"
+    zh-CN: "清空表失败: %{error}"
+    zh-HK: "清空表失敗: %{error}"
   confirm_delete_view_message:
-    en: "Are you sure you want to delete view \"{name}\"?"
-    zh-CN: "确定要删除视图 \"{name}\" 吗？"
-    zh-HK: "確定要刪除視圖 \"{name}\" 嗎？"
+    en: "Are you sure you want to delete view \"%{name}\"?"
+    zh-CN: "确定要删除视图 \"%{name}\" 吗？"
+    zh-HK: "確定要刪除視圖 \"%{name}\" 嗎？"
   delete_view_success:
-    en: "View {name} deleted"
-    zh-CN: "视图 {name} 已删除"
-    zh-HK: "視圖 {name} 已刪除"
+    en: "View %{name} deleted"
+    zh-CN: "视图 %{name} 已删除"
+    zh-HK: "視圖 %{name} 已刪除"
   delete_view_failed:
-    en: "Failed to delete view: {error}"
-    zh-CN: "删除视图失败: {error}"
-    zh-HK: "刪除視圖失敗: {error}"
+    en: "Failed to delete view: %{error}"
+    zh-CN: "删除视图失败: %{error}"
+    zh-HK: "刪除視圖失敗: %{error}"
   rename_query_placeholder:
     en: Enter new query name
     zh-CN: 输入新查询名
@@ -1643,25 +1643,25 @@ DbTreeEvent:
     zh-CN: 查询已重命名
     zh-HK: 查詢已重新命名
   rename_query_failed:
-    en: "Failed to rename query: {error}"
-    zh-CN: "重命名失败: {error}"
-    zh-HK: "重新命名失敗: {error}"
+    en: "Failed to rename query: %{error}"
+    zh-CN: "重命名失败: %{error}"
+    zh-HK: "重新命名失敗: %{error}"
   confirm_delete_query_message:
-    en: "Are you sure you want to delete query \"{name}\"?"
-    zh-CN: "确定要删除查询 \"{name}\" 吗？"
-    zh-HK: "確定要刪除查詢 \"{name}\" 嗎？"
+    en: "Are you sure you want to delete query \"%{name}\"?"
+    zh-CN: "确定要删除查询 \"%{name}\" 吗？"
+    zh-HK: "確定要刪除查詢 \"%{name}\" 嗎？"
   delete_query_success:
     en: Query deleted
     zh-CN: 查询已删除
     zh-HK: 查詢已刪除
   delete_query_failed:
-    en: "Failed to delete query: {error}"
-    zh-CN: "删除查询失败: {error}"
-    zh-HK: "刪除查詢失敗: {error}"
+    en: "Failed to delete query: %{error}"
+    zh-CN: "删除查询失败: %{error}"
+    zh-HK: "刪除查詢失敗: %{error}"
   dump_sql_config_missing:
-    en: "Failed to dump SQL file: unable to get connection config {id}"
-    zh-CN: "转储 SQL 文件失败：无法获取连接配置 {id}"
-    zh-HK: "轉儲 SQL 檔案失敗：無法取得連線設定 {id}"
+    en: "Failed to dump SQL file: unable to get connection config %{id}"
+    zh-CN: "转储 SQL 文件失败：无法获取连接配置 %{id}"
+    zh-HK: "轉儲 SQL 檔案失敗：無法取得連線設定 %{id}"
 SqlResultTab:
   processed_queries_label:
     en: "Processed Queries:"
@@ -1712,17 +1712,17 @@ SqlResultTab:
     zh-CN: 错误信息
     zh-HK: 錯誤資訊
   summary_with_counts:
-    en: "Summary ({current}/{total})"
-    zh-CN: "摘要 ({current}/{total})"
-    zh-HK: "摘要 ({current}/{total})"
+    en: "Summary (%{current}/%{total})"
+    zh-CN: "摘要 (%{current}/%{total})"
+    zh-HK: "摘要 (%{current}/%{total})"
   summary:
     en: Summary
     zh-CN: 摘要
     zh-HK: 摘要
   result_tab:
-    en: "Result {index}"
-    zh-CN: "结果{index}"
-    zh-HK: "結果{index}"
+    en: "Result %{index}"
+    zh-CN: "结果%{index}"
+    zh-HK: "結果%{index}"
   hide_results_panel:
     en: Hide Results Panel
     zh-CN: 隐藏结果面板
@@ -1810,9 +1810,9 @@ TableData:
     zh-HK: 無法重新整理資料
 TableDataGrid:
   load_data_failed:
-    en: "Failed to load data: {error}"
-    zh-CN: "数据加载失败: {error}"
-    zh-HK: "資料載入失敗: {error}"
+    en: "Failed to load data: %{error}"
+    zh-CN: "数据加载失败: %{error}"
+    zh-HK: "資料載入失敗: %{error}"
   export_not_supported:
     en: Export is not supported for the current result
     zh-CN: 当前结果不支持导出
@@ -1830,29 +1830,29 @@ TableDataGrid:
     zh-CN: 选择导出目录
     zh-HK: 選擇匯出目錄
   export_failed:
-    en: "Export failed: {error}"
-    zh-CN: "导出失败: {error}"
-    zh-HK: "匯出失敗: {error}"
+    en: "Export failed: %{error}"
+    zh-CN: "导出失败: %{error}"
+    zh-HK: "匯出失敗: %{error}"
   no_data_to_export:
     en: No data to export
     zh-CN: 没有可导出的数据
     zh-HK: 沒有可匯出的資料
   export_complete:
-    en: "Export completed: {path}"
-    zh-CN: "导出完成: {path}"
-    zh-HK: "匯出完成: {path}"
+    en: "Export completed: %{path}"
+    zh-CN: "导出完成: %{path}"
+    zh-HK: "匯出完成: %{path}"
   column_label:
-    en: "Column {index}"
-    zh-CN: "列 {index}"
-    zh-HK: "欄 {index}"
+    en: "Column %{index}"
+    zh-CN: "列 %{index}"
+    zh-HK: "欄 %{index}"
   edit_cell_title:
-    en: "Edit Cell - {column} (Row {row})"
-    zh-CN: "编辑单元格 - {column} (行 {row})"
-    zh-HK: "編輯儲存格 - {column} (列 {row})"
+    en: "Edit Cell - %{column} (Row %{row})"
+    zh-CN: "编辑单元格 - %{column} (行 %{row})"
+    zh-HK: "編輯儲存格 - %{column} (列 %{row})"
   error_message:
-    en: "Error: {error}"
-    zh-CN: "错误: {error}"
-    zh-HK: "錯誤: {error}"
+    en: "Error: %{error}"
+    zh-CN: "错误: %{error}"
+    zh-HK: "錯誤: %{error}"
   no_changes:
     en: No changes to apply
     zh-CN: 没有变更数据
@@ -1878,9 +1878,9 @@ TableDataGrid:
     zh-CN: SQL内容为空
     zh-HK: SQL內容為空
   execute_failed:
-    en: "Execution failed: {error}"
-    zh-CN: "执行失败: {error}"
-    zh-HK: "執行失敗: {error}"
+    en: "Execution failed: %{error}"
+    zh-CN: "执行失败: %{error}"
+    zh-HK: "執行失敗: %{error}"
   execute_success:
     en: Execution succeeded
     zh-CN: 执行成功
@@ -1942,66 +1942,66 @@ TableDataGrid:
     zh-CN: 导出当前页结果集(insert sql)
     zh-HK: 匯出當前頁結果集(insert sql)
   page_info:
-    en: "Showing {page_size} (of {page_count}, total {total_count})"
-    zh-CN: "显示 {page_size} 条（共 {page_count} 条，总计 {total_count} 条）"
-    zh-HK: "顯示 {page_size} 條（共 {page_count} 條，總計 {total_count} 條）"
+    en: "Showing %{page_size} (of %{page_count}, total %{total_count})"
+    zh-CN: "显示 %{page_size} 条（共 %{page_count} 条，总计 %{total_count} 条）"
+    zh-HK: "顯示 %{page_size} 條（共 %{page_count} 條，總計 %{total_count} 條）"
   page_number:
-    en: "Page {page} (total {total})"
-    zh-CN: "第 {page} 页（共 {total} 条）"
-    zh-HK: "第 {page} 頁（共 {total} 條）"
+    en: "Page %{page} (total %{total})"
+    zh-CN: "第 %{page} 页（共 %{total} 条）"
+    zh-HK: "第 %{page} 頁（共 %{total} 條）"
   query_elapsed:
-    en: "Query time {duration}ms"
-    zh-CN: "查询耗时 {duration}ms"
-    zh-HK: "查詢耗時 {duration}ms"
+    en: "Query time %{duration}ms"
+    zh-CN: "查询耗时 %{duration}ms"
+    zh-HK: "查詢耗時 %{duration}ms"
   all:
     en: All
     zh-CN: 全部
     zh-HK: 全部
   total_records:
-    en: "Total {count} records"
-    zh-CN: "共 {count} 条记录"
-    zh-HK: "共 {count} 條記錄"
+    en: "Total %{count} records"
+    zh-CN: "共 %{count} 条记录"
+    zh-HK: "共 %{count} 條記錄"
 SqlRun:
   select_sql_file:
     en: Select SQL file
     zh-CN: 选择SQL文件
     zh-HK: 選擇SQL檔案
   selected_file:
-    en: "Selected: {path}"
-    zh-CN: "已选择: {path}"
-    zh-HK: "已選擇: {path}"
+    en: "Selected: %{path}"
+    zh-CN: "已选择: %{path}"
+    zh-HK: "已選擇: %{path}"
   select_sql_file_required:
     en: Please select an SQL file
     zh-CN: 请选择SQL文件
     zh-HK: 請選擇SQL檔案
   start_processing_file:
-    en: "Start processing file ({current}/{total})"
-    zh-CN: "开始处理文件 ({current}/{total})"
-    zh-HK: "開始處理檔案 ({current}/{total})"
+    en: "Start processing file (%{current}/%{total})"
+    zh-CN: "开始处理文件 (%{current}/%{total})"
+    zh-HK: "開始處理檔案 (%{current}/%{total})"
   execute_failed:
-    en: "Execution failed: {error}"
-    zh-CN: "执行失败: {error}"
-    zh-HK: "執行失敗: {error}"
+    en: "Execution failed: %{error}"
+    zh-CN: "执行失败: %{error}"
+    zh-HK: "執行失敗: %{error}"
   unknown_error:
     en: Unknown error
     zh-CN: 未知错误
     zh-HK: 未知錯誤
   statement_failed:
-    en: "Statement {statement} failed: {error}"
-    zh-CN: "语句 {statement} 执行失败: {error}"
-    zh-HK: "語句 {statement} 執行失敗: {error}"
+    en: "Statement %{statement} failed: %{error}"
+    zh-CN: "语句 %{statement} 执行失败: %{error}"
+    zh-HK: "語句 %{statement} 執行失敗: %{error}"
   executed_statements:
-    en: "Executed {count} statements ({progress}%)"
-    zh-CN: "已执行 {count} 条语句 ({progress}%)"
-    zh-HK: "已執行 {count} 條語句 ({progress}%)"
+    en: "Executed %{count} statements (%{progress}%)"
+    zh-CN: "已执行 %{count} 条语句 (%{progress}%)"
+    zh-HK: "已執行 %{count} 條語句 (%{progress}%)"
   file_completed:
     en: File execution completed
     zh-CN: 文件执行完成
     zh-HK: 檔案執行完成
   all_completed:
-    en: "All executions completed, elapsed {elapsed}s"
-    zh-CN: "全部执行完成，耗时 {elapsed}s"
-    zh-HK: "全部執行完成，耗時 {elapsed}s"
+    en: "All executions completed, elapsed %{elapsed}s"
+    zh-CN: "全部执行完成，耗时 %{elapsed}s"
+    zh-HK: "全部執行完成，耗時 %{elapsed}s"
   sql_file_label:
     en: "SQL File:"
     zh-CN: "SQL文件:"
@@ -2048,21 +2048,21 @@ SqlRun:
     zh-HK: 關閉
 SqlDump:
   export_table:
-    en: "Export table: {table}"
-    zh-CN: "导出表: {table}"
-    zh-HK: "匯出表: {table}"
+    en: "Export table: %{table}"
+    zh-CN: "导出表: %{table}"
+    zh-HK: "匯出表: %{table}"
   fetching_tables:
     en: Fetching table list...
     zh-CN: 正在获取表列表...
     zh-HK: 正在取得表列表...
   found_tables:
-    en: "Found {count} tables"
-    zh-CN: "找到 {count} 个表"
-    zh-HK: "找到 {count} 個表"
+    en: "Found %{count} tables"
+    zh-CN: "找到 %{count} 个表"
+    zh-HK: "找到 %{count} 個表"
   fetch_tables_failed:
-    en: "Failed to fetch table list: {error}"
-    zh-CN: "获取表列表失败: {error}"
-    zh-HK: "取得表列表失敗: {error}"
+    en: "Failed to fetch table list: %{error}"
+    zh-CN: "获取表列表失败: %{error}"
+    zh-HK: "取得表列表失敗: %{error}"
   server_label:
     en: "Server:"
     zh-CN: "服务器:"
@@ -2105,18 +2105,18 @@ SqlDump:
     zh-HK: 關閉
 SqlEditorView:
   create_dir_failed:
-    en: "Failed to create directory {path}: {error}"
-    zh-CN: "创建目录失败 {path}: {error}"
-    zh-HK: "建立目錄失敗 {path}: {error}"
+    en: "Failed to create directory %{path}: %{error}"
+    zh-CN: "创建目录失败 %{path}: %{error}"
+    zh-HK: "建立目錄失敗 %{path}: %{error}"
   auto_save_failed:
-    en: "Failed to auto-save SQL file {path}: {error}"
-    zh-CN: "自动保存SQL文件失败 {path}: {error}"
-    zh-HK: "自動儲存SQL檔案失敗 {path}: {error}"
+    en: "Failed to auto-save SQL file %{path}: %{error}"
+    zh-CN: "自动保存SQL文件失败 %{path}: %{error}"
+    zh-HK: "自動儲存SQL檔案失敗 %{path}: %{error}"
 DbTreeView:
   parse_connection_config_failed:
-    en: "Failed to parse connection config {id}: {error}"
-    zh-CN: "无法解析连接配置 {id}: {error}"
-    zh-HK: "無法解析連線設定 {id}: {error}"
+    en: "Failed to parse connection config %{id}: %{error}"
+    zh-CN: "无法解析连接配置 %{id}: %{error}"
+    zh-HK: "無法解析連線設定 %{id}: %{error}"
 ChatDbSelector:
   select_source:
     en: Select data source
@@ -2148,9 +2148,9 @@ ChatDbSelector:
     zh-HK: 架構
 ChatMessageList:
   load_more:
-    en: "Load earlier messages ({hidden_count} remaining)"
-    zh-CN: "加载更早消息（剩余 {hidden_count} 条）"
-    zh-HK: "載入更早訊息（剩餘 {hidden_count} 條）"
+    en: "Load earlier messages (%{hidden_count} remaining)"
+    zh-CN: "加载更早消息（剩余 %{hidden_count} 条）"
+    zh-HK: "載入更早訊息（剩餘 %{hidden_count} 條）"
   collapse_history:
     en: Collapse history
     zh-CN: 收起历史消息
@@ -2161,33 +2161,33 @@ ChatMessageList:
     zh-HK: 載入中...
 ChatSqlResult:
   rows_info:
-    en: "{rows} rows"
-    zh-CN: "{rows} 行"
-    zh-HK: "{rows} 行"
+    en: "%{rows} rows"
+    zh-CN: "%{rows} 行"
+    zh-HK: "%{rows} 行"
   success_count:
-    en: "{count} success"
-    zh-CN: "{count} 成功"
-    zh-HK: "{count} 成功"
+    en: "%{count} success"
+    zh-CN: "%{count} 成功"
+    zh-HK: "%{count} 成功"
   error_count:
-    en: "{count} error"
-    zh-CN: "{count} 错误"
-    zh-HK: "{count} 錯誤"
+    en: "%{count} error"
+    zh-CN: "%{count} 错误"
+    zh-HK: "%{count} 錯誤"
   exec_success_rows:
-    en: "Execution succeeded, affected {rows} rows"
-    zh-CN: "执行成功，影响 {rows} 行"
-    zh-HK: "執行成功，影響 {rows} 行"
+    en: "Execution succeeded, affected %{rows} rows"
+    zh-CN: "执行成功，影响 %{rows} 行"
+    zh-HK: "執行成功，影響 %{rows} 行"
   elapsed_ms:
-    en: "Elapsed {ms}ms"
-    zh-CN: "耗时 {ms}ms"
-    zh-HK: "耗時 {ms}ms"
+    en: "Elapsed %{ms}ms"
+    zh-CN: "耗时 %{ms}ms"
+    zh-HK: "耗時 %{ms}ms"
   exec_failed:
     en: Execution failed
     zh-CN: 执行失败
     zh-HK: 執行失敗
   result_tab:
-    en: "Result {index}"
-    zh-CN: "结果 {index}"
-    zh-HK: "結果 {index}"
+    en: "Result %{index}"
+    zh-CN: "结果 %{index}"
+    zh-HK: "結果 %{index}"
 AIInput:
   send:
     en: Send
@@ -2215,13 +2215,13 @@ ChatSqlBlock:
     zh-CN: 运行
     zh-HK: 執行
   summary_success_error:
-    en: "{success} success, {error} failed"
-    zh-CN: "{success} 成功, {error} 失败"
-    zh-HK: "{success} 成功, {error} 失敗"
+    en: "%{success} success, %{error} failed"
+    zh-CN: "%{success} 成功, %{error} 失败"
+    zh-HK: "%{success} 成功, %{error} 失敗"
   summary_rows:
-    en: "{rows} rows"
-    zh-CN: "{rows} 行结果"
-    zh-HK: "{rows} 行結果"
+    en: "%{rows} rows"
+    zh-CN: "%{rows} 行结果"
+    zh-HK: "%{rows} 行結果"
 ChatSession:
   history_title:
     en: Session History
@@ -2232,21 +2232,21 @@ ChatSession:
     zh-CN: 刚刚
     zh-HK: 剛剛
   time_minutes_ago:
-    en: "{minutes} minutes ago"
-    zh-CN: "{minutes} 分钟前"
-    zh-HK: "{minutes} 分鐘前"
+    en: "%{minutes} minutes ago"
+    zh-CN: "%{minutes} 分钟前"
+    zh-HK: "%{minutes} 分鐘前"
   time_hours_ago:
-    en: "{hours} hours ago"
-    zh-CN: "{hours} 小时前"
-    zh-HK: "{hours} 小時前"
+    en: "%{hours} hours ago"
+    zh-CN: "%{hours} 小时前"
+    zh-HK: "%{hours} 小時前"
   time_days_ago:
-    en: "{days} days ago"
-    zh-CN: "{days} 天前"
-    zh-HK: "{days} 天前"
+    en: "%{days} days ago"
+    zh-CN: "%{days} 天前"
+    zh-HK: "%{days} 天前"
   time_weeks_ago:
-    en: "{weeks} weeks ago"
-    zh-CN: "{weeks} 周前"
-    zh-HK: "{weeks} 週前"
+    en: "%{weeks} weeks ago"
+    zh-CN: "%{weeks} 周前"
+    zh-HK: "%{weeks} 週前"
 ChatPanel:
   title:
     en: SQL Assistant
@@ -2281,21 +2281,21 @@ ChatPanel:
     zh-CN: SQL 会话
     zh-HK: SQL 會話
   session_error:
-    en: "Session error: {error}"
-    zh-CN: "会话错误: {error}"
-    zh-HK: "會話錯誤: {error}"
+    en: "Session error: %{error}"
+    zh-CN: "会话错误: %{error}"
+    zh-HK: "會話錯誤: %{error}"
   error_message:
-    en: "Error: {message}"
-    zh-CN: "错误: {message}"
-    zh-HK: "錯誤: {message}"
+    en: "Error: %{message}"
+    zh-CN: "错误: %{message}"
+    zh-HK: "錯誤: %{message}"
   executing:
     en: Executing...
     zh-CN: 执行中...
     zh-HK: 執行中...
   execution_error:
-    en: "Execution error: {error}"
-    zh-CN: "执行错误: {error}"
-    zh-HK: "執行錯誤: {error}"
+    en: "Execution error: %{error}"
+    zh-CN: "执行错误: %{error}"
+    zh-HK: "執行錯誤: %{error}"
   select_database_or_schema_first:
     en: Please select a database or schema first
     zh-CN: 请先选择数据库或架构
@@ -2385,26 +2385,26 @@ SqlEditor:
     zh-CN: 子查询列 - 无法自动推断
     zh-HK: 子查詢列 - 無法自動推斷
   subquery_doc:
-    en: "'{alias}' is a subquery alias; column info must be derived from the subquery definition"
-    zh-CN: "'{alias}' 是子查询的别名，列信息需要从子查询定义中获取"
-    zh-HK: "'{alias}' 是子查詢的別名，欄位資訊需從子查詢定義取得"
+    en: "'%{alias}' is a subquery alias; column info must be derived from the subquery definition"
+    zh-CN: "'%{alias}' 是子查询的别名，列信息需要从子查询定义中获取"
+    zh-HK: "'%{alias}' 是子查詢的別名，欄位資訊需從子查詢定義取得"
   cte_column_uninferable:
     en: CTE columns - cannot infer automatically
     zh-CN: CTE 列 - 无法自动推断
     zh-HK: CTE 列 - 無法自動推斷
   cte_doc:
-    en: "'{alias}' is a CTE (WITH clause) name; column info must be derived from the CTE definition"
-    zh-CN: "'{alias}' 是 CTE (WITH 子句) 的名称，列信息需要从 CTE 定义中获取"
-    zh-HK: "'{alias}' 是 CTE (WITH 子句) 的名稱，欄位資訊需從 CTE 定義取得"
+    en: "'%{alias}' is a CTE (WITH clause) name; column info must be derived from the CTE definition"
+    zh-CN: "'%{alias}' 是 CTE (WITH 子句) 的名称，列信息需要从 CTE 定义中获取"
+    zh-HK: "'%{alias}' 是 CTE (WITH 子句) 的名稱，欄位資訊需從 CTE 定義取得"
   table_detail:
     en: Table
     zh-CN: 表
     zh-HK: 表
 QueryWorkflow:
   warning_block:
-    en: "> ⚠️ {warning}\n\n"
-    zh-CN: "> ⚠️ {warning}\n\n"
-    zh-HK: "> ⚠️ {warning}\n\n"
+    en: "> ⚠️ %{warning}\n\n"
+    zh-CN: "> ⚠️ %{warning}\n\n"
+    zh-HK: "> ⚠️ %{warning}\n\n"
   source_user:
     en: User specified
     zh-CN: 用户指定
@@ -2414,21 +2414,21 @@ QueryWorkflow:
     zh-CN: AI 分析
     zh-HK: AI 分析
   related_tables_header:
-    en: "**Related Tables** ({source}):\n"
-    zh-CN: "**相关表**（{source}）：\n"
-    zh-HK: "**相關表**（{source}）：\n"
+    en: "**Related Tables** (%{source}):\n"
+    zh-CN: "**相关表**（%{source}）：\n"
+    zh-HK: "**相關表**（%{source}）：\n"
   sql_prompt_intro:
-    en: "You are a {db_type} database expert. Generate an accurate SQL query based on the user's question.\n\n"
-    zh-CN: "你是一个 {db_type} 数据库专家。请根据用户问题生成准确的 SQL 查询语句。\n\n"
-    zh-HK: "你是一位 {db_type} 資料庫專家。請根據使用者問題產生準確的 SQL 查詢語句。\n\n"
+    en: "You are a %{db_type} database expert. Generate an accurate SQL query based on the user's question.\n\n"
+    zh-CN: "你是一个 %{db_type} 数据库专家。请根据用户问题生成准确的 SQL 查询语句。\n\n"
+    zh-HK: "你是一位 %{db_type} 資料庫專家。請根據使用者問題產生準確的 SQL 查詢語句。\n\n"
   sql_prompt_tables_header:
     en: "## Available Table Schemas\n\n"
     zh-CN: "## 可用表结构\n\n"
     zh-HK: "## 可用表結構\n\n"
   sql_prompt_table_header:
-    en: "### Table: `{table}`"
-    zh-CN: "### 表: `{table}`"
-    zh-HK: "### 表: `{table}`"
+    en: "### Table: `%{table}`"
+    zh-CN: "### 表: `%{table}`"
+    zh-HK: "### 表: `%{table}`"
   sql_prompt_no_columns:
     en: "(No column info available)\n\n"
     zh-CN: "（列信息暂无）\n\n"
@@ -2499,9 +2499,9 @@ QueryWorkflow:
     zh-HK: "示例格式：\n```json\n[\"table1\", \"table2\"]\n```\n"
 SqlService:
   execution_error:
-    en: "Execution error: {message}"
-    zh-CN: "执行错误: {message}"
-    zh-HK: "執行錯誤: {message}"
+    en: "Execution error: %{message}"
+    zh-CN: "执行错误: %{message}"
+    zh-HK: "執行錯誤: %{message}"
   cancelled:
     en: Request cancelled
     zh-CN: 请求已取消
@@ -2516,13 +2516,13 @@ SqlWorkflow:
     zh-CN: 获取表列表...
     zh-HK: 取得表列表...
   fetch_tables_failed:
-    en: "Failed to fetch table list: {error}"
-    zh-CN: "获取表列表失败: {error}"
-    zh-HK: "取得表列表失敗: {error}"
+    en: "Failed to fetch table list: %{error}"
+    zh-CN: "获取表列表失败: %{error}"
+    zh-HK: "取得表列表失敗: %{error}"
   table_count_warning:
-    en: "Table count ({count}) exceeds threshold ({threshold}); AI output may be inaccurate. Use @table to specify targets."
-    zh-CN: "表数量 ({count}) 超过阈值 ({threshold})，AI 输出结果可能不准确，建议使用 @表名 功能指定目标表"
-    zh-HK: "表數量 ({count}) 超過閾值 ({threshold})，AI 輸出結果可能不準確，建議使用 @表名 功能指定目標表"
+    en: "Table count (%{count}) exceeds threshold (%{threshold}); AI output may be inaccurate. Use @table to specify targets."
+    zh-CN: "表数量 (%{count}) 超过阈值 (%{threshold})，AI 输出结果可能不准确，建议使用 @表名 功能指定目标表"
+    zh-HK: "表數量 (%{count}) 超過閾值 (%{threshold})，AI 輸出結果可能不準確，建議使用 @表名 功能指定目標表"
   ai_select_tables:
     en: AI selecting relevant tables...
     zh-CN: AI 选择相关表...
@@ -2532,37 +2532,37 @@ SqlWorkflow:
     zh-CN: AI 未能选择任何相关表
     zh-HK: AI 未能選擇任何相關表
   fetch_table_schema:
-    en: "Fetching table schema ({current}/{total})..."
-    zh-CN: "获取表结构 ({current}/{total})..."
-    zh-HK: "取得表結構 ({current}/{total})..."
+    en: "Fetching table schema (%{current}/%{total})..."
+    zh-CN: "获取表结构 (%{current}/%{total})..."
+    zh-HK: "取得表結構 (%{current}/%{total})..."
   fetch_table_metadata_failed:
-    en: "Failed to fetch metadata for table {table}: {error}"
-    zh-CN: "获取表 {table} 元数据失败: {error}"
-    zh-HK: "取得表 {table} 元資料失敗: {error}"
+    en: "Failed to fetch metadata for table %{table}: %{error}"
+    zh-CN: "获取表 %{table} 元数据失败: %{error}"
+    zh-HK: "取得表 %{table} 元資料失敗: %{error}"
   no_table_metadata:
     en: Failed to fetch metadata for any tables
     zh-CN: 未能获取任何表的元数据
     zh-HK: 未能取得任何表的元資料
   get_ai_provider_failed:
-    en: "Failed to get AI provider: {error}"
-    zh-CN: "获取 AI 提供者失败: {error}"
-    zh-HK: "取得 AI 提供者失敗: {error}"
+    en: "Failed to get AI provider: %{error}"
+    zh-CN: "获取 AI 提供者失败: %{error}"
+    zh-HK: "取得 AI 提供者失敗: %{error}"
   operation_cancelled:
     en: Operation cancelled
     zh-CN: 操作已取消
     zh-HK: 操作已取消
   ai_select_failed:
-    en: "AI table selection failed: {error}"
-    zh-CN: "AI 选表调用失败: {error}"
-    zh-HK: "AI 選表呼叫失敗: {error}"
+    en: "AI table selection failed: %{error}"
+    zh-CN: "AI 选表调用失败: %{error}"
+    zh-HK: "AI 選表呼叫失敗: %{error}"
   start_stream_failed:
-    en: "Failed to start streaming generation: {error}"
-    zh-CN: "启动流式生成失败: {error}"
-    zh-HK: "啟動串流生成失敗: {error}"
+    en: "Failed to start streaming generation: %{error}"
+    zh-CN: "启动流式生成失败: %{error}"
+    zh-HK: "啟動串流生成失敗: %{error}"
   stream_error:
-    en: "Streaming error: {error}"
-    zh-CN: "流式生成错误: {error}"
-    zh-HK: "串流生成錯誤: {error}"
+    en: "Streaming error: %{error}"
+    zh-CN: "流式生成错误: %{error}"
+    zh-HK: "串流生成錯誤: %{error}"
 DatabaseTab:
   insert_editor:
     en: Insert into Editor

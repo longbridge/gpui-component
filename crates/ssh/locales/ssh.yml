@@ -12,14 +12,14 @@ Ssh:
     zh-CN: 公钥认证失败
     zh-HK: 公鑰認證失敗
   socks5_proxy_connect_failed:
-    en: "SOCKS5 proxy connection failed: {error}"
-    zh-CN: "SOCKS5代理连接失败: {error}"
-    zh-HK: "SOCKS5代理連線失敗: {error}"
+    en: "SOCKS5 proxy connection failed: %{error}"
+    zh-CN: "SOCKS5代理连接失败: %{error}"
+    zh-HK: "SOCKS5代理連線失敗: %{error}"
   http_proxy_connect_failed:
-    en: "Failed to connect HTTP proxy: {error}"
-    zh-CN: "连接HTTP代理失败: {error}"
-    zh-HK: "連線HTTP代理失敗: {error}"
+    en: "Failed to connect HTTP proxy: %{error}"
+    zh-CN: "连接HTTP代理失败: %{error}"
+    zh-HK: "連線HTTP代理失敗: %{error}"
   http_proxy_connection_failed:
-    en: "HTTP proxy connection failed: {response}"
-    zh-CN: "HTTP代理连接失败: {response}"
-    zh-HK: "HTTP代理連線失敗: {response}"
+    en: "HTTP proxy connection failed: %{response}"
+    zh-CN: "HTTP代理连接失败: %{response}"
+    zh-HK: "HTTP代理連線失敗: %{response}"
