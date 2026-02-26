@@ -644,15 +644,14 @@ impl RedisTreeView {
     }
 
     fn update_local_search_counts(&mut self) {
-        let keyword = self.search_keyword.trim().to_lowercase();
-        if keyword.is_empty() {
+        let Some(keyword) = self.local_filter_keyword() else {
             for (node_id, total) in self.db_total_key_counts.iter() {
                 if let Some(node) = self.nodes.get_mut(node_id) {
                     node.key_count = Some(*total);
                 }
             }
             return;
-        }
+        };
 
         let mut counts: HashMap<String, i64> = HashMap::new();
         for node in self.nodes.values() {
@@ -874,12 +873,14 @@ impl RedisTreeView {
 
     /// 递归添加节点条目
     fn add_node_entries(&mut self, node_id: &str, depth: usize, match_cache: &mut HashMap<String, bool>) {
+        let filter_keyword = self.local_filter_keyword();
         let (_is_expandable, matches, child_ids, is_load_more) = match self.nodes.get(node_id) {
             Some(node) => {
                 let is_load_more = matches!(node.node_type, RedisNodeType::LoadMore);
-                let matches = node.name
-                    .to_lowercase()
-                    .contains(&self.search_keyword.to_lowercase());
+                let matches = filter_keyword
+                    .as_ref()
+                    .map(|keyword| node.name.to_lowercase().contains(keyword))
+                    .unwrap_or(true);
                 let child_ids = node
                     .children
                     .iter()
@@ -891,7 +892,7 @@ impl RedisTreeView {
         };
 
         // 搜索过滤
-        if !self.search_keyword.is_empty() {
+        if filter_keyword.is_some() {
             if !matches && !is_load_more && !self.node_has_matching_descendant(node_id, match_cache) {
                 return;
             }
@@ -924,11 +925,10 @@ impl RedisTreeView {
             return false;
         };
 
-        let keyword = self.search_keyword.to_lowercase();
-        if keyword.is_empty() {
+        let Some(keyword) = self.local_filter_keyword() else {
             match_cache.insert(node_id.to_string(), true);
             return true;
-        }
+        };
 
         for child in &node.children {
             if child.name.to_lowercase().contains(&keyword) {
@@ -943,6 +943,17 @@ impl RedisTreeView {
 
         match_cache.insert(node_id.to_string(), false);
         false
+    }
+
+    fn local_filter_keyword(&self) -> Option<String> {
+        let keyword = self.search_keyword.trim();
+        if keyword.is_empty() {
+            return None;
+        }
+        if keyword.contains('*') || keyword.contains('?') || keyword.contains('[') {
+            return None;
+        }
+        Some(keyword.to_lowercase())
     }
 
     fn get_node_icon(&self, node_type: &RedisNodeType) -> IconName {
