@@ -9,9 +9,9 @@ use gpui::{
 use crate::ActiveTheme;
 
 #[cfg(not(target_os = "linux"))]
-const SHADOW_SIZE: Pixels = px(0.0);
+pub(crate) const SHADOW_SIZE: Pixels = px(0.0);
 #[cfg(target_os = "linux")]
-const SHADOW_SIZE: Pixels = px(12.0);
+pub(crate) const SHADOW_SIZE: Pixels = px(12.0);
 const BORDER_SIZE: Pixels = px(1.0);
 pub(crate) const BORDER_RADIUS: Pixels = px(0.0);
 
@@ -41,9 +41,11 @@ impl WindowBorder {
         Self::default()
     }
 
-    /// Set the shadow size in pixels. Use `px(12.0)` for typical Linux client-side decorations.
-    pub fn shadow_size(mut self, size: Pixels) -> Self {
-        self.shadow_size = size;
+    /// Set the shadow size for typical Linux client-side decorations.
+    ///
+    /// Default: [`SHADOW_SIZE`]
+    pub fn shadow_size(mut self, size: impl Into<Pixels>) -> Self {
+        self.shadow_size = size.into();
         self
     }
 }

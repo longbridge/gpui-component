@@ -28,16 +28,14 @@ pub(crate) fn init(cx: &mut App) {
 ///
 /// It is used to manage the Sheet, Dialog, and Notification.
 pub struct Root {
+    style: StyleRefinement,
+    view: AnyView,
     pub(crate) active_sheet: Option<ActiveSheet>,
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
-    /// Shadow size for the window border (e.g. `px(12.0)` for Linux client-side decorations).
-    /// If not set, no shadow is drawn.
-    window_border_shadow_size: Option<Pixels>,
-    view: AnyView,
-    style: StyleRefinement,
+    window_shadow_size: Pixels,
 }
 
 #[derive(Clone)]
@@ -75,21 +73,22 @@ impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            style: StyleRefinement::default(),
+            view: view.into(),
             active_sheet: None,
             active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
-            window_border_shadow_size: None,
-            view: view.into(),
-            style: StyleRefinement::default(),
+            window_shadow_size: window_border::SHADOW_SIZE,
         }
     }
 
-    /// Set the window border shadow size (e.g. `px(12.0)` for Linux client-side decorations).
-    /// Call this after `new()` when building the Root. If not set, shadow size is 0 on non-Linux platforms, 12px on Linux.
-    pub fn window_border_shadow_size(mut self, size: Pixels) -> Self {
-        self.window_border_shadow_size = Some(size);
+    /// Set the window border shadow size for Linux client-side decorations.
+    ///
+    /// Default: [`window_border::SHADOW_SIZE`]
+    pub fn window_shadow_size(mut self, size: impl Into<Pixels>) -> Self {
+        self.window_shadow_size = size.into();
         self
     }
 
@@ -445,11 +444,7 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
-        let border = match self.window_border_shadow_size {
-            Some(size) => window_border().shadow_size(size),
-            None => window_border(),
-        };
-        border.child(
+        window_border().shadow_size(self.window_shadow_size).child(
             div()
                 .id("root")
                 .key_context(CONTEXT)
