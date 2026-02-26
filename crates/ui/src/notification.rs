@@ -345,6 +345,11 @@ impl Render for Notification {
                     on_click(event, window, cx);
                 }))
             })
+            .on_aux_click(cx.listener(move |view, event: &ClickEvent, window, cx| {
+                if event.is_middle_click() {
+                    view.dismiss(window, cx);
+                }
+            }))
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
                 Animation::new(Duration::from_secs_f64(0.25))
