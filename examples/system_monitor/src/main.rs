@@ -9,7 +9,7 @@ use gpui_component::{
     h_flex,
     progress::Progress,
     tab::{Tab, TabBar},
-    table::{Column, ColumnSort, Table, TableDelegate, TableState},
+    table::{Column, ColumnSort, DataTable, TableDelegate, TableState},
     v_flex,
 };
 use smol::Timer;
@@ -465,7 +465,7 @@ impl SystemMonitor {
 
     fn render_processes_tab(&self, _cx: &Context<Self>) -> impl IntoElement {
         v_flex().size_full().child(
-            Table::new(&self.process_table)
+            DataTable::new(&self.process_table)
                 .bordered(false)
                 .stripe(true)
                 .small(),
@@ -599,7 +599,7 @@ impl Render for SystemMonitor {
 }
 
 fn main() {
-    let app = Application::new().with_assets(gpui_component_assets::Assets);
+    let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
 
     app.run(move |cx| {
         gpui_component::init(cx);

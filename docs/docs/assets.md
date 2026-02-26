@@ -29,7 +29,7 @@ Then we need call the `with_assets` method when creating the GPUI application to
 use gpui::*;
 use gpui_component_assets::Assets;
 
-let app = Application::new().with_assets(Assets);
+let app = gpui_platform::application().with_assets(Assets);
 ```
 
 Now, we can use `IconName` and `Icon` in our application as usual, the all icon assets are loaded from the default bundled assets.
@@ -87,7 +87,7 @@ We need call the `with_assets` method when creating the GPUI application to regi
 ```rs
 fn main() {
     // Register Assets to GPUI application.
-    let app = Application::new().with_assets(Assets);
+    let app = gpui_platform::application().with_assets(Assets);
 
     app.run(move |cx| {
         // We must initialize gpui_component before using it.

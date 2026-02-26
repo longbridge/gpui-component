@@ -74,16 +74,37 @@ impl InputState {
         let offset = self.cursor();
         let was_preferred_column = self.preferred_column;
 
-        let mut display_point = self.text_wrapper.offset_to_display_point(offset);
-        display_point.row = display_point.row.saturating_add_signed(move_lines);
+        let mut display_point = self.display_map.offset_to_wrap_display_point(offset);
+
+        // Convert wrap row → display row (skips folded rows), move, then convert back
+        let current_display_row = self
+            .display_map
+            .wrap_row_to_display_row(display_point.row)
+            .unwrap_or_else(|| {
+                self.display_map
+                    .nearest_visible_display_row(display_point.row)
+            });
+        let max_display_row = self.display_map.display_row_count().saturating_sub(1);
+        let target_display_row = current_display_row
+            .saturating_add_signed(move_lines)
+            .min(max_display_row);
+        let target_wrap_row = self
+            .display_map
+            .display_row_to_wrap_row(target_display_row)
+            .unwrap_or(display_point.row);
+
+        display_point.row = target_wrap_row;
         display_point.column = 0;
-        let mut new_offset = self.text_wrapper.display_point_to_offset(display_point);
+        let mut new_offset = self.display_map.wrap_display_point_to_offset(display_point);
 
         if let Some((preferred_x, column)) = was_preferred_column {
             // Get display point again to update local_row.
-            let mut next_display_point = self.text_wrapper.offset_to_display_point(new_offset);
+            let mut next_display_point =
+                self.display_map.offset_to_wrap_display_point(new_offset);
             next_display_point.column = 0;
-            let next_point = self.text_wrapper.display_point_to_point(next_display_point);
+            let next_point = self
+                .display_map
+                .wrap_display_point_to_point(next_display_point);
             let line_start_offset = self.text.line_start_offset(next_point.row);
 
             // If in visible range, prefer to use position to get column.

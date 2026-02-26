@@ -21,9 +21,7 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = Application::new();
-
-    app.run(move |cx| {
+    gpui_platform::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
 

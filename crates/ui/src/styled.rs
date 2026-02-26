@@ -1,4 +1,4 @@
-use crate::{ActiveTheme, PixelsExt as _};
+use crate::ActiveTheme;
 use gpui::{
     App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
     Refineable, StyleRefinement, Styled, Window, div, point, px,
@@ -51,10 +51,7 @@ macro_rules! font_weight {
 }
 
 /// Extends [`gpui::Styled`] with specific styling methods.
-#[cfg_attr(
-    any(feature = "inspector", debug_assertions),
-    gpui_macros::derive_inspector_reflection
-)]
+#[cfg_attr(any(feature = "inspector", debug_assertions), gpui_macros::derive_inspector_reflection)]
 pub trait StyledExt: Styled + Sized {
     /// Refine the style of this element, applying the given style refinement.
     fn refine_style(mut self, style: &StyleRefinement) -> Self {
@@ -100,20 +97,12 @@ pub trait StyledExt: Styled + Sized {
 
     /// Render a border with a width of 1px, color red
     fn debug_red(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::red_500())
-        } else {
-            self
-        }
+        if cfg!(debug_assertions) { self.border_1().border_color(crate::red_500()) } else { self }
     }
 
     /// Render a border with a width of 1px, color blue
     fn debug_blue(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::blue_500())
-        } else {
-            self
-        }
+        if cfg!(debug_assertions) { self.border_1().border_color(crate::blue_500()) } else { self }
     }
 
     /// Render a border with a width of 1px, color yellow
@@ -127,30 +116,18 @@ pub trait StyledExt: Styled + Sized {
 
     /// Render a border with a width of 1px, color green
     fn debug_green(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::green_500())
-        } else {
-            self
-        }
+        if cfg!(debug_assertions) { self.border_1().border_color(crate::green_500()) } else { self }
     }
 
     /// Render a border with a width of 1px, color pink
     fn debug_pink(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::pink_500())
-        } else {
-            self
-        }
+        if cfg!(debug_assertions) { self.border_1().border_color(crate::pink_500()) } else { self }
     }
 
     /// Render a 1px blue border, when if the element is focused
     fn debug_focused(self, focus_handle: &FocusHandle, window: &Window, cx: &App) -> Self {
         if cfg!(debug_assertions) {
-            if focus_handle.contains_focused(window, cx) {
-                self.debug_blue()
-            } else {
-                self
-            }
+            if focus_handle.contains_focused(window, cx) { self.debug_blue() } else { self }
         } else {
             self
         }
@@ -260,30 +237,10 @@ impl Size {
     #[inline]
     pub fn table_cell_padding(&self) -> Edges<Pixels> {
         match self {
-            Size::XSmall => Edges {
-                top: px(2.),
-                bottom: px(2.),
-                left: px(4.),
-                right: px(4.),
-            },
-            Size::Small => Edges {
-                top: px(3.),
-                bottom: px(3.),
-                left: px(6.),
-                right: px(6.),
-            },
-            Size::Large => Edges {
-                top: px(8.),
-                bottom: px(8.),
-                left: px(12.),
-                right: px(12.),
-            },
-            _ => Edges {
-                top: px(4.),
-                bottom: px(4.),
-                left: px(8.),
-                right: px(8.),
-            },
+            Size::XSmall => Edges { top: px(2.), bottom: px(2.), left: px(4.), right: px(4.) },
+            Size::Small => Edges { top: px(3.), bottom: px(3.), left: px(6.), right: px(6.) },
+            Size::Large => Edges { top: px(8.), bottom: px(8.), left: px(12.), right: px(12.) },
+            _ => Edges { top: px(4.), bottom: px(4.), left: px(8.), right: px(8.) },
         }
     }
 
@@ -365,9 +322,10 @@ impl From<Pixels> for Size {
 }
 
 /// A trait for defining element that can be selected.
+#[allow(patterns_in_fns_without_body)]
 pub trait Selectable: Sized {
     /// Set the selected state of the element.
-    fn selected(self, selected: bool) -> Self;
+    fn selected(mut self, selected: bool) -> Self;
 
     /// Returns true if the element is selected.
     fn is_selected(&self) -> bool;
@@ -379,19 +337,21 @@ pub trait Selectable: Sized {
 }
 
 /// A trait for defining element that can be disabled.
+#[allow(patterns_in_fns_without_body)]
 pub trait Disableable {
     /// Set the disabled state of the element.
-    fn disabled(self, disabled: bool) -> Self;
+    fn disabled(mut self, disabled: bool) -> Self;
 }
 
 /// A trait for setting the size of an element.
 /// Size::Medium is use by default.
+#[allow(patterns_in_fns_without_body)]
 pub trait Sizable: Sized {
     /// Set the ui::Size of this element.
     ///
     /// Also can receive a `ButtonSize` to convert to `IconSize`,
     /// Or a `Pixels` to set a custom size: `px(30.)`
-    fn with_size(self, size: impl Into<Size>) -> Self;
+    fn with_size(mut self, size: impl Into<Size>) -> Self;
 
     /// Set to Size::XSmall
     #[inline(always)]
@@ -552,26 +512,10 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
         let style = self.style();
 
         let border_widths = Edges::<Pixels> {
-            top: style
-                .border_widths
-                .top
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-            bottom: style
-                .border_widths
-                .bottom
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-            left: style
-                .border_widths
-                .left
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-            right: style
-                .border_widths
-                .right
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
+            top: style.border_widths.top.map(|v| v.to_pixels(rem_size)).unwrap_or_default(),
+            bottom: style.border_widths.bottom.map(|v| v.to_pixels(rem_size)).unwrap_or_default(),
+            left: style.border_widths.left.map(|v| v.to_pixels(rem_size)).unwrap_or_default(),
+            right: style.border_widths.right.map(|v| v.to_pixels(rem_size)).unwrap_or_default(),
         };
 
         // Update the radius based on element's corner radii and the ring border width.
@@ -642,10 +586,7 @@ mod tests {
         assert_eq!(Size::Medium.min(Size::Large), Size::Large);
         assert_eq!(Size::Large.min(Size::Small), Size::Large);
 
-        assert_eq!(
-            Size::Size(px(10.)).min(Size::Size(px(20.))),
-            Size::Size(px(20.))
-        );
+        assert_eq!(Size::Size(px(10.)).min(Size::Size(px(20.))), Size::Size(px(20.)));
 
         // Min
         assert_eq!(Size::Small.max(Size::XSmall), Size::XSmall);
@@ -654,10 +595,7 @@ mod tests {
         assert_eq!(Size::Medium.max(Size::Large), Size::Medium);
         assert_eq!(Size::Large.max(Size::Small), Size::Small);
 
-        assert_eq!(
-            Size::Size(px(10.)).max(Size::Size(px(20.))),
-            Size::Size(px(10.))
-        );
+        assert_eq!(Size::Size(px(10.)).max(Size::Size(px(20.))), Size::Size(px(10.)));
     }
 
     #[test]

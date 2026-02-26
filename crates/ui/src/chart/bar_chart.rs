@@ -5,14 +5,16 @@ use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-    ActiveTheme, PixelsExt,
+    ActiveTheme,
     plot::{
-        AXIS_GAP, AxisText, Grid, Plot, PlotAxis,
+        AXIS_GAP, Grid, Plot, PlotAxis,
         label::Text,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::Bar,
     },
 };
+
+use super::build_band_x_labels;
 
 #[derive(IntoPlot)]
 pub struct BarChart<T, X, Y>
@@ -27,6 +29,8 @@ where
     fill: Option<Rc<dyn Fn(&T) -> Hsla>>,
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
+    x_axis: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> BarChart<T, X, Y>
@@ -45,6 +49,8 @@ where
             fill: None,
             tick_margin: 1,
             label: None,
+            x_axis: true,
+            grid: true,
         }
     }
 
@@ -78,6 +84,19 @@ where
         self.label = Some(Rc::new(move |t| label(t).into()));
         self
     }
+
+    /// Show or hide the x-axis line and labels.
+    ///
+    /// Default is true.
+    pub fn x_axis(mut self, x_axis: bool) -> Self {
+        self.x_axis = x_axis;
+        self
+    }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
+        self
+    }
 }
 
 impl<T, X, Y> Plot for BarChart<T, X, Y>
@@ -91,7 +110,8 @@ where
         };
 
         let width = bounds.size.width.as_f32();
-        let height = bounds.size.height.as_f32() - AXIS_GAP;
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        let height = bounds.size.height.as_f32() - axis_gap;
 
         // X scale
         let x = ScaleBand::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width])
@@ -110,33 +130,28 @@ where
         );
 
         // Draw X axis
-        let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
-            if (i + 1) % self.tick_margin == 0 {
-                x.tick(&x_fn(d)).map(|x_tick| {
-                    AxisText::new(
-                        x_fn(d).into(),
-                        x_tick + band_width / 2.,
-                        cx.theme().muted_foreground,
-                    )
-                    .align(TextAlign::Center)
-                })
-            } else {
-                None
-            }
-        });
-
-        PlotAxis::new()
-            .x(height)
-            .x_label(x_label)
-            .stroke(cx.theme().border)
-            .paint(&bounds, window, cx);
+        let mut axis = PlotAxis::new().stroke(cx.theme().border);
+        if self.x_axis {
+            let labels = build_band_x_labels(
+                &self.data,
+                x_fn.as_ref(),
+                &x,
+                band_width,
+                self.tick_margin,
+                cx.theme().muted_foreground,
+            );
+            axis = axis.x(height).x_label(labels);
+        }
+        axis.paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw bars
         let x_fn = x_fn.clone();

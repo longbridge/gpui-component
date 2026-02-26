@@ -13,6 +13,7 @@ pub enum Language {
 pub enum Language {
     Json,
     Plain,
+    Astro,
     Bash,
     C,
     CMake,
@@ -30,6 +31,7 @@ pub enum Language {
     JavaScript,
     JsDoc,
     Kotlin,
+    Lua,
     Make,
     Markdown,
     MarkdownInline,
@@ -67,6 +69,7 @@ impl Language {
         #[cfg(feature = "tree-sitter-languages")]
         match self {
             Self::Plain => "text",
+            Self::Astro => "astro",
             Self::Bash => "bash",
             Self::C => "c",
             Self::CMake => "cmake",
@@ -85,6 +88,7 @@ impl Language {
             Self::JsDoc => "jsdoc",
             Self::Json => "json",
             Self::Kotlin => "kotlin",
+            Self::Lua => "lua",
             Self::Make => "make",
             Self::Markdown => "markdown",
             Self::MarkdownInline => "markdown_inline",
@@ -112,6 +116,7 @@ impl Language {
 
         #[cfg(feature = "tree-sitter-languages")]
         match s {
+            "astro" => Self::Astro,
             "bash" | "sh" => Self::Bash,
             "c" => Self::C,
             "cmake" => Self::CMake,
@@ -130,6 +135,7 @@ impl Language {
             "jsdoc" => Self::JsDoc,
             "json" | "jsonc" => Self::Json,
             "kt" | "kts" | "ktm" => Self::Kotlin,
+            "lua" => Self::Lua,
             "make" | "makefile" => Self::Make,
             "markdown" | "md" | "mdx" => Self::Markdown,
             "markdown_inline" | "markdown-inline" => Self::MarkdownInline,
@@ -174,6 +180,7 @@ impl Language {
                 "yaml",
                 "graphql",
             ],
+            Self::Astro => vec!["html", "css", "javascript", "typescript"],
             Self::Php => vec![
                 "php",
                 "html",
@@ -381,11 +388,23 @@ impl Language {
                 include_str!("languages/php/injections.scm"),
                 "",
             ),
+            Self::Astro => (
+                tree_sitter_astro_next::LANGUAGE,
+                tree_sitter_astro_next::HIGHLIGHTS_QUERY,
+                tree_sitter_astro_next::INJECTIONS_QUERY,
+                "",
+            ),
             Self::Kotlin => (
                 tree_sitter_kotlin_sg::LANGUAGE,
                 include_str!("languages/kotlin/highlights.scm"),
                 "",
                 "",
+            ),
+            Self::Lua => (
+                tree_sitter_lua::LANGUAGE,
+                include_str!("languages/lua/highlights.scm"),
+                tree_sitter_lua::INJECTIONS_QUERY,
+                tree_sitter_lua::LOCALS_QUERY,
             ),
             Self::Svelte => (
                 tree_sitter_svelte_next::LANGUAGE,

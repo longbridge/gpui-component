@@ -89,66 +89,11 @@ window.open_dialog(cx, |dialog, _, _| {
 })
 ```
 
-### Confirm Dialog
-
-```rust
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .confirm()
-        .child("Are you sure you want to delete this item?")
-        .on_ok(|_, window, cx| {
-            window.push_notification("Item deleted", cx);
-            true // Return true to close dialog
-        })
-        .on_cancel(|_, window, cx| {
-            window.push_notification("Cancelled", cx);
-            true
-        })
-})
-```
-
-### Alert Dialog
-
-```rust
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .alert()
-        .child("Operation completed successfully!")
-        .on_close(|_, window, cx| {
-            window.push_notification("Alert closed", cx);
-        })
-})
-```
-
-### Custom Button Labels
-
-```rust
-use gpui_component::button::ButtonVariant;
-
-window.open_dialog(cx, |dialog, _, _| {
-    dialog
-        .confirm()
-        .child("Update available. Restart now?")
-        .button_props(
-            DialogButtonProps::default()
-                .cancel_text("Later")
-                .cancel_variant(ButtonVariant::Secondary)
-                .ok_text("Restart Now")
-                .ok_variant(ButtonVariant::Danger)
-        )
-        .on_ok(|_, window, cx| {
-            window.push_notification("Restarting...", cx);
-            true
-        })
-})
-```
-
 ### Dialog with Icon
 
 ```rust
 window.open_dialog(cx, |dialog, _, cx| {
     dialog
-        .confirm()
         .child(
             h_flex()
                 .gap_3()
@@ -252,38 +197,333 @@ Button::new("submit")
     })
 ```
 
-## Examples
+## Declarative API
 
-### Delete Confirmation
+The Dialog component now supports a declarative API that provides a more React-like component composition pattern using dedicated header, title, description, and footer components.
+
+### Import
 
 ```rust
-Button::new("delete")
-    .danger()
-    .label("Delete")
-    .on_click(|_, window, cx| {
-        window.open_dialog(cx, |dialog, _, _| {
-            dialog
-                .confirm()
-                .child("Are you sure you want to delete this item?")
-                .on_ok(|_, window, cx| {
-                    // Perform delete
-                    window.push_notification("Deleted", cx);
-                    true
-                })
-        });
+use gpui_component::dialog::{
+    Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+};
+```
+
+### Trigger-based Dialog
+
+The trigger-based approach allows you to create a dialog that opens when a trigger element is clicked. The dialog is defined inline with the trigger.
+
+```rust
+Dialog::new(cx)
+    .trigger(
+        Button::new("open-dialog")
+            .outline()
+            .label("Open Dialog")
+    )
+    .content(|content, _, cx| {
+        content
+            .child(
+                DialogHeader::new()
+                    .child(DialogTitle::new().child("Account Created"))
+                    .child(DialogDescription::new().child(
+                        "Your account has been created successfully!",
+                    ))
+            )
+            .child(
+                DialogFooter::new()
+                    .border_t_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().muted)
+                    .child(
+                        Button::new("cancel")
+                            .outline()
+                            .label("Cancel")
+                            .on_click(|_, window, cx| {
+                                window.close_dialog(cx);
+                            })
+                    )
+                    .child(
+                        Button::new("ok")
+                            .primary()
+                            .label("Save Changes")
+                    )
+            )
     })
 ```
 
-### Success Alert
+### Content Builder Pattern
+
+Use the content builder pattern with `window.open_dialog` for more control over dialog creation:
 
 ```rust
 window.open_dialog(cx, |dialog, _, _| {
     dialog
-        .confirm()
-        .alert()
-        .child("Your changes have been saved successfully!")
-        .on_close(|_, _, _| {
-            // Optional close handler
+        .w(px(400.))
+        .content(|content, _, _| {
+            content
+                .child(
+                    DialogHeader::new()
+                        .child(DialogTitle::new().child("Custom Width"))
+                        .child(DialogDescription::new().child(
+                            "This dialog has a custom width of 400px.",
+                        ))
+                )
+                .child(div().child(
+                    "Content area with custom width configuration."
+                ))
+                .child(
+                    DialogFooter::new()
+                        .justify_center()
+                        .child(
+                            Button::new("cancel")
+                                .flex_1()
+                                .outline()
+                                .label("Cancel")
+                                .on_click(|_, window, cx| {
+                                    window.close_dialog(cx);
+                                })
+                        )
+                        .child(
+                            Button::new("done")
+                                .flex_1()
+                                .primary()
+                                .label("Done")
+                                .on_click(|_, window, cx| {
+                                    window.close_dialog(cx);
+                                })
+                        )
+                )
         })
 })
 ```
+
+### Declarative Components
+
+#### DialogHeader
+
+Container for the dialog's title and description section.
+
+```rust
+DialogHeader::new()
+    .child(DialogTitle::new().child("Title"))
+    .child(DialogDescription::new().child("Description"))
+```
+
+#### DialogTitle
+
+Displays the main title of the dialog with semantic styling.
+
+```rust
+DialogTitle::new()
+    .child("Account Settings")
+```
+
+#### DialogDescription
+
+Displays descriptive text below the title with muted styling.
+
+```rust
+DialogDescription::new()
+    .child("Update your account settings and preferences here.")
+```
+
+#### DialogFooter
+
+Container for action buttons and footer content. Automatically applies proper spacing and alignment.
+
+```rust
+DialogFooter::new()
+    .bg(cx.theme().muted)
+    .border_t_1()
+    .border_color(cx.theme().border)
+    .child(Button::new("cancel").outline().label("Cancel"))
+    .child(Button::new("save").primary().label("Save"))
+```
+
+### Form Dialog with Declarative API
+
+```rust
+let name_input = cx.new(|cx| InputState::new(window, cx));
+let email_input = cx.new(|cx| InputState::new(window, cx));
+
+Dialog::new(cx)
+    .trigger(Button::new("edit-profile").label("Edit Profile"))
+    .content(|content, _, cx| {
+        content
+            .child(
+                DialogHeader::new()
+                    .child(DialogTitle::new().child("Edit Profile"))
+                    .child(DialogDescription::new().child(
+                        "Make changes to your profile here. Click save when done."
+                    ))
+            )
+            .child(
+                v_flex()
+                    .gap_4()
+                    .py_4()
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child("Name")
+                            .child(Input::new(&name_input).placeholder("Enter your name"))
+                    )
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child("Email")
+                            .child(Input::new(&email_input).placeholder("Enter your email"))
+                    )
+            )
+            .child(
+                DialogFooter::new()
+                    .child(Button::new("cancel").outline().label("Cancel"))
+                    .child(Button::new("save").primary().label("Save Changes"))
+            )
+    })
+```
+
+### Styled Footer
+
+Customize the footer appearance with background colors, borders, and alignment:
+
+```rust
+DialogFooter::new()
+    .justify_center()        // Center align buttons
+    .bg(cx.theme().muted)    // Background color
+    .border_t_1()            // Top border
+    .border_color(cx.theme().border)
+    .child(Button::new("btn1").flex_1().label("Cancel"))
+    .child(Button::new("btn2").flex_1().primary().label("Confirm"))
+```
+
+### DialogContent Container
+
+The `DialogContent` component provides a flexible container for dialog body content:
+
+```rust
+use gpui_component::dialog::DialogContent;
+
+window.open_dialog(cx, |dialog, _, _| {
+    dialog.content(|content, _, cx| {
+        content
+            .child(DialogHeader::new()
+                .child(DialogTitle::new().child("Settings"))
+                .child(DialogDescription::new().child("Configure your preferences"))
+            )
+            .child(
+                div()
+                    .py_4()
+                    .child("Main content area")
+            )
+            .child(DialogFooter::new()
+                .child(Button::new("close").label("Close"))
+            )
+    })
+})
+```
+
+## API Reference - Declarative Components
+
+### Dialog
+
+| Method                   | Description                                           |
+| ------------------------ | ----------------------------------------------------- |
+| `new(cx)`                | Create a new Dialog (no longer requires window param) |
+| `trigger(element)`       | Set trigger element that opens the dialog             |
+| `content(builder)`       | Set content using a builder function                  |
+| `w(px)` / `width(px)`    | Set dialog width                                      |
+| `max_w(px)`              | Set maximum width                                     |
+| `margin_top(px)`         | Set top margin                                        |
+| `overlay(bool)`          | Show/hide overlay (default: true)                     |
+| `overlay_closable(bool)` | Allow closing by clicking overlay (default: true)     |
+| `keyboard(bool)`         | Allow closing with ESC key (default: true)            |
+| `close_button(bool)`     | Show/hide close button (default: true)                |
+
+### DialogContent
+
+Container for dialog body content. Automatically applies padding and flex layout.
+
+```rust
+DialogContent::new()
+    .child(DialogHeader::new()...)
+    .child(/* your content */)
+    .child(DialogFooter::new()...)
+```
+
+### DialogHeader
+
+Container for title and description. Automatically applies vertical flex layout with proper gap.
+
+```rust
+DialogHeader::new()
+    .child(DialogTitle::new().child("Title"))
+    .child(DialogDescription::new().child("Description"))
+```
+
+### DialogTitle
+
+Displays the dialog title with semantic styling (font-semibold, proper line-height).
+
+```rust
+DialogTitle::new()
+    .child("Dialog Title")
+```
+
+### DialogDescription
+
+Displays descriptive text with muted foreground color and proper text sizing.
+
+```rust
+DialogDescription::new()
+    .child("This is a description text that provides more context.")
+```
+
+### DialogFooter
+
+Container for footer buttons with automatic spacing and alignment.
+
+```rust
+DialogFooter::new()
+    .justify_end()  // Right align (default)
+    .child(Button::new("btn1").label("Cancel"))
+    .child(Button::new("btn2").primary().label("OK"))
+```
+
+## Breaking Changes
+
+### Dialog::new() Signature Change
+
+The `Dialog::new()` constructor no longer requires a `window` parameter:
+
+```rust
+// Old API (deprecated)
+Dialog::new(window, cx)
+
+// New API
+Dialog::new(cx)
+```
+
+### Content Builder Function
+
+The `.content()` method now accepts a builder function instead of a pre-built `DialogContent`:
+
+```rust
+// Old approach (still works)
+dialog.child(DialogHeader::new()...)
+
+// New declarative API
+dialog.content(|content, window, cx| {
+    content
+        .child(DialogHeader::new()...)
+        .child(DialogFooter::new()...)
+})
+```
+
+## Best Practices
+
+1. **Use Declarative Components**: Prefer `DialogHeader`, `DialogTitle`, `DialogDescription`, and `DialogFooter` for consistent styling
+2. **Trigger-based for Simple Cases**: Use the trigger pattern for straightforward dialogs that open from a button
+3. **Builder Pattern for Complex Dialogs**: Use `window.open_dialog` with content builder for dialogs requiring complex logic or state
+4. **Semantic Structure**: Always include `DialogHeader` with title and description for accessibility
+5. **Consistent Footer**: Use `DialogFooter` for all action buttons to maintain visual consistency
+6. **Proper Sizing**: Explicitly set dialog width when content requires specific dimensions

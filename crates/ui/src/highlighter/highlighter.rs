@@ -350,6 +350,11 @@ impl SyntaxHighlighter {
         self.text.len() == 0
     }
 
+    /// Get the parsed tree (if available)
+    pub fn tree(&self) -> Option<&Tree> {
+        self.tree.as_ref()
+    }
+
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     ///
     /// Uses incremental parsing by `edit` to efficiently update the highlighter's state.

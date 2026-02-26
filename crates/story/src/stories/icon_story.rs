@@ -60,7 +60,7 @@ impl Render for IconStory {
                     .child(IconName::Info)
                     .child(IconName::Map)
                     .child(IconName::Bot)
-                    .child(IconName::GitHub)
+                    .child(IconName::Github)
                     .child(IconName::Calendar)
                     .child(IconName::Globe)
                     .child(IconName::Heart),

@@ -204,7 +204,6 @@ impl RenderOnce for Radio {
                                 this.child(
                                     div()
                                         .size_full()
-                                        .overflow_hidden()
                                         .line_height(relative(1.))
                                         .when(self.disabled, |this| {
                                             this.text_color(cx.theme().muted_foreground)

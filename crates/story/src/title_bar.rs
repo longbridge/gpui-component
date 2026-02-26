@@ -6,7 +6,7 @@ use gpui::{
     Window, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, PixelsExt, Side, Sizable as _, Theme, TitleBar, WindowExt as _,
+    ActiveTheme as _, IconName, Side, Sizable as _, Theme, TitleBar, WindowExt as _,
     badge::Badge,
     button::{Button, ButtonVariants as _},
     label::Label,
@@ -74,7 +74,7 @@ impl Render for AppTitleBar {
                     .child(self.font_size_selector.clone())
                     .child(
                         Button::new("github")
-                            .icon(IconName::GitHub)
+                            .icon(IconName::Github)
                             .small()
                             .ghost()
                             .on_click(|_, _, cx| {

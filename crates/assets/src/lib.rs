@@ -11,7 +11,7 @@ use std::borrow::Cow;
 /// use gpui::*;
 /// use gpui_component_assets::Assets;
 ///
-/// let app = Application::new().with_assets(Assets);
+/// let app = gpui_platform::application().with_assets(Assets);
 /// ```
 #[derive(RustEmbed)]
 #[folder = "assets"]

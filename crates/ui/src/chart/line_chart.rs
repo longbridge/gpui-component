@@ -1,17 +1,19 @@
 use std::rc::Rc;
 
-use gpui::{px, App, Bounds, Hsla, Pixels, SharedString, TextAlign, Window};
+use gpui::{App, Bounds, Hsla, Pixels, SharedString, Window, px};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
+    ActiveTheme,
     plot::{
+        AXIS_GAP, Grid, Plot, PlotAxis, StrokeStyle,
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Line,
-        AxisText, Grid, Plot, PlotAxis, StrokeStyle, AXIS_GAP,
     },
-    ActiveTheme, PixelsExt,
 };
+
+use super::build_point_x_labels;
 
 #[derive(IntoPlot)]
 pub struct LineChart<T, X, Y>
@@ -27,6 +29,8 @@ where
     stroke_style: StrokeStyle,
     dot: bool,
     tick_margin: usize,
+    x_axis: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> LineChart<T, X, Y>
@@ -46,6 +50,8 @@ where
             x: None,
             y: None,
             tick_margin: 1,
+            x_axis: true,
+            grid: true,
         }
     }
 
@@ -88,6 +94,19 @@ where
         self.tick_margin = tick_margin;
         self
     }
+
+    /// Show or hide the x-axis line and labels.
+    ///
+    /// Default is true.
+    pub fn x_axis(mut self, x_axis: bool) -> Self {
+        self.x_axis = x_axis;
+        self
+    }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
+        self
+    }
 }
 
 impl<T, X, Y> Plot for LineChart<T, X, Y>
@@ -101,7 +120,8 @@ where
         };
 
         let width = bounds.size.width.as_f32();
-        let height = bounds.size.height.as_f32() - AXIS_GAP;
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        let height = bounds.size.height.as_f32() - axis_gap;
 
         // X scale
         let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
@@ -117,40 +137,27 @@ where
         );
 
         // Draw X axis
-        let data_len = self.data.len();
-        let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
-            if (i + 1) % self.tick_margin == 0 {
-                x.tick(&x_fn(d)).map(|x_tick| {
-                    let align = match i {
-                        0 => {
-                            if data_len == 1 {
-                                TextAlign::Center
-                            } else {
-                                TextAlign::Left
-                            }
-                        }
-                        i if i == data_len - 1 => TextAlign::Right,
-                        _ => TextAlign::Center,
-                    };
-                    AxisText::new(x_fn(d).into(), x_tick, cx.theme().muted_foreground).align(align)
-                })
-            } else {
-                None
-            }
-        });
-
-        PlotAxis::new()
-            .x(height)
-            .x_label(x_label)
-            .stroke(cx.theme().border)
-            .paint(&bounds, window, cx);
+        let mut axis = PlotAxis::new().stroke(cx.theme().border);
+        if self.x_axis {
+            let labels = build_point_x_labels(
+                &self.data,
+                x_fn.as_ref(),
+                &x,
+                self.tick_margin,
+                cx.theme().muted_foreground,
+            );
+            axis = axis.x(height).x_label(labels);
+        }
+        axis.paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw line
         let stroke = self.stroke.unwrap_or(cx.theme().chart_2);

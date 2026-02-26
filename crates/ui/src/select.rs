@@ -11,6 +11,7 @@ use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Selectable, Sizable,
     Size, StyleSized, StyledExt,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
+    global_state::GlobalState,
     h_flex,
     input::clear_button,
     list::{List, ListDelegate, ListState},
@@ -235,7 +236,7 @@ where
             }
 
             _ = state.update(cx, |this, cx| {
-                this.open = false;
+                this.set_open(false, cx);
                 this.focus(window, cx);
             });
         });
@@ -253,7 +254,7 @@ where
                 cx.emit(SelectEvent::Confirm(selected_value.clone()));
                 this.final_selected_index = selected_index;
                 this.selected_value = selected_value;
-                this.open = false;
+                this.set_open(false, cx);
                 this.focus(window, cx);
             });
         });
@@ -670,13 +671,13 @@ where
             });
         }
 
-        self.open = false;
+        self.set_open(false, cx);
         cx.notify();
     }
 
     fn up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
-            self.open = true;
+            self.set_open(true, cx);
         }
 
         self.list.focus_handle(cx).focus(window, cx);
@@ -685,7 +686,7 @@ where
 
     fn down(&mut self, _: &SelectDown, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
-            self.open = true;
+            self.set_open(true, cx);
         }
 
         self.list.focus_handle(cx).focus(window, cx);
@@ -697,7 +698,7 @@ where
         cx.propagate();
 
         if !self.open {
-            self.open = true;
+            self.set_open(true, cx);
             cx.notify();
         }
 
@@ -707,7 +708,7 @@ where
     fn toggle_menu(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
 
-        self.open = !self.open;
+        self.set_open(!self.open, cx);
         if self.open {
             self.list.focus_handle(cx).focus(window, cx);
         }
@@ -719,7 +720,17 @@ where
             cx.propagate();
         }
 
-        self.open = false;
+        self.set_open(false, cx);
+        cx.notify();
+    }
+
+    fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        self.open = open;
+        if self.open {
+            GlobalState::global_mut(cx).register_deferred_popover(&self.focus_handle)
+        } else {
+            GlobalState::global_mut(cx).unregister_deferred_popover(&self.focus_handle)
+        }
         cx.notify();
     }
 

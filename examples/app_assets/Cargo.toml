@@ -8,6 +8,7 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui_platform.workspace = true
 gpui-component = { workspace = true }
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 

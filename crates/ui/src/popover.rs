@@ -6,7 +6,10 @@ use gpui::{
 };
 use std::rc::Rc;
 
-use crate::{Anchor, ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored, v_flex};
+use crate::{
+    Anchor, ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored,
+    global_state::GlobalState, v_flex,
+};
 
 const CONTEXT: &str = "Popover";
 pub(crate) fn init(cx: &mut App) {
@@ -236,8 +239,17 @@ impl PopoverState {
         }
     }
 
+    fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        self.open = open;
+        if self.open {
+            GlobalState::global_mut(cx).register_deferred_popover(&self.focus_handle);
+        } else {
+            GlobalState::global_mut(cx).unregister_deferred_popover(&self.focus_handle);
+        }
+    }
+
     fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open = !self.open;
+        self.set_open(!self.open, cx);
         if self.open {
             let state = cx.entity();
             let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
@@ -334,13 +346,13 @@ impl RenderOnce for Popover {
             PopoverState::new(default_open, cx)
         });
 
-        state.update(cx, |state, _| {
+        state.update(cx, |state, cx| {
             if let Some(tracked_focus_handle) = tracked_focus_handle {
                 state.tracked_focus_handle = Some(tracked_focus_handle);
             }
             state.on_open_change = self.on_open_change.clone();
             if let Some(force_open) = force_open {
-                state.open = force_open;
+                state.set_open(force_open, cx);
             }
         });
 
@@ -364,7 +376,7 @@ impl RenderOnce for Popover {
                     state.update(cx, |state, cx| {
                         // We force set open to false to toggle it correctly.
                         // Because if the mouse down out will toggle open first.
-                        state.open = open;
+                        state.set_open(open, cx);
                         state.toggle_open(window, cx);
                     });
                     cx.notify(parent_view_id);

@@ -2,16 +2,18 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
-    HighlightStyle, Hitbox, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels,
-    Point, ShapedLine, SharedString, Size, Style, TextAlign, TextRun, TextStyle, UnderlineStyle,
-    Window, fill, point, px, relative, size,
+    HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
+    Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative,
+    size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    ActiveTheme as _, Colorize, PixelsExt, Root,
-    input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, text_wrapper::LineLayout},
+    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
 };
 
 use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
@@ -19,6 +21,16 @@ use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
+const FOLD_ICON_WIDTH: Pixels = px(14.);
+const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
+
+/// Layout information for fold icons.
+struct FoldIconLayout {
+    /// Hitbox for the line number area (used for hover detection)
+    line_number_hitbox: Hitbox,
+    /// List of (display_row, is_folded, icon_element) pairs for each fold candidate
+    icons: Vec<(usize, bool, gpui::AnyElement)>,
+}
 
 pub(super) struct TextElement {
     pub(crate) state: Entity<InputState>,
@@ -72,7 +84,6 @@ impl TextElement {
         let line_height = last_layout.line_height;
         let visible_range = &last_layout.visible_range;
         let lines = &last_layout.lines;
-        let text_wrapper = &state.text_wrapper;
         let line_number_width = last_layout.line_number_width;
 
         let mut selected_range = state.selected_range;
@@ -110,7 +121,8 @@ impl TextElement {
 
         let mut prev_lines_offset = 0;
         let mut offset_y = px(0.);
-        for (ix, wrap_line) in text_wrapper.lines.iter().enumerate() {
+        let buffer_lines = state.display_map.lines();
+        for (ix, wrap_line) in buffer_lines.iter().enumerate() {
             let row = ix;
             let line_origin = point(px(0.), offset_y);
 
@@ -147,7 +159,9 @@ impl TextElement {
 
                 offset_y += line.size(line_height).height;
                 // +1 for the last `\n`
-                prev_lines_offset += line.len() + 1;
+                // Use wrap_line.len() (buffer line length) instead of line.len() (LineLayout length)
+                // because hidden (folded) LineLayouts have len=0 but the buffer line has content
+                prev_lines_offset += wrap_line.len() + 1;
             } else {
                 // If not in the visible range.
 
@@ -164,7 +178,10 @@ impl TextElement {
                     cursor_end = Some(line_origin);
                 }
 
-                offset_y += wrap_line.height(line_height);
+                // 需要考虑折叠：只累加可见的 wrap rows
+                let visible_wrap_rows =
+                    state.display_map.visible_wrap_row_count_for_buffer_line(ix);
+                offset_y += line_height * visible_wrap_rows;
                 // +1 for the last `\n`
                 prev_lines_offset += wrap_line.len() + 1;
             }
@@ -261,6 +278,7 @@ impl TextElement {
         range: Range<usize>,
         last_layout: &LastLayout,
         bounds: &Bounds<Pixels>,
+        buffer_lines: &[super::display_map::LineItem],
     ) -> Option<Path<Pixels>> {
         if range.is_empty() {
             return None;
@@ -274,18 +292,24 @@ impl TextElement {
 
         let line_height = last_layout.line_height;
         let visible_top = last_layout.visible_top;
-        let visible_start_offset = last_layout.visible_range_offset.start;
+        let visible_range = &last_layout.visible_range;
         let lines = &last_layout.lines;
         let line_number_width = last_layout.line_number_width;
 
         let start_ix = range.start;
         let end_ix = range.end;
 
-        let mut prev_lines_offset = visible_start_offset;
+        // Start from visible_top (which already accounts for all lines before visible range)
+        let mut prev_lines_offset = last_layout.visible_range_offset.start;
         let mut offset_y = visible_top;
         let mut line_corners = vec![];
 
-        for line in lines.iter() {
+        // Only iterate over buffer lines in the visible range
+        for ix in visible_range.start..visible_range.end {
+            let wrap_line = &buffer_lines[ix];
+
+            let line_index = ix - visible_range.start;
+            let line = &lines[line_index];
             let line_size = line.size(line_height);
             let line_wrap_width = line_size.width;
 
@@ -345,7 +369,8 @@ impl TextElement {
 
             offset_y += line_size.height;
             // +1 for skip the last `\n`
-            prev_lines_offset += line.len() + 1;
+            // Use wrap_line.len() (original buffer line length) instead of line.len() (LineLayout length)
+            prev_lines_offset += wrap_line.len() + 1;
         }
 
         let mut points = vec![];
@@ -396,7 +421,10 @@ impl TextElement {
         bounds: &Bounds<Pixels>,
         cx: &mut App,
     ) -> Vec<(Path<Pixels>, bool)> {
-        let search_panel = self.state.read(cx).search_panel.clone();
+        let state = self.state.read(cx);
+        let buffer_lines = state.display_map.lines();
+        let search_panel = state.search_panel.clone();
+
         let Some((ranges, current_match_ix)) = search_panel.and_then(|panel| {
             if let Some(matcher) = panel.read(cx).matcher() {
                 Some((matcher.matched_ranges.clone(), matcher.current_match_ix))
@@ -409,7 +437,9 @@ impl TextElement {
 
         let mut paths = Vec::new();
         for (index, range) in ranges.as_ref().iter().enumerate() {
-            if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
+            if let Some(path) =
+                Self::layout_match_range(range.clone(), last_layout, bounds, buffer_lines)
+            {
                 paths.push((path, current_match_ix == index));
             }
         }
@@ -423,13 +453,16 @@ impl TextElement {
         bounds: &Bounds<Pixels>,
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
-        let hover_popover = self.state.read(cx).hover_popover.clone();
+        let state = self.state.read(cx);
+        let buffer_lines = state.display_map.lines();
+        let hover_popover = state.hover_popover.clone();
+
         let Some(symbol_range) = hover_popover.map(|popover| popover.read(cx).symbol_range.clone())
         else {
             return None;
         };
 
-        Self::layout_match_range(symbol_range, last_layout, bounds)
+        Self::layout_match_range(symbol_range, last_layout, bounds, buffer_lines)
     }
 
     fn layout_document_colors(
@@ -437,10 +470,15 @@ impl TextElement {
         document_colors: &[(Range<usize>, Hsla)],
         last_layout: &LastLayout,
         bounds: &Bounds<Pixels>,
+        cx: &mut App,
     ) -> Vec<(Path<Pixels>, Hsla)> {
+        let buffer_lines = self.state.read(cx).display_map.lines();
+
         let mut paths = vec![];
         for (range, color) in document_colors.iter() {
-            if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
+            if let Some(path) =
+                Self::layout_match_range(range.clone(), last_layout, bounds, buffer_lines)
+            {
                 paths.push((path, *color));
             }
         }
@@ -459,6 +497,8 @@ impl TextElement {
         if !state.focus_handle.is_focused(window) {
             return None;
         }
+
+        let buffer_lines = state.display_map.lines();
 
         let mut selected_range = state.selected_range;
         if let Some(ime_marked_range) = &state.ime_marked_range {
@@ -485,7 +525,7 @@ impl TextElement {
         let range = start_ix.max(last_layout.visible_range_offset.start)
             ..end_ix.min(last_layout.visible_range_offset.end);
 
-        Self::layout_match_range(range, &last_layout, bounds)
+        Self::layout_match_range(range, &last_layout, bounds, buffer_lines)
     }
 
     /// Calculate the visible range of lines in the viewport.
@@ -507,7 +547,7 @@ impl TextElement {
             return (0..1, visible_top);
         }
 
-        let total_lines = state.text_wrapper.len();
+        let total_lines = state.display_map.wrap_row_count();
         let scroll_top = if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
             deferred_scroll_offset.y
         } else {
@@ -516,8 +556,17 @@ impl TextElement {
 
         let mut visible_range = 0..total_lines;
         let mut line_bottom = px(0.);
-        for (ix, line) in state.text_wrapper.lines.iter().enumerate() {
-            let wrapped_height = line.height(line_height);
+        for (ix, _line) in state.display_map.lines().iter().enumerate() {
+            // 获取该 buffer line 中可见的 wrap rows 数量
+            let visible_wrap_rows = state.display_map.visible_wrap_row_count_for_buffer_line(ix);
+
+            // 如果全部被折叠，跳过
+            if visible_wrap_rows == 0 {
+                continue;
+            }
+
+            // 只累加可见 wrap rows 的高度
+            let wrapped_height = line_height * visible_wrap_rows;
             line_bottom += wrapped_height;
 
             if line_bottom < -scroll_top {
@@ -550,7 +599,7 @@ impl TextElement {
             _ => 8,
         };
 
-        let line_number_width = if state.mode.line_number() {
+        let mut line_number_width = if state.mode.line_number() {
             let empty_line_number = window.text_system().shape_line(
                 "+".repeat(line_number_len).into(),
                 font_size,
@@ -565,10 +614,17 @@ impl TextElement {
                 None,
             );
 
-            empty_line_number.width + px(6.) + LINE_NUMBER_RIGHT_MARGIN
+            empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
+        } else if state.mode.is_code_editor() && state.mode.is_multi_line() {
+            LINE_NUMBER_RIGHT_MARGIN
         } else {
             px(0.)
         };
+
+        if state.mode.is_folding() {
+            // Add extra space for fold icons
+            line_number_width += FOLD_ICON_HITBOX_WIDTH
+        }
 
         (line_number_width, line_number_len)
     }
@@ -715,6 +771,155 @@ impl TextElement {
         (first_line, ghost_lines)
     }
 
+    /// Return (line_number_width, line_number_len)
+    /// Layout fold icon hitboxes during prepaint phase.
+    ///
+    /// This creates hitboxes for the fold icon area, positioned to the right of line numbers.
+    /// Icons are created and prepainted here to avoid panics.
+    fn layout_fold_icons(
+        &self,
+        bounds: &Bounds<Pixels>,
+        last_layout: &LastLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> FoldIconLayout {
+        // First pass: collect fold information from state
+        struct FoldInfo {
+            buffer_line: usize,
+            is_folded: bool,
+            display_row: usize,
+            offset_y: Pixels,
+        }
+
+        let line_number_hitbox = window.insert_hitbox(
+            Bounds::new(
+                bounds.origin + point(px(0.), last_layout.visible_top),
+                size(last_layout.line_number_width, bounds.size.height),
+            ),
+            HitboxBehavior::Normal,
+        );
+
+        let mut icon_layout = FoldIconLayout {
+            line_number_hitbox,
+            icons: vec![],
+        };
+
+        let fold_infos: Vec<FoldInfo> = {
+            let state = self.state.read(cx);
+            if !state.mode.is_folding() {
+                return icon_layout;
+            }
+
+            let mut infos = Vec::new();
+            let mut offset_y = last_layout.visible_top;
+
+            for (ix, line) in last_layout.lines.iter().enumerate() {
+                // visible_range contains buffer lines (not display rows)
+                let buffer_line = last_layout.visible_range.start + ix;
+
+                // Skip hidden (folded) lines - they should not show fold icons
+                if !state.display_map.is_buffer_line_hidden(buffer_line)
+                    && state.display_map.is_fold_candidate(buffer_line)
+                {
+                    let is_folded = state.display_map.is_folded_at(buffer_line);
+                    infos.push(FoldInfo {
+                        buffer_line,
+                        is_folded,
+                        display_row: buffer_line,
+                        offset_y,
+                    });
+                }
+
+                offset_y += line.wrapped_lines.len() * last_layout.line_height;
+            }
+
+            infos
+        }; // state is dropped here
+
+        // Second pass: create and prepaint icons
+        let line_height = last_layout.line_height;
+        let line_number_width = last_layout.line_number_width
+            - LINE_NUMBER_RIGHT_MARGIN.half()
+            - FOLD_ICON_HITBOX_WIDTH;
+        let icon_relative_pos = point(
+            (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
+            (line_height - FOLD_ICON_WIDTH).half(),
+        );
+
+        for (ix, info) in fold_infos.iter().enumerate() {
+            // Position fold icon to the right of line numbers
+            let fold_icon_bounds = Bounds::new(
+                bounds.origin + icon_relative_pos + point(line_number_width, info.offset_y),
+                size(FOLD_ICON_HITBOX_WIDTH, line_height),
+            );
+
+            // Create and prepaint icon
+            let mut icon = Button::new(("fold", ix))
+                .ghost()
+                .icon(if info.is_folded {
+                    IconName::ChevronRight
+                } else {
+                    IconName::ChevronDown
+                })
+                .xsmall()
+                .rounded_xs()
+                .size(FOLD_ICON_WIDTH)
+                .selected(info.is_folded)
+                .on_mouse_down(MouseButton::Left, {
+                    let state = self.state.clone();
+                    let buffer_line = info.buffer_line;
+                    move |_, _: &mut Window, cx: &mut App| {
+                        cx.stop_propagation();
+
+                        state.update(cx, |state, cx| {
+                            state.display_map.toggle_fold(buffer_line);
+                            cx.notify();
+                        });
+                    }
+                })
+                .into_any_element();
+
+            icon.prepaint_as_root(
+                fold_icon_bounds.origin,
+                fold_icon_bounds.size.into(),
+                window,
+                cx,
+            );
+
+            icon_layout
+                .icons
+                .push((info.display_row, info.is_folded, icon));
+        }
+
+        icon_layout
+    }
+
+    /// Paint fold icons using prepaint hitboxes.
+    ///
+    /// This handles:
+    /// - Rendering fold icons (chevron-right for folded, chevron-down for expanded)
+    /// - Mouse click handling to toggle fold state
+    /// - Cursor style changes on hover
+    /// - Only show icon on hover or for current line
+    fn paint_fold_icons(
+        &mut self,
+        fold_icon_layout: &mut FoldIconLayout,
+        current_row: Option<usize>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let is_hovered = fold_icon_layout.line_number_hitbox.is_hovered(window);
+        for (display_row, is_folded, icon) in fold_icon_layout.icons.iter_mut() {
+            let is_current_line = current_row == Some(*display_row);
+
+            if !is_hovered && !is_current_line && !*is_folded {
+                continue;
+            }
+
+            icon.paint(window, cx);
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn layout_lines(
         state: &InputState,
@@ -727,7 +932,7 @@ impl TextElement {
         window: &mut Window,
     ) -> Vec<LineLayout> {
         let is_single_line = state.mode.is_single_line();
-        let text_wrapper = &state.text_wrapper;
+        let buffer_lines = state.display_map.lines();
         let visible_range = &last_layout.visible_range;
         let visible_range_offset = &last_layout.visible_range_offset;
 
@@ -745,7 +950,7 @@ impl TextElement {
             return vec![line_layout];
         }
 
-        // Empty to use placeholder, the placeholder is not in the text_wrapper map.
+        // Empty to use placeholder, the placeholder is not in the wrapper map.
         if state.text.len() == 0 {
             return display_text
                 .to_string()
@@ -771,12 +976,21 @@ impl TextElement {
         let mut lines = vec![];
         let mut offset = 0;
         for (ix, line) in visible_text.split("\n").enumerate() {
-            let line_item = text_wrapper
-                .lines
-                .get(visible_range.start + ix)
-                .expect("line should exists in text_wrapper");
+            let buffer_line = visible_range.start + ix;
+            let line_item = buffer_lines
+                .get(buffer_line)
+                .expect("line should exists in wrapper");
 
             debug_assert_eq!(line_item.len(), line.len());
+
+            // Check if this buffer line is completely folded
+            let is_hidden = state.display_map.is_buffer_line_hidden(buffer_line);
+            if is_hidden {
+                // Create an empty LineLayout for folded lines
+                lines.push(LineLayout::new());
+                offset += line.len() + 1; // +1 for the `\n`
+                continue;
+            }
 
             let mut wrapped_lines = SmallVec::with_capacity(1);
 
@@ -890,6 +1104,8 @@ pub(super) struct PrepaintState {
     hover_definition_hitbox: Option<Hitbox>,
     indent_guides_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
+    /// Fold icon layout data
+    fold_icon_layout: FoldIconLayout,
     // Inline completion rendering data
     /// Shaped ghost lines to paint after cursor row (completion lines 2+)
     ghost_lines: Vec<ShapedLine>,
@@ -1004,8 +1220,8 @@ impl Element for TextElement {
         let text_size = style.font_size.to_pixels(window.rem_size());
 
         self.state.update(cx, |state, cx| {
-            state.text_wrapper.set_font(font, text_size, cx);
-            state.text_wrapper.prepare_if_need(&state.text, cx);
+            state.display_map.set_font(font, text_size, cx);
+            state.display_map.ensure_text_prepared(&state.text, cx);
         });
 
         let state = self.state.read(cx);
@@ -1163,7 +1379,7 @@ impl Element for TextElement {
         // 1. Single line
         // 2. Multi-line with soft wrap disabled.
         if state.mode.is_single_line() || !state.soft_wrap {
-            let longest_row = state.text_wrapper.longest_row.row;
+            let longest_row = state.display_map.longest_row();
             let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
                 .text_system()
@@ -1194,7 +1410,7 @@ impl Element for TextElement {
         let ghost_line_count = ghost_lines.len();
         let ghost_lines_height = ghost_line_count as f32 * line_height;
 
-        let total_wrapped_lines = state.text_wrapper.len();
+        let total_wrapped_lines = state.display_map.wrap_row_count();
         let empty_bottom_height = if state.mode.is_code_editor() {
             bounds
                 .size
@@ -1260,7 +1476,7 @@ impl Element for TextElement {
         let selection_path = self.layout_selections(&last_layout, &mut bounds, window, cx);
         let hover_highlight_path = self.layout_hover_highlight(&last_layout, &mut bounds, cx);
         let document_color_paths =
-            self.layout_document_colors(&document_colors, &last_layout, &bounds);
+            self.layout_document_colors(&document_colors, &last_layout, &bounds, cx);
 
         let state = self.state.read(cx);
         let line_numbers = if state.mode.line_number() {
@@ -1284,10 +1500,18 @@ impl Element for TextElement {
 
             // build line numbers
             for (ix, line) in last_layout.lines.iter().enumerate() {
-                let ix = last_layout.visible_range.start + ix;
-                let line_no = format!("{:>width$}", ix + 1, width = line_number_len).into();
+                let buffer_line = last_layout.visible_range.start + ix;
 
-                let runs = if current_row == Some(ix) {
+                // Hidden (folded) lines get empty entry (0 height)
+                if state.display_map.is_buffer_line_hidden(buffer_line) {
+                    line_numbers.push(SmallVec::new());
+                    continue;
+                }
+
+                let line_no: SharedString =
+                    format!("{:>width$}", buffer_line + 1, width = line_number_len).into();
+
+                let runs = if current_row == Some(buffer_line) {
                     &current_line_runs
                 } else {
                     &other_line_runs
@@ -1312,6 +1536,7 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
+        let fold_icon_layout = self.layout_fold_icons(&bounds, &last_layout, window, cx);
 
         PrepaintState {
             bounds,
@@ -1327,6 +1552,7 @@ impl Element for TextElement {
             hover_definition_hitbox,
             document_color_paths,
             indent_guides_path,
+            fold_icon_layout,
             ghost_first_line,
             ghost_lines,
             ghost_lines_height,
@@ -1579,6 +1805,14 @@ impl Element for TextElement {
                 }
             }
         }
+
+        // Paint fold icons (only visible on hover or for current line)
+        self.paint_fold_icons(
+            &mut prepaint.fold_icon_layout,
+            prepaint.current_row,
+            window,
+            cx,
+        );
 
         self.state.update(cx, |state, cx| {
             state.last_layout = Some(prepaint.last_layout.clone());

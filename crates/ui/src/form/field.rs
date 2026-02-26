@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, Axis, Div, Element,
-    ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels, Rems, RenderOnce,
-    SharedString, Styled, Window,
+    AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _,
+    IntoElement, ParentElement, Pixels, Rems, RenderOnce, SharedString, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, Size, StyledExt};
+use crate::{ActiveTheme as _, AxisExt, Size, StyledExt, h_flex, v_flex};
 
 #[derive(Clone, Copy)]
 pub(super) struct FieldProps {
@@ -81,6 +81,7 @@ impl From<SharedString> for FieldBuilder {
 pub struct Field {
     id: ElementId,
     props: FieldProps,
+    style: StyleRefinement,
     label: Option<FieldBuilder>,
     label_indent: bool,
     description: Option<FieldBuilder>,
@@ -99,6 +100,8 @@ impl Field {
     pub fn new() -> Self {
         Self {
             id: 0.into(),
+            props: FieldProps::default(),
+            style: StyleRefinement::default(),
             label: None,
             description: None,
             children: Vec::new(),
@@ -106,7 +109,6 @@ impl Field {
             required: false,
             label_indent: true,
             align_items: None,
-            props: FieldProps::default(),
             col_span: 1,
             col_start: None,
             col_end: None,
@@ -225,6 +227,12 @@ impl ParentElement for Field {
     }
 }
 
+impl Styled for Field {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for Field {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let layout = self.props.layout;
@@ -267,6 +275,7 @@ impl RenderOnce for Field {
             .col_span(self.col_span)
             .when_some(self.col_start, |this, start| this.col_start(start))
             .when_some(self.col_end, |this, end| this.col_end(end))
+            .refine_style(&self.style)
             .child(
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
