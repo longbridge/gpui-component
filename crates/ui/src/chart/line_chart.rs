@@ -93,9 +93,11 @@ where
         self
     }
 
-    /// Hide the x-axis line and labels.
-    pub fn hide_x_axis(mut self) -> Self {
-        self.show_x_axis = false;
+    /// Show or hide the x-axis line and labels.
+    ///
+    /// Default is true.
+    pub fn x_axis(mut self, show_x_axis: bool) -> Self {
+        self.show_x_axis = show_x_axis;
         self
     }
 }
