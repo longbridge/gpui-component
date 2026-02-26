@@ -29,7 +29,7 @@ where
     stroke_style: StrokeStyle,
     dot: bool,
     tick_margin: usize,
-    show_x_axis: bool,
+    x_axis: bool,
 }
 
 impl<T, X, Y> LineChart<T, X, Y>
@@ -49,7 +49,7 @@ where
             x: None,
             y: None,
             tick_margin: 1,
-            show_x_axis: true,
+            x_axis: true,
         }
     }
 
@@ -96,8 +96,8 @@ where
     /// Show or hide the x-axis line and labels.
     ///
     /// Default is true.
-    pub fn x_axis(mut self, show_x_axis: bool) -> Self {
-        self.show_x_axis = show_x_axis;
+    pub fn x_axis(mut self, x_axis: bool) -> Self {
+        self.x_axis = x_axis;
         self
     }
 }
@@ -113,7 +113,7 @@ where
         };
 
         let width = bounds.size.width.as_f32();
-        let axis_gap = if self.show_x_axis { AXIS_GAP } else { 0. };
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
         let height = bounds.size.height.as_f32() - axis_gap;
 
         // X scale
@@ -131,7 +131,7 @@ where
 
         // Draw X axis
         let mut axis = PlotAxis::new().stroke(cx.theme().border);
-        if self.show_x_axis {
+        if self.x_axis {
             let labels = build_point_x_labels(
                 &self.data,
                 x_fn.as_ref(),
