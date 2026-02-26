@@ -99,9 +99,17 @@ impl InputMode {
         matches!(self, InputMode::CodeEditor { .. })
     }
 
+    /// Return true if the mode is code editor and `folding: true`, `multi_line: true`.
     #[inline]
     pub(crate) fn is_folding(&self) -> bool {
-        matches!(self, InputMode::CodeEditor { folding: true, .. })
+        matches!(
+            self,
+            InputMode::CodeEditor {
+                folding: true,
+                multi_line: true,
+                ..
+            }
+        )
     }
 
     #[inline]
@@ -182,7 +190,6 @@ impl InputMode {
     }
 
     /// Return false if the mode is not [`InputMode::CodeEditor`].
-    #[allow(unused)]
     #[inline]
     pub(super) fn line_number(&self) -> bool {
         match self {
@@ -296,6 +303,7 @@ mod tests {
         assert_eq!(mode.has_indent_guides(), true);
         assert_eq!(mode.max_rows(), usize::MAX);
         assert_eq!(mode.min_rows(), 1);
+        assert_eq!(mode.is_folding(), true);
 
         let mode = InputMode::CodeEditor {
             multi_line: false,
@@ -315,6 +323,7 @@ mod tests {
         assert_eq!(mode.has_indent_guides(), false);
         assert_eq!(mode.max_rows(), 1);
         assert_eq!(mode.min_rows(), 1);
+        assert_eq!(mode.is_folding(), false);
     }
 
     #[test]

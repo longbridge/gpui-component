@@ -615,14 +615,15 @@ impl TextElement {
             );
 
             empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
-        } else if state.mode.is_code_editor() {
+        } else if state.mode.is_code_editor() && state.mode.is_multi_line() {
             LINE_NUMBER_RIGHT_MARGIN
         } else {
             px(0.)
         };
 
         if state.mode.is_folding() {
-            line_number_width += FOLD_ICON_HITBOX_WIDTH;
+            // Add extra space for fold icons
+            line_number_width += FOLD_ICON_HITBOX_WIDTH
         }
 
         (line_number_width, line_number_len)
