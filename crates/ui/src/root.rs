@@ -9,8 +9,8 @@ use crate::{
 };
 use gpui::{
     AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, StyleRefinement, Styled, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    IntoElement, KeyBinding, ParentElement as _, Pixels, Render, StyleRefinement, Styled,
+    WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -33,6 +33,9 @@ pub struct Root {
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
+    /// Shadow size for the window border (e.g. `px(12.0)` for Linux client-side decorations).
+    /// If not set, no shadow is drawn.
+    window_border_shadow_size: Option<Pixels>,
     view: AnyView,
     style: StyleRefinement,
 }
@@ -77,9 +80,17 @@ impl Root {
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
+            window_border_shadow_size: None,
             view: view.into(),
             style: StyleRefinement::default(),
         }
+    }
+
+    /// Set the window border shadow size (e.g. `px(12.0)` for Linux client-side decorations).
+    /// Call this after `new()` when building the Root. If not set, shadow size is 0 on non-Linux platforms, 12px on Linux.
+    pub fn window_border_shadow_size(mut self, size: Pixels) -> Self {
+        self.window_border_shadow_size = Some(size);
+        self
     }
 
     pub fn update<F, R>(window: &mut Window, cx: &mut App, f: F) -> R
@@ -434,7 +445,11 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
-        window_border().child(
+        let border = match self.window_border_shadow_size {
+            Some(size) => window_border().shadow_size(size),
+            None => window_border(),
+        };
+        border.child(
             div()
                 .id("root")
                 .key_context(CONTEXT)
