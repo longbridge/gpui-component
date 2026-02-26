@@ -27,6 +27,7 @@ where
     stroke_styles: Vec<StrokeStyle>,
     fills: Vec<Background>,
     tick_margin: usize,
+    grid: bool,
 }
 
 impl<T, X, Y> AreaChart<T, X, Y>
@@ -46,6 +47,7 @@ where
             tick_margin: 1,
             x: None,
             y: vec![],
+            grid: true,
         }
     }
 
@@ -86,6 +88,11 @@ where
 
     pub fn tick_margin(mut self, tick_margin: usize) -> Self {
         self.tick_margin = tick_margin;
+        self
+    }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -149,11 +156,13 @@ where
             .paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw area
         for (i, y_fn) in self.y.iter().enumerate() {

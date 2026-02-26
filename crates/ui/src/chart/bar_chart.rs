@@ -27,6 +27,7 @@ where
     fill: Option<Rc<dyn Fn(&T) -> Hsla>>,
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
+    grid: bool,
 }
 
 impl<T, X, Y> BarChart<T, X, Y>
@@ -45,6 +46,7 @@ where
             fill: None,
             tick_margin: 1,
             label: None,
+            grid: true,
         }
     }
 
@@ -76,6 +78,11 @@ where
         S: Into<SharedString> + 'static,
     {
         self.label = Some(Rc::new(move |t| label(t).into()));
+        self
+    }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -132,11 +139,13 @@ where
             .paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw bars
         let x_fn = x_fn.clone();
