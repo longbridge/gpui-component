@@ -83,15 +83,15 @@ impl ParentElement for WindowBorder {
 impl RenderOnce for WindowBorder {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let decorations = window.window_decorations();
-        let effective_shadow_size = match decorations {
+        let shadow_size = match decorations {
             Decorations::Client { tiling }
                 if tiling.top && tiling.bottom && tiling.left && tiling.right =>
             {
                 px(0.0)
             }
-            _ => SHADOW_SIZE,
+            _ => self.shadow_size,
         };
-        window.set_client_inset(effective_shadow_size);
+        window.set_client_inset(shadow_size);
 
         div()
             .id("window-backdrop")
@@ -120,7 +120,7 @@ impl RenderOnce for WindowBorder {
                                 if tiling.top && tiling.bottom && tiling.left && tiling.right {
                                     return;
                                 }
-                                let Some(edge) = resize_edge(mouse, SHADOW_SIZE, size) else {
+                                let Some(edge) = resize_edge(mouse, shadow_size, size) else {
                                     return;
                                 };
                                 window.set_cursor_style(
