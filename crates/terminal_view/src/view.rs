@@ -636,10 +636,15 @@ impl TerminalView {
     /// 2. 保持文本的完整性，让用户可以检查后再执行
     /// 3. 避免意外执行危险命令
     fn paste_text(&mut self, text: &str, cx: &mut Context<Self>) {
-        // 总是使用 bracketed paste 模式
-        // 现代终端基本都支持此模式，即使不支持也只是显示转义序列，不会导致命令被意外执行
-        let paste_text = format!("\x1b[200~{}\x1b[201~", text.replace('\x1b', ""));
-        self.write_to_pty(paste_text.into_bytes(), cx);
+        // 仅在应用请求 bracketed paste 模式时才包装，避免把控制序列
+        // 原样送进不支持的程序（例如 Vim 未开启时可能导致光标/位置异常）。
+        let mode = self.terminal.read(cx).mode();
+        if mode.contains(TermMode::BRACKETED_PASTE) {
+            let paste_text = format!("\x1b[200~{}\x1b[201~", text.replace('\x1b', ""));
+            self.write_to_pty(paste_text.into_bytes(), cx);
+        } else {
+            self.write_to_pty(text.as_bytes().to_vec(), cx);
+        }
     }
 
     /// 粘贴代码块到终端（用于AI生成的代码）
