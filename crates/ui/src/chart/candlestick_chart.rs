@@ -30,6 +30,7 @@ where
     tick_margin: usize,
     body_width_ratio: f32,
     x_axis: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> CandlestickChart<T, X, Y>
@@ -51,6 +52,7 @@ where
             tick_margin: 1,
             body_width_ratio: 0.8,
             x_axis: true,
+            grid: true,
         }
     }
 
@@ -94,6 +96,11 @@ where
     /// Default is true.
     pub fn x_axis(mut self, x_axis: bool) -> Self {
         self.x_axis = x_axis;
+        self
+    }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
         self
     }
 }
@@ -148,11 +155,13 @@ where
         axis.paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw candlesticks
         let origin = bounds.origin;

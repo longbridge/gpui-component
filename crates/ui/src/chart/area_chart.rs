@@ -30,6 +30,7 @@ where
     fills: Vec<Background>,
     tick_margin: usize,
     x_axis: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> AreaChart<T, X, Y>
@@ -50,6 +51,7 @@ where
             x: None,
             y: vec![],
             x_axis: true,
+            grid: true,
         }
     }
 
@@ -100,6 +102,11 @@ where
         self.x_axis = x_axis;
         self
     }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
+        self
+    }
 }
 
 impl<T, X, Y> Plot for AreaChart<T, X, Y>
@@ -147,11 +154,13 @@ where
         axis.paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw area
         for (i, y_fn) in self.y.iter().enumerate() {

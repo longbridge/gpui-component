@@ -30,6 +30,7 @@ where
     dot: bool,
     tick_margin: usize,
     x_axis: bool,
+    grid: bool,
 }
 
 impl<T, X, Y> LineChart<T, X, Y>
@@ -50,6 +51,7 @@ where
             y: None,
             tick_margin: 1,
             x_axis: true,
+            grid: true,
         }
     }
 
@@ -100,6 +102,11 @@ where
         self.x_axis = x_axis;
         self
     }
+
+    pub fn grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
+        self
+    }
 }
 
 impl<T, X, Y> Plot for LineChart<T, X, Y>
@@ -144,11 +151,13 @@ where
         axis.paint(&bounds, window, cx);
 
         // Draw grid
-        Grid::new()
-            .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-            .stroke(cx.theme().border)
-            .dash_array(&[px(4.), px(2.)])
-            .paint(&bounds, window);
+        if self.grid {
+            Grid::new()
+                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+                .stroke(cx.theme().border)
+                .dash_array(&[px(4.), px(2.)])
+                .paint(&bounds, window);
+        }
 
         // Draw line
         let stroke = self.stroke.unwrap_or(cx.theme().chart_2);
