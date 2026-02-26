@@ -248,6 +248,8 @@ pub struct RedisCliView {
     terminal_bounds: Bounds<Pixels>,
     /// 主题
     theme: CliTheme,
+    /// 是否拥有独立连接（关闭时需要清理）
+    owns_connection: bool,
     /// 文本选择状态
     selection: Option<TextSelection>,
     /// 鼠标状态
@@ -262,6 +264,7 @@ impl RedisCliView {
     pub fn new(
         connection_id: String,
         db_index: u8,
+        owns_connection: bool,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -289,6 +292,7 @@ impl RedisCliView {
             mouse_state: MouseState::default(),
             cell_width: px(7.8), // 默认值，会在渲染时更新
             ime_marked_range: None,
+            owns_connection,
         };
 
         this.start_blink_timer(cx);
@@ -959,6 +963,7 @@ impl RedisCliView {
         cx.notify();
 
         let connection_id = self.connection_id.clone();
+        let db_index = self.db_index;
         let global_state = cx.global::<GlobalRedisState>().clone();
         let _start_time = Instant::now();
 
@@ -971,6 +976,8 @@ impl RedisCliView {
                         .get_connection(&connection_id)
                         .ok_or_else(|| anyhow::anyhow!(t!("RedisCli.connection_missing")))?;
                     let guard = conn.read().await;
+                    guard.select(db_index).await
+                        .map_err(|e| anyhow::anyhow!("{}", e))?;
                     guard.execute_command(&command).await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
@@ -1588,8 +1595,20 @@ impl TabContent for RedisCliView {
         &mut self,
         _tab_id: &str,
         _window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) -> Task<bool> {
+        if self.owns_connection {
+            let connection_id = self.connection_id.clone();
+            let global_state = cx.global::<GlobalRedisState>().clone();
+            cx.spawn(async move |_this, cx: &mut gpui::AsyncApp| {
+                let _ = Tokio::spawn_result(cx, async move {
+                    global_state.remove_connection(&connection_id).await
+                        .map_err(|e| anyhow::anyhow!("{}", e))
+                })
+                .await;
+            })
+            .detach();
+        }
         Task::ready(true)
     }
 }

@@ -10,6 +10,7 @@ use crate::create_key_dialog::CreateKeyDialog;
 use crate::key_value_view::KeyValueView;
 use crate::redis_cli_view::RedisCliView;
 use crate::redis_tree_view::{RedisTreeView, RedisTreeViewEvent};
+use crate::RedisManager;
 use crate::{GlobalRedisState, RedisKeyType, RedisNode, RedisNodeType};
 use one_core::tab_container::{TabContainer, TabItem};
 
@@ -81,6 +82,16 @@ impl RedisEventHandler {
                             Self::handle_refresh_keys(node, tree_view.clone(), global_state.clone(), window, cx);
                         }
                     }
+                    RedisTreeViewEvent::LoadMoreKeys { node_id } => {
+                        if let Some(node) = get_node(node_id, cx) {
+                            Self::handle_load_more_keys(
+                                node,
+                                tree_view.clone(),
+                                global_state.clone(),
+                                cx,
+                            );
+                        }
+                    }
                     RedisTreeViewEvent::DeleteKey { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
                             Self::handle_delete_key(node, tree_view.clone(), global_state.clone(), window, cx);
@@ -99,8 +110,15 @@ impl RedisEventHandler {
                     RedisTreeViewEvent::ConnectionEstablished { .. } => {
                         // 连接建立事件，不需要特殊处理
                     }
-                    RedisTreeViewEvent::OpenCli { connection_id, db_index } => {
-                        Self::handle_open_cli(connection_id.clone(), *db_index, tab_container.clone(), window, cx);
+                    RedisTreeViewEvent::OpenCli { connection_id, db_index, stored_connection } => {
+                        Self::handle_open_cli(
+                            connection_id.clone(),
+                            *db_index,
+                            stored_connection.clone(),
+                            tab_container.clone(),
+                            window,
+                            cx,
+                        );
                     }
                 }
             },
@@ -115,31 +133,89 @@ impl RedisEventHandler {
     fn handle_open_cli(
         connection_id: String,
         db_index: u8,
+        stored_connection: one_core::storage::StoredConnection,
         tab_container: Entity<TabContainer>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut App,
     ) {
-        // 生成唯一的标签页 ID
+        // 生成唯一的标签页 ID（仍使用原连接 ID 作为稳定标识）
         let tab_id = format!("redis-cli-{}-db{}", connection_id, db_index);
+        let global_state = cx.global::<GlobalRedisState>().clone();
+        let tab_container = tab_container.clone();
 
-        // 使用 activate_or_add_tab_lazy 方法：如果标签页存在则激活，否则创建新标签页
-        tab_container.update(cx, |container, cx| {
-            container.activate_or_add_tab_lazy(
-                tab_id,
-                |window, cx| {
-                    let cli_view = cx.new(|cx| {
-                        RedisCliView::new(connection_id.clone(), db_index, window, cx)
+        // 为 CLI 创建独立连接
+        cx.spawn(async move |cx: &mut gpui::AsyncApp| {
+            let mut config = match RedisManager::config_from_stored(&stored_connection) {
+                Ok(config) => config,
+                Err(e) => {
+                    let error_message = e.to_string();
+                    let _ = cx.update(|cx| {
+                        if let Some(window) = cx.active_window() {
+                            _ = window.update(cx, |_, window, cx| {
+                                Self::show_error(window, error_message.clone(), cx);
+                            });
+                        }
                     });
-                    TabItem::new(
-                        format!("redis-cli-{}-db{}", connection_id, db_index),
-                        format!("CLI (db{})", db_index),
-                        cli_view,
-                    )
-                },
-                window,
-                cx,
+                    return;
+                }
+            };
+
+            let unique_id = format!(
+                "cli-{}-{}",
+                connection_id,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
             );
-        });
+            config.id = unique_id.clone();
+            config.name = format!("{} (CLI)", stored_connection.name);
+
+            let create_result = Tokio::spawn_result(cx, {
+                let global_state = global_state.clone();
+                let config = config.clone();
+                async move { global_state.create_connection(config).await.map_err(|e| anyhow::anyhow!("{}", e)) }
+            })
+            .await;
+
+            match create_result {
+                Ok(_cli_conn_id) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(window) = cx.active_window() {
+                            _ = window.update(cx, |_, window, cx| {
+                                tab_container.update(cx, |container, cx| {
+                                    container.activate_or_add_tab_lazy(
+                                        tab_id.clone(),
+                                        |window, cx| {
+                                            let cli_view = cx.new(|cx| {
+                                                RedisCliView::new(unique_id.clone(), db_index, true, window, cx)
+                                            });
+                                            TabItem::new(
+                                                format!("redis-cli-{}-db{}", connection_id, db_index),
+                                                format!("CLI (db{})", db_index),
+                                                cli_view,
+                                            )
+                                        },
+                                        window,
+                                        cx,
+                                    );
+                                });
+                            });
+                        }
+                    });
+                }
+                Err(e) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(window) = cx.active_window() {
+                            _ = window.update(cx, |_, window, cx| {
+                                Self::show_error(window, e.to_string(), cx);
+                            });
+                        }
+                    });
+                }
+            }
+        })
+        .detach();
     }
 
     /// 处理节点选中事件
@@ -200,7 +276,7 @@ impl RedisEventHandler {
                 tab_id,
                 |window, cx| {
                     // 创建新的 KeyValueView 并加载数据
-                    let key_value_view = cx.new(|cx| KeyValueView::new(window, cx));
+                    let key_value_view = cx.new(|cx| KeyValueView::new_with_closeable(true, window, cx));
                     key_value_view.update(cx, |view, cx| {
                         view.load_key(connection_id.clone(), db_index, full_key.clone(), cx);
                     });
@@ -231,11 +307,15 @@ impl RedisEventHandler {
             }
             RedisNodeType::Database(db_index) => {
                 // 加载该数据库的键列表
+                let token = tree_view.update(cx, |tree, _| tree.bump_search_token(&node.id));
                 Self::load_keys(
                     node.connection_id.clone(),
                     *db_index,
                     node.id.clone(),
                     "*".to_string(),
+                    0,
+                    false,
+                    token,
                     tree_view,
                     global_state,
                     cx,
@@ -278,7 +358,7 @@ impl RedisEventHandler {
                 .into_iter()
                 .map(|db| {
                     let node_id = format!("{}:db{}", connection_id, db.index);
-                    let name = format!("db{} ({})", db.index, db.keys);
+                    let name = format!("db{}", db.index);
                     RedisNode::new(
                         node_id,
                         name,
@@ -305,12 +385,21 @@ impl RedisEventHandler {
         db_index: u8,
         node_id: String,
         pattern: String,
+        cursor: u64,
+        append: bool,
+        token: u64,
         tree_view: Entity<RedisTreeView>,
         global_state: GlobalRedisState,
         cx: &mut App,
     ) {
+        let node_id_for_loading = node_id.clone();
+        tree_view.update(cx, |tree, cx| {
+            tree.set_node_loading(&node_id_for_loading, true, cx);
+        });
+
         cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-            let keys_with_types = match Tokio::spawn_result(cx, {
+            let pattern_for_scan = pattern.clone();
+            let (keys_with_types, next_cursor) = match Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let global_state = global_state.clone();
                 async move {
@@ -322,26 +411,13 @@ impl RedisEventHandler {
                     // 切换到目标数据库
                     guard.select(db_index).await.map_err(|e| anyhow::anyhow!("{}", e))?;
 
-                    // 使用 SCAN 扫描键（最多 1000 个）
-                    let mut all_keys = Vec::new();
-                    let mut cursor = 0u64;
-                    let max_keys = 1000;
-
-                    loop {
-                        let result = guard
-                            .scan(cursor, &pattern, 100)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-                        all_keys.extend(result.keys);
-
-                        if result.finished || all_keys.len() >= max_keys {
-                            break;
-                        }
-                        cursor = result.cursor;
-                    }
-
-                    all_keys.truncate(max_keys);
+                    // 使用 SCAN 扫描键（分页）
+                    let result = guard
+                        .scan(cursor, &pattern_for_scan, 50)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+                    let all_keys = result.keys;
+                    let next_cursor = if result.finished { 0 } else { result.cursor };
 
                     // 批量获取每个键的类型
                     let mut keys_with_types = Vec::with_capacity(all_keys.len());
@@ -350,12 +426,22 @@ impl RedisEventHandler {
                         keys_with_types.push((key, key_type));
                     }
 
-                    Ok::<Vec<(String, RedisKeyType)>, anyhow::Error>(keys_with_types)
+                    Ok::<(Vec<(String, RedisKeyType)>, u64), anyhow::Error>((
+                        keys_with_types,
+                        next_cursor,
+                    ))
                 }
             })
             .await {
-                Ok(keys) => keys,
-                Err(_) => return,
+                Ok(result) => result,
+                Err(_) => {
+                    let _ = cx.update(|cx| {
+                        tree_view.update(cx, |tree, cx| {
+                            tree.set_node_loading(&node_id, false, cx);
+                        });
+                    });
+                    return;
+                }
             };
 
             // 构建键节点
@@ -376,7 +462,18 @@ impl RedisEventHandler {
 
             _ = cx.update(|cx| {
                 tree_view.update(cx, |tree, cx| {
-                    tree.set_node_children(&node_id, key_nodes, cx);
+                    tree.set_node_loading(&node_id, false, cx);
+                    if !tree.is_search_token_current(&node_id, token) {
+                        return;
+                    }
+                    tree.apply_key_page(
+                        &node_id,
+                        key_nodes,
+                        pattern.clone(),
+                        next_cursor,
+                        append,
+                        cx,
+                    );
                 });
             });
         })
@@ -409,11 +506,51 @@ impl RedisEventHandler {
             format!("*{}*", trimmed)
         };
 
+        let token = tree_view.update(cx, |tree, _| tree.bump_search_token(&node.id));
         Self::load_keys(
             node.connection_id.clone(),
             db_index,
             node.id.clone(),
             server_pattern,
+            0,
+            false,
+            token,
+            tree_view,
+            global_state,
+            cx,
+        );
+    }
+
+    /// 处理加载更多键事件
+    fn handle_load_more_keys(
+        node: RedisNode,
+        tree_view: Entity<RedisTreeView>,
+        global_state: GlobalRedisState,
+        cx: &mut App,
+    ) {
+        let RedisNodeType::Database(db_index) = node.node_type else {
+            return;
+        };
+
+        let (pattern, cursor, token) = tree_view.read(cx).get_scan_state(&node.id)
+            .map(|(pattern, cursor)| {
+                let token = tree_view.read(cx).current_search_token(&node.id);
+                (pattern, cursor, token)
+            })
+            .unwrap_or(("*".to_string(), 0, 0));
+
+        if cursor == 0 {
+            return;
+        }
+
+        Self::load_keys(
+            node.connection_id.clone(),
+            db_index,
+            node.id.clone(),
+            pattern,
+            cursor,
+            true,
+            token,
             tree_view,
             global_state,
             cx,

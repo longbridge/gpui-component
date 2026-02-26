@@ -9,7 +9,7 @@ use gpui::{
     UniformListScrollHandle, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex,
+    ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, h_flex, v_flex,
     button::{Button, ButtonVariants as _},
     clipboard::Clipboard,
     input::{Input, InputEvent, InputState},
@@ -24,6 +24,12 @@ use tracing::{info, warn};
 
 use crate::{GlobalRedisState, RedisKeyType, RedisManager, RedisNode, RedisNodeType};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SearchMode {
+    Local,
+    Server,
+}
+
 /// 树形视图事件
 #[derive(Clone, Debug)]
 pub enum RedisTreeViewEvent {
@@ -37,6 +43,8 @@ pub enum RedisTreeViewEvent {
     OpenKeyInNewTab { node_id: String },
     /// 刷新键列表
     RefreshKeys { node_id: String },
+    /// 加载更多键
+    LoadMoreKeys { node_id: String },
     /// 删除键
     DeleteKey { node_id: String },
     /// 创建键
@@ -46,7 +54,7 @@ pub enum RedisTreeViewEvent {
     /// 连接已建立
     ConnectionEstablished { node_id: String },
     /// 打开 CLI
-    OpenCli { connection_id: String, db_index: u8 },
+    OpenCli { connection_id: String, db_index: u8, stored_connection: StoredConnection },
 }
 
 /// 扁平化的树条目
@@ -70,6 +78,16 @@ pub struct RedisTreeView {
     search_state: Entity<InputState>,
     /// 搜索关键词
     search_keyword: String,
+    /// 搜索模式
+    search_mode: SearchMode,
+    /// 搜索请求序号（node_id -> token）
+    search_tokens: HashMap<String, u64>,
+    /// 数据库总键数（db_node_id -> total）
+    db_total_key_counts: HashMap<String, i64>,
+    /// SCAN 游标（db_node_id -> cursor）
+    scan_cursors: HashMap<String, u64>,
+    /// SCAN 模式（db_node_id -> pattern）
+    scan_patterns: HashMap<String, String>,
     /// 滚动句柄
     scroll_handle: UniformListScrollHandle,
     /// 焦点句柄
@@ -97,17 +115,22 @@ impl RedisTreeView {
             if matches!(event, InputEvent::Change) {
                 this.search_keyword = this.search_state.read(cx).text().to_string();
                 this.rebuild_flat_entries();
-                if let Some(node_id) = this.get_selected_refreshable_node() {
-                    if let Some(node) = this.nodes.get(&node_id) {
-                        if matches!(node.node_type, RedisNodeType::Database(_)) {
-                            let pattern = this.search_keyword.trim().to_string();
-                            if pattern.is_empty() {
-                                cx.emit(RedisTreeViewEvent::RefreshKeys { node_id });
-                            } else {
-                                cx.emit(RedisTreeViewEvent::SearchKeys { node_id, pattern });
+                if this.search_mode == SearchMode::Server {
+                    if let Some(node_id) = this.get_selected_refreshable_node() {
+                        if let Some(node) = this.nodes.get(&node_id) {
+                            if matches!(node.node_type, RedisNodeType::Database(_)) {
+                                let pattern = this.search_keyword.trim().to_string();
+                                if pattern.is_empty() {
+                                    this.reset_db_key_count(&node_id);
+                                    cx.emit(RedisTreeViewEvent::RefreshKeys { node_id });
+                                } else {
+                                    cx.emit(RedisTreeViewEvent::SearchKeys { node_id, pattern });
+                                }
                             }
                         }
                     }
+                } else {
+                    this.update_local_search_counts();
                 }
                 cx.notify();
             }
@@ -121,6 +144,11 @@ impl RedisTreeView {
             selected_node: None,
             search_state,
             search_keyword: String::new(),
+            search_mode: SearchMode::Local,
+            search_tokens: HashMap::new(),
+            db_total_key_counts: HashMap::new(),
+            scan_cursors: HashMap::new(),
+            scan_patterns: HashMap::new(),
             scroll_handle: UniformListScrollHandle::new(),
             focus_handle: cx.focus_handle(),
             is_loading: false,
@@ -314,7 +342,7 @@ impl RedisTreeView {
                 .into_iter()
                 .map(|db| {
                     let node_id = format!("{}:db{}", connection_id, db.index);
-                    let name = format!("db{} ({})", db.index, db.keys);
+                    let name = format!("db{}", db.index);
                     RedisNode::new(
                         node_id,
                         name,
@@ -464,6 +492,9 @@ impl RedisTreeView {
             return;
         };
 
+        self.search_tokens.remove(node_id);
+        self.scan_cursors.remove(node_id);
+        self.scan_patterns.remove(node_id);
         if self.selected_node.as_ref() == Some(&node.id) {
             self.selected_node = None;
         }
@@ -484,7 +515,149 @@ impl RedisTreeView {
             RedisNodeType::Key(_) | RedisNodeType::Namespace => {
                 Some(format!("{}:db{}", node.connection_id, node.db_index))
             }
+            RedisNodeType::LoadMore => {
+                Some(format!("{}:db{}", node.connection_id, node.db_index))
+            }
         }
+    }
+
+    fn load_more_node_id(node_id: &str) -> String {
+        format!("{}:load_more", node_id)
+    }
+
+    fn remove_load_more_child(children: &mut Vec<RedisNode>) {
+        children.retain(|child| !matches!(child.node_type, RedisNodeType::LoadMore));
+    }
+
+    fn build_load_more_node(&self, node_id: &str, connection_id: &str, db_index: u8) -> RedisNode {
+        RedisNode::new(
+            Self::load_more_node_id(node_id),
+            t!("RedisTree.load_more").to_string(),
+            RedisNodeType::LoadMore,
+            connection_id.to_string(),
+            db_index,
+        )
+    }
+
+    /// 更新 SCAN 状态
+    pub fn set_scan_state(&mut self, node_id: &str, pattern: String, cursor: u64) {
+        self.scan_patterns.insert(node_id.to_string(), pattern);
+        self.scan_cursors.insert(node_id.to_string(), cursor);
+    }
+
+    /// 获取 SCAN 状态
+    pub fn get_scan_state(&self, node_id: &str) -> Option<(String, u64)> {
+        let pattern = self.scan_patterns.get(node_id)?.clone();
+        let cursor = *self.scan_cursors.get(node_id).unwrap_or(&0);
+        Some((pattern, cursor))
+    }
+
+    /// 应用键分页结果
+    pub fn apply_key_page(
+        &mut self,
+        node_id: &str,
+        key_nodes: Vec<RedisNode>,
+        pattern: String,
+        next_cursor: u64,
+        append: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.set_scan_state(node_id, pattern, next_cursor);
+        if append {
+            self.append_node_children(node_id, key_nodes, cx);
+        } else {
+            self.set_node_children(node_id, key_nodes, cx);
+        }
+
+        // 仅在服务端搜索模式下展示匹配数量
+        if self.search_mode == SearchMode::Server && !self.search_keyword.trim().is_empty() {
+            if let Some(node) = self.nodes.get_mut(node_id) {
+                let count = node
+                    .children
+                    .iter()
+                    .filter(|child| matches!(child.node_type, RedisNodeType::Key(_)))
+                    .count() as i64;
+                node.key_count = Some(count);
+            }
+        }
+        if self.search_mode == SearchMode::Server && self.search_keyword.trim().is_empty() {
+            self.reset_db_key_count(node_id);
+        }
+        if self.search_mode == SearchMode::Local {
+            self.update_local_search_counts();
+        }
+
+        if next_cursor != 0 {
+            if let Some(node) = self.nodes.get(node_id) {
+                let load_more = self.build_load_more_node(node_id, &node.connection_id, node.db_index);
+                self.append_node_children(node_id, vec![load_more], cx);
+            }
+        }
+    }
+
+    fn update_local_search_counts(&mut self) {
+        let keyword = self.search_keyword.trim().to_lowercase();
+        if keyword.is_empty() {
+            for (node_id, total) in self.db_total_key_counts.iter() {
+                if let Some(node) = self.nodes.get_mut(node_id) {
+                    node.key_count = Some(*total);
+                }
+            }
+            return;
+        }
+
+        let mut counts: HashMap<String, i64> = HashMap::new();
+        for node in self.nodes.values() {
+            if matches!(node.node_type, RedisNodeType::Key(_)) {
+                if node.name.to_lowercase().contains(&keyword) {
+                    let db_node_id = format!("{}:db{}", node.connection_id, node.db_index);
+                    *counts.entry(db_node_id).or_insert(0) += 1;
+                }
+            }
+        }
+
+        for (node_id, total) in self.db_total_key_counts.iter() {
+            if let Some(node) = self.nodes.get_mut(node_id) {
+                node.key_count = Some(*counts.get(node_id).unwrap_or(&0));
+            } else {
+                let _ = total;
+            }
+        }
+    }
+
+    fn reset_db_key_count(&mut self, node_id: &str) {
+        if let Some(total) = self.db_total_key_counts.get(node_id).copied() {
+            if let Some(node) = self.nodes.get_mut(node_id) {
+                node.key_count = Some(total);
+            }
+        }
+    }
+
+    /// 递增搜索令牌，用于丢弃过期的搜索结果
+    pub fn bump_search_token(&mut self, node_id: &str) -> u64 {
+        let next = self.search_tokens.get(node_id).copied().unwrap_or(0) + 1;
+        self.search_tokens.insert(node_id.to_string(), next);
+        next
+    }
+
+    /// 判断搜索令牌是否仍然有效
+    pub fn is_search_token_current(&self, node_id: &str, token: u64) -> bool {
+        self.search_tokens.get(node_id).copied().unwrap_or(0) == token
+    }
+
+    /// 设置节点加载状态
+    pub fn set_node_loading(&mut self, node_id: &str, loading: bool, cx: &mut Context<Self>) {
+        if loading {
+            self.loading_nodes.insert(node_id.to_string());
+        } else {
+            self.loading_nodes.remove(node_id);
+        }
+        cx.notify();
+    }
+
+    /// 获取当前搜索令牌
+    pub fn current_search_token(&self, node_id: &str) -> u64 {
+        self.search_tokens.get(node_id).copied().unwrap_or(0)
     }
 
     /// 设置节点子项
@@ -509,10 +682,46 @@ impl RedisTreeView {
 
         for child in &children {
             self.nodes.insert(child.id.clone(), child.clone());
+            if let RedisNodeType::Database(_) = child.node_type {
+                if let Some(count) = child.key_count {
+                    self.db_total_key_counts.insert(child.id.clone(), count);
+                }
+            }
         }
 
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.children = children;
+            node.children_loaded = true;
+        }
+
+        self.rebuild_flat_entries();
+        cx.notify();
+    }
+
+    /// 追加节点子项（用于加载更多）
+    pub fn append_node_children(
+        &mut self,
+        node_id: &str,
+        children: Vec<RedisNode>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(mut next_children) = self
+            .nodes
+            .get(node_id)
+            .map(|node| node.children.clone())
+        else {
+            return;
+        };
+
+        Self::remove_load_more_child(&mut next_children);
+
+        for child in &children {
+            self.nodes.insert(child.id.clone(), child.clone());
+            next_children.push(child.clone());
+        }
+
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.children = next_children;
             node.children_loaded = true;
         }
 
@@ -584,12 +793,14 @@ impl RedisTreeView {
                     node_id: node_id.to_string(),
                 });
             }
+            RedisNodeType::LoadMore => {}
         }
     }
 
     /// 重建扁平化条目列表
     fn rebuild_flat_entries(&mut self) {
         self.flat_entries.clear();
+        let mut match_cache: HashMap<String, bool> = HashMap::new();
 
         // 获取根节点（连接节点）
         let root_nodes: Vec<String> = self
@@ -600,14 +811,15 @@ impl RedisTreeView {
             .collect();
 
         for root_id in root_nodes {
-            self.add_node_entries(&root_id, 0);
+            self.add_node_entries(&root_id, 0, &mut match_cache);
         }
     }
 
     /// 递归添加节点条目
-    fn add_node_entries(&mut self, node_id: &str, depth: usize) {
-        let (is_expandable, matches, child_ids) = match self.nodes.get(node_id) {
+    fn add_node_entries(&mut self, node_id: &str, depth: usize, match_cache: &mut HashMap<String, bool>) {
+        let (is_expandable, matches, child_ids, is_load_more) = match self.nodes.get(node_id) {
             Some(node) => {
+                let is_load_more = matches!(node.node_type, RedisNodeType::LoadMore);
                 let matches = node.name
                     .to_lowercase()
                     .contains(&self.search_keyword.to_lowercase());
@@ -616,14 +828,14 @@ impl RedisTreeView {
                     .iter()
                     .map(|child| child.id.clone())
                     .collect::<Vec<_>>();
-                (node.is_expandable(), matches, child_ids)
+                (node.is_expandable(), matches, child_ids, is_load_more)
             }
             None => return,
         };
 
         // 搜索过滤
         if !self.search_keyword.is_empty() {
-            if !matches && !is_expandable {
+            if !matches && !is_load_more && !self.node_has_matching_descendant(node_id, match_cache) {
                 return;
             }
         }
@@ -636,17 +848,53 @@ impl RedisTreeView {
         // 如果节点展开，添加子节点
         if self.expanded_nodes.contains(node_id) {
             for child_id in child_ids {
-                self.add_node_entries(&child_id, depth + 1);
+                self.add_node_entries(&child_id, depth + 1, match_cache);
             }
         }
+    }
+
+    fn node_has_matching_descendant(
+        &self,
+        node_id: &str,
+        match_cache: &mut HashMap<String, bool>,
+    ) -> bool {
+        if let Some(cached) = match_cache.get(node_id) {
+            return *cached;
+        }
+
+        let Some(node) = self.nodes.get(node_id) else {
+            match_cache.insert(node_id.to_string(), false);
+            return false;
+        };
+
+        let keyword = self.search_keyword.to_lowercase();
+        if keyword.is_empty() {
+            match_cache.insert(node_id.to_string(), true);
+            return true;
+        }
+
+        for child in &node.children {
+            if child.name.to_lowercase().contains(&keyword) {
+                match_cache.insert(node_id.to_string(), true);
+                return true;
+            }
+            if self.node_has_matching_descendant(&child.id, match_cache) {
+                match_cache.insert(node_id.to_string(), true);
+                return true;
+            }
+        }
+
+        match_cache.insert(node_id.to_string(), false);
+        false
     }
 
     fn get_node_icon(&self, node_type: &RedisNodeType) -> IconName {
         match node_type {
             RedisNodeType::Connection => IconName::Redis,
             RedisNodeType::Database(_) => IconName::Database,
-            RedisNodeType::Namespace => IconName::Folder,
+            RedisNodeType::Namespace => IconName::FolderOpen1,
             RedisNodeType::Key(_) => IconName::Key,
+            RedisNodeType::LoadMore => IconName::Ellipsis,
         }
     }
 
@@ -678,7 +926,7 @@ impl RedisTreeView {
                 node.children_loaded && !node.children.is_empty()
                     || !node.children_loaded
             }
-            RedisNodeType::Key(_) => false,
+            RedisNodeType::Key(_) | RedisNodeType::LoadMore => false,
         }
     }
 
@@ -732,6 +980,7 @@ impl RedisTreeView {
                     None
                 }
             }
+            RedisNodeType::LoadMore => None,
         }
     }
 
@@ -752,15 +1001,17 @@ impl RedisTreeView {
             RedisNodeType::Key(_) | RedisNodeType::Namespace => {
                 Some((node.connection_id.clone(), node.db_index))
             }
-            RedisNodeType::Connection => None,
+            RedisNodeType::Connection | RedisNodeType::LoadMore => None,
         }
     }
 
     fn render_toolbar(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = cx.entity().clone();
-        let view_for_add = cx.entity().clone();
+        let _view_for_add = cx.entity().clone();
+        let view_for_mode_local = cx.entity().clone();
+        let view_for_mode_server = cx.entity().clone();
         let can_refresh = self.get_selected_refreshable_node().is_some();
-        let can_add = self.get_selected_db_context().is_some();
+        let _can_add = self.get_selected_db_context().is_some();
 
         h_flex()
             .w_full()
@@ -772,6 +1023,57 @@ impl RedisTreeView {
                 div()
                     .flex_1()
                     .child(Input::new(&self.search_state)),
+            )
+            .child(
+                h_flex()
+                    .gap_1()
+                    .child(
+                        Button::new("search-mode-local")
+                            .ghost()
+                            .xsmall()
+                            .selected(self.search_mode == SearchMode::Local)
+                            .child(t!("RedisTree.search_mode_local").to_string())
+                            .on_click(move |_, _, cx| {
+                                view_for_mode_local.update(cx, |this, cx| {
+                                    if this.search_mode != SearchMode::Local {
+                                        this.search_mode = SearchMode::Local;
+                                        this.rebuild_flat_entries();
+                                        this.update_local_search_counts();
+                                        if this.search_keyword.trim().is_empty() {
+                                            if let Some(node_id) = this.get_selected_refreshable_node() {
+                                                cx.emit(RedisTreeViewEvent::RefreshKeys { node_id });
+                                            }
+                                        }
+                                        cx.notify();
+                                    }
+                                });
+                            }),
+                    )
+                    .child(
+                        Button::new("search-mode-server")
+                            .ghost()
+                            .xsmall()
+                            .selected(self.search_mode == SearchMode::Server)
+                            .child(t!("RedisTree.search_mode_server").to_string())
+                            .on_click(move |_, _, cx| {
+                                view_for_mode_server.update(cx, |this, cx| {
+                                    if this.search_mode != SearchMode::Server {
+                                        this.search_mode = SearchMode::Server;
+                                        if let Some(node_id) = this.get_selected_refreshable_node() {
+                                            if !this.search_keyword.trim().is_empty() {
+                                                cx.emit(RedisTreeViewEvent::SearchKeys {
+                                                    node_id,
+                                                    pattern: this.search_keyword.trim().to_string(),
+                                                });
+                                            } else {
+                                                this.update_local_search_counts();
+                                            }
+                                        }
+                                        cx.notify();
+                                    }
+                                });
+                            }),
+                    ),
             )
             .child(
                 Button::new("refresh")
@@ -787,20 +1089,6 @@ impl RedisTreeView {
                                     node.children_loaded = false;
                                 }
                                 cx.emit(RedisTreeViewEvent::RefreshKeys { node_id });
-                            }
-                        });
-                    }),
-            )
-            .child(
-                Button::new("add-key")
-                    .icon(IconName::Plus)
-                    .ghost()
-                    .xsmall()
-                    .disabled(!can_add)
-                    .on_click(move |_, _, cx| {
-                        view_for_add.update(cx, |this, cx| {
-                            if let Some(selected) = this.selected_node.clone() {
-                                cx.emit(RedisTreeViewEvent::CreateKey { node_id: selected });
                             }
                         });
                     }),
@@ -821,7 +1109,13 @@ impl RedisTreeView {
         let is_expanded = self.expanded_nodes.contains(&node_id);
         let is_connection = matches!(node.node_type, RedisNodeType::Connection);
         let is_connected = self.connected_nodes.contains(&node_id);
-        let is_loading = self.loading_nodes.contains(&node_id);
+        let is_load_more = matches!(node.node_type, RedisNodeType::LoadMore);
+        let is_loading = if is_load_more {
+            let db_node_id = format!("{}:db{}", node.connection_id, node.db_index);
+            self.loading_nodes.contains(&db_node_id)
+        } else {
+            self.loading_nodes.contains(&node_id)
+        };
         let error_msg = self.error_nodes.get(&node_id).cloned();
         let is_key = matches!(node.node_type, RedisNodeType::Key(_));
         let key_type_badge = if let RedisNodeType::Key(key_type) = &node.node_type {
@@ -834,6 +1128,8 @@ impl RedisTreeView {
         let name = node.name.clone();
         let key_count = node.key_count;
         let show_arrow = self.should_show_arrow(&node_id);
+        let node_connection_id = node.connection_id.clone();
+        let node_db_index = node.db_index;
         let view = cx.entity().clone();
         let view_for_delete = cx.entity().clone();
         let view_for_context = cx.entity().clone();
@@ -862,6 +1158,14 @@ impl RedisTreeView {
             })
             // 单击选中，双击展开/连接
             .on_mouse_down(MouseButton::Left, move |event, _window, cx| {
+                if is_load_more {
+                    view_for_dbl.update(cx, |_view, cx| {
+                        cx.emit(RedisTreeViewEvent::LoadMoreKeys {
+                            node_id: format!("{}:db{}", node_connection_id, node_db_index),
+                        });
+                    });
+                    return;
+                }
                 if event.click_count == 2 {
                     view_for_dbl.update(cx, |view, cx| {
                         view.handle_double_click(&node_id_for_dbl, cx);
@@ -1055,7 +1359,14 @@ impl RedisTreeView {
             })
             // 右键菜单
             .context_menu({
+                let view_for_context = view_for_context.clone();
+                let node_id_for_context = node_id_for_context.clone();
                 move |menu, window, cx| {
+                    // 右键即选中
+                    view_for_context.update(cx, |view, cx| {
+                        view.selected_node = Some(node_id_for_context.clone());
+                        cx.notify();
+                    });
                     let is_connected = view_for_context.read(cx).connected_nodes.contains(&node_id_for_context);
                     let node = view_for_context.read(cx).nodes.get(&node_id_for_context).cloned();
 
@@ -1084,6 +1395,11 @@ impl RedisTreeView {
                                     let view_for_refresh = view_for_context.clone();
                                     let view_for_disconnect = view_for_context.clone();
                                     let connection_id_for_cli = node.connection_id.clone();
+                                    let stored_for_cli = view_for_context
+                                        .read(cx)
+                                        .stored_connections
+                                        .get(&node_id_for_context)
+                                        .cloned();
                                     let node_id_for_create = node_id_for_context.clone();
                                     let node_id_for_refresh = node_id_for_context.clone();
                                     let node_id_for_disconnect = node_id_for_context.clone();
@@ -1092,10 +1408,13 @@ impl RedisTreeView {
                                             t!("RedisTree.menu_open_cli").to_string(),
                                         )
                                             .on_click(window.listener_for(&view_for_cli, move |_view, _, _, cx| {
-                                                cx.emit(RedisTreeViewEvent::OpenCli {
-                                                    connection_id: connection_id_for_cli.clone(),
-                                                    db_index: 0,
-                                                });
+                                                if let Some(stored_connection) = stored_for_cli.clone() {
+                                                    cx.emit(RedisTreeViewEvent::OpenCli {
+                                                        connection_id: connection_id_for_cli.clone(),
+                                                        db_index: 0,
+                                                        stored_connection,
+                                                    });
+                                                }
                                             }))
                                     )
                                     .separator()
@@ -1149,24 +1468,36 @@ impl RedisTreeView {
                                     )
                                 }
                             }
-                            RedisNodeType::Database(db_idx) => {
+                            RedisNodeType::Database(_db_idx) => {
                                 // 数据库节点：打开 CLI、新建 Key、刷新
                                 let view_for_cli = view_for_context.clone();
                                 let view_for_create = view_for_context.clone();
                                 let view_for_refresh = view_for_context.clone();
                                 let connection_id_for_cli = node.connection_id.clone();
-                                let db_index_for_cli = *db_idx;
+                                let node_id_for_cli = node_id_for_context.clone();
                                 let node_id_for_create = node_id_for_context.clone();
                                 let node_id_for_refresh = node_id_for_context.clone();
+                                let stored_for_cli = view_for_context
+                                    .read(cx)
+                                    .stored_connections
+                                    .get(&node.connection_id)
+                                    .cloned();
                                 menu.item(
                                     PopupMenuItem::new(
                                         t!("RedisTree.menu_open_cli").to_string(),
                                     )
-                                        .on_click(window.listener_for(&view_for_cli, move |_view, _, _, cx| {
-                                            cx.emit(RedisTreeViewEvent::OpenCli {
-                                                connection_id: connection_id_for_cli.clone(),
-                                                db_index: db_index_for_cli,
-                                            });
+                                        .on_click(window.listener_for(&view_for_cli, move |view, _, _, cx| {
+                                            if let Some(node) = view.nodes.get(&node_id_for_cli) {
+                                                if let RedisNodeType::Database(db_index_for_cli) = node.node_type {
+                                                    if let Some(stored_connection) = stored_for_cli.clone() {
+                                                        cx.emit(RedisTreeViewEvent::OpenCli {
+                                                            connection_id: connection_id_for_cli.clone(),
+                                                            db_index: db_index_for_cli,
+                                                            stored_connection,
+                                                        });
+                                                    }
+                                                }
+                                            }
                                         }))
                                 )
                                 .separator()
@@ -1217,6 +1548,7 @@ impl RedisTreeView {
                                         }))
                                 )
                             }
+                            RedisNodeType::LoadMore => menu,
                         }
                     } else {
                         menu

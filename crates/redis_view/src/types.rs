@@ -432,6 +432,8 @@ pub enum RedisNodeType {
     Namespace,
     /// 键节点
     Key(RedisKeyType),
+    /// 加载更多
+    LoadMore,
 }
 
 /// Redis 树形节点

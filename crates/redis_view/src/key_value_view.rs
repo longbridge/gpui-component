@@ -154,10 +154,20 @@ pub struct KeyValueView {
 
     // === List 插入位置 ===
     list_insert_position: ListInsertPosition,
+    /// 是否允许关闭标签页
+    closeable: bool,
 }
 
 impl KeyValueView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_closeable(false, window, cx)
+    }
+
+    pub fn new_with_closeable(
+        closeable: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let format_select = cx.new(|cx| {
             SelectState::new(
                 ViewFormat::all(),
@@ -210,6 +220,7 @@ impl KeyValueView {
             sort_order: SortOrder::Asc,
             zset_sort_by: ZSetSortBy::Score,
             list_insert_position: ListInsertPosition::Tail,
+            closeable,
         }
     }
 
@@ -2608,7 +2619,7 @@ impl TabContent for KeyValueView {
     }
 
     fn closeable(&self, _cx: &App) -> bool {
-        false
+        self.closeable
     }
 
     fn try_close(

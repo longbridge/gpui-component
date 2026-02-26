@@ -457,6 +457,18 @@ RedisTree:
     en: "Search keys..."
     zh-CN: "搜索键..."
     zh-HK: "搜尋鍵..."
+  search_mode_local:
+    en: "Local"
+    zh-CN: "本地"
+    zh-HK: "本地"
+  search_mode_server:
+    en: "Server"
+    zh-CN: "服务端"
+    zh-HK: "服務端"
+  load_more:
+    en: "Load more"
+    zh-CN: "加载更多"
+    zh-HK: "載入更多"
   connection_config_missing:
     en: "Connection config not found: %{node_id}"
     zh-CN: "未找到连接配置：%{node_id}"
