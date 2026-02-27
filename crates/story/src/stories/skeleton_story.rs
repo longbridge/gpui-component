@@ -51,8 +51,8 @@ impl Focusable for SkeletonStory {
 impl Render for SkeletonStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .items_center()
-            .gap_y_3()
+            .w_full()
+            .gap_3()
             .child(
                 section("Skeleton")
                     .max_w_md()

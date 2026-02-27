@@ -66,7 +66,8 @@ impl Focusable for StepperStory {
 impl Render for StepperStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_y_3()
+            .w_full()
+            .gap_3()
             .child(
                 h_flex()
                     .gap_3()

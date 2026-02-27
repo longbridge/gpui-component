@@ -1,6 +1,6 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Window, px,
+    App, AppContext as _, ClickEvent, Context, Entity, Focusable, IntoElement, ParentElement as _,
+    Render, Styled, Window, px,
 };
 
 use crate::section;
@@ -150,7 +150,7 @@ impl Render for TextareaStory {
         let loc = self.textarea.read(cx).cursor_position();
 
         v_flex()
-            .id("textarea-story")
+            .w_full()
             .gap_3()
             .child(
                 section("Textarea").child(

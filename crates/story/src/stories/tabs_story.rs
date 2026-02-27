@@ -69,7 +69,8 @@ impl Focusable for TabsStory {
 impl Render for TabsStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_6()
+            .w_full()
+            .gap_3()
             .child(
                 h_flex()
                     .gap_3()

@@ -1,9 +1,9 @@
 use gpui::{
-    px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window, px,
 };
 
-use gpui_component::{h_flex, indigo_50, indigo_500, tag::Tag, v_flex, ColorName, Sizable};
+use gpui_component::{ColorName, Sizable, h_flex, indigo_50, indigo_500, tag::Tag, v_flex};
 
 use crate::section;
 
@@ -44,7 +44,8 @@ impl Focusable for TagStory {
 impl Render for TagStory {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_6()
+            .w_full()
+            .gap_3()
             .child(
                 section("Tag (default)").child(
                     h_flex()
