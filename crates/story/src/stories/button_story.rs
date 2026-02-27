@@ -357,19 +357,19 @@ impl Render for ButtonStory {
                         )
                         .child(
                             Button::new("progress-button-2")
-                                .icon(ProgressCircle::new("circle-progress-1").value(35.))
+                                .icon(ProgressCircle::new("circle-progress-2").value(35.))
                                 .label("Installing..."),
                         )
                         .child(
                             Button::new("progress-button-3")
                                 .small()
-                                .icon(ProgressCircle::new("circle-progress-1").value(68.))
+                                .icon(ProgressCircle::new("circle-progress-3").value(68.))
                                 .label("Installing..."),
                         )
                         .child(
                             Button::new("progress-button-4")
                                 .xsmall()
-                                .icon(ProgressCircle::new("circle-progress-1").value(85.))
+                                .icon(ProgressCircle::new("circle-progress-4").value(85.))
                                 .label("Installing..."),
                         ),
                 ),
