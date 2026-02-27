@@ -536,6 +536,13 @@ impl RedisTreeView {
             });
 
             if keys.is_empty() {
+                info!(
+                    "redis_view: key scan returned empty (db={}, cursor={}, append={}, pattern={})",
+                    db_index,
+                    cursor,
+                    append,
+                    pattern
+                );
                 return;
             }
 
@@ -595,6 +602,12 @@ impl RedisTreeView {
             };
 
             let _ = this.update(cx, |view, cx| {
+                info!(
+                    "redis_view: key types fetched (db={}, count={}, append={})",
+                    db_index,
+                    types_result.len(),
+                    append
+                );
                 if !view.is_search_token_current(&node_id, token) {
                     return;
                 }
@@ -938,7 +951,12 @@ impl RedisTreeView {
         cx: &mut Context<Self>,
     ) {
         let mut changed = false;
+        let mut missing = 0usize;
+        let mut total = 0usize;
+        let mut first_updated: Option<(String, RedisKeyType)> = None;
+        let mut first_missing: Option<String> = None;
         for (key, key_type) in key_types {
+            total += 1;
             let node_id = format!("{}:db{}:{}", connection_id, db_index, key);
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 if let RedisNodeType::Key(existing) = node.node_type {
@@ -948,10 +966,41 @@ impl RedisTreeView {
                 }
                 node.node_type = RedisNodeType::Key(key_type);
                 changed = true;
+                if first_updated.is_none() {
+                    first_updated = Some((key.clone(), key_type));
+                }
+            } else {
+                missing += 1;
+                if first_missing.is_none() {
+                    first_missing = Some(key.clone());
+                }
             }
+        }
+        if let Some((key, key_type)) = first_updated {
+            info!(
+                "redis_view: key type updated sample (db={}, key={}, type={})",
+                db_index,
+                key,
+                key_type.as_str()
+            );
+        }
+        if missing > 0 {
+            warn!(
+                "redis_view: key type update missing nodes (db={}, missing={}, total={}, sample={})",
+                db_index,
+                missing,
+                total,
+                first_missing.unwrap_or_default()
+            );
         }
         if changed {
             cx.notify();
+        } else if total > 0 {
+            warn!(
+                "redis_view: key type update made no changes (db={}, total={})",
+                db_index,
+                total
+            );
         }
     }
 
@@ -1175,6 +1224,22 @@ impl RedisTreeView {
 
         for child in &node.children {
             self.insert_node_recursive(child);
+        }
+
+        // When re-inserting a key node with unknown type (None), preserve the
+        // already-resolved type from self.nodes. This prevents merge_node_children
+        // from overwriting types that were asynchronously resolved by update_key_types.
+        if let RedisNodeType::Key(RedisKeyType::None) = &node.node_type {
+            if let Some(existing) = self.nodes.get(&node.id) {
+                if let RedisNodeType::Key(existing_type) = existing.node_type {
+                    if existing_type != RedisKeyType::None {
+                        let mut preserved = node.clone();
+                        preserved.node_type = RedisNodeType::Key(existing_type);
+                        self.nodes.insert(node.id.clone(), preserved);
+                        return;
+                    }
+                }
+            }
         }
 
         self.nodes.insert(node.id.clone(), node.clone());

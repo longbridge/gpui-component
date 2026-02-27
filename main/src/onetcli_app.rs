@@ -28,6 +28,7 @@ pub fn init(cx: &mut App) {
                 .add_directive("db=debug".parse().expect("固定的日志指令解析不应失败"))
                 .add_directive("one-ui=debug".parse().expect("固定的日志指令解析不应失败"))
                 .add_directive("one-core=debug".parse().expect("固定的日志指令解析不应失败"))
+                .add_directive("redis_view=debug".parse().expect("固定的日志指令解析不应失败"))
                 .add_directive(
                     "terminal=debug"
                         .parse()
