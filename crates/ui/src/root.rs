@@ -8,9 +8,9 @@ use crate::{
     window_border,
 };
 use gpui::{
-    AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Pixels, Render, StyleRefinement, Styled,
-    WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
+    AnyView, App, AppContext, Context, Decorations, DefiniteLength, Entity, FocusHandle,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
+    StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 
@@ -450,13 +450,31 @@ impl Styled for Root {
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
+        let decorations = window.window_decorations();
+        let border_radius = self.window_border_radius;
 
         window_border()
-            .border_radius(self.window_border_radius)
+            .border_radius(border_radius)
             .shadow_size(self.window_shadow_size)
             .child(
                 div()
                     .id("root")
+                    .map(|this| match decorations {
+                        Decorations::Server => this,
+                        Decorations::Client { tiling, .. } => this
+                            .when(!(tiling.top || tiling.right), |el| {
+                                el.rounded_tr(border_radius)
+                            })
+                            .when(!(tiling.top || tiling.left), |el| {
+                                el.rounded_tl(border_radius)
+                            })
+                            .when(!(tiling.bottom || tiling.right), |el| {
+                                el.rounded_br(border_radius)
+                            })
+                            .when(!(tiling.bottom || tiling.left), |el| {
+                                el.rounded_bl(border_radius)
+                            }),
+                    })
                     .key_context(CONTEXT)
                     .on_action(cx.listener(Self::on_action_tab))
                     .on_action(cx.listener(Self::on_action_tab_prev))
