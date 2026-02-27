@@ -15,7 +15,9 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     tracing_wasm::set_as_global_default();
 
     gpui_platform::application()
-        .with_assets(Assets::default())
+        .with_assets(Assets::new(
+            "https://huacnlee.github.io/gpui-component-story-web/",
+        ))
         .run(|cx: &mut App| {
             gpui_component_story::init(cx);
 

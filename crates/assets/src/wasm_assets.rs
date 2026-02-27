@@ -9,13 +9,15 @@ use web_sys::{Request, RequestInit, RequestMode};
 
 /// WASM implementation - return error until downloaded
 pub struct Assets {
+    endpoint: SharedString,
     cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     pending: Arc<RwLock<HashMap<String, bool>>>,
 }
 
 impl Assets {
-    pub fn new() -> Self {
+    pub fn new(endpoint: impl Into<SharedString>) -> Self {
         Self {
+            endpoint: endpoint.into(),
             cache: Arc::new(RwLock::new(HashMap::new())),
             pending: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -27,12 +29,17 @@ impl Assets {
         opts.set_mode(RequestMode::Cors);
 
         let request = Request::new_with_str_and_init(url, &opts)?;
-        let window = web_sys::window().ok_or_else(|| wasm_bindgen::JsValue::from_str("No window"))?;
-        let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request)).await?;
+        let window =
+            web_sys::window().ok_or_else(|| wasm_bindgen::JsValue::from_str("No window"))?;
+        let resp_value =
+            wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request)).await?;
         let resp: web_sys::Response = resp_value.dyn_into()?;
 
         if !resp.ok() {
-            return Err(wasm_bindgen::JsValue::from_str(&format!("HTTP error: {}", resp.status())));
+            return Err(wasm_bindgen::JsValue::from_str(&format!(
+                "HTTP error: {}",
+                resp.status()
+            )));
         }
 
         let array_buffer = wasm_bindgen_futures::JsFuture::from(resp.array_buffer()?).await?;
@@ -43,7 +50,7 @@ impl Assets {
 
 impl Default for Assets {
     fn default() -> Self {
-        Self::new()
+        Self::new("")
     }
 }
 
@@ -74,7 +81,7 @@ impl AssetSource for Assets {
                     pending.insert(path.to_string(), true);
                 }
 
-                let url = format!("/assets/{}", path);
+                let url = format!("{}/assets/{}", self.endpoint, path);
                 let path_clone = path.to_string();
                 let cache = self.cache.clone();
                 let pending = self.pending.clone();
