@@ -12,7 +12,7 @@ use reqwest::{
     redirect,
 };
 
-mod http_client_tls;
+use crate::http_client_tls;
 
 const DEFAULT_CAPACITY: usize = 4096;
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();

@@ -6,9 +6,8 @@ edition.workspace = true
 
 [features]
 inspector = ["gpui-component/inspector"]
-http-client = ["dep:reqwest_client"]
 tree-sitter = ["gpui-component/tree-sitter-languages"]
-default = ["http-client", "tree-sitter"]
+default = ["tree-sitter"]
 
 [dependencies]
 anyhow.workspace = true
@@ -16,7 +15,7 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
-reqwest_client = { path = "../reqwest_client", optional = true }
+reqwest_client = { path = "../reqwest_client" }
 
 autocorrect = "2.14.2"
 chrono = "0.4"

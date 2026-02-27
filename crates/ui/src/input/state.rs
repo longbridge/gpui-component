@@ -1980,28 +1980,6 @@ impl InputState {
         ))
     }
 
-    /// Replace text by [`lsp_types::Range`].
-    ///
-    /// See also: [`EntityInputHandler::replace_text_in_range`]
-    #[cfg(not(target_arch = "wasm32"))]
-    #[allow(unused)]
-    pub(crate) fn replace_text_in_lsp_range(
-        &mut self,
-        lsp_range: &lsp_types::Range,
-        new_text: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let start = self.text.position_to_offset(&lsp_range.start);
-        let end = self.text.position_to_offset(&lsp_range.end);
-        self.replace_text_in_range_silent(
-            Some(self.range_to_utf16(&(start..end))),
-            new_text,
-            window,
-            cx,
-        );
-    }
-
     /// Replace text in range in silent.
     ///
     /// This will not trigger any UI interaction, such as auto-completion.

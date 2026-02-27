@@ -3085,6 +3085,7 @@ dependencies = [
  "gpui_web",
  "js-sys",
  "log",
+ "reqwest_client",
  "tracing",
  "tracing-subscriber",
  "wasm-bindgen",
@@ -6300,11 +6301,15 @@ dependencies = [
  "bytes",
  "futures",
  "gpui",
+ "js-sys",
  "log",
  "regex",
  "rustls",
  "rustls-platform-verifier",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "zed-reqwest",
 ]
 

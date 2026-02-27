@@ -15,6 +15,7 @@ gpui_web = { git = "https://github.com/zed-industries/zed" }
 gpui-component = { path = "../ui", default-features = false }
 gpui-component-assets.workspace = true
 gpui-component-story = { path = "../story", default-features = false }
+reqwest_client = { path = "../reqwest_client" }
 
 # Web specific dependencies
 console_error_panic_hook = "0.1"

@@ -17,4 +17,6 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rust-embed = { version = "8.7.2", features = ["interpolate-folder-path", "include-exclude"] }
