@@ -36,6 +36,7 @@ pub struct Root {
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
+    window_border_radius: Pixels,
 }
 
 #[derive(Clone)]
@@ -81,6 +82,7 @@ impl Root {
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
+            window_border_radius: window_border::BORDER_RADIUS,
         }
     }
 
@@ -89,6 +91,11 @@ impl Root {
     /// Default: [`window_border::SHADOW_SIZE`]
     pub fn window_shadow_size(mut self, size: impl Into<Pixels>) -> Self {
         self.window_shadow_size = size.into();
+        self
+    }
+
+    pub fn window_border_size(mut self, size: impl Into<Pixels>) -> Self {
+        self.window_border_radius = size.into();
         self
     }
 
@@ -444,19 +451,22 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
-        window_border().shadow_size(self.window_shadow_size).child(
-            div()
-                .id("root")
-                .key_context(CONTEXT)
-                .on_action(cx.listener(Self::on_action_tab))
-                .on_action(cx.listener(Self::on_action_tab_prev))
-                .relative()
-                .size_full()
-                .font_family(cx.theme().font_family.clone())
-                .bg(cx.theme().background)
-                .text_color(cx.theme().foreground)
-                .refine_style(&self.style)
-                .child(self.view.clone()),
-        )
+        window_border()
+            .border_radius(self.window_border_radius)
+            .shadow_size(self.window_shadow_size)
+            .child(
+                div()
+                    .id("root")
+                    .key_context(CONTEXT)
+                    .on_action(cx.listener(Self::on_action_tab))
+                    .on_action(cx.listener(Self::on_action_tab_prev))
+                    .relative()
+                    .size_full()
+                    .font_family(cx.theme().font_family.clone())
+                    .bg(cx.theme().background)
+                    .text_color(cx.theme().foreground)
+                    .refine_style(&self.style)
+                    .child(self.view.clone()),
+            )
     }
 }

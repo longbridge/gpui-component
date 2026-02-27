@@ -25,6 +25,7 @@ pub fn window_border() -> WindowBorder {
 pub struct WindowBorder {
     shadow_size: Pixels,
     children: Vec<AnyElement>,
+    border_radius: Pixels,
 }
 
 impl Default for WindowBorder {
@@ -32,6 +33,7 @@ impl Default for WindowBorder {
         Self {
             shadow_size: SHADOW_SIZE,
             children: Vec::new(),
+            border_radius: BORDER_RADIUS,
         }
     }
 }
@@ -46,6 +48,11 @@ impl WindowBorder {
     /// Default: [`SHADOW_SIZE`]
     pub fn shadow_size(mut self, size: impl Into<Pixels>) -> Self {
         self.shadow_size = size.into();
+        self
+    }
+
+    pub fn border_radius(mut self, radius: impl Into<Pixels>) -> Self {
+        self.border_radius = radius.into();
         self
     }
 }
@@ -114,7 +121,8 @@ impl RenderOnce for WindowBorder {
                             move |_bounds, hitbox, window, _| {
                                 let mouse = window.mouse_position();
                                 let size = window.window_bounds().get_bounds().size;
-                                let Decorations::Client { tiling } = window.window_decorations() else {
+                                let Decorations::Client { tiling } = window.window_decorations()
+                                else {
                                     return;
                                 };
                                 if tiling.top && tiling.bottom && tiling.left && tiling.right {
@@ -146,10 +154,16 @@ impl RenderOnce for WindowBorder {
                         .absolute(),
                     )
                     .when(!(tiling.top || tiling.right), |div| {
-                        div.rounded_tr(BORDER_RADIUS)
+                        div.rounded_tr(self.border_radius)
                     })
                     .when(!(tiling.top || tiling.left), |div| {
-                        div.rounded_tl(BORDER_RADIUS)
+                        div.rounded_tl(self.border_radius)
+                    })
+                    .when(!(tiling.bottom || tiling.right), |div| {
+                        div.rounded_br(self.border_radius)
+                    })
+                    .when(!(tiling.bottom || tiling.left), |div| {
+                        div.rounded_bl(self.border_radius)
                     })
                     .when(!tiling.top, |div| div.pt(shadow_size))
                     .when(!tiling.bottom, |div| div.pb(shadow_size))
@@ -179,10 +193,16 @@ impl RenderOnce for WindowBorder {
                         Decorations::Server => div,
                         Decorations::Client { tiling } => div
                             .when(!(tiling.top || tiling.right), |div| {
-                                div.rounded_tr(BORDER_RADIUS)
+                                div.rounded_tr(self.border_radius)
                             })
                             .when(!(tiling.top || tiling.left), |div| {
-                                div.rounded_tl(BORDER_RADIUS)
+                                div.rounded_tl(self.border_radius)
+                            })
+                            .when(!(tiling.bottom || tiling.right), |div| {
+                                div.rounded_br(self.border_radius)
+                            })
+                            .when(!(tiling.bottom || tiling.left), |div| {
+                                div.rounded_bl(self.border_radius)
                             })
                             .border_color(cx.theme().window_border)
                             .when(!tiling.top, |div| div.border_t(BORDER_SIZE))
