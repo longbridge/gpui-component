@@ -68,7 +68,7 @@ impl DatabaseTabView {
         tab_container.update(cx, |container, cx| {
             let panel = objects_panel.clone();
             let tab = TabItem::new("objects-panel", "database", panel);
-            container.add_and_activate_tab_with_focus(tab, window, cx);
+            container.set_pinned_tab(tab, cx);
         });
 
         let status_msg = cx.new(|_| "Ready".to_string());
