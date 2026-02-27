@@ -5,7 +5,6 @@ use gpui_component::dialog::DialogButtonProps;
 use gpui_component::{notification::Notification, WindowExt};
 use one_core::gpui_tokio::Tokio;
 use rust_i18n::t;
-
 use crate::create_key_dialog::CreateKeyDialog;
 use crate::key_value_view::KeyValueView;
 use crate::redis_cli_view::RedisCliView;
@@ -14,8 +13,6 @@ use crate::RedisManager;
 use crate::{GlobalRedisState, RedisKeyType, RedisNode, RedisNodeType};
 use one_core::tab_container::{TabContainer, TabItem};
 
-const SCAN_BATCH_SIZE: usize = 500;
-const SCAN_TARGET_KEYS: usize = 500;
 
 /// Redis 事件处理器
 pub struct RedisEventHandler {
@@ -70,7 +67,6 @@ impl RedisEventHandler {
                                 node,
                                 pattern.clone(),
                                 tree_view.clone(),
-                                global_state.clone(),
                                 cx,
                             );
                         }
@@ -78,21 +74,6 @@ impl RedisEventHandler {
                     RedisTreeViewEvent::OpenKeyInNewTab { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
                             Self::handle_open_key_in_new_tab(node, tab_container.clone(), global_state.clone(), window, cx);
-                        }
-                    }
-                    RedisTreeViewEvent::RefreshKeys { node_id } => {
-                        if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_refresh_keys(node, tree_view.clone(), global_state.clone(), window, cx);
-                        }
-                    }
-                    RedisTreeViewEvent::LoadMoreKeys { node_id } => {
-                        if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_load_more_keys(
-                                node,
-                                tree_view.clone(),
-                                global_state.clone(),
-                                cx,
-                            );
                         }
                     }
                     RedisTreeViewEvent::DeleteKey { node_id } => {
@@ -295,409 +276,16 @@ impl RedisEventHandler {
         });
     }
 
-    /// 处理刷新键列表事件
-    fn handle_refresh_keys(
-        node: RedisNode,
-        tree_view: Entity<RedisTreeView>,
-        global_state: GlobalRedisState,
-        _window: &mut Window,
-        cx: &mut App,
-    ) {
-        match &node.node_type {
-            RedisNodeType::Connection => {
-                // 加载数据库列表
-                Self::load_databases(node.connection_id.clone(), tree_view, global_state, cx);
-            }
-            RedisNodeType::Database(db_index) => {
-                // 加载该数据库的键列表
-                let token = tree_view.update(cx, |tree, _| tree.bump_search_token(&node.id));
-                Self::load_keys(
-                    node.connection_id.clone(),
-                    *db_index,
-                    node.id.clone(),
-                    "*".to_string(),
-                    0,
-                    false,
-                    token,
-                    tree_view,
-                    global_state,
-                    cx,
-                );
-            }
-            _ => {
-                // 其他节点类型暂不处理
-            }
-        }
-    }
-
-    /// 加载数据库列表
-    fn load_databases(
-        connection_id: String,
-        tree_view: Entity<RedisTreeView>,
-        global_state: GlobalRedisState,
-        cx: &mut App,
-    ) {
-        cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-            let databases = match Tokio::spawn_result(cx, {
-                let connection_id = connection_id.clone();
-                let global_state = global_state.clone();
-                async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
-                    let guard = conn.read().await;
-                    guard
-                        .get_databases_info()
-                        .await
-                        .map_err(|e| anyhow::anyhow!("{}", e))
-                }
-            })
-            .await {
-                Ok(dbs) => dbs,
-                Err(_) => return,
-            };
-
-            let db_nodes: Vec<RedisNode> = databases
-                .into_iter()
-                .map(|db| {
-                    let node_id = format!("{}:db{}", connection_id, db.index);
-                    let name = format!("db{}", db.index);
-                    RedisNode::new(
-                        node_id,
-                        name,
-                        RedisNodeType::Database(db.index),
-                        connection_id.clone(),
-                        db.index,
-                    )
-                    .with_key_count(db.keys)
-                })
-                .collect();
-
-            _ = cx.update(|cx| {
-                tree_view.update(cx, |tree, cx| {
-                    tree.set_node_children(&connection_id, db_nodes, cx);
-                });
-            });
-        })
-        .detach();
-    }
-
-    /// 加载键列表
-    fn load_keys(
-        connection_id: String,
-        db_index: u8,
-        node_id: String,
-        pattern: String,
-        cursor: u64,
-        append: bool,
-        token: u64,
-        tree_view: Entity<RedisTreeView>,
-        global_state: GlobalRedisState,
-        cx: &mut App,
-    ) {
-        let node_id_for_loading = node_id.clone();
-        tree_view.update(cx, |tree, cx| {
-            tree.set_node_loading(&node_id_for_loading, true, cx);
-        });
-
-        cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-            let pattern_for_scan = pattern.clone();
-            let (keys, next_cursor) = match Tokio::spawn_result(cx, {
-                let connection_id = connection_id.clone();
-                let global_state = global_state.clone();
-                async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
-                    let guard = conn.read().await;
-
-                    // 使用 SCAN 扫描键（分页）
-                    let mut all_keys = Vec::new();
-                    let mut current_cursor = cursor;
-                    loop {
-                        let result = guard
-                            .scan_in_db(db_index, current_cursor, &pattern_for_scan, SCAN_BATCH_SIZE)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("{}", e))?;
-                        all_keys.extend(result.keys);
-                        current_cursor = if result.finished { 0 } else { result.cursor };
-                        if current_cursor == 0 || all_keys.len() >= SCAN_TARGET_KEYS {
-                            break;
-                        }
-                    }
-                    let next_cursor = current_cursor;
-
-                    Ok::<(Vec<String>, u64), anyhow::Error>((all_keys, next_cursor))
-                }
-            })
-            .await {
-                Ok(result) => result,
-                Err(_) => {
-                    let _ = cx.update(|cx| {
-                        tree_view.update(cx, |tree, cx| {
-                            tree.set_node_loading(&node_id, false, cx);
-                        });
-                    });
-                    return;
-                }
-            };
-
-            // 构建键节点（按 ":" 分割为树），类型异步加载
-            let key_nodes = Self::build_namespace_tree(
-                &connection_id,
-                db_index,
-                keys.iter().cloned().map(|key| (key, RedisKeyType::None)).collect(),
-            );
-            let keys_for_types = keys.clone();
-            let connection_id_for_types = connection_id.clone();
-            let node_id_for_types = node_id.clone();
-            let tree_for_types = tree_view.clone();
-            let global_for_types = global_state.clone();
-
-            _ = cx.update(|cx| {
-                tree_view.update(cx, |tree, cx| {
-                    tree.set_node_loading(&node_id, false, cx);
-                    if !tree.is_search_token_current(&node_id, token) {
-                        return;
-                    }
-                    tree.apply_key_page(
-                        &node_id,
-                        key_nodes,
-                        pattern.clone(),
-                        next_cursor,
-                        append,
-                        cx,
-                    );
-                });
-            });
-
-            if !keys_for_types.is_empty() {
-                cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-                    let types_result = match Tokio::spawn_result(cx, {
-                        let global_state = global_for_types.clone();
-                        let connection_id = connection_id_for_types.clone();
-                        async move {
-                            let conn = global_state
-                                .get_connection(&connection_id)
-                                .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
-                            let guard = conn.read().await;
-                            Ok::<Vec<(String, RedisKeyType)>, anyhow::Error>(
-                                guard
-                                    .key_types_batch_in_db(db_index, &keys_for_types)
-                                    .await
-                                    .unwrap_or_else(|_| {
-                                        keys_for_types
-                                            .into_iter()
-                                            .map(|key| (key, RedisKeyType::None))
-                                            .collect()
-                                    }),
-                            )
-                        }
-                    })
-                    .await {
-                        Ok(types) => types,
-                        Err(_) => return,
-                    };
-
-                    _ = cx.update(|cx| {
-                        tree_for_types.update(cx, |tree, cx| {
-                            if !tree.is_search_token_current(&node_id_for_types, token) {
-                                return;
-                            }
-                            tree.update_key_types(&connection_id_for_types, db_index, types_result, cx);
-                        });
-                    });
-                })
-                .detach();
-            }
-        })
-        .detach();
-    }
-
-    fn build_namespace_tree(
-        connection_id: &str,
-        db_index: u8,
-        keys_with_types: Vec<(String, RedisKeyType)>,
-    ) -> Vec<RedisNode> {
-        #[derive(Default)]
-        struct NsNode {
-            name: String,
-            children: Vec<NsEntry>,
-        }
-
-        enum NsEntry {
-            Namespace(NsNode),
-            Key { name: String, full_key: String, key_type: RedisKeyType },
-        }
-
-        fn insert_entry(entries: &mut Vec<NsEntry>, parts: &[&str], full_key: &str, key_type: RedisKeyType) {
-            if parts.is_empty() {
-                return;
-            }
-            if parts.len() == 1 {
-                entries.push(NsEntry::Key {
-                    name: parts[0].to_string(),
-                    full_key: full_key.to_string(),
-                    key_type,
-                });
-                return;
-            }
-
-            let name = parts[0];
-            let mut index = None;
-            for (i, entry) in entries.iter().enumerate() {
-                if let NsEntry::Namespace(ns) = entry {
-                    if ns.name == name {
-                        index = Some(i);
-                        break;
-                    }
-                }
-            }
-
-            let idx = if let Some(i) = index {
-                i
-            } else {
-                entries.push(NsEntry::Namespace(NsNode {
-                    name: name.to_string(),
-                    children: Vec::new(),
-                }));
-                entries.len() - 1
-            };
-
-            if let NsEntry::Namespace(ns) = &mut entries[idx] {
-                insert_entry(&mut ns.children, &parts[1..], full_key, key_type);
-            }
-        }
-
-        fn build_nodes(
-            entries: Vec<NsEntry>,
-            connection_id: &str,
-            db_index: u8,
-            path: &str,
-        ) -> Vec<RedisNode> {
-            let mut nodes = Vec::new();
-            for entry in entries {
-                match entry {
-                    NsEntry::Namespace(ns) => {
-                        let next_path = if path.is_empty() {
-                            ns.name.clone()
-                        } else {
-                            format!("{}:{}", path, ns.name)
-                        };
-                        let node_id = format!("{}:db{}:ns:{}", connection_id, db_index, next_path);
-                        let children = build_nodes(ns.children, connection_id, db_index, &next_path);
-                        let mut node = RedisNode::new(
-                            node_id,
-                            ns.name,
-                            RedisNodeType::Namespace,
-                            connection_id.to_string(),
-                            db_index,
-                        );
-                        node.children = children;
-                        node.children_loaded = true;
-                        nodes.push(node);
-                    }
-                    NsEntry::Key { name, full_key, key_type } => {
-                        let key_node_id = format!("{}:db{}:{}", connection_id, db_index, full_key);
-                        let node = RedisNode::new(
-                            key_node_id,
-                            name,
-                            RedisNodeType::Key(key_type),
-                            connection_id.to_string(),
-                            db_index,
-                        )
-                        .with_full_key(full_key);
-                        nodes.push(node);
-                    }
-                }
-            }
-            nodes
-        }
-
-        let mut root_entries: Vec<NsEntry> = Vec::new();
-        for (key, key_type) in keys_with_types {
-            let parts: Vec<&str> = key.split(':').collect();
-            insert_entry(&mut root_entries, &parts, &key, key_type);
-        }
-
-        build_nodes(root_entries, connection_id, db_index, "")
-    }
-
     /// 处理搜索键事件（服务端查询）
     fn handle_search_keys(
         node: RedisNode,
         pattern: String,
         tree_view: Entity<RedisTreeView>,
-        global_state: GlobalRedisState,
         cx: &mut App,
     ) {
-        let RedisNodeType::Database(db_index) = node.node_type else {
-            return;
-        };
-
-        let trimmed = pattern.trim();
-        if trimmed.is_empty() {
-            return;
-        }
-
-        let server_pattern = if trimmed.contains('*')
-            || trimmed.contains('?')
-            || trimmed.contains('[')
-        {
-            trimmed.to_string()
-        } else {
-            format!("*{}*", trimmed)
-        };
-
-        let token = tree_view.update(cx, |tree, _| tree.bump_search_token(&node.id));
-        Self::load_keys(
-            node.connection_id.clone(),
-            db_index,
-            node.id.clone(),
-            server_pattern,
-            0,
-            false,
-            token,
-            tree_view,
-            global_state,
-            cx,
-        );
-    }
-
-    /// 处理加载更多键事件
-    fn handle_load_more_keys(
-        node: RedisNode,
-        tree_view: Entity<RedisTreeView>,
-        global_state: GlobalRedisState,
-        cx: &mut App,
-    ) {
-        let RedisNodeType::Database(db_index) = node.node_type else {
-            return;
-        };
-
-        let (pattern, cursor, token) = tree_view.read(cx).get_scan_state(&node.id)
-            .map(|(pattern, cursor)| {
-                let token = tree_view.read(cx).current_search_token(&node.id);
-                (pattern, cursor, token)
-            })
-            .unwrap_or(("*".to_string(), 0, 0));
-
-        if cursor == 0 {
-            return;
-        }
-
-        Self::load_keys(
-            node.connection_id.clone(),
-            db_index,
-            node.id.clone(),
-            pattern,
-            cursor,
-            true,
-            token,
-            tree_view,
-            global_state,
-            cx,
-        );
+        tree_view.update(cx, |tree, cx| {
+            tree.search_keys(node, pattern, cx);
+        });
     }
 
     /// 处理删除键事件
@@ -971,7 +559,7 @@ impl RedisEventHandler {
                         tree_view.update(cx, |tree, cx| {
                             // 清除数据库节点的子节点加载状态，强制重新加载
                             tree.clear_node_loaded(&node_id, cx);
-                            cx.emit(RedisTreeViewEvent::RefreshKeys { node_id: node_id.clone() });
+                            tree.refresh_keys(node_id.clone(), cx);
                         });
 
                         if let Some(window) = cx.active_window() {
