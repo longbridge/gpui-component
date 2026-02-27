@@ -1901,9 +1901,9 @@ TableDataGrid:
     zh-CN: 导出结果集(.csv)
     zh-HK: 匯出結果集(.csv)
   export_result_insert_sql:
-    en: Export result set (insert sql)
-    zh-CN: 导出结果集(insert sql)
-    zh-HK: 匯出結果集(insert sql)
+    en: Export result set (.sql)
+    zh-CN: 导出结果集(.sql)
+    zh-HK: 匯出結果集(.sql)
   export_current_page_xlsx:
     en: Export current page result set (.xlsx)
     zh-CN: 导出当前页结果集(.xlsx)
@@ -1913,9 +1913,9 @@ TableDataGrid:
     zh-CN: 导出当前页结果集(.csv)
     zh-HK: 匯出當前頁結果集(.csv)
   export_current_page_insert_sql:
-    en: Export current page result set (insert sql)
-    zh-CN: 导出当前页结果集(insert sql)
-    zh-HK: 匯出當前頁結果集(insert sql)
+    en: Export current page result set (.sql)
+    zh-CN: 导出当前页结果集(.sql)
+    zh-HK: 匯出當前頁結果集(.sql)
   page_info:
     en: "Showing %{page_size} (of %{page_count}, total %{total_count})"
     zh-CN: "显示 %{page_size} 条（共 %{page_count} 条，总计 %{total_count} 条）"
