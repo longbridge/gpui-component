@@ -1,0 +1,63 @@
+name: Deploy Web Gallery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'crates/story-web/**'
+      - 'crates/story/**'
+      - 'crates/ui/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/story-web"
+
+      - name: Build WASM
+        working-directory: crates/story-web
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          wasm-bindgen ../../../target/wasm32-unknown-unknown/release/gpui_component_story_web.wasm \
+            --out-dir ./www/src/wasm \
+            --target web \
+            --no-typescript
+
+      - name: Install frontend dependencies
+        working-directory: crates/story-web/www
+        run: bun install
+
+      - name: Build frontend
+        working-directory: crates/story-web/www
+        run: bun run build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./crates/story-web/www/dist
+          cname: gpui-component.yourdomain.com  # 可选:自定义域名

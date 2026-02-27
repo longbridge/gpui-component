@@ -3,6 +3,7 @@ default-members = ["crates/ui", "crates/story", "crates/assets"]
 members = [
     "crates/macros",
     "crates/story",
+    "crates/story-web",
     "crates/ui",
     "crates/assets",
     "crates/webview",

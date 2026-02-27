@@ -1,0 +1,39 @@
+[package]
+name = "gpui-component-story-web"
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui-component = { workspace = true, features = ["tree-sitter-languages"] }
+gpui-component-assets.workspace = true
+gpui-component-story = { path = "../story" }
+reqwest_client = { path = "../reqwest_client" }
+
+# Web specific dependencies
+console_error_panic_hook = "0.1"
+futures = "0.3"
+gpui_web = { git = "https://github.com/zed-industries/zed" }
+js-sys = "0.3"
+log.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "console",
+] }
+autocfg = "1.5.0"
+
+[lints]
+workspace = true
