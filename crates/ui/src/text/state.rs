@@ -1,8 +1,6 @@
 use std::{
     pin::Pin,
-    sync::{Arc, Mutex},
     task::Poll,
-    time::Duration,
 };
 use futures::Stream as _;
 
@@ -14,7 +12,7 @@ use gpui::{
 
 use crate::{
     ActiveTheme, ElementExt,
-    async_util::{Sender, Receiver, unbounded, stream::StreamExt as _},
+    async_util::{Sender, Receiver, unbounded},
     highlighter::HighlightTheme,
     input::{self, Copy},
     text::{
@@ -25,8 +23,6 @@ use crate::{
     },
     v_flex,
 };
-
-const UPDATE_DELAY: Duration = Duration::from_millis(50);
 
 const CONTEXT: &'static str = "TextView";
 pub(crate) fn init(cx: &mut App) {
@@ -58,13 +54,13 @@ pub struct TextViewState {
     pub(super) selectable: bool,
     pub(super) scrollable: bool,
     pub(super) text_view_style: TextViewStyle,
-    pub(super) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
 
     pub(super) is_selecting: bool,
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
 
-    pub(super) parsed_content: Arc<Mutex<ParsedContent>>,
+    pub(super) parsed_content: ParsedContent,
     text: SharedString,
     parsed_error: Option<SharedString>,
     tx: Sender<UpdateOptions>,
@@ -88,13 +84,19 @@ impl TextViewState {
         let focus_handle = cx.focus_handle();
 
         let (tx, rx) = unbounded::<UpdateOptions>();
-        let (tx_result, rx_result) = unbounded::<Result<(), SharedString>>();
+        let (tx_result, rx_result) = unbounded::<Result<ParsedContent, SharedString>>();
         let _receive_task = cx.spawn({
             async move |weak_self, cx| {
                 while let Ok(parsed_result) = rx_result.recv().await {
                     _ = weak_self.update(cx, |state, cx| {
-                        if let Err(err) = &parsed_result {
-                            state.parsed_error = Some(err.clone());
+                        match parsed_result {
+                            Ok(content) => {
+                                state.parsed_content = content;
+                                state.parsed_error = None;
+                            }
+                            Err(err) => {
+                                state.parsed_error = Some(err);
+                            }
                         }
                         state.clear_selection();
                         cx.notify();
@@ -128,7 +130,7 @@ impl TextViewState {
 
     /// Get the text content.
     pub(crate) fn source(&self) -> SharedString {
-        self.parsed_content.lock().unwrap().document.source.clone()
+        self.parsed_content.document.source.clone()
     }
 
     /// Set whether the text is selectable, default false.
@@ -176,7 +178,7 @@ impl TextViewState {
 
     /// Return the selected text.
     pub fn selected_text(&self) -> String {
-        self.parsed_content.lock().unwrap().document.selected_text()
+        self.parsed_content.document.selected_text()
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
@@ -187,7 +189,6 @@ impl TextViewState {
             highlight_theme: cx.theme().highlight_theme.clone(),
         };
 
-        // Parse at first time by blocking.
         _ = self.tx.try_send(update_options);
     }
 
@@ -273,10 +274,8 @@ impl TextViewState {
 impl Render for TextViewState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = cx.entity();
-        let (document, mut node_cx) = {
-            let content = self.parsed_content.lock().unwrap();
-            (content.document.clone(), content.node_cx.clone())
-        };
+        let document = self.parsed_content.document.clone();
+        let mut node_cx = self.parsed_content.node_cx.clone();
 
         node_cx.code_block_actions = self.code_block_actions.clone();
         node_cx.style = self.text_view_style.clone();
@@ -309,7 +308,7 @@ impl Render for TextViewState {
     }
 }
 
-#[derive(PartialEq, Default)]
+#[derive(Clone, PartialEq, Default)]
 pub(crate) struct ParsedContent {
     pub(crate) document: ParsedDocument,
     pub(crate) node_cx: node::NodeContext,
@@ -320,14 +319,14 @@ struct UpdateFuture {
     options: UpdateOptions,
     pending_text: String,
     rx: Pin<Box<Receiver<UpdateOptions>>>,
-    tx_result: Sender<Result<(), SharedString>>,
+    tx_result: Sender<Result<ParsedContent, SharedString>>,
 }
 
 impl UpdateFuture {
     fn new(
         format: TextViewFormat,
         rx: Receiver<UpdateOptions>,
-        tx_result: Sender<Result<(), SharedString>>,
+        tx_result: Sender<Result<ParsedContent, SharedString>>,
         cx: &App,
     ) -> Self {
         Self {
@@ -380,18 +379,18 @@ impl Future for UpdateFuture {
 
 #[derive(Clone)]
 struct UpdateOptions {
-    content: Arc<Mutex<ParsedContent>>,
+    content: ParsedContent,
     pending_text: String,
     append: bool,
-    highlight_theme: Arc<HighlightTheme>,
+    highlight_theme: std::sync::Arc<HighlightTheme>,
 }
 
-fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), SharedString> {
+fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<ParsedContent, SharedString> {
     let mut node_cx = NodeContext {
         ..NodeContext::default()
     };
 
-    let mut content = options.content.lock().unwrap();
+    let mut content = options.content.clone();
     let mut source = String::new();
     if options.append
         && let Some(last_block) = content.document.blocks.pop()
@@ -405,7 +404,7 @@ fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), 
         source = options.pending_text.to_string();
     }
 
-    let new_content = match format {
+    let new_document = match format {
         TextViewFormat::Markdown => {
             format::markdown::parse(&source, &mut node_cx, &options.highlight_theme)
         }
@@ -415,12 +414,12 @@ fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<(), 
     if options.append {
         content.document.source =
             format!("{}{}", content.document.source, options.pending_text).into();
-        content.document.blocks.extend(new_content.blocks);
+        content.document.blocks.extend(new_document.blocks);
     } else {
-        content.document = new_content;
+        content.document = new_document;
     }
 
-    Ok(())
+    Ok(content)
 }
 
 fn selection_points(

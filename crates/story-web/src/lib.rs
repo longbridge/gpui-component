@@ -6,6 +6,7 @@ use gpui_component::{
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex,
 };
+use gpui_component_assets::Assets;
 use gpui_component_story::*;
 use wasm_bindgen::prelude::*;
 
@@ -37,12 +38,63 @@ impl Gallery {
             (
                 "Components",
                 vec![
-                    StoryContainer::panel::<ButtonStory>(window, cx),
-                    StoryContainer::panel::<InputStory>(window, cx),
-                    StoryContainer::panel::<CheckboxStory>(window, cx),
-                    StoryContainer::panel::<SwitchStory>(window, cx),
+                    StoryContainer::panel::<AccordionStory>(window, cx),
+                    StoryContainer::panel::<AlertStory>(window, cx),
+                    StoryContainer::panel::<AlertDialogStory>(window, cx),
+                    StoryContainer::panel::<AvatarStory>(window, cx),
                     StoryContainer::panel::<BadgeStory>(window, cx),
+                    StoryContainer::panel::<BreadcrumbStory>(window, cx),
+                    StoryContainer::panel::<ButtonStory>(window, cx),
+                    StoryContainer::panel::<CalendarStory>(window, cx),
+                    StoryContainer::panel::<ChartStory>(window, cx),
+                    StoryContainer::panel::<CheckboxStory>(window, cx),
+                    StoryContainer::panel::<ClipboardStory>(window, cx),
+                    StoryContainer::panel::<CollapsibleStory>(window, cx),
+                    StoryContainer::panel::<ColorPickerStory>(window, cx),
+                    StoryContainer::panel::<DatePickerStory>(window, cx),
+                    StoryContainer::panel::<DescriptionListStory>(window, cx),
+                    StoryContainer::panel::<DialogStory>(window, cx),
+                    StoryContainer::panel::<DividerStory>(window, cx),
+                    StoryContainer::panel::<DropdownButtonStory>(window, cx),
+                    StoryContainer::panel::<FormStory>(window, cx),
+                    StoryContainer::panel::<GroupBoxStory>(window, cx),
+                    StoryContainer::panel::<HoverCardStory>(window, cx),
                     StoryContainer::panel::<IconStory>(window, cx),
+                    StoryContainer::panel::<ImageStory>(window, cx),
+                    StoryContainer::panel::<InputStory>(window, cx),
+                    StoryContainer::panel::<KbdStory>(window, cx),
+                    StoryContainer::panel::<LabelStory>(window, cx),
+                    StoryContainer::panel::<ListStory>(window, cx),
+                    StoryContainer::panel::<MenuStory>(window, cx),
+                    StoryContainer::panel::<NotificationStory>(window, cx),
+                    StoryContainer::panel::<NumberInputStory>(window, cx),
+                    StoryContainer::panel::<OtpInputStory>(window, cx),
+                    StoryContainer::panel::<PaginationStory>(window, cx),
+                    StoryContainer::panel::<PopoverStory>(window, cx),
+                    StoryContainer::panel::<ProgressStory>(window, cx),
+                    StoryContainer::panel::<RadioStory>(window, cx),
+                    StoryContainer::panel::<RatingStory>(window, cx),
+                    StoryContainer::panel::<ResizableStory>(window, cx),
+                    StoryContainer::panel::<ScrollbarStory>(window, cx),
+                    StoryContainer::panel::<SelectStory>(window, cx),
+                    StoryContainer::panel::<SettingsStory>(window, cx),
+                    StoryContainer::panel::<SheetStory>(window, cx),
+                    StoryContainer::panel::<SidebarStory>(window, cx),
+                    StoryContainer::panel::<SkeletonStory>(window, cx),
+                    StoryContainer::panel::<SliderStory>(window, cx),
+                    StoryContainer::panel::<SpinnerStory>(window, cx),
+                    StoryContainer::panel::<StepperStory>(window, cx),
+                    StoryContainer::panel::<SwitchStory>(window, cx),
+                    StoryContainer::panel::<DataTableStory>(window, cx),
+                    StoryContainer::panel::<TableStory>(window, cx),
+                    StoryContainer::panel::<TabsStory>(window, cx),
+                    StoryContainer::panel::<TagStory>(window, cx),
+                    StoryContainer::panel::<TextareaStory>(window, cx),
+                    StoryContainer::panel::<ThemeColorsStory>(window, cx),
+                    StoryContainer::panel::<ToggleStory>(window, cx),
+                    StoryContainer::panel::<TooltipStory>(window, cx),
+                    StoryContainer::panel::<TreeStory>(window, cx),
+                    StoryContainer::panel::<VirtualListStory>(window, cx),
                 ],
             ),
         ];
@@ -251,49 +303,38 @@ impl Render for Gallery {
     }
 }
 
-struct HelloWorld {
-    name: String,
-}
-
-impl Render for HelloWorld {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .bg(gpui::red())
-            .child(format!("Hello, {}!", self.name))
-    }
-}
-
 #[wasm_bindgen]
 pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
-
-    // Initialize GPUI web platform
+    #[cfg(target_arch = "wasm32")]
     gpui_platform::web_init();
-    gpui_platform::application().run(|cx: &mut App| {
-        gpui_component::init(cx);
+    gpui_platform::application()
+        .with_assets(Assets)
+        .run(|cx: &mut App| {
+            gpui_component::init(cx);
 
-        let bounds = Bounds::centered(
-            None,
-            Size {
-                width: px(1280.0),
-                height: px(800.0),
-            },
-            cx,
-        );
+            let bounds = Bounds::centered(
+                None,
+                Size {
+                    width: px(1280.0),
+                    height: px(800.0),
+                },
+                cx,
+            );
 
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            |window, cx| {
-                let view = Gallery::view(None, window, cx);
-                cx.new(|cx| Root::new(view, window, cx))
-            },
-        )
-        .expect("Failed to open window");
-        cx.activate(true);
-    });
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    ..Default::default()
+                },
+                |window, cx| {
+                    let view = Gallery::view(None, window, cx);
+                    cx.new(|cx| Root::new(view, window, cx))
+                },
+            )
+            .expect("Failed to open window");
+            cx.activate(true);
+        });
 
     Ok(())
 }

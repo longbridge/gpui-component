@@ -2,11 +2,8 @@
 
 // For native targets, re-export smol's primitives
 #[cfg(not(target_arch = "wasm32"))]
-pub use smol::{Timer, stream, channel::{Sender, Receiver, bounded, unbounded}};
+pub use smol::channel::{Sender, Receiver, unbounded};
 
-// For WASM targets, use async-channel and futures
+// For WASM targets, use async-channel
 #[cfg(target_arch = "wasm32")]
-pub use async_channel::{Sender, Receiver, bounded, unbounded};
-
-#[cfg(target_arch = "wasm32")]
-pub use futures::stream;
+pub use async_channel::{Sender, Receiver, unbounded};

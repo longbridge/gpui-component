@@ -21,7 +21,7 @@ if [[ "$1" == "--release" ]]; then
 fi
 
 # Step 1: Build WASM
-echo -e "\n${GREEN}Step 1: Building WASM...${NC}"
+echo -e "${GREEN}Step 1: Building WASM...${NC}"
 cd "$PROJECT_ROOT"
 cargo build --target wasm32-unknown-unknown $RELEASE_FLAG
 
@@ -43,13 +43,13 @@ if [[ ! -f "$WASM_PATH" ]]; then
 fi
 
 # Step 2: Generate JavaScript bindings
-echo -e "\n${GREEN}Step 2: Generating JavaScript bindings...${NC}"
+echo -e "${GREEN}Step 2: Generating JavaScript bindings...${NC}"
 wasm-bindgen "$WASM_PATH" \
     --out-dir "$PROJECT_ROOT/www/src/wasm" \
     --target web \
     --no-typescript
 
-echo -e "\n${GREEN}✓ Build completed successfully!${NC}"
+echo -e "${GREEN}✓ Build completed successfully!${NC}"
 echo -e "${YELLOW}Next steps:${NC}"
 echo -e "  cd www"
 echo -e "  bun install"
