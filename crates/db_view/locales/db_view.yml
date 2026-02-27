@@ -118,10 +118,6 @@ Common:
     en: No %{item} Available
     zh-CN: 无可用的%{item}
     zh-HK: 無可用的%{item}
-  count_of:
-    en: "%{selected} of %{total}"
-    zh-CN: "%{selected} / %{total}"
-    zh-HK: "%{selected} / %{total}"
   confirm:
     en: Confirm
     zh-CN: 确认
@@ -889,29 +885,8 @@ Query:
     zh-CN: SQL 语句
     zh-HK: SQL 語句
 
-DatabaseObjects:
-  title:
-    en: Objects
-    zh-CN: 对象
-    zh-HK: 對象
 
 
-
-
-# SQL 编辑器
-SqlEditor:
-  no_settings:
-    en: This page has no configuration options
-    zh-CN: 此页签暂无配置项
-    zh-HK: 此頁籤暫無設定項
-  no_changes:
-    en: -- No data changes
-    zh-CN: -- 没有变更数据
-    zh-HK: -- 沒有變更資料
-  query_type_error:
-    en: Query type error
-    zh-CN: 查询类型异常
-    zh-HK: 查詢類型異常
 
 # 导入导出
 ImportExport:
@@ -2334,6 +2309,10 @@ EditorView:
     zh-CN: SQL 预览
     zh-HK: SQL 預覽
 DatabaseObjects:
+  title:
+    en: Objects
+    zh-CN: 对象
+    zh-HK: 對象
   batch_not_supported:
     en: This action does not support batch operations
     zh-CN: 该操作不支持批量执行
@@ -2380,6 +2359,18 @@ MsSqlCollation:
     zh-CN: Latin1 General 100 (Unicode)
     zh-HK: Latin1 General 100 (Unicode)
 SqlEditor:
+  no_settings:
+    en: This page has no configuration options
+    zh-CN: 此页签暂无配置项
+    zh-HK: 此頁籤暫無設定項
+  no_changes:
+    en: -- No data changes
+    zh-CN: -- 没有变更数据
+    zh-HK: -- 沒有變更資料
+  query_type_error:
+    en: Query type error
+    zh-CN: 查询类型异常
+    zh-HK: 查詢類型異常
   subquery_column_uninferable:
     en: Subquery columns - cannot infer automatically
     zh-CN: 子查询列 - 无法自动推断

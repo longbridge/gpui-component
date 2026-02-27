@@ -2280,14 +2280,7 @@ impl DbTreeView {
                                         )))
                                         .ghost()
                                         .small()
-                                        .label(
-                                            t!(
-                                                "Common.count_of",
-                                                selected = selected,
-                                                total = total
-                                            )
-                                            .to_string(),
-                                        ),
+                                        .label(format!("{} / {}", selected, total)),
                                     )
                                     .when_some(db_filter_list, |popover, list| {
                                         let view_content = view_for_filter.clone();
