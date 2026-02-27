@@ -675,6 +675,10 @@ pub struct TabContainer {
     tab_list: Option<Entity<ListState<TabListDelegate>>>,
     closing_tabs: HashSet<SharedString>,
     show_window_controls: bool,
+    /// Pinned tab that stays fixed before the scrollable tab list
+    pinned_tab: Option<TabItem>,
+    /// Whether the pinned tab is currently active (showing its content)
+    pinned_tab_active: bool,
 }
 
 impl EventEmitter<TabContainerEvent> for TabContainer {}
@@ -702,9 +706,11 @@ impl TabContainer {
             tab_list: None,
             closing_tabs: HashSet::new(),
             show_window_controls: false,
+            pinned_tab: None,
+            pinned_tab_active: false,
         }
     }
-    
+
 
     pub fn with_inactive_tab_bg_color(mut self, color: impl Into<Option<gpui::Hsla>>) -> Self {
         self.inactive_tab_bg_color = color.into();
@@ -756,6 +762,30 @@ impl TabContainer {
         self
     }
 
+    /// Set a pinned tab that stays fixed before the scrollable tab list.
+    /// The pinned tab is always visible and cannot be scrolled away.
+    pub fn set_pinned_tab(&mut self, tab: TabItem, cx: &mut Context<Self>) {
+        self.pinned_tab = Some(tab);
+        self.pinned_tab_active = self.tabs.is_empty();
+        cx.notify();
+    }
+
+    /// Returns whether the pinned tab is currently active.
+    pub fn is_pinned_tab_active(&self) -> bool {
+        self.pinned_tab_active
+    }
+
+    /// Activate the pinned tab (deactivate regular tabs visually).
+    pub fn activate_pinned_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.pinned_tab.is_some() {
+            self.pinned_tab_active = true;
+            if let Some(pinned) = &self.pinned_tab {
+                pinned.content().focus_handle(cx).focus(window, cx);
+            }
+            cx.notify();
+        }
+    }
+
     pub fn set_tab_bar_bg_color(
         &mut self,
         color: impl Into<Option<gpui::Hsla>>,
@@ -804,6 +834,7 @@ impl TabContainer {
         let id = tab.id().to_string();
         self.tabs.push(tab);
         self.active_index = self.tabs.len() - 1;
+        self.pinned_tab_active = false;
         self.tab_bar_scroll_handle
             .scroll_to_item(self.tabs.len() - 1);
         cx.emit(TabContainerEvent::TabActivated {
@@ -847,6 +878,7 @@ impl TabContainer {
         let focus_handle = tab.content.focus_handle(cx);
         self.tabs.push(tab);
         self.active_index = self.tabs.len() - 1;
+        self.pinned_tab_active = false;
         self.tab_bar_scroll_handle
             .scroll_to_item(self.tabs.len() - 1);
 
@@ -912,10 +944,16 @@ impl TabContainer {
             self.tabs.remove(index);
             self.closing_tabs.remove(&removed_tab_id);
 
-            if index < self.active_index {
+            if self.tabs.is_empty() {
+                // All regular tabs closed, activate pinned tab if present
+                self.active_index = 0;
+                if self.pinned_tab.is_some() {
+                    self.pinned_tab_active = true;
+                }
+            } else if index < self.active_index {
                 self.active_index -= 1;
             } else if index == self.active_index {
-                if !self.tabs.is_empty() && self.active_index >= self.tabs.len() {
+                if self.active_index >= self.tabs.len() {
                     self.active_index = self.tabs.len() - 1;
                 }
             }
@@ -1229,8 +1267,14 @@ impl TabContainer {
 
     /// Set the active tab by index
     pub fn set_active_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if index < self.tabs.len() && index != self.active_index {
-            if let Some(old_tab) = self.tabs.get(self.active_index) {
+        if index < self.tabs.len() && (index != self.active_index || self.pinned_tab_active) {
+            if self.pinned_tab_active {
+                // Deactivate pinned tab
+                if let Some(pinned) = &self.pinned_tab {
+                    pinned.content().on_deactivate(window, cx);
+                }
+                self.pinned_tab_active = false;
+            } else if let Some(old_tab) = self.tabs.get(self.active_index) {
                 old_tab.content().on_deactivate(window, cx);
             }
 
@@ -1421,11 +1465,17 @@ impl TabContainer {
     }
 
     pub fn render_tab_content(&self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let active_view = if self.pinned_tab_active {
+            self.pinned_tab.as_ref().map(|tab| tab.content().view())
+        } else {
+            self.active_tab().map(|tab| tab.content().view())
+        };
+
         div()
             .flex_1()
             .w_full()
             .overflow_hidden()
-            .when_some(self.active_tab(), |el, tab| el.child(tab.content().view()))
+            .when_some(active_view, |el, view| el.child(view))
     }
 
     pub fn render_tab_bar(
@@ -1510,6 +1560,68 @@ impl TabContainer {
                         .when_some(self.top_padding, |div, padding| div.pt(padding)),
                 )
             })
+            // Pinned tab (fixed, not scrollable)
+            .when_some(self.pinned_tab.as_ref(), |this, pinned| {
+                let pinned_title = pinned.content().title(cx);
+                let pinned_icon = pinned.content().icon(cx);
+                let is_pinned_active = self.pinned_tab_active;
+                let view_for_pinned = view.clone();
+                let top_padding = self.top_padding;
+
+                this.child(
+                    div()
+                        .id("pinned-tab")
+                        .flex()
+                        .flex_shrink_0()
+                        .overflow_hidden()
+                        .items_center()
+                        .gap_2()
+                        .h(px(32.0))
+                        .px_3()
+                        .when(!is_macos, |el| el.ml(left_padding))
+                        .when_some(top_padding, |el, padding| el.mt(padding))
+                        .rounded(px(6.0))
+                        .when(is_pinned_active, |el| el.bg(active_tab_color))
+                        .when(!is_pinned_active, |el| {
+                            el.hover(move |style| style.bg(hover_tab_color))
+                                .bg(inactive_tab_color)
+                        })
+                        .cursor_pointer()
+                        .on_click(move |_, window, cx| {
+                            view_for_pinned.update(cx, |this, cx| {
+                                this.activate_pinned_tab(window, cx);
+                            });
+                        })
+                        .when_some(pinned_icon, |el, icon| {
+                            el.child(
+                                div()
+                                    .flex_shrink_0()
+                                    .flex()
+                                    .items_center()
+                                    .child(icon),
+                            )
+                        })
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_sm()
+                                .text_color(text_color)
+                                .text_ellipsis()
+                                .child(pinned_title.to_string()),
+                        ),
+                )
+                // Separator between pinned tab and scrollable tabs
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .mx_1()
+                        .when_some(top_padding, |el, padding| el.mt(padding))
+                        .w(px(1.0))
+                        .h(px(16.0))
+                        .bg(border_color),
+                )
+            })
             .child(
                 h_flex()
                     .id("tabs")
@@ -1519,7 +1631,7 @@ impl TabContainer {
                         this.window_control_area(WindowControlArea::Drag)
                     })
                     .overflow_x_scroll()
-                    .when(!is_macos, |this| this.pl(left_padding))
+                    .when(!is_macos && self.pinned_tab.is_none(), |this| this.pl(left_padding))
                     .when_some(self.top_padding, |div, padding| div.pt(padding))
                     .pr_2()
                     .gap_1()
@@ -1886,6 +1998,11 @@ impl TabContainer {
 
 impl Focusable for TabContainer {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        if self.pinned_tab_active {
+            if let Some(pinned) = &self.pinned_tab {
+                return pinned.content().focus_handle(cx);
+            }
+        }
         if let Some(active_tab) = self.active_tab() {
             active_tab.content().focus_handle(cx)
         } else {

@@ -105,7 +105,7 @@ impl OnetCliApp {
             #[cfg(target_os = "macos")]
             {
                 container = container
-                    .with_left_padding(px(80.0))
+                    .with_left_padding(px(70.0))
                     .with_top_padding(px(4.0))
             }
 
@@ -128,13 +128,13 @@ impl OnetCliApp {
             }
         }
 
-        let has_tabs = !tab_container.read(cx).tabs().is_empty();
-        if !has_tabs {
+        // Set HomePage as the pinned tab (always visible, not scrollable)
+        {
             let tab_container_clone = tab_container.clone();
             tab_container.update(cx, |tc, cx| {
                 let home_page = cx.new(|cx| HomePage::new(tab_container_clone, window, cx));
                 let home_tab = TabItem::new("home", "app", home_page);
-                tc.add_and_activate_tab_with_focus(home_tab, window, cx);
+                tc.set_pinned_tab(home_tab, cx);
             });
         }
 
