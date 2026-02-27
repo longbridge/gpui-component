@@ -10,7 +10,7 @@ use std::ops::Range;
 pub struct SyntaxHighlighter;
 
 impl SyntaxHighlighter {
-    pub fn new(_language: impl Into<SharedString>) -> Self {
+    pub fn new(_language: impl AsRef<str>) -> Self {
         Self
     }
 
@@ -18,11 +18,15 @@ impl SyntaxHighlighter {
         Vec::new()
     }
 
+    pub fn styles(&self, _range: &Range<usize>, _theme: &HighlightTheme) -> Vec<(Range<usize>, HighlightStyle)> {
+        Vec::new()
+    }
+
     pub fn update(&mut self, _edit: Option<crate::input::InputEdit>, _text: &ropey::Rope) {
         // No-op in WASM
     }
 
-    pub fn tree(&self) -> Option<&crate::input::display_map::folding::Tree> {
+    pub fn tree(&self) -> Option<&crate::input::Tree> {
         None
     }
 }
@@ -89,14 +93,46 @@ pub enum FontWeightContent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct ThemeStyle {
-    color: Option<gpui::Hsla>,
-    font_style: Option<FontStyle>,
-    font_weight: Option<FontWeightContent>,
+    pub color: Option<gpui::Hsla>,
+    pub font_style: Option<FontStyle>,
+    pub font_weight: Option<FontWeightContent>,
+}
+
+impl From<ThemeStyle> for HighlightStyle {
+    fn from(style: ThemeStyle) -> Self {
+        HighlightStyle {
+            color: style.color,
+            font_weight: style.font_weight.map(|w| {
+                match w {
+                    FontWeightContent::Thin => gpui::FontWeight::THIN,
+                    FontWeightContent::ExtraLight => gpui::FontWeight::EXTRA_LIGHT,
+                    FontWeightContent::Light => gpui::FontWeight::LIGHT,
+                    FontWeightContent::Normal => gpui::FontWeight::NORMAL,
+                    FontWeightContent::Medium => gpui::FontWeight::MEDIUM,
+                    FontWeightContent::Semibold => gpui::FontWeight::SEMIBOLD,
+                    FontWeightContent::Bold => gpui::FontWeight::BOLD,
+                    FontWeightContent::ExtraBold => gpui::FontWeight::EXTRA_BOLD,
+                    FontWeightContent::Black => gpui::FontWeight::BLACK,
+                }
+            }),
+            font_style: style.font_style.map(|s| {
+                match s {
+                    FontStyle::Normal => gpui::FontStyle::Normal,
+                    FontStyle::Italic => gpui::FontStyle::Italic,
+                    FontStyle::Underline => gpui::FontStyle::Normal,
+                }
+            }),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct SyntaxColors {
     // Minimal stub - actual fields are in native registry.rs
+    // Adding commonly accessed fields to avoid compilation errors
+    #[serde(rename = "link_text")]
+    pub link_text: Option<ThemeStyle>,
 }
 
 impl SyntaxColors {
@@ -196,6 +232,14 @@ pub struct HighlightTheme {
     pub style: HighlightThemeStyle,
 }
 
+impl std::ops::Deref for HighlightTheme {
+    type Target = SyntaxColors;
+
+    fn deref(&self) -> &Self::Target {
+        &self.style.syntax
+    }
+}
+
 impl HighlightTheme {
     pub fn default_dark() -> std::sync::Arc<Self> {
         use crate::DEFAULT_THEME_COLORS;
@@ -225,7 +269,7 @@ impl LanguageRegistry {
         self.languages
             .lock()
             .unwrap()
-            .insert(lang.into(), config.clone());
+            .insert(lang.to_string().into(), config.clone());
     }
 
     pub fn languages(&self) -> Vec<SharedString> {

@@ -104,6 +104,7 @@ impl ThemeRegistry {
         // Load theme in the background.
         cx.spawn(async move |cx| {
             _ = cx.update(|cx| {
+                #[cfg(not(target_arch = "wasm32"))]
                 if let Err(err) = Self::_watch_themes_dir(themes_dir, cx) {
                     tracing::error!("Failed to watch themes directory: {}", err);
                 }

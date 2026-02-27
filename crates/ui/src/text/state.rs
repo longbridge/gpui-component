@@ -4,6 +4,7 @@ use std::{
     task::Poll,
     time::Duration,
 };
+use futures::Stream as _;
 
 use gpui::{
     App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
@@ -349,7 +350,7 @@ impl Future for UpdateFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         loop {
-            match self.rx.poll_next(cx) {
+            match self.rx.as_mut().poll_next(cx) {
                 Poll::Ready(Some(options)) => {
                     if options.append {
                         self.pending_text.push_str(options.pending_text.as_str());
