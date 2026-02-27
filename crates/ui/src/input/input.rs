@@ -308,7 +308,10 @@ impl RenderOnce for Input {
                     })
                     .when(cfg!(not(target_arch = "wasm32")), |this| {
                         this.on_action(
-                            window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
+                            window.listener_for(
+                                &self.state,
+                                InputState::on_action_toggle_code_actions,
+                            ),
                         )
                     })
             })
@@ -325,7 +328,6 @@ impl RenderOnce for Input {
                     .on_action(window.listener_for(&self.state, InputState::page_up))
                     .on_action(window.listener_for(&self.state, InputState::page_down));
 
-                #[cfg(not(target_arch = "wasm32"))]
                 let result = result.on_action(
                     window.listener_for(&self.state, InputState::on_action_go_to_definition),
                 );

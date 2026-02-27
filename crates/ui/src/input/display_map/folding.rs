@@ -9,6 +9,7 @@ pub use tree_sitter::Tree;
 /// Stub type for tree-sitter Tree on WASM (tree-sitter not available).
 pub struct Tree;
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Minimum line span for a node to be considered foldable.
 const MIN_FOLD_LINES: usize = 2;
 

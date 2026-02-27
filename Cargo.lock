@@ -3088,27 +3088,16 @@ dependencies = [
 name = "gpui-component-story-web"
 version = "0.5.1"
 dependencies = [
- "anyhow",
  "console_error_panic_hook",
  "console_log",
- "futures",
- "getrandom 0.2.17",
  "gpui",
  "gpui-component",
  "gpui-component-assets",
  "gpui-component-story",
  "gpui_platform",
- "gpui_web",
- "js-sys",
  "log",
- "reqwest_client",
- "tracing",
- "tracing-subscriber",
  "tracing-wasm",
  "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "web-time",
 ]
 
 [[package]]

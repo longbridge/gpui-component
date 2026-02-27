@@ -23,10 +23,6 @@ pub(crate) use self::text_wrapper::{LineItem, LineLayout};
 // Re-export FoldRange and extract_fold_ranges
 pub use folding::{FoldRange, extract_fold_ranges};
 
-// Re-export Tree for WASM stub
-#[cfg(target_arch = "wasm32")]
-pub use folding::Tree;
-
 /// Position in the buffer (logical text).
 ///
 /// - `line`: 0-based logical line number (split by `\n`)
