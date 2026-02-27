@@ -22,6 +22,7 @@ use one_core::cloud_sync::{
     supabase::{SessionExpiredCallback, SupabaseClient, SupabaseConfig},
     CloudApiClient, UserInfo,
 };
+use tracing::{debug, info, warn};
 use rust_i18n::t;
 use gpui_component::dialog::DialogButtonProps;
 // ============================================================================
@@ -56,7 +57,11 @@ pub fn get_auth_service(cx: &App) -> Arc<AuthService> {
 /// UI 层在 render 或定时器中调用此方法检测会话过期。
 /// 返回 true 表示会话已过期，需要弹出登录对话框。
 pub fn check_and_reset_session_expired() -> bool {
-    SESSION_EXPIRED.swap(false, Ordering::SeqCst)
+    let expired = SESSION_EXPIRED.swap(false, Ordering::SeqCst);
+    if expired {
+        warn!("检测到会话过期标志，准备弹出登录对话框");
+    }
+    expired
 }
 
 // ============================================================================
@@ -92,8 +97,13 @@ impl AuthService {
 
     /// 尝试恢复会话
     pub async fn try_restore_session(&self) -> Option<UserInfo> {
+        debug!("开始尝试恢复会话");
         let auth_data = load_auth_data()?;
         let (access_token, refresh_token, user_id, expires_at) = auth_data;
+        debug!(
+            "已读取本地认证数据: user_id={} expires_at={}",
+            user_id, expires_at
+        );
 
         // 检查令牌是否已过期（提前 60 秒刷新）
         let now = std::time::SystemTime::now()
@@ -104,6 +114,10 @@ impl AuthService {
         let needs_refresh = expires_at <= now + 60;
 
         if needs_refresh {
+            info!(
+                "访问令牌需要刷新: now={} expires_at={}",
+                now, expires_at
+            );
             // 令牌已过期或即将过期，必须刷新
             match self.client.refresh_token(&refresh_token).await {
                 Ok(auth_resp) => {
@@ -118,9 +132,14 @@ impl AuthService {
                         &auth_resp.user_id,
                         auth_resp.expires_at,
                     );
+                    info!(
+                        "令牌刷新成功: user_id={} expires_at={}",
+                        auth_resp.user_id, auth_resp.expires_at
+                    );
                 }
-                Err(_) => {
+                Err(e) => {
                     // 刷新失败，清除本地数据
+                    warn!("令牌刷新失败，清除本地认证数据: {}", e);
                     clear_auth_data();
                     return None;
                 }
@@ -128,6 +147,7 @@ impl AuthService {
         } else {
             // 令牌未过期，直接使用
             self.client.set_auth(access_token, refresh_token.clone(), user_id);
+            debug!("访问令牌有效，已设置认证状态");
 
             // 尝试在后台刷新令牌（可选，提升体验）
             if let Ok(auth_resp) = self.client.refresh_token(&refresh_token).await {
@@ -137,18 +157,27 @@ impl AuthService {
                     &auth_resp.user_id,
                     auth_resp.expires_at,
                 );
+                info!(
+                    "后台刷新令牌成功: user_id={} expires_at={}",
+                    auth_resp.user_id, auth_resp.expires_at
+                );
             }
         }
 
         // 获取用户信息
         match self.client.get_current_user().await {
-            Ok(Some(user)) => Some(user),
+            Ok(Some(user)) => {
+                info!("恢复会话成功: user_id={}", user.id);
+                Some(user)
+            }
             Ok(None) => {
+                warn!("恢复会话失败: 用户信息为空，清除本地认证数据");
                 clear_auth_data();
                 None
             }
-            Err(_) => {
+            Err(e) => {
                 // 获取用户信息失败，清除本地数据
+                warn!("恢复会话失败: 获取用户信息错误: {}", e);
                 clear_auth_data();
                 None
             }

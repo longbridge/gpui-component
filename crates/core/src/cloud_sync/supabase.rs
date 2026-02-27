@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use futures::AsyncReadExt;
 use gpui::http_client::{AsyncBody, HttpClient, Method, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use anyhow::anyhow;
@@ -19,6 +20,7 @@ use llm_connector::{ChatRequest, ChatResponse, StreamingResponse};
 use llm_connector::types::MessageBlock;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use crate::llm::ChatStream;
+use tracing::{debug, error, info, warn};
 
 /// Supabase 客户端配置
 #[derive(Debug, Clone)]
@@ -222,18 +224,41 @@ impl SupabaseClient {
         &self,
         request: Request<AsyncBody>,
     ) -> Result<(StatusCode, Vec<u8>), CloudApiError> {
+        let method = request.method().clone();
+        let uri = request.uri().to_string();
+        let start = Instant::now();
+
+        debug!("[supabase] request start: {} {}", method, uri);
+
         let response = self
             .http
             .send(request)
             .await
-            .map_err(|e| CloudApiError::NetworkError(e.to_string()))?;
+            .map_err(|e| {
+                error!("[supabase] request failed: {} {} - {}", method, uri, e);
+                CloudApiError::NetworkError(e.to_string())
+            })?;
 
         let status = response.status();
         let mut body = response.into_body();
         let mut bytes = Vec::new();
         body.read_to_end(&mut bytes)
             .await
-            .map_err(|e| CloudApiError::NetworkError(e.to_string()))?;
+            .map_err(|e| {
+                error!(
+                    "[supabase] response read failed: {} {} (status {}) - {}",
+                    method, uri, status, e
+                );
+                CloudApiError::NetworkError(e.to_string())
+            })?;
+
+        debug!(
+            "[supabase] request done: {} {} -> {} ({} ms)",
+            method,
+            uri,
+            status,
+            start.elapsed().as_millis()
+        );
 
         Ok((status, bytes))
     }
@@ -254,6 +279,7 @@ impl SupabaseClient {
         }
 
         let url = self.auth_url("/token?grant_type=refresh_token");
+        debug!("[supabase] refresh token: POST {}", url);
         let body = RefreshRequest {
             refresh_token: &refresh_token,
         };
@@ -280,6 +306,10 @@ impl SupabaseClient {
                 expires_at,
             );
 
+            info!(
+                "[supabase] refresh token success: user_id={} expires_at={}",
+                auth.user.id, expires_at
+            );
             Ok(AuthResponse {
                 user_id: auth.user.id,
                 email: auth.user.email.unwrap_or_default(),
@@ -288,6 +318,7 @@ impl SupabaseClient {
                 expires_at,
             })
         } else {
+            warn!("[supabase] refresh token failed: status={}", status);
             Err(CloudApiError::AuthenticationFailed(
                 "令牌刷新失败".to_string(),
             ))
@@ -301,6 +332,7 @@ impl SupabaseClient {
     async fn ensure_token_valid(&self) -> Result<(), CloudApiError> {
         // 如果正在刷新，等待刷新完成
         if self.refresh_state.refreshing.load(Ordering::SeqCst) {
+            debug!("[supabase] token refresh in progress, waiting");
             self.refresh_state.refresh_notify.notified().await;
             // 刷新完成后检查是否成功
             return if self.get_access_token().is_some() {
@@ -316,6 +348,7 @@ impl SupabaseClient {
         // 再次检查（可能在等待锁期间已被其他请求刷新）
         if self.refresh_state.refreshing.load(Ordering::SeqCst) {
             drop(_lock);
+            debug!("[supabase] token refresh in progress after lock, waiting");
             self.refresh_state.refresh_notify.notified().await;
             return if self.get_access_token().is_some() {
                 Ok(())
@@ -326,6 +359,7 @@ impl SupabaseClient {
 
         // 设置刷新中标志
         self.refresh_state.refreshing.store(true, Ordering::SeqCst);
+        debug!("[supabase] token refresh starting");
 
         // 执行刷新
         let result = self.refresh_token_internal().await;
@@ -340,6 +374,7 @@ impl SupabaseClient {
             Ok(_) => Ok(()),
             Err(e) => {
                 // 刷新失败，清除认证状态并通知 UI
+                warn!("[supabase] token refresh failed: {}", e);
                 self.clear_auth();
                 self.notify_session_expired();
                 Err(e)
@@ -424,6 +459,7 @@ impl SupabaseClient {
         let (status, result) = self.get_json::<T>(url, headers).await?;
 
         if status == StatusCode::UNAUTHORIZED {
+            warn!("[supabase] 401 received, refreshing token: GET {}", url);
             // 尝试刷新 token
             self.ensure_token_valid().await?;
             // 重试请求
@@ -446,6 +482,7 @@ impl SupabaseClient {
         let (status, result) = self.post_json::<T, B>(url, headers, body).await?;
 
         if status == StatusCode::UNAUTHORIZED {
+            warn!("[supabase] 401 received, refreshing token: POST {}", url);
             // 尝试刷新 token
             self.ensure_token_valid().await?;
             // 重试请求
@@ -488,6 +525,7 @@ impl SupabaseClient {
 
         let status = response.status();
         if status == StatusCode::UNAUTHORIZED {
+            warn!("[supabase] 401 received, refreshing token: POST (stream) {}", url);
             self.ensure_token_valid().await?;
             headers = self.auth_headers()?;
             let mut retry_builder = Request::builder().method(Method::POST).uri(url);
@@ -551,6 +589,7 @@ impl SupabaseClient {
         let (status, result) = self.patch_json::<T, B>(url, headers, body).await?;
 
         if status == StatusCode::UNAUTHORIZED {
+            warn!("[supabase] 401 received, refreshing token: PATCH {}", url);
             // 尝试刷新 token
             self.ensure_token_valid().await?;
             // 重试请求
@@ -569,6 +608,7 @@ impl SupabaseClient {
         let status = self.delete_request(url, headers).await?;
 
         if status == StatusCode::UNAUTHORIZED {
+            warn!("[supabase] 401 received, refreshing token: DELETE {}", url);
             // 尝试刷新 token
             self.ensure_token_valid().await?;
             // 重试请求
@@ -985,11 +1025,15 @@ impl CloudApiClient for SupabaseClient {
         let result = async {
             let headers = match self.auth_headers() {
                 Ok(h) => h,
-                Err(_) => return Ok(None),
+                Err(_) => {
+                    debug!("[supabase] get_current_user skipped: not authenticated");
+                    return Ok(None);
+                }
             };
             let (status, result) = self.get_json::<SupabaseUser>(&url, headers).await?;
 
             if status == StatusCode::UNAUTHORIZED {
+                warn!("[supabase] get_current_user 401, refreshing token");
                 // 尝试刷新 token 并重试
                 self.ensure_token_valid().await?;
                 let retry_headers = self.auth_headers()?;
@@ -1707,6 +1751,30 @@ impl CloudApiClient for SupabaseClient {
         .flatten();
 
         Ok(Box::pin(stream))
+    }
+
+    async fn list_models(&self) -> Result<Vec<String>, CloudApiError> {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum ModelListResponse {
+            List(Vec<String>),
+            Models { models: Vec<String> },
+            Data { data: Vec<String> },
+        }
+
+        let url = self.functions_url("ai-models");
+        let (status, response) = self.get_json_with_retry::<ModelListResponse>(&url).await?;
+        if !status.is_success() {
+            return Err(CloudApiError::ServerError("获取模型列表失败".to_string()));
+        }
+
+        let models = response.map_err(CloudApiError::ParseError)?;
+        let list = match models {
+            ModelListResponse::List(items) => items,
+            ModelListResponse::Models { models } => models,
+            ModelListResponse::Data { data } => data,
+        };
+        Ok(list)
     }
 }
 

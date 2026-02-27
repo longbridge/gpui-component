@@ -15,6 +15,7 @@ use gpui_component::{
     v_flex,
 };
 use one_core::cloud_sync::UserInfo;
+use one_core::cloud_sync::GlobalCloudUser;
 use one_core::storage::manager::get_config_dir;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
@@ -57,9 +58,10 @@ impl GlobalCurrentUser {
         }
         if let Some(state) = cx.try_global::<GlobalCurrentUser>() {
             if let Ok(mut guard) = state.user.write() {
-                *guard = user;
+                *guard = user.clone();
             }
         }
+        GlobalCloudUser::set_user(user, cx);
     }
 }
 

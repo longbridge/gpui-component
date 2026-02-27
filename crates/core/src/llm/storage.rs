@@ -94,6 +94,41 @@ impl ProviderRepository {
     pub fn new(conn: SqliteConnection) -> Self {
         Self { conn }
     }
+
+    pub fn ensure_onetcli_provider(&self) -> Result<ProviderConfig> {
+        if let Ok(Some(mut existing)) = self.get(super::types::BUILTIN_ONET_CLI_ID) {
+            if !existing.enabled {
+                existing.enabled = true;
+                let _ = self.update(&existing);
+            }
+            return Ok(existing);
+        }
+
+        if let Ok(list) = self.list() {
+            if let Some(mut existing) = list.into_iter().find(|p| p.provider_type == ProviderType::OnetCli) {
+                if !existing.enabled {
+                    existing.enabled = true;
+                    let _ = self.update(&existing);
+                }
+                return Ok(existing);
+            }
+        }
+
+        let mut config = ProviderConfig::builtin_onet_cli();
+        let now = now();
+        config.created_at = now;
+        config.updated_at = now;
+        config.enabled = true;
+
+        if let Ok(list) = self.list() {
+            config.is_default = !list.iter().any(|p| p.is_default);
+        } else {
+            config.is_default = true;
+        }
+
+        let _ = self.insert(&mut config);
+        Ok(config)
+    }
 }
 
 impl Entity for ProviderConfig {

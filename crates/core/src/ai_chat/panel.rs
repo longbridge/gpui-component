@@ -28,13 +28,14 @@ use crate::llm::{
     Message, Role, BUILTIN_ONET_CLI_ID,
 };
 use crate::storage::{traits::Repository, GlobalStorageState};
+use crate::cloud_sync::GlobalCloudUser;
 
 // 使用引擎和渲染器
 use super::engine::ChatEngine;
 use super::rendering::ChatMessageRenderer;
 // 使用共享组件
 use super::components::{
-    ProviderSelectState, ProviderSelectEvent,
+    ProviderItem, ProviderSelectState, ProviderSelectEvent,
     SessionData, SessionListConfig, SessionListDelegate, SessionListHost,
     ModelSettings, ModelSettingsPanel, ModelSettingsEvent,
 };
@@ -295,6 +296,7 @@ pub struct AiChatPanel {
     settings_panel: Entity<ModelSettingsPanel>,
     /// Agent 会话亲和性（用于多轮对话保持同一 Agent）
     session_affinity: SessionAffinity,
+    is_logged_in: bool,
 }
 
 
@@ -377,6 +379,7 @@ impl AiChatPanel {
             custom_colors: None,
             settings_panel,
             session_affinity: SessionAffinity::new(),
+            is_logged_in: GlobalCloudUser::is_logged_in(cx),
         };
 
         // 加载 providers
@@ -387,6 +390,8 @@ impl AiChatPanel {
     fn load_providers(&mut self, cx: &mut Context<Self>) {
         let global_state = cx.global::<GlobalStorageState>();
         let storage_manager = global_state.storage.clone();
+        let is_logged_in = GlobalCloudUser::is_logged_in(cx);
+        self.is_logged_in = is_logged_in;
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let providers = {
@@ -394,10 +399,20 @@ impl AiChatPanel {
                     Some(r) => r,
                     None => return,
                 };
-                match repo.list() {
+                let mut list = match repo.list() {
                     Ok(all) => all.into_iter().filter(|p| p.enabled).collect::<Vec<_>>(),
                     Err(_) => Vec::new(),
+                };
+                if is_logged_in {
+                    if let Ok(onet) = repo.ensure_onetcli_provider() {
+                        if !list.iter().any(|p| p.id == onet.id) {
+                            list.insert(0, onet);
+                        }
+                    }
+                } else {
+                    list.retain(|p| !p.is_builtin());
                 }
+                list
             };
 
             let _ = cx.update(|cx| {
@@ -405,12 +420,9 @@ impl AiChatPanel {
                     let _ = cx.update_window(window_id, |_, window, cx| {
                         if let Some(entity) = this.upgrade() {
                             entity.update(cx, |panel, cx| {
-                                panel.engine.provider_configs = {
-                                    let mut configs = providers.clone();
-                                    configs.insert(0, ProviderConfig::builtin_onet_cli());
-                                    configs
-                                };
-                                panel.provider_select_state.set_provider_configs(&panel.engine.provider_configs, window, cx);
+                                panel.engine.provider_configs = providers.clone();
+                                let items: Vec<_> = providers.iter().map(ProviderItem::from_config).collect();
+                                panel.provider_select_state.set_providers(items, window, cx);
                                 panel.engine.provider_id = panel.provider_select_state.selected_provider().cloned();
                                 panel.engine.selected_model = panel.provider_select_state.selected_model().cloned();
                                 cx.notify();
@@ -766,16 +778,18 @@ impl AiChatPanel {
 
         // 构建 ProviderConfig（含用户选择的 model 和设置覆盖）
         let provider_config = {
-            let base = if provider_id == BUILTIN_ONET_CLI_ID {
-                ProviderConfig::builtin_onet_cli()
-            } else {
-                self.engine
-                    .provider_configs
-                    .iter()
-                    .find(|c| c.id == provider_id)
-                    .cloned()
-                    .unwrap_or_default()
-            };
+            let base = self.engine
+                .provider_configs
+                .iter()
+                .find(|c| c.id == provider_id)
+                .cloned()
+                .unwrap_or_else(|| {
+                    if provider_id == BUILTIN_ONET_CLI_ID {
+                        ProviderConfig::builtin_onet_cli()
+                    } else {
+                        ProviderConfig::default()
+                    }
+                });
             ProviderConfig {
                 model: self.engine.selected_model.clone().unwrap_or(base.model),
                 max_tokens: Some(max_tokens as i32),
@@ -1220,6 +1234,12 @@ impl SessionListHost for AiChatPanel {
 
 impl Render for AiChatPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_logged_in = GlobalCloudUser::is_logged_in(cx);
+        if is_logged_in != self.is_logged_in {
+            self.is_logged_in = is_logged_in;
+            self.load_providers(cx);
+        }
+
         let bg_color = self.background(cx);
         let fg_color = self.foreground(cx);
 

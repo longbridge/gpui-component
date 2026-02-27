@@ -293,6 +293,22 @@ impl ProviderSelectState {
         window: &mut Window,
         cx: &mut App,
     ) {
+        if providers.is_empty() {
+            self.providers.clear();
+            self.models.clear();
+            self.selected_provider = None;
+            self.selected_model = None;
+            self.provider_select.update(cx, |state, cx| {
+                state.set_items(Vec::new(), window, cx);
+                state.set_selected_index(None, window, cx);
+            });
+            self.model_select.update(cx, |state, cx| {
+                state.set_items(Vec::new(), window, cx);
+                state.set_selected_index(None, window, cx);
+            });
+            return;
+        }
+
         // 找到默认 provider
         let default_idx = providers.iter().position(|p| p.is_default).unwrap_or(0);
         let default_provider = providers.get(default_idx).cloned();
@@ -325,6 +341,21 @@ impl ProviderSelectState {
         let builtin = ProviderItem::from_config(&ProviderConfig::builtin_onet_cli());
         providers.insert(0, builtin);
 
+        self.set_providers(providers, window, cx);
+    }
+
+    /// 设置 Providers（可选添加内置 provider）
+    pub fn set_providers_optional_builtin(
+        &mut self,
+        mut providers: Vec<ProviderItem>,
+        include_builtin: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if include_builtin {
+            let builtin = ProviderItem::from_config(&ProviderConfig::builtin_onet_cli());
+            providers.insert(0, builtin);
+        }
         self.set_providers(providers, window, cx);
     }
 

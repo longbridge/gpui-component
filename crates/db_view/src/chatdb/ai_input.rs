@@ -262,11 +262,12 @@ impl AIInput {
     pub fn update_providers(
         &mut self,
         providers: Vec<ProviderItem>,
+        include_builtin: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // 使用 set_providers_with_builtin 自动添加内置 provider，再同步状态
-        self.provider_select_state.set_providers_with_builtin(providers, window, cx);
+        self.provider_select_state
+            .set_providers_optional_builtin(providers, include_builtin, window, cx);
         self.selected_provider = self.provider_select_state.selected_provider().cloned();
         self.selected_model = self.provider_select_state.selected_model().cloned();
 

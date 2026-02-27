@@ -28,6 +28,10 @@ pub mod supabase;
 mod connection_sync;
 mod workspace_sync;
 
+use std::sync::{Arc, RwLock};
+
+use gpui::{App, Global};
+
 pub use client::*;
 pub use conflict::*;
 pub use engine::*;
@@ -35,3 +39,43 @@ pub use models::*;
 pub use queue::*;
 pub use service::*;
 pub use state_manager::*;
+
+// ============================================================================
+// 全局用户状态
+// ============================================================================
+
+/// 全局当前用户状态（供跨 crate 访问登录态）
+#[derive(Clone, Default)]
+pub struct GlobalCloudUser {
+    user: Arc<RwLock<Option<UserInfo>>>,
+}
+
+impl Global for GlobalCloudUser {}
+
+impl GlobalCloudUser {
+    /// 获取当前用户
+    pub fn get_user(cx: &App) -> Option<UserInfo> {
+        if let Some(state) = cx.try_global::<GlobalCloudUser>() {
+            state.user.read().ok().and_then(|u| u.clone())
+        } else {
+            None
+        }
+    }
+
+    /// 是否已登录
+    pub fn is_logged_in(cx: &App) -> bool {
+        Self::get_user(cx).is_some()
+    }
+
+    /// 设置当前用户
+    pub fn set_user(user: Option<UserInfo>, cx: &mut App) {
+        if !cx.has_global::<GlobalCloudUser>() {
+            cx.set_global(GlobalCloudUser::default());
+        }
+        if let Some(state) = cx.try_global::<GlobalCloudUser>() {
+            if let Ok(mut guard) = state.user.write() {
+                *guard = user;
+            }
+        }
+    }
+}

@@ -42,10 +42,10 @@ impl LlmProvider for OnetCliLLMProvider {
     }
 
     async fn models(&self) -> Result<Vec<String>> {
-        // 返回默认支持的模型列表
-        Ok(vec![
-            "qwen-plus".to_string()
-        ])
+        self.cloud_client
+            .list_models()
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))
     }
 
     fn provider_name(&self) -> &str {

@@ -26,6 +26,7 @@ use gpui_component::button::ButtonVariants;
 use one_core::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
 use one_core::agent::registry::AgentRegistry;
 use one_core::gpui_tokio::Tokio;
+use one_core::cloud_sync::GlobalCloudUser;
 use one_core::llm::{
     chat_history::{ChatSession, MessageRepository},
     manager::GlobalProviderState,
@@ -99,6 +100,7 @@ pub struct ChatPanel {
     is_at_bottom: bool,
     /// 是否为新会话（用于在发送第一条消息时更新会话名称）
     is_new_session: bool,
+    is_logged_in: bool,
 
     // 模型设置
     model_settings: ModelSettings,
@@ -183,6 +185,7 @@ impl ChatPanel {
             render_limit: MESSAGE_RENDER_LIMIT,
             is_at_bottom: true,
             is_new_session: false,
+            is_logged_in: GlobalCloudUser::is_logged_in(cx),
             model_settings: ModelSettings::default(),
             cancel_token: None,
             last_user_input: None,
@@ -198,6 +201,9 @@ impl ChatPanel {
     // ========================================================================
 
     fn load_providers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let is_logged_in = GlobalCloudUser::is_logged_in(cx);
+        self.is_logged_in = is_logged_in;
+
         let repo = match self.storage_manager.get::<ProviderRepository>() {
             Some(repo) => repo,
             None => {
@@ -206,23 +212,33 @@ impl ChatPanel {
             }
         };
 
-        let providers = match repo.list() {
+        let mut providers = match repo.list() {
             Ok(all_providers) => all_providers.into_iter().filter(|p| p.enabled).collect::<Vec<_>>(),
             Err(e) => {
                 tracing::error!("Failed to load providers: {}", e);
-                return;
+                Vec::new()
             }
         };
 
-        if providers.is_empty() {
-            return;
+        if is_logged_in {
+            if let Ok(provider) = repo.ensure_onetcli_provider() {
+                if !providers.iter().any(|p| p.id == provider.id) {
+                    providers.insert(0, provider);
+                }
+            }
+        } else {
+            providers.retain(|p| !p.is_builtin());
         }
 
         let items: Vec<ProviderItem> = providers.iter().map(ProviderItem::from_config).collect();
-        // update_providers 内部会通过 ProviderSelectState.rebuild 自动选择默认 provider 和模型，
+        if items.is_empty() {
+            self.provider_id = None;
+            self.selected_model = None;
+        }
+        // update_providers 会同步选择默认 provider 和模型，
         // 然后通过 AIInputEvent::ProviderChanged/ModelChanged 事件回调更新 chat_panel 的状态
         self.ai_input.update(cx, |input, cx| {
-            input.update_providers(items, window, cx);
+            input.update_providers(items, false, window, cx);
         });
     }
 
@@ -483,14 +499,16 @@ impl ChatPanel {
 
     /// 构建 ProviderConfig（两条路径共用）
     fn build_provider_config(&self, provider_id: i64, _cx: &mut Context<Self>) -> ProviderConfig {
-        let base = if provider_id == BUILTIN_ONET_CLI_ID {
-            ProviderConfig::builtin_onet_cli()
-        } else {
-            self.storage_manager
-                .get::<ProviderRepository>()
-                .and_then(|repo| repo.get(provider_id).ok().flatten())
-                .unwrap_or_default()
-        };
+        let base = self.storage_manager
+            .get::<ProviderRepository>()
+            .and_then(|repo| repo.get(provider_id).ok().flatten())
+            .unwrap_or_else(|| {
+                if provider_id == BUILTIN_ONET_CLI_ID {
+                    ProviderConfig::builtin_onet_cli()
+                } else {
+                    ProviderConfig::default()
+                }
+            });
         ProviderConfig {
             model: self.selected_model.clone().unwrap_or(base.model),
             max_tokens: Some(self.model_settings.max_tokens as i32),
@@ -1735,6 +1753,12 @@ impl SessionListHost for ChatPanel {
 
 impl Render for ChatPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_logged_in = GlobalCloudUser::is_logged_in(cx);
+        if is_logged_in != self.is_logged_in {
+            self.is_logged_in = is_logged_in;
+            self.load_providers(window, cx);
+        }
+
         div()
             .size_full()
             .bg(cx.theme().background)

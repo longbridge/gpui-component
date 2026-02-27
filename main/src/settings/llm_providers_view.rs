@@ -10,10 +10,12 @@ use gpui_component::{
     h_flex, v_flex,
 };
 use one_core::llm::{storage::ProviderRepository, types::ProviderConfig};
+use one_core::llm::types::BUILTIN_ONET_CLI_ID;
 use one_core::storage::{GlobalStorageState, StorageManager, traits::Repository};
 use rust_i18n::t;
 
 use super::provider_form_dialog::ProviderForm;
+use crate::setting_tab::GlobalCurrentUser;
 
 pub struct LlmProvidersView {
     focus_handle: FocusHandle,
@@ -21,6 +23,7 @@ pub struct LlmProvidersView {
     providers: Vec<ProviderConfig>,
     loading: bool,
     loaded: bool,
+    is_logged_in: bool,
 }
 
 impl LlmProvidersView {
@@ -35,20 +38,32 @@ impl LlmProvidersView {
             providers: vec![],
             loading: false,
             loaded: false,
+            is_logged_in: GlobalCurrentUser::get_user(cx).is_some(),
         }
     }
 
     fn load_providers(&mut self, cx: &mut Context<Self>) {
         self.loading = true;
         self.loaded = true;
+        let is_logged_in = GlobalCurrentUser::get_user(cx).is_some();
+        self.is_logged_in = is_logged_in;
 
         let repo = self
             .storage_manager
             .get::<ProviderRepository>()
             .expect("ProviderRepository not found");
 
+        if is_logged_in {
+            if let Err(e) = repo.ensure_onetcli_provider() {
+                tracing::error!("Failed to ensure OnetCli provider: {}", e);
+            }
+        }
+
         match repo.list() {
-            Ok(providers) => {
+            Ok(mut providers) => {
+                if !is_logged_in {
+                    providers.retain(|p| !p.is_builtin());
+                }
                 self.providers = providers;
                 self.loading = false;
             }
@@ -148,6 +163,9 @@ impl LlmProvidersView {
     }
 
     fn delete_provider(&mut self, provider_id: i64, cx: &mut Context<Self>) {
+        if provider_id == BUILTIN_ONET_CLI_ID {
+            return;
+        }
         let repo = self
             .storage_manager
             .get::<ProviderRepository>()
@@ -164,6 +182,9 @@ impl LlmProvidersView {
     }
 
     fn toggle_provider(&mut self, mut provider: ProviderConfig, cx: &mut Context<Self>) {
+        if provider.is_builtin() {
+            return;
+        }
         provider.enabled = !provider.enabled;
 
         let repo = self
@@ -184,6 +205,12 @@ impl LlmProvidersView {
 
 impl Render for LlmProvidersView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_logged_in = GlobalCurrentUser::get_user(cx).is_some();
+        if is_logged_in != self.is_logged_in {
+            self.is_logged_in = is_logged_in;
+            self.loaded = false;
+        }
+
         // 第一次渲染时开始加载
         if !self.loaded && !self.loading {
             self.load_providers(cx);
@@ -398,22 +425,24 @@ impl LlmProvidersView {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(
-                        Button::new(SharedString::from(format!("toggle-{}", provider_id)))
-                            .with_variant(if provider.enabled {
-                                ButtonVariant::Secondary
-                            } else {
-                                ButtonVariant::Primary
-                            })
-                            .label(if provider.enabled {
-                                t!("LlmProviders.action_disable")
-                            } else {
-                                t!("LlmProviders.action_enable")
-                            })
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.toggle_provider(provider_clone.clone(), cx);
-                            })),
-                    )
+                    .when(!provider.is_builtin(), |this| {
+                        this.child(
+                            Button::new(SharedString::from(format!("toggle-{}", provider_id)))
+                                .with_variant(if provider.enabled {
+                                    ButtonVariant::Secondary
+                                } else {
+                                    ButtonVariant::Primary
+                                })
+                                .label(if provider.enabled {
+                                    t!("LlmProviders.action_disable")
+                                } else {
+                                    t!("LlmProviders.action_enable")
+                                })
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.toggle_provider(provider_clone.clone(), cx);
+                                })),
+                        )
+                    })
                     .child(
                         Button::new(SharedString::from(format!("edit-{}", provider_id_edit)))
                             .with_variant(ButtonVariant::Secondary)
@@ -422,14 +451,16 @@ impl LlmProvidersView {
                                 view.edit_provider(provider_id_edit, window, cx);
                             })),
                     )
-                    .child(
-                        Button::new(SharedString::from(format!("delete-{}", provider_id)))
-                            .with_variant(ButtonVariant::Secondary)
-                            .label(t!("LlmProviders.action_delete"))
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.delete_provider(provider_id, cx);
-                            })),
-                    ),
+                    .when(!provider.is_builtin(), |this| {
+                        this.child(
+                            Button::new(SharedString::from(format!("delete-{}", provider_id)))
+                                .with_variant(ButtonVariant::Secondary)
+                                .label(t!("LlmProviders.action_delete"))
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.delete_provider(provider_id, cx);
+                                })),
+                        )
+                    }),
             )
     }
 }

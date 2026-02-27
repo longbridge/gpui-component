@@ -1,9 +1,11 @@
 //! Provider Form Dialog - 添加/编辑 LLM Provider 的表单对话框
 
 use gpui::{App, AsyncApp, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window, div, AppContext, WeakEntity};
+use gpui::prelude::FluentBuilder;
 use gpui_component::{IndexPath, button::{Button, ButtonVariant, ButtonVariants}, h_flex, input::{Input, InputState}, select::{Select, SelectItem, SelectState}, switch::Switch, v_flex, Disableable, WindowExt};
 use one_core::gpui_tokio::Tokio;
 use one_core::llm::{LlmConnector, types::{ProviderConfig, ProviderType}, LlmProvider};
+use one_core::llm::manager::GlobalProviderState;
 use rust_i18n::t;
 
 const CUSTOM_MODEL_ID: &str = "__custom__";
@@ -415,10 +417,21 @@ impl ProviderForm {
             updated_at: now,
         };
 
+        let is_onet_cli = provider_type.is_builtin();
+        let global_provider_state = cx.global::<GlobalProviderState>().clone();
+
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = Tokio::spawn(cx, async move {
-                let connector = LlmConnector::from_config(&config)?;
-                connector.models().await
+                if is_onet_cli {
+                    let provider = global_provider_state
+                        .manager()
+                        .get_provider(&config)
+                        .await?;
+                    provider.models().await
+                } else {
+                    let connector = LlmConnector::from_config(&config)?;
+                    connector.models().await
+                }
             })
             .await;
 
@@ -534,6 +547,14 @@ impl Focusable for ProviderForm {
 
 impl Render for ProviderForm {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let provider_type = self
+            .provider_type_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .unwrap_or(ProviderType::OpenAI);
+        let is_builtin = provider_type.is_builtin();
+
         let mut model_rows = v_flex().gap_2();
         for (index, row) in self.model_rows.iter().enumerate() {
             let selected = row.select.read(cx).selected_value().cloned();
@@ -578,7 +599,7 @@ impl Render for ProviderForm {
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .child(t!("LlmProviders.name_label").to_string()),
                     )
-                    .child(Input::new(&self.name_input)),
+                    .child(Input::new(&self.name_input).disabled(is_builtin)),
             )
             .child(
                 v_flex()
@@ -589,41 +610,43 @@ impl Render for ProviderForm {
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .child(t!("LlmProviders.provider_type_label").to_string()),
                     )
-                    .child(Select::new(&self.provider_type_select)),
+                    .child(Select::new(&self.provider_type_select).disabled(is_builtin)),
             )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .child(t!("LlmProviders.api_key_label").to_string()),
-                    )
-                    .child(Input::new(&self.api_key_input)),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .child(t!("LlmProviders.api_base_label").to_string()),
-                    )
-                    .child(Input::new(&self.api_base_input)),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .child(t!("LlmProviders.api_version_label").to_string()),
-                    )
-                    .child(Input::new(&self.api_version_input)),
-            )
+            .when(!is_builtin, |this| {
+                this.child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(t!("LlmProviders.api_key_label").to_string()),
+                        )
+                        .child(Input::new(&self.api_key_input)),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(t!("LlmProviders.api_base_label").to_string()),
+                        )
+                        .child(Input::new(&self.api_base_input)),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(t!("LlmProviders.api_version_label").to_string()),
+                        )
+                        .child(Input::new(&self.api_version_input)),
+                )
+            })
             .child(
                 v_flex()
                     .gap_2()
