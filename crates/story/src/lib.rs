@@ -19,10 +19,12 @@ use gpui_component::{
 use serde::{Deserialize, Serialize};
 
 mod app_menus;
+mod gallery;
 mod stories;
 mod themes;
 mod title_bar;
 pub use crate::title_bar::AppTitleBar;
+pub use gallery::Gallery;
 pub use stories::*;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -611,10 +613,10 @@ impl Render for StoryContainer {
     }
 }
 
-struct StoryRoot {
-    focus_handle: FocusHandle,
-    title_bar: Entity<AppTitleBar>,
-    view: AnyView,
+pub struct StoryRoot {
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) title_bar: Entity<AppTitleBar>,
+    pub(crate) view: AnyView,
 }
 
 impl StoryRoot {

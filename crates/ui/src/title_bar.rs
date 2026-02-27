@@ -207,7 +207,7 @@ struct WindowControls {
 
 impl RenderOnce for WindowControls {
     fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
-        if cfg!(target_os = "macos") {
+        if cfg!(target_os = "macos") || cfg!(target_family = "wasm") {
             return div().id("window-controls");
         }
 
@@ -252,6 +252,7 @@ impl Render for TitleBarState {
 impl RenderOnce for TitleBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
+        let is_web = cfg!(target_family = "wasm");
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
 
@@ -300,24 +301,29 @@ impl RenderOnce for TitleBar {
                 .child(
                     h_flex()
                         .id("bar")
-                        .window_control_area(WindowControlArea::Drag)
-                        .when(window.is_fullscreen(), |this| this.pl_3())
                         .h_full()
                         .justify_between()
                         .flex_shrink_0()
                         .flex_1()
-                        .when(is_linux && is_client_decorated, |this| {
-                            this.child(
-                                div()
-                                    .top_0()
-                                    .left_0()
-                                    .absolute()
-                                    .size_full()
-                                    .h_full()
-                                    .on_mouse_down(MouseButton::Right, move |ev, window, _| {
-                                        window.show_window_menu(ev.position)
-                                    }),
-                            )
+                        .when(!is_web, |this| {
+                            this.window_control_area(WindowControlArea::Drag)
+                                .when(window.is_fullscreen(), |this| this.pl_3())
+                                .when(is_linux && is_client_decorated, |this| {
+                                    this.child(
+                                        div()
+                                            .top_0()
+                                            .left_0()
+                                            .absolute()
+                                            .size_full()
+                                            .h_full()
+                                            .on_mouse_down(
+                                                MouseButton::Right,
+                                                move |ev, window, _| {
+                                                    window.show_window_menu(ev.position)
+                                                },
+                                            ),
+                                    )
+                                })
                         })
                         .children(self.children),
                 )
