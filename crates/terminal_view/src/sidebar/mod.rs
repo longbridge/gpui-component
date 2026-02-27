@@ -77,7 +77,7 @@ pub enum TerminalSidebarEvent {
     FontFamilyChanged(String),
     /// 主题变更
     ThemeChanged(TerminalTheme),
-    /// 执行历史命令
+    /// 执行命令
     ExecuteCommand(String),
     /// 请求询问 AI
     AskAi,

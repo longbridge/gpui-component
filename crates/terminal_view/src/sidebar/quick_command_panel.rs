@@ -410,7 +410,6 @@ impl QuickCommandPanel {
         let item_id = SharedString::from(format!("quick-cmd-item-{}", index));
         let group_name = SharedString::from(format!("quick-cmd-group-{}", index));
 
-        let highlight_color = cx.theme().accent;
         let pin_color = cx.theme().warning;
         let muted_bg = cx.theme().muted;
         let muted_fg = cx.theme().muted_foreground;
@@ -423,7 +422,7 @@ impl QuickCommandPanel {
             .py_2()
             .rounded_md()
             .cursor_pointer()
-            .hover(|s| s.bg(muted_bg).text_color(highlight_color))
+            .hover(|s| s.bg(muted_bg))
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
                 this.paste_command(command_for_paste.clone(), cx);
             }))
@@ -490,7 +489,6 @@ impl QuickCommandPanel {
                                     .label("PASTE")
                                     .ghost()
                                     .xsmall()
-                                    .text_color(highlight_color)
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.paste_command(command_for_paste2.clone(), cx);
                                     }))
