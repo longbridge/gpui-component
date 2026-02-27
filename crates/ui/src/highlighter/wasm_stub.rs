@@ -18,7 +18,11 @@ impl SyntaxHighlighter {
         Vec::new()
     }
 
-    pub fn styles(&self, _range: &Range<usize>, _theme: &HighlightTheme) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub fn styles(
+        &self,
+        _range: &Range<usize>,
+        _theme: &HighlightTheme,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
         Vec::new()
     }
 
@@ -67,7 +71,10 @@ pub struct LanguageConfig {
 // For WASM, we create minimal stubs here
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::{LazyLock, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -102,25 +109,21 @@ impl From<ThemeStyle> for HighlightStyle {
     fn from(style: ThemeStyle) -> Self {
         HighlightStyle {
             color: style.color,
-            font_weight: style.font_weight.map(|w| {
-                match w {
-                    FontWeightContent::Thin => gpui::FontWeight::THIN,
-                    FontWeightContent::ExtraLight => gpui::FontWeight::EXTRA_LIGHT,
-                    FontWeightContent::Light => gpui::FontWeight::LIGHT,
-                    FontWeightContent::Normal => gpui::FontWeight::NORMAL,
-                    FontWeightContent::Medium => gpui::FontWeight::MEDIUM,
-                    FontWeightContent::Semibold => gpui::FontWeight::SEMIBOLD,
-                    FontWeightContent::Bold => gpui::FontWeight::BOLD,
-                    FontWeightContent::ExtraBold => gpui::FontWeight::EXTRA_BOLD,
-                    FontWeightContent::Black => gpui::FontWeight::BLACK,
-                }
+            font_weight: style.font_weight.map(|w| match w {
+                FontWeightContent::Thin => gpui::FontWeight::THIN,
+                FontWeightContent::ExtraLight => gpui::FontWeight::EXTRA_LIGHT,
+                FontWeightContent::Light => gpui::FontWeight::LIGHT,
+                FontWeightContent::Normal => gpui::FontWeight::NORMAL,
+                FontWeightContent::Medium => gpui::FontWeight::MEDIUM,
+                FontWeightContent::Semibold => gpui::FontWeight::SEMIBOLD,
+                FontWeightContent::Bold => gpui::FontWeight::BOLD,
+                FontWeightContent::ExtraBold => gpui::FontWeight::EXTRA_BOLD,
+                FontWeightContent::Black => gpui::FontWeight::BLACK,
             }),
-            font_style: style.font_style.map(|s| {
-                match s {
-                    FontStyle::Normal => gpui::FontStyle::Normal,
-                    FontStyle::Italic => gpui::FontStyle::Italic,
-                    FontStyle::Underline => gpui::FontStyle::Normal,
-                }
+            font_style: style.font_style.map(|s| match s {
+                FontStyle::Normal => gpui::FontStyle::Normal,
+                FontStyle::Italic => gpui::FontStyle::Italic,
+                FontStyle::Underline => gpui::FontStyle::Normal,
             }),
             ..Default::default()
         }
@@ -220,7 +223,9 @@ pub struct HighlightThemeStyle {
     pub editor_line_number: Option<gpui::Hsla>,
     pub editor_active_line_number: Option<gpui::Hsla>,
     pub editor_invisible: Option<gpui::Hsla>,
+    #[serde(flatten)]
     pub status: StatusColors,
+    #[serde(rename = "syntax")]
     pub syntax: SyntaxColors,
 }
 

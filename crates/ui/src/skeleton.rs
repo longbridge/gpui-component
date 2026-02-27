@@ -3,7 +3,11 @@ use gpui::{
     bounce, div, ease_in_out, Animation, AnimationExt, IntoElement, RenderOnce, StyleRefinement,
     Styled,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
+#[cfg(target_arch = "wasm32")]
+use web_time::Duration;
 
 /// A skeleton loading placeholder element.
 #[derive(IntoElement)]

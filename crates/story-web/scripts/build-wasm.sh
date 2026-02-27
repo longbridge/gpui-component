@@ -27,9 +27,19 @@ cargo build --target wasm32-unknown-unknown $RELEASE_FLAG
 
 # Determine the build directory
 if [[ "$RELEASE_FLAG" == "--release" ]]; then
-    WASM_PATH="../../../target/wasm32-unknown-unknown/release/gpui_component_story_web.wasm"
+    BUILD_MODE="release"
 else
-    WASM_PATH="../../../target/wasm32-unknown-unknown/debug/gpui_component_story_web.wasm"
+    BUILD_MODE="debug"
+fi
+
+# WASM file is in workspace target directory
+WORKSPACE_ROOT="$PROJECT_ROOT/../.."
+WASM_PATH="$WORKSPACE_ROOT/target/wasm32-unknown-unknown/$BUILD_MODE/gpui_component_story_web.wasm"
+
+# Check if WASM file exists
+if [[ ! -f "$WASM_PATH" ]]; then
+    echo -e "${RED}Error: WASM file not found at: $WASM_PATH${NC}"
+    exit 1
 fi
 
 # Step 2: Generate JavaScript bindings

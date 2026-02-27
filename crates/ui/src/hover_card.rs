@@ -4,7 +4,11 @@ use gpui::{
     Task, Window, div, prelude::FluentBuilder as _,
 };
 use std::rc::Rc;
+
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
+#[cfg(target_arch = "wasm32")]
+use web_time::Duration;
 
 use crate::{Anchor, ElementExt, StyledExt as _, popover::Popover};
 
