@@ -164,10 +164,13 @@ pub fn init(cx: &mut App) {
     themes::init(cx);
     stories::init(cx);
 
-    let http_client = std::sync::Arc::new(
-        reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
-    );
-    cx.set_http_client(http_client);
+    #[cfg(feature = "http-client")]
+    {
+        let http_client = std::sync::Arc::new(
+            reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
+        );
+        cx.set_http_client(http_client);
+    }
 
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),

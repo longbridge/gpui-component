@@ -222,10 +222,11 @@ impl InputState {
         let offset = self.cursor();
         let text = self.text.clone();
         let debounce = provider.inline_completion_debounce();
+        let background_executor = cx.background_executor().clone();
 
         self.inline_completion.task = cx.spawn_in(window, async move |editor, cx| {
             // Debounce: wait before fetching to avoid unnecessary requests while typing
-            smol::Timer::after(debounce).await;
+            background_executor.timer(debounce).await;
 
             // Now fetch the inline completion after the debounce period
             let task = editor.update_in(cx, |editor, window, cx| {

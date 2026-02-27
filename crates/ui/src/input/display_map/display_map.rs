@@ -16,6 +16,7 @@ use super::wrap_map::WrapMap;
 use super::{BufferPoint, DisplayPoint};
 use crate::input::display_map::WrapPoint;
 use crate::input::rope_ext::RopeExt as _;
+use crate::input::Point as TreeSitterPoint;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
@@ -184,7 +185,7 @@ impl DisplayMap {
     /// and merges them with existing (already adjusted) candidates.
     pub fn update_fold_candidates_for_edit(
         &mut self,
-        tree: &tree_sitter::Tree,
+        tree: &super::folding::Tree,
         edit_byte_range: Range<usize>,
         new_text: &Rope,
     ) {
@@ -266,12 +267,12 @@ impl DisplayMap {
         self.wrap_map.wrapper().display_point_to_offset(point)
     }
 
-    /// Convert wrap display point to tree_sitter::Point (buffer line/col).
+    /// Convert wrap display point to TreeSitterPoint (buffer line/col).
     #[inline]
     pub(crate) fn wrap_display_point_to_point(
         &self,
         point: WrapDisplayPoint,
-    ) -> tree_sitter::Point {
+    ) -> TreeSitterPoint {
         self.wrap_map.wrapper().display_point_to_point(point)
     }
 

@@ -10,10 +10,10 @@ use gpui::{
     ListState, ParentElement as _, Pixels, Point, Render, SharedString, Styled as _, Task, Window,
     prelude::FluentBuilder as _, px,
 };
-use smol::{Timer, stream::StreamExt as _};
 
 use crate::{
     ActiveTheme, ElementExt,
+    async_util::{Sender, Receiver, unbounded, stream::StreamExt as _},
     highlighter::HighlightTheme,
     input::{self, Copy},
     text::{
@@ -66,7 +66,7 @@ pub struct TextViewState {
     pub(super) parsed_content: Arc<Mutex<ParsedContent>>,
     text: SharedString,
     parsed_error: Option<SharedString>,
-    tx: smol::channel::Sender<UpdateOptions>,
+    tx: Sender<UpdateOptions>,
     _parse_task: Task<()>,
     _receive_task: Task<()>,
 }
@@ -86,8 +86,8 @@ impl TextViewState {
     fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let (tx, rx) = smol::channel::unbounded::<UpdateOptions>();
-        let (tx_result, rx_result) = smol::channel::unbounded::<Result<(), SharedString>>();
+        let (tx, rx) = unbounded::<UpdateOptions>();
+        let (tx_result, rx_result) = unbounded::<Result<(), SharedString>>();
         let _receive_task = cx.spawn({
             async move |weak_self, cx| {
                 while let Ok(parsed_result) = rx_result.recv().await {
@@ -318,17 +318,15 @@ struct UpdateFuture {
     format: TextViewFormat,
     options: UpdateOptions,
     pending_text: String,
-    timer: Timer,
-    rx: Pin<Box<smol::channel::Receiver<UpdateOptions>>>,
-    tx_result: smol::channel::Sender<Result<(), SharedString>>,
-    delay: Duration,
+    rx: Pin<Box<Receiver<UpdateOptions>>>,
+    tx_result: Sender<Result<(), SharedString>>,
 }
 
 impl UpdateFuture {
     fn new(
         format: TextViewFormat,
-        rx: smol::channel::Receiver<UpdateOptions>,
-        tx_result: smol::channel::Sender<Result<(), SharedString>>,
+        rx: Receiver<UpdateOptions>,
+        tx_result: Sender<Result<(), SharedString>>,
         cx: &App,
     ) -> Self {
         Self {
@@ -340,10 +338,8 @@ impl UpdateFuture {
                 content: Default::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
             },
-            timer: Timer::never(),
             rx: Box::pin(rx),
             tx_result,
-            delay: UPDATE_DELAY,
         }
     }
 }
@@ -355,24 +351,15 @@ impl Future for UpdateFuture {
         loop {
             match self.rx.poll_next(cx) {
                 Poll::Ready(Some(options)) => {
-                    let delay = self.delay;
                     if options.append {
                         self.pending_text.push_str(options.pending_text.as_str());
                     } else {
                         self.pending_text = options.pending_text.clone();
                     }
                     self.options = options;
-                    self.timer.set_after(delay);
-                    continue;
-                }
-                Poll::Ready(None) => return Poll::Ready(()),
-                Poll::Pending => {}
-            }
 
-            match self.timer.poll_next(cx) {
-                Poll::Ready(Some(_)) => {
+                    // Process immediately without debounce
                     let pending_text = std::mem::take(&mut self.pending_text);
-
                     let res = parse_content(
                         self.format,
                         &UpdateOptions {
@@ -383,7 +370,8 @@ impl Future for UpdateFuture {
                     _ = self.tx_result.try_send(res);
                     continue;
                 }
-                Poll::Ready(None) | Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(()),
+                Poll::Pending => return Poll::Pending,
             }
         }
     }

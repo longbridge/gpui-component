@@ -29,13 +29,12 @@ use crate::highlighter::DiagnosticSet;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
-    HoverDefinition, Lsp, Position,
+    HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
     display_map::LineLayout,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
 };
-use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -1984,6 +1983,7 @@ impl InputState {
     /// Replace text by [`lsp_types::Range`].
     ///
     /// See also: [`EntityInputHandler::replace_text_in_range`]
+    #[cfg(not(target_arch = "wasm32"))]
     #[allow(unused)]
     pub(crate) fn replace_text_in_lsp_range(
         &mut self,

@@ -2,6 +2,8 @@
 
 Web version of the GPUI Component Story Gallery, compiled to WASM to run in browsers.
 
+> ⚠️ **Status**: Currently blocked by WASM compatibility issues in dependencies (psm, aws-lc-sys, errno). See [STATUS.md](./STATUS.md) for details. Infrastructure is complete and ready once upstream dependencies support WASM.
+
 ## Prerequisites
 
 - Rust toolchain with `wasm32-unknown-unknown` target

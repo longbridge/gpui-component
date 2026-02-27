@@ -6,20 +6,20 @@ edition.workspace = true
 
 [features]
 inspector = ["gpui-component/inspector"]
+http-client = ["dep:reqwest_client"]
+tree-sitter = ["gpui-component/tree-sitter-languages"]
+default = ["http-client", "tree-sitter"]
 
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
-gpui-component = { workspace = true, features = [
-  "tree-sitter-languages",
-] }
+gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
-reqwest_client = { path = "../reqwest_client" }
+reqwest_client = { path = "../reqwest_client", optional = true }
 
 autocorrect = "2.14.2"
 chrono = "0.4"
-color-lsp = "0.2.0"
 csv = "1.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 itertools = "0.14.0"
@@ -28,13 +28,17 @@ rand = "0.8"
 regex = "1"
 serde = "1"
 serde_json = "1"
-smol.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-tree-sitter-navi = "0.2.2"
 unindent = "0.2.3"
 rust-i18n.workspace = true
 dirs = "6.0.0"
+
+# Native-only dependencies (not available on WASM)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+smol.workspace = true
+tree-sitter-navi = "0.2.2"
+color-lsp = "0.2.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

@@ -169,6 +169,7 @@ impl ThemeRegistry {
             .collect();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn _watch_themes_dir(themes_dir: PathBuf, cx: &mut App) -> anyhow::Result<()> {
         if !themes_dir.exists() {
             fs::create_dir_all(&themes_dir)?;

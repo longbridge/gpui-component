@@ -24,11 +24,10 @@ pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange};
 pub use indent::TabSize;
 pub use input::*;
 pub use lsp::*;
+pub use lsp_types::Position;
 pub use mask_pattern::MaskPattern;
 pub use number_input::{NumberInput, NumberInputEvent, StepAction};
 pub use otp_input::*;
-pub use state::*;
-
-pub use lsp_types::Position;
-pub use rope_ext::*;
+pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
+pub use state::*;

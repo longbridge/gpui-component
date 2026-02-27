@@ -306,24 +306,31 @@ impl RenderOnce for Input {
                             .on_action(window.listener_for(&self.state, InputState::indent_block))
                             .on_action(window.listener_for(&self.state, InputState::outdent_block))
                     })
-                    .on_action(
-                        window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
-                    )
+                    .when(cfg!(not(target_arch = "wasm32")), |this| {
+                        this.on_action(
+                            window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
+                        )
+                    })
             })
             .on_action(window.listener_for(&self.state, InputState::left))
             .on_action(window.listener_for(&self.state, InputState::right))
             .on_action(window.listener_for(&self.state, InputState::select_left))
             .on_action(window.listener_for(&self.state, InputState::select_right))
             .when(state.mode.is_multi_line(), |this| {
-                this.on_action(window.listener_for(&self.state, InputState::up))
+                let result = this
+                    .on_action(window.listener_for(&self.state, InputState::up))
                     .on_action(window.listener_for(&self.state, InputState::down))
                     .on_action(window.listener_for(&self.state, InputState::select_up))
                     .on_action(window.listener_for(&self.state, InputState::select_down))
                     .on_action(window.listener_for(&self.state, InputState::page_up))
-                    .on_action(window.listener_for(&self.state, InputState::page_down))
-                    .on_action(
-                        window.listener_for(&self.state, InputState::on_action_go_to_definition),
-                    )
+                    .on_action(window.listener_for(&self.state, InputState::page_down));
+
+                #[cfg(not(target_arch = "wasm32"))]
+                let result = result.on_action(
+                    window.listener_for(&self.state, InputState::on_action_go_to_definition),
+                );
+
+                result
             })
             .on_action(window.listener_for(&self.state, InputState::select_all))
             .on_action(window.listener_for(&self.state, InputState::select_to_start_of_line))

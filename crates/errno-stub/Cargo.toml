@@ -1,0 +1,12 @@
+[package]
+name = "errno"
+version = "0.3.13"
+edition = "2021"
+
+[features]
+default = ["std"]
+std = []
+
+[lib]
+name = "errno"
+path = "src/lib.rs"

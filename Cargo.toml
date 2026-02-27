@@ -108,3 +108,10 @@ files.extend-exclude = ["**/fixtures/*"]
 
 [workspace.metadata.typos.default.extend-identifiers]
 consts = "consts"
+
+# Patches for WASM compatibility
+[patch.crates-io]
+# Use stacker's psm version which may have better WASM support
+psm = { git = "https://github.com/rust-lang/stacker", branch = "master" }
+# Use errno stub for WASM
+errno = { path = "crates/errno-stub" }

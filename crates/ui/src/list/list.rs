@@ -22,7 +22,6 @@ use gpui::{
     Length, MouseButton, ParentElement, Render, Styled, Task, Window, div, prelude::FluentBuilder,
 };
 use rust_i18n::t;
-use smol::Timer;
 
 pub(crate) fn init(cx: &mut App) {
     let context: Option<&str> = Some("List");
@@ -288,7 +287,7 @@ where
                     });
 
                     // Always wait 100ms to avoid flicker
-                    Timer::after(Duration::from_millis(100)).await;
+                    window.background_executor().timer(Duration::from_millis(100)).await;
                     _ = this.update_in(window, |this, window, cx| {
                         this.set_searching(false, window, cx);
                     });

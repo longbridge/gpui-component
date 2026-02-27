@@ -3,12 +3,11 @@ use std::{cell::RefCell, ops::Range};
 
 use gpui::{App, SharedString};
 use ropey::Rope;
-use tree_sitter::InputEdit;
 
 use super::display_map::DisplayMap;
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
-use crate::input::{RopeExt as _, TabSize};
+use crate::input::{InputEdit, RopeExt as _, TabSize};
 
 #[derive(Clone)]
 pub(crate) enum InputMode {
