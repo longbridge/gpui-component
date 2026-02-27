@@ -154,6 +154,7 @@ impl RenderOnce for GroupBox {
                 })
                 .child(
                     v_flex()
+                        .w_full()
                         .when_some(bg, |this, bg| this.bg(bg))
                         .when_some(border, |this, border| this.border_color(border).border_1())
                         .text_color(cx.theme().group_box_foreground)

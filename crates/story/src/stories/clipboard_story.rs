@@ -83,15 +83,17 @@ impl Render for ClipboardStory {
             )
             .child(
                 section("With in an Input").max_w_md().child(
-                    Input::new(&self.url_state).suffix(
-                        Clipboard::new("clipboard2")
-                            .value_fn({
-                                let state = self.url_state.clone();
-                                move |_, cx| state.read(cx).value()
-                            })
-                            .on_copied(|value, window, cx| {
-                                window.push_notification(format!("Copied value: {}", value), cx)
-                            }),
+                    h_flex().w_full().child(
+                        Input::new(&self.url_state).w_full().suffix(
+                            Clipboard::new("clipboard2")
+                                .value_fn({
+                                    let state = self.url_state.clone();
+                                    move |_, cx| state.read(cx).value()
+                                })
+                                .on_copied(|value, window, cx| {
+                                    window.push_notification(format!("Copied value: {}", value), cx)
+                                }),
+                        ),
                     ),
                 ),
             )
