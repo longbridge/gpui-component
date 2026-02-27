@@ -1,9 +1,10 @@
 use gpui::{
-    actions, div, App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
+    Render, StatefulInteractiveElement, Styled, Window, actions, div,
 };
 
 use gpui_component::{
+    ActiveTheme, IconName,
     button::{Button, ButtonVariant, ButtonVariants},
     checkbox::Checkbox,
     dock::PanelControl,
@@ -11,10 +12,10 @@ use gpui_component::{
     radio::Radio,
     switch::Switch,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, IconName,
+    v_flex,
 };
 
-use crate::{section, Story};
+use crate::{Story, section};
 
 actions!(tooltip_story, [Info]);
 
@@ -65,8 +66,8 @@ impl Render for TooltipStory {
         _cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
-            .p_4()
-            .gap_5()
+            .w_full()
+            .gap_3()
             .child(
                 section("Tooltip for Button")
                     .child(

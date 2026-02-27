@@ -58,7 +58,9 @@ impl Focusable for ClipboardStory {
 impl Render for ClipboardStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_6()
+            .size_full()
+            .justify_start()
+            .gap_3()
             .child(
                 section("Clipboard").max_w_md().child(
                     h_flex()

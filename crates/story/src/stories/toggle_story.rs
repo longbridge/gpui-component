@@ -54,8 +54,8 @@ impl Focusable for ToggleStory {
 impl Render for ToggleStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .size_full()
-            .gap_6()
+            .w_full()
+            .gap_3()
             .child(
                 section("Toggle")
                     .child(

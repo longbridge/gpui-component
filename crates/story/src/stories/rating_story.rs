@@ -58,8 +58,8 @@ pub fn init(_cx: &mut App) {
 impl Render for RatingStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .items_center()
-            .gap_y_3()
+            .w_full()
+            .gap_3()
             .child(
                 h_flex().w_full().gap_3().child(
                     ButtonGroup::new("toggle-size")
