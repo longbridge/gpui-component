@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bytes::Bytes;
-use gpui::http_client::{self, http, AsyncBody, HttpClient, RedirectPolicy, Url};
+use gpui::http_client::{self, AsyncBody, HttpClient, RedirectPolicy, Url, http};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response as WebResponse};
@@ -56,7 +56,9 @@ impl HttpClient for WasmHttpClient {
                 .headers
                 .iter()
                 .filter_map(|(k, v)| {
-                    v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string()))
+                    v.to_str()
+                        .ok()
+                        .map(|v| (k.as_str().to_string(), v.to_string()))
                 })
                 .collect();
             let redirect_policy = parts.extensions.get::<RedirectPolicy>().cloned();
@@ -71,7 +73,15 @@ impl HttpClient for WasmHttpClient {
             };
 
             // Now do the actual fetch in a way that keeps non-Send types local
-            perform_fetch(method, uri, headers, body_bytes, redirect_policy, user_agent).await
+            perform_fetch(
+                method,
+                uri,
+                headers,
+                body_bytes,
+                redirect_policy,
+                user_agent,
+            )
+            .await
         };
 
         // Wrap the future to make it Send
@@ -104,18 +114,18 @@ async fn perform_fetch(
     user_agent: Option<String>,
 ) -> Result<http_client::Response<AsyncBody>> {
     // Create request init
-    let mut opts = RequestInit::new();
-    opts.method(&method);
-    opts.mode(RequestMode::Cors);
+    let opts = RequestInit::new();
+    opts.set_method(&method);
+    opts.set_mode(RequestMode::Cors);
 
     // Handle redirect policy
     if let Some(policy) = redirect_policy {
         match policy {
             RedirectPolicy::NoFollow => {
-                opts.redirect(web_sys::RequestRedirect::Manual);
+                opts.set_redirect(web_sys::RequestRedirect::Manual);
             }
             RedirectPolicy::FollowLimit(_) | RedirectPolicy::FollowAll => {
-                opts.redirect(web_sys::RequestRedirect::Follow);
+                opts.set_redirect(web_sys::RequestRedirect::Follow);
             }
         }
     }
@@ -124,7 +134,7 @@ async fn perform_fetch(
     if let Some(bytes) = body_bytes {
         let uint8_array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
         uint8_array.copy_from(&bytes);
-        opts.body(Some(&uint8_array));
+        opts.set_body(&uint8_array);
     }
 
     // Create request

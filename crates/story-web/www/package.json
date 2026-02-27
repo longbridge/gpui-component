@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "vite": "^6.0.7",
+    "vite-plugin-static-copy": "^3.2.0",
     "vite-plugin-wasm": "^3.3.0"
   }
 }

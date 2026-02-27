@@ -8,8 +8,14 @@ use wasm_bindgen::prelude::*;
 pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
+    // Initialize logging to browser console
+    console_log::init_with_level(log::Level::Info).expect("Failed to initialize logger");
+
+    // Also initialize tracing for WASM
+    tracing_wasm::set_as_global_default();
+
     gpui_platform::application()
-        .with_assets(Assets)
+        .with_assets(Assets::default())
         .run(|cx: &mut App| {
             gpui_component_story::init(cx);
 
