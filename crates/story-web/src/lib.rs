@@ -257,7 +257,9 @@ struct HelloWorld {
 
 impl Render for HelloWorld {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().child(format!("Hello, {}!", self.name))
+        div()
+            .bg(gpui::red())
+            .child(format!("Hello, {}!", self.name))
     }
 }
 
@@ -266,8 +268,9 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     // Initialize GPUI web platform
+    gpui_platform::web_init();
     gpui_platform::application().run(|cx: &mut App| {
-        gpui_component_story::init(cx);
+        gpui_component::init(cx);
 
         let bounds = Bounds::centered(
             None,
@@ -284,10 +287,8 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
                 ..Default::default()
             },
             |window, cx| {
-                let _view = Gallery::view(None, window, cx);
-                cx.new(|_cx| HelloWorld {
-                    name: "GPUI Component".into(),
-                })
+                let view = Gallery::view(None, window, cx);
+                cx.new(|cx| Root::new(view, window, cx))
             },
         )
         .expect("Failed to open window");

@@ -2960,6 +2960,7 @@ dependencies = [
  "gpui_macros",
  "html5ever 0.27.0",
  "indoc",
+ "instant",
  "itertools 0.13.0",
  "lsp-types 0.97.0",
  "markdown",
@@ -3016,7 +3017,6 @@ dependencies = [
  "tree-sitter-zig",
  "unicode-segmentation",
  "uuid",
- "web-time",
  "zed-sum-tree",
 ]
 
@@ -3923,6 +3923,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0242819d153cba4b4b05a5a8f2a7e9bbf97b6055b2a002b395c96b5ff3c0222"
 dependencies = [
  "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
