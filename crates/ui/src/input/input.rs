@@ -306,14 +306,9 @@ impl RenderOnce for Input {
                             .on_action(window.listener_for(&self.state, InputState::indent_block))
                             .on_action(window.listener_for(&self.state, InputState::outdent_block))
                     })
-                    .when(cfg!(not(target_arch = "wasm32")), |this| {
-                        this.on_action(
-                            window.listener_for(
-                                &self.state,
-                                InputState::on_action_toggle_code_actions,
-                            ),
-                        )
-                    })
+                    .on_action(
+                        window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
+                    )
             })
             .on_action(window.listener_for(&self.state, InputState::left))
             .on_action(window.listener_for(&self.state, InputState::right))

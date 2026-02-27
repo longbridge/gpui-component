@@ -2972,6 +2972,7 @@ dependencies = [
  "indoc",
  "instant",
  "itertools 0.13.0",
+ "log",
  "lsp-types 0.97.0",
  "markdown",
  "markup5ever_rcdom",

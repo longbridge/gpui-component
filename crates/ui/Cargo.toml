@@ -70,6 +70,7 @@ serde_repr.workspace = true
 smallvec.workspace = true
 sum-tree.workspace = true
 tracing.workspace = true
+log.workspace = true
 
 enum-iterator = "2.1.0"
 itertools = "0.13.0"
