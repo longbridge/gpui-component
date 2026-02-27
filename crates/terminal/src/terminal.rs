@@ -110,6 +110,68 @@ pub struct Terminal {
     connection_kind: TerminalConnectionKind,
 }
 
+#[derive(Clone)]
+pub struct TerminalScrollProxy {
+    term: Arc<FairMutex<Term<GpuiEventProxy>>>,
+    event_tx: Option<UnboundedSender<TerminalEvent>>,
+}
+
+/// Snapshot of terminal scroll state, captured in a single lock acquisition
+/// to ensure consistency.
+#[derive(Clone, Debug)]
+pub struct TerminalScrollSnapshot {
+    pub display_offset: usize,
+    pub history_size: usize,
+    pub screen_lines: usize,
+    pub columns: usize,
+}
+
+impl TerminalScrollProxy {
+    /// Snapshot all scroll-related state in a single lock acquisition
+    /// to avoid inconsistency from multiple separate locks.
+    pub fn snapshot(&self) -> TerminalScrollSnapshot {
+        let term = self.term.lock();
+        TerminalScrollSnapshot {
+            display_offset: term.grid().display_offset(),
+            history_size: term.history_size(),
+            screen_lines: term.screen_lines(),
+            columns: term.columns(),
+        }
+    }
+
+    pub fn display_offset(&self) -> usize {
+        self.term.lock().grid().display_offset()
+    }
+
+    pub fn history_size(&self) -> usize {
+        self.term.lock().history_size()
+    }
+
+    pub fn screen_lines(&self) -> usize {
+        self.term.lock().screen_lines()
+    }
+
+    pub fn columns(&self) -> usize {
+        self.term.lock().columns()
+    }
+
+    pub fn mode(&self) -> TermMode {
+        *self.term.lock().mode()
+    }
+
+    pub fn scroll_display_delta(&self, delta: i32) {
+        if delta == 0 {
+            return;
+        }
+        self.term
+            .lock()
+            .scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
+        if let Some(tx) = &self.event_tx {
+            let _ = tx.send(TerminalEvent::Wakeup);
+        }
+    }
+}
+
 impl Terminal {
     /// 创建本地终端
     pub fn new_local(config: LocalConfig, cx: &mut Context<Self>) -> Result<Self> {
@@ -651,6 +713,14 @@ impl Terminal {
         self.term
             .lock()
             .scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
+    }
+
+    /// 获取滚动代理（供视图层的滚动条使用）
+    pub fn scroll_proxy(&self) -> TerminalScrollProxy {
+        TerminalScrollProxy {
+            term: self.term.clone(),
+            event_tx: self.event_tx.clone(),
+        }
     }
 
     // ========== Vi 模式 ==========

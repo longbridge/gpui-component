@@ -6,9 +6,12 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
+use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
 use gpui_component::{Icon, IconName, Sizable, Size};
 use std::borrow::Cow;
+use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::addon::{
     register_default_addons,
@@ -19,7 +22,7 @@ use crate::addon::{
 };
 use crate::blink_manager::BlinkManager;
 use crate::sidebar::{TerminalSidebar, TerminalSidebarEvent, SidebarPanel, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
-use terminal::terminal::{ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent};
+use terminal::terminal::{ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent, TerminalScrollProxy};
 use crate::terminal_element::{RenderCache, TerminalElement};
 use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 use one_core::storage::models::StoredConnection;
@@ -27,7 +30,7 @@ use one_core::tab_container::{TabContent, TabContentEvent};
 use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use rust_i18n::t;
 use std::ops::Deref;
-use terminal::LocalConfig;
+use terminal::{LocalConfig};
 
 actions!(
     terminal_view,
@@ -123,6 +126,9 @@ pub struct TerminalView {
     resizing: Option<ResizingPanel>,
     /// 视图边界
     view_bounds: Bounds<Pixels>,
+
+    scrollbar_metrics: Rc<RefCell<TerminalScrollbarMetrics>>,
+    scrollbar_handle: TerminalScrollbarHandle,
 }
 
 /// Mouse interaction state
@@ -132,6 +138,82 @@ struct MouseState {
     last_click_point: Option<AlacPoint>,
     click_count: u32,
     last_click_time: Option<std::time::Instant>,
+}
+
+#[derive(Debug, Clone)]
+struct TerminalScrollbarMetrics {
+    viewport_size: gpui::Size<Pixels>,
+    line_height: Pixels,
+    cell_width: Pixels,
+}
+
+impl Default for TerminalScrollbarMetrics {
+    fn default() -> Self {
+        Self {
+            viewport_size: size(px(0.0), px(0.0)),
+            line_height: px(1.0),
+            cell_width: px(1.0),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct TerminalScrollbarHandle {
+    proxy: TerminalScrollProxy,
+    metrics: Rc<RefCell<TerminalScrollbarMetrics>>,
+    future_display_offset: Rc<StdCell<Option<usize>>>,
+}
+
+impl TerminalScrollbarHandle {
+    fn new(proxy: TerminalScrollProxy, metrics: Rc<RefCell<TerminalScrollbarMetrics>>) -> Self {
+        Self {
+            proxy,
+            metrics,
+            future_display_offset: Rc::new(StdCell::new(None)),
+        }
+    }
+
+    fn take_future_display_offset(&self) -> Option<usize> {
+        self.future_display_offset.take()
+    }
+}
+
+impl ScrollbarHandle for TerminalScrollbarHandle {
+    fn offset(&self) -> Point<Pixels> {
+        let metrics = self.metrics.borrow();
+        let line_height = metrics.line_height.max(px(1.0));
+        // Snapshot terminal state in a single lock to avoid inconsistency
+        let snapshot = self.proxy.snapshot();
+        let max_offset = snapshot.history_size;
+        let scroll_offset = max_offset.saturating_sub(snapshot.display_offset);
+        Point::new(px(0.0), -(scroll_offset as f32 * line_height))
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        let metrics = self.metrics.borrow();
+        let line_height = metrics.line_height.max(px(1.0));
+        let snapshot = self.proxy.snapshot();
+        let max_offset = snapshot.history_size as i32;
+        if max_offset == 0 {
+            return;
+        }
+        let offset_delta = (offset.y / line_height).round() as i32;
+        let display_offset = (max_offset + offset_delta).clamp(0, max_offset) as usize;
+        self.future_display_offset.set(Some(display_offset));
+    }
+
+    fn content_size(&self) -> gpui::Size<Pixels> {
+        let metrics = self.metrics.borrow();
+        let line_height = metrics.line_height.max(px(1.0));
+        let snapshot = self.proxy.snapshot();
+        let total_lines = snapshot.history_size + snapshot.screen_lines;
+        let height = line_height * total_lines as f32;
+        let width = metrics
+            .viewport_size
+            .width
+            .max(metrics.cell_width * snapshot.columns as f32);
+        size(width, height)
+    }
 }
 
 impl TerminalView {
@@ -213,6 +295,10 @@ impl TerminalView {
         subscriptions.push(focus_subscription);
         subscriptions.push(blur_subscription);
 
+        let scrollbar_metrics = Rc::new(RefCell::new(TerminalScrollbarMetrics::default()));
+        let scrollbar_handle =
+            TerminalScrollbarHandle::new(terminal.read(cx).scroll_proxy(), scrollbar_metrics.clone());
+
         Ok(Self {
             terminal,
             local_working_dir: if is_local_terminal {
@@ -243,6 +329,8 @@ impl TerminalView {
             sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
             resizing: None,
             view_bounds: Bounds::default(),
+            scrollbar_metrics,
+            scrollbar_handle,
         })
     }
 
@@ -1419,6 +1507,17 @@ impl Render for TerminalView {
         self.line_height = self.current_theme.font_size * self.current_theme.line_height_scale;
         self.font_size = self.current_theme.font_size;
 
+        if let Some(new_display_offset) = self.scrollbar_handle.take_future_display_offset() {
+            self.terminal.update(cx, |terminal, _| {
+                let current = terminal.term().lock().grid().display_offset() as i32;
+                let target = new_display_offset as i32;
+                let delta = target - current;
+                if delta != 0 {
+                    terminal.scroll(delta);
+                }
+            });
+        }
+
         let connection_state = self.terminal.read(cx).connection_state().clone();
         let can_reconnect = self.terminal.read(cx).can_reconnect();
         let bg_color = self.current_theme.background;
@@ -1427,6 +1526,9 @@ impl Render for TerminalView {
         let sidebar_visible = self.sidebar.read(cx).is_visible();
         let sidebar_panel_size = self.sidebar_panel_size;
         let view = cx.entity().clone();
+        let terminal_mode = self.terminal.read(cx).mode();
+        let history_size = self.terminal.read(cx).term().lock().history_size();
+        let show_scrollbar = !terminal_mode.contains(TermMode::ALT_SCREEN) && history_size > 0;
 
         div()
             .size_full()
@@ -1439,7 +1541,7 @@ impl Render for TerminalView {
                 let terminal_bounds = self.terminal_bounds;
                 let entity = cx.entity().downgrade();
                 let focus_handle = self.focus_handle.clone();
-                div()
+                let terminal_core = div()
                     .track_focus(&focus_handle)
                     .key_context(TERMINAL_CONTEXT)
                     .on_action(cx.listener(Self::send_tab))
@@ -1464,6 +1566,12 @@ impl Render for TerminalView {
                                 if let Some(entity) = entity.upgrade() {
                                     entity.update(cx, |this, cx| {
                                         this.terminal_bounds = bounds;
+                                        {
+                                            let mut metrics = this.scrollbar_metrics.borrow_mut();
+                                            metrics.viewport_size = bounds.size;
+                                            metrics.line_height = this.line_height;
+                                            metrics.cell_width = this.cell_width;
+                                        }
                                         this.resize_if_needed(bounds, cx);
                                     });
                                 }
@@ -1547,7 +1655,28 @@ impl Render for TerminalView {
                         matches!(connection_state, ConnectionState::Disconnected { .. })
                             || matches!(connection_state, ConnectionState::Connecting),
                         |this| this.child(self.render_connection_overlay(can_reconnect, cx)),
-                    )
+                    );
+
+                div()
+                    .relative()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .child(terminal_core)
+                    .when(show_scrollbar, |this| {
+                        this.child(
+                            div()
+                                .absolute()
+                                .top(px(12.0))
+                                .right(px(4.0))
+                                .bottom(px(12.0))
+                                .w(px(12.0))
+                                .child(
+                                    Scrollbar::vertical(&self.scrollbar_handle)
+                                        .scrollbar_show(ScrollbarShow::Always),
+                                ),
+                        )
+                    })
             })
             // 渲染侧边栏
             .when(sidebar_visible, |this| {
