@@ -2066,7 +2066,7 @@ impl DataGrid {
             .child(
                 Button::new("export-data")
                     .with_size(Size::Medium)
-                    .icon(IconName::File)
+                    .icon(IconName::Export)
                     .tooltip(t!("TableDataGrid.export").to_string())
                     .disabled(loading)
                     .dropdown_menu(move |menu, window, _cx| {
