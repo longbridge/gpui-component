@@ -88,7 +88,7 @@ impl ProviderItem {
 
     /// 获取显示名称
     pub fn display_name(&self) -> String {
-        self.provider_type.clone()
+        format!("{}  ({})", self.name, self.provider_type)
     }
 }
 
