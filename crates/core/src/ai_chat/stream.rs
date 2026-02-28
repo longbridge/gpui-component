@@ -146,7 +146,7 @@ impl ChatStreamProcessor {
     ) -> (
         mpsc::Receiver<StreamEvent>,
         CancellationToken,
-        impl std::future::Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
     ) {
         let (tx, rx) = mpsc::channel(64);
         let cancel_clone = cancel_token.clone();
