@@ -88,7 +88,7 @@ impl ProviderItem {
 
     /// 获取显示名称
     pub fn display_name(&self) -> String {
-        format!("{} - {} ({})", self.provider_type, self.model, self.name)
+        self.provider_type.clone()
     }
 }
 
