@@ -95,7 +95,7 @@ impl AssetSource for Assets {
             }
 
             // Return error so GPUI will retry (but only log once per icon)
-            Err(anyhow!("Loading"))
+            Err(anyhow!("Wasm assets loading, will be available soon..."))
         } else {
             Ok(None)
         }
