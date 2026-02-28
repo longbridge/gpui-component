@@ -27,7 +27,7 @@ jobs:
             binary: onetcli
             archive: onetcli-aarch64-apple-darwin.tar.gz
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-15-intel
             binary: onetcli
             archive: onetcli-x86_64-apple-darwin.tar.gz
           - target: x86_64-unknown-linux-gnu
