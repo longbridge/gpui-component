@@ -19,44 +19,13 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 pub fn init(cx: &mut App) {
+    // 从 RUST_LOG 环境变量读取日志级别，默认 info
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(
-                    "gpui_component=trace"
-                        .parse()
-                        .expect("固定的日志指令解析不应失败"),
-                )
-                .add_directive("db=debug".parse().expect("固定的日志指令解析不应失败"))
-                .add_directive("one-ui=debug".parse().expect("固定的日志指令解析不应失败"))
-                .add_directive(
-                    "one-core=debug"
-                        .parse()
-                        .expect("固定的日志指令解析不应失败"),
-                )
-                .add_directive(
-                    "redis_view=debug"
-                        .parse()
-                        .expect("固定的日志指令解析不应失败"),
-                )
-                .add_directive(
-                    "terminal=debug"
-                        .parse()
-                        .expect("固定的日志指令解析不应失败"),
-                )
-                .add_directive(
-                    "sftp_view=debug"
-                        .parse()
-                        .expect("固定的日志指令解析不应失败"),
-                )
-                .add_directive("main=debug".parse().expect("固定的日志指令解析不应失败"))
-                .add_directive(
-                    "terminal_view=debug"
-                        .parse()
-                        .expect("固定的日志指令解析不应失败"),
-                ),
-        )
+        .with(env_filter)
         .init();
     let http_client =
         std::sync::Arc::new(ReqwestClient::user_agent("one-hub").expect("HTTP 客户端初始化失败"));

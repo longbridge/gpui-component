@@ -27,6 +27,7 @@ base64 = { workspace = true }
 dirs = "5"
 dotenvy = "0.15"
 futures = { workspace = true }
+smol = { workspace = true }
 db = { workspace = true }
 db_view = { workspace = true }
 terminal = { workspace = true }

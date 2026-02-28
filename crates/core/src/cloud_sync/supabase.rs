@@ -103,9 +103,12 @@ impl SupabaseClient {
 
     /// 触发会话过期回调
     fn notify_session_expired(&self) {
+        warn!("[supabase] notifying session expired to UI layer");
         if let Ok(cb) = self.on_session_expired.read() {
             if let Some(callback) = cb.as_ref() {
                 callback();
+            } else {
+                warn!("[supabase] no session expired callback registered");
             }
         }
     }
@@ -124,16 +127,30 @@ impl SupabaseClient {
         expires_at: i64,
     ) {
         if let Ok(mut state) = self.auth_state.write() {
+            let token_prefix = if access_token.len() > 20 {
+                &access_token[..20]
+            } else {
+                &access_token
+            };
+            info!(
+                "[supabase] set_auth: user_id={} expires_at={} token_prefix={}...",
+                user_id, expires_at, token_prefix
+            );
             state.access_token = Some(access_token);
             state.refresh_token = Some(refresh_token);
             state.user_id = Some(user_id);
             state.expires_at = expires_at;
+        } else {
+            error!("[supabase] set_auth failed: could not acquire auth_state write lock");
         }
     }
 
     /// 清除认证状态
     pub fn clear_auth(&self) {
+        warn!("[supabase] clear_auth called, clearing all auth state");
         if let Ok(mut state) = self.auth_state.write() {
+            let user_id = state.user_id.clone().unwrap_or_default();
+            info!("[supabase] clearing auth for user_id={}", user_id);
             state.access_token = None;
             state.refresh_token = None;
             state.user_id = None;
@@ -189,9 +206,10 @@ impl SupabaseClient {
 
     /// 获取认证请求头
     fn auth_headers(&self) -> Result<Vec<(&'static str, String)>, CloudApiError> {
-        let token = self
-            .get_access_token()
-            .ok_or(CloudApiError::NotAuthenticated)?;
+        let token = self.get_access_token().ok_or_else(|| {
+            warn!("[supabase] auth_headers: no access token available");
+            CloudApiError::NotAuthenticated
+        })?;
 
         let mut headers = self.common_headers();
         headers.push(("Authorization", format!("Bearer {}", token)));
@@ -301,8 +319,8 @@ impl SupabaseClient {
             );
 
             info!(
-                "[supabase] refresh token success: user_id={} expires_at={}",
-                auth.user.id, expires_at
+                "[supabase] refresh token success: user_id={} expires_at={} expires_in={:?}",
+                auth.user.id, expires_at, auth.expires_in
             );
             Ok(AuthResponse {
                 user_id: auth.user.id,
@@ -312,10 +330,40 @@ impl SupabaseClient {
                 expires_at,
             })
         } else {
-            warn!("[supabase] refresh token failed: status={}", status);
+            let error_body = match &result {
+                Ok(_) => "parsed ok but status failed".to_string(),
+                Err(e) => e.clone(),
+            };
+            error!(
+                "[supabase] refresh token failed: status={} body={}",
+                status, error_body
+            );
             Err(CloudApiError::AuthenticationFailed(
                 "令牌刷新失败".to_string(),
             ))
+        }
+    }
+
+    /// 检查 token 是否即将过期（提前 60 秒刷新）
+    fn is_token_expiring_soon(&self) -> bool {
+        if let Ok(state) = self.auth_state.read() {
+            if state.expires_at == 0 {
+                // expires_at 为 0 表示未设置，不做主动刷新
+                return false;
+            }
+            let now = chrono::Utc::now().timestamp();
+            let expiring = state.expires_at <= now + 60;
+            if expiring {
+                warn!(
+                    "[supabase] token expiring soon: now={} expires_at={} ({}s remaining)",
+                    now,
+                    state.expires_at,
+                    state.expires_at - now
+                );
+            }
+            expiring
+        } else {
+            false
         }
     }
 
@@ -332,6 +380,7 @@ impl SupabaseClient {
             return if self.get_access_token().is_some() {
                 Ok(())
             } else {
+                warn!("[supabase] token refresh waited but no access token after refresh");
                 Err(CloudApiError::NotAuthenticated)
             };
         }
@@ -347,13 +396,14 @@ impl SupabaseClient {
             return if self.get_access_token().is_some() {
                 Ok(())
             } else {
+                warn!("[supabase] token refresh waited (after lock) but no access token");
                 Err(CloudApiError::NotAuthenticated)
             };
         }
 
         // 设置刷新中标志
         self.refresh_state.refreshing.store(true, Ordering::SeqCst);
-        debug!("[supabase] token refresh starting");
+        info!("[supabase] token refresh starting");
 
         // 执行刷新
         let result = self.refresh_token_internal().await;
@@ -365,10 +415,16 @@ impl SupabaseClient {
         self.refresh_state.refresh_notify.notify_waiters();
 
         match result {
-            Ok(_) => Ok(()),
+            Ok(auth_resp) => {
+                info!(
+                    "[supabase] token refresh succeeded: user_id={} new_expires_at={}",
+                    auth_resp.user_id, auth_resp.expires_at
+                );
+                Ok(())
+            }
             Err(e) => {
                 // 刷新失败，清除认证状态并通知 UI
-                warn!("[supabase] token refresh failed: {}", e);
+                error!("[supabase] token refresh failed, clearing auth: {}", e);
                 self.clear_auth();
                 self.notify_session_expired();
                 Err(e)
@@ -449,6 +505,12 @@ impl SupabaseClient {
         &self,
         url: &str,
     ) -> Result<(StatusCode, Result<T, String>), CloudApiError> {
+        // 主动检查 token 是否即将过期
+        if self.is_token_expiring_soon() {
+            info!("[supabase] proactive token refresh before GET {}", url);
+            self.ensure_token_valid().await?;
+        }
+
         let headers = self.auth_headers()?;
         let (status, result) = self.get_json::<T>(url, headers).await?;
 
@@ -471,6 +533,12 @@ impl SupabaseClient {
         extra_headers: Vec<(&'static str, String)>,
         body: &B,
     ) -> Result<(StatusCode, Result<T, String>), CloudApiError> {
+        // 主动检查 token 是否即将过期
+        if self.is_token_expiring_soon() {
+            info!("[supabase] proactive token refresh before POST {}", url);
+            self.ensure_token_valid().await?;
+        }
+
         let mut headers = self.auth_headers()?;
         headers.extend(extra_headers.clone());
         let (status, result) = self.post_json::<T, B>(url, headers, body).await?;
@@ -581,6 +649,12 @@ impl SupabaseClient {
         extra_headers: Vec<(&'static str, String)>,
         body: &B,
     ) -> Result<(StatusCode, Result<T, String>), CloudApiError> {
+        // 主动检查 token 是否即将过期
+        if self.is_token_expiring_soon() {
+            info!("[supabase] proactive token refresh before PATCH {}", url);
+            self.ensure_token_valid().await?;
+        }
+
         let mut headers = self.auth_headers()?;
         headers.extend(extra_headers.clone());
         let (status, result) = self.patch_json::<T, B>(url, headers, body).await?;
@@ -601,6 +675,12 @@ impl SupabaseClient {
     /// 发送带 401 自动重试的 DELETE 请求
     #[allow(dead_code)]
     async fn delete_with_retry(&self, url: &str) -> Result<StatusCode, CloudApiError> {
+        // 主动检查 token 是否即将过期
+        if self.is_token_expiring_soon() {
+            info!("[supabase] proactive token refresh before DELETE {}", url);
+            self.ensure_token_valid().await?;
+        }
+
         let headers = self.auth_headers()?;
         let status = self.delete_request(url, headers).await?;
 
@@ -892,17 +972,23 @@ impl CloudApiClient for SupabaseClient {
             let auth = result.map_err(|e| CloudApiError::ParseError(e))?;
 
             // 保存认证状态
-            self.set_auth(
-                auth.access_token.clone(),
-                auth.refresh_token.clone(),
-                auth.user.id.clone(),
-            );
-
             let expires_at = auth.expires_at.unwrap_or_else(|| {
                 auth.expires_in
                     .map(|e| chrono::Utc::now().timestamp() + e)
                     .unwrap_or(0)
             });
+
+            self.set_auth_with_expiry(
+                auth.access_token.clone(),
+                auth.refresh_token.clone(),
+                auth.user.id.clone(),
+                expires_at,
+            );
+
+            info!(
+                "[supabase] sign_in_with_password success: user_id={} expires_at={}",
+                auth.user.id, expires_at
+            );
 
             Ok(AuthResponse {
                 user_id: auth.user.id,
@@ -964,17 +1050,18 @@ impl CloudApiClient for SupabaseClient {
             match (auth.access_token, auth.refresh_token) {
                 (Some(access_token), Some(refresh_token)) => {
                     // 有 token，直接登录成功
-                    self.set_auth(
-                        access_token.clone(),
-                        refresh_token.clone(),
-                        auth.user.id.clone(),
-                    );
-
                     let expires_at = auth.expires_at.unwrap_or_else(|| {
                         auth.expires_in
                             .map(|e| chrono::Utc::now().timestamp() + e)
                             .unwrap_or(0)
                     });
+
+                    self.set_auth_with_expiry(
+                        access_token.clone(),
+                        refresh_token.clone(),
+                        auth.user.id.clone(),
+                        expires_at,
+                    );
 
                     Ok(AuthResponse {
                         user_id: auth.user.id,
@@ -1019,6 +1106,15 @@ impl CloudApiClient for SupabaseClient {
 
     async fn get_current_user(&self) -> Result<Option<UserInfo>, CloudApiError> {
         let url = self.auth_url("/user");
+        debug!("[supabase] get_current_user: GET {}", url);
+
+        // 主动检查 token 是否即将过期
+        if self.is_token_expiring_soon() {
+            info!(
+                "[supabase] proactive token refresh before get_current_user"
+            );
+            self.ensure_token_valid().await?;
+        }
 
         // 使用带重试的 GET 请求
         let result = async {
@@ -1095,6 +1191,7 @@ impl CloudApiClient for SupabaseClient {
         }
 
         let url = self.auth_url("/token?grant_type=refresh_token");
+        info!("[supabase] refresh_token (trait): POST {}", url);
         let body = RefreshRequest { refresh_token };
         let headers = self.common_headers();
 
@@ -1105,17 +1202,24 @@ impl CloudApiClient for SupabaseClient {
         if status.is_success() {
             let auth = result.map_err(|e| CloudApiError::ParseError(e))?;
 
-            self.set_auth(
-                auth.access_token.clone(),
-                auth.refresh_token.clone(),
-                auth.user.id.clone(),
-            );
-
             let expires_at = auth.expires_at.unwrap_or_else(|| {
                 auth.expires_in
                     .map(|e| chrono::Utc::now().timestamp() + e)
                     .unwrap_or(0)
             });
+
+            // 使用 set_auth_with_expiry 确保内存中 expires_at 正确
+            self.set_auth_with_expiry(
+                auth.access_token.clone(),
+                auth.refresh_token.clone(),
+                auth.user.id.clone(),
+                expires_at,
+            );
+
+            info!(
+                "[supabase] refresh_token (trait) success: user_id={} expires_at={} expires_in={:?}",
+                auth.user.id, expires_at, auth.expires_in
+            );
 
             Ok(AuthResponse {
                 user_id: auth.user.id,
@@ -1125,6 +1229,14 @@ impl CloudApiClient for SupabaseClient {
                 expires_at,
             })
         } else {
+            let error_body = match &result {
+                Ok(_) => "parsed ok but status failed".to_string(),
+                Err(e) => e.clone(),
+            };
+            error!(
+                "[supabase] refresh_token (trait) failed: status={} body={}",
+                status, error_body
+            );
             Err(CloudApiError::AuthenticationFailed(
                 "令牌刷新失败".to_string(),
             ))
@@ -1169,6 +1281,7 @@ impl CloudApiClient for SupabaseClient {
         }
 
         let url = self.auth_url("/verify");
+        info!("[supabase] verify_otp: email={}", email);
         let body = VerifyOtpRequest {
             email,
             token,
@@ -1183,17 +1296,23 @@ impl CloudApiClient for SupabaseClient {
         if status.is_success() {
             let auth = result.map_err(|e| CloudApiError::ParseError(e))?;
 
-            self.set_auth(
-                auth.access_token.clone(),
-                auth.refresh_token.clone(),
-                auth.user.id.clone(),
-            );
-
             let expires_at = auth.expires_at.unwrap_or_else(|| {
                 auth.expires_in
                     .map(|e| chrono::Utc::now().timestamp() + e)
                     .unwrap_or(0)
             });
+
+            self.set_auth_with_expiry(
+                auth.access_token.clone(),
+                auth.refresh_token.clone(),
+                auth.user.id.clone(),
+                expires_at,
+            );
+
+            info!(
+                "[supabase] verify_otp success: user_id={} expires_at={}",
+                auth.user.id, expires_at
+            );
 
             Ok(AuthResponse {
                 user_id: auth.user.id,

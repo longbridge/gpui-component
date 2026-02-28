@@ -5631,6 +5631,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sftp_view",
+ "smol",
  "ssh",
  "terminal",
  "terminal_view",
