@@ -31,16 +31,11 @@ impl WasmHttpClient {
         }
     }
 
-    pub fn user_agent(agent: &str) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .user_agent(agent)
-            .build()
-            .map_err(|e| {
-                log::error!("Failed to create reqwest client: {}", e);
-                anyhow!("Failed to create client: {}", e)
-            })?;
-
-        Ok(Self { client })
+    pub fn user_agent(_agent: &str) -> Result<Self> {
+        // In WASM/browser environment, we should not set custom User-Agent
+        // as it triggers CORS preflight requests that many servers don't allow.
+        // The browser will automatically set an appropriate User-Agent.
+        Ok(Self::new())
     }
 }
 
@@ -77,10 +72,19 @@ impl HttpClient for WasmHttpClient {
             let url = parts.uri.to_string();
             let mut request_builder = client.request(method, &url);
 
-            // Add headers
+            // Add headers (skip headers that trigger CORS preflight)
             for (name, value) in parts.headers.iter() {
+                let name_str = name.as_str();
+
+                // Skip headers that trigger CORS preflight in browsers
+                if name_str.eq_ignore_ascii_case("user-agent")
+                    || name_str.eq_ignore_ascii_case("referer")
+                {
+                    continue;
+                }
+
                 if let Ok(value_str) = value.to_str() {
-                    request_builder = request_builder.header(name.as_str(), value_str);
+                    request_builder = request_builder.header(name_str, value_str);
                 }
             }
 
