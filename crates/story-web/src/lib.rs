@@ -14,6 +14,8 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     // Also initialize tracing for WASM
     tracing_wasm::set_as_global_default();
 
+    #[cfg(target_arch = "wasm32")]
+    gpui_platform::web_init();
     gpui_platform::application()
         .with_assets(Assets::new(
             "https://huacnlee.github.io/gpui-component-story-web/",
