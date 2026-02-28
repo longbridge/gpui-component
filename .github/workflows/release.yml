@@ -96,7 +96,9 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           chmod +x script/bundle-macos.sh
+          chmod +x script/bundle-macos-dmg.sh
           script/bundle-macos.sh ${{ matrix.target }}
+          script/bundle-macos-dmg.sh ${{ matrix.target }}
           tar czf ${{ matrix.archive }} -C target OnetCli.app
 
       - name: Package (Linux)
@@ -125,6 +127,13 @@ jobs:
         with:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
+
+      - name: Upload macOS DMG artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: onetcli-${{ matrix.target }}.dmg
+          path: onetcli-${{ matrix.target }}.dmg
 
   release:
     name: Create Release
@@ -158,4 +167,5 @@ jobs:
           files: |
             artifacts/onetcli-*.tar.gz
             artifacts/onetcli-*.zip
+            artifacts/onetcli-*.dmg
             artifacts/sha256sums.txt
