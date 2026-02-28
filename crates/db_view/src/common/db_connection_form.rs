@@ -1,5 +1,6 @@
 use anyhow::Error;
 use db::{GlobalDbState, oracle};
+use gpui::prelude::FluentBuilder;
 use gpui::{
     App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     ParentElement, PathPromptOptions, Render, SharedString, Styled, Window, div, prelude::*, px,
@@ -11,6 +12,7 @@ use gpui_component::{
     form::{field, v_form},
     h_flex,
     input::{Input, InputEvent, InputState},
+    scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectItem, SelectState},
     tab::{Tab, TabBar},
     v_flex,
@@ -728,7 +730,9 @@ impl DbConnectionForm {
                         }
 
                         if field.field_type == FormFieldType::TextArea {
-                            if field.rows == 14 {
+                            if field.name == "remark" {
+                                input_state = input_state.auto_grow(3, 10);
+                            } else if field.rows == 14 {
                                 input_state = input_state.rows(14);
                             } else {
                                 input_state = input_state.auto_grow(5, 14);
@@ -1360,7 +1364,7 @@ impl Render for DbConnectionForm {
                 div()
                     .flex_1()
                     .min_h(px(250.))
-                    .overflow_hidden()
+                    .overflow_y_scrollbar()
                     .when(!current_tab_fields.is_empty(), |this| {
                         let is_general_tab = self.active_tab == 0;
                         let db_type = self.config.db_type;
@@ -1394,6 +1398,7 @@ impl Render for DbConnectionForm {
                                                 h_flex()
                                                     .w_full()
                                                     .gap_2()
+                                                    .when(is_textarea, |el| el.items_start())
                                                     .when(is_select, |el| {
                                                         if let Some(select_state) =
                                                             self.field_selects.get(&field_name)

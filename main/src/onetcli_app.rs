@@ -111,7 +111,7 @@ impl OnetCliApp {
             #[cfg(target_os = "macos")]
             {
                 container = container
-                    .with_left_padding(px(70.0))
+                    .with_left_padding(px(80.0))
                     .with_top_padding(px(4.0))
             }
 
