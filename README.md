@@ -206,11 +206,10 @@ rustflags = ["-C", "link-arg=/STACK:8000000"]
   - `cargo machete`（macOS）
   - `typos` 拼写检查（macOS）
   - `cargo test --all` 全平台测试
-- **build-release.yml** — 版本标签（`v*`）触发或手动触发，构建全平台二进制并发布 GitHub Release：
+- **release.yml** — 版本标签（`v*`）触发或手动触发，统一执行发布流程：
   - 构建目标：macOS (aarch64, x86_64)、Linux (x86_64)、Windows (x86_64)
   - 自动打包（tar.gz / zip）、生成 SHA256 校验和
   - 创建 GitHub Release 并上传所有产物
-- **release.yml** — 版本标签触发，自动发布到 crates.io
 - **release-docs.yml** — 自动构建并部署 VitePress 文档到 GitHub Pages
 - **test-docs.yml** — 文档变更时触发文档构建测试
 
