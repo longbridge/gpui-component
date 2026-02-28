@@ -101,6 +101,10 @@ impl InputMode {
     /// Return true if the mode is code editor and `folding: true`, `multi_line: true`.
     #[inline]
     pub(crate) fn is_folding(&self) -> bool {
+        if cfg!(target_arch = "wasm32") {
+            return false;
+        }
+
         matches!(
             self,
             InputMode::CodeEditor {

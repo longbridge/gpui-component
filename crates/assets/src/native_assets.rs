@@ -8,6 +8,13 @@ use std::borrow::Cow;
 #[include = "icons/**/*.svg"]
 pub struct Assets;
 
+impl Assets {
+    /// Create a new Assets instance. The endpoint parameter is ignored for native builds.
+    pub fn new(_endpoint: impl Into<SharedString>) -> Self {
+        Self
+    }
+}
+
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
         if path.is_empty() {

@@ -36,6 +36,10 @@ impl EditorStory {
             InputState::new(window, cx)
                 .code_editor("rust")
                 .multi_line(true)
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    ..Default::default()
+                })
                 .default_value(EXAMPLE_CODE)
         });
 

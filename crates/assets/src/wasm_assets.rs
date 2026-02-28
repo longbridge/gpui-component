@@ -3,11 +3,9 @@ use gpui::{AssetSource, Result, SharedString};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{Request, RequestInit, RequestMode};
 
-/// WASM implementation - return error until downloaded
+/// WASM implementation - download assets on-demand
 pub struct Assets {
     endpoint: SharedString,
     cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
@@ -21,30 +19,6 @@ impl Assets {
             cache: Arc::new(RwLock::new(HashMap::new())),
             pending: Arc::new(RwLock::new(HashMap::new())),
         }
-    }
-
-    async fn fetch_icon(url: &str) -> std::result::Result<Vec<u8>, wasm_bindgen::JsValue> {
-        let opts = RequestInit::new();
-        opts.set_method("GET");
-        opts.set_mode(RequestMode::Cors);
-
-        let request = Request::new_with_str_and_init(url, &opts)?;
-        let window =
-            web_sys::window().ok_or_else(|| wasm_bindgen::JsValue::from_str("No window"))?;
-        let resp_value =
-            wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request)).await?;
-        let resp: web_sys::Response = resp_value.dyn_into()?;
-
-        if !resp.ok() {
-            return Err(wasm_bindgen::JsValue::from_str(&format!(
-                "HTTP error: {}",
-                resp.status()
-            )));
-        }
-
-        let array_buffer = wasm_bindgen_futures::JsFuture::from(resp.array_buffer()?).await?;
-        let uint8_array = js_sys::Uint8Array::new(&array_buffer);
-        Ok(uint8_array.to_vec())
     }
 }
 
@@ -68,15 +42,15 @@ impl AssetSource for Assets {
                 }
             }
 
-            // Check if download is pending
-            let is_pending = if let Ok(pending) = self.pending.read() {
-                pending.contains_key(path)
-            } else {
-                false
-            };
+            // Check if download is already pending
+            let is_pending = self
+                .pending
+                .read()
+                .map(|p| p.contains_key(path))
+                .unwrap_or(false);
 
             if !is_pending {
-                // Mark as pending and trigger download
+                // Mark as pending and start download
                 if let Ok(mut pending) = self.pending.write() {
                     pending.insert(path.to_string(), true);
                 }
@@ -87,27 +61,41 @@ impl AssetSource for Assets {
                 let pending = self.pending.clone();
 
                 spawn_local(async move {
-                    match Self::fetch_icon(&url).await {
-                        Ok(bytes) => {
-                            if let Ok(mut cache) = cache.write() {
-                                cache.insert(path_clone.clone(), bytes);
-                            }
-                            if let Ok(mut pending) = pending.write() {
-                                pending.remove(&path_clone);
+                    match reqwest::get(&url).await {
+                        Ok(response) => {
+                            if response.status().is_success() {
+                                match response.bytes().await {
+                                    Ok(bytes) => {
+                                        if let Ok(mut cache) = cache.write() {
+                                            cache.insert(path_clone.clone(), bytes.to_vec());
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!("Failed to read icon {}: {}", path_clone, e);
+                                    }
+                                }
+                            } else {
+                                log::warn!(
+                                    "Failed to download icon {}: HTTP {}",
+                                    path_clone,
+                                    response.status()
+                                );
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to download icon {}: {:?}", path_clone, e);
-                            if let Ok(mut pending) = pending.write() {
-                                pending.remove(&path_clone);
-                            }
+                            log::warn!("Failed to fetch icon {}: {}", path_clone, e);
                         }
+                    }
+
+                    // Remove from pending
+                    if let Ok(mut pending) = pending.write() {
+                        pending.remove(&path_clone);
                     }
                 });
             }
 
-            // Return error so GPUI won't cache and will retry
-            Err(anyhow!("Icon not loaded yet: {}", path))
+            // Return error so GPUI will retry (but only log once per icon)
+            Err(anyhow!("Loading"))
         } else {
             Ok(None)
         }
