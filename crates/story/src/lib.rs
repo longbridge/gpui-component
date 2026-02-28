@@ -316,7 +316,12 @@ pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
         title: title.into(),
         sub_title: vec![],
-        base: h_flex().flex_wrap().justify_center().items_center().gap_4(),
+        base: h_flex()
+            .w_full()
+            .flex_wrap()
+            .justify_center()
+            .items_center()
+            .gap_4(),
         children: vec![],
     }
 }

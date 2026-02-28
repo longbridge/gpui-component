@@ -57,119 +57,115 @@ impl Focusable for CheckboxStory {
 
 impl Render for CheckboxStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().gap_6().child(
-            v_flex()
-                .items_start()
-                .justify_center()
-                .gap_4()
-                .child(
-                    section("Checkbox")
-                        .child(
-                            Checkbox::new("1")
-                                .checked(self.check1)
-                                .label("A normal checkbox")
-                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                    this.check1 = *checked;
-                                    cx.notify();
-                                })),
-                        )
-                        .child(
-                            Checkbox::new("2")
-                                .checked(self.check2)
-                                .label("Remember me")
-                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                    this.check2 = *checked;
-                                    cx.notify();
-                                })),
-                        ),
-                )
-                .child(
-                    section("Without label").child(
-                        Checkbox::new("3")
-                            .checked(self.check3)
-                            .on_click(cx.listener(|this, checked: &bool, _, _| {
-                                this.check3 = *checked;
+        v_flex()
+            .size_full()
+            .justify_start()
+            .gap_3()
+            .child(
+                section("Checkbox")
+                    .child(
+                        Checkbox::new("1")
+                            .checked(self.check1)
+                            .label("A normal checkbox")
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                this.check1 = *checked;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("2")
+                            .checked(self.check2)
+                            .label("Remember me")
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                this.check2 = *checked;
+                                cx.notify();
                             })),
                     ),
-                )
-                .child(
-                    section("Small size").max_w_md().child(
-                        Checkbox::new("4")
-                            .small()
+            )
+            .child(
+                section("Without label").child(Checkbox::new("3").checked(self.check3).on_click(
+                    cx.listener(|this, checked: &bool, _, _| {
+                        this.check3 = *checked;
+                    }),
+                )),
+            )
+            .child(
+                section("Small size").max_w_md().child(
+                    Checkbox::new("4")
+                        .small()
+                        .checked(self.check4)
+                        .label("A small checkbox")
+                        .on_click(cx.listener(|this, checked: &bool, _, _| {
+                            this.check4 = *checked;
+                        })),
+                ),
+            )
+            .child(
+                section("Large size").max_w_md().child(
+                    Checkbox::new("check5")
+                        .large()
+                        .checked(self.check2)
+                        .label("A large checkbox")
+                        .on_click(cx.listener(|this, checked: &bool, _, _| {
+                            this.check2 = *checked;
+                        })),
+                ),
+            )
+            .child(
+                section("Disabled").max_w_md().child(
+                    h_flex()
+                        .items_center()
+                        .gap_6()
+                        .child(
+                            Checkbox::new("check3")
+                                .label("Disabled Checked")
+                                .checked(true)
+                                .disabled(true),
+                        )
+                        .child(
+                            Checkbox::new("check3_1")
+                                .label("Disabled Unchecked")
+                                .checked(false)
+                                .disabled(true),
+                        ),
+                ),
+            )
+            .child(
+                section("Multi-line").child(
+                    v_flex().gap_4().child(
+                        Checkbox::new("multi-line-checkbox")
+                            .w(px(300.))
                             .checked(self.check4)
-                            .label("A small checkbox")
+                            .label("A multi-line checkbox.")
+                            .child(div().text_color(cx.theme().muted_foreground).child(
+                                "This is a long long label text that \
+                                should wrap when the text is too long.",
+                            ))
                             .on_click(cx.listener(|this, checked: &bool, _, _| {
                                 this.check4 = *checked;
                             })),
                     ),
-                )
-                .child(
-                    section("Large size").max_w_md().child(
-                        Checkbox::new("check5")
-                            .large()
-                            .checked(self.check2)
-                            .label("A large checkbox")
-                            .on_click(cx.listener(|this, checked: &bool, _, _| {
-                                this.check2 = *checked;
-                            })),
-                    ),
-                )
-                .child(
-                    section("Disabled").max_w_md().child(
-                        h_flex()
-                            .items_center()
-                            .gap_6()
-                            .child(
-                                Checkbox::new("check3")
-                                    .label("Disabled Checked")
-                                    .checked(true)
-                                    .disabled(true),
-                            )
-                            .child(
-                                Checkbox::new("check3_1")
-                                    .label("Disabled Unchecked")
-                                    .checked(false)
-                                    .disabled(true),
-                            ),
-                    ),
-                )
-                .child(
-                    section("Multi-line").child(
-                        v_flex().gap_4().child(
-                            Checkbox::new("multi-line-checkbox")
-                                .w(px(300.))
-                                .checked(self.check4)
-                                .label("A multi-line checkbox.")
-                                .child(div().text_color(cx.theme().muted_foreground).child(
-                                    "This is a long long label text that \
-                                should wrap when the text is too long.",
-                                ))
-                                .on_click(cx.listener(|this, checked: &bool, _, _| {
-                                    this.check4 = *checked;
-                                })),
-                        ),
-                    ),
-                )
-                .child(
-                    section("Rich description (Markdown)").child(
-                        Checkbox::new("longlong-markdown-checkbox")
-                            .w(px(300.))
-                            .checked(self.check5)
-                            .label("Label with description (Markdown)")
-                            .child(
-                                div()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(markdown(
-                                        "The [long long label](https://github.com) \
+                ),
+            )
+            .child(
+                section("Rich description (Markdown)").child(
+                    Checkbox::new("longlong-markdown-checkbox")
+                        .w(px(300.))
+                        .checked(self.check5)
+                        .label("Label with description (Markdown)")
+                        .child(
+                            div()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(markdown(
+                                    "The [long long label](https://github.com) \
                             text used **Markdown**, \
                             it should wrap when the text is too long.",
-                                    )),
-                            )
-                            .on_click(cx.listener(|this, checked: &bool, _, _| {
-                                this.check5 = *checked;
-                            })),
-                    ),
+                                )),
+                        )
+                        .on_click(cx.listener(|this, checked: &bool, _, _| {
+                            this.check5 = *checked;
+                        })),
                 ),
-        )
+            )
     }
 }

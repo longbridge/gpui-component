@@ -128,11 +128,11 @@ impl Render for TreeStory {
     ) -> impl gpui::IntoElement {
         let view = cx.entity();
         v_flex()
+            .w_full()
+            .gap_3()
             .id("tree-story")
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
-            .gap_5()
-            .size_full()
             .child(
                 h_flex().gap_3().child(
                     Button::new("select-item")

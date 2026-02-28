@@ -51,9 +51,8 @@ impl Focusable for SpinnerStory {
 impl Render for SpinnerStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .items_center()
-            .size_full()
-            .gap_6()
+            .w_full()
+            .gap_3()
             .child(section("Spinner").gap_x_2().child(Spinner::new()))
             .child(
                 section("Spinner with color")

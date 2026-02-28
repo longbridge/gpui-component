@@ -90,8 +90,8 @@ impl Focusable for ProgressStory {
 impl Render for ProgressStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .items_center()
-            .gap_y_3()
+            .w_full()
+            .gap_3()
             .child(
                 h_flex()
                     .w_full()
