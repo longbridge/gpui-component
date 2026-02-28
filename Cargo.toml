@@ -109,7 +109,7 @@ files.extend-exclude = ["**/fixtures/*"]
 [workspace.metadata.typos.default.extend-identifiers]
 consts = "consts"
 
-[package.metadata.cargo-machete]
+[workspace.metadata.cargo-machete]
 ignored = ["log", "anyhow", "serde"]
 
 # Patches for WASM compatibility
