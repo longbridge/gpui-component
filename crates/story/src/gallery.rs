@@ -30,7 +30,10 @@ impl Gallery {
             _ => {}
         })];
         let stories = vec![
-            ("Getting Started", vec![StoryContainer::panel::<WelcomeStory>(window, cx)]),
+            (
+                "Getting Started",
+                vec![StoryContainer::panel::<WelcomeStory>(window, cx)],
+            ),
             (
                 "Components",
                 vec![
@@ -52,6 +55,7 @@ impl Gallery {
                     StoryContainer::panel::<DialogStory>(window, cx),
                     StoryContainer::panel::<DividerStory>(window, cx),
                     StoryContainer::panel::<DropdownButtonStory>(window, cx),
+                    StoryContainer::panel::<EditorStory>(window, cx),
                     StoryContainer::panel::<FormStory>(window, cx),
                     StoryContainer::panel::<GroupBoxStory>(window, cx),
                     StoryContainer::panel::<HoverCardStory>(window, cx),
