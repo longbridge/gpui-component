@@ -881,7 +881,7 @@ impl InputState {
         if self.selected_range.end > text_len {
             return String::new();
         }
-        self.text.slice(self.selected_range.clone()).to_string()
+        self.text.slice(self.selected_range).to_string()
     }
 
     /// Return the (0-based) [`Position`] of the cursor.

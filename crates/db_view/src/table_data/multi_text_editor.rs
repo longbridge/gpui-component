@@ -16,8 +16,8 @@ pub enum EditorTab {
 impl EditorTab {
     pub fn language(&self) -> Language {
         match self {
-            EditorTab::Text => Language::from_str("text"),
-            EditorTab::Json => Language::from_str("json"),
+            EditorTab::Text => Language::Plain,
+            EditorTab::Json => Language::Json,
         }
     }
 }

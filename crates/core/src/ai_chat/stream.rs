@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::llm::manager::GlobalProviderState;
 use crate::llm::storage::ProviderRepository;
-use crate::llm::{ChatRequest, Message, ProviderConfig};
+use crate::llm::{ChatRequest, Message};
 use crate::storage::StorageManager;
 use crate::storage::traits::Repository;
 
@@ -190,9 +190,7 @@ impl ChatStreamProcessor {
         cancel_token: CancellationToken,
     ) -> Result<(), StreamError> {
         // 获取 provider 配置
-        let config = if provider_id == crate::llm::BUILTIN_ONET_CLI_ID {
-            ProviderConfig::builtin_onet_cli()
-        } else {
+        let config = {
             let repo = storage
                 .get::<ProviderRepository>()
                 .ok_or(StreamError::ProviderNotFound)?;

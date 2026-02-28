@@ -281,16 +281,11 @@ impl AIInput {
     pub fn update_providers(
         &mut self,
         providers: Vec<ProviderItem>,
-        include_builtin: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.provider_select_state.set_providers_optional_builtin(
-            providers,
-            include_builtin,
-            window,
-            cx,
-        );
+        self.provider_select_state
+            .set_providers(providers, window, cx);
         self.selected_provider = self.provider_select_state.selected_provider().cloned();
         self.selected_model = self.provider_select_state.selected_model().cloned();
 

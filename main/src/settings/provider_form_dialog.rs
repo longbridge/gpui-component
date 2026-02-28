@@ -118,12 +118,15 @@ impl ProviderForm {
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
-        // 创建 provider 类型选择器
-        let provider_types: Vec<ProviderTypeItem> = ProviderType::all()
-            .iter()
-            .cloned()
-            .map(|item| ProviderTypeItem::new(item))
-            .collect();
+        // 创建 provider 类型选择器：新增时不包含内置类型，编辑时包含所有类型
+        let is_editing = config.is_some();
+        let types = if is_editing {
+            ProviderType::all()
+        } else {
+            ProviderType::user_configurable()
+        };
+        let provider_types: Vec<ProviderTypeItem> =
+            types.into_iter().map(ProviderTypeItem::new).collect();
 
         let selected_index = if let Some(ref cfg) = config {
             provider_types

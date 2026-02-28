@@ -12,7 +12,6 @@ tracing = { workspace = true }
 rust-i18n = { workspace = true }
 russh = { workspace = true }
 russh-sftp = { workspace = true }
-russh-keys = { workspace = true }
 ssh = { workspace = true }
 tokio-socks = { workspace = true }
 

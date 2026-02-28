@@ -41,7 +41,7 @@ use one_core::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity
 use one_core::cloud_sync::GlobalCloudUser;
 use one_core::gpui_tokio::Tokio;
 use one_core::llm::{
-    BUILTIN_ONET_CLI_ID, Message, ProviderConfig, Role,
+    Message, ProviderConfig, Role,
     chat_history::{ChatSession, MessageRepository},
     manager::GlobalProviderState,
     storage::ProviderRepository,
@@ -254,7 +254,7 @@ impl ChatPanel {
         // update_providers 会同步选择默认 provider 和模型，
         // 然后通过 AIInputEvent::ProviderChanged/ModelChanged 事件回调更新 chat_panel 的状态
         self.ai_input.update(cx, |input, cx| {
-            input.update_providers(items, false, window, cx);
+            input.update_providers(items, window, cx);
         });
     }
 
@@ -526,13 +526,7 @@ impl ChatPanel {
             .storage_manager
             .get::<ProviderRepository>()
             .and_then(|repo| repo.get(provider_id).ok().flatten())
-            .unwrap_or_else(|| {
-                if provider_id == BUILTIN_ONET_CLI_ID {
-                    ProviderConfig::builtin_onet_cli()
-                } else {
-                    ProviderConfig::default()
-                }
-            });
+            .unwrap_or_default();
         ProviderConfig {
             model: self.selected_model.clone().unwrap_or(base.model),
             max_tokens: Some(self.model_settings.max_tokens as i32),

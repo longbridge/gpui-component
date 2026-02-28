@@ -8,7 +8,7 @@ pub mod types;
 pub use connector::{ChatStream, LlmConnector, LlmProvider};
 pub use manager::{GlobalProviderState, ProviderManager};
 pub use onet_cli_provider::OnetCliLLMProvider;
-pub use types::{BUILTIN_ONET_CLI_ID, ProviderConfig, ProviderType};
+pub use types::{ProviderConfig, ProviderType};
 
 pub use llm_connector::types::{ChatRequest, Message, MessageBlock, Role, StreamingResponse};
 

@@ -174,7 +174,7 @@ rustflags = ["-C", "link-arg=/STACK:8000000"]
 
 ### 网络与安全
 
-- **SSH/SFTP** — russh、russh-sftp、russh-keys
+- **SSH/SFTP** — russh、russh-sftp
 - **HTTP** — Zed 定制的 reqwest fork (zed-reqwest)
 - **加密** — aes-gcm、sha2、ed25519
 

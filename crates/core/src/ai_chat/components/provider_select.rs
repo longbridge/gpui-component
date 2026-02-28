@@ -271,19 +271,6 @@ impl ProviderSelectState {
             .and_then(|id| id.parse().ok())
     }
 
-    /// 获取当前选中的 Provider 配置
-    ///
-    /// 对于内置 provider，返回内置配置；否则需要从数据库获取。
-    pub fn get_selected_config(&self) -> Option<ProviderConfig> {
-        let provider_id = self.selected_provider_id()?;
-        if provider_id == crate::llm::BUILTIN_ONET_CLI_ID {
-            Some(ProviderConfig::builtin_onet_cli())
-        } else {
-            // 用户配置的 provider 需要从数据库获取
-            None
-        }
-    }
-
     /// 检查当前选中的是否为内置 provider
     pub fn is_selected_builtin(&self) -> bool {
         self.selected_provider_item()
@@ -333,38 +320,7 @@ impl ProviderSelectState {
         }
     }
 
-    /// 设置 Providers（自动添加内置 provider）
-    ///
-    /// 在用户配置的 providers 前面添加内置的 OnetCli provider。
-    pub fn set_providers_with_builtin(
-        &mut self,
-        mut providers: Vec<ProviderItem>,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        // 在列表最前面添加内置的 OnetCli provider
-        let builtin = ProviderItem::from_config(&ProviderConfig::builtin_onet_cli());
-        providers.insert(0, builtin);
-
-        self.set_providers(providers, window, cx);
-    }
-
-    /// 设置 Providers（可选添加内置 provider）
-    pub fn set_providers_optional_builtin(
-        &mut self,
-        mut providers: Vec<ProviderItem>,
-        include_builtin: bool,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        if include_builtin {
-            let builtin = ProviderItem::from_config(&ProviderConfig::builtin_onet_cli());
-            providers.insert(0, builtin);
-        }
-        self.set_providers(providers, window, cx);
-    }
-
-    /// 从 ProviderConfig 列表设置 Providers（自动添加内置 provider）
+    /// 从 ProviderConfig 列表设置 Providers
     pub fn set_provider_configs(
         &mut self,
         configs: &[ProviderConfig],
@@ -377,7 +333,7 @@ impl ProviderSelectState {
             .map(ProviderItem::from_config)
             .collect();
 
-        self.set_providers_with_builtin(items, window, cx);
+        self.set_providers(items, window, cx);
     }
 
     /// 设置 Models

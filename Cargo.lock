@@ -4809,7 +4809,7 @@ dependencies = [
  "p384",
  "p521",
  "rand_core 0.6.4",
- "rsa 0.10.0-rc.12",
+ "rsa",
  "sec1",
  "sha1 0.10.6",
  "sha1 0.11.0-rc.5",
@@ -6857,21 +6857,6 @@ dependencies = [
 
 [[package]]
 name = "pageant"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "032d6201d2fb765158455ae0d5a510c016bb6da7232e5040e39e9c8db12b0afc"
-dependencies = [
- "bytes",
- "delegate",
- "futures",
- "rand 0.8.5",
- "thiserror 1.0.69",
- "tokio",
- "windows 0.58.0",
-]
-
-[[package]]
-name = "pageant"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b537f975f6d8dcf48db368d7ec209d583b015713b5df0f5d92d2631e4ff5595"
@@ -7261,17 +7246,6 @@ dependencies = [
  "atomic-waker",
  "fastrand 2.3.0",
  "futures-io",
-]
-
-[[package]]
-name = "pkcs1"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8ffb9f10fa047879315e6625af03c164b16962a5368d724ed16323b68ace47f"
-dependencies = [
- "der 0.7.10",
- "pkcs8 0.10.2",
- "spki 0.7.3",
 ]
 
 [[package]]
@@ -8357,27 +8331,6 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rsa"
-version = "0.9.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a0376c50d0358279d9d643e4bf7b7be212f1f4ff1da9070a7b54d22ef75c88"
-dependencies = [
- "const-oid 0.9.6",
- "digest 0.10.7",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "pkcs1 0.7.5",
- "pkcs8 0.10.2",
- "rand_core 0.6.4",
- "sha2 0.10.9",
- "signature 2.2.0",
- "spki 0.7.3",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "rsa"
 version = "0.10.0-rc.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9a2b1eacbc34fbaf77f6f1db1385518446008d49b9f9f59dc9d1340fce4ca9e"
@@ -8386,7 +8339,7 @@ dependencies = [
  "crypto-bigint 0.7.0-rc.18",
  "crypto-primes",
  "digest 0.11.0",
- "pkcs1 0.8.0-rc.4",
+ "pkcs1",
  "pkcs8 0.11.0-rc.11",
  "rand_core 0.10.0-rc-3",
  "sha2 0.11.0-rc.5",
@@ -8459,16 +8412,16 @@ dependencies = [
  "p256",
  "p384",
  "p521",
- "pageant 0.2.0",
+ "pageant",
  "pbkdf2",
- "pkcs1 0.8.0-rc.4",
+ "pkcs1",
  "pkcs5",
  "pkcs8 0.10.2",
  "rand 0.9.2",
  "rand_core 0.10.0-rc-3",
- "rsa 0.10.0-rc.12",
- "russh-cryptovec 0.52.0",
- "russh-util 0.52.0",
+ "rsa",
+ "russh-cryptovec",
+ "russh-util",
  "sec1",
  "sha1 0.10.6",
  "sha2 0.10.9",
@@ -8484,17 +8437,6 @@ dependencies = [
 
 [[package]]
 name = "russh-cryptovec"
-version = "0.48.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d8e7e854e1a87e4be00fa287c98cad23faa064d0464434beaa9f014ec3baa98"
-dependencies = [
- "libc",
- "ssh-encoding",
- "winapi",
-]
-
-[[package]]
-name = "russh-cryptovec"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb0ed583ff0f6b4aa44c7867dd7108df01b30571ee9423e250b4cc939f8c6cf"
@@ -8504,62 +8446,6 @@ dependencies = [
  "nix 0.29.0",
  "ssh-encoding",
  "winapi",
-]
-
-[[package]]
-name = "russh-keys"
-version = "0.49.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "788a2439ce385856585346beb37c48e7c9eb5de5f4f00736720a19ffdb3f5bb5"
-dependencies = [
- "aes",
- "async-trait",
- "bcrypt-pbkdf",
- "block-padding",
- "byteorder",
- "bytes",
- "cbc",
- "ctr",
- "data-encoding",
- "der 0.7.10",
- "digest 0.10.7",
- "ecdsa",
- "ed25519-dalek",
- "elliptic-curve",
- "futures",
- "getrandom 0.2.16",
- "hmac",
- "home",
- "inout",
- "log",
- "md5 0.7.0",
- "num-integer",
- "p256",
- "p384",
- "p521",
- "pageant 0.0.1",
- "pbkdf2",
- "pkcs1 0.7.5",
- "pkcs5",
- "pkcs8 0.10.2",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rsa 0.9.9",
- "russh-cryptovec 0.48.0",
- "russh-util 0.48.0",
- "sec1",
- "serde",
- "sha1 0.10.6",
- "sha2 0.10.9",
- "signature 2.2.0",
- "spki 0.7.3",
- "ssh-encoding",
- "ssh-key",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "typenum",
- "zeroize",
 ]
 
 [[package]]
@@ -8577,18 +8463,6 @@ dependencies = [
  "thiserror 2.0.14",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "russh-util"
-version = "0.48.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92c7dd577958c0cefbc8f8a2c05c48c88c42e2fdb760dbe9b96ae31d4de97a1f"
-dependencies = [
- "chrono",
- "tokio",
- "wasm-bindgen",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -9324,7 +9198,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "russh",
- "russh-keys",
  "russh-sftp",
  "rust-i18n",
  "ssh",
@@ -9701,9 +9574,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "russh",
- "russh-keys",
- "russh-sftp",
- "russh-util 0.52.0",
  "rust-i18n",
  "tokio",
  "tokio-socks",
@@ -9737,29 +9607,6 @@ dependencies = [
  "bytes",
  "pem-rfc7468 0.7.0",
  "sha2 0.10.9",
-]
-
-[[package]]
-name = "ssh-key"
-version = "0.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b86f5297f0f04d08cabaa0f6bff7cb6aec4d9c3b49d87990d63da9d9156a8c3"
-dependencies = [
- "bcrypt-pbkdf",
- "ed25519-dalek",
- "num-bigint-dig",
- "p256",
- "p384",
- "p521",
- "rand_core 0.6.4",
- "rsa 0.9.9",
- "sec1",
- "sha2 0.10.9",
- "signature 2.2.0",
- "ssh-cipher",
- "ssh-encoding",
- "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -10622,18 +10469,6 @@ dependencies = [
  "futures-util",
  "thiserror 1.0.69",
  "tokio",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -12165,16 +12000,6 @@ dependencies = [
 
 [[package]]
 name = "windows"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd04d41d93c4992d421894c18c8b43496aa748dd4c081bac0dc93eb0489272b6"
-dependencies = [
- "windows-core 0.58.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows"
 version = "0.61.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9babd3a767a4c1aef6900409f85f5d53ce2544ccdfaa86dad48c91782c6d6893"
@@ -12243,19 +12068,6 @@ dependencies = [
 
 [[package]]
 name = "windows-core"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ba6d44ec8c2591c134257ce647b7ea6b20335bf6379a27dac5f1641fcf59f99"
-dependencies = [
- "windows-implement 0.58.0",
- "windows-interface 0.58.0",
- "windows-result 0.2.0",
- "windows-strings 0.1.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-core"
 version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0fdd3ddb90610c7638aa2b3a3ab2904fb9e5cdbecc643ddb3647212781c4ae3"
@@ -12315,17 +12127,6 @@ dependencies = [
 
 [[package]]
 name = "windows-implement"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bbd5b46c938e506ecbce286b6628a02171d56153ba733b6c741fc627ec9579b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.105",
-]
-
-[[package]]
-name = "windows-implement"
 version = "0.60.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
@@ -12340,17 +12141,6 @@ name = "windows-interface"
 version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29bee4b38ea3cde66011baa44dba677c432a78593e202392d1e9070cf2a7fca7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.105",
-]
-
-[[package]]
-name = "windows-interface"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "053c4c462dc91d3b1504c6fe5a726dd15e216ba718e84a0e46a88fbe5ded3515"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -12433,15 +12223,6 @@ dependencies = [
 
 [[package]]
 name = "windows-result"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d1043d8214f791817bab27572aaa8af63732e11bf84aa21a45a78d6c317ae0e"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-result"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56f42bd332cc6c8eac5af113fc0c1fd6a8fd2aa08a0119358686e5160d0586c6"
@@ -12456,16 +12237,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
 dependencies = [
  "windows-link 0.2.1",
-]
-
-[[package]]
-name = "windows-strings"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd9b125c486025df0eabcb585e62173c6c9eddcec5d117d3b6e8c30e2ee4d10"
-dependencies = [
- "windows-result 0.2.0",
- "windows-targets 0.52.6",
 ]
 
 [[package]]

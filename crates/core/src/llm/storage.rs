@@ -96,14 +96,7 @@ impl ProviderRepository {
     }
 
     pub fn ensure_onetcli_provider(&self) -> Result<ProviderConfig> {
-        if let Ok(Some(mut existing)) = self.get(super::types::BUILTIN_ONET_CLI_ID) {
-            if !existing.enabled {
-                existing.enabled = true;
-                let _ = self.update(&existing);
-            }
-            return Ok(existing);
-        }
-
+        // 先查找已有的 OnetCli 类型 provider
         if let Ok(list) = self.list() {
             if let Some(mut existing) = list
                 .into_iter()
@@ -117,17 +110,29 @@ impl ProviderRepository {
             }
         }
 
-        let mut config = ProviderConfig::builtin_onet_cli();
+        // 不存在则创建
         let now = now();
-        config.created_at = now;
-        config.updated_at = now;
-        config.enabled = true;
+        let has_default = self
+            .list()
+            .map(|list| list.iter().any(|p| p.is_default))
+            .unwrap_or(false);
 
-        if let Ok(list) = self.list() {
-            config.is_default = !list.iter().any(|p| p.is_default);
-        } else {
-            config.is_default = true;
-        }
+        let mut config = ProviderConfig {
+            id: now,
+            name: "ONetCli AI".to_string(),
+            provider_type: ProviderType::OnetCli,
+            api_key: None,
+            api_base: None,
+            api_version: None,
+            model: "qwen-plus".to_string(),
+            models: Vec::new(),
+            max_tokens: None,
+            temperature: None,
+            enabled: true,
+            is_default: !has_default,
+            created_at: now,
+            updated_at: now,
+        };
 
         let _ = self.insert(&mut config);
         Ok(config)

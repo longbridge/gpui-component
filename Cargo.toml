@@ -118,8 +118,6 @@ redis_client = { package = "redis", version = "0.27", features = ["tokio-comp", 
 # SSH and SFTP
 russh = "0.57"
 russh-sftp = "2.1.1"
-russh-keys = "0.49"
-russh-util = "0.52"
 tokio-socks = "0.5"
 
 # Encryption
@@ -130,10 +128,8 @@ sha2 = "0.10"
 
 # Terminal emulation
 alacritty_terminal = "0.25"
-vte = "0.13"
 
-# Local PTY
-portable-pty = "0.8"
+
 
 parking_lot = "0.12"
 bytes = "1.5"
@@ -160,16 +156,26 @@ style = { level = "allow", priority = -1 }
 todo = "deny"
 type_complexity = "allow"
 
-[workspace.lints.rust.unexpected_cfgs]
-level = "allow"
-check-cfg = [
-    'cfg(feature, values("tree-sitter-bash", "tree-sitter-c", "tree-sitter-c-sharp", "tree-sitter-cmake", "tree-sitter-cpp", "tree-sitter-css", "tree-sitter-diff", "tree-sitter-elixir", "tree-sitter-embedded-template", "tree-sitter-go", "tree-sitter-graphql", "tree-sitter-html", "tree-sitter-java", "tree-sitter-javascript", "tree-sitter-jsdoc", "tree-sitter-kotlin-sg", "tree-sitter-make", "tree-sitter-md", "tree-sitter-php", "tree-sitter-proto", "tree-sitter-python", "tree-sitter-ruby", "tree-sitter-rust", "tree-sitter-scala", "tree-sitter-sequel", "tree-sitter-svelte-next", "tree-sitter-swift", "tree-sitter-toml-ng", "tree-sitter-typescript", "tree-sitter-yaml", "tree-sitter-zig"))',
-]
 
 [profile.dev]
-codegen-units = 16
-debug = "limited"
-split-debuginfo = "unpacked"
+#codegen-units = 16
+#debug = "limited"
+#split-debuginfo = "unpacked"
+
+
+
+# 优化级别：0=无优化（默认，调试最佳），1=轻度优化，2=中度，3=高度
+opt-level = 0
+# 是否启用调试符号：true=启用（默认），false=禁用，"full"=完整符号（推荐）
+debug = true
+# 是否启用 debuginfo 行表（保证调试器能对应源码行）
+debug-assertions = true
+# 是否启用溢出检查（Debug 模式默认开启，Release 关闭）
+overflow-checks = true
+# 是否增量编译（加速二次构建，默认开启）
+incremental = true
+# panic 处理方式："unwind"=展开栈（默认），"abort"=直接终止程序
+panic = "unwind"
 
 [profile.release]
 opt-level = 3

@@ -13,9 +13,6 @@ tracing = { workspace = true }
 rust-i18n = { workspace = true }
 # SSH and SFTP
 russh.workspace = true
-russh-sftp.workspace = true
-russh-keys.workspace = true
-russh-util.workspace = true
 # Proxy support
 tokio-socks.workspace = true
 

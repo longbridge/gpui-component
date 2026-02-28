@@ -143,30 +143,7 @@ impl Default for ProviderConfig {
     }
 }
 
-/// 内置 provider 的特殊 ID
-pub const BUILTIN_ONET_CLI_ID: i64 = -1;
-
 impl ProviderConfig {
-    /// 创建内置的 OnetCli provider 配置
-    pub fn builtin_onet_cli() -> Self {
-        Self {
-            id: BUILTIN_ONET_CLI_ID,
-            name: "ONetCli AI".to_string(),
-            provider_type: ProviderType::OnetCli,
-            api_key: None,
-            api_base: None,
-            api_version: None,
-            model: "qwen-plus".to_string(),
-            models: Vec::new(),
-            max_tokens: None,
-            temperature: None,
-            enabled: true,
-            is_default: true,
-            created_at: 0,
-            updated_at: 0,
-        }
-    }
-
     /// 是否为内置 provider
     pub fn is_builtin(&self) -> bool {
         self.provider_type.is_builtin()

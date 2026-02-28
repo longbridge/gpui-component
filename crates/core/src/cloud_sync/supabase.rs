@@ -847,6 +847,22 @@ impl From<&CloudWorkspace> for WorkspaceRow {
     }
 }
 
+
+/// 模型列表记录
+#[derive(Debug, Serialize, Deserialize)]
+struct ModelListRow {
+    model: String,
+    #[serde(default)]
+    enabled: Option<bool>,
+}
+
+impl From<ModelListRow> for String {
+    fn from(row: ModelListRow) -> Self {
+        row.model
+    }
+}
+
+
 #[async_trait]
 impl CloudApiClient for SupabaseClient {
     // ========================================================================
@@ -1281,6 +1297,25 @@ impl CloudApiClient for SupabaseClient {
     // 连接数据同步
     // ========================================================================
 
+    async fn list_models(&self) -> Result<Vec<String>, CloudApiError> {
+        let url = format!(
+            "{}?select=model,enabled&enabled=eq.true&order=created_at.desc",
+            self.rest_url("model_list"),
+        );
+
+        let (status, result) = self.get_json_with_retry::<Vec<ModelListRow>>(&url).await?;
+
+        if status.is_success() {
+            let rows = result.map_err(CloudApiError::ParseError)?;
+            Ok(rows.into_iter().map(String::from).collect())
+        } else {
+            Err(CloudApiError::ServerError(format!(
+                "获取模型列表失败: {}",
+                status
+            )))
+        }
+    }
+
     async fn list_connections(&self) -> Result<Vec<CloudConnection>, CloudApiError> {
         let url = format!(
             "{}?select=*&order=updated_at.desc",
@@ -1457,6 +1492,10 @@ impl CloudApiClient for SupabaseClient {
         Ok(response)
     }
 
+    // ========================================================================
+    // 工作空间数据同步
+    // ========================================================================
+
     async fn get_connections_since(
         &self,
         since_timestamp: i64,
@@ -1484,10 +1523,6 @@ impl CloudApiClient for SupabaseClient {
             )))
         }
     }
-
-    // ========================================================================
-    // 工作空间数据同步
-    // ========================================================================
 
     async fn list_workspaces(&self) -> Result<Vec<CloudWorkspace>, CloudApiError> {
         let url = format!(
@@ -1701,30 +1736,6 @@ impl CloudApiClient for SupabaseClient {
         .flatten();
 
         Ok(Box::pin(stream))
-    }
-
-    async fn list_models(&self) -> Result<Vec<String>, CloudApiError> {
-        #[derive(serde::Deserialize)]
-        #[serde(untagged)]
-        enum ModelListResponse {
-            List(Vec<String>),
-            Models { models: Vec<String> },
-            Data { data: Vec<String> },
-        }
-
-        let url = self.functions_url("ai-models");
-        let (status, response) = self.get_json_with_retry::<ModelListResponse>(&url).await?;
-        if !status.is_success() {
-            return Err(CloudApiError::ServerError("获取模型列表失败".to_string()));
-        }
-
-        let models = response.map_err(CloudApiError::ParseError)?;
-        let list = match models {
-            ModelListResponse::List(items) => items,
-            ModelListResponse::Models { models } => models,
-            ModelListResponse::Data { data } => data,
-        };
-        Ok(list)
     }
 }
 

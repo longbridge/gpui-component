@@ -815,6 +815,14 @@ LlmProviders:
     en: Delete
     zh-CN: 删除
     zh-HK: 刪除
+  action_set_default:
+    en: Set Default
+    zh-CN: 设为默认
+    zh-HK: 設為默認
+  action_unset_default:
+    en: Unset Default
+    zh-CN: 取消默认
+    zh-HK: 取消默認
   name_label:
     en: Name
     zh-CN: 名称

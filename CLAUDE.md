@@ -177,7 +177,7 @@ CI runs clippy (macOS), machete (macOS), typos (macOS), and full test suite on a
 - **GPUI**: Git dependency from `zed-industries/zed`
 - **reqwest**: Zed's custom fork (`zed-reqwest`)
 - **Database drivers**: tokio-postgres, mysql_async, rusqlite, tiberius+bb8, oracle, clickhouse
-- **SSH/SFTP**: russh ecosystem (russh, russh-sftp, russh-keys)
+- **SSH/SFTP**: russh ecosystem (russh, russh-sftp)
 - **Terminal**: alacritty_terminal
 - **AI**: llm-connector (with streaming)
 - **Text**: ropey (Rope), tree-sitter (syntax highlighting)
