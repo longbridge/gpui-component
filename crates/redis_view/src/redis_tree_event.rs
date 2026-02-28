@@ -1,18 +1,19 @@
 //! Redis 树形视图事件处理
 
-use gpui::{px, App, AppContext, Context, Entity, EventEmitter, ParentElement, Styled, Subscription, Window};
-use gpui_component::dialog::DialogButtonProps;
-use gpui_component::{notification::Notification, WindowExt};
-use one_core::gpui_tokio::Tokio;
-use rust_i18n::t;
+use crate::RedisManager;
 use crate::create_key_dialog::CreateKeyDialog;
 use crate::key_value_view::KeyValueView;
 use crate::redis_cli_view::RedisCliView;
 use crate::redis_tree_view::{RedisTreeView, RedisTreeViewEvent};
-use crate::RedisManager;
 use crate::{GlobalRedisState, RedisKeyType, RedisNode, RedisNodeType};
+use gpui::{
+    App, AppContext, Context, Entity, EventEmitter, ParentElement, Styled, Subscription, Window, px,
+};
+use gpui_component::dialog::DialogButtonProps;
+use gpui_component::{WindowExt, notification::Notification};
+use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContainer, TabItem};
-
+use rust_i18n::t;
 
 /// Redis 事件处理器
 pub struct RedisEventHandler {
@@ -53,48 +54,83 @@ impl RedisEventHandler {
                 match event {
                     RedisTreeViewEvent::NodeSelected { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_node_selected(node, key_value_view, global_state.clone(), window, cx);
-                        }
-                    }
-                    RedisTreeViewEvent::KeySelected { node_id } => {
-                        if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_key_selected(node, key_value_view, global_state.clone(), window, cx);
-                        }
-                    }
-                    RedisTreeViewEvent::SearchKeys { node_id, pattern } => {
-                        if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_search_keys(
+                            Self::handle_node_selected(
                                 node,
-                                pattern.clone(),
-                                tree_view.clone(),
+                                key_value_view,
+                                global_state.clone(),
+                                window,
                                 cx,
                             );
                         }
                     }
+                    RedisTreeViewEvent::KeySelected { node_id } => {
+                        if let Some(node) = get_node(node_id, cx) {
+                            Self::handle_key_selected(
+                                node,
+                                key_value_view,
+                                global_state.clone(),
+                                window,
+                                cx,
+                            );
+                        }
+                    }
+                    RedisTreeViewEvent::SearchKeys { node_id, pattern } => {
+                        if let Some(node) = get_node(node_id, cx) {
+                            Self::handle_search_keys(node, pattern.clone(), tree_view.clone(), cx);
+                        }
+                    }
                     RedisTreeViewEvent::OpenKeyInNewTab { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_open_key_in_new_tab(node, tab_container.clone(), global_state.clone(), window, cx);
+                            Self::handle_open_key_in_new_tab(
+                                node,
+                                tab_container.clone(),
+                                global_state.clone(),
+                                window,
+                                cx,
+                            );
                         }
                     }
                     RedisTreeViewEvent::DeleteKey { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_delete_key(node, tree_view.clone(), global_state.clone(), window, cx);
+                            Self::handle_delete_key(
+                                node,
+                                tree_view.clone(),
+                                global_state.clone(),
+                                window,
+                                cx,
+                            );
                         }
                     }
                     RedisTreeViewEvent::CreateKey { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_create_key(node, tree_view.clone(), global_state.clone(), window, cx);
+                            Self::handle_create_key(
+                                node,
+                                tree_view.clone(),
+                                global_state.clone(),
+                                window,
+                                cx,
+                            );
                         }
                     }
                     RedisTreeViewEvent::CloseConnection { node_id } => {
                         if let Some(node) = get_node(node_id, cx) {
-                            Self::handle_close_connection(node, tree_view.clone(), global_state.clone(), window, cx);
+                            Self::handle_close_connection(
+                                node,
+                                tree_view.clone(),
+                                global_state.clone(),
+                                window,
+                                cx,
+                            );
                         }
                     }
                     RedisTreeViewEvent::ConnectionEstablished { .. } => {
                         // 连接建立事件，不需要特殊处理
                     }
-                    RedisTreeViewEvent::OpenCli { connection_id, db_index, stored_connection } => {
+                    RedisTreeViewEvent::OpenCli {
+                        connection_id,
+                        db_index,
+                        stored_connection,
+                    } => {
                         Self::handle_open_cli(
                             connection_id.clone(),
                             *db_index,
@@ -158,7 +194,12 @@ impl RedisEventHandler {
             let create_result = Tokio::spawn_result(cx, {
                 let global_state = global_state.clone();
                 let config = config.clone();
-                async move { global_state.create_connection(config).await.map_err(|e| anyhow::anyhow!("{}", e)) }
+                async move {
+                    global_state
+                        .create_connection(config)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("{}", e))
+                }
             })
             .await;
 
@@ -172,10 +213,19 @@ impl RedisEventHandler {
                                         tab_id.clone(),
                                         |window, cx| {
                                             let cli_view = cx.new(|cx| {
-                                                RedisCliView::new(unique_id.clone(), db_index, true, window, cx)
+                                                RedisCliView::new(
+                                                    unique_id.clone(),
+                                                    db_index,
+                                                    true,
+                                                    window,
+                                                    cx,
+                                                )
                                             });
                                             TabItem::new(
-                                                format!("redis-cli-{}-db{}", connection_id, db_index),
+                                                format!(
+                                                    "redis-cli-{}-db{}",
+                                                    connection_id, db_index
+                                                ),
                                                 format!("CLI (db{})", db_index),
                                                 cli_view,
                                             )
@@ -214,7 +264,12 @@ impl RedisEventHandler {
             RedisNodeType::Key(_) => {
                 if let Some(full_key) = &node.full_key {
                     key_value_view.update(cx, |view, cx| {
-                        view.load_key(node.connection_id.clone(), node.db_index, full_key.clone(), cx);
+                        view.load_key(
+                            node.connection_id.clone(),
+                            node.db_index,
+                            full_key.clone(),
+                            cx,
+                        );
                     });
                 }
             }
@@ -232,7 +287,12 @@ impl RedisEventHandler {
     ) {
         if let Some(full_key) = &node.full_key {
             key_value_view.update(cx, |view, cx| {
-                view.load_key(node.connection_id.clone(), node.db_index, full_key.clone(), cx);
+                view.load_key(
+                    node.connection_id.clone(),
+                    node.db_index,
+                    full_key.clone(),
+                    cx,
+                );
             });
         }
     }
@@ -250,7 +310,10 @@ impl RedisEventHandler {
         };
 
         // 生成唯一的标签页 ID
-        let tab_id = format!("key-{}-db{}-{}", node.connection_id, node.db_index, full_key);
+        let tab_id = format!(
+            "key-{}-db{}-{}",
+            node.connection_id, node.db_index, full_key
+        );
         let connection_id = node.connection_id.clone();
         let db_index = node.db_index;
 
@@ -260,7 +323,8 @@ impl RedisEventHandler {
                 tab_id,
                 |window, cx| {
                     // 创建新的 KeyValueView 并加载数据
-                    let key_value_view = cx.new(|cx| KeyValueView::new_with_closeable(true, window, cx));
+                    let key_value_view =
+                        cx.new(|cx| KeyValueView::new_with_closeable(true, window, cx));
                     key_value_view.update(cx, |view, cx| {
                         view.load_key(connection_id.clone(), db_index, full_key.clone(), cx);
                     });
@@ -296,7 +360,7 @@ impl RedisEventHandler {
         window: &mut Window,
         cx: &mut App,
     ) {
-        use gpui_component::{v_flex, WindowExt};
+        use gpui_component::{WindowExt, v_flex};
 
         let Some(full_key) = node.full_key.clone() else {
             return;
@@ -321,9 +385,7 @@ impl RedisEventHandler {
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(
-                            t!("RedisTree.confirm_delete_key", key = key).to_string(),
-                        )
+                        .child(t!("RedisTree.confirm_delete_key", key = key).to_string())
                         .child(t!("RedisTree.irreversible").to_string()),
                 )
                 .on_ok(move |_, _window, cx: &mut App| {
@@ -338,41 +400,38 @@ impl RedisEventHandler {
                         let conn_id = conn_id.clone();
                         let key = key.clone();
                         async move {
-                            let conn = state
-                                .get_connection(&conn_id)
-                                .ok_or_else(|| anyhow::anyhow!(t!("RedisTree.connection_missing")))?;
+                            let conn = state.get_connection(&conn_id).ok_or_else(|| {
+                                anyhow::anyhow!(t!("RedisTree.connection_missing"))
+                            })?;
                             let guard = conn.read().await;
-                            guard.del(&[key.as_str()]).await
+                            guard
+                                .del(&[key.as_str()])
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))
                         }
                     });
 
-                    cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-                        match task.await {
-                            Ok(_) => {
-                                let _ = cx.update(|cx| {
-                                    tree.update(cx, |view, cx| {
-                                        view.remove_node(&node_id, cx);
-                                    });
+                    cx.spawn(async move |cx: &mut gpui::AsyncApp| match task.await {
+                        Ok(_) => {
+                            let _ = cx.update(|cx| {
+                                tree.update(cx, |view, cx| {
+                                    view.remove_node(&node_id, cx);
                                 });
-                            }
-                            Err(e) => {
-                                let _ = cx.update(|cx| {
-                                    if let Some(window) = cx.active_window() {
-                                        _ = window.update(cx, |_, window, cx| {
-                                            Self::show_error(
-                                                window,
-                                                t!(
-                                                    "RedisTree.delete_key_failed",
-                                                    error = e
-                                                )
+                            });
+                        }
+                        Err(e) => {
+                            let _ = cx.update(|cx| {
+                                if let Some(window) = cx.active_window() {
+                                    _ = window.update(cx, |_, window, cx| {
+                                        Self::show_error(
+                                            window,
+                                            t!("RedisTree.delete_key_failed", error = e)
                                                 .to_string(),
-                                                cx,
-                                            );
-                                        });
-                                    }
-                                });
-                            }
+                                            cx,
+                                        );
+                                    });
+                                }
+                            });
                         }
                     })
                     .detach();
@@ -483,34 +542,46 @@ impl RedisEventHandler {
                     let guard = conn.read().await;
 
                     // 切换到目标数据库
-                    guard.select(db_index).await
+                    guard
+                        .select(db_index)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
                     // 根据类型创建键
                     match key_type {
                         RedisKeyType::String => {
-                            guard.set(&key, &value, ttl).await
+                            guard
+                                .set(&key, &value, ttl)
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                         }
                         RedisKeyType::List => {
                             let push_value = if value.is_empty() { "" } else { value.as_str() };
-                            guard.rpush(&key, &[push_value]).await
+                            guard
+                                .rpush(&key, &[push_value])
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                             if let Some(seconds) = ttl {
                                 if seconds > 0 {
-                                    guard.expire(&key, seconds).await
+                                    guard
+                                        .expire(&key, seconds)
+                                        .await
                                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                                 }
                             }
                         }
                         RedisKeyType::Set => {
                             if !value.is_empty() {
-                                guard.sadd(&key, &[value.as_str()]).await
+                                guard
+                                    .sadd(&key, &[value.as_str()])
+                                    .await
                                     .map_err(|e| anyhow::anyhow!("{}", e))?;
                             }
                             if let Some(seconds) = ttl {
                                 if seconds > 0 {
-                                    guard.expire(&key, seconds).await
+                                    guard
+                                        .expire(&key, seconds)
+                                        .await
                                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                                 }
                             }
@@ -518,32 +589,42 @@ impl RedisEventHandler {
                         RedisKeyType::ZSet => {
                             // 使用用户输入的分数
                             if !value.is_empty() {
-                                guard.zadd(&key, &[(zset_score, value.as_str())]).await
+                                guard
+                                    .zadd(&key, &[(zset_score, value.as_str())])
+                                    .await
                                     .map_err(|e| anyhow::anyhow!("{}", e))?;
                             }
                             if let Some(seconds) = ttl {
                                 if seconds > 0 {
-                                    guard.expire(&key, seconds).await
+                                    guard
+                                        .expire(&key, seconds)
+                                        .await
                                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                                 }
                             }
                         }
                         RedisKeyType::Hash => {
                             // 使用用户输入的字段名和值
-                            let field = if hash_field.is_empty() { "field".to_string() } else { hash_field };
-                            guard.hset(&key, &field, &value).await
+                            let field = if hash_field.is_empty() {
+                                "field".to_string()
+                            } else {
+                                hash_field
+                            };
+                            guard
+                                .hset(&key, &field, &value)
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                             if let Some(seconds) = ttl {
                                 if seconds > 0 {
-                                    guard.expire(&key, seconds).await
+                                    guard
+                                        .expire(&key, seconds)
+                                        .await
                                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                                 }
                             }
                         }
                         _ => {
-                            return Err(anyhow::anyhow!(
-                                t!("RedisTree.unsupported_key_type")
-                            ));
+                            return Err(anyhow::anyhow!(t!("RedisTree.unsupported_key_type")));
                         }
                     }
 
@@ -565,10 +646,8 @@ impl RedisEventHandler {
                         if let Some(window) = cx.active_window() {
                             _ = window.update(cx, |_, window, cx| {
                                 window.push_notification(
-                                    Notification::success(
-                                        t!("RedisTree.key_created").to_string(),
-                                    )
-                                    .autohide(true),
+                                    Notification::success(t!("RedisTree.key_created").to_string())
+                                        .autohide(true),
                                     cx,
                                 );
                             });
@@ -603,7 +682,7 @@ impl RedisEventHandler {
         window: &mut Window,
         cx: &mut App,
     ) {
-        use gpui_component::{v_flex, WindowExt};
+        use gpui_component::{WindowExt, v_flex};
 
         let connection_id = node.connection_id.clone();
         let connection_name = node.name.clone();
@@ -622,9 +701,7 @@ impl RedisEventHandler {
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(
-                            t!("RedisTree.confirm_disconnect", name = conn_name).to_string(),
-                        )
+                        .child(t!("RedisTree.confirm_disconnect", name = conn_name).to_string())
                         .child(t!("RedisTree.disconnect_warning").to_string()),
                 )
                 .on_ok(move |_, _window, cx: &mut App| {
@@ -636,37 +713,34 @@ impl RedisEventHandler {
                     let task = Tokio::spawn_result(cx, {
                         let conn_id = conn_id.clone();
                         async move {
-                            state.remove_connection(&conn_id).await
+                            state
+                                .remove_connection(&conn_id)
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))
                         }
                     });
 
-                    cx.spawn(async move |cx: &mut gpui::AsyncApp| {
-                        match task.await {
-                            Ok(_) => {
-                                let _ = cx.update(|cx| {
-                                    tree.update(cx, |view, cx| {
-                                        view.disconnect_connection(&conn_id, cx);
-                                    });
+                    cx.spawn(async move |cx: &mut gpui::AsyncApp| match task.await {
+                        Ok(_) => {
+                            let _ = cx.update(|cx| {
+                                tree.update(cx, |view, cx| {
+                                    view.disconnect_connection(&conn_id, cx);
                                 });
-                            }
-                            Err(e) => {
-                                let _ = cx.update(|cx| {
-                                    if let Some(window) = cx.active_window() {
-                                        _ = window.update(cx, |_, window, cx| {
-                                            Self::show_error(
-                                                window,
-                                                t!(
-                                                    "RedisTree.disconnect_failed",
-                                                    error = e
-                                                )
+                            });
+                        }
+                        Err(e) => {
+                            let _ = cx.update(|cx| {
+                                if let Some(window) = cx.active_window() {
+                                    _ = window.update(cx, |_, window, cx| {
+                                        Self::show_error(
+                                            window,
+                                            t!("RedisTree.disconnect_failed", error = e)
                                                 .to_string(),
-                                                cx,
-                                            );
-                                        });
-                                    }
-                                });
-                            }
+                                            cx,
+                                        );
+                                    });
+                                }
+                            });
                         }
                     })
                     .detach();

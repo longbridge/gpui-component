@@ -6,14 +6,15 @@
 //! - 通过 trait 自定义回调处理
 
 use gpui::{
-    div, prelude::FluentBuilder, App, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Task, Window,
+    App, Context, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Task, Window, div, prelude::FluentBuilder,
 };
 use gpui_component::{
-    button::{Button, ButtonVariants},
-    h_flex, v_flex,
-    list::{ListDelegate, ListState},
     ActiveTheme, IconName, IndexPath, Selectable, Sizable,
+    button::{Button, ButtonVariants},
+    h_flex,
+    list::{ListDelegate, ListState},
+    v_flex,
 };
 use rust_i18n::t;
 
@@ -55,7 +56,14 @@ pub trait SessionListHost: 'static + Sized {
     fn on_session_select(&mut self, session_id: i64, cx: &mut Context<Self>);
 
     /// 处理会话编辑（可选）
-    fn on_session_edit(&mut self, _session_id: i64, _name: String, _window: &mut Window, _cx: &mut Context<Self>) {}
+    fn on_session_edit(
+        &mut self,
+        _session_id: i64,
+        _name: String,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
 
     /// 处理会话删除（可选）
     fn on_session_delete(&mut self, _session_id: i64, _cx: &mut Context<Self>) {}
@@ -326,7 +334,11 @@ impl<H: SessionListHost> ListDelegate for SessionListDelegate<H> {
         _cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let session = self.filtered_sessions.get(ix.row)?.clone();
-        Some(SessionListItem::new(session, self.config.clone(), self.host.clone()))
+        Some(SessionListItem::new(
+            session,
+            self.config.clone(),
+            self.host.clone(),
+        ))
     }
 
     fn set_selected_index(
@@ -338,7 +350,12 @@ impl<H: SessionListHost> ListDelegate for SessionListDelegate<H> {
         self.selected_index = ix;
     }
 
-    fn confirm(&mut self, _secondary: bool, _window: &mut Window, cx: &mut Context<ListState<Self>>) {
+    fn confirm(
+        &mut self,
+        _secondary: bool,
+        _window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
+    ) {
         if let Some(ix) = self.selected_index {
             if let Some(session) = self.filtered_sessions.get(ix.row) {
                 let session_id = session.id;

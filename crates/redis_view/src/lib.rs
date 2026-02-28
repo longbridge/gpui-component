@@ -16,15 +16,15 @@ pub mod manager;
 pub mod types;
 
 // 视图模块
+pub(crate) mod create_key_dialog;
 pub mod key_value_view;
 pub mod redis_cli_element;
 pub mod redis_cli_view;
-pub(crate) mod create_key_dialog;
-mod redis_tree_event;
 pub mod redis_form_window;
-pub mod sidebar;
 pub mod redis_tab;
+mod redis_tree_event;
 pub mod redis_tree_view;
+pub mod sidebar;
 
 // 核心导出
 pub use connection::{RedisConnection, RedisConnectionImpl};
@@ -35,9 +35,9 @@ pub use types::*;
 pub use key_value_view::{KeyValueView, KeyValueViewEvent};
 pub use redis_cli_view::{RedisCliView, RedisCliViewEvent};
 pub use redis_form_window::{RedisFormWindow, RedisFormWindowConfig};
-pub use sidebar::{RedisSidebar, RedisSidebarEvent};
 pub use redis_tab::RedisTabView;
 pub use redis_tree_view::{RedisTreeView, RedisTreeViewEvent};
+pub use sidebar::{RedisSidebar, RedisSidebarEvent};
 
 /// 初始化 Redis 模块
 ///

@@ -13,6 +13,7 @@ use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::tty::{self, Options as PtyOptions};
+use futures::StreamExt;
 use gpui::*;
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
@@ -20,16 +21,15 @@ use one_core::storage::models::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use futures::StreamExt;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::interval;
 
 use crate::pty_backend::{GpuiEventProxy, LocalPtyBackend};
 
+use crate::{LocalConfig, SshBackend, TerminalBackend, TerminalEvent, TerminalSize};
 pub use ssh::{
     JumpServerConnectConfig, ProxyConnectConfig, ProxyType, PtyConfig, SshAuth, SshConnectConfig,
 };
-use crate::{LocalConfig, SshBackend, TerminalBackend, TerminalEvent, TerminalSize};
 
 /// Terminal 发出的事件，供 TerminalView 订阅
 #[derive(Debug, Clone)]
@@ -209,7 +209,11 @@ impl Terminal {
     }
 
     /// 创建 SSH 终端
-    pub fn new_ssh(conn: StoredConnection, cx: &mut Context<Self>, working_dir: Option<&str>) -> Self {
+    pub fn new_ssh(
+        conn: StoredConnection,
+        cx: &mut Context<Self>,
+        working_dir: Option<&str>,
+    ) -> Self {
         let ssh_params = conn
             .to_ssh_params()
             .expect("StoredConnection should contain valid SSH params");
@@ -225,13 +229,13 @@ impl Terminal {
                 certificate_path: None,
             },
         };
-        
+
         // 构建初始化命令
         let init_commands = {
             let mut commands = Vec::new();
-            if let Some (work_dir) = working_dir { 
+            if let Some(work_dir) = working_dir {
                 commands.push(format!("cd {}", work_dir));
-            }else {
+            } else {
                 // 切换到默认目录
                 if let Some(ref dir) = ssh_params.default_directory {
                     if !dir.is_empty() {
@@ -309,7 +313,13 @@ impl Terminal {
 
         Self::spawn_disconnect_handler(disconnect_rx, cx);
         Self::spawn_event_loop(event_rx, cx);
-        Self::spawn_ssh_connect(config.clone(), term.clone(), event_tx.clone(), Some(disconnect_tx), cx);
+        Self::spawn_ssh_connect(
+            config.clone(),
+            term.clone(),
+            event_tx.clone(),
+            Some(disconnect_tx),
+            cx,
+        );
 
         Self {
             term,
@@ -465,7 +475,7 @@ impl Terminal {
             .await
         });
 
-        cx.spawn(async move |this: WeakEntity< Self>, cx| {
+        cx.spawn(async move |this: WeakEntity<Self>, cx| {
             let result = task.await;
             let _ = this.update(cx, |this, cx| {
                 this.handle_ssh_result(result, cx);
@@ -493,7 +503,8 @@ impl Terminal {
                 // 需要调整到当前实际尺寸
                 tracing::info!(
                     "SSH 连接成功，同步终端尺寸到远程: {}x{}",
-                    self.cols, self.rows
+                    self.cols,
+                    self.rows
                 );
                 backend.resize(TerminalSize {
                     rows: self.rows as u16,
@@ -615,7 +626,12 @@ impl Terminal {
 
         tracing::info!(
             "Terminal::resize: {}x{} -> {}x{}, pixel={}x{}",
-            self.cols, self.rows, cols, rows, pixel_width, pixel_height
+            self.cols,
+            self.rows,
+            cols,
+            rows,
+            pixel_width,
+            pixel_height
         );
 
         self.cols = cols;

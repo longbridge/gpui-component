@@ -1,11 +1,25 @@
 //! Provider Form Dialog - 添加/编辑 LLM Provider 的表单对话框
 
-use gpui::{App, AsyncApp, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window, div, AppContext, WeakEntity};
 use gpui::prelude::FluentBuilder;
-use gpui_component::{IndexPath, button::{Button, ButtonVariant, ButtonVariants}, h_flex, input::{Input, InputState}, select::{Select, SelectItem, SelectState}, switch::Switch, v_flex, Disableable, WindowExt};
+use gpui::{
+    App, AppContext, AsyncApp, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, SharedString, Styled, WeakEntity, Window, div,
+};
+use gpui_component::{
+    Disableable, IndexPath, WindowExt,
+    button::{Button, ButtonVariant, ButtonVariants},
+    h_flex,
+    input::{Input, InputState},
+    select::{Select, SelectItem, SelectState},
+    switch::Switch,
+    v_flex,
+};
 use one_core::gpui_tokio::Tokio;
-use one_core::llm::{LlmConnector, types::{ProviderConfig, ProviderType}, LlmProvider};
 use one_core::llm::manager::GlobalProviderState;
+use one_core::llm::{
+    LlmConnector, LlmProvider,
+    types::{ProviderConfig, ProviderType},
+};
 use rust_i18n::t;
 
 const CUSTOM_MODEL_ID: &str = "__custom__";
@@ -156,8 +170,8 @@ impl ProviderForm {
         });
 
         let api_version_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx)
-                .placeholder(t!("LlmProviders.api_version_placeholder"));
+            let mut state =
+                InputState::new(window, cx).placeholder(t!("LlmProviders.api_version_placeholder"));
             if let Some(ref cfg) = config {
                 if let Some(ref version) = cfg.api_version {
                     state = state.default_value(version);
@@ -176,7 +190,12 @@ impl ProviderForm {
         let initial_models = config_models.unwrap_or_default();
         let model_items = Self::build_model_items(&initial_models);
         let model_rows = if initial_models.is_empty() {
-            vec![Self::create_model_row_with_items(None, &model_items, window, cx)]
+            vec![Self::create_model_row_with_items(
+                None,
+                &model_items,
+                window,
+                cx,
+            )]
         } else {
             initial_models
                 .iter()
@@ -224,10 +243,7 @@ impl ProviderForm {
         cx: &mut Context<Self>,
     ) -> ModelRow {
         let selected_value = selected.unwrap_or_default();
-        let custom_index = items
-            .iter()
-            .position(|item| item.is_custom())
-            .unwrap_or(0);
+        let custom_index = items.iter().position(|item| item.is_custom()).unwrap_or(0);
         let selected_index = if !selected_value.is_empty() {
             items
                 .iter()
@@ -300,7 +316,8 @@ impl ProviderForm {
     fn remove_model_row(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.model_rows.len() <= 1 {
             self.model_rows.clear();
-            self.model_rows.push(self.create_model_row(None, window, cx));
+            self.model_rows
+                .push(self.create_model_row(None, window, cx));
             cx.notify();
             return;
         }
@@ -320,10 +337,7 @@ impl ProviderForm {
             items.push(ModelItem::custom());
         }
 
-        let custom_index = items
-            .iter()
-            .position(|item| item.is_custom())
-            .unwrap_or(0);
+        let custom_index = items.iter().position(|item| item.is_custom()).unwrap_or(0);
         self.model_items = items.clone();
 
         if self.model_rows.is_empty() {
@@ -460,11 +474,8 @@ impl ProviderForm {
                                     }
                                     Err(message) => {
                                         window.push_notification(
-                                            t!(
-                                                "LlmProviders.model_load_failed",
-                                                error = message
-                                            )
-                                            .to_string(),
+                                            t!("LlmProviders.model_load_failed", error = message)
+                                                .to_string(),
                                             cx,
                                         );
                                     }

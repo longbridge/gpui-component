@@ -5,9 +5,9 @@
 use db::{GlobalDbState, SqlResult};
 use gpui::AsyncApp;
 use one_core::storage::DatabaseType;
+use rust_i18n::t;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use rust_i18n::t;
 
 // ============================================================================
 // 错误类型

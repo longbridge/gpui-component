@@ -4,13 +4,14 @@
 //! 可在不同的聊天面板中复用。
 
 use gpui::{
-    div, px, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    ParentElement, Render, Styled, Window, div, px,
 };
 use gpui_component::{
-    h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
+    ActiveTheme, Icon, IconName, Sizable, Size, h_flex,
     input::{Input, InputEvent, InputState},
     slider::{Slider, SliderEvent, SliderState},
+    v_flex,
 };
 use rust_i18n::t;
 
@@ -155,18 +156,22 @@ impl ModelSettingsPanel {
         });
 
         // 订阅温度滑块事件
-        cx.subscribe_in(&temperature_slider, window, |this, _, event, _window, cx| {
-            let SliderEvent::Change(value) = event;
-            if let gpui_component::slider::SliderValue::Single(v) = value {
-                this.settings.temperature = *v;
-                this.emit_change(cx);
-            }
-        }).detach();
+        cx.subscribe_in(
+            &temperature_slider,
+            window,
+            |this, _, event, _window, cx| {
+                let SliderEvent::Change(value) = event;
+                if let gpui_component::slider::SliderValue::Single(v) = value {
+                    this.settings.temperature = *v;
+                    this.emit_change(cx);
+                }
+            },
+        )
+        .detach();
 
         // 创建历史记录输入
         let history_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .default_value(settings.history_count.to_string())
+            InputState::new(window, cx).default_value(settings.history_count.to_string())
         });
 
         // 订阅历史记录输入事件
@@ -178,24 +183,28 @@ impl ModelSettingsPanel {
                     this.emit_change(cx);
                 }
             }
-        }).detach();
+        })
+        .detach();
 
         // 创建最大 token 输入
-        let max_tokens_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .default_value(settings.max_tokens.to_string())
-        });
+        let max_tokens_input =
+            cx.new(|cx| InputState::new(window, cx).default_value(settings.max_tokens.to_string()));
 
         // 订阅最大 token 输入事件
-        cx.subscribe_in(&max_tokens_input, window, |this, input, event, _window, cx| {
-            if let InputEvent::Change = event {
-                let text = input.read(cx).text().to_string();
-                if let Ok(tokens) = text.parse::<usize>() {
-                    this.settings.max_tokens = tokens.clamp(100, 8000);
-                    this.emit_change(cx);
+        cx.subscribe_in(
+            &max_tokens_input,
+            window,
+            |this, input, event, _window, cx| {
+                if let InputEvent::Change = event {
+                    let text = input.read(cx).text().to_string();
+                    if let Ok(tokens) = text.parse::<usize>() {
+                        this.settings.max_tokens = tokens.clamp(100, 8000);
+                        this.emit_change(cx);
+                    }
                 }
-            }
-        }).detach();
+            },
+        )
+        .detach();
 
         Self {
             focus_handle,
@@ -213,7 +222,12 @@ impl ModelSettingsPanel {
     }
 
     /// 更新设置
-    pub fn update_settings(&mut self, settings: ModelSettings, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn update_settings(
+        &mut self,
+        settings: ModelSettings,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.settings = settings.clone();
 
         // 更新温度滑块
@@ -272,11 +286,7 @@ impl ModelSettingsPanel {
                             .child(description.to_string()),
                     ),
             )
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .child(content)
-            )
+            .child(div().flex_shrink_0().child(content))
     }
 }
 
@@ -346,10 +356,7 @@ impl Render for ModelSettingsPanel {
                     &self.labels.history_desc,
                     div()
                         .w(px(80.0))
-                        .child(
-                            Input::new(&self.history_input)
-                                .with_size(Size::Small),
-                        ),
+                        .child(Input::new(&self.history_input).with_size(Size::Small)),
                     cx,
                 ),
             )
@@ -360,10 +367,7 @@ impl Render for ModelSettingsPanel {
                     &self.labels.max_tokens_desc,
                     div()
                         .w(px(80.0))
-                        .child(
-                            Input::new(&self.max_tokens_input)
-                                .with_size(Size::Small),
-                        ),
+                        .child(Input::new(&self.max_tokens_input).with_size(Size::Small)),
                     cx,
                 ),
             )

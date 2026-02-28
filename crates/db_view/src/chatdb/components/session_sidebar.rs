@@ -7,16 +7,17 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, px, App, Context, Entity, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
+    App, Context, Entity, FontWeight, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
+use gpui_component::IndexPath;
 use gpui_component::{
+    ActiveTheme, IconName, Selectable, Sizable,
     button::{Button, ButtonVariants},
     h_flex,
     list::{List, ListDelegate, ListState},
-    v_flex, ActiveTheme, IconName, Selectable, Sizable,
+    v_flex,
 };
-use gpui_component::IndexPath;
 use one_core::llm::chat_history::ChatSession;
 use rust_i18n::t;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -221,7 +222,12 @@ where
         self.selected_index = ix;
     }
 
-    fn confirm(&mut self, _secondary: bool, _window: &mut Window, _cx: &mut Context<ListState<Self>>) {
+    fn confirm(
+        &mut self,
+        _secondary: bool,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
+    ) {
         if let Some(ix) = self.selected_index {
             if let Some((session_id, _, _)) = self.filtered_sessions.get(ix.row) {
                 (self.on_select)(*session_id);

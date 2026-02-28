@@ -13,9 +13,7 @@ use sqlparser::parser::Parser;
 use crate::metadata_cache::{CacheKey, MetadataCacheManager};
 
 /// DDL 关键字列表，用于粗粒度兜底检测
-const DDL_KEYWORDS: &[&str] = &[
-    "CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME",
-];
+const DDL_KEYWORDS: &[&str] = &["CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME"];
 
 /// DDL 事件类型
 #[derive(Debug, Clone)]
@@ -152,7 +150,9 @@ impl DdlInvalidator {
         if let Ok(statements) = Parser::parse_sql(&dialect, sql) {
             let events: Vec<DdlEvent> = statements
                 .iter()
-                .filter_map(|stmt| Self::statement_to_ddl_event(stmt, current_database, current_schema))
+                .filter_map(|stmt| {
+                    Self::statement_to_ddl_event(stmt, current_database, current_schema)
+                })
                 .collect();
 
             if !events.is_empty() {
@@ -228,9 +228,7 @@ impl DdlInvalidator {
             }
 
             Statement::Drop {
-                object_type,
-                names,
-                ..
+                object_type, names, ..
             } => {
                 use sqlparser::ast::ObjectType;
                 let name = names.first().map(Self::extract_object_name_from_ast)?;
@@ -297,9 +295,7 @@ impl DdlInvalidator {
                     sqlparser::ast::SchemaName::NamedAuthorization(name, _) => {
                         Self::extract_object_name_from_ast(name)
                     }
-                    sqlparser::ast::SchemaName::UnnamedAuthorization(ident) => {
-                        ident.value.clone()
-                    }
+                    sqlparser::ast::SchemaName::UnnamedAuthorization(ident) => ident.value.clone(),
                 };
                 Some(DdlEvent::CreateSchema {
                     database: current_database.to_string(),
@@ -499,10 +495,24 @@ impl DdlInvalidator {
         // RENAME TABLE
         if upper.starts_with("RENAME TABLE") {
             let rest = sql_trimmed[12..].trim();
-            let parts: Vec<&str> = rest.splitn(2, |c: char| c.eq_ignore_ascii_case(&'T') && rest[rest.find(c).unwrap_or(0)..].to_uppercase().starts_with("TO")).collect();
+            let parts: Vec<&str> = rest
+                .splitn(2, |c: char| {
+                    c.eq_ignore_ascii_case(&'T')
+                        && rest[rest.find(c).unwrap_or(0)..]
+                            .to_uppercase()
+                            .starts_with("TO")
+                })
+                .collect();
             if parts.len() == 2 {
-                let old_table = Self::clean_identifier(parts[0].trim().trim_end_matches(char::is_whitespace));
-                let new_table = Self::clean_identifier(parts[1].trim_start_matches(|c: char| c.eq_ignore_ascii_case(&'O') || c.is_whitespace()).trim());
+                let old_table =
+                    Self::clean_identifier(parts[0].trim().trim_end_matches(char::is_whitespace));
+                let new_table = Self::clean_identifier(
+                    parts[1]
+                        .trim_start_matches(|c: char| {
+                            c.eq_ignore_ascii_case(&'O') || c.is_whitespace()
+                        })
+                        .trim(),
+                );
                 return Some(DdlEvent::RenameTable {
                     database: current_database.to_string(),
                     schema: current_schema.map(|s| s.to_string()),
@@ -587,8 +597,7 @@ impl DdlInvalidator {
         }
 
         // CREATE FUNCTION
-        if upper.starts_with("CREATE FUNCTION") || upper.starts_with("CREATE OR REPLACE FUNCTION")
-        {
+        if upper.starts_with("CREATE FUNCTION") || upper.starts_with("CREATE OR REPLACE FUNCTION") {
             let prefix = if upper.starts_with("CREATE OR REPLACE FUNCTION") {
                 "CREATE OR REPLACE FUNCTION"
             } else {
@@ -611,8 +620,7 @@ impl DdlInvalidator {
         }
 
         // CREATE PROCEDURE
-        if upper.starts_with("CREATE PROCEDURE")
-            || upper.starts_with("CREATE OR REPLACE PROCEDURE")
+        if upper.starts_with("CREATE PROCEDURE") || upper.starts_with("CREATE OR REPLACE PROCEDURE")
         {
             let prefix = if upper.starts_with("CREATE OR REPLACE PROCEDURE") {
                 "CREATE OR REPLACE PROCEDURE"
@@ -784,11 +792,7 @@ impl DdlInvalidator {
     }
 
     /// 处理单个 DDL 事件
-    async fn handle_event(
-        cache: &MetadataCacheManager,
-        connection_id: &str,
-        event: &DdlEvent,
-    ) {
+    async fn handle_event(cache: &MetadataCacheManager, connection_id: &str, event: &DdlEvent) {
         debug!("Processing DDL event for {}: {:?}", connection_id, event);
 
         match event {
@@ -877,8 +881,7 @@ impl DdlInvalidator {
                 cache.invalidate(&key).await;
             }
 
-            DdlEvent::CreateFunction { database, .. }
-            | DdlEvent::DropFunction { database, .. } => {
+            DdlEvent::CreateFunction { database, .. } | DdlEvent::DropFunction { database, .. } => {
                 // 失效函数列表缓存
                 let key = CacheKey::functions(connection_id, database);
                 cache.invalidate(&key).await;
@@ -979,7 +982,9 @@ mod tests {
     #[test]
     fn test_parse_create_database() {
         let event = DdlInvalidator::parse_ddl_event("CREATE DATABASE testdb", "mydb", None);
-        assert!(matches!(event, Some(DdlEvent::CreateDatabase { database }) if database == "testdb"));
+        assert!(
+            matches!(event, Some(DdlEvent::CreateDatabase { database }) if database == "testdb")
+        );
     }
 
     #[test]
@@ -1065,8 +1070,7 @@ mod tests {
             DdlInvalidator::parse_ddl_event("INSERT INTO users VALUES (1, 'test')", "mydb", None);
         assert!(event.is_none());
 
-        let event =
-            DdlInvalidator::parse_ddl_event("UPDATE users SET name = 'test'", "mydb", None);
+        let event = DdlInvalidator::parse_ddl_event("UPDATE users SET name = 'test'", "mydb", None);
         assert!(event.is_none());
     }
 
@@ -1112,7 +1116,10 @@ mod tests {
         let event = DdlInvalidator::parse_ddl_event("DROP VIEW IF EXISTS my_view", "mydb", None);
         assert!(matches!(event, Some(DdlEvent::DropView { view, .. }) if view == "my_view"));
 
-        let event = DdlInvalidator::parse_ddl_event("DROP SCHEMA IF EXISTS my_schema", "mydb", None);
-        assert!(matches!(event, Some(DdlEvent::DropSchema { schema, .. }) if schema == "my_schema"));
+        let event =
+            DdlInvalidator::parse_ddl_event("DROP SCHEMA IF EXISTS my_schema", "mydb", None);
+        assert!(
+            matches!(event, Some(DdlEvent::DropSchema { schema, .. }) if schema == "my_schema")
+        );
     }
 }

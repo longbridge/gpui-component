@@ -69,11 +69,8 @@ impl ClickHouseDbConnection {
             Ok(result) => {
                 let elapsed_ms = start.elapsed().as_millis();
 
-                let columns: Vec<String> = result
-                    .meta
-                    .iter()
-                    .map(|meta| meta.name.clone())
-                    .collect();
+                let columns: Vec<String> =
+                    result.meta.iter().map(|meta| meta.name.clone()).collect();
                 let column_meta: Vec<QueryColumnMeta> = result
                     .meta
                     .iter()

@@ -1,11 +1,11 @@
 //! Redis 核心类型定义
 
+use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::str::FromStr;
 use thiserror::Error;
-use rust_i18n::t;
 
 /// Redis 错误类型
 #[derive(Debug, Error)]
@@ -253,15 +253,9 @@ impl KeyInfo {
         match self.ttl {
             -2 => t!("RedisTTL.not_found").to_string(),
             -1 => t!("RedisTTL.permanent").to_string(),
-            ttl if ttl >= 86400 => {
-                t!("RedisTTL.days", days = ttl / 86400).to_string()
-            }
-            ttl if ttl >= 3600 => {
-                t!("RedisTTL.hours", hours = ttl / 3600).to_string()
-            }
-            ttl if ttl >= 60 => {
-                t!("RedisTTL.minutes", minutes = ttl / 60).to_string()
-            }
+            ttl if ttl >= 86400 => t!("RedisTTL.days", days = ttl / 86400).to_string(),
+            ttl if ttl >= 3600 => t!("RedisTTL.hours", hours = ttl / 3600).to_string(),
+            ttl if ttl >= 60 => t!("RedisTTL.minutes", minutes = ttl / 60).to_string(),
             ttl => t!("RedisTTL.seconds", seconds = ttl).to_string(),
         }
     }
@@ -400,9 +394,8 @@ impl RedisConnectionMode {
 fn percent_encode_userinfo(value: &str) -> String {
     let mut encoded = String::with_capacity(value.len());
     for &byte in value.as_bytes() {
-        let needs_encoding = byte <= 0x1F
-            || byte == 0x7F
-            || matches!(byte, b'@' | b':' | b'/' | b'?' | b'#' | b'%');
+        let needs_encoding =
+            byte <= 0x1F || byte == 0x7F || matches!(byte, b'@' | b':' | b'/' | b'?' | b'#' | b'%');
         if needs_encoding {
             encoded.push_str(&format!("%{:02X}", byte));
         } else {

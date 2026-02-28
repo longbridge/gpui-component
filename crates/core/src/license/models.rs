@@ -176,7 +176,10 @@ impl SubscriptionStatus {
 
     /// 检查订阅是否有效（活跃或已取消但未到期）
     pub fn is_valid(&self) -> bool {
-        matches!(self, SubscriptionStatus::Active | SubscriptionStatus::Cancelled)
+        matches!(
+            self,
+            SubscriptionStatus::Active | SubscriptionStatus::Cancelled
+        )
     }
 }
 
@@ -198,7 +201,11 @@ impl SubscriptionInfo {
         let status = SubscriptionStatus::from_str(&self.status);
 
         // 如果订阅无效，降级为免费版
-        let effective_plan = if status.is_valid() { plan } else { PlanTier::Free };
+        let effective_plan = if status.is_valid() {
+            plan
+        } else {
+            PlanTier::Free
+        };
 
         LicenseInfo::new(user_id, effective_plan, self.expires_at)
     }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use gpui::{App, AsyncApp, Entity, Task , Window};
+use gpui::{App, AsyncApp, Entity, Task, Window};
 
 use crate::storage::get_config_dir;
 use crate::tab_container::{TabContainer, TabContainerState, TabContentRegistry};
@@ -70,7 +70,9 @@ pub fn schedule_save(
     let last_state = last_layout_state.clone();
 
     cx.spawn(async move |cx: &mut AsyncApp| {
-        cx.background_executor().timer(Duration::from_secs(SAVE_DELAY_SECS)).await;
+        cx.background_executor()
+            .timer(Duration::from_secs(SAVE_DELAY_SECS))
+            .await;
 
         if let Some(t) = cx.update(move |cx| {
             let current_state = tab_container.read(cx).dump(cx);
@@ -86,7 +88,7 @@ pub fn schedule_save(
 
             Some(current_state)
         }) {
-            tracing::info!("Tab state saved, {:?}",  t)
+            tracing::info!("Tab state saved, {:?}", t)
         }
     })
 }

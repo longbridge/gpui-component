@@ -593,10 +593,9 @@ pub struct CodeBlockRenderOptions {
     pub in_list: bool,
 }
 
-pub type CodeBlockRenderer =
-    dyn Fn(&CodeBlock, CodeBlockRenderOptions, AnyElement, &mut Window, &mut App) -> AnyElement
-        + Send
-        + Sync;
+pub type CodeBlockRenderer = dyn Fn(&CodeBlock, CodeBlockRenderOptions, AnyElement, &mut Window, &mut App) -> AnyElement
+    + Send
+    + Sync;
 
 /// A context for rendering nodes, contains link references.
 #[derive(Default, Clone)]

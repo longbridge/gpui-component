@@ -3,7 +3,7 @@
 use itertools::Itertools;
 use num_traits::{Num, ToPrimitive};
 
-use super::{sealed::Sealed, Scale};
+use super::{Scale, sealed::Sealed};
 
 #[derive(Clone)]
 pub struct ScaleLinear<T> {

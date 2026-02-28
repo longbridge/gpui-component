@@ -14,7 +14,7 @@
 //! - UseLocal: 使用本地版本（覆盖云端）
 //! - KeepBoth: 保留两个版本（创建副本）
 
-use crate::cloud_sync::models::{CloudConnection, ConflictType, SyncConflict, ConflictResolution};
+use crate::cloud_sync::models::{CloudConnection, ConflictResolution, ConflictType, SyncConflict};
 use crate::storage::StoredConnection;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -138,12 +138,8 @@ impl ConflictResolver {
         strategy: ConflictResolution,
     ) -> ResolvedAction {
         match strategy {
-            ConflictResolution::UseCloud => {
-                ResolvedAction::UpdateLocal(conflict.cloud.clone())
-            }
-            ConflictResolution::UseLocal => {
-                ResolvedAction::UpdateCloud(conflict.local.clone())
-            }
+            ConflictResolution::UseCloud => ResolvedAction::UpdateLocal(conflict.cloud.clone()),
+            ConflictResolution::UseLocal => ResolvedAction::UpdateCloud(conflict.local.clone()),
             ConflictResolution::KeepBoth => {
                 let copy = self.create_conflict_copy(&conflict.local, "本地");
                 ResolvedAction::KeepBoth {
@@ -162,9 +158,9 @@ impl ConflictResolver {
         let formatted_time = Self::format_timestamp(timestamp);
 
         let mut copy = conn.clone();
-        copy.id = None;  // 清除 ID，作为新连接插入
-        copy.cloud_id = None;  // 清除云端关联
-        copy.last_synced_at = None;  // 清除同步状态
+        copy.id = None; // 清除 ID，作为新连接插入
+        copy.cloud_id = None; // 清除云端关联
+        copy.last_synced_at = None; // 清除同步状态
         copy.name = format!("{} ({} {})", conn.name, source, formatted_time);
 
         copy
@@ -257,7 +253,9 @@ impl ConflictDetail {
 
         let local_info = ConnectionInfo {
             name: conflict.local.name.clone(),
-            last_modified: conflict.local.updated_at
+            last_modified: conflict
+                .local
+                .updated_at
                 .map(|t| ConflictResolver::format_timestamp_static(t))
                 .unwrap_or_else(|| "未知".to_string()),
             connection_type: conflict.local.connection_type.to_string(),
@@ -265,7 +263,9 @@ impl ConflictDetail {
 
         let cloud_info = ConnectionInfo {
             name: conflict.cloud.name.clone(),
-            last_modified: ConflictResolver::format_timestamp_static(conflict.cloud.updated_at / 1000),
+            last_modified: ConflictResolver::format_timestamp_static(
+                conflict.cloud.updated_at / 1000,
+            ),
             connection_type: conflict.cloud.connection_type.clone(),
         };
 

@@ -1,15 +1,14 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, rems, App, ClickEvent, ElementId, Empty, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    App, ClickEvent, ElementId, Empty, Hsla, InteractiveElement, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px, rems,
 };
 
 use crate::{
-    h_flex,
+    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt, h_flex,
     text::{Text, TextViewStyle},
-    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt,
 };
 
 /// The variant of the [`Alert`].

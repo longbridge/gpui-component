@@ -58,8 +58,7 @@ impl ClickHouseDatabaseForm {
         let focus_handle = cx.focus_handle();
 
         let name_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("Database.enter_database_name").to_string())
+            InputState::new(window, cx).placeholder(t!("Database.enter_database_name").to_string())
         });
 
         let engine_items = vec![
@@ -75,8 +74,7 @@ impl ClickHouseDatabaseForm {
             cx.new(|cx| SelectState::new(engine_items, Some(IndexPath::new(0)), window, cx));
 
         let comment_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("Database.engine_comment").to_string())
+            InputState::new(window, cx).placeholder(t!("Database.engine_comment").to_string())
         });
 
         let name_sub = cx.observe(&name_input, |this, _, cx| {

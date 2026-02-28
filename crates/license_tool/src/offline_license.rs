@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use ed25519_dalek::{SigningKey, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use one_core::license::{OfflineLicenseDocument, OfflineLicensePayload, PlanTier};
 use rand::{RngCore, rngs::OsRng};
 use std::fs;
@@ -32,9 +32,7 @@ pub fn signing_key_from_base64(secret_key_base64: &str) -> Result<SigningKey> {
         .decode(secret_key_base64.as_bytes())
         .map_err(|e| anyhow!("私钥解码失败: {}", e))?;
 
-    let secret_key: [u8; 32] = decoded
-        .try_into()
-        .map_err(|_| anyhow!("私钥长度错误"))?;
+    let secret_key: [u8; 32] = decoded.try_into().map_err(|_| anyhow!("私钥长度错误"))?;
 
     Ok(SigningKey::from_bytes(&secret_key))
 }

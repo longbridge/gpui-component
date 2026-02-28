@@ -1,16 +1,20 @@
 use std::{collections::HashSet, ops::Range};
 
-use gpui::{div, px, AnyElement, App, Context, Div, Entity, InteractiveElement as _, IntoElement, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement, Styled as _, Subscription, Window};
-use gpui_component::{
-    h_flex, input::{Input, InputState}, menu::PopupMenu, ActiveTheme as _, Icon,
-    IconName,
-    Size,
+use crate::edit_table::filter_panel::FilterValue;
+use crate::edit_table::{Column, ColumnSort, EditTableState, loading::Loading};
+use gpui::{
+    AnyElement, App, Context, Div, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement, Styled as _,
+    Subscription, Window, div, px,
 };
 use gpui_component::date_picker::{DatePicker, DatePickerState};
 use gpui_component::datetime_picker::{DateTimePicker, DateTimePickerState};
 use gpui_component::time_picker::{TimePicker, TimePickerState};
-use crate::edit_table::{loading::Loading, Column, ColumnSort, EditTableState};
-use crate::edit_table::filter_panel::FilterValue;
+use gpui_component::{
+    ActiveTheme as _, Icon, IconName, Size, h_flex,
+    input::{Input, InputState},
+    menu::PopupMenu,
+};
 
 pub enum CellEditor {
     Input(Entity<InputState>),
@@ -99,11 +103,7 @@ impl CellEditor {
                             .w_0()
                             .h(px(0.))
                             .overflow_hidden()
-                            .child(
-                                DatePicker::new(picker)
-                                    .appearance(false)
-                                    .cleanable(true),
-                            ),
+                            .child(DatePicker::new(picker).appearance(false).cleanable(true)),
                     )
                     .into_any_element()
             }
@@ -146,15 +146,11 @@ impl CellEditor {
                             .child("..."),
                     )
                     .child(
-                        div()
-                            .w_0()
-                            .h(px(0.))
-                            .overflow_hidden()
-                            .child(
-                                DateTimePicker::new(picker)
-                                    .appearance(false)
-                                    .cleanable(true),
-                            ),
+                        div().w_0().h(px(0.)).overflow_hidden().child(
+                            DateTimePicker::new(picker)
+                                .appearance(false)
+                                .cleanable(true),
+                        ),
                     )
                     .into_any_element()
             }
@@ -201,11 +197,7 @@ impl CellEditor {
                             .w_0()
                             .h(px(0.))
                             .overflow_hidden()
-                            .child(
-                                TimePicker::new(picker)
-                                    .appearance(false)
-                                    .cleanable(true),
-                            ),
+                            .child(TimePicker::new(picker).appearance(false).cleanable(true)),
                     )
                     .into_any_element()
             }
@@ -411,7 +403,11 @@ pub trait EditTableDelegate: Sized + 'static {
         false
     }
 
-    fn on_row_added(&mut self, window: &mut Window, cx: &mut Context<EditTableState<Self>>) -> usize {
+    fn on_row_added(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<EditTableState<Self>>,
+    ) -> usize {
         0
     }
 

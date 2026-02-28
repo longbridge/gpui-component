@@ -105,7 +105,10 @@ impl ProviderRepository {
         }
 
         if let Ok(list) = self.list() {
-            if let Some(mut existing) = list.into_iter().find(|p| p.provider_type == ProviderType::OnetCli) {
+            if let Some(mut existing) = list
+                .into_iter()
+                .find(|p| p.provider_type == ProviderType::OnetCli)
+            {
                 if !existing.enabled {
                     existing.enabled = true;
                     let _ = self.update(&existing);

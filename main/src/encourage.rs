@@ -2,11 +2,13 @@
 // 鼓励作者对话框
 // ============================================================================
 
-use std::sync::Arc;
-use gpui::{div, img, px, AnyElement, App, Context, FocusHandle, Focusable, FontWeight, Image, ImageFormat, IntoElement, ParentElement, Render, SharedString, Styled, StyledImage, Window};
+use gpui::{
+    AnyElement, App, Context, FocusHandle, Focusable, FontWeight, Image, ImageFormat, IntoElement,
+    ParentElement, Render, SharedString, Styled, StyledImage, Window, div, img, px,
+};
+use gpui_component::{ActiveTheme, h_flex, v_flex};
 use rust_i18n::t;
-use gpui_component::{h_flex, v_flex, ActiveTheme};
-
+use std::sync::Arc;
 
 const WECHAT_QR_ENV: &str = "ONETCLI_WECHAT_QR_URL";
 const ALIPAY_QR_ENV: &str = "ONETCLI_ALIPAY_QR_URL";
@@ -39,9 +41,21 @@ impl EncourageDialog {
         v_flex()
             .w_full()
             .gap_1()
-            .child(div().text_sm().child(t!("Encourage.intro_line1").to_string()))
-            .child(div().text_sm().child(t!("Encourage.intro_line2").to_string()))
-            .child(div().text_sm().child(t!("Encourage.intro_line3").to_string()))
+            .child(
+                div()
+                    .text_sm()
+                    .child(t!("Encourage.intro_line1").to_string()),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .child(t!("Encourage.intro_line2").to_string()),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .child(t!("Encourage.intro_line3").to_string()),
+            )
             .into_any_element()
     }
 
@@ -182,18 +196,20 @@ impl Render for EncourageDialog {
                             .font_weight(FontWeight::MEDIUM)
                             .child(t!("Encourage.alt_support_title").to_string()),
                     )
-                    .children([
-                        t!("Encourage.alt_support_item1"),
-                        t!("Encourage.alt_support_item2"),
-                        t!("Encourage.alt_support_item3"),
-                    ]
+                    .children(
+                        [
+                            t!("Encourage.alt_support_item1"),
+                            t!("Encourage.alt_support_item2"),
+                            t!("Encourage.alt_support_item3"),
+                        ]
                         .into_iter()
                         .map(|item| {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(format!("• {}", item))
-                        })),
+                        }),
+                    ),
             )
             .child(
                 div()

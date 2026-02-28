@@ -2,20 +2,27 @@
 
 use std::ops::Deref;
 
-use gpui::{App, Axis, Bounds, Context, Element, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, SharedString, Style, Styled, Subscription, Task, Window, div, px, AppContext};
 use gpui::prelude::FluentBuilder;
+use gpui::{
+    App, AppContext, Axis, Bounds, Context, Element, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point,
+    Render, SharedString, Style, Styled, Subscription, Task, Window, div, px,
+};
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, h_flex};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::{ActiveConnections, StoredConnection, Workspace};
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent, TabItem};
-use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
+use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
 use tracing::warn;
 
+use crate::GlobalMongoState;
 use crate::collection_view::CollectionView;
 use crate::mongo_tree_event::MongoEventHandler;
 use crate::mongo_tree_view::MongoTreeView;
-use crate::sidebar::{MongoSidebar, MongoSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
-use crate::GlobalMongoState;
+use crate::sidebar::{
+    MongoSidebar, MongoSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH,
+    TOOLBAR_WIDTH,
+};
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
 const TREE_PANEL_DEFAULT_SIZE: Pixels = px(250.0);
@@ -50,9 +57,7 @@ impl MongoTabView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let tree_view = cx.new(|cx| {
-            MongoTreeView::new_with_connections(&connections, window, cx)
-        });
+        let tree_view = cx.new(|cx| MongoTreeView::new_with_connections(&connections, window, cx));
         let tab_container = cx.new(|cx| TabContainer::new(window, cx));
         let collection_view = cx.new(|cx| CollectionView::new(window, cx));
         let sidebar = cx.new(|cx| MongoSidebar::new(window, cx));
@@ -64,25 +69,37 @@ impl MongoTabView {
         });
 
         let event_handler = cx.new(|cx| {
-            MongoEventHandler::new(&tree_view, tab_container.clone(), collection_view.clone(), window, cx)
+            MongoEventHandler::new(
+                &tree_view,
+                tab_container.clone(),
+                collection_view.clone(),
+                window,
+                cx,
+            )
         });
 
         let mut subscriptions = Vec::new();
-        subscriptions.push(cx.subscribe(&sidebar, |_this, _, event: &MongoSidebarEvent, cx| {
-            match event {
-                MongoSidebarEvent::PanelChanged | MongoSidebarEvent::AskAi => {
-                    cx.notify();
-                }
-            }
-        }));
+        subscriptions.push(
+            cx.subscribe(
+                &sidebar,
+                |_this, _, event: &MongoSidebarEvent, cx| match event {
+                    MongoSidebarEvent::PanelChanged | MongoSidebarEvent::AskAi => {
+                        cx.notify();
+                    }
+                },
+            ),
+        );
 
         let active_connection = connections
             .iter()
             .find(|connection| connection.id == active_connection_id)
             .cloned()
             .or_else(|| connections.first().cloned());
-        let resolved_active_connection_id = active_connection_id
-            .or_else(|| active_connection.as_ref().and_then(|connection| connection.id));
+        let resolved_active_connection_id = active_connection_id.or_else(|| {
+            active_connection
+                .as_ref()
+                .and_then(|connection| connection.id)
+        });
 
         if let Some(active_connection_id) = resolved_active_connection_id {
             tree_view.update(cx, |tree_view, cx| {
@@ -174,17 +191,16 @@ impl MongoTabView {
                 } else {
                     TOOLBAR_WIDTH
                 };
-                let max_size = (available_width - PANEL_MIN_SIZE - sidebar_width).max(PANEL_MIN_SIZE);
+                let max_size =
+                    (available_width - PANEL_MIN_SIZE - sidebar_width).max(PANEL_MIN_SIZE);
                 self.tree_panel_size = new_size.clamp(PANEL_MIN_SIZE, max_size);
             }
             ResizingPanel::Sidebar => {
                 let new_size = self.bounds.right() - mouse_position.x;
                 let max_size = (available_width - self.tree_panel_size - PANEL_MIN_SIZE)
                     .max(SIDEBAR_MIN_WIDTH);
-                self.sidebar_panel_size = new_size.clamp(
-                    SIDEBAR_MIN_WIDTH,
-                    max_size.min(SIDEBAR_MAX_WIDTH),
-                );
+                self.sidebar_panel_size =
+                    new_size.clamp(SIDEBAR_MIN_WIDTH, max_size.min(SIDEBAR_MAX_WIDTH));
             }
         }
 
@@ -256,10 +272,7 @@ impl TabContent for MongoTabView {
 
         cx.spawn(async move |_this, cx: &mut gpui::AsyncApp| {
             for connection in &connections {
-                let connection_id = connection
-                    .id
-                    .map(|id| id.to_string())
-                    .unwrap_or_default();
+                let connection_id = connection.id.map(|id| id.to_string()).unwrap_or_default();
                 if connection_id.is_empty() {
                     continue;
                 }
@@ -279,14 +292,14 @@ impl TabContent for MongoTabView {
                 if let Err(error) = result {
                     warn!(
                         "Failed to close mongodb connection {}: {}",
-                        connection_id,
-                        error
+                        connection_id, error
                     );
                 }
 
                 if let Ok(connection_id_value) = connection_id.parse::<i64>() {
                     let _ = cx.update(|cx| {
-                        cx.global_mut::<ActiveConnections>().remove(connection_id_value);
+                        cx.global_mut::<ActiveConnections>()
+                            .remove(connection_id_value);
                     });
                 }
             }
@@ -340,9 +353,7 @@ impl Render for MongoTabView {
                                 .child(self.sidebar.clone()),
                         )
                     })
-                    .when(!sidebar_visible, |this| {
-                        this.child(self.sidebar.clone())
-                    })
+                    .when(!sidebar_visible, |this| this.child(self.sidebar.clone()))
                     .child(ResizeEventHandler { view }),
             )
     }

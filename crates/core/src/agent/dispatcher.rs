@@ -123,7 +123,10 @@ impl AgentDispatcher {
                 {
                     Ok(decision) => {
                         if let Some(agent) = registry.get(&decision.agent_id) {
-                            info!(agent = decision.agent_id.as_str(), "Dispatched via LLM routing");
+                            info!(
+                                agent = decision.agent_id.as_str(),
+                                "Dispatched via LLM routing"
+                            );
                             Arc::clone(agent)
                         } else {
                             warn!(
@@ -193,7 +196,9 @@ impl AgentDispatcher {
         }
 
         // 1c: Session affinity (if still valid).
-        if affinity.is_valid() && let Some(id) = affinity.current_agent_id() {
+        if affinity.is_valid()
+            && let Some(id) = affinity.current_agent_id()
+        {
             for agent in available {
                 if agent.descriptor().id == id {
                     return Some(agent);

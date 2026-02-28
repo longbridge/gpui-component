@@ -82,7 +82,9 @@ impl AgentContext {
 
     /// Retrieve a capability value by key, downcasting to `T`.
     pub fn get_capability<T: Any + Send + Sync>(&self, key: &str) -> Option<&T> {
-        self.capabilities.get(key).and_then(|v| v.downcast_ref::<T>())
+        self.capabilities
+            .get(key)
+            .and_then(|v| v.downcast_ref::<T>())
     }
 }
 
@@ -118,7 +120,10 @@ pub enum Artifact {
     /// A SQL query.
     Sql(String),
     /// A code snippet with optional language tag.
-    Code { language: Option<String>, content: String },
+    Code {
+        language: Option<String>,
+        content: String,
+    },
     /// An arbitrary JSON artifact.
     Custom(Value),
 }
@@ -141,11 +146,7 @@ pub trait Agent: Send + Sync + 'static {
     }
 
     /// Execute the agent. Send events (deltas, progress, completion) through `tx`.
-    async fn execute(
-        &self,
-        ctx: AgentContext,
-        tx: mpsc::Sender<AgentEvent>,
-    );
+    async fn execute(&self, ctx: AgentContext, tx: mpsc::Sender<AgentEvent>);
 }
 
 /// Convenience alias for a thread-safe agent reference.

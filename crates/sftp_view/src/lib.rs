@@ -3,13 +3,15 @@ rust_i18n::i18n!("locales", fallback = "en");
 mod context_menu_handler;
 mod file_list_panel;
 
-pub use file_list_panel::{DraggedFileItem, DraggedFileItems, FileItem, FileListPanel, FileListPanelEvent};
 use context_menu_handler::ContextMenuHandler;
+pub use file_list_panel::{
+    DraggedFileItem, DraggedFileItems, FileItem, FileListPanel, FileListPanelEvent,
+};
 
 use gpui::{
-    App, AsyncApp, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, FontWeight,
-    Hsla, IntoElement, ParentElement, Render, SharedString, Styled, WeakEntity, Window, actions, div,
-    prelude::*, px,
+    App, AsyncApp, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable,
+    FontWeight, Hsla, IntoElement, ParentElement, Render, SharedString, Styled, WeakEntity, Window,
+    actions, div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, Size, WindowExt,
@@ -29,6 +31,7 @@ use one_core::storage::models::{
     ActiveConnections, ProxyType as StorageProxyType, SshAuthMethod, StoredConnection,
 };
 use one_core::tab_container::{TabContent, TabContentEvent};
+use rust_i18n::t;
 use sftp::{RusshSftpClient, SftpClient, TransferCancelled, TransferProgress};
 use ssh::{JumpServerConnectConfig, ProxyConnectConfig, ProxyType, SshAuth, SshConnectConfig};
 use std::collections::VecDeque;
@@ -37,7 +40,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
-use rust_i18n::t;
 
 actions!(
     sftp_view,
@@ -58,7 +60,10 @@ pub enum SftpViewEvent {
     /// 请求打开本地终端，带工作目录
     OpenLocalTerminal { working_dir: String },
     /// 请求打开 SSH 终端，携带连接信息
-    OpenSshTerminal { connection: StoredConnection,working_dir: String },
+    OpenSshTerminal {
+        connection: StoredConnection,
+        working_dir: String,
+    },
 }
 
 #[derive(Clone, PartialEq)]
@@ -200,9 +205,7 @@ impl TransferQueue {
 
     fn next_startable(&mut self) -> Vec<TransferTask> {
         let mut startable = Vec::new();
-        let mut available_slots = self
-            .max_concurrent
-            .saturating_sub(self.running_count());
+        let mut available_slots = self.max_concurrent.saturating_sub(self.running_count());
 
         while available_slots > 0 {
             let Some(task_id) = self.pending.pop_front() else {
@@ -441,7 +444,12 @@ impl SftpView {
         Self::new_with_index(conn, None, window, cx)
     }
 
-    pub fn new_with_index(conn: StoredConnection, tab_index: Option<usize>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new_with_index(
+        conn: StoredConnection,
+        tab_index: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let ssh_params = conn
             .to_ssh_params()
             .expect("StoredConnection should contain valid SSH params");
@@ -581,8 +589,10 @@ impl SftpView {
             },
         ));
 
-        let transfer_client_pool =
-            Arc::new(Mutex::new(TransferClientPool::new(config.clone(), MAX_CONCURRENT_TRANSFERS)));
+        let transfer_client_pool = Arc::new(Mutex::new(TransferClientPool::new(
+            config.clone(),
+            MAX_CONCURRENT_TRANSFERS,
+        )));
 
         let mut view = Self {
             connection_state: ConnectionState::Disconnected { error: None },
@@ -747,7 +757,10 @@ impl SftpView {
             Err(e) => {
                 tracing::error!("Failed to read local directory: {}", e);
                 if let Some(window) = window {
-                    window.push_notification(Notification::error(t!("Error.read_dir_failed", error = e)), cx);
+                    window.push_notification(
+                        Notification::error(t!("Error.read_dir_failed", error = e)),
+                        cx,
+                    );
                 }
             }
         }
@@ -1242,9 +1255,7 @@ impl SftpView {
         };
 
         // 检查是否有文件夹冲突（合并选项只对文件夹有意义）
-        let has_dir_conflict = pending_transfers
-            .iter()
-            .any(|t| t.has_conflict && t.is_dir);
+        let has_dir_conflict = pending_transfers.iter().any(|t| t.has_conflict && t.is_dir);
 
         window.open_dialog(cx, move |dialog, _window, cx| {
             let view_overwrite = view.clone();
@@ -1437,13 +1448,7 @@ impl SftpView {
                 );
             }
             TransferOperation::DeleteLocal { entries, local_dir } => {
-                self.start_local_delete_task(
-                    task.id,
-                    entries,
-                    local_dir,
-                    task.shared_progress,
-                    cx,
-                );
+                self.start_local_delete_task(task.id, entries, local_dir, task.shared_progress, cx);
             }
             TransferOperation::DeleteRemote {
                 entries,
@@ -1495,7 +1500,9 @@ impl SftpView {
                             &remote_path,
                             cancelled.clone(),
                             Box::new(move |progress: TransferProgress| {
-                                progress_for_callback.scanning.store(false, Ordering::Relaxed);
+                                progress_for_callback
+                                    .scanning
+                                    .store(false, Ordering::Relaxed);
                                 progress_for_callback
                                     .transferred
                                     .store(progress.transferred, Ordering::Relaxed);
@@ -1528,7 +1535,9 @@ impl SftpView {
                             &remote_path,
                             cancelled.clone(),
                             Box::new(move |progress: TransferProgress| {
-                                progress_for_callback.scanning.store(false, Ordering::Relaxed);
+                                progress_for_callback
+                                    .scanning
+                                    .store(false, Ordering::Relaxed);
                                 progress_for_callback
                                     .transferred
                                     .store(progress.transferred, Ordering::Relaxed);
@@ -1636,7 +1645,9 @@ impl SftpView {
                             local_path.to_string_lossy().as_ref(),
                             cancelled.clone(),
                             Box::new(move |progress: TransferProgress| {
-                                progress_for_callback.scanning.store(false, Ordering::Relaxed);
+                                progress_for_callback
+                                    .scanning
+                                    .store(false, Ordering::Relaxed);
                                 progress_for_callback
                                     .transferred
                                     .store(progress.transferred, Ordering::Relaxed);
@@ -1669,7 +1680,9 @@ impl SftpView {
                             local_path.to_string_lossy().as_ref(),
                             cancelled.clone(),
                             Box::new(move |progress: TransferProgress| {
-                                progress_for_callback.scanning.store(false, Ordering::Relaxed);
+                                progress_for_callback
+                                    .scanning
+                                    .store(false, Ordering::Relaxed);
                                 progress_for_callback
                                     .transferred
                                     .store(progress.transferred, Ordering::Relaxed);
@@ -2014,7 +2027,9 @@ impl SftpView {
             .iter_mut()
             .find(|task| task.id == task_id)
         {
-            task.shared_progress.scanning.store(false, Ordering::Relaxed);
+            task.shared_progress
+                .scanning
+                .store(false, Ordering::Relaxed);
             match result {
                 Ok(_) => {
                     task.state = TransferTaskState::Completed;
@@ -2241,11 +2256,7 @@ impl SftpView {
         }
     }
 
-    fn execute_downloads(
-        &mut self,
-        transfers: Vec<PendingTransfer>,
-        cx: &mut Context<Self>,
-    ) {
+    fn execute_downloads(&mut self, transfers: Vec<PendingTransfer>, cx: &mut Context<Self>) {
         tracing::info!("execute_downloads: {} transfers", transfers.len());
 
         for transfer in transfers {
@@ -2343,18 +2354,15 @@ impl SftpView {
                 .title(t!("Dialog.confirm_delete").to_string())
                 .w(px(400.))
                 .child(
-                    v_flex()
-                        .gap_2()
-                        .child(confirm_msg.clone())
-                        .child(
-                            div()
-                                .p_2()
-                                .bg(cx.theme().secondary)
-                                .rounded_md()
-                                .text_sm()
-                                .overflow_hidden()
-                                .child(file_list.clone()),
-                        ),
+                    v_flex().gap_2().child(confirm_msg.clone()).child(
+                        div()
+                            .p_2()
+                            .bg(cx.theme().secondary)
+                            .rounded_md()
+                            .text_sm()
+                            .overflow_hidden()
+                            .child(file_list.clone()),
+                    ),
                 )
                 .confirm()
                 .button_props(
@@ -2472,18 +2480,15 @@ impl SftpView {
                 .title(t!("Dialog.confirm_delete").to_string())
                 .w(px(400.))
                 .child(
-                    v_flex()
-                        .gap_2()
-                        .child(confirm_msg.clone())
-                        .child(
-                            div()
-                                .p_2()
-                                .bg(cx.theme().secondary)
-                                .rounded_md()
-                                .text_sm()
-                                .overflow_hidden()
-                                .child(file_list.clone()),
-                        ),
+                    v_flex().gap_2().child(confirm_msg.clone()).child(
+                        div()
+                            .p_2()
+                            .bg(cx.theme().secondary)
+                            .rounded_md()
+                            .text_sm()
+                            .overflow_hidden()
+                            .child(file_list.clone()),
+                    ),
                 )
                 .confirm()
                 .button_props(
@@ -2550,7 +2555,8 @@ impl SftpView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.filename")));
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.filename")));
         let view = cx.entity().downgrade();
 
         // 在打开对话框前设置焦点，避免闪烁
@@ -2590,7 +2596,10 @@ impl SftpView {
                                         e
                                     );
                                     window.push_notification(
-                                        Notification::error(t!("Error.create_folder_failed", error = e)),
+                                        Notification::error(t!(
+                                            "Error.create_folder_failed",
+                                            error = e
+                                        )),
                                         cx,
                                     );
                                 } else {
@@ -3021,16 +3030,13 @@ impl SftpView {
                                     .text_color(cx.theme().danger)
                                     .into_any_element()
                             })
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(if is_connecting {
-                                        t!("Connection.connecting").to_string()
-                                    } else {
-                                        t!("Connection.disconnected").to_string()
-                                    }),
-                            ),
+                            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
+                                if is_connecting {
+                                    t!("Connection.connecting").to_string()
+                                } else {
+                                    t!("Connection.disconnected").to_string()
+                                },
+                            )),
                     )
                     .when_some(error_msg, |el, msg| {
                         el.child(
@@ -3187,12 +3193,9 @@ impl SftpView {
                                 Tooltip::new(tooltip_name.clone()).build(window, cx)
                             }),
                     )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(px(100.))
-                            .child(Progress::new("file-transfer-process").value(display_progress as f32)),
-                    )
+                    .child(div().flex_1().min_w(px(100.)).child(
+                        Progress::new("file-transfer-process").value(display_progress as f32),
+                    ))
                     .child(
                         div()
                             .text_xs()
@@ -3254,7 +3257,7 @@ impl SftpView {
         let mut breadcrumb = Breadcrumb::new();
         let components: Vec<_> = self.local_current_path.components().collect();
         let total = components.len();
-    const MAX_VISIBLE: usize = 4;
+        const MAX_VISIBLE: usize = 4;
 
         if total <= MAX_VISIBLE {
             for (idx, component) in components.iter().enumerate() {
@@ -3363,13 +3366,12 @@ impl SftpView {
                         parts[..=idx].join("/")
                     };
 
-                    breadcrumb = breadcrumb.child(
-                        breadcrumb_item(parts[idx].to_string()).on_click(cx.listener(
-                            move |this, _, _window, cx| {
+                    breadcrumb =
+                        breadcrumb.child(breadcrumb_item(parts[idx].to_string()).on_click(
+                            cx.listener(move |this, _, _window, cx| {
                                 this.navigate_remote_to(path_so_far.clone(), cx);
-                            },
-                        )),
-                    );
+                            }),
+                        ));
                 }
             }
         }
@@ -3456,12 +3458,7 @@ impl SftpView {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.start_local_path_editing(window, cx);
                             }))
-                            .child(
-                                breadcrumb
-                                    .flex_1()
-                                    .min_w(px(0.))
-                                    .overflow_hidden(),
-                            )
+                            .child(breadcrumb.flex_1().min_w(px(0.)).overflow_hidden())
                             .into_any_element()
                     })
                     .child(
@@ -3608,12 +3605,7 @@ impl SftpView {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.start_remote_path_editing(window, cx);
                             }))
-                            .child(
-                                breadcrumb
-                                    .flex_1()
-                                    .min_w(px(0.))
-                                    .overflow_hidden(),
-                            )
+                            .child(breadcrumb.flex_1().min_w(px(0.)).overflow_hidden())
                             .into_any_element()
                     })
                     .child(
@@ -3682,7 +3674,11 @@ impl SftpView {
                             .on_drop(cx.listener(|this, items: &DraggedFileItems, window, cx| {
                                 this.is_dragging_over_remote = false;
                                 if !items.is_remote {
-                                    this.handle_local_files_drop_to_remote(items.clone(), window, cx);
+                                    this.handle_local_files_drop_to_remote(
+                                        items.clone(),
+                                        window,
+                                        cx,
+                                    );
                                 }
                             }))
                     })

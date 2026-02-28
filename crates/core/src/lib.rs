@@ -19,9 +19,18 @@ pub mod tab_persistence;
 pub mod themes;
 pub mod utils;
 
-pub use crate::agent::{Agent, AgentContext, AgentDescriptor, AgentDispatcher, AgentEvent, AgentResult, AgentRegistry, SessionAffinity};
-pub use crate::ai_chat::{AiChatColors, AiChatPanel, AiChatPanelEvent, ChatMessageUI, ChatMessageUIGeneric, ChatRole, CodeBlockAction, CodeBlockActionBuilder, CodeBlockActionCallback, CodeBlockActionRegistry, LanguageMatcher, MessageExtension, MessageVariant, NoExtension, ProviderItem};
-pub use crate::ai_chat::{ChatEngine, ChatMessageRenderer, CoreStreamEvent, StreamError, ChatStreamProcessor};
+pub use crate::agent::{
+    Agent, AgentContext, AgentDescriptor, AgentDispatcher, AgentEvent, AgentRegistry, AgentResult,
+    SessionAffinity,
+};
+pub use crate::ai_chat::{
+    AiChatColors, AiChatPanel, AiChatPanelEvent, ChatMessageUI, ChatMessageUIGeneric, ChatRole,
+    CodeBlockAction, CodeBlockActionBuilder, CodeBlockActionCallback, CodeBlockActionRegistry,
+    LanguageMatcher, MessageExtension, MessageVariant, NoExtension, ProviderItem,
+};
+pub use crate::ai_chat::{
+    ChatEngine, ChatMessageRenderer, ChatStreamProcessor, CoreStreamEvent, StreamError,
+};
 
 pub fn init(cx: &mut App) {
     gpui_tokio::init(cx);

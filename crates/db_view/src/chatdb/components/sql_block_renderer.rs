@@ -3,11 +3,12 @@
 //! 渲染 SQL 代码块及其执行结果
 
 use gpui::prelude::FluentBuilder;
-use gpui::{div, px, AnyElement, App, IntoElement, ParentElement, Styled};
+use gpui::{AnyElement, App, IntoElement, ParentElement, Styled, div, px};
 use gpui_component::{
+    ActiveTheme, IconName, Sizable,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
-    h_flex, v_flex, ActiveTheme, IconName, Sizable,
+    h_flex, v_flex,
 };
 use rust_i18n::t;
 use std::collections::HashMap;
@@ -24,11 +25,7 @@ pub struct SqlBlockRenderer;
 
 impl SqlBlockRenderer {
     /// 渲染 SQL 代码块操作按钮
-    pub fn render_actions<F>(
-        code: &str,
-        is_sql: bool,
-        on_run: F,
-    ) -> impl IntoElement
+    pub fn render_actions<F>(code: &str, is_sql: bool, on_run: F) -> impl IntoElement
     where
         F: Fn() + 'static,
     {

@@ -2,10 +2,10 @@
 
 use gpui::{AppContext, Context, Entity, Subscription, Window};
 
-use one_core::tab_container::{TabContainer, TabItem};
+use crate::MongoNodeType;
 use crate::collection_view::{CollectionTabConfig, CollectionTabView, CollectionView};
 use crate::mongo_tree_view::{MongoTreeView, MongoTreeViewEvent};
-use crate::MongoNodeType;
+use one_core::tab_container::{TabContainer, TabItem};
 
 /// MongoDB 事件处理器
 pub struct MongoEventHandler {

@@ -117,17 +117,14 @@ impl IntentRouter {
         prompt
     }
 
-    fn parse_response(
-        response: &str,
-        valid_ids: &[&str],
-    ) -> Result<RoutingDecision, RouterError> {
+    fn parse_response(response: &str, valid_ids: &[&str]) -> Result<RoutingDecision, RouterError> {
         let trimmed = response.trim();
 
         let try_extract = |val: &serde_json::Value| -> Option<RoutingDecision> {
             let id = val.get("agent_id")?.as_str()?;
-            valid_ids
-                .contains(&id)
-                .then(|| RoutingDecision { agent_id: id.to_string() })
+            valid_ids.contains(&id).then(|| RoutingDecision {
+                agent_id: id.to_string(),
+            })
         };
 
         // Strategy 1: Direct JSON parse.

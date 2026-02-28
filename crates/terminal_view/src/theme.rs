@@ -423,7 +423,7 @@ impl TerminalTheme {
     pub fn available_monospace_fonts() -> Vec<&'static str> {
         if cfg!(target_os = "macos") {
             vec![
-                "Menlo",           // macOS 默认
+                "Menlo", // macOS 默认
                 "Monaco",
                 "SF Mono",
                 "Courier New",
@@ -437,7 +437,7 @@ impl TerminalTheme {
             ]
         } else if cfg!(target_os = "windows") {
             vec![
-                "Consolas",        // Windows 默认
+                "Consolas", // Windows 默认
                 "Cascadia Mono",
                 "Cascadia Code",
                 "Courier New",
@@ -469,6 +469,8 @@ impl TerminalTheme {
 
     /// 获取可用的字体大小预设列表
     pub fn available_font_sizes() -> Vec<f32> {
-        vec![8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 18.0, 20.0, 22.0, 24.0]
+        vec![
+            8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 18.0, 20.0, 22.0, 24.0,
+        ]
     }
 }

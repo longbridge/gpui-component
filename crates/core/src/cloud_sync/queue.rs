@@ -306,9 +306,7 @@ impl OperationQueue {
                 SyncOperation::UpdateCloud { .. } | SyncOperation::UpdateLocal { .. } => {
                     stats.updates += 1
                 }
-                SyncOperation::DeleteCloud(_) | SyncOperation::DeleteLocal(_) => {
-                    stats.deletes += 1
-                }
+                SyncOperation::DeleteCloud(_) | SyncOperation::DeleteLocal(_) => stats.deletes += 1,
                 SyncOperation::Download(_) => stats.downloads += 1,
             }
         }

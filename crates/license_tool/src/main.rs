@@ -148,11 +148,7 @@ fn parse_issue_args(arguments: &[String]) -> Result<IssueArgs> {
     })
 }
 
-fn require_next_value(
-    arguments: &[String],
-    index: usize,
-    name: &str,
-) -> Result<String> {
+fn require_next_value(arguments: &[String], index: usize, name: &str) -> Result<String> {
     arguments
         .get(index + 1)
         .cloned()

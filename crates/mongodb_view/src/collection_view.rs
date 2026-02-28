@@ -4,12 +4,12 @@ use std::collections::HashMap;
 
 use gpui::{
     AnyElement, App, AppContext, AsyncApp, ClipboardItem, Context, Entity, EventEmitter,
-    FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString, Styled,
-    StatefulInteractiveElement, Subscription, UniformListScrollHandle, Window, div,
-    prelude::FluentBuilder, px, uniform_list, InteractiveElement,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, UniformListScrollHandle, Window, div,
+    prelude::FluentBuilder, px, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyledExt,
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyledExt, WindowExt as _,
     button::{Button, ButtonVariants as _},
     dialog::DialogButtonProps,
     h_flex,
@@ -18,7 +18,6 @@ use gpui_component::{
     spinner::Spinner,
     tab::{Tab, TabBar},
     v_flex,
-    WindowExt as _,
 };
 use mongodb::bson::{Bson, Document};
 use mongodb::options::FindOptions;
@@ -26,8 +25,8 @@ use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
 
-use crate::types::{bson_to_string, document_to_pretty_json, MongoError};
 use crate::GlobalMongoState;
+use crate::types::{MongoError, bson_to_string, document_to_pretty_json};
 
 const DEFAULT_PAGE_SIZE: i64 = 25;
 const DEFAULT_SKIP: i64 = 0;
@@ -94,12 +93,11 @@ fn parse_optional_document(text: &str, label: &str) -> Result<Option<Document>, 
             t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
         )
     })?;
-    let bson = mongodb::bson::to_bson(&value)
-        .map_err(|e| {
-            MongoError::InvalidFilter(
-                t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
-            )
-        })?;
+    let bson = mongodb::bson::to_bson(&value).map_err(|e| {
+        MongoError::InvalidFilter(
+            t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
+        )
+    })?;
     match bson {
         Bson::Document(document) => Ok(Some(document)),
         _ => Err(MongoError::InvalidFilter(
@@ -121,12 +119,11 @@ fn parse_required_document(text: &str, label: &str) -> Result<Document, MongoErr
             t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
         )
     })?;
-    let bson = mongodb::bson::to_bson(&value)
-        .map_err(|e| {
-            MongoError::InvalidFilter(
-                t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
-            )
-        })?;
+    let bson = mongodb::bson::to_bson(&value).map_err(|e| {
+        MongoError::InvalidFilter(
+            t!("MongoCollection.parse_failed", label = label, error = e).to_string(),
+        )
+    })?;
     match bson {
         Bson::Document(document) => Ok(document),
         _ => Err(MongoError::InvalidFilter(
@@ -165,7 +162,7 @@ fn parse_pipeline(text: &str) -> Result<Vec<Document>, MongoError> {
         _ => {
             return Err(MongoError::InvalidFilter(
                 t!("MongoCollection.pipeline_must_be_array").to_string(),
-            ))
+            ));
         }
     };
 
@@ -190,7 +187,7 @@ fn parse_pipeline(text: &str) -> Result<Vec<Document>, MongoError> {
                         index = index + 1
                     )
                     .to_string(),
-                ))
+                ));
             }
         }
     }
@@ -198,8 +195,8 @@ fn parse_pipeline(text: &str) -> Result<Vec<Document>, MongoError> {
 }
 
 fn document_to_compact_json(document: &Document) -> Result<String, MongoError> {
-    let bson = mongodb::bson::to_bson(document)
-        .map_err(|e| MongoError::Serialization(e.to_string()))?;
+    let bson =
+        mongodb::bson::to_bson(document).map_err(|e| MongoError::Serialization(e.to_string()))?;
     serde_json::to_string(&bson).map_err(|e| MongoError::Serialization(e.to_string()))
 }
 
@@ -211,8 +208,7 @@ fn documents_to_pretty_json(documents: &[Document]) -> Result<String, MongoError
         array.push(bson);
     }
     let bson = Bson::Array(array);
-    serde_json::to_string_pretty(&bson)
-        .map_err(|e| MongoError::Serialization(e.to_string()))
+    serde_json::to_string_pretty(&bson).map_err(|e| MongoError::Serialization(e.to_string()))
 }
 
 fn bson_type_name(value: &Bson) -> &'static str {
@@ -280,8 +276,7 @@ fn build_schema_payload(documents: &[Document]) -> Result<String, MongoError> {
         "fields": fields_json,
     });
 
-    serde_json::to_string_pretty(&payload)
-        .map_err(|e| MongoError::Serialization(e.to_string()))
+    serde_json::to_string_pretty(&payload).map_err(|e| MongoError::Serialization(e.to_string()))
 }
 
 /// MongoDB 集合文档视图
@@ -349,9 +344,10 @@ impl CollectionView {
             InputState::new(window, cx)
                 .placeholder(t!("MongoCollection.sort_placeholder").to_string())
         });
-        let projection_input =
-            cx.new(|cx| InputState::new(window, cx)
-                .placeholder(t!("MongoCollection.projection_placeholder").to_string()));
+        let projection_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("MongoCollection.projection_placeholder").to_string())
+        });
         let page_size_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
                 .placeholder(t!("MongoCollection.page_size_placeholder").to_string());
@@ -545,15 +541,10 @@ impl CollectionView {
 
     fn read_query_inputs(&self, cx: &mut Context<Self>) -> Result<QueryInputs, MongoError> {
         let filter_text = self.filter_input.read(cx).text().to_string();
-        let filter = parse_optional_document(
-            &filter_text,
-            t!("MongoCollection.filter_label").as_ref(),
-        )?;
+        let filter =
+            parse_optional_document(&filter_text, t!("MongoCollection.filter_label").as_ref())?;
         let sort_text = self.sort_input.read(cx).text().to_string();
-        let sort = parse_optional_document(
-            &sort_text,
-            t!("MongoCollection.sort_label").as_ref(),
-        )?;
+        let sort = parse_optional_document(&sort_text, t!("MongoCollection.sort_label").as_ref())?;
         let projection_text = self.projection_input.read(cx).text().to_string();
         let projection = parse_optional_document(
             &projection_text,
@@ -593,11 +584,7 @@ impl CollectionView {
         })
     }
 
-    fn build_find_options(
-        &self,
-        inputs: &QueryInputs,
-        skip: i64,
-    ) -> FindOptions {
+    fn build_find_options(&self, inputs: &QueryInputs, skip: i64) -> FindOptions {
         let mut options = FindOptions::default();
         options.limit = Some(inputs.page_size);
         if skip > 0 {
@@ -826,10 +813,7 @@ impl CollectionView {
                     .and_then(|item| item.id_bson.clone())
             });
             let Some(target_id) = target_id else {
-                self.set_error(
-                    t!("MongoCollection.id_required_for_update").to_string(),
-                    cx,
-                );
+                self.set_error(t!("MongoCollection.id_required_for_update").to_string(), cx);
                 return;
             };
             document.insert("_id", target_id.clone());
@@ -853,11 +837,9 @@ impl CollectionView {
             let target_id = target_id.clone();
             let success_message = success_message.to_string();
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 match editor_mode {
                     EditorMode::Create => guard
@@ -865,10 +847,9 @@ impl CollectionView {
                         .await
                         .map(|_| ()),
                     EditorMode::Update => {
-                        let target_id =
-                            target_id.ok_or_else(|| {
-                                anyhow::anyhow!(t!("MongoCollection.id_missing").to_string())
-                            })?;
+                        let target_id = target_id.ok_or_else(|| {
+                            anyhow::anyhow!(t!("MongoCollection.id_missing").to_string())
+                        })?;
                         guard
                             .replace_document(&database_name, &collection_name, target_id, document)
                             .await
@@ -877,7 +858,8 @@ impl CollectionView {
                     EditorMode::View => Ok(()),
                 }
                 .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.is_loading = false;
@@ -917,10 +899,7 @@ impl CollectionView {
             return;
         };
         let Some(id_bson) = item.id_bson.clone() else {
-            self.set_error(
-                t!("MongoCollection.id_required_for_delete").to_string(),
-                cx,
-            );
+            self.set_error(t!("MongoCollection.id_required_for_delete").to_string(), cx);
             return;
         };
         self.pending_select_id = self
@@ -937,17 +916,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .delete_document(&database_name, &collection_name, id_bson)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.is_loading = false;
@@ -958,10 +936,7 @@ impl CollectionView {
                         view.selected_index = None;
                         view.show_explain = false;
                         view.pending_reload = true;
-                        Self::notify_success(
-                            t!("MongoCollection.document_deleted").as_ref(),
-                            cx,
-                        );
+                        Self::notify_success(t!("MongoCollection.document_deleted").as_ref(), cx);
                     }
                     Err(error) => {
                         view.error_message = Some(error.to_string());
@@ -1089,8 +1064,7 @@ impl CollectionView {
             array.push(bson);
         }
         let bson = Bson::Array(array);
-        serde_json::to_string_pretty(&bson)
-            .map_err(|e| MongoError::Serialization(e.to_string()))
+        serde_json::to_string_pretty(&bson).map_err(|e| MongoError::Serialization(e.to_string()))
     }
 
     fn build_query_code(
@@ -1154,17 +1128,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .explain_find(&database_name, &collection_name, inputs.filter, options)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.is_loading = false;
@@ -1222,17 +1195,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .aggregate_documents(&database_name, &collection_name, pipeline)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.aggregation_loading = false;
@@ -1261,10 +1233,7 @@ impl CollectionView {
     fn export_aggregation_result(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let content = self.aggregation_output.read(cx).text().to_string();
         if content.trim().is_empty() {
-            Self::notify_error(
-                t!("MongoCollection.no_aggregation_to_export").as_ref(),
-                cx,
-            );
+            Self::notify_error(t!("MongoCollection.no_aggregation_to_export").as_ref(), cx);
             return;
         }
         self.show_export_dialog(
@@ -1296,11 +1265,9 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 let mut options = FindOptions::default();
                 options.limit = Some(100);
@@ -1308,7 +1275,8 @@ impl CollectionView {
                     .find_documents(&database_name, &collection_name, None, options)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.schema_loading = false;
@@ -1354,17 +1322,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .list_indexes(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.indexes_loading = false;
@@ -1428,17 +1395,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .create_index(&database_name, &collection_name, keys, name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.indexes_loading = false;
@@ -1462,12 +1428,8 @@ impl CollectionView {
         let name = self.index_drop_input.read(cx).text().to_string();
         let name = name.trim().to_string();
         if name.is_empty() {
-            self.indexes_error =
-                Some(t!("MongoCollection.index_name_required").to_string());
-            Self::notify_error(
-                t!("MongoCollection.index_name_required").as_ref(),
-                cx,
-            );
+            self.indexes_error = Some(t!("MongoCollection.index_name_required").to_string());
+            Self::notify_error(t!("MongoCollection.index_name_required").as_ref(), cx);
             cx.notify();
             return;
         }
@@ -1489,17 +1451,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .drop_index(&database_name, &collection_name, &name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.indexes_loading = false;
@@ -1538,25 +1499,25 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .get_collection_validation(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.validation_loading = false;
                 match result {
                     Ok(validator) => {
                         let payload = match validator {
-                            Some(doc) => document_to_pretty_json(&doc)
-                                .unwrap_or_else(|_| "{}".to_string()),
+                            Some(doc) => {
+                                document_to_pretty_json(&doc).unwrap_or_else(|_| "{}".to_string())
+                            }
                             None => "{}".to_string(),
                         };
                         view.pending_validation_value = Some(payload);
@@ -1574,18 +1535,16 @@ impl CollectionView {
 
     fn save_validation(&mut self, cx: &mut Context<Self>) {
         let text = self.validation_input.read(cx).text().to_string();
-        let validator = match parse_optional_document(
-            &text,
-            t!("MongoCollection.validation_label").as_ref(),
-        ) {
-            Ok(validator) => validator,
-            Err(error) => {
-                self.validation_error = Some(error.to_string());
-                Self::notify_error(&error.to_string(), cx);
-                cx.notify();
-                return;
-            }
-        };
+        let validator =
+            match parse_optional_document(&text, t!("MongoCollection.validation_label").as_ref()) {
+                Ok(validator) => validator,
+                Err(error) => {
+                    self.validation_error = Some(error.to_string());
+                    Self::notify_error(&error.to_string(), cx);
+                    cx.notify();
+                    return;
+                }
+            };
         let Some(connection_id) = self.connection_id.clone() else {
             return;
         };
@@ -1604,26 +1563,22 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .update_collection_validation(&database_name, &collection_name, validator)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.validation_loading = false;
                 match result {
                     Ok(_) => {
-                        Self::notify_success(
-                            t!("MongoCollection.validation_updated").as_ref(),
-                            cx,
-                        );
+                        Self::notify_success(t!("MongoCollection.validation_updated").as_ref(), cx);
                         view.load_validation(cx);
                     }
                     Err(error) => {
@@ -1656,27 +1611,23 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 guard
                     .update_collection_validation(&database_name, &collection_name, None)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.validation_loading = false;
                 match result {
                     Ok(_) => {
                         view.pending_validation_value = Some("{}".to_string());
-                        Self::notify_success(
-                            t!("MongoCollection.validation_cleared").as_ref(),
-                            cx,
-                        );
+                        Self::notify_success(t!("MongoCollection.validation_cleared").as_ref(), cx);
                         view.load_validation(cx);
                     }
                     Err(error) => {
@@ -1747,14 +1698,17 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
-                let connection = global_state
-                    .get_connection(&connection_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
-                    })?;
+                let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
+                    anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
+                })?;
                 let guard = connection.read().await;
                 let documents = guard
-                    .find_documents(&database_name, &collection_name, inputs.filter.clone(), options)
+                    .find_documents(
+                        &database_name,
+                        &collection_name,
+                        inputs.filter.clone(),
+                        options,
+                    )
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
                 let total = guard
@@ -1762,7 +1716,8 @@ impl CollectionView {
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
                 Ok((documents, total))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 match result {
@@ -1777,7 +1732,8 @@ impl CollectionView {
                                     .map(bson_to_string)
                                     .unwrap_or_else(|| format!("#{}", index + 1));
                                 let json = document_to_pretty_json(&document)?;
-                                let summary = truncate_summary(json.lines().next().unwrap_or(""), 120);
+                                let summary =
+                                    truncate_summary(json.lines().next().unwrap_or(""), 120);
                                 Ok(DocumentItem {
                                     id,
                                     id_bson,
@@ -1795,11 +1751,10 @@ impl CollectionView {
                                 view.error_message = None;
 
                                 if let Some(target_id) = view.pending_select_id.take() {
-                                    if let Some((index, item)) = view
-                                        .documents
-                                        .iter()
-                                        .enumerate()
-                                        .find(|(_, item)| item.id_bson.as_ref() == Some(&target_id))
+                                    if let Some((index, item)) =
+                                        view.documents.iter().enumerate().find(|(_, item)| {
+                                            item.id_bson.as_ref() == Some(&target_id)
+                                        })
                                     {
                                         view.selected_index = Some(index);
                                         view.editor_mode = EditorMode::View;
@@ -1856,7 +1811,12 @@ impl CollectionView {
                     .with_size(Size::Small)
                     .text_color(cx.theme().muted_foreground),
             )
-            .child(div().text_sm().text_color(cx.theme().foreground).child(title))
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().foreground)
+                    .child(title),
+            )
     }
 
     fn render_tab_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2489,63 +2449,51 @@ impl CollectionView {
                     .invisible()
                     .group_hover("mongo-doc-row", |style| style.visible())
                     .child(
-                        Button::new(SharedString::from(format!(
-                            "mongo-doc-edit-{}",
-                            index
-                        )))
-                        .ghost()
-                        .xsmall()
-                        .icon(IconName::Edit)
-                        .tooltip(t!("Common.edit").to_string())
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            cx.stop_propagation();
-                            this.select_document(index, window, cx);
-                            this.start_update(window, cx);
-                        })),
+                        Button::new(SharedString::from(format!("mongo-doc-edit-{}", index)))
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Edit)
+                            .tooltip(t!("Common.edit").to_string())
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.select_document(index, window, cx);
+                                this.start_update(window, cx);
+                            })),
                     )
                     .child(
-                        Button::new(SharedString::from(format!(
-                            "mongo-doc-delete-{}",
-                            index
-                        )))
-                        .ghost()
-                        .xsmall()
-                        .icon(IconName::Remove)
-                        .tooltip(t!("Common.delete").to_string())
-                        .on_click(cx.listener(move |this, _, _window, cx| {
-                            cx.stop_propagation();
-                            this.selected_index = Some(index);
-                            this.delete_selected(cx);
-                        })),
+                        Button::new(SharedString::from(format!("mongo-doc-delete-{}", index)))
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Remove)
+                            .tooltip(t!("Common.delete").to_string())
+                            .on_click(cx.listener(move |this, _, _window, cx| {
+                                cx.stop_propagation();
+                                this.selected_index = Some(index);
+                                this.delete_selected(cx);
+                            })),
                     )
                     .child(
-                        Button::new(SharedString::from(format!(
-                            "mongo-doc-copy-{}",
-                            index
-                        )))
-                        .ghost()
-                        .xsmall()
-                        .icon(IconName::Copy)
-                        .tooltip(t!("Common.copy").to_string())
-                        .on_click(cx.listener(move |this, _, _window, cx| {
-                            cx.stop_propagation();
-                            this.selected_index = Some(index);
-                            this.copy_selected(cx);
-                        })),
+                        Button::new(SharedString::from(format!("mongo-doc-copy-{}", index)))
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Copy)
+                            .tooltip(t!("Common.copy").to_string())
+                            .on_click(cx.listener(move |this, _, _window, cx| {
+                                cx.stop_propagation();
+                                this.selected_index = Some(index);
+                                this.copy_selected(cx);
+                            })),
                     )
                     .child(
-                        Button::new(SharedString::from(format!(
-                            "mongo-doc-clone-{}",
-                            index
-                        )))
-                        .ghost()
-                        .xsmall()
-                        .icon(IconName::Plus)
-                        .tooltip(t!("MongoCollection.clone").to_string())
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            cx.stop_propagation();
-                            this.start_clone(index, window, cx);
-                        })),
+                        Button::new(SharedString::from(format!("mongo-doc-clone-{}", index)))
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Plus)
+                            .tooltip(t!("MongoCollection.clone").to_string())
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.start_clone(index, window, cx);
+                            })),
                     ),
             )
             .into_any_element()
@@ -2581,11 +2529,13 @@ impl CollectionView {
         uniform_list(
             "mongo-documents-list",
             item_count,
-            cx.processor(move |view: &mut Self, visible_range: std::ops::Range<usize>, window, cx| {
-                visible_range
-                    .map(|index| view.render_document_row(index, window, cx))
-                    .collect()
-            }),
+            cx.processor(
+                move |view: &mut Self, visible_range: std::ops::Range<usize>, window, cx| {
+                    visible_range
+                        .map(|index| view.render_document_row(index, window, cx))
+                        .collect()
+                },
+            ),
         )
         .size_full()
         .track_scroll(&self.list_scroll_handle)
@@ -2605,17 +2555,13 @@ impl CollectionView {
             .border_r_1()
             .border_color(cx.theme().border)
             .child(
-                h_flex()
-                    .items_center()
-                    .px_2()
-                    .py_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_semibold()
-                            .text_color(cx.theme().foreground)
-                            .child(title),
-                    ),
+                h_flex().items_center().px_2().py_1().child(
+                    div()
+                        .text_sm()
+                        .font_semibold()
+                        .text_color(cx.theme().foreground)
+                        .child(title),
+                ),
             )
             .child(
                 div()
@@ -2742,7 +2688,11 @@ impl CollectionView {
         } else {
             (remaining_total.saturating_sub(1) / page_size) + 1
         };
-        let current_page_display = if total_pages == 0 { 0 } else { self.page_index + 1 };
+        let current_page_display = if total_pages == 0 {
+            0
+        } else {
+            self.page_index + 1
+        };
 
         let can_prev = self.page_index > 0;
         let can_next = if self.total_count.is_some() {
@@ -2816,10 +2766,10 @@ impl CollectionView {
                             .outline()
                             .icon(IconName::ChevronRight)
                             .disabled(!can_next)
-                        .on_click(cx.listener(|this, _, _window, cx| {
-                            this.page_index += 1;
-                            this.reload(cx);
-                        })),
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                this.page_index += 1;
+                                this.reload(cx);
+                            })),
                     ),
             )
     }
@@ -2896,7 +2846,11 @@ impl TabContent for CollectionTabView {
     }
 
     fn title(&self, _cx: &App) -> SharedString {
-        format!("{}/{}", self.config.database_name, self.config.collection_name).into()
+        format!(
+            "{}/{}",
+            self.config.database_name, self.config.collection_name
+        )
+        .into()
     }
 
     fn icon(&self, _cx: &App) -> Option<Icon> {
@@ -2938,16 +2892,14 @@ impl Render for CollectionView {
             }
         };
 
-        let container = v_flex()
-            .size_full()
-            .p_2()
-            .gap_2();
+        let container = v_flex().size_full().p_2().gap_2();
         if self.collection_name.is_none() {
             container.child(body)
         } else {
             container
                 .child(self.render_header(cx))
-                .child(self.render_tab_bar(cx)).child(body)
+                .child(self.render_tab_bar(cx))
+                .child(body)
         }
     }
 }

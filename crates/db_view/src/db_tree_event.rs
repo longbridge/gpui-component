@@ -14,6 +14,7 @@ use gpui::{
 };
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::{WindowExt, h_flex, notification::Notification, v_flex};
+use one_core::gpui_tokio::Tokio;
 use one_core::{
     popup_window::{PopupWindowOptions, open_popup_window},
     tab_container::{TabContainer, TabItem},
@@ -22,7 +23,6 @@ use rust_i18n::t;
 use std::collections::HashSet;
 use tracing::log::{error, warn};
 use uuid::Uuid;
-use one_core::gpui_tokio::Tokio;
 
 // Event handler for database tree view events
 pub struct DatabaseEventHandler {
@@ -502,10 +502,7 @@ impl DatabaseEventHandler {
         let database = node.get_database_name();
         let schema = node.get_schema_name();
         let database_type = node.database_type;
-        let title = format!(
-            "{} - Query",
-            database.as_deref().unwrap_or("New Query")
-        );
+        let title = format!("{} - Query", database.as_deref().unwrap_or("New Query"));
 
         let tab_id = format!(
             "query-{}-{}",
@@ -845,8 +842,7 @@ impl DatabaseEventHandler {
         .detach();
 
         open_popup_window(
-            PopupWindowOptions::new(t!("ImportExport.export_table").to_string())
-                .size(800.0, 600.0),
+            PopupWindowOptions::new(t!("ImportExport.export_table").to_string()).size(800.0, 600.0),
             move |_window, _cx| export_view.clone(),
             cx,
         );
@@ -1063,11 +1059,8 @@ impl DatabaseEventHandler {
                             let _ = cx.update(|cx| {
                                 Self::show_error_async(
                                     cx,
-                                    t!(
-                                        "DbTreeEvent.delete_connection_invalid_id",
-                                        error = e
-                                    )
-                                    .to_string(),
+                                    t!("DbTreeEvent.delete_connection_invalid_id", error = e)
+                                        .to_string(),
                                 );
                             });
                         }
@@ -1098,8 +1091,11 @@ impl DatabaseEventHandler {
         } else {
             Self::show_error(
                 window,
-                t!("DbTreeEvent.unsupported_database_type", db_type = format!("{:?}", database_type))
-                    .to_string(),
+                t!(
+                    "DbTreeEvent.unsupported_database_type",
+                    db_type = format!("{:?}", database_type)
+                )
+                .to_string(),
                 cx,
             );
             return;
@@ -1122,9 +1118,7 @@ impl DatabaseEventHandler {
                 .overlay(false)
                 .child(editor_view.clone())
                 .width(px(700.0))
-                .button_props(
-                    DialogButtonProps::default().ok_text(t!("Common.create").to_string()),
-                )
+                .button_props(DialogButtonProps::default().ok_text(t!("Common.create").to_string()))
                 .footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
                 .on_ok(move |_, _window, cx| {
                     let sql = editor_view_ok.read(cx).get_sql(cx);
@@ -1241,8 +1235,11 @@ impl DatabaseEventHandler {
         } else {
             Self::show_error(
                 window,
-                t!("DbTreeEvent.unsupported_database_type", db_type = format!("{:?}", database_type))
-                    .to_string(),
+                t!(
+                    "DbTreeEvent.unsupported_database_type",
+                    db_type = format!("{:?}", database_type)
+                )
+                .to_string(),
                 cx,
             );
             return;
@@ -1261,15 +1258,11 @@ impl DatabaseEventHandler {
             let panel = objects_panel.clone();
 
             dialog
-                .title(
-                    t!("DbTreeEvent.edit_database_title", name = database_name).to_string(),
-                )
+                .title(t!("DbTreeEvent.edit_database_title", name = database_name).to_string())
                 .child(editor_view.clone())
                 .overlay(false)
                 .width(px(700.0))
-                .button_props(
-                    DialogButtonProps::default().ok_text(t!("Common.save").to_string()),
-                )
+                .button_props(DialogButtonProps::default().ok_text(t!("Common.save").to_string()))
                 .footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
                 .on_ok(move |_, _window, cx| {
                     let sql = editor_view_ok.read(cx).get_sql(cx);
@@ -1310,8 +1303,7 @@ impl DatabaseEventHandler {
                                         }
                                         window.push_notification(
                                             Notification::success(
-                                                t!("DbTreeEvent.edit_database_success")
-                                                    .to_string(),
+                                                t!("DbTreeEvent.edit_database_success").to_string(),
                                             )
                                             .autohide(true),
                                             cx,
@@ -1533,8 +1525,11 @@ impl DatabaseEventHandler {
         } else {
             Self::show_error(
                 window,
-                t!("DbTreeEvent.unsupported_database_type", db_type = format!("{:?}", database_type))
-                    .to_string(),
+                t!(
+                    "DbTreeEvent.unsupported_database_type",
+                    db_type = format!("{:?}", database_type)
+                )
+                .to_string(),
                 cx,
             );
             return;
@@ -1556,14 +1551,10 @@ impl DatabaseEventHandler {
 
             dialog
                 .overlay(false)
-                .title(
-                    t!("DbTreeEvent.create_schema_title", name = database_name).to_string(),
-                )
+                .title(t!("DbTreeEvent.create_schema_title", name = database_name).to_string())
                 .child(editor_view.clone())
                 .width(px(600.0))
-                .button_props(
-                    DialogButtonProps::default().ok_text(t!("Common.create").to_string()),
-                )
+                .button_props(DialogButtonProps::default().ok_text(t!("Common.create").to_string()))
                 .footer(|ok, cancel, window, cx| vec![cancel(window, cx), ok(window, cx)])
                 .on_ok(move |_, _window, cx| {
                     let sql = editor_view_ok.read(cx).get_sql(cx);
@@ -1612,8 +1603,7 @@ impl DatabaseEventHandler {
                                         }
                                         window.push_notification(
                                             Notification::success(
-                                                t!("DbTreeEvent.create_schema_success")
-                                                    .to_string(),
+                                                t!("DbTreeEvent.create_schema_success").to_string(),
                                             )
                                             .autohide(true),
                                             cx,
@@ -1833,13 +1823,7 @@ impl DatabaseEventHandler {
                 );
             }
             DatabaseObjectsBatchAction::DeleteQuery => {
-                Self::handle_batch_delete_queries(
-                    nodes,
-                    tree_view,
-                    objects_panel,
-                    window,
-                    cx,
-                );
+                Self::handle_batch_delete_queries(nodes, tree_view, objects_panel, window, cx);
             }
         }
     }
@@ -1898,10 +1882,9 @@ impl DatabaseEventHandler {
                                     if let Some(conn_repo) = storage.get::<ConnectionRepository>() {
                                         match conn_repo.delete(id) {
                                             Ok(_) => removed_ids.push(node.connection_id.clone()),
-                                            Err(error) => errors.push(format!(
-                                                "{}: {}",
-                                                node.name, error
-                                            )),
+                                            Err(error) => {
+                                                errors.push(format!("{}: {}", node.name, error))
+                                            }
                                         }
                                     } else {
                                         errors.push(
@@ -2239,13 +2222,12 @@ impl DatabaseEventHandler {
                             };
                             let database_name = node.get_database_name();
                             let schema_name = node.get_schema_name();
-                            let (database, schema) = if database_name.is_none()
-                                && schema_name.is_some()
-                            {
-                                (schema_name.clone().unwrap_or_default(), None)
-                            } else {
-                                (database_name.unwrap_or_default(), schema_name)
-                            };
+                            let (database, schema) =
+                                if database_name.is_none() && schema_name.is_some() {
+                                    (schema_name.clone().unwrap_or_default(), None)
+                                } else {
+                                    (database_name.unwrap_or_default(), schema_name)
+                                };
 
                             let task = state
                                 .drop_table(
@@ -2476,9 +2458,7 @@ impl DatabaseEventHandler {
 
                     cx.spawn(async move |cx| {
                         let errors = task.await.unwrap_or_else(|error| {
-                            vec![
-                                t!("DbTreeEvent.delete_query_failed", error = error).to_string()
-                            ]
+                            vec![t!("DbTreeEvent.delete_query_failed", error = error).to_string()]
                         });
 
                         let mut parent_ids: HashSet<String> = HashSet::new();
@@ -2495,24 +2475,24 @@ impl DatabaseEventHandler {
                                         for parent_id in &parent_ids {
                                             tree.refresh_tree(parent_id.clone(), cx);
                                         }
-                                });
-                            }
-                            if let Some(panel) = panel {
-                                panel.update(cx, |panel, cx| {
-                                    panel.refresh(state, cx);
-                                });
-                            }
-                            window.close_dialog(cx);
+                                    });
+                                }
+                                if let Some(panel) = panel {
+                                    panel.update(cx, |panel, cx| {
+                                        panel.refresh(state, cx);
+                                    });
+                                }
+                                window.close_dialog(cx);
 
-                            if errors.is_empty() {
-                                Self::show_success_async(
-                                    cx,
-                                    t!(
-                                        "DbTreeEvent.batch_delete_queries_success",
-                                        count = delete_count
-                                    )
-                                    .to_string(),
-                                );
+                                if errors.is_empty() {
+                                    Self::show_success_async(
+                                        cx,
+                                        t!(
+                                            "DbTreeEvent.batch_delete_queries_success",
+                                            count = delete_count
+                                        )
+                                        .to_string(),
+                                    );
                                 } else {
                                     Self::show_error_async(
                                         cx,
@@ -2587,7 +2567,9 @@ impl DatabaseEventHandler {
 
                     cx.spawn(async move |cx: &mut AsyncApp| {
                         let Some(window_id) = window_id else { return };
-                        let Some(tbl_name_value) = tbl_name else { return };
+                        let Some(tbl_name_value) = tbl_name else {
+                            return;
+                        };
 
                         // For Oracle: use schema as database, for others: use database
                         let (database, schema) = if db_name.is_none() && sch_name.is_some() {
@@ -2599,7 +2581,13 @@ impl DatabaseEventHandler {
                         };
 
                         let task = state
-                            .drop_table(&mut cx.clone(), conn_id.clone(), database, schema, tbl_name_value.clone())
+                            .drop_table(
+                                &mut cx.clone(),
+                                conn_id.clone(),
+                                database,
+                                schema,
+                                tbl_name_value.clone(),
+                            )
                             .await;
 
                         match task {
@@ -2662,8 +2650,8 @@ impl DatabaseEventHandler {
 
         // 创建输入框状态
         let input_state = cx.new(|cx| {
-            let mut state =
-                InputState::new(window, cx).placeholder(t!("DbTreeEvent.rename_table_placeholder").to_string());
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("DbTreeEvent.rename_table_placeholder").to_string());
             state.set_value(old_table_name.clone(), window, cx);
             state
         });
@@ -2689,9 +2677,9 @@ impl DatabaseEventHandler {
                                 .gap_2()
                                 .items_center()
                                 .child(
-                                    div()
-                                        .w(px(80.))
-                                        .child(t!("DbTreeEvent.rename_table_old_label").to_string()),
+                                    div().w(px(80.)).child(
+                                        t!("DbTreeEvent.rename_table_old_label").to_string(),
+                                    ),
                                 )
                                 .child(div().flex_1().child(old_name.clone())),
                         )
@@ -2700,9 +2688,9 @@ impl DatabaseEventHandler {
                                 .gap_2()
                                 .items_center()
                                 .child(
-                                    div()
-                                        .w(px(80.))
-                                        .child(t!("DbTreeEvent.rename_table_new_label").to_string()),
+                                    div().w(px(80.)).child(
+                                        t!("DbTreeEvent.rename_table_new_label").to_string(),
+                                    ),
                                 )
                                 .child(div().flex_1().child(Input::new(&input))),
                         ),
@@ -2926,11 +2914,8 @@ impl DatabaseEventHandler {
                                     }
                                     Self::show_success_async(
                                         cx,
-                                        t!(
-                                            "DbTreeEvent.delete_view_success",
-                                            name = v_name_log
-                                        )
-                                        .to_string(),
+                                        t!("DbTreeEvent.delete_view_success", name = v_name_log)
+                                            .to_string(),
                                     );
                                 });
                             }
@@ -2938,8 +2923,7 @@ impl DatabaseEventHandler {
                                 let _ = cx.update(|cx| {
                                     Self::show_error_async(
                                         cx,
-                                        t!("DbTreeEvent.delete_view_failed", error = e)
-                                            .to_string(),
+                                        t!("DbTreeEvent.delete_view_failed", error = e).to_string(),
                                     );
                                 });
                             }
@@ -3022,8 +3006,8 @@ impl DatabaseEventHandler {
         let window_id = cx.active_window().expect("No active window");
 
         let input_state = cx.new(|cx| {
-            let mut state =
-                InputState::new(window, cx).placeholder(t!("DbTreeEvent.rename_query_placeholder").to_string());
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("DbTreeEvent.rename_query_placeholder").to_string());
             state.set_value(old_name.clone(), window, cx);
             state
         });
@@ -3048,9 +3032,9 @@ impl DatabaseEventHandler {
                                 .gap_2()
                                 .items_center()
                                 .child(
-                                    div()
-                                        .w(px(80.))
-                                        .child(t!("DbTreeEvent.rename_query_old_label").to_string()),
+                                    div().w(px(80.)).child(
+                                        t!("DbTreeEvent.rename_query_old_label").to_string(),
+                                    ),
                                 )
                                 .child(div().flex_1().child(old_name.clone())),
                         )
@@ -3059,9 +3043,9 @@ impl DatabaseEventHandler {
                                 .gap_2()
                                 .items_center()
                                 .child(
-                                    div()
-                                        .w(px(80.))
-                                        .child(t!("DbTreeEvent.rename_query_new_label").to_string()),
+                                    div().w(px(80.)).child(
+                                        t!("DbTreeEvent.rename_query_new_label").to_string(),
+                                    ),
                                 )
                                 .child(div().flex_1().child(Input::new(&input))),
                         ),
@@ -3080,7 +3064,6 @@ impl DatabaseEventHandler {
                     let db_tree = db_tree.clone();
                     let parent_id = parent_id.clone();
                     let old_path = old_path.clone();
-
 
                     let task = Tokio::spawn_result(cx, async move {
                         tokio::fs::rename(old_path, new_path).await?;
@@ -3240,8 +3223,7 @@ impl DatabaseEventHandler {
         };
 
         open_popup_window(
-            PopupWindowOptions::new(t!("ImportExport.run_sql_file").to_string())
-                .size(800.0, 520.0),
+            PopupWindowOptions::new(t!("ImportExport.run_sql_file").to_string()).size(800.0, 520.0),
             move |window, cx| SqlRunView::new(connection_id, database, schema, window, cx),
             cx,
         );
@@ -3324,11 +3306,8 @@ impl DatabaseEventHandler {
                         cx.update_window(window_id, |_entity, window, cx| {
                             Self::show_error(
                                 window,
-                                t!(
-                                    "DbTreeEvent.dump_sql_config_missing",
-                                    id = connection_id
-                                )
-                                .to_string(),
+                                t!("DbTreeEvent.dump_sql_config_missing", id = connection_id)
+                                    .to_string(),
                                 cx,
                             );
                         })

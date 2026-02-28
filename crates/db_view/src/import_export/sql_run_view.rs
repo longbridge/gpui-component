@@ -16,8 +16,8 @@ use gpui_component::{
     switch::Switch,
     v_flex, v_virtual_list,
 };
-use std::rc::Rc;
 use rust_i18n::t;
+use std::rc::Rc;
 
 // 3. 当前 crate 导入（按模块分组）
 use db::{ExecOptions, GlobalDbState, SqlResult, SqlSource};
@@ -545,7 +545,7 @@ impl Render for SqlRunView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(t!("SqlRun.success_label").to_string())
+                                    .child(t!("SqlRun.success_label").to_string()),
                             )
                             .child(div().child(success.to_string())),
                     )
@@ -555,7 +555,7 @@ impl Render for SqlRunView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(t!("SqlRun.error_label").to_string())
+                                    .child(t!("SqlRun.error_label").to_string()),
                             )
                             .child(
                                 div()
@@ -573,7 +573,7 @@ impl Render for SqlRunView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(t!("SqlRun.time_label").to_string())
+                                    .child(t!("SqlRun.time_label").to_string()),
                             )
                             .child(div().child(elapsed)),
                     ),
@@ -686,20 +686,19 @@ impl Render for SqlRunView {
                             Button::new("start")
                                 .primary()
                                 .child(t!("SqlRun.execute").to_string())
-                                .on_click(
-                            window.listener_for(
-                                &cx.entity(),
-                                |view, _: &ClickEvent, window, cx| {
-                                    view.start_run(window, cx);
-                                },
-                            ),
-                        ))
+                                .on_click(window.listener_for(
+                                    &cx.entity(),
+                                    |view, _: &ClickEvent, window, cx| {
+                                        view.start_run(window, cx);
+                                    },
+                                )),
+                        )
                     })
                     .when(is_running, |this| {
                         this.child(
                             Button::new("running")
                                 .loading(true)
-                                .child(t!("SqlRun.executing").to_string())
+                                .child(t!("SqlRun.executing").to_string()),
                         )
                     })
                     .when(is_finished, |this| {

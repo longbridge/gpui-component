@@ -2,22 +2,25 @@
 
 use std::ops::Deref;
 
+use crate::GlobalRedisState;
 use crate::key_value_view::KeyValueView;
 use crate::redis_tree_event::RedisEventHandler;
 use crate::redis_tree_view::RedisTreeView;
-use crate::sidebar::{RedisSidebar, RedisSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
-use gpui::{
-    App, AppContext, Axis, Bounds, Context, Element, Entity, EventEmitter,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, SharedString, Style, Styled, Subscription, Task, Window, div, px,
+use crate::sidebar::{
+    RedisSidebar, RedisSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH,
+    TOOLBAR_WIDTH,
 };
 use gpui::prelude::FluentBuilder;
+use gpui::{
+    App, AppContext, Axis, Bounds, Context, Element, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point,
+    Render, SharedString, Style, Styled, Subscription, Task, Window, div, px,
+};
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, h_flex};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::{ActiveConnections, StoredConnection, Workspace};
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent, TabItem};
-use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
-use crate::GlobalRedisState;
+use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
 use tracing::warn;
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
@@ -70,9 +73,7 @@ impl RedisTabView {
         cx: &mut Context<Self>,
     ) -> Self {
         // 使用新的 API 创建树视图，显示所有连接（未连接状态）
-        let tree_view = cx.new(|cx| {
-            RedisTreeView::new_with_connections(&connections, window, cx)
-        });
+        let tree_view = cx.new(|cx| RedisTreeView::new_with_connections(&connections, window, cx));
 
         let tab_container = cx.new(|cx| TabContainer::new(window, cx));
         let key_value_view = cx.new(|cx| KeyValueView::new(window, cx));
@@ -91,8 +92,8 @@ impl RedisTabView {
             .cloned()
             .or_else(|| connections.first().cloned());
 
-        let active_connection_id = active_conn_id
-            .or_else(|| active_connection.as_ref().and_then(|conn| conn.id));
+        let active_connection_id =
+            active_conn_id.or_else(|| active_connection.as_ref().and_then(|conn| conn.id));
 
         // 事件处理器负责处理树视图事件，包括连接建立后创建 CLI 视图
         let event_handler = cx.new(|cx| {
@@ -106,13 +107,16 @@ impl RedisTabView {
         });
 
         let mut subscriptions = Vec::new();
-        subscriptions.push(cx.subscribe(&sidebar, |_this, _, event: &RedisSidebarEvent, cx| {
-            match event {
-                RedisSidebarEvent::PanelChanged | RedisSidebarEvent::AskAi => {
-                    cx.notify();
-                }
-            }
-        }));
+        subscriptions.push(
+            cx.subscribe(
+                &sidebar,
+                |_this, _, event: &RedisSidebarEvent, cx| match event {
+                    RedisSidebarEvent::PanelChanged | RedisSidebarEvent::AskAi => {
+                        cx.notify();
+                    }
+                },
+            ),
+        );
 
         if let Some(active_connection_id) = active_connection_id {
             tree_view.update(cx, |tree_view, cx| {
@@ -138,11 +142,7 @@ impl RedisTabView {
         }
     }
 
-    pub fn new(
-        connection: StoredConnection,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(connection: StoredConnection, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let active_conn_id = connection.id;
         Self::new_with_active_conn(None, vec![connection], active_conn_id, window, cx)
     }
@@ -217,17 +217,16 @@ impl RedisTabView {
                 } else {
                     TOOLBAR_WIDTH
                 };
-                let max_size = (available_width - PANEL_MIN_SIZE - sidebar_width).max(PANEL_MIN_SIZE);
+                let max_size =
+                    (available_width - PANEL_MIN_SIZE - sidebar_width).max(PANEL_MIN_SIZE);
                 self.tree_panel_size = new_size.clamp(PANEL_MIN_SIZE, max_size);
             }
             ResizingPanel::Sidebar => {
                 let new_size = self.bounds.right() - mouse_position.x;
                 let max_size = (available_width - self.tree_panel_size - PANEL_MIN_SIZE)
                     .max(SIDEBAR_MIN_WIDTH);
-                self.sidebar_panel_size = new_size.clamp(
-                    SIDEBAR_MIN_WIDTH,
-                    max_size.min(SIDEBAR_MAX_WIDTH),
-                );
+                self.sidebar_panel_size =
+                    new_size.clamp(SIDEBAR_MIN_WIDTH, max_size.min(SIDEBAR_MAX_WIDTH));
             }
         }
 
@@ -299,10 +298,7 @@ impl TabContent for RedisTabView {
 
         cx.spawn(async move |_this, cx: &mut gpui::AsyncApp| {
             for connection in &connections {
-                let connection_id = connection
-                    .id
-                    .map(|id| id.to_string())
-                    .unwrap_or_default();
+                let connection_id = connection.id.map(|id| id.to_string()).unwrap_or_default();
                 if connection_id.is_empty() {
                     continue;
                 }
@@ -322,8 +318,7 @@ impl TabContent for RedisTabView {
                 if let Err(error) = result {
                     warn!(
                         "Failed to close redis connection {}: {}",
-                        connection_id,
-                        error
+                        connection_id, error
                     );
                 }
             }
@@ -384,9 +379,7 @@ impl Render for RedisTabView {
                                 .child(self.sidebar.clone()),
                         )
                     })
-                    .when(!sidebar_visible, |this| {
-                        this.child(self.sidebar.clone())
-                    })
+                    .when(!sidebar_visible, |this| this.child(self.sidebar.clone()))
                     .child(ResizeEventHandler { view }),
             )
     }

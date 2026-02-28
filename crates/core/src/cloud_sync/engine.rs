@@ -8,6 +8,8 @@
 //! - 支持冲突检测和多种解决策略
 //! - 提供完整同步和增量同步两种模式
 
+use super::connection_sync::ConnectionSyncHandler;
+use super::workspace_sync::WorkspaceSyncHandler;
 use crate::cloud_sync::client::CloudApiClient;
 use crate::cloud_sync::models::{ConflictResolution, SyncResult};
 use crate::cloud_sync::queue::OperationQueue;
@@ -18,8 +20,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::connection_sync::ConnectionSyncHandler;
-use super::workspace_sync::WorkspaceSyncHandler;
 
 pub type SyncFuture<'a> = Pin<Box<dyn Future<Output = Result<SyncResult, SyncError>> + Send + 'a>>;
 
@@ -88,7 +88,8 @@ impl SyncEngine {
         // 如果本地 crypto 模块已解锁但同步服务未解锁，同步密钥状态
         if crypto::has_master_key() {
             if let Some(raw_key) = crypto::get_raw_master_key() {
-                let mut service_write = self.crypto_service
+                let mut service_write = self
+                    .crypto_service
                     .write()
                     .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
                 if !service_write.is_unlocked() {
@@ -98,7 +99,8 @@ impl SyncEngine {
             }
         }
 
-        let service = self.crypto_service
+        let service = self
+            .crypto_service
             .read()
             .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
 
@@ -150,7 +152,8 @@ impl SyncEngine {
     }
 
     pub(crate) fn take_operation_queue(&self, key: &str) -> Result<OperationQueue, SyncError> {
-        let mut service = self.crypto_service
+        let mut service = self
+            .crypto_service
             .write()
             .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
 
@@ -162,12 +165,12 @@ impl SyncEngine {
         key: &str,
         queue: OperationQueue,
     ) -> Result<(), SyncError> {
-        let mut service = self.crypto_service
+        let mut service = self
+            .crypto_service
             .write()
             .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
 
         service.store_operation_queue(key, queue);
         Ok(())
     }
-
 }

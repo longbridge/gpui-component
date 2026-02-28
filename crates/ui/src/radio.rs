@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use crate::{
-    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme, AxisExt,
-    FocusableExt as _, Sizable, Size, StyledExt,
+    ActiveTheme, AxisExt, FocusableExt as _, Sizable, Size, StyledExt,
+    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex,
 };
 use gpui::{
-    div, prelude::FluentBuilder, px, relative, rems, AnyElement, App, Axis, Div, ElementId,
-    InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder, px, relative, rems,
 };
 
 /// A Radio element.

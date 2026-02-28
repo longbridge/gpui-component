@@ -3,12 +3,17 @@
 //! 提供类似于 redis-cli 的交互式命令行界面
 //! 参考 terminal_view 的实现，实现完整的交互式终端体验
 
+use crate::redis_cli_element::{
+    CliLine, CliLineType, CliTheme, RedisCliElement, SelectionType, TextPosition, TextSelection,
+    cell_column_for_char_index, cell_len, char_index_for_cell_column,
+};
+use crate::{GlobalRedisState, RedisValue};
 use gpui::{
-    App, AsyncApp, Bounds, ClipboardItem, Context, ElementInputHandler, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontFallbacks, InteractiveElement,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, ScrollWheelEvent, SharedString, Styled, Task,
-    UTF16Selection, Window, actions, canvas, div, px, rgb, size,
+    App, AsyncApp, Bounds, ClipboardItem, Context, ElementInputHandler, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, FontFallbacks, InteractiveElement, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Point, Render, ScrollWheelEvent, SharedString, Styled, Task, UTF16Selection, Window, actions,
+    canvas, div, px, rgb, size,
 };
 use gpui_component::{
     Icon, IconName, Sizable, Size,
@@ -17,11 +22,6 @@ use gpui_component::{
 use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
-use crate::{GlobalRedisState, RedisValue};
-use crate::redis_cli_element::{
-    cell_column_for_char_index, cell_len, char_index_for_cell_column, CliLine, CliLineType,
-    CliTheme, RedisCliElement, SelectionType, TextPosition, TextSelection,
-};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -63,34 +63,118 @@ struct CommandHint {
 }
 
 const COMMAND_HINTS: &[CommandHint] = &[
-    CommandHint { name: "PING", usage: "PING" },
-    CommandHint { name: "INFO", usage: "INFO [section]" },
-    CommandHint { name: "DBSIZE", usage: "DBSIZE" },
-    CommandHint { name: "SELECT", usage: "SELECT <index>" },
-    CommandHint { name: "KEYS", usage: "KEYS <pattern>" },
-    CommandHint { name: "SCAN", usage: "SCAN <cursor> [MATCH pattern] [COUNT count]" },
-    CommandHint { name: "GET", usage: "GET <key>" },
-    CommandHint { name: "SET", usage: "SET <key> <value>" },
-    CommandHint { name: "DEL", usage: "DEL <key> [key ...]" },
-    CommandHint { name: "EXISTS", usage: "EXISTS <key> [key ...]" },
-    CommandHint { name: "TTL", usage: "TTL <key>" },
-    CommandHint { name: "EXPIRE", usage: "EXPIRE <key> <seconds>" },
-    CommandHint { name: "PERSIST", usage: "PERSIST <key>" },
-    CommandHint { name: "HGET", usage: "HGET <key> <field>" },
-    CommandHint { name: "HSET", usage: "HSET <key> <field> <value>" },
-    CommandHint { name: "HDEL", usage: "HDEL <key> <field> [field ...]" },
-    CommandHint { name: "LRANGE", usage: "LRANGE <key> <start> <stop>" },
-    CommandHint { name: "LPUSH", usage: "LPUSH <key> <value> [value ...]" },
-    CommandHint { name: "RPUSH", usage: "RPUSH <key> <value> [value ...]" },
-    CommandHint { name: "SADD", usage: "SADD <key> <member> [member ...]" },
-    CommandHint { name: "SMEMBERS", usage: "SMEMBERS <key>" },
-    CommandHint { name: "ZADD", usage: "ZADD <key> <score> <member> [score member ...]" },
-    CommandHint { name: "ZRANGE", usage: "ZRANGE <key> <start> <stop> [WITHSCORES]" },
-    CommandHint { name: "ZREM", usage: "ZREM <key> <member> [member ...]" },
-    CommandHint { name: "XADD", usage: "XADD <key> <id> <field> <value> [field value ...]" },
-    CommandHint { name: "XLEN", usage: "XLEN <key>" },
-    CommandHint { name: "XRANGE", usage: "XRANGE <key> <start> <end> [COUNT count]" },
-    CommandHint { name: "HELP", usage: "HELP" },
+    CommandHint {
+        name: "PING",
+        usage: "PING",
+    },
+    CommandHint {
+        name: "INFO",
+        usage: "INFO [section]",
+    },
+    CommandHint {
+        name: "DBSIZE",
+        usage: "DBSIZE",
+    },
+    CommandHint {
+        name: "SELECT",
+        usage: "SELECT <index>",
+    },
+    CommandHint {
+        name: "KEYS",
+        usage: "KEYS <pattern>",
+    },
+    CommandHint {
+        name: "SCAN",
+        usage: "SCAN <cursor> [MATCH pattern] [COUNT count]",
+    },
+    CommandHint {
+        name: "GET",
+        usage: "GET <key>",
+    },
+    CommandHint {
+        name: "SET",
+        usage: "SET <key> <value>",
+    },
+    CommandHint {
+        name: "DEL",
+        usage: "DEL <key> [key ...]",
+    },
+    CommandHint {
+        name: "EXISTS",
+        usage: "EXISTS <key> [key ...]",
+    },
+    CommandHint {
+        name: "TTL",
+        usage: "TTL <key>",
+    },
+    CommandHint {
+        name: "EXPIRE",
+        usage: "EXPIRE <key> <seconds>",
+    },
+    CommandHint {
+        name: "PERSIST",
+        usage: "PERSIST <key>",
+    },
+    CommandHint {
+        name: "HGET",
+        usage: "HGET <key> <field>",
+    },
+    CommandHint {
+        name: "HSET",
+        usage: "HSET <key> <field> <value>",
+    },
+    CommandHint {
+        name: "HDEL",
+        usage: "HDEL <key> <field> [field ...]",
+    },
+    CommandHint {
+        name: "LRANGE",
+        usage: "LRANGE <key> <start> <stop>",
+    },
+    CommandHint {
+        name: "LPUSH",
+        usage: "LPUSH <key> <value> [value ...]",
+    },
+    CommandHint {
+        name: "RPUSH",
+        usage: "RPUSH <key> <value> [value ...]",
+    },
+    CommandHint {
+        name: "SADD",
+        usage: "SADD <key> <member> [member ...]",
+    },
+    CommandHint {
+        name: "SMEMBERS",
+        usage: "SMEMBERS <key>",
+    },
+    CommandHint {
+        name: "ZADD",
+        usage: "ZADD <key> <score> <member> [score member ...]",
+    },
+    CommandHint {
+        name: "ZRANGE",
+        usage: "ZRANGE <key> <start> <stop> [WITHSCORES]",
+    },
+    CommandHint {
+        name: "ZREM",
+        usage: "ZREM <key> <member> [member ...]",
+    },
+    CommandHint {
+        name: "XADD",
+        usage: "XADD <key> <id> <field> <value> [field value ...]",
+    },
+    CommandHint {
+        name: "XLEN",
+        usage: "XLEN <key>",
+    },
+    CommandHint {
+        name: "XRANGE",
+        usage: "XRANGE <key> <start> <end> [COUNT count]",
+    },
+    CommandHint {
+        name: "HELP",
+        usage: "HELP",
+    },
 ];
 
 /// 鼠标状态
@@ -378,7 +462,9 @@ impl RedisCliView {
 
         // 延迟恢复闪烁
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(500)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(500))
+                .await;
             let _ = this.update(cx, |view, cx| {
                 view.blink_manager.resume_blinking(epoch);
                 view.start_blink_timer(cx);
@@ -417,7 +503,8 @@ impl RedisCliView {
         }
 
         // 在光标位置插入文本
-        let byte_pos = self.input_text
+        let byte_pos = self
+            .input_text
             .char_indices()
             .nth(self.cursor_pos)
             .map(|(i, _)| i)
@@ -442,8 +529,14 @@ impl RedisCliView {
             let char_indices: Vec<_> = self.input_text.char_indices().collect();
             if self.cursor_pos <= char_indices.len() {
                 // 删除前一个字符
-                let start = char_indices.get(self.cursor_pos - 1).map(|(i, _)| *i).unwrap_or(0);
-                let end = char_indices.get(self.cursor_pos).map(|(i, _)| *i).unwrap_or(self.input_text.len());
+                let start = char_indices
+                    .get(self.cursor_pos - 1)
+                    .map(|(i, _)| *i)
+                    .unwrap_or(0);
+                let end = char_indices
+                    .get(self.cursor_pos)
+                    .map(|(i, _)| *i)
+                    .unwrap_or(self.input_text.len());
 
                 self.input_text = format!(
                     "{}{}",
@@ -467,14 +560,16 @@ impl RedisCliView {
         let char_count = self.input_text.chars().count();
         if self.cursor_pos < char_count {
             let char_indices: Vec<_> = self.input_text.char_indices().collect();
-            let start = char_indices.get(self.cursor_pos).map(|(i, _)| *i).unwrap_or(self.input_text.len());
-            let end = char_indices.get(self.cursor_pos + 1).map(|(i, _)| *i).unwrap_or(self.input_text.len());
+            let start = char_indices
+                .get(self.cursor_pos)
+                .map(|(i, _)| *i)
+                .unwrap_or(self.input_text.len());
+            let end = char_indices
+                .get(self.cursor_pos + 1)
+                .map(|(i, _)| *i)
+                .unwrap_or(self.input_text.len());
 
-            self.input_text = format!(
-                "{}{}",
-                &self.input_text[..start],
-                &self.input_text[end..]
-            );
+            self.input_text = format!("{}{}", &self.input_text[..start], &self.input_text[end..]);
             cx.notify();
         }
     }
@@ -513,7 +608,12 @@ impl RedisCliView {
     }
 
     /// 清除选择
-    fn clear_selection(&mut self, _: &ClearSelection, _window: &mut Window, cx: &mut Context<Self>) {
+    fn clear_selection(
+        &mut self,
+        _: &ClearSelection,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.selection.is_some() {
             self.selection = None;
             cx.notify();
@@ -684,8 +784,9 @@ impl RedisCliView {
 
         // 检测双击/三击
         let is_multi_click = self.mouse_state.last_click_position == Some(position)
-            && self.mouse_state.last_click_time
-                .map_or(false, |t| now.duration_since(t).as_millis() < DOUBLE_CLICK_THRESHOLD_MS);
+            && self.mouse_state.last_click_time.map_or(false, |t| {
+                now.duration_since(t).as_millis() < DOUBLE_CLICK_THRESHOLD_MS
+            });
 
         if is_multi_click {
             self.mouse_state.click_count += 1;
@@ -847,8 +948,16 @@ impl RedisCliView {
             }
 
             let chars: Vec<char> = line.chars().collect();
-            let start_col = if line_idx == start.line { start.column } else { 0 };
-            let end_col = if line_idx == end.line { end.column } else { cell_len(line) };
+            let start_col = if line_idx == start.line {
+                start.column
+            } else {
+                0
+            };
+            let end_col = if line_idx == end.line {
+                end.column
+            } else {
+                cell_len(line)
+            };
 
             let start_char = char_index_for_cell_column(line, start_col).min(chars.len());
             let end_char = char_index_for_cell_column(line, end_col).min(chars.len());
@@ -933,7 +1042,8 @@ impl RedisCliView {
         // 先添加命令行
         self.output_entries.push_back(CliEntry {
             command: "HELP".to_string(),
-            result: CliResult::Success(RedisValue::String(r#"Redis CLI 帮助
+            result: CliResult::Success(RedisValue::String(
+                r#"Redis CLI 帮助
 ================
 
 本地命令:
@@ -953,7 +1063,9 @@ impl RedisCliView {
   KEYS *        列出所有键
   GET <key>     获取字符串值
   SET <key> <value>  设置字符串值
-  DEL <key>     删除键"#.to_string())),
+  DEL <key>     删除键"#
+                    .to_string(),
+            )),
         });
         cx.notify();
     }
@@ -977,15 +1089,16 @@ impl RedisCliView {
                         .get_connection(&connection_id)
                         .ok_or_else(|| anyhow::anyhow!(t!("RedisCli.connection_missing")))?;
                     let guard = conn.read().await;
-                    guard.execute_command_in_db(db_index, &command).await
+                    guard
+                        .execute_command_in_db(db_index, &command)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             let result = match spawn_result {
-                Ok(value) =>  {
-                    CliResult::Success(value)
-                },
+                Ok(value) => CliResult::Success(value),
                 Err(e) => CliResult::Error(e.to_string()),
             };
 
@@ -1112,7 +1225,12 @@ impl RedisCliView {
     }
 
     /// 清空输出（action handler）
-    fn clear_output_action(&mut self, _: &ClearOutput, _window: &mut Window, cx: &mut Context<Self>) {
+    fn clear_output_action(
+        &mut self,
+        _: &ClearOutput,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.clear_output(cx);
     }
 
@@ -1167,23 +1285,24 @@ impl RedisCliView {
 
         // 只删除输入行的选中部分
         if start.line == input_line && end.line == input_line {
-        let start_col = start.column.saturating_sub(prompt_len);
-        let end_col = end.column.saturating_sub(prompt_len);
-        let char_count = self.input_text.chars().count();
+            let start_col = start.column.saturating_sub(prompt_len);
+            let end_col = end.column.saturating_sub(prompt_len);
+            let char_count = self.input_text.chars().count();
 
-        let start_char = char_index_for_cell_column(&self.input_text, start_col).min(char_count);
-        let end_char = char_index_for_cell_column(&self.input_text, end_col).min(char_count);
+            let start_char =
+                char_index_for_cell_column(&self.input_text, start_col).min(char_count);
+            let end_char = char_index_for_cell_column(&self.input_text, end_col).min(char_count);
 
-        if start_char < end_char {
-            let chars: Vec<char> = self.input_text.chars().collect();
-            self.input_text = chars[..start_char]
-                .iter()
-                .chain(chars[end_char..].iter())
-                .collect();
-            self.cursor_pos = start_char;
-            self.ime_marked_range = None;
-            cx.notify();
-        }
+            if start_char < end_char {
+                let chars: Vec<char> = self.input_text.chars().collect();
+                self.input_text = chars[..start_char]
+                    .iter()
+                    .chain(chars[end_char..].iter())
+                    .collect();
+                self.cursor_pos = start_char;
+                self.ime_marked_range = None;
+                cx.notify();
+            }
         }
     }
 
@@ -1380,7 +1499,12 @@ impl RedisCliView {
                 }
                 let mut lines = Vec::new();
                 for (i, item) in arr.iter().enumerate() {
-                    lines.push(format!("{}{}) {}", prefix, i + 1, self.format_redis_value(item, 0).trim_start()));
+                    lines.push(format!(
+                        "{}{}) {}",
+                        prefix,
+                        i + 1,
+                        self.format_redis_value(item, 0).trim_start()
+                    ));
                 }
                 lines.join("\n")
             }
@@ -1530,37 +1654,36 @@ impl RedisCliView {
         let view_paste = view.clone();
         let view_clear = view.clone();
 
-        menu
-            .item(
-                PopupMenuItem::new(t!("Common.copy").to_string())
-                    .icon(IconName::Copy)
-                    .action(Box::new(Copy))
-                    .on_click(move |_, window, cx| {
-                        view_copy.update(cx, |this, cx| {
-                            this.copy(&Copy, window, cx);
-                        });
-                    }),
-            )
-            .item(
-                PopupMenuItem::new(t!("Common.paste").to_string())
-                    .action(Box::new(Paste))
-                    .on_click(move |_, window, cx| {
-                        view_paste.update(cx, |this, cx| {
-                            this.paste(&Paste, window, cx);
-                        });
-                    }),
-            )
-            .separator()
-            .item(
-                PopupMenuItem::new(t!("RedisCli.clear_output").to_string())
-                    .icon(IconName::Delete)
-                    .action(Box::new(ClearOutput))
-                    .on_click(move |_, window, cx| {
-                        view_clear.update(cx, |this, cx| {
-                            this.clear_output_action(&ClearOutput, window, cx);
-                        });
-                    }),
-            )
+        menu.item(
+            PopupMenuItem::new(t!("Common.copy").to_string())
+                .icon(IconName::Copy)
+                .action(Box::new(Copy))
+                .on_click(move |_, window, cx| {
+                    view_copy.update(cx, |this, cx| {
+                        this.copy(&Copy, window, cx);
+                    });
+                }),
+        )
+        .item(
+            PopupMenuItem::new(t!("Common.paste").to_string())
+                .action(Box::new(Paste))
+                .on_click(move |_, window, cx| {
+                    view_paste.update(cx, |this, cx| {
+                        this.paste(&Paste, window, cx);
+                    });
+                }),
+        )
+        .separator()
+        .item(
+            PopupMenuItem::new(t!("RedisCli.clear_output").to_string())
+                .icon(IconName::Delete)
+                .action(Box::new(ClearOutput))
+                .on_click(move |_, window, cx| {
+                    view_clear.update(cx, |this, cx| {
+                        this.clear_output_action(&ClearOutput, window, cx);
+                    });
+                }),
+        )
     }
 }
 
@@ -1601,7 +1724,9 @@ impl TabContent for RedisCliView {
             let global_state = cx.global::<GlobalRedisState>().clone();
             cx.spawn(async move |_this, cx: &mut gpui::AsyncApp| {
                 let _ = Tokio::spawn_result(cx, async move {
-                    global_state.remove_connection(&connection_id).await
+                    global_state
+                        .remove_connection(&connection_id)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 })
                 .await;
@@ -1631,7 +1756,7 @@ impl Render for RedisCliView {
         div()
             .id("redis-cli-view")
             .size_full()
-            .bg(rgb(0x1E1E1E))  // 终端深色背景
+            .bg(rgb(0x1E1E1E)) // 终端深色背景
             .track_focus(&focus_handle)
             .key_context(REDIS_CLI_CONTEXT)
             .on_action(cx.listener(Self::clear_output_action))
@@ -1813,7 +1938,8 @@ impl EntityInputHandler for RedisCliView {
 
         let prompt_len = self.get_prompt().chars().count() + 1;
         let cursor_col = cell_column_for_char_index(&self.input_text, self.cursor_pos);
-        let x = self.terminal_bounds.origin.x + px(12.0)
+        let x = self.terminal_bounds.origin.x
+            + px(12.0)
             + char_width * (prompt_len + cursor_col) as f32;
 
         let lines = self.build_text_lines();
@@ -1821,10 +1947,7 @@ impl EntityInputHandler for RedisCliView {
         let scroll_offset_px = line_height * self.scroll_offset;
         let y = self.terminal_bounds.origin.y + line_height * input_line as f32 - scroll_offset_px;
 
-        Some(Bounds::new(
-            Point::new(x, y),
-            size(char_width, line_height),
-        ))
+        Some(Bounds::new(Point::new(x, y), size(char_width, line_height)))
     }
 
     fn character_index_for_point(
@@ -1848,10 +1971,7 @@ fn clamp_position_to_lines(position: TextPosition, lines: &[String]) -> TextPosi
     }
 
     let line = position.line.min(lines.len().saturating_sub(1));
-    let line_len = lines
-        .get(line)
-        .map(|text| cell_len(text))
-        .unwrap_or(0);
+    let line_len = lines.get(line).map(|text| cell_len(text)).unwrap_or(0);
     let column = position.column.min(line_len);
 
     TextPosition::new(line, column)
@@ -1865,10 +1985,7 @@ fn byte_index_for_char_index(text: &str, char_index: usize) -> usize {
 }
 
 fn utf16_offset_for_char_index(text: &str, char_index: usize) -> usize {
-    text.chars()
-        .take(char_index)
-        .map(|ch| ch.len_utf16())
-        .sum()
+    text.chars().take(char_index).map(|ch| ch.len_utf16()).sum()
 }
 
 fn char_index_for_utf16_offset(text: &str, utf16_index: usize) -> usize {

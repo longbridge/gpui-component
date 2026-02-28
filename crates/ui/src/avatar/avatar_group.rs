@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, Div, InteractiveElement, Interactivity, IntoElement,
-    ParentElement as _, RenderOnce, StyleRefinement, Styled,
+    Div, InteractiveElement, Interactivity, IntoElement, ParentElement as _, RenderOnce,
+    StyleRefinement, Styled, div, prelude::FluentBuilder as _,
 };
 
-use crate::{avatar::Avatar, ActiveTheme, Sizable, Size, StyledExt as _};
+use crate::{ActiveTheme, Sizable, Size, StyledExt as _, avatar::Avatar};
 
 /// A grouped avatars to display in a compact layout.
 #[derive(IntoElement)]

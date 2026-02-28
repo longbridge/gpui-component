@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{
-    px, Along, App, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window,
+    Along, App, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px,
 };
 
 use crate::PixelsExt;

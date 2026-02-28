@@ -1,8 +1,12 @@
 use std::rc::Rc;
 
-use gpui::{div, prelude::FluentBuilder as _, px, AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _, IntoElement, JustifyItems, ParentElement, Pixels, Rems, RenderOnce, SharedString, Styled, Window};
+use gpui::{
+    AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _,
+    IntoElement, JustifyItems, ParentElement, Pixels, Rems, RenderOnce, SharedString, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
+};
 
-use crate::{h_flex, v_flex, ActiveTheme as _, AxisExt, Size, StyledExt};
+use crate::{ActiveTheme as _, AxisExt, Size, StyledExt, h_flex, v_flex};
 
 #[derive(Clone, Copy)]
 pub(super) struct FieldProps {

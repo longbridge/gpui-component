@@ -2,10 +2,17 @@ use std::collections::HashSet;
 
 use crate::home_tab::HomePage;
 use gpui::{
-    div, px, App, Context, Entity, InteractiveElement,
-    ParentElement, SharedString, StatefulInteractiveElement, Styled, Task, Window,
+    App, Context, Entity, InteractiveElement, ParentElement, SharedString,
+    StatefulInteractiveElement, Styled, Task, Window, div, px,
 };
-use gpui_component::{button::{Button, ButtonVariants as _}, checkbox::Checkbox, h_flex, list::{ListDelegate, ListItem, ListState}, tooltip::Tooltip, ActiveTheme, IconName, IndexPath, Sizable};
+use gpui_component::{
+    ActiveTheme, IconName, IndexPath, Sizable,
+    button::{Button, ButtonVariants as _},
+    checkbox::Checkbox,
+    h_flex,
+    list::{ListDelegate, ListItem, ListState},
+    tooltip::Tooltip,
+};
 use one_core::storage::{StoredConnection, Workspace};
 
 #[derive(Clone)]

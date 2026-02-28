@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use gpui::*;
-use gpui_component::{v_flex, IconName, Root};
+use gpui_component::{IconName, Root, v_flex};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 

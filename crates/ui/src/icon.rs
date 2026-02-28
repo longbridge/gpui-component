@@ -189,7 +189,7 @@ pub enum IconName {
     TableData,
     TableDesign,
     Server,
-    Export
+    Export,
 }
 
 impl IconName {
@@ -202,7 +202,7 @@ impl IconName {
     pub fn color(self) -> Icon {
         Icon::build(self).color()
     }
-    
+
     pub fn mono(self) -> Icon {
         Icon::build(self).mono()
     }

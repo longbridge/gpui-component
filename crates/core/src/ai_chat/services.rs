@@ -4,8 +4,8 @@
 //! - SessionService: 会话持久化服务
 
 use crate::llm::chat_history::{ChatMessage, ChatSession, MessageRepository, SessionRepository};
-use crate::storage::traits::Repository;
 use crate::storage::StorageManager;
+use crate::storage::traits::Repository;
 use rust_i18n::t;
 
 // ============================================================================
@@ -123,11 +123,7 @@ impl SessionService {
     }
 
     /// 添加用户消息
-    pub fn add_user_message(
-        &self,
-        session_id: i64,
-        content: String,
-    ) -> Result<i64, SessionError> {
+    pub fn add_user_message(&self, session_id: i64, content: String) -> Result<i64, SessionError> {
         let message_repo = self
             .storage_manager
             .get::<MessageRepository>()

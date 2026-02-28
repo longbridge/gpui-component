@@ -1330,10 +1330,7 @@ impl DatabasePlugin for PostgresPlugin {
                 self.quote_identifier(table)
             )
         } else {
-            format!(
-                "DROP TABLE IF EXISTS {}",
-                self.quote_identifier(table)
-            )
+            format!("DROP TABLE IF EXISTS {}", self.quote_identifier(table))
         }
     }
 

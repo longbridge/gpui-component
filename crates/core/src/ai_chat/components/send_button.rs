@@ -7,8 +7,8 @@
 
 use gpui::{AnyElement, App, IntoElement, Window};
 use gpui_component::{
-    button::{Button, ButtonVariants},
     IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
 };
 use rust_i18n::t;
 

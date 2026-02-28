@@ -1,6 +1,7 @@
 use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState, StyleRefinement,
-    ParentElement as _, SharedString, Styled, Window, div, list, prelude::FluentBuilder as _, px,
+    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    ParentElement as _, SharedString, StyleRefinement, Styled, Window, div, list,
+    prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 

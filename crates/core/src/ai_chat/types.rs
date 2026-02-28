@@ -3,11 +3,11 @@
 //! 此模块包含 AI 聊天面板的核心类型，可被不同的面板实现复用。
 //! ChatMessageUI 支持泛型扩展，通过 MessageExtension trait 实现不同场景的定制。
 
+use crate::llm::{Message, MessageBlock, Role};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
-use crate::llm::{Message, MessageBlock, Role};
 
 // ============================================================================
 // 常量

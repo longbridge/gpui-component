@@ -1,12 +1,11 @@
-use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use crate::sql_editor::SqlEditor;
 use crate::sql_result_tab::SqlResultTabContainer;
 use db::{GlobalDbState, compress_sql, format_sql};
 use gpui::prelude::*;
 use gpui::{
-    App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity,
-    EventEmitter, FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, SharedString, Styled, Task, WeakEntity, Window, div, px,
+    App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity, EventEmitter,
+    FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Point, Render, SharedString, Styled, Task, WeakEntity, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::InputEvent;
@@ -18,6 +17,8 @@ use one_core::storage::DatabaseType;
 use one_core::storage::manager::get_queries_dir;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
+use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
+use rust_i18n::t;
 use smol::Timer;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -25,7 +26,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 use tracing::log::error;
-use rust_i18n::t;
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
 const RESULT_PANEL_DEFAULT_SIZE: Pixels = px(400.0);
@@ -119,7 +119,14 @@ impl SqlEditorTab {
 
         instance.bind_select_event(cx);
         instance.bind_auto_save(auto_save_seq, is_dirty, window, cx);
-        instance.load_databases_async(initial_database, initial_schema, resolved_file_path, should_load_file, cx, window);
+        instance.load_databases_async(
+            initial_database,
+            initial_schema,
+            resolved_file_path,
+            should_load_file,
+            cx,
+            window,
+        );
 
         instance
     }
@@ -237,87 +244,91 @@ impl SqlEditorTab {
         let file_path = self.file_path.clone();
         let editor_entity = self.editor.clone();
 
-        cx.subscribe_in(&editor_input, window, move |_this, _input, event: &InputEvent, _window, cx| {
-            if let InputEvent::Change = event {
-                // 标记为已修改
-                is_dirty.store(true, Ordering::Relaxed);
+        cx.subscribe_in(
+            &editor_input,
+            window,
+            move |_this, _input, event: &InputEvent, _window, cx| {
+                if let InputEvent::Change = event {
+                    // 标记为已修改
+                    is_dirty.store(true, Ordering::Relaxed);
 
-                // 检查自动保存是否启用
-                let auto_save_config = cx.try_global::<AutoSaveConfig>();
-                let (enabled, interval_ms) = match auto_save_config {
-                    Some(config) => (config.is_enabled(), config.interval_ms()),
-                    None => (true, 5000), // 默认值：启用，5秒间隔
-                };
+                    // 检查自动保存是否启用
+                    let auto_save_config = cx.try_global::<AutoSaveConfig>();
+                    let (enabled, interval_ms) = match auto_save_config {
+                        Some(config) => (config.is_enabled(), config.interval_ms()),
+                        None => (true, 5000), // 默认值：启用，5秒间隔
+                    };
 
-                if !enabled {
-                    return;
-                }
-
-                // 增加序列号以取消之前的保存任务
-                let my_seq = auto_save_seq.fetch_add(1, Ordering::SeqCst) + 1;
-                let seq_clone = auto_save_seq.clone();
-                let dirty_clone = is_dirty.clone();
-                let file_path_clone = file_path.clone();
-                let editor_clone = editor_entity.clone();
-
-                // 启动防抖定时保存
-                cx.spawn(async move |_handle, cx| {
-                    // 等待指定间隔
-                    Timer::after(Duration::from_millis(interval_ms)).await;
-
-                    // 检查是否被更新的请求取代
-                    if seq_clone.load(Ordering::SeqCst) != my_seq {
+                    if !enabled {
                         return;
                     }
 
-                    // 检查是否有未保存的修改
-                    if !dirty_clone.load(Ordering::Relaxed) {
-                        return;
-                    }
+                    // 增加序列号以取消之前的保存任务
+                    let my_seq = auto_save_seq.fetch_add(1, Ordering::SeqCst) + 1;
+                    let seq_clone = auto_save_seq.clone();
+                    let dirty_clone = is_dirty.clone();
+                    let file_path_clone = file_path.clone();
+                    let editor_clone = editor_entity.clone();
 
-                    // 执行保存
-                    let _ = cx.update(|cx| {
-                        let sql = editor_clone.read(cx).get_text(cx);
-                        if sql.trim().is_empty() {
+                    // 启动防抖定时保存
+                    cx.spawn(async move |_handle, cx| {
+                        // 等待指定间隔
+                        Timer::after(Duration::from_millis(interval_ms)).await;
+
+                        // 检查是否被更新的请求取代
+                        if seq_clone.load(Ordering::SeqCst) != my_seq {
                             return;
                         }
 
-                        // 创建目录
-                        if let Some(parent) = file_path_clone.parent() {
-                            if let Err(e) = std::fs::create_dir_all(parent) {
+                        // 检查是否有未保存的修改
+                        if !dirty_clone.load(Ordering::Relaxed) {
+                            return;
+                        }
+
+                        // 执行保存
+                        let _ = cx.update(|cx| {
+                            let sql = editor_clone.read(cx).get_text(cx);
+                            if sql.trim().is_empty() {
+                                return;
+                            }
+
+                            // 创建目录
+                            if let Some(parent) = file_path_clone.parent() {
+                                if let Err(e) = std::fs::create_dir_all(parent) {
+                                    error!(
+                                        "{}",
+                                        t!(
+                                            "SqlEditorView.create_dir_failed",
+                                            path = format!("{:?}", parent),
+                                            error = e
+                                        )
+                                        .to_string()
+                                    );
+                                    return;
+                                }
+                            }
+
+                            // 写入文件
+                            if let Err(e) = std::fs::write(&file_path_clone, &sql) {
                                 error!(
                                     "{}",
                                     t!(
-                                        "SqlEditorView.create_dir_failed",
-                                        path = format!("{:?}", parent),
+                                        "SqlEditorView.auto_save_failed",
+                                        path = format!("{:?}", file_path_clone),
                                         error = e
                                     )
                                     .to_string()
                                 );
-                                return;
+                            } else {
+                                // 保存成功，清除脏标记
+                                dirty_clone.store(false, Ordering::Relaxed);
                             }
-                        }
-
-                        // 写入文件
-                        if let Err(e) = std::fs::write(&file_path_clone, &sql) {
-                            error!(
-                                "{}",
-                                t!(
-                                    "SqlEditorView.auto_save_failed",
-                                    path = format!("{:?}", file_path_clone),
-                                    error = e
-                                )
-                                .to_string()
-                            );
-                        } else {
-                            // 保存成功，清除脏标记
-                            dirty_clone.store(false, Ordering::Relaxed);
-                        }
-                    });
-                })
-                .detach();
-            }
-        })
+                        });
+                    })
+                    .detach();
+                }
+            },
+        )
         .detach();
     }
 
@@ -360,7 +371,11 @@ impl SqlEditorTab {
 
                             if let Some(schema_name) = initial_schema.as_ref() {
                                 if let Some(index) = schemas.iter().position(|s| s == schema_name) {
-                                    state.set_selected_index(Some(IndexPath::new(index)), window, cx);
+                                    state.set_selected_index(
+                                        Some(IndexPath::new(index)),
+                                        window,
+                                        cx,
+                                    );
                                 } else if !schemas.is_empty() {
                                     state.set_selected_index(Some(IndexPath::new(0)), window, cx);
                                 }
@@ -765,7 +780,11 @@ impl SqlEditorTab {
         });
     }
 
-    fn render_resize_handle(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_resize_handle(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let view = cx.entity().clone();
 
         resize_handle::<ResizePanel, ResizePanel>("result-resize-handle", Axis::Vertical)
@@ -780,7 +799,12 @@ impl SqlEditorTab {
             })
     }
 
-    fn resize(&mut self, mouse_position: Point<Pixels>, _window: &mut Window, cx: &mut Context<Self>) {
+    fn resize(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.resizing {
             return;
         }
@@ -798,7 +822,11 @@ impl SqlEditorTab {
         cx.notify();
     }
 
-    fn render_has_results(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_has_results(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let result_panel_size = self.result_panel_size;
         let border_color = cx.theme().border;
 
@@ -808,7 +836,7 @@ impl SqlEditorTab {
                 v_flex()
                     .flex_1()
                     .min_h_0()
-                    .child(self.render_sql_editor(cx))
+                    .child(self.render_sql_editor(cx)),
             )
             .child(
                 div()
@@ -818,7 +846,7 @@ impl SqlEditorTab {
                     .border_t_1()
                     .border_color(border_color)
                     .child(self.sql_result_tab_container.clone())
-                    .child(self.render_resize_handle(window, cx))
+                    .child(self.render_resize_handle(window, cx)),
             )
     }
 
@@ -901,12 +929,7 @@ impl SqlEditorTab {
         let is_query_executing = self.sql_result_tab_container.read(cx).is_executing(cx);
 
         // Check if there is selected text in the editor
-        let has_selection = !self
-            .editor
-            .read(cx)
-            .get_selected_text(cx)
-            .trim()
-            .is_empty();
+        let has_selection = !self.editor.read(cx).get_selected_text(cx).trim().is_empty();
 
         v_flex()
             .size_full()
@@ -1023,7 +1046,9 @@ impl Render for SqlEditorTab {
 
         let mut div = v_flex().size_full();
         if has_results && results_visible {
-            div = div.child(self.render_has_results(window, cx)).child(ResizeEventHandler { view });
+            div = div
+                .child(self.render_has_results(window, cx))
+                .child(ResizeEventHandler { view });
         } else {
             div = div.child(self.render_sql_editor(cx));
         }

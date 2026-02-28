@@ -1,12 +1,12 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, Element, ElementId, Entity,
-    GlobalElementId, InteractiveElement, IntoElement, MouseDownEvent, MouseUpEvent,
-    ParentElement as _, Pixels, Point, Render, StatefulInteractiveElement, Styled as _, Window,
+    AnyElement, App, Axis, Element, ElementId, Entity, GlobalElementId, InteractiveElement,
+    IntoElement, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
+    StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{dock::DockPlacement, ActiveTheme as _, AxisExt as _};
+use crate::{ActiveTheme as _, AxisExt as _, dock::DockPlacement};
 
 pub(crate) const HANDLE_PADDING: Pixels = px(4.);
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);

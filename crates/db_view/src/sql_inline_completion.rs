@@ -106,24 +106,112 @@ const COMPOUND_KEYWORDS: &[(&str, &str)] = &[
 
 /// Single-word SQL keywords for fallback matching (no docs needed for inline completion).
 const SINGLE_KEYWORDS: &[&str] = &[
-    "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "TRUNCATE", "FROM",
-    "WHERE", "JOIN", "ON", "USING", "HAVING", "LIMIT", "OFFSET", "VALUES", "INTO", "SET", "AND",
-    "OR", "NOT", "IN", "EXISTS", "BETWEEN", "LIKE", "AS", "DISTINCT", "ALL", "UNION", "INTERSECT",
-    "EXCEPT", "CASE", "WHEN", "THEN", "ELSE", "END", "WITH", "TABLE", "INDEX", "VIEW",
-    "REFERENCES", "UNIQUE", "CHECK", "DEFAULT", "NULL", "TRUE", "FALSE", "ASC", "DESC",
+    "SELECT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "CREATE",
+    "ALTER",
+    "DROP",
+    "TRUNCATE",
+    "FROM",
+    "WHERE",
+    "JOIN",
+    "ON",
+    "USING",
+    "HAVING",
+    "LIMIT",
+    "OFFSET",
+    "VALUES",
+    "INTO",
+    "SET",
+    "AND",
+    "OR",
+    "NOT",
+    "IN",
+    "EXISTS",
+    "BETWEEN",
+    "LIKE",
+    "AS",
+    "DISTINCT",
+    "ALL",
+    "UNION",
+    "INTERSECT",
+    "EXCEPT",
+    "CASE",
+    "WHEN",
+    "THEN",
+    "ELSE",
+    "END",
+    "WITH",
+    "TABLE",
+    "INDEX",
+    "VIEW",
+    "REFERENCES",
+    "UNIQUE",
+    "CHECK",
+    "DEFAULT",
+    "NULL",
+    "TRUE",
+    "FALSE",
+    "ASC",
+    "DESC",
 ];
 
 /// SQL function names for inline keyword matching.
 const FUNCTION_NAMES: &[&str] = &[
-    "COUNT", "SUM", "AVG", "MIN", "MAX", "COALESCE", "NULLIF", "CAST", "UPPER", "LOWER", "TRIM",
-    "LENGTH", "SUBSTRING", "CONCAT", "REPLACE", "ABS", "ROUND", "FLOOR", "CEIL", "NOW",
+    "COUNT",
+    "SUM",
+    "AVG",
+    "MIN",
+    "MAX",
+    "COALESCE",
+    "NULLIF",
+    "CAST",
+    "UPPER",
+    "LOWER",
+    "TRIM",
+    "LENGTH",
+    "SUBSTRING",
+    "CONCAT",
+    "REPLACE",
+    "ABS",
+    "ROUND",
+    "FLOOR",
+    "CEIL",
+    "NOW",
 ];
 
 /// SQL data types for inline keyword matching.
 const DATA_TYPE_NAMES: &[&str] = &[
-    "INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "FLOAT", "DOUBLE", "DECIMAL", "NUMERIC",
-    "REAL", "CHAR", "VARCHAR", "TEXT", "NCHAR", "NVARCHAR", "BOOLEAN", "BOOL", "DATE", "TIME",
-    "DATETIME", "TIMESTAMP", "BLOB", "CLOB", "BINARY", "VARBINARY", "JSON", "XML", "UUID",
+    "INT",
+    "INTEGER",
+    "BIGINT",
+    "SMALLINT",
+    "TINYINT",
+    "FLOAT",
+    "DOUBLE",
+    "DECIMAL",
+    "NUMERIC",
+    "REAL",
+    "CHAR",
+    "VARCHAR",
+    "TEXT",
+    "NCHAR",
+    "NVARCHAR",
+    "BOOLEAN",
+    "BOOL",
+    "DATE",
+    "TIME",
+    "DATETIME",
+    "TIMESTAMP",
+    "BLOB",
+    "CLOB",
+    "BINARY",
+    "VARBINARY",
+    "JSON",
+    "XML",
+    "UUID",
     "SERIAL",
 ];
 
@@ -221,13 +309,25 @@ impl<'a> SqlInlineCompleter<'a> {
         if schema_first {
             self.try_schema_completion(&context_info.context, partial, &symbol_table)
                 .or_else(|| {
-                    self.try_clause_template(&context_info, &tokens, offset, &symbol_table, before_cursor)
+                    self.try_clause_template(
+                        &context_info,
+                        &tokens,
+                        offset,
+                        &symbol_table,
+                        before_cursor,
+                    )
                 })
                 .or_else(|| self.try_keyword_completion(partial))
         } else {
             self.try_keyword_completion(partial)
                 .or_else(|| {
-                    self.try_clause_template(&context_info, &tokens, offset, &symbol_table, before_cursor)
+                    self.try_clause_template(
+                        &context_info,
+                        &tokens,
+                        offset,
+                        &symbol_table,
+                        before_cursor,
+                    )
                 })
                 .or_else(|| {
                     self.try_schema_completion(&context_info.context, partial, &symbol_table)
@@ -368,9 +468,7 @@ impl<'a> SqlInlineCompleter<'a> {
                     return None;
                 }
 
-                let has_from = meaningful
-                    .iter()
-                    .any(|t| t.is_keyword_of(SqlKeyword::From));
+                let has_from = meaningful.iter().any(|t| t.is_keyword_of(SqlKeyword::From));
                 let has_update = meaningful
                     .iter()
                     .any(|t| t.is_keyword_of(SqlKeyword::Update));
@@ -379,7 +477,11 @@ impl<'a> SqlInlineCompleter<'a> {
                     .any(|t| t.is_keyword_of(SqlKeyword::Insert));
 
                 // Check if the last keyword before the ident was JOIN
-                let last_kw_is_join = meaningful.iter().rev().skip(1).find(|t| t.is_keyword())
+                let last_kw_is_join = meaningful
+                    .iter()
+                    .rev()
+                    .skip(1)
+                    .find(|t| t.is_keyword())
                     .map_or(false, |t| t.is_keyword_of(SqlKeyword::Join));
 
                 if last_kw_is_join && !existing.has_on {
@@ -411,10 +513,7 @@ impl<'a> SqlInlineCompleter<'a> {
                     return Some("= ".to_string());
                 }
                 // After a value (number, string) → suggest AND
-                if matches!(
-                    last.kind,
-                    SqlTokenKind::Number | SqlTokenKind::String
-                ) {
+                if matches!(last.kind, SqlTokenKind::Number | SqlTokenKind::String) {
                     return Some("AND ".to_string());
                 }
                 None
@@ -430,10 +529,8 @@ impl<'a> SqlInlineCompleter<'a> {
 
             // After SET col = 'value' → suggest WHERE
             SqlContext::SetClause => {
-                if matches!(
-                    last.kind,
-                    SqlTokenKind::Number | SqlTokenKind::String
-                ) && !existing.has_where
+                if matches!(last.kind, SqlTokenKind::Number | SqlTokenKind::String)
+                    && !existing.has_where
                 {
                     return Some("WHERE ".to_string());
                 }
@@ -526,18 +623,14 @@ impl<'a> SqlInlineCompleter<'a> {
         upper_prefix: &str,
         prefix_len: usize,
     ) -> Option<String> {
-        let columns = self
-            .schema
-            .columns_by_table
-            .get(table_name)
-            .or_else(|| {
-                let lower = table_name.to_lowercase();
-                self.schema
-                    .columns_by_table
-                    .iter()
-                    .find(|(k, _)| k.to_lowercase() == lower)
-                    .map(|(_, v)| v)
-            })?;
+        let columns = self.schema.columns_by_table.get(table_name).or_else(|| {
+            let lower = table_name.to_lowercase();
+            self.schema
+                .columns_by_table
+                .iter()
+                .find(|(k, _)| k.to_lowercase() == lower)
+                .map(|(_, v)| v)
+        })?;
 
         let mut best: Option<&str> = None;
         for (col, _, _) in columns {
@@ -557,18 +650,14 @@ impl<'a> SqlInlineCompleter<'a> {
         symbol_table: &SymbolTable,
     ) -> Option<Vec<String>> {
         let resolved = symbol_table.resolve(table_name).unwrap_or(table_name);
-        let columns = self
-            .schema
-            .columns_by_table
-            .get(resolved)
-            .or_else(|| {
-                let lower = resolved.to_lowercase();
-                self.schema
-                    .columns_by_table
-                    .iter()
-                    .find(|(k, _)| k.to_lowercase() == lower)
-                    .map(|(_, v)| v)
-            })?;
+        let columns = self.schema.columns_by_table.get(resolved).or_else(|| {
+            let lower = resolved.to_lowercase();
+            self.schema
+                .columns_by_table
+                .iter()
+                .find(|(k, _)| k.to_lowercase() == lower)
+                .map(|(_, v)| v)
+        })?;
         Some(columns.iter().map(|(name, _, _)| name.clone()).collect())
     }
 
@@ -579,9 +668,7 @@ impl<'a> SqlInlineCompleter<'a> {
                 && offset <= token.end
                 && matches!(
                     token.kind,
-                    SqlTokenKind::String
-                        | SqlTokenKind::LineComment
-                        | SqlTokenKind::BlockComment
+                    SqlTokenKind::String | SqlTokenKind::LineComment | SqlTokenKind::BlockComment
                 )
             {
                 return true;
@@ -611,9 +698,15 @@ fn extract_partial_word(before_cursor: &str) -> &str {
 /// If reference is all lowercase, return text lowercased.
 /// Otherwise return text as-is.
 fn apply_case(text: &str, reference: &str) -> String {
-    if reference.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) {
+    if reference
+        .chars()
+        .all(|c| !c.is_alphabetic() || c.is_uppercase())
+    {
         text.to_uppercase()
-    } else if reference.chars().all(|c| !c.is_alphabetic() || c.is_lowercase()) {
+    } else if reference
+        .chars()
+        .all(|c| !c.is_alphabetic() || c.is_lowercase())
+    {
         text.to_lowercase()
     } else {
         text.to_string()
@@ -814,10 +907,7 @@ mod tests {
     #[test]
     fn test_keyword_fallback_when_no_schema() {
         // No schema tables, so "WH" should fall back to keyword "WHERE"
-        assert_eq!(
-            suggest("SELECT * FROM t WH", 18),
-            Some("ERE ".to_string())
-        );
+        assert_eq!(suggest("SELECT * FROM t WH", 18), Some("ERE ".to_string()));
     }
 
     // === New tests: DotColumn single char ===
@@ -886,10 +976,7 @@ mod tests {
     #[test]
     fn test_new_statement_after_semicolon() {
         // After semicolon with new text, should still suggest
-        assert_eq!(
-            suggest("SELECT 1; SEL", 13),
-            Some("ECT ".to_string())
-        );
+        assert_eq!(suggest("SELECT 1; SEL", 13), Some("ECT ".to_string()));
     }
 
     #[test]

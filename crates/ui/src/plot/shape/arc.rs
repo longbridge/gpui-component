@@ -2,7 +2,7 @@
 
 use std::{f32::consts::PI, fmt::Debug};
 
-use gpui::{point, px, Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window};
+use gpui::{Bounds, Hsla, Path, PathBuilder, Pixels, Point, Window, point, px};
 
 use crate::PixelsExt;
 

@@ -3,7 +3,14 @@
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
-use gpui::{Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px, ShapedLine, TextAlign, Half};
+use gpui::{
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
+    Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
+    prelude::FluentBuilder as _, px,
+};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::ops::Range;
@@ -17,6 +24,7 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
     HoverDefinition, Lsp, Position,
@@ -28,7 +36,6 @@ use crate::input::{
 use crate::input::{InlineCompletion, RopeExt as _, Selection};
 use crate::{Root, history::History};
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
-use crate::input::blink_cursor::CURSOR_WIDTH;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -504,7 +511,7 @@ impl InputState {
     pub fn set_auto_pair(&mut self, enabled: bool) {
         self.auto_pair = enabled;
     }
-    
+
     /// Set this input is searchable, default is false (Default true for Code Editor).
     pub fn searchable(mut self, searchable: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
@@ -1117,9 +1124,10 @@ impl InputState {
                 let prev_offset = self.text.clip_offset(cursor.saturating_sub(1), Bias::Left);
                 let next_offset = cursor;
 
-                if let (Some(prev_char), Some(next_char)) =
-                    (self.text.char_at(prev_offset), self.text.char_at(next_offset))
-                {
+                if let (Some(prev_char), Some(next_char)) = (
+                    self.text.char_at(prev_offset),
+                    self.text.char_at(next_offset),
+                ) {
                     let is_pair = matches!(
                         (prev_char, next_char),
                         ('(', ')') | ('[', ']') | ('{', '}') | ('"', '"') | ('\'', '\'')
@@ -2153,7 +2161,8 @@ impl EntityInputHandler for InputState {
         let old_text = self.text.clone();
         self.text.replace(range.clone(), &actual_text);
 
-        let mut new_offset: usize = (range.start + actual_text.len() - cursor_offset_back).min(self.text.len());
+        let mut new_offset: usize =
+            (range.start + actual_text.len() - cursor_offset_back).min(self.text.len());
 
         if self.mode.is_single_line() {
             let pending_text = self.text.to_string();

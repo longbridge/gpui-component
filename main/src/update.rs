@@ -3,14 +3,11 @@ use std::process::Command;
 use std::sync::Arc;
 
 use futures::AsyncReadExt;
-use gpui::http_client::{http, AsyncBody, HttpClient, Method, Request};
+use gpui::http_client::{AsyncBody, HttpClient, Method, Request, http};
 use gpui::prelude::FluentBuilder;
 use gpui::{App, AppContext, Context, IntoElement, ParentElement, Render, Styled, Window, div, px};
 use gpui_component::{
-    ActiveTheme, WindowExt,
-    dialog::DialogButtonProps,
-    progress::Progress,
-    v_flex,
+    ActiveTheme, WindowExt, dialog::DialogButtonProps, progress::Progress, v_flex,
 };
 use rust_i18n::t;
 use semver::Version;
@@ -177,8 +174,7 @@ async fn fetch_update_info(
         return Err(format!("更新接口返回异常状态码: {}", status));
     }
 
-    serde_json::from_slice::<UpdateResponse>(&bytes)
-        .map_err(|e| format!("解析更新响应失败: {}", e))
+    serde_json::from_slice::<UpdateResponse>(&bytes).map_err(|e| format!("解析更新响应失败: {}", e))
 }
 
 fn select_download_url(
@@ -545,7 +541,11 @@ fn download_file_name(version: &str, download_url: &str) -> String {
     let parsed = http::Uri::try_from(download_url).ok();
     let extension = parsed
         .and_then(|uri| uri.path().rsplit('/').next().map(|p| p.to_string()))
-        .and_then(|name| Path::new(&name).extension().map(|ext| ext.to_string_lossy().to_string()))
+        .and_then(|name| {
+            Path::new(&name)
+                .extension()
+                .map(|ext| ext.to_string_lossy().to_string())
+        })
         .unwrap_or_else(|| {
             #[cfg(target_os = "windows")]
             {
@@ -670,8 +670,7 @@ fn apply_update_unix(download_path: &Path) -> Result<(), String> {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn apply_update_unix_with_target(download_path: &Path, target_path: &Path) -> Result<(), String> {
     if target_path.exists() {
-        std::fs::remove_file(target_path)
-            .map_err(|e| format!("移除旧版本失败: {}", e))?;
+        std::fs::remove_file(target_path).map_err(|e| format!("移除旧版本失败: {}", e))?;
     }
 
     match std::fs::rename(download_path, target_path) {

@@ -57,8 +57,7 @@ impl MsSqlDatabaseForm {
         let focus_handle = cx.focus_handle();
 
         let name_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("Database.enter_database_name").to_string())
+            InputState::new(window, cx).placeholder(t!("Database.enter_database_name").to_string())
         });
 
         let collation_items = vec![

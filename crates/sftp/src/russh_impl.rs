@@ -129,11 +129,9 @@ async fn sftp_connect_via_proxy(
             Ok(stream.into_inner())
         }
         ProxyType::Http => {
-            let stream = TcpStream::connect(&proxy_addr)
-                .await
-                .map_err(|e| {
-                    anyhow::anyhow!(t!("Sftp.http_proxy_connect_failed", error = e).to_string())
-                })?;
+            let stream = TcpStream::connect(&proxy_addr).await.map_err(|e| {
+                anyhow::anyhow!(t!("Sftp.http_proxy_connect_failed", error = e).to_string())
+            })?;
 
             let connect_request = if let (Some(username), Some(password)) =
                 (&proxy.username, &proxy.password)
@@ -161,12 +159,10 @@ async fn sftp_connect_via_proxy(
             reader.read_line(&mut response_line).await?;
 
             if !response_line.contains("200") {
-                anyhow::bail!(
-                    t!(
-                        "Sftp.http_proxy_connection_failed",
-                        response = response_line.trim()
-                    )
-                );
+                anyhow::bail!(t!(
+                    "Sftp.http_proxy_connection_failed",
+                    response = response_line.trim()
+                ));
             }
 
             loop {
@@ -235,7 +231,9 @@ impl RusshSftpClient {
         channel.request_subsystem(true, "sftp").await?;
 
         let mut raw = RawSftpSession::new(channel.into_stream());
-        raw.init().await.map_err(|e| anyhow!("Failed to init raw SFTP session: {}", e))?;
+        raw.init()
+            .await
+            .map_err(|e| anyhow!("Failed to init raw SFTP session: {}", e))?;
 
         // 尝试查询 limits@openssh.com 扩展并设置限制
         if let Ok(limits_ext) = raw.limits().await {
@@ -283,10 +281,7 @@ impl RusshSftpClient {
         let producer = tokio::spawn(async move {
             for i in 0..total_chunks {
                 let offset = i * chunk_size;
-                let len = std::cmp::min(
-                    PIPELINE_CHUNK_SIZE,
-                    (total_size - offset) as u32,
-                );
+                let len = std::cmp::min(PIPELINE_CHUNK_SIZE, (total_size - offset) as u32);
 
                 let permit = semaphore.clone().acquire_owned().await;
                 if permit.is_err() {
@@ -306,9 +301,7 @@ impl RusshSftpClient {
                         Ok(data) => {
                             let _ = tx.send((offset, data.data)).await;
                         }
-                        Err(SftpError::Status(status))
-                            if status.status_code == StatusCode::Eof =>
-                        {
+                        Err(SftpError::Status(status)) if status.status_code == StatusCode::Eof => {
                             // EOF 表示文件读完，发送空数据标记此 offset
                             let _ = tx.send((offset, Vec::new())).await;
                         }
@@ -463,9 +456,7 @@ impl RusshSftpClient {
                         Ok(data) => {
                             let _ = tx.send((offset, data.data)).await;
                         }
-                        Err(SftpError::Status(status))
-                            if status.status_code == StatusCode::Eof =>
-                        {
+                        Err(SftpError::Status(status)) if status.status_code == StatusCode::Eof => {
                             let _ = tx.send((offset, Vec::new())).await;
                         }
                         Err(_e) => {
@@ -590,8 +581,7 @@ impl RusshSftpClient {
                     speed_samples.remove(0);
                 }
 
-                let avg_speed =
-                    speed_samples.iter().sum::<f64>() / speed_samples.len() as f64;
+                let avg_speed = speed_samples.iter().sum::<f64>() / speed_samples.len() as f64;
 
                 progress(TransferProgress {
                     transferred,
@@ -638,8 +628,8 @@ impl SftpClient for RusshSftpClient {
                 .keepalive_interval
                 .or(Some(Duration::from_secs(60))),
             keepalive_max: ssh_config.keepalive_max.unwrap_or(3),
-            window_size: 16 * 1024 * 1024,       // 16 MB
-            maximum_packet_size: 0xFFFF,           // 65535, max allowed by russh
+            window_size: 16 * 1024 * 1024, // 16 MB
+            maximum_packet_size: 0xFFFF,   // 65535, max allowed by russh
             nodelay: true,
             ..<_>::default()
         });
@@ -663,12 +653,7 @@ impl SftpClient for RusshSftpClient {
 
             // 通过跳板机转发到目标服务器
             let forwarded_channel = jump_session
-                .channel_open_direct_tcpip(
-                    &ssh_config.host,
-                    ssh_config.port as u32,
-                    "127.0.0.1",
-                    0,
-                )
+                .channel_open_direct_tcpip(&ssh_config.host, ssh_config.port as u32, "127.0.0.1", 0)
                 .await?;
 
             let handler = SftpHandler;
@@ -677,24 +662,16 @@ impl SftpClient for RusshSftpClient {
 
             (session, Some(jump_session))
         } else if let Some(ref proxy) = ssh_config.proxy {
-            tracing::info!(
-                "SFTP: 通过代理 {}:{} 连接",
-                proxy.host,
-                proxy.port
-            );
-            let stream =
-                sftp_connect_via_proxy(proxy, &ssh_config.host, ssh_config.port).await?;
+            tracing::info!("SFTP: 通过代理 {}:{} 连接", proxy.host, proxy.port);
+            let stream = sftp_connect_via_proxy(proxy, &ssh_config.host, ssh_config.port).await?;
             let handler = SftpHandler;
             let session = client::connect_stream(config, stream, handler).await?;
             (session, None)
         } else {
             let handler = SftpHandler;
-            let session = client::connect(
-                config,
-                (ssh_config.host.as_str(), ssh_config.port),
-                handler,
-            )
-            .await?;
+            let session =
+                client::connect(config, (ssh_config.host.as_str(), ssh_config.port), handler)
+                    .await?;
             (session, None)
         };
 
@@ -783,10 +760,19 @@ impl SftpClient for RusshSftpClient {
             let raw_session = match self.get_or_create_raw_session().await {
                 Ok(raw) => raw,
                 Err(e) => {
-                    tracing::warn!("Failed to create raw SFTP session, falling back to serial: {}", e);
+                    tracing::warn!(
+                        "Failed to create raw SFTP session, falling back to serial: {}",
+                        e
+                    );
                     self.raw_sftp = None;
                     return self
-                        .serial_download_file(remote_path, local_path, total_size, cancelled, progress)
+                        .serial_download_file(
+                            remote_path,
+                            local_path,
+                            total_size,
+                            cancelled,
+                            progress,
+                        )
                         .await;
                 }
             };
@@ -1114,7 +1100,9 @@ impl SftpClient for RusshSftpClient {
         cancelled: Arc<AtomicBool>,
         progress: ProgressCallback,
     ) -> Result<()> {
-        let entries = self.list_dir_recursive(remote_path, cancelled.clone()).await?;
+        let entries = self
+            .list_dir_recursive(remote_path, cancelled.clone())
+            .await?;
 
         let total_size: u64 = entries.iter().filter(|e| !e.is_dir).map(|e| e.size).sum();
         let mut transferred: u64 = 0;
@@ -1151,7 +1139,10 @@ impl SftpClient for RusshSftpClient {
             match self.get_or_create_raw_session().await {
                 Ok(raw) => Some(raw),
                 Err(e) => {
-                    tracing::warn!("Failed to create raw SFTP session, falling back to serial: {}", e);
+                    tracing::warn!(
+                        "Failed to create raw SFTP session, falling back to serial: {}",
+                        e
+                    );
                     self.raw_sftp = None;
                     None
                 }

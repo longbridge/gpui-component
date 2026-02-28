@@ -1,24 +1,28 @@
 use std::collections::{HashMap, HashSet};
 
+use super::copy_format::{CopyFormat, CopyFormatter, TableMetadata};
+use super::data_grid::DataGrid;
 use db::{ColumnInfo, FieldType};
-use gpui::{App, AppContext, ClipboardItem, Context, InteractiveElement, IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, div, prelude::FluentBuilder, px};
+use gpui::{
+    App, AppContext, ClipboardItem, Context, InteractiveElement, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, div,
+    prelude::FluentBuilder, px,
+};
 use gpui_component::calendar::Date;
+use gpui_component::date_picker::{DatePickerEvent, DatePickerState};
+use gpui_component::datetime_picker::{DateTimePickerEvent, DateTimePickerState};
 use gpui_component::input::{InputEvent, InputState, MaskPattern};
 use gpui_component::menu::{PopupMenu, PopupMenuItem};
+use gpui_component::time_picker::{TimePickerEvent, TimePickerState};
 use gpui_component::tooltip::Tooltip;
-use gpui_component::{ActiveTheme, h_flex, WindowExt};
+use gpui_component::{ActiveTheme, WindowExt, h_flex};
+use one_core::storage::DatabaseType;
 use one_ui::edit_table::{
     CellEditor, Column, EditTableDelegate, EditTableEvent, EditTableState,
     filter_panel::FilterValue,
 };
-use one_core::storage::DatabaseType;
 use rust_i18n::t;
 use uuid::Uuid;
-use gpui_component::date_picker::{DatePickerEvent, DatePickerState};
-use gpui_component::datetime_picker::{DateTimePickerEvent, DateTimePickerState};
-use gpui_component::time_picker::{TimePickerEvent, TimePickerState};
-use super::data_grid::DataGrid;
-use super::copy_format::{CopyFormat, CopyFormatter, TableMetadata};
 
 /// Represents a single cell change with old and new values
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -808,7 +812,11 @@ impl EditTableDelegate for EditorTableDelegate {
         where
             F: FnMut() -> Option<String>,
         {
-            let row_number_offset = if state.delegate().row_number_enabled(cx) { 1 } else { 0 };
+            let row_number_offset = if state.delegate().row_number_enabled(cx) {
+                1
+            } else {
+                0
+            };
             let selected_cells = collect_selected_cells(state, row_number_offset);
             if selected_cells.is_empty() {
                 return false;
@@ -865,7 +873,11 @@ impl EditTableDelegate for EditorTableDelegate {
                 return;
             }
 
-            let row_number_offset = if state.delegate().row_number_enabled(cx) { 1 } else { 0 };
+            let row_number_offset = if state.delegate().row_number_enabled(cx) {
+                1
+            } else {
+                0
+            };
             let mut changes: Vec<(usize, usize, String)> = Vec::new();
             for (row_offset, row_data) in data.iter().enumerate() {
                 for (col_offset, value) in row_data.iter().enumerate() {
@@ -877,7 +889,9 @@ impl EditTableDelegate for EditorTableDelegate {
             }
 
             if state.delegate_mut().set_cell_values(changes, window, cx) {
-                state.delegate_mut().on_paste(data.clone(), start, window, cx);
+                state
+                    .delegate_mut()
+                    .on_paste(data.clone(), start, window, cx);
                 cx.emit(EditTableEvent::PasteData { data, start });
                 state.refresh(cx);
             }
@@ -942,55 +956,43 @@ impl EditTableDelegate for EditorTableDelegate {
             let table_in = table_in.clone();
             move |submenu, _window, _cx| {
                 submenu
-                    .item(
-                        PopupMenuItem::new("CSV").on_click({
-                            let t = table_csv.clone();
-                            move |_, _window, cx| {
-                                copy_with_format(&t, CopyFormat::Csv, cx);
-                            }
-                        }),
-                    )
-                    .item(
-                        PopupMenuItem::new("JSON").on_click({
-                            let t = table_json.clone();
-                            move |_, _window, cx| {
-                                copy_with_format(&t, CopyFormat::Json, cx);
-                            }
-                        }),
-                    )
-                    .item(
-                        PopupMenuItem::new("Markdown").on_click({
-                            let t = table_md.clone();
-                            move |_, _window, cx| {
-                                copy_with_format(&t, CopyFormat::Markdown, cx);
-                            }
-                        }),
-                    )
+                    .item(PopupMenuItem::new("CSV").on_click({
+                        let t = table_csv.clone();
+                        move |_, _window, cx| {
+                            copy_with_format(&t, CopyFormat::Csv, cx);
+                        }
+                    }))
+                    .item(PopupMenuItem::new("JSON").on_click({
+                        let t = table_json.clone();
+                        move |_, _window, cx| {
+                            copy_with_format(&t, CopyFormat::Json, cx);
+                        }
+                    }))
+                    .item(PopupMenuItem::new("Markdown").on_click({
+                        let t = table_md.clone();
+                        move |_, _window, cx| {
+                            copy_with_format(&t, CopyFormat::Markdown, cx);
+                        }
+                    }))
                     .separator()
-                    .item(
-                        PopupMenuItem::new("INSERT").on_click({
-                            let t = table_insert.clone();
-                            move |_, _window, cx| {
-                                copy_with_format(&t, CopyFormat::SqlInsert, cx);
-                            }
-                        }),
-                    )
-                    .item(
-                        PopupMenuItem::new("UPDATE").on_click({
-                            let t = table_update.clone();
-                            move |_, _window, cx| {
-                                copy_with_format(&t, CopyFormat::SqlUpdate, cx);
-                            }
-                        }),
-                    )
-                    .item(
-                        PopupMenuItem::new("DELETE").on_click({
-                            let t = table_delete.clone();
-                            move |_, _window, cx| {
-                                copy_with_format(&t, CopyFormat::SqlDelete, cx);
-                            }
-                        }),
-                    )
+                    .item(PopupMenuItem::new("INSERT").on_click({
+                        let t = table_insert.clone();
+                        move |_, _window, cx| {
+                            copy_with_format(&t, CopyFormat::SqlInsert, cx);
+                        }
+                    }))
+                    .item(PopupMenuItem::new("UPDATE").on_click({
+                        let t = table_update.clone();
+                        move |_, _window, cx| {
+                            copy_with_format(&t, CopyFormat::SqlUpdate, cx);
+                        }
+                    }))
+                    .item(PopupMenuItem::new("DELETE").on_click({
+                        let t = table_delete.clone();
+                        move |_, _window, cx| {
+                            copy_with_format(&t, CopyFormat::SqlDelete, cx);
+                        }
+                    }))
                     .item(
                         PopupMenuItem::new(t!("TableData.sql_in_clause").to_string()).on_click({
                             let t = table_in.clone();
@@ -1028,7 +1030,7 @@ impl EditTableDelegate for EditorTableDelegate {
         )
         .item(
             PopupMenuItem::submenu(t!("TableData.generate_uuid").to_string(), uuid_menu)
-                .disabled(edit_disabled)
+                .disabled(edit_disabled),
         )
         .item(
             PopupMenuItem::new(t!("TableData.edit_in_cell_editor").to_string())
@@ -1039,7 +1041,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         let Some(data_grid) = data_grid.clone() else {
                             window.push_notification(
                                 t!("TableData.open_cell_editor_failed").to_string(),
-                                cx
+                                cx,
                             );
                             return;
                         };
@@ -1049,7 +1051,7 @@ impl EditTableDelegate for EditorTableDelegate {
                             tracing::error!("Failed to open cell editor: {}", error);
                             window.push_notification(
                                 t!("TableData.open_cell_editor_failed").to_string(),
-                                cx
+                                cx,
                             );
                         }
                     }
@@ -1075,7 +1077,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         if !cloned {
                             window.push_notification(
                                 t!("TableData.clone_row_failed").to_string(),
-                                cx
+                                cx,
                             );
                         }
                     }
@@ -1122,12 +1124,17 @@ impl EditTableDelegate for EditorTableDelegate {
                     table.update(cx, |state, cx| {
                         let mut columns = state.get_selection_columns(cx);
                         if columns.is_empty() {
-                            if let Some((_, col_ix)) = state.selection().active.or(state.selected_cell())
+                            if let Some((_, col_ix)) =
+                                state.selection().active.or(state.selected_cell())
                             {
-                                let row_number_offset =
-                                    if state.delegate().row_number_enabled(cx) { 1 } else { 0 };
+                                let row_number_offset = if state.delegate().row_number_enabled(cx) {
+                                    1
+                                } else {
+                                    0
+                                };
                                 if let Some(delegate_col) = col_ix.checked_sub(row_number_offset) {
-                                    columns.push(state.delegate().get_column_name(delegate_col, cx));
+                                    columns
+                                        .push(state.delegate().get_column_name(delegate_col, cx));
                                 }
                             }
                         }
@@ -1147,27 +1154,26 @@ impl EditTableDelegate for EditorTableDelegate {
             }),
         )
         .separator()
-        .item(PopupMenuItem::submenu(t!("TableData.copy_as").to_string(), copy_sql_menu))
+        .item(PopupMenuItem::submenu(
+            t!("TableData.copy_as").to_string(),
+            copy_sql_menu,
+        ))
         .separator()
         .item(
             PopupMenuItem::new(t!("TableData.save_data_as").to_string()).on_click({
                 let data_grid = data_grid.clone();
                 move |_, window, cx| {
                     let Some(data_grid) = data_grid.clone() else {
-                        window.push_notification(
-                            t!("TableData.export_data_failed").to_string(),
-                            cx
-                        );
+                        window
+                            .push_notification(t!("TableData.export_data_failed").to_string(), cx);
                         return;
                     };
                     if let Err(error) = data_grid.update(cx, |grid, cx| {
                         grid.open_export_view(window, cx);
                     }) {
                         tracing::error!("Failed to open export view: {}", error);
-                        window.push_notification(
-                            t!("TableData.export_data_failed").to_string(),
-                            cx
-                        );
+                        window
+                            .push_notification(t!("TableData.export_data_failed").to_string(), cx);
                     }
                 }
             }),
@@ -1178,20 +1184,16 @@ impl EditTableDelegate for EditorTableDelegate {
                 let data_grid = data_grid.clone();
                 move |_, window, cx| {
                     let Some(data_grid) = data_grid.clone() else {
-                        window.push_notification(
-                            t!("TableData.refresh_data_failed").to_string(),
-                            cx
-                        );
+                        window
+                            .push_notification(t!("TableData.refresh_data_failed").to_string(), cx);
                         return;
                     };
                     if let Err(error) = data_grid.update(cx, |grid, cx| {
                         grid.refresh_data(cx);
                     }) {
                         tracing::error!("Failed to refresh data grid: {}", error);
-                        window.push_notification(
-                            t!("TableData.refresh_data_failed").to_string(),
-                            cx
-                        );
+                        window
+                            .push_notification(t!("TableData.refresh_data_failed").to_string(), cx);
                     }
                 }
             }),
@@ -1296,10 +1298,9 @@ impl EditTableDelegate for EditorTableDelegate {
                                     });
                                     return;
                                 }
-                                if let Ok(date) = chrono::NaiveDate::parse_from_str(
-                                    trimmed,
-                                    "%Y-%m-%d",
-                                ) {
+                                if let Ok(date) =
+                                    chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+                                {
                                     picker_handle.update(cx, |state, cx| {
                                         state.set_date(date, window, cx);
                                     });
@@ -1342,10 +1343,7 @@ impl EditTableDelegate for EditorTableDelegate {
                 let edit_value_trimmed = edit_value.trim().to_string();
                 let (initial_value, initial_datetime) = if edit_value_trimmed.is_empty() {
                     let now = chrono::Local::now().naive_local();
-                    (
-                        now.format("%Y-%m-%d %H:%M:%S").to_string(),
-                        Some(now),
-                    )
+                    (now.format("%Y-%m-%d %H:%M:%S").to_string(), Some(now))
                 } else {
                     (edit_value.clone(), None)
                 };
@@ -1397,10 +1395,7 @@ impl EditTableDelegate for EditorTableDelegate {
                     if let Some(dt) = datetime {
                         state.set_datetime(Some(dt), window, cx);
                     } else if !edit_value_trimmed.is_empty() {
-                        tracing::warn!(
-                            "Failed to parse datetime value: '{}'",
-                            edit_value_trimmed
-                        );
+                        tracing::warn!("Failed to parse datetime value: '{}'", edit_value_trimmed);
                         state.set_datetime(Some(chrono::Local::now().naive_local()), window, cx);
                     }
                     state.set_open(true, window, cx);
@@ -1824,7 +1819,11 @@ impl EditTableDelegate for EditorTableDelegate {
         self.is_new_row(actual_row)
     }
 
-    fn on_row_added(&mut self, _window: &mut Window, _cx: &mut Context<EditTableState<Self>>) -> usize {
+    fn on_row_added(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<EditTableState<Self>>,
+    ) -> usize {
         // Add a new empty row (None represents NULL/empty value)
         let new_row: Vec<Option<String>> = vec![None; self.columns.len()];
         let row_ix = self.rows.len();

@@ -4,14 +4,14 @@
 //! - AI 聊天面板
 //! - 可扩展的其他面板
 
-use gpui::{
-    div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, Window,
-};
 use gpui::prelude::FluentBuilder;
-use gpui_component::{v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
-use one_core::ai_chat::ask_ai::{get_ask_ai_notifier, AskAiEvent};
+use gpui::{
+    AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window, div, px,
+};
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, v_flex};
+use one_core::ai_chat::ask_ai::{AskAiEvent, get_ask_ai_notifier};
 use one_core::ai_chat::{AiChatPanel, AiChatPanelEvent, CodeBlockAction};
 
 /// 侧边栏面板类型
@@ -69,26 +69,27 @@ impl DatabaseSidebar {
         let mut subs = Vec::new();
 
         // 订阅 AI 聊天面板关闭事件
-        subs.push(cx.subscribe(
-            &ai_chat_panel,
-            |this, _, event: &AiChatPanelEvent, cx| {
+        subs.push(
+            cx.subscribe(&ai_chat_panel, |this, _, event: &AiChatPanelEvent, cx| {
                 if let AiChatPanelEvent::Close = event {
                     this.active_panel = None;
                     cx.emit(DatabaseSidebarEvent::PanelChanged);
                     cx.notify();
                 }
-            },
-        ));
+            }),
+        );
 
         // 订阅全局 AskAi 通知器
         if let Some(notifier) = get_ask_ai_notifier(cx) {
-            subs.push(cx.subscribe(&notifier, move |this, _, event: &AskAiEvent, cx| {
-                // 只有激活的 tab 才响应事件
-                if this.is_active {
-                    let AskAiEvent::Request(message) = event;
-                    this.ask_ai(message.clone(), cx);
-                }
-            }));
+            subs.push(
+                cx.subscribe(&notifier, move |this, _, event: &AskAiEvent, cx| {
+                    // 只有激活的 tab 才响应事件
+                    if this.is_active {
+                        let AskAiEvent::Request(message) = event;
+                        this.ask_ai(message.clone(), cx);
+                    }
+                }),
+            );
         }
 
         Self {

@@ -14,15 +14,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::addon::{
-    register_default_addons,
-    AddonManager,
-    SearchAddon,
-    TerminalAddonFrameContext,
+    register_default_addons, AddonManager, SearchAddon, TerminalAddonFrameContext,
     TerminalAddonMouseContext,
 };
 use crate::blink_manager::BlinkManager;
-use crate::sidebar::{TerminalSidebar, TerminalSidebarEvent, SidebarPanel, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
-use terminal::terminal::{ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent, TerminalScrollProxy};
+use crate::sidebar::{
+    SidebarPanel, TerminalSidebar, TerminalSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH,
+    SIDEBAR_MIN_WIDTH,
+};
 use crate::terminal_element::{RenderCache, TerminalElement};
 use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 use one_core::storage::models::StoredConnection;
@@ -30,7 +29,10 @@ use one_core::tab_container::{TabContent, TabContentEvent};
 use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use rust_i18n::t;
 use std::ops::Deref;
-use terminal::{LocalConfig};
+use terminal::terminal::{
+    ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent, TerminalScrollProxy,
+};
+use terminal::LocalConfig;
 
 actions!(
     terminal_view,
@@ -221,12 +223,16 @@ impl TerminalView {
         Self::new_with_index(config, None, window, cx)
     }
 
-    pub fn new_with_index(config: LocalConfig, tab_index: Option<usize>, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+    pub fn new_with_index(
+        config: LocalConfig,
+        tab_index: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<Self> {
         // 创建 Terminal Entity
         let local_working_dir = config.working_dir.clone().map(PathBuf::from);
-        let terminal = cx.new(|cx| {
-            Terminal::new_local(config, cx).expect("Failed to create local terminal")
-        });
+        let terminal =
+            cx.new(|cx| Terminal::new_local(config, cx).expect("Failed to create local terminal"));
         Self::new_with_terminal(terminal, None, local_working_dir, tab_index, window, cx)
     }
 
@@ -234,7 +240,13 @@ impl TerminalView {
         Self::new_ssh_with_index(conn, None, window, cx, None)
     }
 
-    pub fn new_ssh_with_index(conn: StoredConnection, tab_index: Option<usize>, window: &mut Window, cx: &mut Context<Self>, working_dir: Option<&str>) -> Self {
+    pub fn new_ssh_with_index(
+        conn: StoredConnection,
+        tab_index: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        working_dir: Option<&str>,
+    ) -> Self {
         // 创建 SSH Terminal Entity
         let connection_id = conn.id;
         let terminal = cx.new(|cx| Terminal::new_ssh(conn, cx, working_dir));
@@ -254,7 +266,8 @@ impl TerminalView {
 
         // 获取初始颜色
         let colors = terminal.read(cx).term().lock().colors().clone();
-        let is_local_terminal = terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+        let is_local_terminal =
+            terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
 
         // 创建默认主题（需要在创建侧边栏之前）
         let default_theme = TerminalTheme::midnight();
@@ -296,8 +309,10 @@ impl TerminalView {
         subscriptions.push(blur_subscription);
 
         let scrollbar_metrics = Rc::new(RefCell::new(TerminalScrollbarMetrics::default()));
-        let scrollbar_handle =
-            TerminalScrollbarHandle::new(terminal.read(cx).scroll_proxy(), scrollbar_metrics.clone());
+        let scrollbar_handle = TerminalScrollbarHandle::new(
+            terminal.read(cx).scroll_proxy(),
+            scrollbar_metrics.clone(),
+        );
 
         Ok(Self {
             terminal,
@@ -802,7 +817,12 @@ impl TerminalView {
         self.search_forward_internal(cx);
     }
 
-    fn search_backward(&mut self, _: &SearchBackward, _window: &mut Window, cx: &mut Context<Self>) {
+    fn search_backward(
+        &mut self,
+        _: &SearchBackward,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // 如果侧边栏设置面板未激活，则激活它
         if self.sidebar.read(cx).active_panel() != Some(SidebarPanel::Settings) {
             self.sidebar.update(cx, |sidebar, cx| {
@@ -873,7 +893,8 @@ impl TerminalView {
     fn render_terminal(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         // Prepare addons before rendering
         {
-            let is_local = self.terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
+            let is_local =
+                self.terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
             let term = self.terminal.read(cx).term().lock();
             let display_offset = term.grid().display_offset();
             let visible_lines = 0..term.screen_lines();
@@ -907,10 +928,14 @@ impl TerminalView {
             &self.render_cache,
             self.current_theme.font_family.clone(),
             self.current_theme.font_size,
-            self.current_theme.font_fallbacks.iter().map(|s| s.to_string()).collect(),
+            self.current_theme
+                .font_fallbacks
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             self.current_theme.line_height_scale,
             cursor_visible,
-            self.cell_width,  // 传入预计算的 cell_width，确保与 resize 一致
+            self.cell_width, // 传入预计算的 cell_width，确保与 resize 一致
         )
         .into_element()
     }
@@ -1198,7 +1223,12 @@ impl TerminalView {
         }
     }
 
-    fn pixel_to_point(&self, position: Point<Pixels>, bounds: Bounds<Pixels>, cx: &Context<Self>) -> AlacPoint {
+    fn pixel_to_point(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        cx: &Context<Self>,
+    ) -> AlacPoint {
         let relative_x = position.x - bounds.origin.x;
         let relative_y = position.y - bounds.origin.y;
 
@@ -1286,7 +1316,11 @@ impl TerminalView {
         };
 
         self.terminal.update(cx, |terminal, _| {
-            terminal.start_selection(selection_type, point, self.pixel_to_side(event.position, bounds));
+            terminal.start_selection(
+                selection_type,
+                point,
+                self.pixel_to_side(event.position, bounds),
+            );
         });
 
         self.mouse_state.selecting = true;
@@ -1378,22 +1412,34 @@ impl TerminalView {
         self.write_to_pty(b"\x1b[Z".to_vec(), cx);
     }
 
-    fn render_sidebar_resize_handle(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_sidebar_resize_handle(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let view = cx.entity().clone();
 
-        resize_handle::<ResizePanel, ResizePanel>("terminal-sidebar-resize-handle", Axis::Horizontal)
-            .placement(HandlePlacement::Right)
-            .on_drag(ResizePanel, move |info, _, _, cx| {
-                cx.stop_propagation();
-                view.update(cx, |view, cx| {
-                    view.resizing = Some(ResizingPanel::Sidebar);
-                    cx.notify();
-                });
-                cx.new(|_| info.deref().clone())
-            })
+        resize_handle::<ResizePanel, ResizePanel>(
+            "terminal-sidebar-resize-handle",
+            Axis::Horizontal,
+        )
+        .placement(HandlePlacement::Right)
+        .on_drag(ResizePanel, move |info, _, _, cx| {
+            cx.stop_propagation();
+            view.update(cx, |view, cx| {
+                view.resizing = Some(ResizingPanel::Sidebar);
+                cx.notify();
+            });
+            cx.new(|_| info.deref().clone())
+        })
     }
 
-    fn resize_sidebar(&mut self, mouse_position: Point<Pixels>, _window: &mut Window, cx: &mut Context<Self>) {
+    fn resize_sidebar(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(resizing) = self.resizing else {
             return;
         };
@@ -1472,7 +1518,11 @@ impl Render for TerminalView {
             None
         } else {
             Some(FontFallbacks::from_fonts(
-                self.current_theme.font_fallbacks.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+                self.current_theme
+                    .font_fallbacks
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
             ))
         };
         let features = FontFeatures(std::sync::Arc::new(vec![("calt".to_string(), 0)]));
@@ -1605,7 +1655,15 @@ impl Render for TerminalView {
                             .bottom(px(12.))
                             .child(self.render_terminal(cx))
                             .context_menu(move |menu, window, cx| {
-                                Self::build_context_menu(menu, has_selection, selection_text.clone(), &view, &sidebar, window, cx)
+                                Self::build_context_menu(
+                                    menu,
+                                    has_selection,
+                                    selection_text.clone(),
+                                    &view,
+                                    &sidebar,
+                                    window,
+                                    cx,
+                                )
                             })
                     })
                     .when_some(tooltip.zip(mouse_pos), |this, (tooltip, pos)| {
@@ -1687,12 +1745,10 @@ impl Render for TerminalView {
                         .w(sidebar_panel_size)
                         .flex_shrink_0()
                         .child(self.render_sidebar_resize_handle(window, cx))
-                        .child(self.sidebar.clone())
+                        .child(self.sidebar.clone()),
                 )
             })
-            .when(!sidebar_visible, |this| {
-                this.child(self.sidebar.clone())
-            })
+            .when(!sidebar_visible, |this| this.child(self.sidebar.clone()))
             .child(ResizeEventHandler { view })
     }
 }

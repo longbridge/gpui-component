@@ -1,7 +1,7 @@
 use crate::{ActiveTheme, StyledExt};
 use gpui::{
-    bounce, div, ease_in_out, Animation, AnimationExt, IntoElement, RenderOnce, StyleRefinement,
-    Styled,
+    Animation, AnimationExt, IntoElement, RenderOnce, StyleRefinement, Styled, bounce, div,
+    ease_in_out,
 };
 use std::time::Duration;
 

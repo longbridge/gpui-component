@@ -960,20 +960,15 @@ impl GlobalDbState {
         schema_to_switch: Option<String>,
     ) -> anyhow::Result<Vec<SqlResult>> {
         // 获取缓存实例用于 DDL 失效
-        let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
-        let cache_ctx = cx
-            .update(|cx| {
-                cx.try_global::<GlobalDbState>()
-                    .and_then(|state| state.get_config(&config.id))
-                    .map(|cfg| CacheContext::from_config(&cfg))
-            });
+        let cache_ctx = cx.update(|cx| {
+            cx.try_global::<GlobalDbState>()
+                .and_then(|state| state.get_config(&config.id))
+                .map(|cfg| CacheContext::from_config(&cfg))
+        });
 
-        let notifier = cx
-            .update(|cx| {
-                cx.try_global::<GlobalConnectionNotifier>().cloned()
-            });
+        let notifier = cx.update(|cx| cx.try_global::<GlobalConnectionNotifier>().cloned());
 
         let clone_self = self.clone();
         let config_id = config.id.clone();
@@ -1302,8 +1297,7 @@ impl GlobalDbState {
         let cache_ctx = crate::CacheContext::from_config(&config);
 
         // 获取缓存实例
-        let cache = cx
-            .update(|cx| cx.try_global::<crate::GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<crate::GlobalNodeCache>().cloned());
 
         // For Database and Schema nodes, we need to connect to the specific database
         // This is especially important for PostgreSQL which doesn't support database switching
@@ -1438,8 +1432,7 @@ impl GlobalDbState {
         connection_id: String,
     ) -> anyhow::Result<Vec<String>> {
         // 获取缓存实例
-        let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1460,10 +1453,9 @@ impl GlobalDbState {
 
         // 缓存未命中，从数据库查询
         let conn_id = connection_id.clone();
-        let databases =
-            with_plugin_session!(self, cx, connection_id, |plugin, conn| {
-                plugin.list_databases(&*conn).await
-            })?;
+        let databases = with_plugin_session!(self, cx, connection_id, |plugin, conn| {
+            plugin.list_databases(&*conn).await
+        })?;
 
         // 写入缓存
         if let Some(cache) = cache {
@@ -1513,8 +1505,7 @@ impl GlobalDbState {
         database: String,
     ) -> anyhow::Result<Vec<String>> {
         // 获取缓存实例
-        let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1564,8 +1555,7 @@ impl GlobalDbState {
         schema: Option<String>,
     ) -> anyhow::Result<Vec<crate::types::TableInfo>> {
         // 获取缓存实例
-        let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1633,8 +1623,7 @@ impl GlobalDbState {
         table: String,
     ) -> anyhow::Result<Vec<crate::types::ColumnInfo>> {
         // 获取缓存实例
-        let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {
@@ -1643,9 +1632,7 @@ impl GlobalDbState {
             let sch = schema.clone();
             let tbl = table.clone();
             let result = Tokio::spawn_result(cx, async move {
-                if let Some(columns) = cache
-                    .get_columns(&conn_id, &db, sch.as_deref(), &tbl)
-                    .await
+                if let Some(columns) = cache.get_columns(&conn_id, &db, sch.as_deref(), &tbl).await
                 {
                     tracing::debug!(
                         "Cache hit for columns: {}:{}:{:?}:{}",
@@ -1716,8 +1703,7 @@ impl GlobalDbState {
         table: String,
     ) -> anyhow::Result<Vec<crate::types::IndexInfo>> {
         // 获取缓存实例
-        let cache = cx
-            .update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
+        let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         // 尝试从缓存获取
         if let Some(cache) = cache.clone() {

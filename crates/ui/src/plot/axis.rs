@@ -1,9 +1,9 @@
 use gpui::{
-    point, px, App, Bounds, FontWeight, Hsla, PathBuilder, Pixels, Point, SharedString, TextAlign,
-    Window,
+    App, Bounds, FontWeight, Hsla, PathBuilder, Pixels, Point, SharedString, TextAlign, Window,
+    point, px,
 };
 
-use super::{label::PlotLabel, label::Text, label::TEXT_GAP, label::TEXT_SIZE, origin_point};
+use super::{label::PlotLabel, label::TEXT_GAP, label::TEXT_SIZE, label::Text, origin_point};
 
 pub const AXIS_GAP: f32 = 18.;
 

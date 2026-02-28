@@ -4,10 +4,10 @@ use crate::connection::{MongoConnection, MongoConnectionImpl};
 use crate::types::{MongoConnectionConfig, MongoError};
 use dashmap::DashMap;
 use gpui::Global;
+use one_core::storage::MongoDBParams;
 use rust_i18n::t;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use one_core::storage::MongoDBParams;
 
 /// MongoDB 连接存储
 type ConnectionMap = DashMap<String, Arc<RwLock<Box<dyn MongoConnection>>>>;
@@ -43,7 +43,8 @@ impl GlobalMongoState {
 
         let connection_arc: Arc<RwLock<Box<dyn MongoConnection>>> =
             Arc::new(RwLock::new(Box::new(connection)));
-        self.connections.insert(connection_id.clone(), connection_arc);
+        self.connections
+            .insert(connection_id.clone(), connection_arc);
 
         Ok(connection_id)
     }
@@ -52,7 +53,9 @@ impl GlobalMongoState {
         &self,
         connection_id: &str,
     ) -> Option<Arc<RwLock<Box<dyn MongoConnection>>>> {
-        self.connections.get(connection_id).map(|entry| entry.clone())
+        self.connections
+            .get(connection_id)
+            .map(|entry| entry.clone())
     }
 
     pub async fn remove_connection(&self, connection_id: &str) -> Result<(), MongoError> {
@@ -68,7 +71,10 @@ impl GlobalMongoState {
     }
 
     pub fn connection_ids(&self) -> Vec<String> {
-        self.connections.iter().map(|entry| entry.key().clone()).collect()
+        self.connections
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     pub fn connection_count(&self) -> usize {
@@ -103,7 +109,9 @@ impl MongoManager {
 
         let host_value = params.host.trim().to_string();
         if host_value.is_empty() {
-            return Err(MongoError::Internal(t!("MongoManager.host_required").to_string()));
+            return Err(MongoError::Internal(
+                t!("MongoManager.host_required").to_string(),
+            ));
         }
 
         let scheme = if params.use_srv_record {
@@ -116,8 +124,16 @@ impl MongoManager {
         connection_string.push_str(scheme);
         connection_string.push_str("://");
 
-        let username_value = params.username.as_ref().map(|value| value.trim()).unwrap_or("");
-        let password_value = params.password.as_ref().map(|value| value.trim()).unwrap_or("");
+        let username_value = params
+            .username
+            .as_ref()
+            .map(|value| value.trim())
+            .unwrap_or("");
+        let password_value = params
+            .password
+            .as_ref()
+            .map(|value| value.trim())
+            .unwrap_or("");
 
         if !username_value.is_empty() {
             connection_string.push_str(username_value);
@@ -135,7 +151,11 @@ impl MongoManager {
             connection_string.push_str(&format!("{}:{}", host_value, port_value));
         }
 
-        let database_value = params.database.as_ref().map(|value| value.trim()).unwrap_or("");
+        let database_value = params
+            .database
+            .as_ref()
+            .map(|value| value.trim())
+            .unwrap_or("");
         if !database_value.is_empty() {
             connection_string.push('/');
             connection_string.push_str(database_value);
@@ -167,7 +187,10 @@ impl MongoManager {
             .map(|value| value.trim())
             .unwrap_or("");
         if !read_preference_value.is_empty() {
-            query_pairs.push(("readPreference".to_string(), read_preference_value.to_string()));
+            query_pairs.push((
+                "readPreference".to_string(),
+                read_preference_value.to_string(),
+            ));
         }
 
         if params.direct_connection {
@@ -180,10 +203,7 @@ impl MongoManager {
 
         if let Some(connect_timeout_seconds) = params.connect_timeout_seconds {
             let timeout_millis = connect_timeout_seconds.saturating_mul(1000);
-            query_pairs.push((
-                "connectTimeoutMS".to_string(),
-                timeout_millis.to_string(),
-            ));
+            query_pairs.push(("connectTimeoutMS".to_string(), timeout_millis.to_string()));
         }
 
         let application_name_value = params
@@ -211,10 +231,7 @@ impl MongoManager {
         Ok(connection_string)
     }
 
-    pub async fn test_parameters(
-        name: String,
-        params: &MongoDBParams,
-    ) -> Result<(), MongoError> {
+    pub async fn test_parameters(name: String, params: &MongoDBParams) -> Result<(), MongoError> {
         let connection_string = Self::build_connection_string(params)?;
         let config = MongoConnectionConfig {
             id: "test".to_string(),

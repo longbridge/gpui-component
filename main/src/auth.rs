@@ -2,29 +2,33 @@
 //!
 //! 提供 Supabase 认证集成，包括登录、登出、会话持久化等功能。
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::http_client::HttpClient;
 use gpui::prelude::FluentBuilder;
-use gpui::{px, App, AppContext as _, AsyncApp, Context, Entity, FontWeight, InteractiveElement, ParentElement, Styled, Window};
+use gpui::{
+    App, AppContext as _, AsyncApp, Context, Entity, FontWeight, InteractiveElement, ParentElement,
+    Styled, Window, px,
+};
 
 /// 全局静态会话过期标志
 ///
 /// 用于在 SupabaseClient 的回调中（无法访问 GPUI 全局状态时）通知 UI 层会话已过期。
 /// UI 层定期检查此标志，若为 true 则弹出登录对话框。
 static SESSION_EXPIRED: AtomicBool = AtomicBool::new(false);
+use gpui_component::dialog::DialogButtonProps;
 use gpui_component::{
+    ActiveTheme, WindowExt,
     input::{Input, InputState},
-    v_flex, ActiveTheme, WindowExt,
+    v_flex,
 };
 use one_core::cloud_sync::{
-    supabase::{SessionExpiredCallback, SupabaseClient, SupabaseConfig},
     CloudApiClient, UserInfo,
+    supabase::{SessionExpiredCallback, SupabaseClient, SupabaseConfig},
 };
-use tracing::{debug, info, warn};
 use rust_i18n::t;
-use gpui_component::dialog::DialogButtonProps;
+use tracing::{debug, info, warn};
 // ============================================================================
 // 全局认证服务
 // ============================================================================
@@ -114,10 +118,7 @@ impl AuthService {
         let needs_refresh = expires_at <= now + 60;
 
         if needs_refresh {
-            info!(
-                "访问令牌需要刷新: now={} expires_at={}",
-                now, expires_at
-            );
+            info!("访问令牌需要刷新: now={} expires_at={}", now, expires_at);
             // 令牌已过期或即将过期，必须刷新
             match self.client.refresh_token(&refresh_token).await {
                 Ok(auth_resp) => {
@@ -146,7 +147,8 @@ impl AuthService {
             }
         } else {
             // 令牌未过期，直接使用
-            self.client.set_auth(access_token, refresh_token.clone(), user_id);
+            self.client
+                .set_auth(access_token, refresh_token.clone(), user_id);
             debug!("访问令牌有效，已设置认证状态");
 
             // 尝试在后台刷新令牌（可选，提升体验）
@@ -304,12 +306,10 @@ pub fn show_auth_dialog<V: 'static>(
     view: Entity<V>,
     on_submit: impl Fn(&mut V, String, String, &mut Context<V>) + 'static,
 ) {
-    let email_input = cx.new(|cx| {
-        InputState::new(window, cx).placeholder(t!("Auth.email_placeholder"))
-    });
-    let otp_input = cx.new(|cx| {
-        InputState::new(window, cx).placeholder(t!("Auth.otp_placeholder"))
-    });
+    let email_input =
+        cx.new(|cx| InputState::new(window, cx).placeholder(t!("Auth.email_placeholder")));
+    let otp_input =
+        cx.new(|cx| InputState::new(window, cx).placeholder(t!("Auth.otp_placeholder")));
     let error_message = cx.new(|_| Option::<String>::None);
     let step_state = cx.new(|_| OtpStep::EnterEmail);
     let sending_state = cx.new(|_| false);
@@ -387,20 +387,20 @@ pub fn show_auth_dialog<V: 'static>(
                         cx.spawn(async move |cx: &mut AsyncApp| {
                             match auth.send_otp(&email_clone).await {
                                 Ok(()) => {
-                            cx.update(|cx| {
-                                step_update.update(cx, |step, cx| {
-                                    *step = OtpStep::EnterCode;
-                                    cx.notify();
-                                });
-                            });
+                                    cx.update(|cx| {
+                                        step_update.update(cx, |step, cx| {
+                                            *step = OtpStep::EnterCode;
+                                            cx.notify();
+                                        });
+                                    });
                                 }
                                 Err(e) => {
-                            cx.update(|cx| {
-                                error_update.update(cx, |msg, cx| {
-                                    *msg = Some(e);
-                                    cx.notify();
-                                });
-                            });
+                                    cx.update(|cx| {
+                                        error_update.update(cx, |msg, cx| {
+                                            *msg = Some(e);
+                                            cx.notify();
+                                        });
+                                    });
                                 }
                             }
                         })
@@ -462,70 +462,70 @@ pub fn show_auth_dialog<V: 'static>(
                                 )
                                 .child(Input::new(&otp_render)),
                         )
-                            .child(
-                                gpui::div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(t!("Auth.otp_sent_hint").to_string()),
-                            )
-                            // 重新发送验证码链接
-                            .child({
-                                let is_sending = *sending_render.read(cx);
-                                gpui::div()
-                                    .id("resend-otp")
-                                    .text_sm()
-                                    .text_color(cx.theme().link)
-                                    .cursor_pointer()
-                                    .when(is_sending, |this| {
-                                        this.text_color(cx.theme().muted_foreground)
-                                            .cursor_default()
-                                    })
-                                    .child(if is_sending {
-                                        t!("Auth.sending_otp").to_string()
-                                    } else {
-                                        t!("Auth.resend_otp").to_string()
-                                    })
-                                    .when(!is_sending, |this| {
-                                        let email_send = email_for_send.clone();
-                                        let error_send = error_for_send.clone();
-                                        let sending_send = sending_for_send.clone();
-                                        this.on_mouse_down(
-                                            gpui::MouseButton::Left,
-                                            move |_, _window, cx| {
-                                                let email = email_send.read(cx).text().to_string();
-                                                if email.is_empty() {
-                                                    return;
-                                                }
+                        .child(
+                            gpui::div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(t!("Auth.otp_sent_hint").to_string()),
+                        )
+                        // 重新发送验证码链接
+                        .child({
+                            let is_sending = *sending_render.read(cx);
+                            gpui::div()
+                                .id("resend-otp")
+                                .text_sm()
+                                .text_color(cx.theme().link)
+                                .cursor_pointer()
+                                .when(is_sending, |this| {
+                                    this.text_color(cx.theme().muted_foreground)
+                                        .cursor_default()
+                                })
+                                .child(if is_sending {
+                                    t!("Auth.sending_otp").to_string()
+                                } else {
+                                    t!("Auth.resend_otp").to_string()
+                                })
+                                .when(!is_sending, |this| {
+                                    let email_send = email_for_send.clone();
+                                    let error_send = error_for_send.clone();
+                                    let sending_send = sending_for_send.clone();
+                                    this.on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        move |_, _window, cx| {
+                                            let email = email_send.read(cx).text().to_string();
+                                            if email.is_empty() {
+                                                return;
+                                            }
 
-                                                sending_send.update(cx, |s, cx| {
-                                                    *s = true;
-                                                    cx.notify();
+                                            sending_send.update(cx, |s, cx| {
+                                                *s = true;
+                                                cx.notify();
+                                            });
+
+                                            let auth = get_auth_service(cx);
+                                            let error_update = error_send.clone();
+                                            let sending_update = sending_send.clone();
+
+                                            cx.spawn(async move |cx: &mut AsyncApp| {
+                                                let result = auth.send_otp(&email).await;
+                                                cx.update(|cx| {
+                                                    sending_update.update(cx, |s, cx| {
+                                                        *s = false;
+                                                        cx.notify();
+                                                    });
+                                                    if let Err(e) = result {
+                                                        error_update.update(cx, |msg, cx| {
+                                                            *msg = Some(e);
+                                                            cx.notify();
+                                                        });
+                                                    }
                                                 });
-
-                                                let auth = get_auth_service(cx);
-                                                let error_update = error_send.clone();
-                                                let sending_update = sending_send.clone();
-
-                                                cx.spawn(async move |cx: &mut AsyncApp| {
-                                                    let result = auth.send_otp(&email).await;
-                            cx.update(|cx| {
-                                sending_update.update(cx, |s, cx| {
-                                    *s = false;
-                                    cx.notify();
-                                });
-                                                        if let Err(e) = result {
-                                                            error_update.update(cx, |msg, cx| {
-                                                                *msg = Some(e);
-                                                                cx.notify();
-                                                            });
-                                                        }
-                            });
-                                                })
-                                                    .detach();
-                                            },
-                                        )
-                                    })
-                            })
+                                            })
+                                            .detach();
+                                        },
+                                    )
+                                })
+                        })
                     })
                     // 错误信息
                     .when_some(error_render.read(cx).clone(), |this, msg| {
@@ -547,19 +547,16 @@ pub fn show_auth_dialog<V: 'static>(
                                 .text_color(cx.theme().link)
                                 .cursor_pointer()
                                 .child(t!("Auth.change_email").to_string())
-                                .on_mouse_down(
-                                    gpui::MouseButton::Left,
-                                    move |_, _window, cx| {
-                                        step_back.update(cx, |step, cx| {
-                                            *step = OtpStep::EnterEmail;
-                                            cx.notify();
-                                        });
-                                        error_back.update(cx, |msg, cx| {
-                                            *msg = None;
-                                            cx.notify();
-                                        });
-                                    },
-                                ),
+                                .on_mouse_down(gpui::MouseButton::Left, move |_, _window, cx| {
+                                    step_back.update(cx, |step, cx| {
+                                        *step = OtpStep::EnterEmail;
+                                        cx.notify();
+                                    });
+                                    error_back.update(cx, |msg, cx| {
+                                        *msg = None;
+                                        cx.notify();
+                                    });
+                                }),
                         )
                     }),
             )

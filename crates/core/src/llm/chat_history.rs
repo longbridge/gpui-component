@@ -292,7 +292,9 @@ impl Repository for MessageRepository {
 
     fn get(&self, id: i64) -> Result<Option<Self::Entity>> {
         self.conn.with_connection(|conn| {
-            let mut stmt = conn.prepare("SELECT id, session_id, role, content, created_at FROM chat_messages WHERE id = ?1")?;
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, role, content, created_at FROM chat_messages WHERE id = ?1",
+            )?;
             let mut rows = stmt.query(params![id])?;
             if let Some(row) = rows.next()? {
                 Ok(Some(ChatMessage::from_row(row)?))
@@ -368,5 +370,4 @@ impl MessageRepository {
             Ok(())
         })
     }
-
 }

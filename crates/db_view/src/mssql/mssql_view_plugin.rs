@@ -401,30 +401,30 @@ impl DatabaseViewPlugin for MsSqlDatabaseViewPlugin {
             }
             DbNodeType::Schema | DbNodeType::TablesFolder => {
                 vec![
-                        ToolbarButton::current_node(
-                            "create-table",
-                            IconName::Plus,
-                            t!("Table.new_table").to_string(),
-                            |node| DatabaseObjectsEvent::DesignTable { node },
-                        ),
-                        ToolbarButton::selected_row(
-                            "open-table",
-                            IconName::Eye,
-                            t!("Table.view_data").to_string(),
-                            |node| DatabaseObjectsEvent::OpenTableData { node },
-                        ),
-                        ToolbarButton::selected_row(
-                            "design-table",
-                            IconName::Edit,
-                            t!("Table.design_table").to_string(),
-                            |node| DatabaseObjectsEvent::DesignTable { node },
-                        ),
-                        ToolbarButton::selected_row(
-                            "drop-table",
-                            IconName::Minus,
-                            t!("Table.delete_table").to_string(),
-                            |node| DatabaseObjectsEvent::DeleteTable { node },
-                        ),
+                    ToolbarButton::current_node(
+                        "create-table",
+                        IconName::Plus,
+                        t!("Table.new_table").to_string(),
+                        |node| DatabaseObjectsEvent::DesignTable { node },
+                    ),
+                    ToolbarButton::selected_row(
+                        "open-table",
+                        IconName::Eye,
+                        t!("Table.view_data").to_string(),
+                        |node| DatabaseObjectsEvent::OpenTableData { node },
+                    ),
+                    ToolbarButton::selected_row(
+                        "design-table",
+                        IconName::Edit,
+                        t!("Table.design_table").to_string(),
+                        |node| DatabaseObjectsEvent::DesignTable { node },
+                    ),
+                    ToolbarButton::selected_row(
+                        "drop-table",
+                        IconName::Minus,
+                        t!("Table.delete_table").to_string(),
+                        |node| DatabaseObjectsEvent::DeleteTable { node },
+                    ),
                 ]
             }
             DbNodeType::Table => {

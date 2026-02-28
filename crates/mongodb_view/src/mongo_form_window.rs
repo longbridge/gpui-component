@@ -1,9 +1,21 @@
 //! MongoDB 连接表单窗口
 
 use gpui::prelude::FluentBuilder;
-use gpui::{div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window};
-use gpui_component::{ActiveTheme, Disableable, IconName, Size, button::{Button, ButtonVariants as _}, checkbox::Checkbox, h_flex, input::{Input, InputState}, select::{Select, SelectItem, SelectState}, tab::{Tab, TabBar}, v_flex, TitleBar, Sizable};
-use one_core::connection_notifier::{get_notifier, ConnectionDataEvent};
+use gpui::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
+};
+use gpui_component::{
+    ActiveTheme, Disableable, IconName, Sizable, Size, TitleBar,
+    button::{Button, ButtonVariants as _},
+    checkbox::Checkbox,
+    h_flex,
+    input::{Input, InputState},
+    select::{Select, SelectItem, SelectState},
+    tab::{Tab, TabBar},
+    v_flex,
+};
+use one_core::connection_notifier::{ConnectionDataEvent, get_notifier};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{MongoDBParams, StoredConnection, Workspace};
@@ -92,8 +104,14 @@ impl MongoFormWindow {
     pub fn new(config: MongoFormWindowConfig, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let is_editing = config.editing_connection.is_some();
         let editing_id = config.editing_connection.as_ref().and_then(|c| c.id);
-        let editing_cloud_id = config.editing_connection.as_ref().and_then(|c| c.cloud_id.clone());
-        let editing_last_synced_at = config.editing_connection.as_ref().and_then(|c| c.last_synced_at);
+        let editing_cloud_id = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.cloud_id.clone());
+        let editing_last_synced_at = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.last_synced_at);
 
         let title: SharedString = if is_editing {
             t!("MongoForm.edit_connection_title").to_string()
@@ -263,7 +281,12 @@ impl MongoFormWindow {
 
         let workspace_items = {
             let mut items = vec![WorkspaceSelectItem::none()];
-            items.extend(config.workspaces.iter().map(WorkspaceSelectItem::from_workspace));
+            items.extend(
+                config
+                    .workspaces
+                    .iter()
+                    .map(WorkspaceSelectItem::from_workspace),
+            );
             items
         };
 
@@ -484,7 +507,6 @@ impl MongoFormWindow {
             });
         })
         .detach();
-
     }
 
     fn on_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -506,11 +528,7 @@ impl MongoFormWindow {
         let workspace_id = self.get_workspace_id(cx);
         let remark = {
             let value = self.remark_input.read(cx).text().to_string();
-            if value.is_empty() {
-                None
-            } else {
-                Some(value)
-            }
+            if value.is_empty() { None } else { Some(value) }
         };
         let sync_enabled = self.sync_enabled;
         let is_editing = self.is_editing;
@@ -594,11 +612,26 @@ impl MongoFormWindow {
     fn render_basic_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_2()
-            .child(self.render_form_row(t!("MongoForm.name_label").as_ref(), Input::new(&self.name_input)))
-            .child(self.render_form_row(t!("MongoForm.host_label").as_ref(), Input::new(&self.host_input)))
-            .child(self.render_form_row(t!("MongoForm.port_label").as_ref(), Input::new(&self.port_input)))
-            .child(self.render_form_row(t!("MongoForm.database_label").as_ref(), Input::new(&self.database_input)))
-            .child(self.render_form_row(t!("MongoForm.username_label").as_ref(), Input::new(&self.username_input)))
+            .child(self.render_form_row(
+                t!("MongoForm.name_label").as_ref(),
+                Input::new(&self.name_input),
+            ))
+            .child(self.render_form_row(
+                t!("MongoForm.host_label").as_ref(),
+                Input::new(&self.host_input),
+            ))
+            .child(self.render_form_row(
+                t!("MongoForm.port_label").as_ref(),
+                Input::new(&self.port_input),
+            ))
+            .child(self.render_form_row(
+                t!("MongoForm.database_label").as_ref(),
+                Input::new(&self.database_input),
+            ))
+            .child(self.render_form_row(
+                t!("MongoForm.username_label").as_ref(),
+                Input::new(&self.username_input),
+            ))
             .child(self.render_form_row(
                 t!("MongoForm.password_label").as_ref(),
                 Input::new(&self.password_input).mask_toggle(),
@@ -694,9 +727,10 @@ impl MongoFormWindow {
     }
 
     fn render_remark_tab(&self) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .child(self.render_form_row(t!("MongoForm.remark_label").as_ref(), Input::new(&self.remark_input)))
+        v_flex().gap_2().child(self.render_form_row(
+            t!("MongoForm.remark_label").as_ref(),
+            Input::new(&self.remark_input),
+        ))
     }
 }
 
@@ -740,9 +774,9 @@ impl Render for MongoFormWindow {
                         .flex_1()
                         .text_sm()
                         .font_weight(gpui::FontWeight::MEDIUM)
-                    .child(self.title.clone()),
-            ),
-        )
+                        .child(self.title.clone()),
+                ),
+            )
             .child(
                 div().flex().justify_center().px_3().pt_2().child(
                     TabBar::new("mongodb-form-tabs")

@@ -4,10 +4,10 @@
 
 use crate::cloud_sync::models::*;
 use crate::license::SubscriptionInfo;
-use async_trait::async_trait;
-use std::fmt;
-use llm_connector::ChatRequest;
 use crate::llm::ChatStream;
+use async_trait::async_trait;
+use llm_connector::ChatRequest;
+use std::fmt;
 
 /// 云端 API 错误类型
 #[derive(Debug, Clone)]
@@ -74,11 +74,7 @@ pub trait CloudApiClient: Send + Sync {
     ) -> Result<OAuthResponse, CloudApiError>;
 
     /// 注册新用户
-    async fn sign_up(
-        &self,
-        email: &str,
-        password: &str,
-    ) -> Result<AuthResponse, CloudApiError>;
+    async fn sign_up(&self, email: &str, password: &str) -> Result<AuthResponse, CloudApiError>;
 
     /// 登出
     async fn sign_out(&self) -> Result<(), CloudApiError>;
@@ -177,14 +173,11 @@ pub trait CloudApiClient: Send + Sync {
     /// 删除工作空间
     async fn delete_workspace(&self, id: &str) -> Result<(), CloudApiError>;
 
-
-
     /// 聊天
-    async fn chat(&self, request: &ChatRequest) -> Result<String,CloudApiError>;
+    async fn chat(&self, request: &ChatRequest) -> Result<String, CloudApiError>;
 
     /// 聊天流
     async fn chat_stream(&self, request: &ChatRequest) -> Result<ChatStream, CloudApiError>;
-    
 }
 
 /// 认证响应

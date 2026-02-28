@@ -1,19 +1,18 @@
-
+use crate::home_tab::HomePage;
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, KeyBinding, ParentElement, Render, Styled, Task,
     Window, div, px,
 };
 use gpui_component::dock::{ClosePanel, ToggleZoom};
 use gpui_component::{ActiveTheme, Root};
+use one_core::llm::manager::GlobalProviderState;
 use one_core::tab_container::{
     TabContainer, TabContainerEvent, TabContainerState, TabContentRegistry, TabItem,
 };
 use one_core::tab_persistence::{load_tabs, save_tab_state, schedule_save};
-use one_core::llm::manager::GlobalProviderState;
 use reqwest_client::ReqwestClient;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use crate::home_tab::HomePage;
 
 pub fn init(cx: &mut App) {
     tracing_subscriber::registry()
@@ -27,8 +26,16 @@ pub fn init(cx: &mut App) {
                 )
                 .add_directive("db=debug".parse().expect("固定的日志指令解析不应失败"))
                 .add_directive("one-ui=debug".parse().expect("固定的日志指令解析不应失败"))
-                .add_directive("one-core=debug".parse().expect("固定的日志指令解析不应失败"))
-                .add_directive("redis_view=debug".parse().expect("固定的日志指令解析不应失败"))
+                .add_directive(
+                    "one-core=debug"
+                        .parse()
+                        .expect("固定的日志指令解析不应失败"),
+                )
+                .add_directive(
+                    "redis_view=debug"
+                        .parse()
+                        .expect("固定的日志指令解析不应失败"),
+                )
                 .add_directive(
                     "terminal=debug"
                         .parse()
@@ -39,8 +46,7 @@ pub fn init(cx: &mut App) {
                         .parse()
                         .expect("固定的日志指令解析不应失败"),
                 )
-                .add_directive("main=debug".parse()
-                    .expect("固定的日志指令解析不应失败"))
+                .add_directive("main=debug".parse().expect("固定的日志指令解析不应失败"))
                 .add_directive(
                     "terminal_view=debug"
                         .parse()

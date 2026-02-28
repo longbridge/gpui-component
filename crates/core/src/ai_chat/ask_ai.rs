@@ -1,9 +1,11 @@
 //! Ask AI - 询问AI功能的可复用组件和全局事件机制
 
-use gpui::{AnyElement, App, AppContext, Context, Entity, EventEmitter, Global, IntoElement, SharedString};
+use gpui::{
+    AnyElement, App, AppContext, Context, Entity, EventEmitter, Global, IntoElement, SharedString,
+};
 use gpui_component::{
-    button::{Button, ButtonVariants},
     IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
 };
 use rust_i18n::t;
 
@@ -32,8 +34,7 @@ pub fn init_ask_ai_notifier(cx: &mut App) {
 
 /// 获取全局 AI 通知器 Entity
 pub fn get_ask_ai_notifier(cx: &App) -> Option<Entity<AskAiNotifier>> {
-    cx.try_global::<GlobalAskAiNotifier>()
-        .map(|g| g.0.clone())
+    cx.try_global::<GlobalAskAiNotifier>().map(|g| g.0.clone())
 }
 
 /// 辅助函数：发送 AI 请求事件 - Context 版本
@@ -65,7 +66,11 @@ pub struct AskAiButton {
 }
 
 impl AskAiButton {
-    pub fn new(id: impl Into<SharedString>, sql: impl Into<String>, error_message: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<SharedString>,
+        sql: impl Into<String>,
+        error_message: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             sql: sql.into(),
@@ -94,9 +99,7 @@ impl AskAiButton {
         .to_string();
 
         if let Some(ctx) = &self.context {
-            message.push_str(
-                &t!("AiChat.ask_ai_context", context = ctx).to_string(),
-            );
+            message.push_str(&t!("AiChat.ask_ai_context", context = ctx).to_string());
         }
 
         message.push_str(&t!("AiChat.ask_ai_request_help").to_string());

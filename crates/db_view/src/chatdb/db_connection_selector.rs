@@ -2,17 +2,21 @@
 
 use db::GlobalDbState;
 use gpui::prelude::FluentBuilder;
-use gpui::{div, px, App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window};
+use gpui::{
+    App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window,
+    div, px,
+};
 use gpui_component::{
+    ActiveTheme, IconName, Sizable, Size,
     button::{Button, ButtonVariants},
     h_flex,
     popover::Popover,
     spinner::Spinner,
     v_flex,
-    ActiveTheme, IconName, Sizable, Size,
 };
-use one_core::storage::{ConnectionRepository, ConnectionType, DatabaseType, GlobalStorageState};
 use one_core::storage::traits::Repository;
+use one_core::storage::{ConnectionRepository, ConnectionType, DatabaseType, GlobalStorageState};
 use rust_i18n::t;
 
 // ========================================================================
@@ -27,7 +31,11 @@ pub struct ConnectionItem {
 }
 
 impl ConnectionItem {
-    pub fn new(id: impl Into<String>, name: impl Into<String>, database_type: DatabaseType) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        database_type: DatabaseType,
+    ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
@@ -211,11 +219,7 @@ impl DbConnectionSelector {
         cx.notify();
     }
 
-    fn handle_connection_selected(
-        &mut self,
-        connection: ConnectionItem,
-        cx: &mut Context<Self>,
-    ) {
+    fn handle_connection_selected(&mut self, connection: ConnectionItem, cx: &mut Context<Self>) {
         // 如果选择的是同一个连接，不做任何处理
         if self.selected_connection.as_ref().map(|c| &c.id) == Some(&connection.id) {
             return;
@@ -233,7 +237,8 @@ impl DbConnectionSelector {
 
         let global_db_state = cx.global::<GlobalDbState>().clone();
         self.supports_schema = global_db_state.supports_schema(&connection.database_type);
-        self.uses_schema_as_database = global_db_state.uses_schema_as_database(&connection.database_type);
+        self.uses_schema_as_database =
+            global_db_state.uses_schema_as_database(&connection.database_type);
 
         self.register_connection(connection.id.clone(), cx);
         self.emit_selection(cx);
@@ -536,23 +541,24 @@ impl DbConnectionSelector {
         let connection_items = connections
             .into_iter()
             .map(|conn| {
-                let selected = selected_connection.as_ref().map(|c| c.id == conn.id).unwrap_or(false);
+                let selected = selected_connection
+                    .as_ref()
+                    .map(|c| c.id == conn.id)
+                    .unwrap_or(false);
                 let label = conn.name.clone();
                 let view = view.clone();
                 let conn_clone = conn.clone();
-                AnyColumnItem::new(
-                    Self::render_list_item(
-                        SharedString::from(format!("conn-item-{}", conn.id)),
-                        label,
-                        selected,
-                        colors,
-                        move |_, _window, cx| {
-                            view.update(cx, |selector, cx| {
-                                selector.handle_connection_selected(conn_clone.clone(), cx);
-                            });
-                        },
-                    ),
-                )
+                AnyColumnItem::new(Self::render_list_item(
+                    SharedString::from(format!("conn-item-{}", conn.id)),
+                    label,
+                    selected,
+                    colors,
+                    move |_, _window, cx| {
+                        view.update(cx, |selector, cx| {
+                            selector.handle_connection_selected(conn_clone.clone(), cx);
+                        });
+                    },
+                ))
             })
             .collect::<Vec<_>>();
 
@@ -562,45 +568,47 @@ impl DbConnectionSelector {
                 let selected = if uses_schema_as_database {
                     selected_schema.as_ref().map(|s| s == &db).unwrap_or(false)
                 } else {
-                    selected_database.as_ref().map(|s| s == &db).unwrap_or(false)
+                    selected_database
+                        .as_ref()
+                        .map(|s| s == &db)
+                        .unwrap_or(false)
                 };
                 let view = view.clone();
                 let db_clone = db.clone();
-                AnyColumnItem::new(
-                    Self::render_list_item(
-                        SharedString::from(format!("db-item-{}", db)),
-                        db,
-                        selected,
-                        colors,
-                        move |_, _window, cx| {
-                            view.update(cx, |selector, cx| {
-                                selector.handle_database_selected(db_clone.clone(), cx);
-                            });
-                        },
-                    ),
-                )
+                AnyColumnItem::new(Self::render_list_item(
+                    SharedString::from(format!("db-item-{}", db)),
+                    db,
+                    selected,
+                    colors,
+                    move |_, _window, cx| {
+                        view.update(cx, |selector, cx| {
+                            selector.handle_database_selected(db_clone.clone(), cx);
+                        });
+                    },
+                ))
             })
             .collect::<Vec<_>>();
 
         let schema_items = schemas
             .into_iter()
             .map(|schema| {
-                let selected = selected_schema.as_ref().map(|s| s == &schema).unwrap_or(false);
+                let selected = selected_schema
+                    .as_ref()
+                    .map(|s| s == &schema)
+                    .unwrap_or(false);
                 let view = view.clone();
                 let schema_clone = schema.clone();
-                AnyColumnItem::new(
-                    Self::render_list_item(
-                        SharedString::from(format!("schema-item-{}", schema)),
-                        schema,
-                        selected,
-                        colors,
-                        move |_, _window, cx| {
-                            view.update(cx, |selector, cx| {
-                                selector.handle_schema_selected(schema_clone.clone(), cx);
-                            });
-                        },
-                    ),
-                )
+                AnyColumnItem::new(Self::render_list_item(
+                    SharedString::from(format!("schema-item-{}", schema)),
+                    schema,
+                    selected,
+                    colors,
+                    move |_, _window, cx| {
+                        view.update(cx, |selector, cx| {
+                            selector.handle_schema_selected(schema_clone.clone(), cx);
+                        });
+                    },
+                ))
             })
             .collect::<Vec<_>>();
 

@@ -1,8 +1,10 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-use rust_i18n::t;
 use db::plugin::SqlCompletionInfo;
+use db::sql_editor::sql_context_inferrer::{ContextInferrer, SqlContext as InferredSqlContext};
+use db::sql_editor::sql_symbol_table::SymbolTable;
+use db::sql_editor::sql_tokenizer::SqlTokenizer;
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, Render, Styled as _, Subscription, Task, Window,
 };
@@ -11,10 +13,12 @@ use gpui_component::input::{
     CodeActionProvider, CompletionProvider, HoverProvider, Input, InputEvent, InputState, TabSize,
 };
 use gpui_component::{Rope, RopeExt};
-use lsp_types::{CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse, InsertReplaceEdit, InsertTextFormat, Range as LspRange};
-use db::sql_editor::sql_context_inferrer::{ContextInferrer, SqlContext as InferredSqlContext};
-use db::sql_editor::sql_symbol_table::SymbolTable;
-use db::sql_editor::sql_tokenizer::SqlTokenizer;
+use lsp_types::{
+    CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
+    InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse, InsertReplaceEdit,
+    InsertTextFormat, Range as LspRange,
+};
+use rust_i18n::t;
 use sum_tree::Bias;
 
 /// Simple schema hints to improve autocomplete suggestions.
@@ -457,11 +461,7 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                         kind: Some(CompletionItemKind::TEXT),
                         detail: Some(t!("SqlEditor.subquery_column_uninferable").to_string()),
                         documentation: Some(lsp_types::Documentation::String(
-                            t!(
-                                "SqlEditor.subquery_doc",
-                                alias = alias_or_table
-                            )
-                            .to_string(),
+                            t!("SqlEditor.subquery_doc", alias = alias_or_table).to_string(),
                         )),
                         ..Default::default()
                     });
@@ -475,11 +475,7 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                         kind: Some(CompletionItemKind::TEXT),
                         detail: Some(t!("SqlEditor.cte_column_uninferable").to_string()),
                         documentation: Some(lsp_types::Documentation::String(
-                            t!(
-                                "SqlEditor.cte_doc",
-                                alias = alias_or_table
-                            )
-                            .to_string(),
+                            t!("SqlEditor.cte_doc", alias = alias_or_table).to_string(),
                         )),
                         ..Default::default()
                     });
@@ -642,10 +638,7 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                     // 检查当前语句是否有 FROM 子句
                     // 需要检查整个语句（包括光标后的部分），这样在 SELECT 列表中编辑时也能正确补全
                     // 找到当前语句的开始位置（从光标往前找分号或文件开头）
-                    let statement_start = before_cursor
-                        .rfind(';')
-                        .map(|p| p + 1)
-                        .unwrap_or(0);
+                    let statement_start = before_cursor.rfind(';').map(|p| p + 1).unwrap_or(0);
 
                     // 找到当前语句的结束位置（从光标往后找分号或文件结尾）
                     let after_cursor = &text[offset..];
@@ -658,9 +651,7 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                     let current_statement = &text[statement_start..statement_end];
 
                     // 如果当前语句没有 FROM，不显示列
-                    let has_from = current_statement
-                        .to_uppercase()
-                        .contains(" FROM ");
+                    let has_from = current_statement.to_uppercase().contains(" FROM ");
 
                     if !has_from {
                         // 当前语句没有 FROM，跳过列显示
@@ -691,7 +682,12 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                             });
                             if let Some(cols) = columns {
                                 for (column, data_type, doc) in cols {
-                                    all_columns.push((column.clone(), table.clone(), data_type.clone(), doc.clone()));
+                                    all_columns.push((
+                                        column.clone(),
+                                        table.clone(),
+                                        data_type.clone(),
+                                        doc.clone(),
+                                    ));
                                 }
                             }
                         }
@@ -710,7 +706,10 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                                     column_counts.get(&column.to_lowercase()).unwrap_or(&0) > &1;
                                 let (label, new_text) = if is_duplicate {
                                     // 多表同名列：显示 table.column 格式
-                                    (format!("{}.{}", table, column), format!("{}.{}", table, column))
+                                    (
+                                        format!("{}.{}", table, column),
+                                        format!("{}.{}", table, column),
+                                    )
                                 } else {
                                     // 唯一列名：只显示 column
                                     (column.clone(), column.clone())
@@ -1011,12 +1010,8 @@ impl CompletionProvider for DefaultSqlCompletionProvider {
                                 },
                             )),
                             filter_text: Some(matched_prefix(dtype)),
-                            documentation: Some(lsp_types::Documentation::String(
-                                doc.to_string(),
-                            )),
-                            sort_text: Some(completion_priority::score_to_sort_text(
-                                score, dtype,
-                            )),
+                            documentation: Some(lsp_types::Documentation::String(doc.to_string())),
+                            sort_text: Some(completion_priority::score_to_sort_text(score, dtype)),
                             ..Default::default()
                         });
                     }
@@ -1221,10 +1216,7 @@ impl TableMentionCompletionProvider {
             }
             return Some((at_index, rest.to_string()));
         }
-        if !after_at
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_')
-        {
+        if !after_at.chars().all(|c| c.is_alphanumeric() || c == '_') {
             return None;
         }
         Some((at_index, after_at.to_string()))
@@ -1285,13 +1277,11 @@ impl CompletionProvider for TableMentionCompletionProvider {
                     kind: Some(CompletionItemKind::STRUCT),
                     detail: Some(t!("SqlEditor.table_detail").to_string()),
                     documentation,
-                    text_edit: Some(CompletionTextEdit::InsertAndReplace(
-                        InsertReplaceEdit {
-                            new_text: mention_text,
-                            insert: replace_range,
-                            replace: replace_range,
-                        },
-                    )),
+                    text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                        new_text: mention_text,
+                        insert: replace_range,
+                        replace: replace_range,
+                    })),
                     filter_text: if prefix.is_empty() {
                         None
                     } else {
@@ -1473,7 +1463,6 @@ impl SqlEditor {
 
 impl Render for SqlEditor {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        Input::new(&self.editor)
-            .size_full()
+        Input::new(&self.editor).size_full()
     }
 }

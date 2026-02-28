@@ -21,8 +21,8 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -83,8 +83,7 @@ impl KeyStorage for LocalFileStorage {
     }
 
     fn save(&self, master_key: &str) -> Result<(), String> {
-        let path = get_key_storage_path()
-            .ok_or_else(|| "无法获取密钥存储路径".to_string())?;
+        let path = get_key_storage_path().ok_or_else(|| "无法获取密钥存储路径".to_string())?;
 
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
@@ -104,8 +103,7 @@ impl KeyStorage for LocalFileStorage {
         let mut data = nonce_bytes.to_vec();
         data.extend(ciphertext);
 
-        fs::write(&path, &data)
-            .map_err(|e| format!("写入密钥文件失败: {}", e))?;
+        fs::write(&path, &data).map_err(|e| format!("写入密钥文件失败: {}", e))?;
 
         tracing::info!("[本地文件] 主密钥已保存");
         Ok(())
@@ -138,17 +136,14 @@ impl KeyStorage for LocalFileStorage {
     fn delete(&self) -> Result<(), String> {
         if let Some(path) = get_key_storage_path() {
             if path.exists() {
-                fs::remove_file(&path)
-                    .map_err(|e| format!("删除密钥文件失败: {}", e))?;
+                fs::remove_file(&path).map_err(|e| format!("删除密钥文件失败: {}", e))?;
             }
         }
         Ok(())
     }
 
     fn exists(&self) -> bool {
-        get_key_storage_path()
-            .map(|p| p.exists())
-            .unwrap_or(false)
+        get_key_storage_path().map(|p| p.exists()).unwrap_or(false)
     }
 }
 

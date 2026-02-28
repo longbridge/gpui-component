@@ -7,15 +7,15 @@ use gpui::{
     Styled, Window, div,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode,
+    ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode, WindowExt,
     button::{Button, ButtonVariants as _},
     group_box::GroupBoxVariant,
-    h_flex, WindowExt,
+    h_flex,
     setting::{NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
     v_flex,
 };
-use one_core::cloud_sync::UserInfo;
 use one_core::cloud_sync::GlobalCloudUser;
+use one_core::cloud_sync::UserInfo;
 use one_core::storage::manager::get_config_dir;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
@@ -427,7 +427,8 @@ impl SettingsPanel {
                                         ),
                                         (
                                             "workspace".into(),
-                                            t!("Settings.General.Database.open_mode_workspace").into(),
+                                            t!("Settings.General.Database.open_mode_workspace")
+                                                .into(),
                                         ),
                                     ],
                                     |cx: &App| {
@@ -503,9 +504,7 @@ impl SettingsPanel {
             )),
             // 账户设置页
             SettingPage::new(t!("Settings.Account.title")).group(SettingGroup::new().item(
-                SettingItem::render(move |_options, window, cx| {
-                    render_account_section(window, cx)
-                }),
+                SettingItem::render(move |_options, window, cx| render_account_section(window, cx)),
             )),
         ]
     }
@@ -568,7 +567,13 @@ fn render_account_section(_window: &mut Window, cx: &App) -> gpui::AnyElement {
         let display_name: SharedString = user
             .username
             .clone()
-            .unwrap_or_else(|| user.email.split('@').next().unwrap_or(&user.email).to_string())
+            .unwrap_or_else(|| {
+                user.email
+                    .split('@')
+                    .next()
+                    .unwrap_or(&user.email)
+                    .to_string()
+            })
             .into();
 
         v_flex()
@@ -648,10 +653,8 @@ fn render_account_section(_window: &mut Window, cx: &App) -> gpui::AnyElement {
                                                         let _ = cx.update_window(
                                                             window_id,
                                                             |_, window, cx| {
-                                                                window.push_notification(
-                                                                    message,
-                                                                    cx,
-                                                                );
+                                                                window
+                                                                    .push_notification(message, cx);
                                                             },
                                                         );
                                                     }
@@ -675,9 +678,9 @@ fn render_account_section(_window: &mut Window, cx: &App) -> gpui::AnyElement {
                                 let auth = get_auth_service(cx);
                                 cx.spawn(async move |cx: &mut AsyncApp| {
                                     auth.sign_out().await;
-                            cx.update(|cx| {
-                                GlobalCurrentUser::set_user(None, cx);
-                            });
+                                    cx.update(|cx| {
+                                        GlobalCurrentUser::set_user(None, cx);
+                                    });
                                 })
                                 .detach();
                             }),

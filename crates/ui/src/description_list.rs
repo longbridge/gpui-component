@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, DefiniteLength, IntoElement,
-    ParentElement, RenderOnce, SharedString, Styled, Window,
+    AnyElement, App, Axis, DefiniteLength, IntoElement, ParentElement, RenderOnce, SharedString,
+    Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{h_flex, text::Text, v_flex, ActiveTheme as _, AxisExt, Sizable, Size};
+use crate::{ActiveTheme as _, AxisExt, Sizable, Size, h_flex, text::Text, v_flex};
 
 /// A description list.
 #[derive(IntoElement)]

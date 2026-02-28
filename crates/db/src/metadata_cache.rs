@@ -39,7 +39,7 @@ impl CacheLevel {
             CacheLevel::Connection => Duration::from_secs(5 * 60), // 5分钟
             CacheLevel::Database => Duration::from_secs(3 * 60),   // 3分钟
             CacheLevel::Table => Duration::from_secs(2 * 60),      // 2分钟
-            CacheLevel::Detail => Duration::from_secs(60),          // 1分钟
+            CacheLevel::Detail => Duration::from_secs(60),         // 1分钟
         }
     }
 }
@@ -174,12 +174,7 @@ impl CacheKey {
     }
 
     /// 创建列信息缓存键
-    pub fn columns(
-        connection_id: &str,
-        database: &str,
-        schema: Option<&str>,
-        table: &str,
-    ) -> Self {
+    pub fn columns(connection_id: &str, database: &str, schema: Option<&str>, table: &str) -> Self {
         Self {
             connection_id: connection_id.to_string(),
             database: Some(database.to_string()),
@@ -190,12 +185,7 @@ impl CacheKey {
     }
 
     /// 创建索引信息缓存键
-    pub fn indexes(
-        connection_id: &str,
-        database: &str,
-        schema: Option<&str>,
-        table: &str,
-    ) -> Self {
+    pub fn indexes(connection_id: &str, database: &str, schema: Option<&str>, table: &str) -> Self {
         Self {
             connection_id: connection_id.to_string(),
             database: Some(database.to_string()),
@@ -282,12 +272,7 @@ impl CacheKey {
     }
 
     /// 创建检查约束缓存键
-    pub fn checks(
-        connection_id: &str,
-        database: &str,
-        schema: Option<&str>,
-        table: &str,
-    ) -> Self {
+    pub fn checks(connection_id: &str, database: &str, schema: Option<&str>, table: &str) -> Self {
         Self {
             connection_id: connection_id.to_string(),
             database: Some(database.to_string()),
@@ -401,7 +386,7 @@ impl Default for MetadataCacheConfig {
             connection_ttl: Duration::from_secs(5 * 60), // 5分钟
             database_ttl: Duration::from_secs(3 * 60),   // 3分钟
             table_ttl: Duration::from_secs(2 * 60),      // 2分钟
-            detail_ttl: Duration::from_secs(60),          // 1分钟
+            detail_ttl: Duration::from_secs(60),         // 1分钟
             max_memory_entries: 10000,
             enable_file_cache: true,
         }
@@ -436,10 +421,12 @@ fn build_cache_path(cache_dir: &Path, key: &CacheKey) -> PathBuf {
         path = path.join(safe_schema);
     }
 
-    let filename = format!("{}_{}.json",
+    let filename = format!(
+        "{}_{}.json",
         key.object_name.as_deref().unwrap_or("_list"),
         key.entry_type.as_str()
-    ).replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
+    )
+    .replace([':', '/', '\\', '<', '>', '|', '?', '*'], "_");
 
     path.join(filename)
 }
@@ -464,7 +451,8 @@ impl MetadataCacheManager {
     pub fn with_config(cache_dir: PathBuf, config: MetadataCacheConfig) -> Result<Self> {
         std::fs::create_dir_all(&cache_dir)?;
 
-        let max_ttl = config.connection_ttl
+        let max_ttl = config
+            .connection_ttl
             .max(config.database_ttl)
             .max(config.table_ttl)
             .max(config.detail_ttl);
@@ -557,7 +545,9 @@ impl MetadataCacheManager {
     /// 使连接下所有缓存失效
     pub async fn invalidate_connection(&self, connection_id: &str) {
         let prefix = format!("{}:", connection_id);
-        let keys_to_remove: Vec<Arc<String>> = self.memory_cache.iter()
+        let keys_to_remove: Vec<Arc<String>> = self
+            .memory_cache
+            .iter()
             .filter(|(k, _)| k.starts_with(&prefix))
             .map(|(k, _)| k)
             .collect();
@@ -582,7 +572,9 @@ impl MetadataCacheManager {
     /// 使数据库下所有缓存失效
     pub async fn invalidate_database(&self, connection_id: &str, database: &str) {
         let prefix = format!("{}:{}:", connection_id, database);
-        let keys_to_remove: Vec<Arc<String>> = self.memory_cache.iter()
+        let keys_to_remove: Vec<Arc<String>> = self
+            .memory_cache
+            .iter()
             .filter(|(k, _)| k.starts_with(&prefix))
             .map(|(k, _)| k)
             .collect();
@@ -775,14 +767,8 @@ mod tests {
             CacheLevel::Database.default_ttl(),
             Duration::from_secs(3 * 60)
         );
-        assert_eq!(
-            CacheLevel::Table.default_ttl(),
-            Duration::from_secs(2 * 60)
-        );
-        assert_eq!(
-            CacheLevel::Detail.default_ttl(),
-            Duration::from_secs(60)
-        );
+        assert_eq!(CacheLevel::Table.default_ttl(), Duration::from_secs(2 * 60));
+        assert_eq!(CacheLevel::Detail.default_ttl(), Duration::from_secs(60));
     }
 
     #[test]

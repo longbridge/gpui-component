@@ -1,8 +1,15 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use db_view::connection_form_window::{ConnectionFormWindow, ConnectionFormWindowConfig};
 use gpui::prelude::FluentBuilder;
-use gpui::{AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, div, px, WeakEntity};
+use gpui::{
+    AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle,
+    Focusable, FontWeight, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
+};
+use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
+use gpui_component::menu::DropdownMenu;
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, InteractiveElementExt, Sizable, Size, ThemeMode,
     WindowExt,
@@ -16,11 +23,11 @@ use gpui_component::{
     tooltip::Tooltip,
     v_flex,
 };
-use rust_i18n::t;
-use db_view::connection_form_window::{ConnectionFormWindow, ConnectionFormWindowConfig};
-use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
-use gpui_component::menu::DropdownMenu;
-use one_core::cloud_sync::{CloudApiClient, CloudConnection, CloudSyncService, ConflictResolution, SyncConflict, SyncEngine, UserInfo};
+use mongodb_view::{MongoFormWindow, MongoFormWindowConfig};
+use one_core::cloud_sync::{
+    CloudApiClient, CloudConnection, CloudSyncService, ConflictResolution, SyncConflict,
+    SyncEngine, UserInfo,
+};
 use one_core::connection_notifier::{ConnectionDataEvent, emit_connection_event, get_notifier};
 use one_core::crypto;
 use one_core::license::Feature;
@@ -33,18 +40,17 @@ use one_core::storage::{
 };
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::themes::SwitchThemeMode;
-use terminal_view::{SshFormWindow, SshFormWindowConfig};
 use redis_view::{RedisFormWindow, RedisFormWindowConfig};
-use mongodb_view::{MongoFormWindow, MongoFormWindowConfig};
+use rust_i18n::t;
+use terminal_view::{SshFormWindow, SshFormWindowConfig};
 
 use crate::auth::{AuthService, show_auth_dialog};
 use crate::encourage::EncourageDialog;
-use crate::license::{get_license_service, is_feature_enabled, show_upgrade_dialog};
-use crate::setting_tab::{GlobalCurrentUser};
-use crate::user_avatar::render_user_avatar;
-use crate::home::home_strategy::{build_connection_open_strategy};
+use crate::home::home_strategy::build_connection_open_strategy;
 use crate::home::home_workspace_filter::WorkspaceFilterDelegate;
-
+use crate::license::{get_license_service, is_feature_enabled, show_upgrade_dialog};
+use crate::setting_tab::GlobalCurrentUser;
+use crate::user_avatar::render_user_avatar;
 
 // HomePage Entity - 管理 home 页面的所有状态
 
@@ -130,9 +136,7 @@ impl HomePage {
             workspace_filter_list: None,
             _subscriptions: Vec::new(),
             cloud_connections: Vec::new(),
-            cloud_sync_service: Arc::new(std::sync::RwLock::new(
-                CloudSyncService::new(),
-            )),
+            cloud_sync_service: Arc::new(std::sync::RwLock::new(CloudSyncService::new())),
             cloud_error: None,
             syncing: false,
             sync_requested: false,
@@ -180,7 +184,9 @@ impl HomePage {
                     }
                     ConnectionDataEvent::ConnectionUpdated { connection } => {
                         // 立即更新列表中的连接，避免异步加载的时序问题
-                        if let Some(pos) = this.connections.iter().position(|c| c.id == connection.id) {
+                        if let Some(pos) =
+                            this.connections.iter().position(|c| c.id == connection.id)
+                        {
                             this.connections[pos] = connection.clone();
                         } else {
                             // 如果找不到，添加到列表
@@ -295,7 +301,11 @@ impl HomePage {
 
         if !self.pending_conflicts.is_empty() {
             self.cloud_error = Some(
-                t!("Home.conflict_tooltip", count = self.pending_conflicts.len()).to_string(),
+                t!(
+                    "Home.conflict_tooltip",
+                    count = self.pending_conflicts.len()
+                )
+                .to_string(),
             );
             cx.notify();
             return;
@@ -353,7 +363,8 @@ impl HomePage {
                         this.cloud_error = Some(e.to_string());
                     }
                 }
-                if sync_requested && this.pending_conflicts.is_empty() && this.cloud_error.is_none() {
+                if sync_requested && this.pending_conflicts.is_empty() && this.cloud_error.is_none()
+                {
                     this.sync_requested = false;
                     this.trigger_sync(cx);
                 } else {
@@ -452,7 +463,11 @@ impl HomePage {
             return;
         }
 
-        tracing::info!("解决 {} 个冲突，策略: {:?}", self.pending_conflicts.len(), resolution);
+        tracing::info!(
+            "解决 {} 个冲突，策略: {:?}",
+            self.pending_conflicts.len(),
+            resolution
+        );
 
         if self.syncing {
             self.sync_requested = true;
@@ -468,8 +483,8 @@ impl HomePage {
         cx.notify();
 
         // 创建同步引擎
-        let engine = SyncEngine::new(cloud_client, sync_service, storage)
-            .with_conflict_strategy(resolution);
+        let engine =
+            SyncEngine::new(cloud_client, sync_service, storage).with_conflict_strategy(resolution);
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             // 重新执行同步，使用指定的冲突解决策略
@@ -480,7 +495,11 @@ impl HomePage {
                 let sync_requested = this.sync_requested;
                 match result {
                     Ok(stats) => {
-                        tracing::info!("冲突解决完成，上传 {}，下载 {}", stats.uploaded, stats.downloaded);
+                        tracing::info!(
+                            "冲突解决完成，上传 {}，下载 {}",
+                            stats.uploaded,
+                            stats.downloaded
+                        );
                         this.pending_conflicts.clear();
                         this.load_connections(cx);
                     }
@@ -489,7 +508,8 @@ impl HomePage {
                         this.cloud_error = Some(e.to_string());
                     }
                 }
-                if sync_requested && this.pending_conflicts.is_empty() && this.cloud_error.is_none() {
+                if sync_requested && this.pending_conflicts.is_empty() && this.cloud_error.is_none()
+                {
                     this.sync_requested = false;
                     this.trigger_sync(cx);
                 } else {
@@ -521,7 +541,8 @@ impl HomePage {
 
                     // 更新 License
                     let license_service = get_license_service(cx);
-                    if let Err(e) = license_service.update_from_subscription(user.id, subscription) {
+                    if let Err(e) = license_service.update_from_subscription(user.id, subscription)
+                    {
                         tracing::warn!("更新 License 失败: {}", e);
                     }
 
@@ -566,7 +587,9 @@ impl HomePage {
 
                         // 更新 License
                         let license_service = get_license_service(cx);
-                        if let Err(e) = license_service.update_from_subscription(user.id, subscription) {
+                        if let Err(e) =
+                            license_service.update_from_subscription(user.id, subscription)
+                        {
                             tracing::warn!("更新 License 失败: {}", e);
                         }
 
@@ -684,7 +707,8 @@ impl HomePage {
         let storage = cx.global::<GlobalStorageState>().storage.clone();
 
         // 获取连接的 cloud_id，用于删除云端数据
-        let cloud_id = self.connections
+        let cloud_id = self
+            .connections
             .iter()
             .find(|c| c.id == Some(conn_id))
             .and_then(|c| c.cloud_id.clone());
@@ -705,8 +729,13 @@ impl HomePage {
                     }
                     Err(e) => {
                         // 云端删除失败，记录到待删除表，下次同步时重试
-                        tracing::warn!("[删除] 云端连接删除失败: {} - {}（记录到待删除列表）", cloud_id, e);
-                        if let Some(pending_repo) = storage.get::<PendingCloudDeletionRepository>() {
+                        tracing::warn!(
+                            "[删除] 云端连接删除失败: {} - {}（记录到待删除列表）",
+                            cloud_id,
+                            e
+                        );
+                        if let Some(pending_repo) = storage.get::<PendingCloudDeletionRepository>()
+                        {
                             if let Err(e) = pending_repo.add(cloud_id, "connection") {
                                 tracing::error!("[删除] 记录待删除失败: {}", e);
                             }
@@ -846,43 +875,46 @@ impl HomePage {
             Ok(workspace)
         })();
 
-        cx.spawn(async move |this, cx| {
-            match result {
-                Ok(workspace) => {
-                    _ = this.update(cx, |this, cx| {
-                        let workspace_id = workspace.id.unwrap_or(0);
-                        if let Some(editing_id) = editing_id {
-                            if let Some(pos) = this
-                                .workspaces
-                                .iter()
-                                .position(|w| w.id == Some(editing_id))
-                            {
-                                this.workspaces[pos] = workspace;
-                            }
-                            emit_connection_event(
-                                ConnectionDataEvent::WorkspaceUpdated { workspace_id },
-                                cx,
-                            );
-                        } else {
-                            this.workspaces.push(workspace);
-                            emit_connection_event(
-                                ConnectionDataEvent::WorkspaceCreated { workspace_id },
-                                cx,
-                            );
+        cx.spawn(async move |this, cx| match result {
+            Ok(workspace) => {
+                _ = this.update(cx, |this, cx| {
+                    let workspace_id = workspace.id.unwrap_or(0);
+                    if let Some(editing_id) = editing_id {
+                        if let Some(pos) = this
+                            .workspaces
+                            .iter()
+                            .position(|w| w.id == Some(editing_id))
+                        {
+                            this.workspaces[pos] = workspace;
                         }
-                        this.editing_workspace_id = None;
-                        cx.notify();
-                    });
-                }
-                Err(e) => {
-                    tracing::error!("Failed to save workspace: {}", e);
-                }
+                        emit_connection_event(
+                            ConnectionDataEvent::WorkspaceUpdated { workspace_id },
+                            cx,
+                        );
+                    } else {
+                        this.workspaces.push(workspace);
+                        emit_connection_event(
+                            ConnectionDataEvent::WorkspaceCreated { workspace_id },
+                            cx,
+                        );
+                    }
+                    this.editing_workspace_id = None;
+                    cx.notify();
+                });
+            }
+            Err(e) => {
+                tracing::error!("Failed to save workspace: {}", e);
             }
         })
         .detach();
     }
 
-    pub(crate) fn delete_workspace(&mut self, workspace_id: i64, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn delete_workspace(
+        &mut self,
+        workspace_id: i64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let workspace_name = self
             .workspaces
             .iter()
@@ -914,7 +946,8 @@ impl HomePage {
         let storage = cx.global::<GlobalStorageState>().storage.clone();
 
         // 获取工作空间的 cloud_id，用于删除云端数据
-        let cloud_id = self.workspaces
+        let cloud_id = self
+            .workspaces
             .iter()
             .find(|w| w.id == Some(workspace_id))
             .and_then(|w| w.cloud_id.clone());
@@ -935,8 +968,13 @@ impl HomePage {
                     }
                     Err(e) => {
                         // 云端删除失败，记录到待删除表，下次同步时重试
-                        tracing::warn!("[删除] 云端工作空间删除失败: {} - {}（记录到待删除列表）", cloud_id, e);
-                        if let Some(pending_repo) = storage.get::<PendingCloudDeletionRepository>() {
+                        tracing::warn!(
+                            "[删除] 云端工作空间删除失败: {} - {}（记录到待删除列表）",
+                            cloud_id,
+                            e
+                        );
+                        if let Some(pending_repo) = storage.get::<PendingCloudDeletionRepository>()
+                        {
                             if let Err(e) = pending_repo.add(cloud_id, "workspace") {
                                 tracing::error!("[删除] 记录待删除失败: {}", e);
                             }
@@ -1058,7 +1096,8 @@ impl HomePage {
                 "编辑 Redis 连接".to_string()
             } else {
                 "新建 Redis 连接".to_string()
-            }).size(700.0, 650.0),
+            })
+            .size(700.0, 650.0),
             move |window, cx| cx.new(|cx| RedisFormWindow::new(config, window, cx)),
             cx,
         );
@@ -1084,7 +1123,8 @@ impl HomePage {
                 "编辑 MongoDB 连接".to_string()
             } else {
                 "新建 MongoDB 连接".to_string()
-            }).size(700.0, 520.0),
+            })
+            .size(700.0, 520.0),
             move |window, cx| cx.new(|cx| MongoFormWindow::new(config, window, cx)),
             cx,
         );
@@ -1293,17 +1333,13 @@ impl HomePage {
                             h_flex()
                                 .items_center()
                                 .gap_3()
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .flex_shrink_0()
-                                        .w(px(80.))
-                                        .child(if is_change_mode {
-                                            t!("Encryption.new_password_label").to_string()
-                                        } else {
-                                            t!("Encryption.repo_password_label").to_string()
-                                        }),
-                                )
+                                .child(div().text_sm().flex_shrink_0().w(px(80.)).child(
+                                    if is_change_mode {
+                                        t!("Encryption.new_password_label").to_string()
+                                    } else {
+                                        t!("Encryption.repo_password_label").to_string()
+                                    },
+                                ))
                                 .child(Input::new(&key_input_for_render).mask_toggle().w_full()),
                         )
                         // 确认密码输入框（首次设置和修改模式）
@@ -1313,11 +1349,9 @@ impl HomePage {
                                     .items_center()
                                     .gap_3()
                                     .child(
-                                        div()
-                                            .text_sm()
-                                            .flex_shrink_0()
-                                            .w(px(80.))
-                                            .child(t!("Encryption.confirm_password_label").to_string()),
+                                        div().text_sm().flex_shrink_0().w(px(80.)).child(
+                                            t!("Encryption.confirm_password_label").to_string(),
+                                        ),
                                     )
                                     .child(Input::new(&confirm_state).mask_toggle().w_full()),
                             )
@@ -1335,10 +1369,9 @@ impl HomePage {
                             v_flex()
                                 .gap_2()
                                 .child(
-                                    div()
-                                        .text_base()
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child(t!("Encryption.remember_password_title").to_string()),
+                                    div().text_base().font_weight(FontWeight::SEMIBOLD).child(
+                                        t!("Encryption.remember_password_title").to_string(),
+                                    ),
                                 )
                                 .child(
                                     div()
@@ -1361,12 +1394,7 @@ impl HomePage {
                         )
                         // 错误提示
                         .when_some(error_msg_for_render.read(cx).clone(), |this, msg| {
-                            this.child(
-                                div()
-                                    .text_sm()
-                                    .text_color(cx.theme().danger)
-                                    .child(msg),
-                            )
+                            this.child(div().text_sm().text_color(cx.theme().danger).child(msg))
                         }),
                 )
         });
@@ -1414,7 +1442,9 @@ impl HomePage {
                                 let mut menu = menu
                                     .item(
                                         PopupMenuItem::new(t!("Workspace.label"))
-                                            .icon(IconName::AppsColor.color().with_size(Size::Medium))
+                                            .icon(
+                                                IconName::AppsColor.color().with_size(Size::Medium),
+                                            )
                                             .on_click(window.listener_for(
                                                 &view,
                                                 move |this, _, window, cx| {
@@ -1425,7 +1455,12 @@ impl HomePage {
                                     .separator()
                                     .item(
                                         PopupMenuItem::new("SSH")
-                                            .icon(IconName::Terminal.mono().text_color(gpui::rgb(0x8b5cf6)).with_size(Size::Medium))
+                                            .icon(
+                                                IconName::Terminal
+                                                    .mono()
+                                                    .text_color(gpui::rgb(0x8b5cf6))
+                                                    .with_size(Size::Medium),
+                                            )
                                             .on_click(window.listener_for(
                                                 &view,
                                                 move |this, _, window, cx| {
@@ -1436,7 +1471,11 @@ impl HomePage {
                                     )
                                     .item(
                                         PopupMenuItem::new("Terminal")
-                                            .icon(IconName::TerminalColor.color().with_size(Size::Medium))
+                                            .icon(
+                                                IconName::TerminalColor
+                                                    .color()
+                                                    .with_size(Size::Medium),
+                                            )
                                             .on_click(window.listener_for(
                                                 &view,
                                                 move |this, _, window, cx| {
@@ -1488,13 +1527,7 @@ impl HomePage {
                             }),
                     )
                     // 分隔线
-                    .child(
-                        div()
-                            .h(px(20.0))
-                            .w(px(1.0))
-                            .bg(cx.theme().border)
-                            .mx_1(),
-                    )
+                    .child(div().h(px(20.0)).w(px(1.0)).bg(cx.theme().border).mx_1())
                     // 同步按钮
                     .child(
                         Button::new("sync-button")
@@ -1551,9 +1584,7 @@ impl HomePage {
                                 t!("Encryption.edit_repo_password").to_string()
                             })
                             .ghost()
-                            .when(has_master_key, |btn| {
-                                btn.text_color(cx.theme().success)
-                            })
+                            .when(has_master_key, |btn| btn.text_color(cx.theme().success))
                             .when(!has_master_key, |btn| {
                                 btn.text_color(cx.theme().muted_foreground)
                             })
@@ -1592,7 +1623,7 @@ impl HomePage {
                             })),
                     )
                     // 工作区筛选
-                    .child(workspace_filter)
+                    .child(workspace_filter),
             )
     }
 
@@ -1800,16 +1831,12 @@ impl HomePage {
                             .on_click(cx.listener(move |this: &mut HomePage, _, window, cx| {
                                 if filter_type_clone == ConnectionType::ChatDB {
                                     this.add_ai_chat_tab(window, cx);
-                                    return  ;
+                                    return;
                                 }
                                 this.selected_filter = filter_type_clone;
                                 cx.notify();
                             }))
-                            .child(
-                                Icon::new(filter_type.icon())
-                                    .color()
-                                    .with_size(Size::Large),
-                            )
+                            .child(Icon::new(filter_type.icon()).color().with_size(Size::Large))
                             .child(
                                 div()
                                     .text_sm()
@@ -1851,7 +1878,7 @@ impl HomePage {
                             .justify_start()
                             .on_click(cx.listener(|this: &mut HomePage, _, window, cx| {
                                 this.show_encourage_dialog(window, cx);
-                            }))
+                            })),
                     )
                     .child(
                         Button::new("open_settings")
@@ -2443,14 +2470,20 @@ impl HomePage {
                                 if let Ok(params) = conn.to_redis_params() {
                                     let conn_info = match params.mode {
                                         RedisMode::Standalone => {
-                                            format!("{}:{}/{}", params.host, params.port, params.db_index)
+                                            format!(
+                                                "{}:{}/{}",
+                                                params.host, params.port, params.db_index
+                                            )
                                         }
                                         RedisMode::Sentinel => {
                                             let (master_name, sentinel_count) = params
                                                 .sentinel
                                                 .as_ref()
                                                 .map(|sentinel| {
-                                                    (sentinel.master_name.as_str(), sentinel.sentinels.len())
+                                                    (
+                                                        sentinel.master_name.as_str(),
+                                                        sentinel.sentinels.len(),
+                                                    )
                                                 })
                                                 .unwrap_or(("sentinel", 0));
                                             format!("{} (sentinel:{})", master_name, sentinel_count)
@@ -2533,7 +2566,12 @@ impl HomePage {
 
                 menu.item(
                     PopupMenuItem::new("with SSH")
-                        .icon(IconName::Terminal.mono().with_size(Size::Medium).text_color(gpui::rgb(0x8b5cf6)))
+                        .icon(
+                            IconName::Terminal
+                                .mono()
+                                .with_size(Size::Medium)
+                                .text_color(gpui::rgb(0x8b5cf6)),
+                        )
                         .on_click(
                             window.listener_for(&view_clone, move |this, _, window, cx| {
                                 this.open_ssh_terminal(ssh_conn_clone.clone(), window, cx);
@@ -2647,7 +2685,6 @@ impl Render for HomePage {
         )
     }
 }
-
 
 // ============================================================================
 // 辅助函数

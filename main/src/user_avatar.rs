@@ -37,15 +37,17 @@ pub fn render_user_avatar<V: 'static>(
             .clone()
             .unwrap_or_else(|| {
                 // 从邮箱提取用户名
-                user.email.split('@').next().unwrap_or(&user.email).to_string()
+                user.email
+                    .split('@')
+                    .next()
+                    .unwrap_or(&user.email)
+                    .to_string()
             })
             .into();
         let avatar_url = user.avatar_url.clone();
 
         let avatar = if let Some(url) = &avatar_url {
-            Avatar::new()
-                .src(url.as_str())
-                .with_size(Size::Small)
+            Avatar::new().src(url.as_str()).with_size(Size::Small)
         } else {
             Avatar::new()
                 .name(display_name.clone())

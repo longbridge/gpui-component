@@ -34,8 +34,8 @@ mod storage;
 
 pub use error::LicenseError;
 pub use models::{
-    Feature, LicenseInfo, OfflineLicenseDocument, OfflineLicensePayload, PlanTier, SubscriptionInfo,
-    SubscriptionStatus,
+    Feature, LicenseInfo, OfflineLicenseDocument, OfflineLicensePayload, PlanTier,
+    SubscriptionInfo, SubscriptionStatus,
 };
 pub use service::LicenseService;
 pub use storage::{LicenseStorage, LocalLicenseStorage};

@@ -1,13 +1,13 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, Axis, Corners, Edges, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window,
+    App, Axis, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
-    button::{Button, ButtonVariant, ButtonVariants},
     Disableable, Sizable, Size, StyledExt,
+    button::{Button, ButtonVariant, ButtonVariants},
 };
 
 /// A ButtonGroup element, to wrap multiple buttons in a group.

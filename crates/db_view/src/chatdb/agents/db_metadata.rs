@@ -41,11 +41,7 @@ impl DatabaseMetadataProvider {
     pub async fn list_tables(&self) -> anyhow::Result<Vec<TableBrief>> {
         let tables = self
             .global_db_state
-            .list_tables_direct(
-                &self.connection_id,
-                &self.database,
-                self.schema.clone(),
-            )
+            .list_tables_direct(&self.connection_id, &self.database, self.schema.clone())
             .await?;
 
         Ok(tables

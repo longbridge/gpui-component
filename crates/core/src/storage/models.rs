@@ -47,7 +47,7 @@ pub enum ConnectionType {
     SshSftp,
     Redis,
     MongoDB,
-    ChatDB
+    ChatDB,
 }
 
 impl fmt::Display for ConnectionType {
@@ -65,8 +65,7 @@ impl fmt::Display for ConnectionType {
 }
 
 impl ConnectionType {
-
-    pub fn all() -> Vec<ConnectionType>{
+    pub fn all() -> Vec<ConnectionType> {
         vec![
             ConnectionType::All,
             ConnectionType::Database,

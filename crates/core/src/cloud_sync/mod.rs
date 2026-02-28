@@ -19,13 +19,13 @@
 
 pub mod client;
 pub mod conflict;
+mod connection_sync;
 pub mod engine;
 mod models;
 pub mod queue;
 mod service;
 pub mod state_manager;
 pub mod supabase;
-mod connection_sync;
 mod workspace_sync;
 
 use std::sync::{Arc, RwLock};

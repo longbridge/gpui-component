@@ -252,10 +252,18 @@ impl TableSelection {
     }
 
     /// 移动活动单元格
-    pub fn move_active(&mut self, row_delta: i32, col_delta: i32, row_count: usize, col_count: usize) {
+    pub fn move_active(
+        &mut self,
+        row_delta: i32,
+        col_delta: i32,
+        row_count: usize,
+        col_count: usize,
+    ) {
         if let Some((row, col)) = self.active {
-            let new_row = (row as i32 + row_delta).clamp(0, row_count.saturating_sub(1) as i32) as usize;
-            let new_col = (col as i32 + col_delta).clamp(0, col_count.saturating_sub(1) as i32) as usize;
+            let new_row =
+                (row as i32 + row_delta).clamp(0, row_count.saturating_sub(1) as i32) as usize;
+            let new_col =
+                (col as i32 + col_delta).clamp(0, col_count.saturating_sub(1) as i32) as usize;
             self.select_single((new_row, new_col));
         } else if row_count > 0 && col_count > 0 {
             self.select_single((0, 0));
@@ -263,10 +271,18 @@ impl TableSelection {
     }
 
     /// 扩展选区（Shift+方向键）
-    pub fn extend_active(&mut self, row_delta: i32, col_delta: i32, row_count: usize, col_count: usize) {
+    pub fn extend_active(
+        &mut self,
+        row_delta: i32,
+        col_delta: i32,
+        row_count: usize,
+        col_count: usize,
+    ) {
         if let Some((row, col)) = self.active {
-            let new_row = (row as i32 + row_delta).clamp(0, row_count.saturating_sub(1) as i32) as usize;
-            let new_col = (col as i32 + col_delta).clamp(0, col_count.saturating_sub(1) as i32) as usize;
+            let new_row =
+                (row as i32 + row_delta).clamp(0, row_count.saturating_sub(1) as i32) as usize;
+            let new_col =
+                (col as i32 + col_delta).clamp(0, col_count.saturating_sub(1) as i32) as usize;
             self.extend_to((new_row, new_col));
         }
     }

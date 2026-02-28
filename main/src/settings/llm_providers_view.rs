@@ -9,8 +9,8 @@ use gpui_component::{
     dialog::DialogButtonProps,
     h_flex, v_flex,
 };
-use one_core::llm::{storage::ProviderRepository, types::ProviderConfig};
 use one_core::llm::types::BUILTIN_ONET_CLI_ID;
+use one_core::llm::{storage::ProviderRepository, types::ProviderConfig};
 use one_core::storage::{GlobalStorageState, StorageManager, traits::Repository};
 use rust_i18n::t;
 
@@ -120,7 +120,8 @@ impl LlmProvidersView {
                     let config_opt = form_clone.update(cx, |form, cx| form.get_config(cx));
 
                     let Some(mut config) = config_opt else {
-                        window.push_notification(t!("LlmProviders.required_notice").to_string(), cx);
+                        window
+                            .push_notification(t!("LlmProviders.required_notice").to_string(), cx);
                         return false;
                     };
 
@@ -374,7 +375,7 @@ impl LlmProvidersView {
                                             "LlmProviders.default_model",
                                             model = provider.model.as_str()
                                         )
-                                            .to_string(),
+                                        .to_string(),
                                     ),
                             )
                             .when(!provider.models.is_empty(), |this| {

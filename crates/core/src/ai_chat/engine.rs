@@ -15,11 +15,9 @@ use uuid::Uuid;
 use crate::ai_chat::components::ModelSettings;
 use crate::ai_chat::panel::CodeBlockActionRegistry;
 use crate::ai_chat::services::{SessionService, extract_session_name};
-use crate::ai_chat::types::{
-    ChatMessageUIGeneric, ChatRole, MessageExtension, NoExtension,
-};
-use crate::llm::chat_history::ChatSession;
+use crate::ai_chat::types::{ChatMessageUIGeneric, ChatRole, MessageExtension, NoExtension};
 use crate::llm::ProviderConfig;
+use crate::llm::chat_history::ChatSession;
 use crate::llm::storage::ProviderRepository;
 use crate::storage::StorageManager;
 use crate::storage::traits::Repository;
@@ -99,7 +97,10 @@ impl<E: MessageExtension + Default> ChatEngine<E> {
             return Some(id);
         }
 
-        match self.session_service.ensure_session(None, provider_id, default_name) {
+        match self
+            .session_service
+            .ensure_session(None, provider_id, default_name)
+        {
             Ok(id) => {
                 self.session_id = Some(id);
                 self.is_new_session = true;
@@ -114,18 +115,24 @@ impl<E: MessageExtension + Default> ChatEngine<E> {
 
     /// 持久化用户消息，并在新会话时更新标题
     pub fn persist_user_message(&mut self, session_id: i64, content: &str) {
-        let _ = self.session_service.add_user_message(session_id, content.to_string());
+        let _ = self
+            .session_service
+            .add_user_message(session_id, content.to_string());
 
         if self.is_new_session {
             self.is_new_session = false;
             let session_name = extract_session_name(content);
-            let _ = self.session_service.update_session_name(session_id, session_name);
+            let _ = self
+                .session_service
+                .update_session_name(session_id, session_name);
         }
     }
 
     /// 持久化助手消息
     pub fn persist_assistant_message(&self, session_id: i64, content: String) {
-        let _ = self.session_service.add_assistant_message(session_id, content);
+        let _ = self
+            .session_service
+            .add_assistant_message(session_id, content);
     }
 
     /// 开始新会话
@@ -147,10 +154,8 @@ impl<E: MessageExtension + Default> ChatEngine<E> {
     /// 添加流式助手消息占位符，返回消息 ID
     pub fn push_streaming_assistant(&mut self) -> String {
         let msg_id = Uuid::new_v4().to_string();
-        self.messages.push(
-            ChatMessageUIGeneric::streaming_assistant()
-                .with_id(msg_id.clone()),
-        );
+        self.messages
+            .push(ChatMessageUIGeneric::streaming_assistant().with_id(msg_id.clone()));
         msg_id
     }
 
@@ -181,10 +186,8 @@ impl<E: MessageExtension + Default> ChatEngine<E> {
     /// 添加状态消息，返回消息 ID
     pub fn push_status(&mut self, title: impl Into<String>, is_done: bool) -> String {
         let msg_id = Uuid::new_v4().to_string();
-        self.messages.push(
-            ChatMessageUIGeneric::status(title, is_done)
-                .with_id(msg_id.clone()),
-        );
+        self.messages
+            .push(ChatMessageUIGeneric::status(title, is_done).with_id(msg_id.clone()));
         msg_id
     }
 

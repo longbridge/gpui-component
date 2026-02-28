@@ -11,11 +11,11 @@ use std::rc::Rc;
 
 use crate::db_tree_view::SqlDumpMode;
 use db::{DataFormat, ExportConfig, ExportProgressEvent, GlobalDbState};
+use rust_i18n::t;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 use tokio::sync::mpsc;
-use rust_i18n::t;
 
 #[derive(Debug, Clone)]
 struct LogEntry {
@@ -569,7 +569,7 @@ impl Render for SqlDumpView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(t!("SqlDump.error_label").to_string())
+                                    .child(t!("SqlDump.error_label").to_string()),
                             )
                             .child(div().child(errors.to_string())),
                     )
@@ -589,7 +589,7 @@ impl Render for SqlDumpView {
                             .child(
                                 div()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(t!("SqlDump.time_label").to_string())
+                                    .child(t!("SqlDump.time_label").to_string()),
                             )
                             .child(div().child(elapsed)),
                     ),
@@ -689,14 +689,14 @@ impl Render for SqlDumpView {
                                     |view, _: &ClickEvent, window, cx| {
                                         view.start_dump(window, cx);
                                     },
-                                ))
+                                )),
                         )
                     })
                     .when(is_running, |this| {
                         this.child(
                             Button::new("running")
                                 .loading(true)
-                                .child(t!("SqlDump.exporting").to_string())
+                                .child(t!("SqlDump.exporting").to_string()),
                         )
                     })
                     .when(is_finished, |this| {

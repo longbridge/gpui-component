@@ -1,29 +1,29 @@
 //! Redis 键值视图
 
+use crate::{
+    GlobalRedisState, HashField, KeyInfo, KeyValueContent, KeyValueDetail, RedisKeyType, ZSetMember,
+};
 use gpui::{
-    App, AppContext, AsyncApp, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled,
-    Task, Window, div, px, relative, prelude::FluentBuilder, StatefulInteractiveElement,
+    App, AppContext, AsyncApp, ClipboardItem, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Task, Window, div, prelude::FluentBuilder, px, relative,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath, Sizable, Size, h_flex, v_flex,
+    ActiveTheme, Icon, IconName, IndexPath, Sizable, Size, WindowExt as _,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     dialog::DialogButtonProps,
+    h_flex,
+    highlighter::Language,
     input::{Input, InputEvent, InputState},
     radio::Radio,
     select::{Select, SelectEvent, SelectItem, SelectState},
     spinner::Spinner,
-    highlighter::Language,
-    WindowExt as _,
+    v_flex,
 };
 use one_core::gpui_tokio::Tokio;
-use rust_i18n::t;
-use crate::{
-    GlobalRedisState, HashField, KeyInfo, KeyValueContent, KeyValueDetail,
-    RedisKeyType, ZSetMember,
-};
 use one_core::tab_container::{TabContent, TabContentEvent};
+use rust_i18n::t;
 
 /// 键值视图事件
 #[derive(Clone, Debug)]
@@ -280,7 +280,8 @@ impl KeyValueView {
                 if self.filter_exact_match {
                     item.contains(&self.filter_text)
                 } else {
-                    item.to_lowercase().contains(&self.filter_text.to_lowercase())
+                    item.to_lowercase()
+                        .contains(&self.filter_text.to_lowercase())
                 }
             })
             .map(|(idx, s)| (idx, s.clone()))
@@ -300,7 +301,9 @@ impl KeyValueView {
                 if self.filter_exact_match {
                     search_text.contains(&self.filter_text)
                 } else {
-                    search_text.to_lowercase().contains(&self.filter_text.to_lowercase())
+                    search_text
+                        .to_lowercase()
+                        .contains(&self.filter_text.to_lowercase())
                 }
             })
             .map(|(idx, f)| (idx, f.clone()))
@@ -319,7 +322,9 @@ impl KeyValueView {
                 if self.filter_exact_match {
                     item.member.contains(&self.filter_text)
                 } else {
-                    item.member.to_lowercase().contains(&self.filter_text.to_lowercase())
+                    item.member
+                        .to_lowercase()
+                        .contains(&self.filter_text.to_lowercase())
                 }
             })
             .map(|(idx, m)| (idx, m.clone()))
@@ -330,9 +335,13 @@ impl KeyValueView {
             ZSetSortBy::Score => {
                 filtered.sort_by(|a, b| {
                     if self.sort_order == SortOrder::Asc {
-                        a.1.score.partial_cmp(&b.1.score).unwrap_or(std::cmp::Ordering::Equal)
+                        a.1.score
+                            .partial_cmp(&b.1.score)
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     } else {
-                        b.1.score.partial_cmp(&a.1.score).unwrap_or(std::cmp::Ordering::Equal)
+                        b.1.score
+                            .partial_cmp(&a.1.score)
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     }
                 });
             }
@@ -396,18 +405,20 @@ impl KeyValueView {
     fn format_value(&self, value: &str) -> String {
         match self.view_format {
             ViewFormat::Raw => value.to_string(),
-            ViewFormat::Json => {
-                match serde_json::from_str::<serde_json::Value>(value) {
-                    Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_else(|_| value.to_string()),
-                    Err(_) => value.to_string(),
-                }
-            }
-            ViewFormat::Hex => {
-                value.bytes().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")
-            }
-            ViewFormat::Binary => {
-                value.bytes().map(|b| format!("{:08b}", b)).collect::<Vec<_>>().join(" ")
-            }
+            ViewFormat::Json => match serde_json::from_str::<serde_json::Value>(value) {
+                Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_else(|_| value.to_string()),
+                Err(_) => value.to_string(),
+            },
+            ViewFormat::Hex => value
+                .bytes()
+                .map(|b| format!("{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(" "),
+            ViewFormat::Binary => value
+                .bytes()
+                .map(|b| format!("{:08b}", b))
+                .collect::<Vec<_>>()
+                .join(" "),
         }
     }
 
@@ -433,10 +444,9 @@ impl KeyValueView {
             let result = Tokio::spawn_result(cx, {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
-                async move {
-                    Self::fetch_key_value(&global_state, &connection_id, &key).await
-                }
-            }).await;
+                async move { Self::fetch_key_value(&global_state, &connection_id, &key).await }
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 match result {
@@ -479,7 +489,10 @@ impl KeyValueView {
             .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
 
         let guard = conn.read().await;
-        guard.get_key_value_detail(key).await.map_err(|e| anyhow::anyhow!("{}", e))
+        guard
+            .get_key_value_detail(key)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))
     }
 
     /// 获取编辑器内容
@@ -500,7 +513,10 @@ impl KeyValueView {
         let view = cx.entity().clone();
         let key_for_copy = key_name.clone();
         let editor_content = self.get_editor_content(cx);
-        let can_add_element = matches!(key_type, RedisKeyType::List | RedisKeyType::Set | RedisKeyType::ZSet | RedisKeyType::Hash);
+        let can_add_element = matches!(
+            key_type,
+            RedisKeyType::List | RedisKeyType::Set | RedisKeyType::ZSet | RedisKeyType::Hash
+        );
         let is_string = matches!(key_type, RedisKeyType::String);
         let is_zset = matches!(key_type, RedisKeyType::ZSet);
         let zset_sort_label = match self.zset_sort_by {
@@ -534,13 +550,7 @@ impl KeyValueView {
                             .child(key_type_display),
                     )
                     // 键名
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_sm()
-                            .truncate()
-                            .child(key_name.clone()),
-                    )
+                    .child(div().flex_1().text_sm().truncate().child(key_name.clone()))
                     // 刷新按钮
                     .child(
                         Button::new("refresh-key")
@@ -551,7 +561,9 @@ impl KeyValueView {
                                 let view = view.clone();
                                 move |_, _, cx| {
                                     view.update(cx, |view, cx| {
-                                        if let (Some(conn_id), Some(key)) = (view.connection_id.clone(), view.current_key.clone()) {
+                                        if let (Some(conn_id), Some(key)) =
+                                            (view.connection_id.clone(), view.current_key.clone())
+                                        {
                                             view.load_key(conn_id, view.db_index, key, cx);
                                         }
                                     });
@@ -565,7 +577,9 @@ impl KeyValueView {
                             .ghost()
                             .with_size(Size::Medium)
                             .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(key_for_copy.clone()));
+                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                    key_for_copy.clone(),
+                                ));
                             }),
                     )
                     // TTL 显示（可点击编辑）
@@ -651,10 +665,10 @@ impl KeyValueView {
                             .items_center()
                             .when(is_string, |this| {
                                 this.child(
-                                        div()
-                                            .text_base()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(t!("KeyValueView.view_mode").to_string()),
+                                    div()
+                                        .text_base()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(t!("KeyValueView.view_mode").to_string()),
                                 )
                                 .child(
                                     Select::new(&self.format_select)
@@ -677,7 +691,8 @@ impl KeyValueView {
                                             let view = view.clone();
                                             move |_, _, cx| {
                                                 view.update(cx, |view, cx| {
-                                                    view.filter_exact_match = !view.filter_exact_match;
+                                                    view.filter_exact_match =
+                                                        !view.filter_exact_match;
                                                     cx.notify();
                                                 });
                                             }
@@ -755,18 +770,20 @@ impl KeyValueView {
                                     .on_click({
                                         let content = editor_content.clone();
                                         move |_, _, cx| {
-                                            cx.write_to_clipboard(ClipboardItem::new_string(content.clone()));
+                                            cx.write_to_clipboard(ClipboardItem::new_string(
+                                                content.clone(),
+                                            ));
                                         }
                                     }),
                             )
                             // 保存按钮（仅 String 类型显示）
                             .when(is_string && self.is_dirty, |this| {
                                 this.child(
-                                Button::new("save-value")
-                                    .icon(IconName::Check)
-                                    .label(t!("KeyValueView.save").to_string())
-                                    .success()
-                                    .with_size(Size::Medium)
+                                    Button::new("save-value")
+                                        .icon(IconName::Check)
+                                        .label(t!("KeyValueView.save").to_string())
+                                        .success()
+                                        .with_size(Size::Medium)
                                         .on_click({
                                             let view = view.clone();
                                             move |_, _, cx| {
@@ -839,7 +856,11 @@ impl KeyValueView {
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.value_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.value_label").to_string()),
+                                )
                                 .child(Input::new(&value_input).w_full()),
                         ),
                 )
@@ -864,7 +885,13 @@ impl KeyValueView {
     }
 
     /// 显示 List 编辑对话框
-    fn show_list_edit_dialog(&mut self, index: usize, current_value: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn show_list_edit_dialog(
+        &mut self,
+        index: usize,
+        current_value: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let value_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
                 .placeholder(t!("KeyValueView.input_value_placeholder").to_string())
@@ -890,7 +917,11 @@ impl KeyValueView {
                 .child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child(t!("KeyValueView.value_label").to_string()))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("KeyValueView.value_label").to_string()),
+                        )
                         .child(Input::new(&value_input).w_full()),
                 )
                 .confirm()
@@ -914,9 +945,18 @@ impl KeyValueView {
     }
 
     /// 添加 List 元素
-    fn add_list_element(&mut self, value: String, position: ListInsertPosition, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+    fn add_list_element(
+        &mut self,
+        value: String,
+        position: ListInsertPosition,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -925,23 +965,28 @@ impl KeyValueView {
                 let key = key.clone();
                 let value = value.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
                     match position {
                         ListInsertPosition::Head => {
-                            guard.lpush(&key, &[value.as_str()]).await
+                            guard
+                                .lpush(&key, &[value.as_str()])
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                         }
                         ListInsertPosition::Tail => {
-                            guard.rpush(&key, &[value.as_str()]).await
+                            guard
+                                .rpush(&key, &[value.as_str()])
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                         }
                     }
                     Ok::<(), anyhow::Error>(())
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -955,8 +1000,12 @@ impl KeyValueView {
 
     /// 编辑 List 元素（通过 LSET）
     fn edit_list_element(&mut self, index: usize, new_value: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -965,14 +1014,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let new_value = new_value.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.lset(&key, index as i64, &new_value).await
+                    guard
+                        .lset(&key, index as i64, &new_value)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1011,7 +1063,11 @@ impl KeyValueView {
                 .child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child(t!("KeyValueView.member_label").to_string()))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("KeyValueView.member_label").to_string()),
+                        )
                         .child(Input::new(&value_input).w_full()),
                 )
                 .confirm()
@@ -1036,8 +1092,12 @@ impl KeyValueView {
 
     /// 添加 Set 成员
     fn add_set_member(&mut self, member: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1046,14 +1106,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let member = member.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.sadd(&key, &[member.as_str()]).await
+                    guard
+                        .sadd(&key, &[member.as_str()])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1102,13 +1165,21 @@ impl KeyValueView {
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.score_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.score_label").to_string()),
+                                )
                                 .child(Input::new(&score_input).w_full()),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.member_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.member_label").to_string()),
+                                )
                                 .child(Input::new(&member_input).w_full()),
                         ),
                 )
@@ -1135,7 +1206,13 @@ impl KeyValueView {
     }
 
     /// 显示 ZSet 编辑对话框
-    fn show_zset_edit_dialog(&mut self, member: String, current_score: f64, window: &mut Window, cx: &mut Context<Self>) {
+    fn show_zset_edit_dialog(
+        &mut self,
+        member: String,
+        current_score: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let score_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
                 .placeholder(t!("KeyValueView.score_placeholder").to_string());
@@ -1173,13 +1250,21 @@ impl KeyValueView {
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.score_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.score_label").to_string()),
+                                )
                                 .child(Input::new(&score_input).w_full()),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.member_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.member_label").to_string()),
+                                )
                                 .child(Input::new(&member_input).w_full()),
                         ),
                 )
@@ -1207,8 +1292,12 @@ impl KeyValueView {
 
     /// 添加 ZSet 成员
     fn add_zset_member(&mut self, member: String, score: f64, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1217,14 +1306,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let member = member.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.zadd(&key, &[(score, member.as_str())]).await
+                    guard
+                        .zadd(&key, &[(score, member.as_str())])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1237,9 +1329,19 @@ impl KeyValueView {
     }
 
     /// 更新 ZSet 成员（删除旧成员后添加新成员）
-    fn update_zset_member(&mut self, old_member: String, new_member: String, score: f64, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+    fn update_zset_member(
+        &mut self,
+        old_member: String,
+        new_member: String,
+        score: f64,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1249,20 +1351,25 @@ impl KeyValueView {
                 let old_member = old_member.clone();
                 let new_member = new_member.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
                     // 如果成员名变了，先删除旧的
                     if old_member != new_member {
-                        guard.zrem(&key, &[old_member.as_str()]).await
+                        guard
+                            .zrem(&key, &[old_member.as_str()])
+                            .await
                             .map_err(|e| anyhow::anyhow!("{}", e))?;
                     }
-                    guard.zadd(&key, &[(score, new_member.as_str())]).await
+                    guard
+                        .zadd(&key, &[(score, new_member.as_str())])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                     Ok::<(), anyhow::Error>(())
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1309,13 +1416,21 @@ impl KeyValueView {
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.field_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.field_label").to_string()),
+                                )
                                 .child(Input::new(&field_input).w_full()),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.value_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.value_label").to_string()),
+                                )
                                 .child(Input::new(&value_input).w_full()),
                         ),
                 )
@@ -1341,7 +1456,13 @@ impl KeyValueView {
     }
 
     /// 显示 Hash 编辑对话框
-    fn show_hash_edit_dialog(&mut self, field: String, current_value: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn show_hash_edit_dialog(
+        &mut self,
+        field: String,
+        current_value: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let field_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
                 .placeholder(t!("KeyValueView.hash_field_placeholder_edit").to_string());
@@ -1379,13 +1500,21 @@ impl KeyValueView {
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.field_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.field_label").to_string()),
+                                )
                                 .child(Input::new(&field_input).w_full()),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.value_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.value_label").to_string()),
+                                )
                                 .child(Input::new(&value_input).w_full()),
                         ),
                 )
@@ -1404,7 +1533,12 @@ impl KeyValueView {
                     let _ = view_for_ok.update(cx, |v, cx| {
                         // 如果字段名变了，先删除旧字段
                         if old_field_for_ok != new_field {
-                            v.delete_hash_field_then_set(old_field_for_ok.clone(), new_field.clone(), value.clone(), cx);
+                            v.delete_hash_field_then_set(
+                                old_field_for_ok.clone(),
+                                new_field.clone(),
+                                value.clone(),
+                                cx,
+                            );
                         } else {
                             v.set_hash_field(new_field, value, cx);
                         }
@@ -1417,8 +1551,12 @@ impl KeyValueView {
 
     /// 设置 Hash 字段
     fn set_hash_field(&mut self, field: String, value: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1428,14 +1566,17 @@ impl KeyValueView {
                 let field = field.clone();
                 let value = value.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.hset(&key, &field, &value).await
+                    guard
+                        .hset(&key, &field, &value)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1448,9 +1589,19 @@ impl KeyValueView {
     }
 
     /// 删除旧 Hash 字段并设置新字段
-    fn delete_hash_field_then_set(&mut self, old_field: String, new_field: String, value: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+    fn delete_hash_field_then_set(
+        &mut self,
+        old_field: String,
+        new_field: String,
+        value: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1458,17 +1609,22 @@ impl KeyValueView {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.hdel(&key, &[old_field.as_str()]).await
+                    guard
+                        .hdel(&key, &[old_field.as_str()])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
-                    guard.hset(&key, &new_field, &value).await
+                    guard
+                        .hset(&key, &new_field, &value)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                     Ok::<(), anyhow::Error>(())
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1520,7 +1676,11 @@ impl KeyValueView {
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("KeyValueView.ttl_label").to_string()))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("KeyValueView.ttl_label").to_string()),
+                                )
                                 .child(Input::new(&ttl_input).w_full()),
                         )
                         .child(
@@ -1554,8 +1714,12 @@ impl KeyValueView {
 
     /// 设置键的 TTL
     fn set_key_ttl(&mut self, ttl: Option<i64>, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1563,23 +1727,28 @@ impl KeyValueView {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
                     match ttl {
                         Some(seconds) if seconds > 0 => {
-                            guard.expire(&key, seconds).await
+                            guard
+                                .expire(&key, seconds)
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                         }
                         _ => {
-                            guard.persist(&key).await
+                            guard
+                                .persist(&key)
+                                .await
                                 .map_err(|e| anyhow::anyhow!("{}", e))?;
                         }
                     }
                     Ok::<(), anyhow::Error>(())
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1595,7 +1764,9 @@ impl KeyValueView {
 
     /// 显示重命名对话框
     fn show_rename_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(current_name) = self.current_key.clone() else { return };
+        let Some(current_name) = self.current_key.clone() else {
+            return;
+        };
         let name_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
                 .placeholder(t!("KeyValueView.new_key_name_placeholder").to_string());
@@ -1620,7 +1791,11 @@ impl KeyValueView {
                 .child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child(t!("KeyValueView.new_key_name_label").to_string()))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("KeyValueView.new_key_name_label").to_string()),
+                        )
                         .child(Input::new(&name_input).w_full()),
                 )
                 .confirm()
@@ -1645,8 +1820,12 @@ impl KeyValueView {
 
     /// 重命名键
     fn rename_key(&mut self, new_name: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(old_name) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(old_name) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
         let db_index = self.db_index;
 
@@ -1656,14 +1835,17 @@ impl KeyValueView {
                 let old_name = old_name.clone();
                 let new_name = new_name.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.rename(&old_name, &new_name).await
+                    guard
+                        .rename(&old_name, &new_name)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1678,8 +1860,12 @@ impl KeyValueView {
 
     /// 保存 String 值
     fn save_string_value(&mut self, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let value = self.get_editor_content(cx);
         let global_state = cx.global::<GlobalRedisState>().clone();
 
@@ -1689,14 +1875,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let value = value.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.set(&key, &value, None).await
+                    guard
+                        .set(&key, &value, None)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1718,8 +1907,12 @@ impl KeyValueView {
 
     /// 删除 List 元素
     fn delete_list_element(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
         let delete_marker = "__DELETED_ELEMENT_MARKER__";
 
@@ -1728,17 +1921,22 @@ impl KeyValueView {
                 let connection_id = connection_id.clone();
                 let key = key.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.lset(&key, index as i64, delete_marker).await
+                    guard
+                        .lset(&key, index as i64, delete_marker)
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
-                    guard.execute_command(&format!("LREM {} 1 {}", key, delete_marker)).await
+                    guard
+                        .execute_command(&format!("LREM {} 1 {}", key, delete_marker))
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))?;
                     Ok::<(), anyhow::Error>(())
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1752,8 +1950,12 @@ impl KeyValueView {
 
     /// 删除 Set 元素
     fn delete_set_element(&mut self, member: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1762,14 +1964,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let member = member.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.srem(&key, &[member.as_str()]).await
+                    guard
+                        .srem(&key, &[member.as_str()])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1783,8 +1988,12 @@ impl KeyValueView {
 
     /// 删除 ZSet 元素
     fn delete_zset_element(&mut self, member: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1793,14 +2002,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let member = member.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.zrem(&key, &[member.as_str()]).await
+                    guard
+                        .zrem(&key, &[member.as_str()])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1814,8 +2026,12 @@ impl KeyValueView {
 
     /// 删除 Hash 字段
     fn delete_hash_field(&mut self, field: String, cx: &mut Context<Self>) {
-        let Some(connection_id) = self.connection_id.clone() else { return };
-        let Some(key) = self.current_key.clone() else { return };
+        let Some(connection_id) = self.connection_id.clone() else {
+            return;
+        };
+        let Some(key) = self.current_key.clone() else {
+            return;
+        };
         let global_state = cx.global::<GlobalRedisState>().clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
@@ -1824,14 +2040,17 @@ impl KeyValueView {
                 let key = key.clone();
                 let field = field.clone();
                 async move {
-                    let conn = global_state
-                        .get_connection(&connection_id)
-                        .ok_or_else(|| anyhow::anyhow!("{}", t!("KeyValueView.connection_missing")))?;
+                    let conn = global_state.get_connection(&connection_id).ok_or_else(|| {
+                        anyhow::anyhow!("{}", t!("KeyValueView.connection_missing"))
+                    })?;
                     let guard = conn.read().await;
-                    guard.hdel(&key, &[field.as_str()]).await
+                    guard
+                        .hdel(&key, &[field.as_str()])
+                        .await
                         .map_err(|e| anyhow::anyhow!("{}", e))
                 }
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 if result.is_ok() {
@@ -1844,7 +2063,11 @@ impl KeyValueView {
     }
 
     /// 渲染值编辑器
-    fn render_value_editor(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_value_editor(
+        &self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let Some(content) = &self.value_content else {
             return div()
                 .size_full()
@@ -1856,41 +2079,27 @@ impl KeyValueView {
         };
 
         match content {
-            KeyValueContent::String(_) => {
-                self.render_string_editor(cx).into_any_element()
-            }
-            KeyValueContent::List(items) => {
-                self.render_list_view(items, cx).into_any_element()
-            }
-            KeyValueContent::Set(items) => {
-                self.render_set_view(items, cx).into_any_element()
-            }
-            KeyValueContent::ZSet(items) => {
-                self.render_zset_view(items, cx).into_any_element()
-            }
-            KeyValueContent::Hash(items) => {
-                self.render_hash_view(items, cx).into_any_element()
-            }
+            KeyValueContent::String(_) => self.render_string_editor(cx).into_any_element(),
+            KeyValueContent::List(items) => self.render_list_view(items, cx).into_any_element(),
+            KeyValueContent::Set(items) => self.render_set_view(items, cx).into_any_element(),
+            KeyValueContent::ZSet(items) => self.render_zset_view(items, cx).into_any_element(),
+            KeyValueContent::Hash(items) => self.render_hash_view(items, cx).into_any_element(),
             KeyValueContent::Stream(entries) => {
                 self.render_stream_view(entries, cx).into_any_element()
             }
-            KeyValueContent::None => {
-                div()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(t!("KeyValueView.empty_value").to_string())
-                    .into_any_element()
-            }
+            KeyValueContent::None => div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(t!("KeyValueView.empty_value").to_string())
+                .into_any_element(),
         }
     }
 
     /// 渲染 String 编辑器（使用 Input 组件）
     fn render_string_editor(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        Input::new(&self.string_editor)
-            .size_full()
-            .cleanable(false)
+        Input::new(&self.string_editor).size_full().cleanable(false)
     }
 
     /// 渲染底部状态栏
@@ -1910,7 +2119,8 @@ impl KeyValueView {
             _ => 0,
         };
 
-        let memory_display = info.memory_usage
+        let memory_display = info
+            .memory_usage
             .map(|m| t!("KeyValueView.status_memory", memory = m).to_string())
             .unwrap_or_default();
 
@@ -1930,7 +2140,9 @@ impl KeyValueView {
                         div()
                             .text_base()
                             .text_color(cx.theme().muted_foreground)
-                            .child(t!("KeyValueView.status_length", count = content_len).to_string()),
+                            .child(
+                                t!("KeyValueView.status_length", count = content_len).to_string(),
+                            ),
                     )
                     .when(size > 0, |this| {
                         this.child(
@@ -1950,14 +2162,12 @@ impl KeyValueView {
                     }),
             )
             .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_base()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(self.view_format.display_name()),
-                    ),
+                h_flex().gap_2().child(
+                    div()
+                        .text_base()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(self.view_format.display_name()),
+                ),
             )
             .into_any_element()
     }
@@ -2004,13 +2214,7 @@ impl KeyValueView {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(format!("{}", idx + 1)),
                         )
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_base()
-                                .truncate()
-                                .child(item.clone()),
-                        )
+                        .child(div().flex_1().text_base().truncate().child(item.clone()))
                         .child(
                             h_flex()
                                 .w(px(120.0))
@@ -2026,7 +2230,9 @@ impl KeyValueView {
                                         .on_click({
                                             let value = value_for_copy.clone();
                                             move |_, _, cx| {
-                                                cx.write_to_clipboard(ClipboardItem::new_string(value.clone()));
+                                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                                    value.clone(),
+                                                ));
                                             }
                                         }),
                                 )
@@ -2040,7 +2246,12 @@ impl KeyValueView {
                                             let value = value_for_edit.clone();
                                             move |_, window, cx| {
                                                 view.update(cx, |v, cx| {
-                                                    v.show_list_edit_dialog(idx, value.clone(), window, cx);
+                                                    v.show_list_edit_dialog(
+                                                        idx,
+                                                        value.clone(),
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }
                                         }),
@@ -2108,13 +2319,7 @@ impl KeyValueView {
                                         .with_size(Size::Small)
                                         .text_color(cx.theme().muted_foreground),
                                 )
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .text_base()
-                                        .truncate()
-                                        .child(item.clone()),
-                                ),
+                                .child(div().flex_1().text_base().truncate().child(item.clone())),
                         )
                         .child(
                             h_flex()
@@ -2131,7 +2336,9 @@ impl KeyValueView {
                                         .on_click({
                                             let value = value_for_copy.clone();
                                             move |_, _, cx| {
-                                                cx.write_to_clipboard(ClipboardItem::new_string(value.clone()));
+                                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                                    value.clone(),
+                                                ));
                                             }
                                         }),
                                 )
@@ -2165,8 +2372,14 @@ impl KeyValueView {
         let (min_score, max_score) = if filtered_items.is_empty() {
             (0.0, 1.0)
         } else {
-            let min = filtered_items.iter().map(|(_, m)| m.score).fold(f64::INFINITY, f64::min);
-            let max = filtered_items.iter().map(|(_, m)| m.score).fold(f64::NEG_INFINITY, f64::max);
+            let min = filtered_items
+                .iter()
+                .map(|(_, m)| m.score)
+                .fold(f64::INFINITY, f64::min);
+            let max = filtered_items
+                .iter()
+                .map(|(_, m)| m.score)
+                .fold(f64::NEG_INFINITY, f64::max);
             if (max - min).abs() < f64::EPSILON {
                 (min - 1.0, max + 1.0)
             } else {
@@ -2226,8 +2439,16 @@ impl KeyValueView {
                             div()
                                 .w(px(50.0))
                                 .text_sm()
-                                .font_weight(if display_idx < 3 { gpui::FontWeight::BOLD } else { gpui::FontWeight::NORMAL })
-                                .text_color(if display_idx < 3 { cx.theme().primary } else { cx.theme().muted_foreground })
+                                .font_weight(if display_idx < 3 {
+                                    gpui::FontWeight::BOLD
+                                } else {
+                                    gpui::FontWeight::NORMAL
+                                })
+                                .text_color(if display_idx < 3 {
+                                    cx.theme().primary
+                                } else {
+                                    cx.theme().muted_foreground
+                                })
                                 .child(rank_display),
                         )
                         // 分数可视化柱状图
@@ -2279,7 +2500,9 @@ impl KeyValueView {
                                         .on_click({
                                             let value = value_for_copy.clone();
                                             move |_, _, cx| {
-                                                cx.write_to_clipboard(ClipboardItem::new_string(value.clone()));
+                                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                                    value.clone(),
+                                                ));
                                             }
                                         }),
                                 )
@@ -2294,7 +2517,12 @@ impl KeyValueView {
                                             let score = score_for_edit;
                                             move |_, window, cx| {
                                                 view.update(cx, |v, cx| {
-                                                    v.show_zset_edit_dialog(member.clone(), score, window, cx);
+                                                    v.show_zset_edit_dialog(
+                                                        member.clone(),
+                                                        score,
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }
                                         }),
@@ -2386,7 +2614,9 @@ impl KeyValueView {
                                         .on_click({
                                             let value = field_for_copy.clone();
                                             move |_, _, cx| {
-                                                cx.write_to_clipboard(ClipboardItem::new_string(value.clone()));
+                                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                                    value.clone(),
+                                                ));
                                             }
                                         }),
                                 )
@@ -2401,7 +2631,12 @@ impl KeyValueView {
                                             let value = value_for_edit.clone();
                                             move |_, window, cx| {
                                                 view.update(cx, |v, cx| {
-                                                    v.show_hash_edit_dialog(field.clone(), value.clone(), window, cx);
+                                                    v.show_hash_edit_dialog(
+                                                        field.clone(),
+                                                        value.clone(),
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }
                                         }),
@@ -2443,9 +2678,7 @@ impl KeyValueView {
 
         let last_index = columns.len().saturating_sub(1);
         for (index, (name, width)) in columns.into_iter().enumerate() {
-            let col = div()
-                .text_sm()
-                .font_weight(gpui::FontWeight::SEMIBOLD);
+            let col = div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD);
 
             if width > 0.0 {
                 let col = col.w(px(width));
@@ -2494,11 +2727,7 @@ impl KeyValueView {
                                     .w(px(100.0))
                                     .child(k.clone()),
                             )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .child(v.clone()),
-                            )
+                            .child(div().text_sm().child(v.clone()))
                     }))
             }))
     }

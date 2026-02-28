@@ -1,7 +1,8 @@
 use gpui::*;
 use gpui_component::{
+    Root, TitleBar,
     button::{Button, ButtonVariants},
-    h_flex, v_flex, Root, TitleBar,
+    h_flex, v_flex,
 };
 
 pub struct Example;

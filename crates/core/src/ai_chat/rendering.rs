@@ -3,8 +3,12 @@
 //! 提供通用的消息渲染函数，可被不同的面板复用。
 //! SQL 面板可以在此基础上覆盖特定渲染（如 SQL 代码块）。
 
-use gpui::{div, AnyElement, App, InteractiveElement, IntoElement, ParentElement, SharedString, Styled};
-use gpui_component::{button::ButtonVariants, h_flex, text::TextView, ActiveTheme, Icon, IconName, Sizable, Size};
+use gpui::{
+    AnyElement, App, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, div,
+};
+use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable, Size, button::ButtonVariants, h_flex, text::TextView,
+};
 use rust_i18n::t;
 
 use crate::ai_chat::panel::CodeBlockActionRegistry;
@@ -54,12 +58,7 @@ impl ChatMessageRenderer {
     }
 
     /// 渲染状态消息
-    pub fn render_status_message(
-        id: &str,
-        title: &str,
-        is_done: bool,
-        cx: &App,
-    ) -> AnyElement {
+    pub fn render_status_message(id: &str, title: &str, is_done: bool, cx: &App) -> AnyElement {
         let icon = if is_done {
             IconName::Check
         } else {
@@ -139,38 +138,29 @@ impl ChatMessageRenderer {
                             let lang_str = lang.as_ref().map(|s| s.as_ref());
                             let matched_actions = registry.get_actions_for_lang(lang_str);
 
-                            let mut row = h_flex()
-                                .gap_1()
-                                .child(
-                                    gpui_component::clipboard::Clipboard::new("copy")
-                                        .value(code.clone()),
-                                );
+                            let mut row = h_flex().gap_1().child(
+                                gpui_component::clipboard::Clipboard::new("copy")
+                                    .value(code.clone()),
+                            );
 
                             for (idx, action) in matched_actions.iter().enumerate() {
-                                let btn_id =
-                                    SharedString::from(format!("{}-{}", action.id, idx));
+                                let btn_id = SharedString::from(format!("{}-{}", action.id, idx));
                                 let callback = action.callback.clone();
                                 let icon = action.icon.clone();
                                 let label = action.label.clone();
                                 let code = code.to_string();
                                 let lang = lang.as_ref().map(|s| s.to_string());
-                                let mut btn =
-                                    gpui_component::button::Button::new(btn_id)
-                                        .icon(icon)
-                                        .ghost()
-                                        .xsmall()
-                                        .on_click({
-                                            let code = code.clone();
-                                            let lang = lang.clone();
-                                            move |_, window, cx| {
-                                                callback(
-                                                    code.clone(),
-                                                    lang.clone(),
-                                                    window,
-                                                    cx,
-                                                );
-                                            }
-                                        });
+                                let mut btn = gpui_component::button::Button::new(btn_id)
+                                    .icon(icon)
+                                    .ghost()
+                                    .xsmall()
+                                    .on_click({
+                                        let code = code.clone();
+                                        let lang = lang.clone();
+                                        move |_, window, cx| {
+                                            callback(code.clone(), lang.clone(), window, cx);
+                                        }
+                                    });
 
                                 if let Some(lbl) = label {
                                     btn = btn.label(lbl);
@@ -200,9 +190,7 @@ impl ChatMessageRenderer {
                 MessageVariant::Status { title, is_done } => {
                     Self::render_status_message(&msg.id, title, *is_done, cx)
                 }
-                MessageVariant::Text => {
-                    Self::render_assistant_text(msg, code_block_actions, cx)
-                }
+                MessageVariant::Text => Self::render_assistant_text(msg, code_block_actions, cx),
                 MessageVariant::SqlResult => {
                     // SqlResult 需要特殊渲染，默认只显示占位符
                     div()

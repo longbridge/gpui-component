@@ -21,11 +21,11 @@ use gpui_component::{
     v_flex,
 };
 use one_ui::edit_table::Column;
-use tracing::log::error;
 use smol::Timer;
+use tracing::log::error;
 
-use one_core::ai_chat::ask_ai::AskAiButton;
 use crate::table_data::data_grid::{DataGrid, DataGridConfig, DataGridUsage};
+use one_core::ai_chat::ask_ai::AskAiButton;
 // 3. 当前 crate 导入（按模块分组）
 use db::{GlobalDbState, SqlResult, SqlSource};
 use gpui_component::checkbox::Checkbox;
@@ -512,13 +512,18 @@ impl SqlResultTabContainer {
                     (false, "".to_string())
                 };
 
-                let config = DataGridConfig::new(db_name.clone(), table_name.clone(), &connection_id, database_type)
-                    .editable(editable)
-                    .show_toolbar(true)
-                    .usage(DataGridUsage::SqlResult)
-                    .rows_count(query_result.rows.len())
-                    .execution_time(query_result.elapsed_ms)
-                    .sql(query_result.sql.clone());
+                let config = DataGridConfig::new(
+                    db_name.clone(),
+                    table_name.clone(),
+                    &connection_id,
+                    database_type,
+                )
+                .editable(editable)
+                .show_toolbar(true)
+                .usage(DataGridUsage::SqlResult)
+                .rows_count(query_result.rows.len())
+                .execution_time(query_result.elapsed_ms)
+                .sql(query_result.sql.clone());
 
                 let data_grid = cx.new(|cx| DataGrid::new(config, _window, cx));
 
@@ -723,9 +728,12 @@ impl SqlResultTabContainer {
                                     .text_color(cx.theme().muted_foreground)
                                     .child(t!("SqlResultTab.execution_time_label")),
                             )
-                            .child(div().text_lg().font_semibold().child(
-                                format!("{:.3}s", total_elapsed_ms / 1000.0)
-                            )),
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_semibold()
+                                    .child(format!("{:.3}s", total_elapsed_ms / 1000.0)),
+                            ),
                     ),
             )
             .child(
@@ -763,27 +771,26 @@ impl SqlResultTabContainer {
 
         // 当查询执行中但尚未解析出总数时，显示不确定状态的加载指示器
         if total == 0 {
-            return div()
-                .px_4()
-                .py_2()
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(Spinner::new().with_size(Size::Small))
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(t!("SqlResultTab.parsing_and_executing"))
-                        )
-                );
+            return div().px_4().py_2().child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(Spinner::new().with_size(Size::Small))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(t!("SqlResultTab.parsing_and_executing")),
+                    ),
+            );
         }
 
         let progress_percent = (current as f32 / total as f32) * 100.0;
-        div()
-            .px_4()
-            .child(Progress::new("query-progress").h(px(4.)).value(progress_percent))
+        div().px_4().child(
+            Progress::new("query-progress")
+                .h(px(4.))
+                .value(progress_percent),
+        )
     }
 
     fn render_table_header(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -801,7 +808,13 @@ impl SqlResultTabContainer {
                     .font_semibold()
                     .child(t!("SqlResultTab.query_header")),
             )
-            .child(div().flex_1().text_sm().font_semibold().child(t!("SqlResultTab.message_header")))
+            .child(
+                div()
+                    .flex_1()
+                    .text_sm()
+                    .font_semibold()
+                    .child(t!("SqlResultTab.message_header")),
+            )
             .child(
                 div()
                     .w(px(80.))
@@ -822,95 +835,81 @@ impl SqlResultTabContainer {
 
         // 当执行中且列表为空时，显示加载占位符
         if is_executing && item_count == 0 {
-            return div()
-                .flex_1()
-                .w_full()
-                .px_4()
-                .py_8()
-                .child(
-                    v_flex()
-                        .items_center()
-                        .justify_center()
-                        .gap_4()
-                        .child(Spinner::new().with_size(Size::Large))
-                        .child(
-                            div()
-                                .text_base()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(t!("SqlResultTab.query_executing_wait"))
-                        )
-                );
+            return div().flex_1().w_full().px_4().py_8().child(
+                v_flex()
+                    .items_center()
+                    .justify_center()
+                    .gap_4()
+                    .child(Spinner::new().with_size(Size::Large))
+                    .child(
+                        div()
+                            .text_base()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(t!("SqlResultTab.query_executing_wait")),
+                    ),
+            );
         }
 
-        div()
-            .flex_1()
-            .w_full()
-            .px_4()
-            .child(
-                uniform_list(
-                    "statement-list",
-                    item_count,
-                    cx.processor(
-                        move |view: &mut Self, visible_range: Range<usize>, _window, cx| {
-                            let items = view
-                                .statement_list
-                                .read(cx)
-                                .filtered_items()
-                                .to_vec();
-                            visible_range
-                                .into_iter()
-                                .filter_map(|idx| {
-                                    items.get(idx).map(|item| {
-                                        let status_color = if item.is_error {
-                                            cx.theme().danger
-                                        } else {
-                                            cx.theme().success
-                                        };
-                                        let sql_display = item.truncated_sql.as_ref()
-                                            .cloned()
-                                            .unwrap_or_else(|| {
-                                                item.sql.replace('\n', " ").replace('\r', "")
-                                            });
+        div().flex_1().w_full().px_4().child(
+            uniform_list(
+                "statement-list",
+                item_count,
+                cx.processor(
+                    move |view: &mut Self, visible_range: Range<usize>, _window, cx| {
+                        let items = view.statement_list.read(cx).filtered_items().to_vec();
+                        visible_range
+                            .into_iter()
+                            .filter_map(|idx| {
+                                items.get(idx).map(|item| {
+                                    let status_color = if item.is_error {
+                                        cx.theme().danger
+                                    } else {
+                                        cx.theme().success
+                                    };
+                                    let sql_display =
+                                        item.truncated_sql.as_ref().cloned().unwrap_or_else(|| {
+                                            item.sql.replace('\n', " ").replace('\r', "")
+                                        });
 
-                                        h_flex()
-                                            .id(("statement-item", idx))
-                                            .w_full()
-                                            .h(px(40.))
-                                            .items_center()
-                                            .gap_4()
-                                            .child(Self::render_sql_column(
-                                                item,
-                                                sql_display,
-                                                status_color,
-                                                idx,
-                                                cx,
-                                            ))
-                                            .child(view.render_message_column(
-                                                item,
-                                                status_color,
-                                                idx,
-                                                cx,
-                                            ))
-                                            .child(
-                                                div()
-                                                    .w(px(80.))
-                                                    .flex_shrink_0()
-                                                    .text_sm()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child(format!(
-                                                        "{:.3}s",
-                                                        item.elapsed_ms as f64 / 1000.0
-                                                    )),
-                                            )
-                                    })
+                                    h_flex()
+                                        .id(("statement-item", idx))
+                                        .w_full()
+                                        .h(px(40.))
+                                        .items_center()
+                                        .gap_4()
+                                        .child(Self::render_sql_column(
+                                            item,
+                                            sql_display,
+                                            status_color,
+                                            idx,
+                                            cx,
+                                        ))
+                                        .child(view.render_message_column(
+                                            item,
+                                            status_color,
+                                            idx,
+                                            cx,
+                                        ))
+                                        .child(
+                                            div()
+                                                .w(px(80.))
+                                                .flex_shrink_0()
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(format!(
+                                                    "{:.3}s",
+                                                    item.elapsed_ms as f64 / 1000.0
+                                                )),
+                                        )
                                 })
-                                .collect()
-                        },
-                    ),
-                )
-                .size_full()
-                .track_scroll(&self.scroll_handle),
+                            })
+                            .collect()
+                    },
+                ),
             )
+            .size_full()
+            .track_scroll(&self.scroll_handle),
+        )
     }
 
     fn render_sql_column(
@@ -956,10 +955,7 @@ impl SqlResultTabContainer {
         }
     }
 
-    fn render_sql_popover_content(
-        full_sql: String,
-        idx: usize,
-    ) -> impl IntoElement {
+    fn render_sql_popover_content(full_sql: String, idx: usize) -> impl IntoElement {
         let sql_for_copy = full_sql.clone();
         v_flex()
             .gap_2()
@@ -971,10 +967,7 @@ impl SqlResultTabContainer {
                         h_flex()
                             .items_center()
                             .gap_1()
-                            .child(
-                                Icon::new(IconName::File)
-                                    .with_size(Size::Small),
-                            )
+                            .child(Icon::new(IconName::File).with_size(Size::Small))
                             .child(t!("SqlResultTab.sql_statement")),
                     )
                     .child(Clipboard::new(("copy-sql", idx)).value(sql_for_copy)),
@@ -1050,10 +1043,7 @@ impl SqlResultTabContainer {
                         h_flex()
                             .items_center()
                             .gap_1()
-                            .child(
-                                Icon::new(IconName::TriangleAlert)
-                                    .with_size(Size::Small),
-                            )
+                            .child(Icon::new(IconName::TriangleAlert).with_size(Size::Small))
                             .child(t!("SqlResultTab.error_info")),
                     )
                     .child(
@@ -1061,10 +1051,14 @@ impl SqlResultTabContainer {
                             .gap_1()
                             .child(Clipboard::new(("copy-error", idx)).value(error_for_copy))
                             .child(
-                                AskAiButton::new(format!("ask-ai-error-{}", idx), sql, error_msg.clone())
-                                    .with_size(Size::XSmall)
-                            )
-                    )
+                                AskAiButton::new(
+                                    format!("ask-ai-error-{}", idx),
+                                    sql,
+                                    error_msg.clone(),
+                                )
+                                .with_size(Size::XSmall),
+                            ),
+                    ),
             )
             .child(
                 div()
@@ -1176,25 +1170,23 @@ impl Render for SqlResultTabContainer {
                                 });
                             }
                         })
-                        .child(Tab::new().label(match &execution_state {
-                            ExecutionState::Executing { current, total } => {
-                                t!(
+                        .child(
+                            Tab::new().label(match &execution_state {
+                                ExecutionState::Executing { current, total } => t!(
                                     "SqlResultTab.summary_with_counts",
                                     current = current,
                                     total = total
                                 )
-                                .to_string()
-                            }
-                            _ => t!("SqlResultTab.summary").to_string(),
-                        }))
+                                .to_string(),
+                                _ => t!("SqlResultTab.summary").to_string(),
+                            }),
+                        )
                         .children({
                             let mut tabs = vec![];
                             for idx in 0..query_tabs.len() {
-                                tabs.push(
-                                    Tab::new().label(
-                                        t!("SqlResultTab.result_tab", index = idx + 1).to_string(),
-                                    )
-                                )
+                                tabs.push(Tab::new().label(
+                                    t!("SqlResultTab.result_tab", index = idx + 1).to_string(),
+                                ))
                             }
                             tabs
                         })

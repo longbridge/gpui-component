@@ -105,9 +105,7 @@ impl SupabaseConfig {
         }
 
         // 编译时环境变量
-        option_env!("SUPABASE_URL")
-            .unwrap_or_default()
-            .to_string()
+        option_env!("SUPABASE_URL").unwrap_or_default().to_string()
     }
 
     /// 获取 API Key

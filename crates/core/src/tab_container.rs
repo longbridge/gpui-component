@@ -1,11 +1,18 @@
 use gpui::prelude::FluentBuilder;
-use gpui::{AnyView, App, AppContext as _, Context, Corner, Decorations, Entity, EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton, ParentElement, Render, RenderOnce, SharedString, Styled, Task, Window, div, px, WindowControlArea};
+use gpui::{
+    AnyView, App, AppContext as _, Context, Corner, Decorations, Entity, EntityId, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
+    RenderOnce, SharedString, Styled, Task, Window, WindowControlArea, div, px,
+};
 use gpui::{ScrollHandle, StatefulInteractiveElement as _};
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::list::{List, ListDelegate, ListState};
 use gpui_component::menu::{ContextMenuExt, PopupMenuItem};
 use gpui_component::popover::Popover;
-use gpui_component::{ActiveTheme, Icon, IconName, IndexPath, InteractiveElementExt as _, Selectable, Size, h_flex, v_flex, Sizable};
+use gpui_component::{
+    ActiveTheme, Icon, IconName, IndexPath, InteractiveElementExt as _, Selectable, Sizable, Size,
+    h_flex, v_flex,
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -480,44 +487,49 @@ impl RenderOnce for TabListItem {
             .when(!selected, |el| {
                 el.hover(|style| style.bg(cx.theme().list_hover))
             })
-            .on_drag(DragTab::new(tab_index, drag_title), |drag, _, window, cx| {
-                window.prevent_default();
-                cx.stop_propagation();
-                cx.new(|_| drag.clone())
-            })
+            .on_drag(
+                DragTab::new(tab_index, drag_title),
+                |drag, _, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                },
+            )
             .drag_over::<DragTab>(move |el, _, _, _cx| {
                 el.border_t_2().border_color(drag_border_color)
             })
-            .on_drop(window.listener_for(&container, move |this, drag: &DragTab, window, cx| {
-                let from_index = drag.tab_index;
-                let to_index = tab_index;
-                if from_index == to_index {
-                    return;
-                }
-                this.move_tab(from_index, to_index, cx);
-                this.set_active_index(to_index, window, cx);
-                if let Some(tab_list) = &this.tab_list {
-                    let tabs_data: Vec<(usize, SharedString, Option<Icon>, bool)> = this
-                        .tabs
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, tab)| {
-                            (
-                                idx,
-                                tab.content().title(cx),
-                                tab.content().icon(cx),
-                                tab.content().closeable(cx),
-                            )
-                        })
-                        .collect();
-                    tab_list.update(cx, |state, cx| {
-                        let delegate = state.delegate_mut();
-                        delegate.tabs = tabs_data.clone();
-                        delegate.filtered_tabs = tabs_data;
-                        cx.notify();
-                    });
-                }
-            }))
+            .on_drop(
+                window.listener_for(&container, move |this, drag: &DragTab, window, cx| {
+                    let from_index = drag.tab_index;
+                    let to_index = tab_index;
+                    if from_index == to_index {
+                        return;
+                    }
+                    this.move_tab(from_index, to_index, cx);
+                    this.set_active_index(to_index, window, cx);
+                    if let Some(tab_list) = &this.tab_list {
+                        let tabs_data: Vec<(usize, SharedString, Option<Icon>, bool)> = this
+                            .tabs
+                            .iter()
+                            .enumerate()
+                            .map(|(idx, tab)| {
+                                (
+                                    idx,
+                                    tab.content().title(cx),
+                                    tab.content().icon(cx),
+                                    tab.content().closeable(cx),
+                                )
+                            })
+                            .collect();
+                        tab_list.update(cx, |state, cx| {
+                            let delegate = state.delegate_mut();
+                            delegate.tabs = tabs_data.clone();
+                            delegate.filtered_tabs = tabs_data;
+                            cx.notify();
+                        });
+                    }
+                }),
+            )
             .when_some(self.icon, |el, icon| {
                 el.child(
                     Icon::new(icon)
@@ -710,7 +722,6 @@ impl TabContainer {
             pinned_tab_active: false,
         }
     }
-
 
     pub fn with_inactive_tab_bg_color(mut self, color: impl Into<Option<gpui::Hsla>>) -> Self {
         self.inactive_tab_bg_color = color.into();
@@ -1544,12 +1555,15 @@ impl TabContainer {
                         state.should_move = false;
                     }),
                 )
-                .on_mouse_move(window.listener_for(&drag_state, |state, _, window, _| {
-                    if state.should_move {
-                        state.should_move = false;
-                        window.start_window_move();
-                    }
-                }))
+                .on_mouse_move(window.listener_for(
+                    &drag_state,
+                    |state, _, window, _| {
+                        if state.should_move {
+                            state.should_move = false;
+                            window.start_window_move();
+                        }
+                    },
+                ))
             })
             .when(is_macos, |this| {
                 this.child(
@@ -1593,13 +1607,7 @@ impl TabContainer {
                             });
                         })
                         .when_some(pinned_icon, |el, icon| {
-                            el.child(
-                                div()
-                                    .flex_shrink_0()
-                                    .flex()
-                                    .items_center()
-                                    .child(icon),
-                            )
+                            el.child(div().flex_shrink_0().flex().items_center().child(icon))
                         })
                         .child(
                             div()
@@ -1631,25 +1639,30 @@ impl TabContainer {
                         this.window_control_area(WindowControlArea::Drag)
                     })
                     .overflow_x_scroll()
-                    .when(!is_macos && self.pinned_tab.is_none(), |this| this.pl(left_padding))
+                    .when(!is_macos && self.pinned_tab.is_none(), |this| {
+                        this.pl(left_padding)
+                    })
                     .when_some(self.top_padding, |div, padding| div.pt(padding))
                     .pr_2()
                     .gap_1()
                     .track_scroll(&self.tab_bar_scroll_handle)
                     // Linux 客户端装饰模式下，右键显示窗口菜单
-                    .when(is_linux && is_client_decorated && show_window_controls, |this| {
-                        this.child(
-                            div()
-                                .top_0()
-                                .left_0()
-                                .absolute()
-                                .size_full()
-                                .h_full()
-                                .on_mouse_down(MouseButton::Right, move |ev, window, _| {
-                                    window.show_window_menu(ev.position)
-                                }),
-                        )
-                    })
+                    .when(
+                        is_linux && is_client_decorated && show_window_controls,
+                        |this| {
+                            this.child(
+                                div()
+                                    .top_0()
+                                    .left_0()
+                                    .absolute()
+                                    .size_full()
+                                    .h_full()
+                                    .on_mouse_down(MouseButton::Right, move |ev, window, _| {
+                                        window.show_window_menu(ev.position)
+                                    }),
+                            )
+                        },
+                    )
                     .children(self.tabs.iter().enumerate().map(|(idx, tab)| {
                         let title = tab.content().title(cx);
                         let icon = tab.content().icon(cx);
@@ -1689,35 +1702,34 @@ impl TabContainer {
                                         window.prevent_default();
                                         cx.stop_propagation();
                                     })
-                                    .on_drag(DragTab::new(idx, title.clone()), |drag, _, window, cx| {
-                                        window.prevent_default();
-                                        cx.stop_propagation();
-                                        cx.new(|_| drag.clone())
-                                    })
+                                    .on_drag(
+                                        DragTab::new(idx, title.clone()),
+                                        |drag, _, window, cx| {
+                                            window.prevent_default();
+                                            cx.stop_propagation();
+                                            cx.new(|_| drag.clone())
+                                        },
+                                    )
                                     .drag_over::<DragTab>(move |el, _, _, _cx| {
                                         el.border_l_2().border_color(drag_border_color)
                                     })
-                                    .on_drop(cx.listener(move |this, drag: &DragTab, window, cx| {
-                                        let from_idx = drag.tab_index;
-                                        let to_idx = idx;
-                                        if from_idx != to_idx {
-                                            this.move_tab(from_idx, to_idx, cx);
-                                        }
-                                        this.set_active_index(to_idx, window, cx);
-                                    }))
+                                    .on_drop(cx.listener(
+                                        move |this, drag: &DragTab, window, cx| {
+                                            let from_idx = drag.tab_index;
+                                            let to_idx = idx;
+                                            if from_idx != to_idx {
+                                                this.move_tab(from_idx, to_idx, cx);
+                                            }
+                                            this.set_active_index(to_idx, window, cx);
+                                        },
+                                    ))
                             })
                             .on_click(cx.listener(move |this, _event, window, cx| {
                                 window.prevent_default();
                                 this.set_active_index(idx, window, cx);
                             }))
                             .when_some(icon, |el, icon| {
-                                el.child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .flex()
-                                        .items_center()
-                                        .child(icon),
-                                )
+                                el.child(div().flex_shrink_0().flex().items_center().child(icon))
                             })
                             .child(
                                 div()
@@ -1887,9 +1899,10 @@ impl TabContainer {
                         )
                     }),
             )
-            .when(cfg!(not(target_os = "macos")) && self.show_window_controls, |el| {
-                el.child(self.render_window_controls(window))
-            })
+            .when(
+                cfg!(not(target_os = "macos")) && self.show_window_controls,
+                |el| el.child(self.render_window_controls(window)),
+            )
     }
 
     fn render_window_controls(&self, window: &mut Window) -> impl IntoElement {
@@ -1912,7 +1925,11 @@ impl TabContainer {
             ))
             .child(self.render_control_button(
                 if is_maximized { "restore" } else { "maximize" },
-                if is_maximized { IconName::WindowRestore } else { IconName::WindowMaximize },
+                if is_maximized {
+                    IconName::WindowRestore
+                } else {
+                    IconName::WindowMaximize
+                },
                 WindowControlArea::Max,
                 is_linux,
                 is_windows,

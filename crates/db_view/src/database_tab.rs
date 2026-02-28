@@ -1,28 +1,29 @@
 use std::ops::Deref;
 
 use crate::database_objects_tab::DatabaseObjectsPanel;
-use crate::sidebar::{DatabaseSidebar, DatabaseSidebarEvent, TOOLBAR_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
 use crate::db_tree_event::DatabaseEventHandler;
 use crate::db_tree_view::DbTreeView;
+use crate::sidebar::{
+    DatabaseSidebar, DatabaseSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH,
+    SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH,
+};
 use crate::sql_editor_view::SqlEditorTab;
-use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use db::GlobalDbState;
 use gpui::{
-    AnyElement, App, AppContext, AsyncApp, Axis, Bounds, Context, Element, Entity,
-    EventEmitter, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, SharedString,
-    Style, Styled, Task, Window, div, prelude::FluentBuilder, px,
+    AnyElement, App, AppContext, AsyncApp, Axis, Bounds, Context, Element, Entity, EventEmitter,
+    FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Pixels, Point, Render, SharedString, Style, Styled, Task, Window,
+    div, prelude::FluentBuilder, px,
 };
-use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size, h_flex, v_flex,
-};
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use one_core::ai_chat::{CodeBlockAction, LanguageMatcher};
 use one_core::storage::{ActiveConnections, Workspace};
-use rust_i18n::t;
 use one_core::{
     storage::StoredConnection,
     tab_container::{TabContainer, TabContent, TabContentEvent, TabItem},
 };
+use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
+use rust_i18n::t;
 use uuid::Uuid;
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
@@ -87,24 +88,22 @@ impl DatabaseTabView {
         let sidebar = cx.new(|cx| DatabaseSidebar::new(window, cx));
 
         // 注册 SQL 代码块操作
-        Self::register_sql_code_block_actions(
-            &sidebar,
-            tab_container.clone(),
-            &connections,
-            cx,
-        );
+        Self::register_sql_code_block_actions(&sidebar, tab_container.clone(), &connections, cx);
 
         let mut subscriptions = Vec::new();
-        subscriptions.push(cx.subscribe(&sidebar, |_this, _, event: &DatabaseSidebarEvent, cx| {
-            match event {
-                DatabaseSidebarEvent::PanelChanged => {
-                    cx.notify();
-                }
-                DatabaseSidebarEvent::AskAi => {
-                    cx.notify();
-                }
-            }
-        }));
+        subscriptions.push(
+            cx.subscribe(
+                &sidebar,
+                |_this, _, event: &DatabaseSidebarEvent, cx| match event {
+                    DatabaseSidebarEvent::PanelChanged => {
+                        cx.notify();
+                    }
+                    DatabaseSidebarEvent::AskAi => {
+                        cx.notify();
+                    }
+                },
+            ),
+        );
 
         let mut global_state = cx.global::<GlobalDbState>().clone();
 
@@ -180,7 +179,9 @@ impl DatabaseTabView {
                 if let Some(active_tab) = tab_container_for_insert.read(cx).active_tab() {
                     // 检查是否是 SQL 编辑器
                     if active_tab.content().content_key(cx) == "SqlEditor" {
-                        if let Ok(sql_editor) = active_tab.content().view().downcast::<SqlEditorTab>() {
+                        if let Ok(sql_editor) =
+                            active_tab.content().view().downcast::<SqlEditorTab>()
+                        {
                             sql_editor.update(cx, |editor, cx| {
                                 editor.set_sql(code, window, cx);
                             });
@@ -249,7 +250,11 @@ impl DatabaseTabView {
         }
     }
 
-    fn render_tree_resize_handle(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_tree_resize_handle(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let view = cx.entity().clone();
 
         resize_handle::<ResizePanel, ResizePanel>("tree-resize-handle", Axis::Horizontal)
@@ -264,7 +269,11 @@ impl DatabaseTabView {
             })
     }
 
-    fn render_sidebar_resize_handle(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_sidebar_resize_handle(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let view = cx.entity().clone();
 
         resize_handle::<ResizePanel, ResizePanel>("sidebar-resize-handle", Axis::Horizontal)
@@ -279,7 +288,12 @@ impl DatabaseTabView {
             })
     }
 
-    fn resize(&mut self, mouse_position: Point<Pixels>, _window: &mut Window, cx: &mut Context<Self>) {
+    fn resize(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(resizing) = self.resizing else {
             return;
         };
@@ -290,14 +304,21 @@ impl DatabaseTabView {
             ResizingPanel::TreePanel => {
                 let new_size = mouse_position.x - self.bounds.left();
                 let sidebar_visible = self.sidebar.read(cx).is_panel_visible();
-                let sidebar_width = if sidebar_visible { self.sidebar_panel_size } else { TOOLBAR_WIDTH };
-                let max_size = (available_width - PANEL_MIN_SIZE - sidebar_width).max(PANEL_MIN_SIZE);
+                let sidebar_width = if sidebar_visible {
+                    self.sidebar_panel_size
+                } else {
+                    TOOLBAR_WIDTH
+                };
+                let max_size =
+                    (available_width - PANEL_MIN_SIZE - sidebar_width).max(PANEL_MIN_SIZE);
                 self.tree_panel_size = new_size.clamp(PANEL_MIN_SIZE, max_size);
             }
             ResizingPanel::Sidebar => {
                 let new_size = self.bounds.right() - mouse_position.x;
-                let max_size = (available_width - self.tree_panel_size - PANEL_MIN_SIZE).max(SIDEBAR_MIN_WIDTH);
-                self.sidebar_panel_size = new_size.clamp(SIDEBAR_MIN_WIDTH, max_size.min(SIDEBAR_MAX_WIDTH));
+                let max_size = (available_width - self.tree_panel_size - PANEL_MIN_SIZE)
+                    .max(SIDEBAR_MIN_WIDTH);
+                self.sidebar_panel_size =
+                    new_size.clamp(SIDEBAR_MIN_WIDTH, max_size.min(SIDEBAR_MAX_WIDTH));
             }
         }
 
@@ -546,14 +567,14 @@ impl Render for DatabaseTabView {
                                 .border_r_1()
                                 .border_color(border_color)
                                 .child(self.db_tree_view.clone())
-                                .child(self.render_tree_resize_handle(window, cx))
+                                .child(self.render_tree_resize_handle(window, cx)),
                         )
                         .child(
                             div()
                                 .flex_1()
                                 .h_full()
                                 .min_w_0()
-                                .child(self.tab_container.clone())
+                                .child(self.tab_container.clone()),
                         )
                         .when(sidebar_visible, |this| {
                             this.child(
@@ -563,13 +584,11 @@ impl Render for DatabaseTabView {
                                     .w(sidebar_panel_size)
                                     .flex_shrink_0()
                                     .child(self.render_sidebar_resize_handle(window, cx))
-                                    .child(self.sidebar.clone())
+                                    .child(self.sidebar.clone()),
                             )
                         })
-                        .when(!sidebar_visible, |this| {
-                            this.child(self.sidebar.clone())
-                        })
-                        .child(ResizeEventHandler { view })
+                        .when(!sidebar_visible, |this| this.child(self.sidebar.clone()))
+                        .child(ResizeEventHandler { view }),
                 )
             })
     }

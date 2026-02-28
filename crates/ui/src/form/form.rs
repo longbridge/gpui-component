@@ -1,11 +1,12 @@
 use gpui::{
-    px, App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled,
-    Window,
+    App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled,
+    Window, px,
 };
 
 use crate::{
+    Sizable, Size,
     form::{Field, FieldProps},
-    v_flex, Sizable, Size,
+    v_flex,
 };
 
 /// A form element that contains multiple form fields.

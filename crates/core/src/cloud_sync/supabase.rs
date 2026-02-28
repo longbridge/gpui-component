@@ -6,20 +6,20 @@
 use crate::cloud_sync::client::*;
 use crate::cloud_sync::models::*;
 use crate::license::SubscriptionInfo;
+use crate::llm::ChatStream;
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::AsyncReadExt;
+use futures_util::StreamExt;
+use futures_util::stream;
 use gpui::http_client::{AsyncBody, HttpClient, Method, Request, Response, StatusCode};
+use llm_connector::types::MessageBlock;
+use llm_connector::{ChatRequest, ChatResponse, StreamingResponse};
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use anyhow::anyhow;
-use futures_util::stream;
-use futures_util::StreamExt;
-use llm_connector::{ChatRequest, ChatResponse, StreamingResponse};
-use llm_connector::types::MessageBlock;
+use std::time::Instant;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
-use crate::llm::ChatStream;
 use tracing::{debug, error, info, warn};
 
 /// Supabase 客户端配置
@@ -230,27 +230,21 @@ impl SupabaseClient {
 
         debug!("[supabase] request start: {} {}", method, uri);
 
-        let response = self
-            .http
-            .send(request)
-            .await
-            .map_err(|e| {
-                error!("[supabase] request failed: {} {} - {}", method, uri, e);
-                CloudApiError::NetworkError(e.to_string())
-            })?;
+        let response = self.http.send(request).await.map_err(|e| {
+            error!("[supabase] request failed: {} {} - {}", method, uri, e);
+            CloudApiError::NetworkError(e.to_string())
+        })?;
 
         let status = response.status();
         let mut body = response.into_body();
         let mut bytes = Vec::new();
-        body.read_to_end(&mut bytes)
-            .await
-            .map_err(|e| {
-                error!(
-                    "[supabase] response read failed: {} {} (status {}) - {}",
-                    method, uri, status, e
-                );
-                CloudApiError::NetworkError(e.to_string())
-            })?;
+        body.read_to_end(&mut bytes).await.map_err(|e| {
+            error!(
+                "[supabase] response read failed: {} {} (status {}) - {}",
+                method, uri, status, e
+            );
+            CloudApiError::NetworkError(e.to_string())
+        })?;
 
         debug!(
             "[supabase] request done: {} {} -> {} ({} ms)",
@@ -503,8 +497,8 @@ impl SupabaseClient {
         // 确保 token 有效
         self.ensure_token_valid().await?;
 
-        let body_bytes = serde_json::to_vec(body)
-            .map_err(|e| CloudApiError::ParseError(e.to_string()))?;
+        let body_bytes =
+            serde_json::to_vec(body).map_err(|e| CloudApiError::ParseError(e.to_string()))?;
 
         let mut headers = self.auth_headers()?;
         let mut builder = Request::builder().method(Method::POST).uri(url);
@@ -525,7 +519,10 @@ impl SupabaseClient {
 
         let status = response.status();
         if status == StatusCode::UNAUTHORIZED {
-            warn!("[supabase] 401 received, refreshing token: POST (stream) {}", url);
+            warn!(
+                "[supabase] 401 received, refreshing token: POST (stream) {}",
+                url
+            );
             self.ensure_token_valid().await?;
             headers = self.auth_headers()?;
             let mut retry_builder = Request::builder().method(Method::POST).uri(url);
@@ -782,8 +779,7 @@ impl From<&CloudConnection> for ConnectionRow {
             updated_at: None,
             created_at: None,
             deleted_at: conn.deleted_at.and_then(|ts| {
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .map(|dt| dt.to_rfc3339())
+                chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.to_rfc3339())
             }),
         }
     }
@@ -845,8 +841,7 @@ impl From<&CloudWorkspace> for WorkspaceRow {
             updated_at: None,
             created_at: None,
             deleted_at: ws.deleted_at.and_then(|ts| {
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .map(|dt| dt.to_rfc3339())
+                chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.to_rfc3339())
             }),
         }
     }
@@ -906,11 +901,7 @@ impl CloudApiClient for SupabaseClient {
                     // 尝试解析错误响应
                     serde_json::from_str::<SupabaseError>(&e)
                         .ok()
-                        .and_then(|err| {
-                            err.error_description
-                                .or(err.message)
-                                .or(err.error)
-                        })
+                        .and_then(|err| err.error_description.or(err.message).or(err.error))
                         .unwrap_or_else(|| "认证失败".to_string())
                 }
                 Ok(_) => "认证失败".to_string(),
@@ -935,11 +926,7 @@ impl CloudApiClient for SupabaseClient {
         Ok(OAuthResponse { auth_url })
     }
 
-    async fn sign_up(
-        &self,
-        email: &str,
-        password: &str,
-    ) -> Result<AuthResponse, CloudApiError> {
+    async fn sign_up(&self, email: &str, password: &str) -> Result<AuthResponse, CloudApiError> {
         #[derive(Serialize)]
         struct SignUpRequest<'a> {
             email: &'a str,
@@ -994,11 +981,7 @@ impl CloudApiClient for SupabaseClient {
                     // 尝试解析错误响应
                     serde_json::from_str::<SupabaseError>(&e)
                         .ok()
-                        .and_then(|err| {
-                            err.error_description
-                                .or(err.message)
-                                .or(err.error)
-                        })
+                        .and_then(|err| err.error_description.or(err.message).or(err.error))
                         .unwrap_or_else(|| "注册失败".to_string())
                 }
                 Ok(_) => "注册失败".to_string(),
@@ -1150,16 +1133,10 @@ impl CloudApiClient for SupabaseClient {
             Ok(())
         } else {
             let error_msg = match result {
-                Err(e) => {
-                    serde_json::from_str::<SupabaseError>(&e)
-                        .ok()
-                        .and_then(|err| {
-                            err.error_description
-                                .or(err.message)
-                                .or(err.error)
-                        })
-                        .unwrap_or_else(|| "发送验证码失败".to_string())
-                }
+                Err(e) => serde_json::from_str::<SupabaseError>(&e)
+                    .ok()
+                    .and_then(|err| err.error_description.or(err.message).or(err.error))
+                    .unwrap_or_else(|| "发送验证码失败".to_string()),
                 Ok(_) => "发送验证码失败".to_string(),
             };
             Err(CloudApiError::AuthenticationFailed(error_msg))
@@ -1211,16 +1188,10 @@ impl CloudApiClient for SupabaseClient {
             })
         } else {
             let error_msg = match result {
-                Err(e) => {
-                    serde_json::from_str::<SupabaseError>(&e)
-                        .ok()
-                        .and_then(|err| {
-                            err.error_description
-                                .or(err.message)
-                                .or(err.error)
-                        })
-                        .unwrap_or_else(|| "验证码验证失败".to_string())
-                }
+                Err(e) => serde_json::from_str::<SupabaseError>(&e)
+                    .ok()
+                    .and_then(|err| err.error_description.or(err.message).or(err.error))
+                    .unwrap_or_else(|| "验证码验证失败".to_string()),
                 Ok(_) => "验证码验证失败".to_string(),
             };
             Err(CloudApiError::AuthenticationFailed(error_msg))
@@ -1232,10 +1203,7 @@ impl CloudApiClient for SupabaseClient {
     // ========================================================================
 
     async fn get_user_config(&self) -> Result<Option<CloudUserConfig>, CloudApiError> {
-        let url = format!(
-            "{}?&select=*",
-            self.rest_url("user_configs"),
-        );
+        let url = format!("{}?&select=*", self.rest_url("user_configs"),);
 
         let (status, result) = self.get_json_with_retry::<Vec<UserConfigRow>>(&url).await?;
 
@@ -1261,9 +1229,7 @@ impl CloudApiClient for SupabaseClient {
     }
 
     async fn save_user_config(&self, config: &CloudUserConfig) -> Result<(), CloudApiError> {
-        let user_id = self
-            .get_user_id()
-            .ok_or(CloudApiError::NotAuthenticated)?;
+        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
 
         let row = UserConfigRow {
             id: None,
@@ -1294,12 +1260,11 @@ impl CloudApiClient for SupabaseClient {
     // ========================================================================
 
     async fn get_subscription(&self) -> Result<Option<SubscriptionInfo>, CloudApiError> {
-        let url = format!(
-            "{}?&select=*",
-            self.rest_url("user_subscriptions")
-        );
+        let url = format!("{}?&select=*", self.rest_url("user_subscriptions"));
 
-        let (status, result) = self.get_json_with_retry::<Vec<SubscriptionRow>>(&url).await?;
+        let (status, result) = self
+            .get_json_with_retry::<Vec<SubscriptionRow>>(&url)
+            .await?;
 
         if status.is_success() {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
@@ -1317,7 +1282,6 @@ impl CloudApiClient for SupabaseClient {
     // ========================================================================
 
     async fn list_connections(&self) -> Result<Vec<CloudConnection>, CloudApiError> {
-
         let url = format!(
             "{}?select=*&order=updated_at.desc",
             self.rest_url("connections")
@@ -1356,9 +1320,7 @@ impl CloudApiClient for SupabaseClient {
         &self,
         connection: &CloudConnection,
     ) -> Result<CloudConnection, CloudApiError> {
-        let user_id = self
-            .get_user_id()
-            .ok_or(CloudApiError::NotAuthenticated)?;
+        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
 
         let mut row = ConnectionRow::from(connection);
         row.user_id = user_id;
@@ -1395,9 +1357,7 @@ impl CloudApiClient for SupabaseClient {
         &self,
         connection: &CloudConnection,
     ) -> Result<CloudConnection, CloudApiError> {
-        let user_id = self
-            .get_user_id()
-            .ok_or(CloudApiError::NotAuthenticated)?;
+        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
 
         let mut row = ConnectionRow::from(connection);
         row.user_id = user_id;
@@ -1501,7 +1461,6 @@ impl CloudApiClient for SupabaseClient {
         &self,
         since_timestamp: i64,
     ) -> Result<Vec<CloudConnection>, CloudApiError> {
-
         // 将时间戳转换为 ISO 8601 格式
         let since_datetime = chrono::DateTime::from_timestamp_millis(since_timestamp)
             .map(|dt| dt.to_rfc3339())
@@ -1531,7 +1490,6 @@ impl CloudApiClient for SupabaseClient {
     // ========================================================================
 
     async fn list_workspaces(&self) -> Result<Vec<CloudWorkspace>, CloudApiError> {
-
         let url = format!(
             "{}?select=*&order=updated_at.desc",
             self.rest_url("workspaces"),
@@ -1554,9 +1512,7 @@ impl CloudApiClient for SupabaseClient {
         &self,
         workspace: &CloudWorkspace,
     ) -> Result<CloudWorkspace, CloudApiError> {
-        let user_id = self
-            .get_user_id()
-            .ok_or(CloudApiError::NotAuthenticated)?;
+        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
 
         let mut row = WorkspaceRow::from(workspace);
         row.user_id = user_id;
@@ -1592,9 +1548,7 @@ impl CloudApiClient for SupabaseClient {
         &self,
         workspace: &CloudWorkspace,
     ) -> Result<CloudWorkspace, CloudApiError> {
-        let user_id = self
-            .get_user_id()
-            .ok_or(CloudApiError::NotAuthenticated)?;
+        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
 
         let mut row = WorkspaceRow::from(workspace);
         row.user_id = user_id;
@@ -1643,13 +1597,13 @@ impl CloudApiClient for SupabaseClient {
     }
 
     async fn chat(&self, request: &ChatRequest) -> Result<String, CloudApiError> {
-        
         let url = self.functions_url("ai-proxy");
-        let (status, response )= self.post_json_with_retry::
-        <ChatResponse,ChatRequest>(&url, vec![], request).await?;
+        let (status, response) = self
+            .post_json_with_retry::<ChatResponse, ChatRequest>(&url, vec![], request)
+            .await?;
 
-        let mut  chat_resp = response.map_err(|e| CloudApiError::ParseError(e))?;
-        
+        let mut chat_resp = response.map_err(|e| CloudApiError::ParseError(e))?;
+
         if status.is_success() {
             if chat_resp.choices.is_empty() {
                 return Ok("".to_string());
@@ -1661,18 +1615,15 @@ impl CloudApiClient for SupabaseClient {
                         chat_resp.content = match content {
                             MessageBlock::Text { text } => text.to_string(),
                             MessageBlock::Image { .. } => "".to_string(),
-                            MessageBlock::ImageUrl { .. } => "".to_string()
+                            MessageBlock::ImageUrl { .. } => "".to_string(),
                         }
                     }
                 }
             }
             Ok(chat_resp.content)
-        }
-        
-        else {
+        } else {
             Err(CloudApiError::ServerError("接口请求失败".to_string()))
         }
-        
     }
 
     async fn chat_stream(&self, request: &ChatRequest) -> Result<ChatStream, CloudApiError> {
@@ -1682,72 +1633,71 @@ impl CloudApiClient for SupabaseClient {
 
         let url = self.functions_url("ai-proxy");
         let response = self.post_stream_with_retry(&url, &stream_request).await?;
-        
-        
+
         let body = response.into_body();
 
         // 创建 SSE 解析流
-        let stream = stream::unfold(
-            (body, String::new()),
-            |(mut body, mut buffer)| async move {
-                let mut chunk = vec![0u8; 4096];
-                match body.read(&mut chunk).await {
-                    Ok(0) => None, // EOF
-                    Ok(n) => {
-                        buffer.push_str(&String::from_utf8_lossy(&chunk[..n]));
+        let stream = stream::unfold((body, String::new()), |(mut body, mut buffer)| async move {
+            let mut chunk = vec![0u8; 4096];
+            match body.read(&mut chunk).await {
+                Ok(0) => None, // EOF
+                Ok(n) => {
+                    buffer.push_str(&String::from_utf8_lossy(&chunk[..n]));
 
-                        // 解析 SSE 事件
-                        let mut results = Vec::new();
-                        while let Some(pos) = buffer.find("\n\n") {
-                            let event = buffer[..pos].to_string();
-                            buffer = buffer[pos + 2..].to_string();
+                    // 解析 SSE 事件
+                    let mut results = Vec::new();
+                    while let Some(pos) = buffer.find("\n\n") {
+                        let event = buffer[..pos].to_string();
+                        buffer = buffer[pos + 2..].to_string();
 
-                            // 解析 data: 前缀
-                            for line in event.lines() {
-                                if let Some(data) = line.strip_prefix("data: ") {
-                                    if data == "[DONE]" {
+                        // 解析 data: 前缀
+                        for line in event.lines() {
+                            if let Some(data) = line.strip_prefix("data: ") {
+                                if data == "[DONE]" {
+                                    continue;
+                                }
+                                // 直接解析为 StreamingResponse
+                                if let Ok(mut response) =
+                                    serde_json::from_str::<StreamingResponse>(data)
+                                {
+                                    if response.choices.is_empty() {
                                         continue;
                                     }
-                                    // 直接解析为 StreamingResponse
-                                    if let Ok(mut response) =
-                                        serde_json::from_str::<StreamingResponse>(data)
-                                    {
-                                        if response.choices.is_empty() {
-                                            continue;
+                                    // 按优先级获取内容：content > reasoning_content > reasoning > thought > thinking
+                                    if response.content.is_empty() {
+                                        if let Some(choice) = response.choices.first() {
+                                            let content = choice
+                                                .delta
+                                                .content
+                                                .as_ref()
+                                                .filter(|s| !s.is_empty())
+                                                .or(choice.delta.reasoning_content.as_ref())
+                                                .or(choice.delta.reasoning.as_ref())
+                                                .or(choice.delta.thought.as_ref())
+                                                .or(choice.delta.thinking.as_ref())
+                                                .cloned()
+                                                .unwrap_or_default();
+                                            response.content = content;
                                         }
-                                        // 按优先级获取内容：content > reasoning_content > reasoning > thought > thinking
-                                        if response.content.is_empty() {
-                                            if let Some(choice) = response.choices.first() {
-                                                let content = choice.delta.content.as_ref()
-                                                    .filter(|s| !s.is_empty())
-                                                    .or(choice.delta.reasoning_content.as_ref())
-                                                    .or(choice.delta.reasoning.as_ref())
-                                                    .or(choice.delta.thought.as_ref())
-                                                    .or(choice.delta.thinking.as_ref())
-                                                    .cloned()
-                                                    .unwrap_or_default();
-                                                response.content = content;
-                                            }
-                                        }
-                                        results.push(Ok(response));
                                     }
+                                    results.push(Ok(response));
                                 }
                             }
                         }
-
-                        if results.is_empty() {
-                            Some((stream::iter(vec![]), (body, buffer)))
-                        } else {
-                            Some((stream::iter(results), (body, buffer)))
-                        }
                     }
-                    Err(e) => Some((
-                        stream::iter(vec![Err(anyhow!("读取流失败: {}", e))]),
-                        (body, buffer),
-                    )),
+
+                    if results.is_empty() {
+                        Some((stream::iter(vec![]), (body, buffer)))
+                    } else {
+                        Some((stream::iter(results), (body, buffer)))
+                    }
                 }
-            },
-        )
+                Err(e) => Some((
+                    stream::iter(vec![Err(anyhow!("读取流失败: {}", e))]),
+                    (body, buffer),
+                )),
+            }
+        })
         .flatten();
 
         Ok(Box::pin(stream))

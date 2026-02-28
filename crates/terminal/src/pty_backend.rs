@@ -61,8 +61,10 @@ impl LocalPtyBackend {
 
         tracing::debug!(
             "LocalPtyBackend::new: 初始尺寸 {}x{}, cell={}x{}",
-            window_size.num_cols, window_size.num_lines,
-            window_size.cell_width, window_size.cell_height
+            window_size.num_cols,
+            window_size.num_lines,
+            window_size.cell_width,
+            window_size.cell_height
         );
 
         let pty = tty::new(&pty_options, window_size, 0)?;
@@ -100,9 +102,12 @@ impl LocalPtyBackend {
         };
         tracing::debug!(
             "LocalPtyBackend::resize: {}x{}, cell={}x{}, pixel={}x{}",
-            window_size.num_cols, window_size.num_lines,
-            window_size.cell_width, window_size.cell_height,
-            size.pixel_width, size.pixel_height
+            window_size.num_cols,
+            window_size.num_lines,
+            window_size.cell_width,
+            window_size.cell_height,
+            size.pixel_width,
+            size.pixel_height
         );
         let _ = self.event_loop_sender.send(Msg::Resize(window_size));
     }

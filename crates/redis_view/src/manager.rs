@@ -103,12 +103,17 @@ impl RedisManager {
     }
 
     /// 从 StoredConnection 创建配置
-    pub fn config_from_stored(stored: &one_core::storage::StoredConnection) -> Result<RedisConnectionConfig, RedisError> {
-        let params = stored.to_redis_params()
+    pub fn config_from_stored(
+        stored: &one_core::storage::StoredConnection,
+    ) -> Result<RedisConnectionConfig, RedisError> {
+        let params = stored
+            .to_redis_params()
             .map_err(|e| RedisError::Serialization(e.to_string()))?;
 
         let mode = match params.mode {
-            one_core::storage::RedisMode::Standalone => crate::types::RedisConnectionMode::Standalone,
+            one_core::storage::RedisMode::Standalone => {
+                crate::types::RedisConnectionMode::Standalone
+            }
             one_core::storage::RedisMode::Sentinel => crate::types::RedisConnectionMode::Sentinel,
             one_core::storage::RedisMode::Cluster => crate::types::RedisConnectionMode::Cluster,
         };

@@ -8,14 +8,15 @@
 //! - `SessionList`: 会话列表组件
 
 mod model_settings;
-mod send_button;
 mod provider_select;
+mod send_button;
 mod session_list;
 
-pub use model_settings::{ModelSettings, ModelSettingsPanel, ModelSettingsEvent, ModelSettingsLabels};
+pub use model_settings::{
+    ModelSettings, ModelSettingsEvent, ModelSettingsLabels, ModelSettingsPanel,
+};
+pub use provider_select::{ModelItem, ProviderItem, ProviderSelectEvent, ProviderSelectState};
 pub use send_button::{SendButton, SendButtonEvent, SendButtonState};
-pub use provider_select::{ProviderItem, ModelItem, ProviderSelectState, ProviderSelectEvent};
 pub use session_list::{
-    SessionData, SessionListConfig, SessionListItem, SessionListDelegate,
-    SessionListHost,
+    SessionData, SessionListConfig, SessionListDelegate, SessionListHost, SessionListItem,
 };

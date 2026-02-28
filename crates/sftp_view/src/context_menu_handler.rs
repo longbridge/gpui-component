@@ -79,8 +79,13 @@ pub trait ContextMenuHandler {
         Self: Sized;
 
     /// 在终端中打开（指定路径）
-    fn open_in_terminal_at(&self, path: &str, side: PanelSide, window: &mut Window, cx: &mut Context<Self>)
-    where
+    fn open_in_terminal_at(
+        &self,
+        path: &str,
+        side: PanelSide,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) where
         Self: Sized;
 
     /// 切换隐藏文件显示
@@ -116,7 +121,10 @@ impl ContextMenuHandler for SftpView {
             FileListPanelEvent::Rename { name, full_path } => {
                 self.rename_item(name, full_path, PanelSide::Local, window, cx);
             }
-            FileListPanelEvent::Download { name: _, full_path: _ } => {
+            FileListPanelEvent::Download {
+                name: _,
+                full_path: _,
+            } => {
                 // 本地文件不支持下载，无操作
             }
             FileListPanelEvent::ChangePermissions { name, full_path } => {
@@ -134,7 +142,10 @@ impl ContextMenuHandler for SftpView {
             FileListPanelEvent::CopyAbsolutePath { full_path } => {
                 self.copy_absolute_path(full_path, window, cx);
             }
-            FileListPanelEvent::Delete { name: _, full_path: _ } => {
+            FileListPanelEvent::Delete {
+                name: _,
+                full_path: _,
+            } => {
                 self.delete_local_selected(window, cx);
             }
             FileListPanelEvent::UploadFile => {
@@ -169,7 +180,10 @@ impl ContextMenuHandler for SftpView {
             FileListPanelEvent::Rename { name, full_path } => {
                 self.rename_item(name, full_path, PanelSide::Remote, window, cx);
             }
-            FileListPanelEvent::Download { name: _, full_path: _ } => {
+            FileListPanelEvent::Download {
+                name: _,
+                full_path: _,
+            } => {
                 self.download_selected(window, cx);
             }
             FileListPanelEvent::ChangePermissions { name, full_path } => {
@@ -187,7 +201,10 @@ impl ContextMenuHandler for SftpView {
             FileListPanelEvent::CopyAbsolutePath { full_path } => {
                 self.copy_absolute_path(full_path, window, cx);
             }
-            FileListPanelEvent::Delete { name: _, full_path: _ } => {
+            FileListPanelEvent::Delete {
+                name: _,
+                full_path: _,
+            } => {
                 self.delete_remote_selected(window, cx);
             }
             FileListPanelEvent::UploadFile => {
@@ -207,7 +224,8 @@ impl ContextMenuHandler for SftpView {
     }
 
     fn create_new_file(&mut self, side: PanelSide, window: &mut Window, cx: &mut Context<Self>) {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.filename")));
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.filename")));
         let view = cx.entity().downgrade();
 
         // 在打开对话框前设置焦点，避免闪烁
@@ -247,7 +265,10 @@ impl ContextMenuHandler for SftpView {
                                         e
                                     );
                                     window.push_notification(
-                                        Notification::error(t!("Error.create_file_failed", error = e)),
+                                        Notification::error(t!(
+                                            "Error.create_file_failed",
+                                            error = e
+                                        )),
                                         cx,
                                     );
                                 } else {
@@ -271,23 +292,18 @@ impl ContextMenuHandler for SftpView {
 
                                 let view = cx.entity().clone();
                                 window
-                                    .spawn(cx, async move |cx| {
-                                        match task.await {
-                                            Ok(Ok(_)) => {
-                                                let _ = view.update_in(cx, |this, window, cx| {
-                                                    window.close_dialog(cx);
-                                                    this.refresh_remote_dir(cx);
-                                                });
-                                            }
-                                            Ok(Err(e)) => {
-                                                tracing::error!(
-                                                    "Failed to create remote file: {}",
-                                                    e
-                                                );
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Task error: {}", e);
-                                            }
+                                    .spawn(cx, async move |cx| match task.await {
+                                        Ok(Ok(_)) => {
+                                            let _ = view.update_in(cx, |this, window, cx| {
+                                                window.close_dialog(cx);
+                                                this.refresh_remote_dir(cx);
+                                            });
+                                        }
+                                        Ok(Err(e)) => {
+                                            tracing::error!("Failed to create remote file: {}", e);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Task error: {}", e);
                                         }
                                     })
                                     .detach();
@@ -307,7 +323,8 @@ impl ContextMenuHandler for SftpView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.new_name")));
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.new_name")));
         let view = cx.entity().downgrade();
         let old_name = name.to_string();
         let old_path = full_path.to_string();
@@ -344,71 +361,64 @@ impl ContextMenuHandler for SftpView {
                         return false;
                     }
 
-                    let _ = view_clone.update(cx, |this, cx| {
-                        match side {
-                            PanelSide::Local => {
-                                let old_full_path = PathBuf::from(&old_path_for_callback);
-                                let new_full_path = old_full_path
-                                    .parent()
-                                    .unwrap_or(&old_full_path)
-                                    .join(&new_name);
+                    let _ = view_clone.update(cx, |this, cx| match side {
+                        PanelSide::Local => {
+                            let old_full_path = PathBuf::from(&old_path_for_callback);
+                            let new_full_path = old_full_path
+                                .parent()
+                                .unwrap_or(&old_full_path)
+                                .join(&new_name);
 
-                                if let Err(e) = std::fs::rename(&old_full_path, &new_full_path) {
-                                    tracing::error!(
-                                        "Failed to rename {} to {}: {}",
-                                        old_full_path.display(),
-                                        new_full_path.display(),
-                                        e
-                                    );
-                                    window.push_notification(
-                                        Notification::error(t!("Error.rename_failed", error = e)),
-                                        cx,
-                                    );
-                                } else {
-                                    window.close_dialog(cx);
-                                }
-                                this.refresh_local_dir(cx);
+                            if let Err(e) = std::fs::rename(&old_full_path, &new_full_path) {
+                                tracing::error!(
+                                    "Failed to rename {} to {}: {}",
+                                    old_full_path.display(),
+                                    new_full_path.display(),
+                                    e
+                                );
+                                window.push_notification(
+                                    Notification::error(t!("Error.rename_failed", error = e)),
+                                    cx,
+                                );
+                            } else {
+                                window.close_dialog(cx);
                             }
-                            PanelSide::Remote => {
-                                let Some(client) = this.sftp_client.clone() else {
-                                    return;
-                                };
+                            this.refresh_local_dir(cx);
+                        }
+                        PanelSide::Remote => {
+                            let Some(client) = this.sftp_client.clone() else {
+                                return;
+                            };
 
-                                let old_remote_path = old_path_for_callback.clone();
-                                let new_remote_path = if let Some(pos) = old_remote_path.rfind('/') {
-                                    format!("{}/{}", &old_remote_path[..pos], new_name)
-                                } else {
-                                    new_name.clone()
-                                };
+                            let old_remote_path = old_path_for_callback.clone();
+                            let new_remote_path = if let Some(pos) = old_remote_path.rfind('/') {
+                                format!("{}/{}", &old_remote_path[..pos], new_name)
+                            } else {
+                                new_name.clone()
+                            };
 
-                                let task = Tokio::spawn(cx, async move {
-                                    let mut client = client.lock().await;
-                                    client.rename(&old_remote_path, &new_remote_path).await
-                                });
+                            let task = Tokio::spawn(cx, async move {
+                                let mut client = client.lock().await;
+                                client.rename(&old_remote_path, &new_remote_path).await
+                            });
 
-                                let view = cx.entity().clone();
-                                window
-                                    .spawn(cx, async move |cx| {
-                                        match task.await {
-                                            Ok(Ok(_)) => {
-                                                let _ = view.update_in(cx, |this, window, cx| {
-                                                    window.close_dialog(cx);
-                                                    this.refresh_remote_dir(cx);
-                                                });
-                                            }
-                                            Ok(Err(e)) => {
-                                                tracing::error!(
-                                                    "Failed to rename remote file: {}",
-                                                    e
-                                                );
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Task error: {}", e);
-                                            }
-                                        }
-                                    })
-                                    .detach();
-                            }
+                            let view = cx.entity().clone();
+                            window
+                                .spawn(cx, async move |cx| match task.await {
+                                    Ok(Ok(_)) => {
+                                        let _ = view.update_in(cx, |this, window, cx| {
+                                            window.close_dialog(cx);
+                                            this.refresh_remote_dir(cx);
+                                        });
+                                    }
+                                    Ok(Err(e)) => {
+                                        tracing::error!("Failed to rename remote file: {}", e);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Task error: {}", e);
+                                    }
+                                })
+                                .detach();
                         }
                     });
                     false
@@ -418,7 +428,10 @@ impl ContextMenuHandler for SftpView {
 
     fn copy_file_name(&self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         cx.write_to_clipboard(ClipboardItem::new_string(name.to_string()));
-        window.push_notification(Notification::success(t!("Notification.copied_filename")), cx);
+        window.push_notification(
+            Notification::success(t!("Notification.copied_filename")),
+            cx,
+        );
     }
 
     fn copy_absolute_path(&self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -433,7 +446,8 @@ impl ContextMenuHandler for SftpView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.permission")));
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Placeholder.permission")));
         let view = cx.entity().downgrade();
         let file_name = name.to_string();
         let file_path = full_path.to_string();
@@ -494,30 +508,33 @@ impl ContextMenuHandler for SftpView {
 
                         let view = cx.entity().clone();
                         window
-                            .spawn(cx, async move |cx| {
-                                match task.await {
-                                    Ok(Ok(_)) => {
-                                        let _ = view.update_in(cx, |this, window, cx| {
-                                            window.close_dialog(cx);
-                                            window.push_notification(
-                                                Notification::success(t!("Notification.permission_success")),
-                                                cx,
-                                            );
-                                            this.refresh_remote_dir(cx);
-                                        });
-                                    }
-                                    Ok(Err(e)) => {
-                                        tracing::error!("Failed to change permissions: {}", e);
-                                        let _ = view.update_in(cx, |_this, window, cx| {
-                                            window.push_notification(
-                                                Notification::error(t!("Error.permission_failed", error = e)),
-                                                cx,
-                                            );
-                                        });
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("Task error: {}", e);
-                                    }
+                            .spawn(cx, async move |cx| match task.await {
+                                Ok(Ok(_)) => {
+                                    let _ = view.update_in(cx, |this, window, cx| {
+                                        window.close_dialog(cx);
+                                        window.push_notification(
+                                            Notification::success(t!(
+                                                "Notification.permission_success"
+                                            )),
+                                            cx,
+                                        );
+                                        this.refresh_remote_dir(cx);
+                                    });
+                                }
+                                Ok(Err(e)) => {
+                                    tracing::error!("Failed to change permissions: {}", e);
+                                    let _ = view.update_in(cx, |_this, window, cx| {
+                                        window.push_notification(
+                                            Notification::error(t!(
+                                                "Error.permission_failed",
+                                                error = e
+                                            )),
+                                            cx,
+                                        );
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::error!("Task error: {}", e);
                                 }
                             })
                             .detach();
@@ -543,7 +560,13 @@ impl ContextMenuHandler for SftpView {
         }
     }
 
-    fn open_in_terminal_at(&self, path: &str, side: PanelSide, _window: &mut Window, cx: &mut Context<Self>) {
+    fn open_in_terminal_at(
+        &self,
+        path: &str,
+        side: PanelSide,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match side {
             PanelSide::Local => {
                 // 如果是文件，获取其所在目录
@@ -559,12 +582,17 @@ impl ContextMenuHandler for SftpView {
                     target_path
                 };
                 let path_str = dir_path.to_string_lossy().to_string();
-                cx.emit(SftpViewEvent::OpenLocalTerminal { working_dir: path_str });
+                cx.emit(SftpViewEvent::OpenLocalTerminal {
+                    working_dir: path_str,
+                });
             }
             PanelSide::Remote => {
                 // 打开 SSH 终端连接到远程服务器
                 let base_path = self.remote_current_path.as_str();
-                let is_rooted = path.starts_with('/') || path.starts_with("~") || path.starts_with("./") || path.starts_with("../");
+                let is_rooted = path.starts_with('/')
+                    || path.starts_with("~")
+                    || path.starts_with("./")
+                    || path.starts_with("../");
                 let has_base_prefix = !base_path.is_empty()
                     && (path == base_path || path.starts_with(&format!("{}/", base_path)));
                 let working_dir = if is_rooted || has_base_prefix {

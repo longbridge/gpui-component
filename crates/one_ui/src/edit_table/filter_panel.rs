@@ -7,7 +7,9 @@ use std::rc::Rc;
 
 use gpui_component::list::{ListDelegate, ListState};
 use gpui_component::tooltip::Tooltip;
-use gpui_component::{ActiveTheme, IndexPath, Selectable, checkbox::Checkbox, h_flex, label::Label};
+use gpui_component::{
+    ActiveTheme, IndexPath, Selectable, checkbox::Checkbox, h_flex, label::Label,
+};
 
 #[derive(Clone, Debug)]
 pub struct FilterValue {

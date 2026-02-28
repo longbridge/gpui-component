@@ -230,8 +230,9 @@ impl TableImportView {
             current_step: ImportStep::Config,
             format: cx.new(|_| DataImportFormat::Csv),
 
-            file_path: cx
-                .new(|cx| InputState::new(window, cx).placeholder(t!("ImportExport.select_import_file"))),
+            file_path: cx.new(|cx| {
+                InputState::new(window, cx).placeholder(t!("ImportExport.select_import_file"))
+            }),
             pending_file_path: cx.new(|_| None),
 
             record_separator: cx.new(|cx| {
@@ -529,7 +530,8 @@ impl TableImportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: "".to_string(),
-                                    message: t!("ImportExport.parsing_file", file = file).to_string(),
+                                    message: t!("ImportExport.parsing_file", file = file)
+                                        .to_string(),
                                 });
                                 cx.notify();
                             });

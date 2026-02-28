@@ -1,7 +1,7 @@
 use gpui::{
-    px, relative, App, Axis, BorderStyle, Bounds, ContentMask, Corners, Edges, Element, ElementId,
+    App, Axis, BorderStyle, Bounds, ContentMask, Corners, Edges, Element, ElementId,
     GlobalElementId, Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point,
-    Position, ScrollHandle, ScrollWheelEvent, Style, Window,
+    Position, ScrollHandle, ScrollWheelEvent, Style, Window, px, relative,
 };
 
 use crate::AxisExt;

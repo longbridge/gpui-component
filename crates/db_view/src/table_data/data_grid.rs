@@ -5,30 +5,28 @@ use gpui::{
     actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, IconName, Sizable as _, Size, WindowExt,
-    button::Button,
-    h_flex,
-    v_flex,
+    ActiveTheme as _, Disableable as _, IconName, Sizable as _, Size, WindowExt, button::Button,
+    h_flex, v_flex,
 };
 use one_ui::edit_table::{Column, EditTable, EditTableEvent, EditTableState};
-use tracing::{error, log::trace};
 use rust_i18n::t;
+use tracing::{error, log::trace};
 
-use crate::table_data::copy_format::{CopyFormat, CopyFormatter, TableMetadata};
-use crate::sql_editor::SqlEditor;
 use crate::import_export::table_export_view::DataExportView;
+use crate::sql_editor::SqlEditor;
+use crate::table_data::copy_format::{CopyFormat, CopyFormatter, TableMetadata};
 use crate::table_data::filter_editor::{FilterEditorEvent, TableFilterEditor, TableSchema};
 use crate::table_data::multi_text_editor::create_multi_text_editor_with_content;
 use crate::table_data::results_delegate::{EditorTableDelegate, RowChange};
+use chrono::Local;
 use db::{
     ColumnInfo, ExecOptions, GlobalDbState, IndexInfo, QueryResult, SqlResult, TableCellChange,
     TableDataRequest, TableRowChange, TableSaveRequest,
 };
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{DropdownMenu, PopupMenuItem};
-use one_core::tab_container::TabContainer;
 use one_core::popup_window::{PopupWindowOptions, open_popup_window};
-use chrono::Local;
+use one_core::tab_container::TabContainer;
 use std::path::PathBuf;
 
 actions!(
@@ -215,14 +213,11 @@ impl DataGrid {
         let table_name = config.table_name.clone();
         let data_grid_handle = cx.entity().downgrade();
         let table = cx.new(|cx| {
-            let mut delegate = EditorTableDelegate::new(vec![], vec![], editable, database_type, window, cx);
+            let mut delegate =
+                EditorTableDelegate::new(vec![], vec![], editable, database_type, window, cx);
             // 设置表名，用于 SQL 生成
             delegate.set_table_name(table_name);
-            EditTableState::new(
-                delegate,
-                window,
-                cx,
-            )
+            EditTableState::new(delegate, window, cx)
         });
         table.update(cx, |state, _| {
             state.delegate_mut().set_data_grid(data_grid_handle.clone());
@@ -396,9 +391,8 @@ impl DataGrid {
                     tracing::error!("load_data_with_clauses failed: {}", err);
                     cx.update(|cx| {
                         table_data_info.update(cx, |info, cx| {
-                            info.error_message = Some(
-                                t!("TableDataGrid.load_data_failed", error = err).to_string()
-                            );
+                            info.error_message =
+                                Some(t!("TableDataGrid.load_data_failed", error = err).to_string());
                             cx.notify();
                         });
                         table.update(cx, |state, cx| {
@@ -639,11 +633,10 @@ impl DataGrid {
                         if total_count == 0 {
                             None
                         } else {
-                            let mut request =
-                                TableDataRequest::new(&database_name, &table_name)
-                                    .with_page(1, total_count)
-                                    .with_where_clause(where_clause)
-                                    .with_order_by_clause(order_by_clause);
+                            let mut request = TableDataRequest::new(&database_name, &table_name)
+                                .with_page(1, total_count)
+                                .with_where_clause(where_clause)
+                                .with_order_by_clause(order_by_clause);
 
                             if let Some(schema) = schema_name.clone() {
                                 request = request.with_schema(schema);
@@ -662,16 +655,19 @@ impl DataGrid {
                                 Err(error) => {
                                     let _ = cx.update(|cx| {
                                         if let Some(window_id) = window_id {
-                                            let _ = cx.update_window(window_id, |_entity, window, cx| {
-                                                window.push_notification(
-                                                    t!(
-                                                        "TableDataGrid.export_failed",
-                                                        error = error
-                                                    )
-                                                    .to_string(),
-                                                    cx,
-                                                );
-                                            });
+                                            let _ = cx.update_window(
+                                                window_id,
+                                                |_entity, window, cx| {
+                                                    window.push_notification(
+                                                        t!(
+                                                            "TableDataGrid.export_failed",
+                                                            error = error
+                                                        )
+                                                        .to_string(),
+                                                        cx,
+                                                    );
+                                                },
+                                            );
                                         }
                                     });
                                     return;
@@ -689,7 +685,7 @@ impl DataGrid {
                         let _ = cx.update_window(window_id, |_entity, window, cx| {
                             window.push_notification(
                                 t!("TableDataGrid.no_data_to_export").to_string(),
-                                cx
+                                cx,
                             );
                         });
                     }
@@ -697,27 +693,23 @@ impl DataGrid {
                 return;
             };
 
-            let content = match Self::build_export_content(
-                format,
-                rows,
-                columns.clone(),
-                metadata.clone(),
-            ) {
-                Some(content) => content,
-                None => {
-                    let _ = cx.update(|cx| {
-                        if let Some(window_id) = window_id {
-                            let _ = cx.update_window(window_id, |_entity, window, cx| {
-                                window.push_notification(
-                                    t!("TableDataGrid.no_data_to_export").to_string(),
-                                    cx
-                                );
-                            });
-                        }
-                    });
-                    return;
-                }
-            };
+            let content =
+                match Self::build_export_content(format, rows, columns.clone(), metadata.clone()) {
+                    Some(content) => content,
+                    None => {
+                        let _ = cx.update(|cx| {
+                            if let Some(window_id) = window_id {
+                                let _ = cx.update_window(window_id, |_entity, window, cx| {
+                                    window.push_notification(
+                                        t!("TableDataGrid.no_data_to_export").to_string(),
+                                        cx,
+                                    );
+                                });
+                            }
+                        });
+                        return;
+                    }
+                };
 
             let base_name = if table_name.is_empty() {
                 "result_set"
@@ -751,28 +743,19 @@ impl DataGrid {
 
             let _ = cx.update(|cx| {
                 if let Some(window_id) = window_id {
-                    let _ = cx.update_window(window_id, |_entity, window, cx| {
-                        match write_result {
-                            Ok(()) => {
-                                window.push_notification(
-                                    t!(
-                                        "TableDataGrid.export_complete",
-                                        path = full_path.display()
-                                    )
+                    let _ = cx.update_window(window_id, |_entity, window, cx| match write_result {
+                        Ok(()) => {
+                            window.push_notification(
+                                t!("TableDataGrid.export_complete", path = full_path.display())
                                     .to_string(),
-                                    cx,
-                                );
-                            }
-                            Err(error) => {
-                                window.push_notification(
-                                    t!(
-                                        "TableDataGrid.export_failed",
-                                        error = error
-                                    )
-                                    .to_string(),
-                                    cx,
-                                );
-                            }
+                                cx,
+                            );
+                        }
+                        Err(error) => {
+                            window.push_notification(
+                                t!("TableDataGrid.export_failed", error = error).to_string(),
+                                cx,
+                            );
                         }
                     });
                 }
@@ -785,49 +768,43 @@ impl DataGrid {
         table: &Entity<EditTableState<EditorTableDelegate>>,
         cx: &AsyncApp,
     ) -> Option<(Vec<SharedString>, Vec<Vec<Option<String>>>)> {
-        table
-            .read_with(cx, |table_state, _cx| {
-                let delegate = table_state.delegate();
-                let row_count = delegate.filtered_row_count();
-                if row_count == 0 {
-                    return None;
+        table.read_with(cx, |table_state, _cx| {
+            let delegate = table_state.delegate();
+            let row_count = delegate.filtered_row_count();
+            if row_count == 0 {
+                return None;
+            }
+
+            let mut row_indices = Vec::with_capacity(row_count);
+            for display_row in 0..row_count {
+                let Some(actual_row) = delegate.resolve_display_row(display_row) else {
+                    continue;
+                };
+                if delegate.is_deleted_row(actual_row) {
+                    continue;
                 }
+                row_indices.push(actual_row);
+            }
 
-                let mut row_indices = Vec::with_capacity(row_count);
-                for display_row in 0..row_count {
-                    let Some(actual_row) = delegate.resolve_display_row(display_row) else {
-                        continue;
-                    };
-                    if delegate.is_deleted_row(actual_row) {
-                        continue;
-                    }
-                    row_indices.push(actual_row);
-                }
+            let rows = delegate.get_rows_data(&row_indices);
+            if rows.is_empty() {
+                return None;
+            }
 
-                let rows = delegate.get_rows_data(&row_indices);
-                if rows.is_empty() {
-                    return None;
-                }
+            let columns = delegate
+                .columns
+                .iter()
+                .map(|column| column.name.clone())
+                .collect();
 
-                let columns = delegate
-                    .columns
-                    .iter()
-                    .map(|column| column.name.clone())
-                    .collect();
-
-                Some((columns, rows))
-            })
+            Some((columns, rows))
+        })
     }
 
     fn normalize_query_result(
         query_result: QueryResult,
     ) -> (Vec<SharedString>, Vec<Vec<Option<String>>>) {
-        if query_result
-            .columns
-            .first()
-            .map(|name| name.as_str())
-            == Some("__rowid__")
-        {
+        if query_result.columns.first().map(|name| name.as_str()) == Some("__rowid__") {
             let columns = query_result
                 .columns
                 .into_iter()
@@ -923,11 +900,9 @@ impl DataGrid {
             .await;
 
             match result {
-                Err(err) => {
-                    cx.update(|cx| {
-                        notification(cx, format!("Failed to execute SQL: {}", err));
-                    })
-                }
+                Err(err) => cx.update(|cx| {
+                    notification(cx, format!("Failed to execute SQL: {}", err));
+                }),
                 Ok(results) => {
                     let (result, column_meta) = results;
                     if let SqlResult::Query(query_result) = result {
@@ -1197,7 +1172,7 @@ impl DataGrid {
                             Err(err) => {
                                 window.push_notification(
                                     t!("TableDataGrid.error_message", error = err).to_string(),
-                                    cx
+                                    cx,
                                 );
                                 false
                             }
@@ -1258,7 +1233,10 @@ impl DataGrid {
         let columns_meta = delegate.column_meta().to_vec();
 
         let global_state = cx.global::<GlobalDbState>().clone();
-        match global_state.db_manager.get_plugin(&self.config.database_type) {
+        match global_state
+            .db_manager
+            .get_plugin(&self.config.database_type)
+        {
             Ok(plugin) => {
                 let mut request = CopySqlRequest::new(&self.config.table_name, columns_meta)
                     .with_rows(rows_data)
@@ -1288,7 +1266,10 @@ impl DataGrid {
         let columns_meta = delegate.column_meta().to_vec();
 
         let global_state = cx.global::<GlobalDbState>().clone();
-        match global_state.db_manager.get_plugin(&self.config.database_type) {
+        match global_state
+            .db_manager
+            .get_plugin(&self.config.database_type)
+        {
             Ok(plugin) => {
                 let mut request = CopySqlRequest::new(&self.config.table_name, columns_meta)
                     .with_rows(rows_data)
@@ -1319,7 +1300,10 @@ impl DataGrid {
         let columns_meta = delegate.column_meta().to_vec();
 
         let global_state = cx.global::<GlobalDbState>().clone();
-        match global_state.db_manager.get_plugin(&self.config.database_type) {
+        match global_state
+            .db_manager
+            .get_plugin(&self.config.database_type)
+        {
             Ok(plugin) => {
                 let mut request = CopySqlRequest::new(&self.config.table_name, columns_meta)
                     .with_rows(rows_data)
@@ -1350,7 +1334,10 @@ impl DataGrid {
         let columns_meta = delegate.column_meta().to_vec();
 
         let global_state = cx.global::<GlobalDbState>().clone();
-        match global_state.db_manager.get_plugin(&self.config.database_type) {
+        match global_state
+            .db_manager
+            .get_plugin(&self.config.database_type)
+        {
             Ok(plugin) => {
                 let mut request = CopySqlRequest::new(&self.config.table_name, columns_meta)
                     .with_rows(rows_data)
@@ -1378,22 +1365,14 @@ impl DataGrid {
         }
 
         // 从选区获取所有行
-        let mut rows: Vec<usize> = selection
-            .all_cells()
-            .iter()
-            .map(|(row, _)| *row)
-            .collect();
+        let mut rows: Vec<usize> = selection.all_cells().iter().map(|(row, _)| *row).collect();
         rows.sort();
         rows.dedup();
         rows
     }
 
     /// 复制当前选中行为指定类型的 SQL
-    pub fn copy_selection_as_sql(
-        &self,
-        sql_type: db::CopyAsSqlType,
-        cx: &App,
-    ) -> String {
+    pub fn copy_selection_as_sql(&self, sql_type: db::CopyAsSqlType, cx: &App) -> String {
         use db::CopyAsSqlType;
 
         let row_indices = self.selected_row_indices(cx);
@@ -1403,7 +1382,9 @@ impl DataGrid {
 
         match sql_type {
             CopyAsSqlType::Insert => self.copy_as_insert(&row_indices, cx),
-            CopyAsSqlType::InsertWithComments => self.copy_as_insert_with_comments(&row_indices, cx),
+            CopyAsSqlType::InsertWithComments => {
+                self.copy_as_insert_with_comments(&row_indices, cx)
+            }
             CopyAsSqlType::Update => self.copy_as_update(&row_indices, cx),
             CopyAsSqlType::Delete => self.copy_as_delete(&row_indices, cx),
         }
@@ -1790,7 +1771,8 @@ impl DataGrid {
                         let Some(save_request) =
                             this.create_save_request(columns.clone(), index_infos.clone(), cx)
                         else {
-                            window.push_notification(t!("TableDataGrid.no_changes").to_string(), cx);
+                            window
+                                .push_notification(t!("TableDataGrid.no_changes").to_string(), cx);
                             return;
                         };
 
@@ -1806,7 +1788,7 @@ impl DataGrid {
                             sql_content,
                             t!("TableDataGrid.change_sql_preview").as_ref(),
                             window,
-                            cx
+                            cx,
                         );
                     });
                 }
@@ -1849,7 +1831,8 @@ impl DataGrid {
                 .overlay(false)
                 .content_center()
                 .button_props(
-                    DialogButtonProps::default().ok_text(t!("TableDataGrid.execute_sql").to_string())
+                    DialogButtonProps::default()
+                        .ok_text(t!("TableDataGrid.execute_sql").to_string()),
                 )
                 .footer(|ok, cancel, window, cx| vec![ok(window, cx), cancel(window, cx)])
                 .on_ok(move |_, window, cx| {
@@ -1940,7 +1923,7 @@ impl DataGrid {
                                 window.close_dialog(cx);
                                 window.push_notification(
                                     t!("TableDataGrid.execute_success").to_string(),
-                                    cx
+                                    cx,
                                 );
                             });
                         }
@@ -1969,9 +1952,7 @@ impl DataGrid {
             Ok(plugin) => {
                 let sql = plugin.generate_table_changes_sql(request);
                 let trimmed = sql.trim();
-                if trimmed.is_empty()
-                    || trimmed == t!("TableDataGrid.no_changes_sql_marker")
-                {
+                if trimmed.is_empty() || trimmed == t!("TableDataGrid.no_changes_sql_marker") {
                     Err(t!("TableDataGrid.no_changes").to_string())
                 } else {
                     Ok(plugin.format_sql(&sql))
@@ -2071,25 +2052,21 @@ impl DataGrid {
                     .disabled(loading)
                     .dropdown_menu(move |menu, window, _cx| {
                         menu.item(
-                            PopupMenuItem::new(
-                                t!("TableDataGrid.export_result_xlsx").to_string()
-                            )
-                            .on_click(window.listener_for(
-                                &data_grid,
-                                |this, _, window, cx| {
-                                    this.export_result_set(
-                                        ExportScope::All,
-                                        ExportFormat::Xlsx,
-                                        window,
-                                        cx,
-                                    );
-                                },
-                            )),
+                            PopupMenuItem::new(t!("TableDataGrid.export_result_xlsx").to_string())
+                                .on_click(window.listener_for(
+                                    &data_grid,
+                                    |this, _, window, cx| {
+                                        this.export_result_set(
+                                            ExportScope::All,
+                                            ExportFormat::Xlsx,
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                )),
                         )
-                            .item(
-                                PopupMenuItem::new(
-                                    t!("TableDataGrid.export_result_csv").to_string()
-                                )
+                        .item(
+                            PopupMenuItem::new(t!("TableDataGrid.export_result_csv").to_string())
                                 .on_click(window.listener_for(
                                     &data_grid,
                                     |this, _, window, cx| {
@@ -2101,68 +2078,72 @@ impl DataGrid {
                                         );
                                     },
                                 )),
+                        )
+                        .item(
+                            PopupMenuItem::new(
+                                t!("TableDataGrid.export_result_insert_sql").to_string(),
                             )
-                            .item(
-                                PopupMenuItem::new(
-                                    t!("TableDataGrid.export_result_insert_sql").to_string()
-                                )
-                                .on_click(
-                                    window.listener_for(&data_grid, |this, _, window, cx| {
-                                        this.export_result_set(
-                                            ExportScope::All,
-                                            ExportFormat::InsertSql,
-                                            window,
-                                            cx,
-                                        );
-                                    }),
-                                ),
+                            .on_click(window.listener_for(
+                                &data_grid,
+                                |this, _, window, cx| {
+                                    this.export_result_set(
+                                        ExportScope::All,
+                                        ExportFormat::InsertSql,
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
+                        .separator()
+                        .item(
+                            PopupMenuItem::new(
+                                t!("TableDataGrid.export_current_page_xlsx").to_string(),
                             )
-                            .separator()
-                            .item(
-                                PopupMenuItem::new(
-                                    t!("TableDataGrid.export_current_page_xlsx").to_string()
-                                )
-                                .on_click(
-                                    window.listener_for(&data_grid, |this, _, window, cx| {
-                                        this.export_result_set(
-                                            ExportScope::CurrentPage,
-                                            ExportFormat::Xlsx,
-                                            window,
-                                            cx,
-                                        );
-                                    }),
-                                ),
+                            .on_click(window.listener_for(
+                                &data_grid,
+                                |this, _, window, cx| {
+                                    this.export_result_set(
+                                        ExportScope::CurrentPage,
+                                        ExportFormat::Xlsx,
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
+                        .item(
+                            PopupMenuItem::new(
+                                t!("TableDataGrid.export_current_page_csv").to_string(),
                             )
-                            .item(
-                                PopupMenuItem::new(
-                                    t!("TableDataGrid.export_current_page_csv").to_string()
-                                )
-                                .on_click(
-                                    window.listener_for(&data_grid, |this, _, window, cx| {
-                                        this.export_result_set(
-                                            ExportScope::CurrentPage,
-                                            ExportFormat::Csv,
-                                            window,
-                                            cx,
-                                        );
-                                    }),
-                                ),
+                            .on_click(window.listener_for(
+                                &data_grid,
+                                |this, _, window, cx| {
+                                    this.export_result_set(
+                                        ExportScope::CurrentPage,
+                                        ExportFormat::Csv,
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
+                        .item(
+                            PopupMenuItem::new(
+                                t!("TableDataGrid.export_current_page_insert_sql").to_string(),
                             )
-                            .item(
-                                PopupMenuItem::new(
-                                    t!("TableDataGrid.export_current_page_insert_sql").to_string()
-                                )
-                                .on_click(
-                                    window.listener_for(&data_grid, |this, _, window, cx| {
-                                        this.export_result_set(
-                                            ExportScope::CurrentPage,
-                                            ExportFormat::InsertSql,
-                                            window,
-                                            cx,
-                                        );
-                                    }),
-                                ),
-                            )
+                            .on_click(window.listener_for(
+                                &data_grid,
+                                |this, _, window, cx| {
+                                    this.export_result_set(
+                                        ExportScope::CurrentPage,
+                                        ExportFormat::InsertSql,
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
                     }),
             )
             .into_any_element()
@@ -2222,17 +2203,19 @@ impl DataGrid {
             .child(div().text_sm().text_color(cx.theme().foreground).child({
                 if filtered_count < total_rows {
                     t!(
-                            "TableDataGrid.page_info",
-                            page_size = filtered_count,
-                            page_count = total_rows,
-                            total_count = table_data_info.total_count
-                        ).to_string()
+                        "TableDataGrid.page_info",
+                        page_size = filtered_count,
+                        page_count = total_rows,
+                        total_count = table_data_info.total_count
+                    )
+                    .to_string()
                 } else {
                     t!(
-                            "TableDataGrid.page_number",
-                            page = table_data_info.current_page,
-                            total = table_data_info.total_count
-                        ).to_string()
+                        "TableDataGrid.page_number",
+                        page = table_data_info.current_page,
+                        total = table_data_info.total_count
+                    )
+                    .to_string()
                 }
             }))
             .child(
@@ -2244,7 +2227,7 @@ impl DataGrid {
                             "TableDataGrid.query_elapsed",
                             duration = table_data_info.duration
                         )
-                        .to_string()
+                        .to_string(),
                     ),
             )
             .child(
@@ -2311,20 +2294,14 @@ impl DataGrid {
                 div()
                     .text_sm()
                     .text_color(cx.theme().foreground)
-                    .child(
-                        t!("TableDataGrid.total_records", count = row_count).to_string()
-                    ),
+                    .child(t!("TableDataGrid.total_records", count = row_count).to_string()),
             )
             .child(
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .child(
-                        t!(
-                            "TableDataGrid.query_elapsed",
-                            duration = execution_time
-                        )
-                        .to_string()
+                        t!("TableDataGrid.query_elapsed", duration = execution_time).to_string(),
                     ),
             )
             .child(

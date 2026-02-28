@@ -1,8 +1,24 @@
 //! AI Chat Panel - 数据库 AI 助手对话面板
 
-use std::sync::Arc;
-use gpui::{div, prelude::FluentBuilder, px, App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window};
+use crate::agent::registry::AgentRegistry;
+use crate::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
+use crate::cloud_sync::GlobalCloudUser;
+use crate::gpui_tokio::Tokio;
+use crate::llm::ProviderConfig;
+use crate::llm::{
+    BUILTIN_ONET_CLI_ID, Message, Role,
+    chat_history::{MessageRepository, SessionRepository},
+    manager::GlobalProviderState,
+    storage::ProviderRepository,
+};
+use crate::storage::{GlobalStorageState, traits::Repository};
+use gpui::{
+    App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window, div, prelude::FluentBuilder, px,
+};
 use gpui_component::{
+    ActiveTheme, IconName, Sizable, Size, WindowExt as _,
     button::{Button, ButtonVariants},
     dialog::DialogButtonProps,
     h_flex,
@@ -10,34 +26,19 @@ use gpui_component::{
     list::{List, ListState},
     popover::Popover,
     v_flex,
-    ActiveTheme,
-    IconName, Sizable, Size,
-    WindowExt as _,
 };
-use tracing::{info, warn};
 use rust_i18n::t;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use crate::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
-use crate::agent::registry::AgentRegistry;
-use crate::gpui_tokio::Tokio;
-use crate::llm::ProviderConfig;
-use crate::llm::{
-    chat_history::{MessageRepository, SessionRepository},
-    manager::GlobalProviderState,
-    storage::ProviderRepository,
-    Message, Role, BUILTIN_ONET_CLI_ID,
-};
-use crate::storage::{traits::Repository, GlobalStorageState};
-use crate::cloud_sync::GlobalCloudUser;
+use tracing::{info, warn};
 
 // 使用引擎和渲染器
 use super::engine::ChatEngine;
 use super::rendering::ChatMessageRenderer;
 // 使用共享组件
 use super::components::{
-    ProviderItem, ProviderSelectState, ProviderSelectEvent,
-    SessionData, SessionListConfig, SessionListDelegate, SessionListHost,
-    ModelSettings, ModelSettingsPanel, ModelSettingsEvent,
+    ModelSettings, ModelSettingsEvent, ModelSettingsPanel, ProviderItem, ProviderSelectEvent,
+    ProviderSelectState, SessionData, SessionListConfig, SessionListDelegate, SessionListHost,
 };
 
 /// AI 聊天面板的自定义颜色配置
@@ -91,12 +92,31 @@ impl LanguageMatcher {
 
     /// 创建 SQL 语言匹配器
     pub fn sql() -> Self {
-        Self::Exact(vec!["sql", "mysql", "postgresql", "postgres", "sqlite", "mssql", "oracle", "plsql"])
+        Self::Exact(vec![
+            "sql",
+            "mysql",
+            "postgresql",
+            "postgres",
+            "sqlite",
+            "mssql",
+            "oracle",
+            "plsql",
+        ])
     }
 
     /// 创建 Shell/Bash 语言匹配器
     pub fn shell() -> Self {
-        Self::Exact(vec!["bash", "sh", "shell", "zsh", "fish", "powershell", "ps1", "cmd", "batch"])
+        Self::Exact(vec![
+            "bash",
+            "sh",
+            "shell",
+            "zsh",
+            "fish",
+            "powershell",
+            "ps1",
+            "cmd",
+            "batch",
+        ])
     }
 
     /// 创建 Python 语言匹配器
@@ -117,18 +137,16 @@ impl LanguageMatcher {
     /// 检查是否匹配给定的语言
     pub fn matches(&self, lang: Option<&str>) -> bool {
         match self {
-            LanguageMatcher::Exact(langs) => {
-                lang.map_or(false, |l| {
-                    let l_lower = l.to_lowercase();
-                    langs.iter().any(|&expected| expected.eq_ignore_ascii_case(&l_lower))
-                })
-            }
-            LanguageMatcher::Prefix(prefix) => {
-                lang.map_or(false, |l| l.to_lowercase().starts_with(&prefix.to_lowercase()))
-            }
-            LanguageMatcher::Custom(f) => {
-                lang.map_or(false, |l| f(l))
-            }
+            LanguageMatcher::Exact(langs) => lang.map_or(false, |l| {
+                let l_lower = l.to_lowercase();
+                langs
+                    .iter()
+                    .any(|&expected| expected.eq_ignore_ascii_case(&l_lower))
+            }),
+            LanguageMatcher::Prefix(prefix) => lang.map_or(false, |l| {
+                l.to_lowercase().starts_with(&prefix.to_lowercase())
+            }),
+            LanguageMatcher::Custom(f) => lang.map_or(false, |l| f(l)),
             LanguageMatcher::Any => true,
         }
     }
@@ -141,7 +159,8 @@ impl LanguageMatcher {
 /// - `lang`: 代码块语言（可能为空）
 /// - `window`: 窗口引用
 /// - `cx`: 应用上下文
-pub type CodeBlockActionCallback = Arc<dyn Fn(String, Option<String>, &mut Window, &mut App) + Send + Sync>;
+pub type CodeBlockActionCallback =
+    Arc<dyn Fn(String, Option<String>, &mut Window, &mut App) + Send + Sync>;
 
 /// 代码块操作定义
 ///
@@ -236,7 +255,9 @@ pub struct CodeBlockActionRegistry {
 impl CodeBlockActionRegistry {
     /// 创建空的注册表
     pub fn new() -> Self {
-        Self { actions: Vec::new() }
+        Self {
+            actions: Vec::new(),
+        }
     }
 
     /// 注册一个代码块操作
@@ -299,7 +320,6 @@ pub struct AiChatPanel {
     is_logged_in: bool,
 }
 
-
 impl AiChatPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
@@ -317,11 +337,12 @@ impl AiChatPanel {
         });
 
         // Provider/Model 选择器（回调直接接收 &mut Self，避免重复借用）
-        let provider_select_state = ProviderSelectState::new(window, cx, |event, this, window, cx| {
-            match event {
+        let provider_select_state =
+            ProviderSelectState::new(window, cx, |event, this, window, cx| match event {
                 ProviderSelectEvent::ProviderChanged { provider_id, .. } => {
                     this.engine.provider_id = Some(provider_id.clone());
-                    this.engine.selected_model = this.provider_select_state
+                    this.engine.selected_model = this
+                        .provider_select_state
                         .update_models_for_provider(&provider_id, window, cx);
                     cx.notify();
                 }
@@ -329,8 +350,7 @@ impl AiChatPanel {
                     this.engine.selected_model = Some(model.clone());
                     cx.notify();
                 }
-            }
-        });
+            });
 
         let mut subscriptions = Vec::new();
 
@@ -349,19 +369,17 @@ impl AiChatPanel {
 
         // 创建模型设置面板
         let model_settings = ModelSettings::default();
-        let settings_panel = cx.new(|cx| {
-            ModelSettingsPanel::new(model_settings.clone(), window, cx)
-        });
+        let settings_panel =
+            cx.new(|cx| ModelSettingsPanel::new(model_settings.clone(), window, cx));
 
         // 订阅模型设置事件
         subscriptions.push(cx.subscribe_in(
             &settings_panel,
             window,
-            |this, _panel, event: &ModelSettingsEvent, _window, cx| {
-                match event { ModelSettingsEvent::Changed(settings) => {
+            |this, _panel, event: &ModelSettingsEvent, _window, cx| match event {
+                ModelSettingsEvent::Changed(settings) => {
                     this.engine.model_settings = settings.clone();
                     cx.notify();
-                    }
                 }
             },
         ));
@@ -421,10 +439,13 @@ impl AiChatPanel {
                         if let Some(entity) = this.upgrade() {
                             entity.update(cx, |panel, cx| {
                                 panel.engine.provider_configs = providers.clone();
-                                let items: Vec<_> = providers.iter().map(ProviderItem::from_config).collect();
+                                let items: Vec<_> =
+                                    providers.iter().map(ProviderItem::from_config).collect();
                                 panel.provider_select_state.set_providers(items, window, cx);
-                                panel.engine.provider_id = panel.provider_select_state.selected_provider().cloned();
-                                panel.engine.selected_model = panel.provider_select_state.selected_model().cloned();
+                                panel.engine.provider_id =
+                                    panel.provider_select_state.selected_provider().cloned();
+                                panel.engine.selected_model =
+                                    panel.provider_select_state.selected_model().cloned();
                                 cx.notify();
                             });
                         }
@@ -435,7 +456,11 @@ impl AiChatPanel {
         .detach();
     }
 
-    pub fn set_connection_info(&mut self, connection_name: Option<String>, database: Option<String>) {
+    pub fn set_connection_info(
+        &mut self,
+        connection_name: Option<String>,
+        database: Option<String>,
+    ) {
         self.connection_name = connection_name;
         self.database = database;
     }
@@ -448,34 +473,47 @@ impl AiChatPanel {
 
     /// 获取背景色（自定义或默认主题）
     fn background(&self, cx: &App) -> Hsla {
-        self.custom_colors.as_ref().map(|c| c.background).unwrap_or_else(|| cx.theme().background)
+        self.custom_colors
+            .as_ref()
+            .map(|c| c.background)
+            .unwrap_or_else(|| cx.theme().background)
     }
 
     /// 获取前景色（自定义或默认主题）
     fn foreground(&self, cx: &App) -> Hsla {
-        self.custom_colors.as_ref().map(|c| c.foreground).unwrap_or_else(|| cx.theme().foreground)
+        self.custom_colors
+            .as_ref()
+            .map(|c| c.foreground)
+            .unwrap_or_else(|| cx.theme().foreground)
     }
 
     /// 获取次要背景色（自定义或默认主题）
     fn muted(&self, cx: &App) -> Hsla {
-        self.custom_colors.as_ref().map(|c| c.muted).unwrap_or_else(|| cx.theme().muted)
+        self.custom_colors
+            .as_ref()
+            .map(|c| c.muted)
+            .unwrap_or_else(|| cx.theme().muted)
     }
 
     /// 获取边框色（自定义或默认主题）
     fn border(&self, cx: &App) -> Hsla {
-        self.custom_colors.as_ref().map(|c| c.border).unwrap_or_else(|| cx.theme().border)
+        self.custom_colors
+            .as_ref()
+            .map(|c| c.border)
+            .unwrap_or_else(|| cx.theme().border)
     }
-
 
     pub fn set_provider_id(&mut self, provider_id: String, cx: &mut Context<Self>) {
         self.engine.provider_id = Some(provider_id.clone());
         if let Some(config) = self
-            .engine.provider_configs
+            .engine
+            .provider_configs
             .iter()
             .find(|provider| provider.id.to_string() == provider_id)
         {
             let models = ProviderSelectState::build_model_list_from_config(config);
-            self.engine.selected_model = ProviderSelectState::resolve_default_model_from_config(config, &models);
+            self.engine.selected_model =
+                ProviderSelectState::resolve_default_model_from_config(config, &models);
         }
         cx.notify();
     }
@@ -487,7 +525,11 @@ impl AiChatPanel {
     }
 
     /// 批量注册代码块操作
-    pub fn register_code_block_actions(&mut self, actions: Vec<CodeBlockAction>, cx: &mut Context<Self>) {
+    pub fn register_code_block_actions(
+        &mut self,
+        actions: Vec<CodeBlockAction>,
+        cx: &mut Context<Self>,
+    ) {
         for action in actions {
             self.engine.code_block_actions.register(action);
         }
@@ -545,7 +587,9 @@ impl AiChatPanel {
     }
 
     fn update_session_list(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let sessions_data: Vec<SessionData> = self.engine.history_sessions
+        let sessions_data: Vec<SessionData> = self
+            .engine
+            .history_sessions
             .iter()
             .map(|s| SessionData::new(s.id, s.name.clone(), s.updated_at))
             .collect();
@@ -562,7 +606,8 @@ impl AiChatPanel {
                     SessionListDelegate::new(panel, sessions_data, SessionListConfig::default()),
                     window,
                     cx,
-                ).searchable(true)
+                )
+                .searchable(true)
             }));
         }
     }
@@ -596,7 +641,8 @@ impl AiChatPanel {
                     }
                 });
             }
-        }).detach();
+        })
+        .detach();
     }
 
     fn delete_session(&mut self, session_id: i64, cx: &mut Context<Self>) {
@@ -631,10 +677,17 @@ impl AiChatPanel {
                     });
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 
-    fn start_rename_session(&mut self, session_id: i64, current_name: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn start_rename_session(
+        &mut self,
+        session_id: i64,
+        current_name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(&current_name)
@@ -655,7 +708,7 @@ impl AiChatPanel {
                 .button_props(
                     DialogButtonProps::default()
                         .ok_text(t!("Common.save").to_string())
-                        .cancel_text(t!("Common.cancel").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
                 )
                 .on_ok(move |_, _window, cx| {
                     let new_name = input_for_ok.read(cx).value().to_string();
@@ -672,12 +725,9 @@ impl AiChatPanel {
                         .child(
                             div()
                                 .text_sm()
-                                .child(t!("AiChat.rename_session_prompt").to_string())
+                                .child(t!("AiChat.rename_session_prompt").to_string()),
                         )
-                        .child(
-                            Input::new(&input_for_dialog)
-                                .w_full()
-                        )
+                        .child(Input::new(&input_for_dialog).w_full()),
                 )
         });
     }
@@ -709,7 +759,8 @@ impl AiChatPanel {
                     });
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 
     fn load_session(&mut self, session_id: i64, cx: &mut Context<Self>) {
@@ -738,7 +789,8 @@ impl AiChatPanel {
                     });
                 });
             }
-        }).detach();
+        })
+        .detach();
     }
 
     fn send_message(&mut self, content: String, cx: &mut Context<Self>) {
@@ -778,7 +830,8 @@ impl AiChatPanel {
 
         // 构建 ProviderConfig（含用户选择的 model 和设置覆盖）
         let provider_config = {
-            let base = self.engine
+            let base = self
+                .engine
                 .provider_configs
                 .iter()
                 .find(|c| c.id == provider_id)
@@ -840,15 +893,18 @@ impl AiChatPanel {
                     if let Some(message_repo) = storage_manager.get::<MessageRepository>() {
                         match message_repo.list_by_session(sid) {
                             Ok(messages) => {
-                                let mut msgs: Vec<Message> = messages.iter().map(|msg| {
-                                    let role = match msg.role.as_str() {
-                                        "user" => Role::User,
-                                        "assistant" => Role::Assistant,
-                                        "system" => Role::System,
-                                        _ => Role::User,
-                                    };
-                                    Message::text(role, &msg.content)
-                                }).collect();
+                                let mut msgs: Vec<Message> = messages
+                                    .iter()
+                                    .map(|msg| {
+                                        let role = match msg.role.as_str() {
+                                            "user" => Role::User,
+                                            "assistant" => Role::Assistant,
+                                            "system" => Role::System,
+                                            _ => Role::User,
+                                        };
+                                        Message::text(role, &msg.content)
+                                    })
+                                    .collect();
                                 // 限制历史条数
                                 if msgs.len() > history_count {
                                     msgs = msgs.split_off(msgs.len() - history_count);
@@ -905,7 +961,8 @@ impl AiChatPanel {
                             let msg_id = assistant_msg_id.clone();
                             cx.update(|cx| {
                                 entity.update(cx, |this, cx| {
-                                    this.engine.update_streaming_content(&msg_id, content_snapshot);
+                                    this.engine
+                                        .update_streaming_content(&msg_id, content_snapshot);
                                     this.engine.scroll_to_bottom();
                                     cx.notify();
                                 })
@@ -921,7 +978,8 @@ impl AiChatPanel {
                             let storage_for_save = storage_manager.clone();
                             cx.update(|cx| {
                                 entity.update(cx, |this, cx| {
-                                    this.engine.finalize_streaming(&msg_id, final_content.clone());
+                                    this.engine
+                                        .finalize_streaming(&msg_id, final_content.clone());
                                     this.engine.is_loading = false;
                                     this.engine.cancel_token = None;
                                     this.engine.scroll_to_bottom();
@@ -932,16 +990,21 @@ impl AiChatPanel {
                                         let storage = storage_for_save;
                                         cx.spawn(async move |_this, _cx: &mut AsyncApp| {
                                             if let Some(repo) = storage.get::<MessageRepository>() {
-                                                let mut msg = crate::llm::chat_history::ChatMessage::new(
-                                                    sid,
-                                                    "assistant".to_string(),
-                                                    content_to_save,
-                                                );
+                                                let mut msg =
+                                                    crate::llm::chat_history::ChatMessage::new(
+                                                        sid,
+                                                        "assistant".to_string(),
+                                                        content_to_save,
+                                                    );
                                                 if let Err(e) = repo.insert(&mut msg) {
-                                                    warn!("Failed to save assistant message: {}", e);
+                                                    warn!(
+                                                        "Failed to save assistant message: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
-                                        }).detach();
+                                        })
+                                        .detach();
                                     }
 
                                     cx.notify();
@@ -983,7 +1046,8 @@ impl AiChatPanel {
                     }
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 
     fn render_header(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1007,7 +1071,7 @@ impl AiChatPanel {
                     .text_sm()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(fg)
-                    .child(t!("AiChat.title").to_string())
+                    .child(t!("AiChat.title").to_string()),
             )
             .child(
                 h_flex()
@@ -1019,7 +1083,7 @@ impl AiChatPanel {
                             .small()
                             .on_click(cx.listener(|this, _event, _window, cx| {
                                 this.start_new_session(cx);
-                            }))
+                            })),
                     )
                     .child(
                         Popover::new("history-popover")
@@ -1041,7 +1105,7 @@ impl AiChatPanel {
                                 Button::new("history")
                                     .icon(IconName::BookOpen)
                                     .ghost()
-                                    .small()
+                                    .small(),
                             )
                             .when_some(session_list, |popover, list| {
                                 popover.child(
@@ -1050,9 +1114,9 @@ impl AiChatPanel {
                                         .max_h(px(350.0))
                                         .border_1()
                                         .border_color(border)
-                                        .rounded(cx.theme().radius)
+                                        .rounded(cx.theme().radius),
                                 )
-                            })
+                            }),
                     )
                     .child(
                         Button::new("close-panel")
@@ -1061,8 +1125,8 @@ impl AiChatPanel {
                             .small()
                             .on_click(cx.listener(|_this, _event, _window, cx| {
                                 cx.emit(AiChatPanelEvent::Close);
-                            }))
-                    )
+                            })),
+                    ),
             )
     }
 
@@ -1079,14 +1143,11 @@ impl AiChatPanel {
             .p_4()
             .pb_8()
             .child(
-                v_flex()
-                    .w_full()
-                    .gap_4()
-                    .children(
-                        self.engine.messages
-                            .iter()
-                            .map(|msg| ChatMessageRenderer::render_message(msg, &code_block_actions, cx)),
-                    ),
+                v_flex().w_full().gap_4().children(
+                    self.engine.messages.iter().map(|msg| {
+                        ChatMessageRenderer::render_message(msg, &code_block_actions, cx)
+                    }),
+                ),
             )
     }
 
@@ -1141,17 +1202,13 @@ impl AiChatPanel {
                                 div()
                                     .flex_1()
                                     .min_w_0()
-                                    .child(
-                                        self.provider_select_state.render_provider_select(),
-                                    ),
+                                    .child(self.provider_select_state.render_provider_select()),
                             )
                             .child(
                                 div()
                                     .flex_1()
                                     .min_w_0()
-                                    .child(
-                                        self.provider_select_state.render_model_select(),
-                                    ),
+                                    .child(self.provider_select_state.render_model_select()),
                             )
                             // 模型设置按钮
                             .child({
@@ -1164,34 +1221,30 @@ impl AiChatPanel {
                                             .ghost()
                                             .with_size(Size::Small),
                                     )
-                                    .content(move |_state, _window, _cx| {
-                                        settings_panel.clone()
-                                    })
+                                    .content(move |_state, _window, _cx| settings_panel.clone())
                             }),
                     )
-                    .child(
-                        if self.can_cancel() {
-                            // 加载中显示终止按钮
-                            Button::new("cancel")
-                                .with_size(Size::Small)
-                                .danger()
-                                .icon(IconName::CircleX)
-                                .label(t!("AiChat.cancel").to_string())
-                                .on_click(cx.listener(|this, _, _window, cx| {
-                                    this.cancel_current_operation(cx);
-                                }))
-                        } else {
-                            // 正常状态显示发送按钮
-                            Button::new("send")
-                                .with_size(Size::Small)
-                                .primary()
-                                .icon(IconName::ArrowRight)
-                                .label(t!("AiChat.send").to_string())
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.submit(window, cx);
-                                }))
-                        },
-                    ),
+                    .child(if self.can_cancel() {
+                        // 加载中显示终止按钮
+                        Button::new("cancel")
+                            .with_size(Size::Small)
+                            .danger()
+                            .icon(IconName::CircleX)
+                            .label(t!("AiChat.cancel").to_string())
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                this.cancel_current_operation(cx);
+                            }))
+                    } else {
+                        // 正常状态显示发送按钮
+                        Button::new("send")
+                            .with_size(Size::Small)
+                            .primary()
+                            .icon(IconName::ArrowRight)
+                            .label(t!("AiChat.send").to_string())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.submit(window, cx);
+                            }))
+                    }),
             )
     }
 }
@@ -1209,7 +1262,13 @@ impl SessionListHost for AiChatPanel {
         self.load_session(session_id, cx);
     }
 
-    fn on_session_edit(&mut self, session_id: i64, name: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_session_edit(
+        &mut self,
+        session_id: i64,
+        name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.start_rename_session(session_id, name, window, cx);
     }
 
@@ -1243,16 +1302,14 @@ impl Render for AiChatPanel {
         let bg_color = self.background(cx);
         let fg_color = self.foreground(cx);
 
-        div()
-            .size_full()
-            .child(
-                v_flex()
-                    .size_full()
-                    .bg(bg_color)
-                    .text_color(fg_color)
-                    .child(self.render_header(window, cx))
-                    .child(self.render_messages(window, cx))
-                    .child(self.render_input(window, cx))
-            )
+        div().size_full().child(
+            v_flex()
+                .size_full()
+                .bg(bg_color)
+                .text_color(fg_color)
+                .child(self.render_header(window, cx))
+                .child(self.render_messages(window, cx))
+                .child(self.render_input(window, cx)),
+        )
     }
 }

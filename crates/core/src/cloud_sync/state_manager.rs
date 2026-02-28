@@ -6,8 +6,8 @@
 //! - 记录同步历史
 
 use crate::cloud_sync::models::{SyncState, SyncStatus};
-use crate::storage::{ConnectionRepository, StorageManager, StoredConnection};
 use crate::storage::traits::Repository;
+use crate::storage::{ConnectionRepository, StorageManager, StoredConnection};
 use std::collections::HashMap;
 
 /// 同步状态管理器

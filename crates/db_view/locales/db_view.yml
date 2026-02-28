@@ -137,6 +137,10 @@ Common:
 
 # 连接操作
 Connection:
+  edit:
+    en: Edit Connection
+    zh-CN: 编辑连接
+    zh-HK: 编辑连接
   test:
     en: Test
     zh-CN: 测试
@@ -349,6 +353,46 @@ ConnectionForm:
     en: Test connection failed
     zh-CN: 测试连接失败
     zh-HK: 測試連線失敗
+  oracle_client_required:
+    en: "Oracle Client is not available: %{error}"
+    zh-CN: "未检测到可用的 Oracle Client：%{error}"
+    zh-HK: "未檢測到可用的 Oracle Client：%{error}"
+  oracle_client_status:
+    en: Oracle Client
+    zh-CN: Oracle 客户端
+    zh-HK: Oracle 客戶端
+  oracle_client_checking:
+    en: Checking...
+    zh-CN: 检测中...
+    zh-HK: 檢測中...
+  oracle_client_available:
+    en: "Available (%{version})"
+    zh-CN: "可用（%{version}）"
+    zh-HK: "可用（%{version}）"
+  oracle_client_unavailable:
+    en: "Unavailable (%{error})"
+    zh-CN: "不可用（%{error}）"
+    zh-HK: "不可用（%{error}）"
+  oracle_client_open_download:
+    en: Open Download Page
+    zh-CN: 打开下载页面
+    zh-HK: 打開下載頁面
+  oracle_client_guide_windows:
+    en: "Install Oracle Instant Client Basic/Basic Light (x64) from https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html, unzip it, then add that directory to PATH (put it before other Oracle paths), and restart the app."
+    zh-CN: "请下载并安装 Oracle Instant Client Basic/Basic Light（x64）：https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html。解压后将目录加入 PATH（优先于其他 Oracle 路径），然后重启应用。"
+    zh-HK: "請下載並安裝 Oracle Instant Client Basic/Basic Light（x64）：https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html。解壓後將目錄加入 PATH（優先於其他 Oracle 路徑），然後重啟應用。"
+  oracle_client_guide_macos:
+    en: "Install Oracle Instant Client Basic/Basic Light for macOS from https://www.oracle.com/database/technologies/instant-client/macos-intel-x86-downloads.html. Ensure libclntsh.dylib is discoverable (same dir as app binary, or DYLD_LIBRARY_PATH points to Instant Client), then restart the app."
+    zh-CN: "请下载并安装 macOS 版 Oracle Instant Client Basic/Basic Light：https://www.oracle.com/database/technologies/instant-client/macos-intel-x86-downloads.html。确保系统可发现 libclntsh.dylib（放在应用可搜索路径，或设置 DYLD_LIBRARY_PATH 指向 Instant Client），然后重启应用。"
+    zh-HK: "請下載並安裝 macOS 版 Oracle Instant Client Basic/Basic Light：https://www.oracle.com/database/technologies/instant-client/macos-intel-x86-downloads.html。確保系統可發現 libclntsh.dylib（放在應用可搜尋路徑，或設定 DYLD_LIBRARY_PATH 指向 Instant Client），然後重啟應用。"
+  oracle_client_guide_linux:
+    en: "Install Oracle Instant Client Basic/Basic Light from https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html. Ensure libclntsh.so exists and set LD_LIBRARY_PATH (or ldconfig) to the Instant Client directory; if needed install dependencies like libaio/libnsl, then restart the app."
+    zh-CN: "请下载并安装 Linux 版 Oracle Instant Client Basic/Basic Light：https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html。确认存在 libclntsh.so，并通过 LD_LIBRARY_PATH（或 ldconfig）配置库路径；必要时安装 libaio/libnsl，随后重启应用。"
+    zh-HK: "請下載並安裝 Linux 版 Oracle Instant Client Basic/Basic Light：https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html。確認存在 libclntsh.so，並透過 LD_LIBRARY_PATH（或 ldconfig）設定庫路徑；必要時安裝 libaio/libnsl，隨後重啟應用。"
+  oracle_client_guide_other:
+    en: "Install Oracle Client 11.2+ and ensure client libraries can be found by the OS loader. Refer to ODPI-C installation guide: https://oracle.github.io/odpi/doc/installation.html"
+    zh-CN: "请安装 Oracle Client 11.2+ 并确保系统动态库加载器可找到客户端库。参考 ODPI-C 安装指南：https://oracle.github.io/odpi/doc/installation.html"
+    zh-HK: "請安裝 Oracle Client 11.2+ 並確保系統動態庫載入器可找到客戶端庫。參考 ODPI-C 安裝指南：https://oracle.github.io/odpi/doc/installation.html"
   connection_failed:
     en: Connection failed
     zh-CN: 连接失败

@@ -85,8 +85,7 @@ impl MySqlDatabaseForm {
         let plugin = MySqlPlugin::new();
 
         let name_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("Database.enter_database_name").to_string())
+            InputState::new(window, cx).placeholder(t!("Database.enter_database_name").to_string())
         });
 
         let charset_items: Vec<CharsetSelectItem> = plugin

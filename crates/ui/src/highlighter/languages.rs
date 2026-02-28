@@ -8,7 +8,7 @@ pub enum Language {
     Json,
     Plain,
     Bash,
-    Sql
+    Sql,
 }
 
 #[cfg(feature = "tree-sitter-languages")]
@@ -194,9 +194,9 @@ impl Language {
             Self::Svelte => vec!["svelte", "html", "css", "typescript"],
             _ => vec![],
         }
-            .into_iter()
-            .map(|s| s.into())
-            .collect()
+        .into_iter()
+        .map(|s| s.into())
+        .collect()
     }
 
     /// Return the language info for the language.

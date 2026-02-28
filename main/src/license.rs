@@ -5,11 +5,8 @@
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use gpui::{px, App, Context, ParentElement, Styled, Window};
-use gpui_component::{
-    dialog::DialogButtonProps,
-    v_flex, ActiveTheme, Icon, IconName, WindowExt,
-};
+use gpui::{App, Context, ParentElement, Styled, Window, px};
+use gpui_component::{ActiveTheme, Icon, IconName, WindowExt, dialog::DialogButtonProps, v_flex};
 use one_core::license::{Feature, LicenseService, LocalLicenseStorage};
 use rust_i18n::t;
 
@@ -101,20 +98,13 @@ pub fn show_upgrade_dialog<V: 'static>(window: &mut Window, cx: &mut Context<V>)
                             .child(t!("License.upgrade_message").to_string()),
                     )
                     // 功能列表
-                    .child(
-                        v_flex()
-                            .gap_2()
-                            .child(feature_item(
-                                IconName::Refresh,
-                                t!("License.feature_cloud_sync").to_string(),
-                                cx,
-                            )),
-                    ),
+                    .child(v_flex().gap_2().child(feature_item(
+                        IconName::Refresh,
+                        t!("License.feature_cloud_sync").to_string(),
+                        cx,
+                    ))),
             )
-            .button_props(
-                DialogButtonProps::default()
-                    .ok_text(t!("License.upgrade_button")),
-            )
+            .button_props(DialogButtonProps::default().ok_text(t!("License.upgrade_button")))
             .on_ok(|_, _, cx| {
                 // 打开购买页面
                 cx.open_url("https://onehub.app/pricing");

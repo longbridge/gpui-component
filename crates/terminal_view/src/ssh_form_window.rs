@@ -1,5 +1,9 @@
 use gpui::prelude::FluentBuilder;
-use gpui::{div, px, App, AppContext, AsyncApp, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window};
+use gpui::{
+    div, px, App, AppContext, AsyncApp, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, WeakEntity, Window,
+};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
@@ -138,8 +142,14 @@ impl SshFormWindow {
     pub fn new(config: SshFormWindowConfig, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let is_editing = config.editing_connection.is_some();
         let editing_id = config.editing_connection.as_ref().and_then(|c| c.id);
-        let editing_cloud_id = config.editing_connection.as_ref().and_then(|c| c.cloud_id.clone());
-        let editing_last_synced_at = config.editing_connection.as_ref().and_then(|c| c.last_synced_at);
+        let editing_cloud_id = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.cloud_id.clone());
+        let editing_last_synced_at = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.last_synced_at);
 
         let title: SharedString = if is_editing {
             t!("SSH.edit").to_string()
@@ -254,7 +264,7 @@ impl SshFormWindow {
         let mut enable_jump_server = false;
         let mut enable_proxy = false;
         let mut proxy_type = ProxyTypeSelection::default();
-        let mut sync_enabled = true;  // 默认启用云同步
+        let mut sync_enabled = true; // 默认启用云同步
 
         if let Some(ref conn) = config.editing_connection {
             // 加载同步状态
@@ -462,11 +472,19 @@ impl SshFormWindow {
         // 初始化设置
         let default_directory = {
             let d = self.default_directory_input.read(cx).text().to_string();
-            if d.is_empty() { None } else { Some(d) }
+            if d.is_empty() {
+                None
+            } else {
+                Some(d)
+            }
         };
         let init_script = {
             let s = self.init_script_input.read(cx).text().to_string();
-            if s.is_empty() { None } else { Some(s) }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
         };
 
         // 跳板机配置
@@ -510,11 +528,19 @@ impl SshFormWindow {
                     .unwrap_or(1080);
                 let proxy_username = {
                     let u = self.proxy_username_input.read(cx).text().to_string();
-                    if u.is_empty() { None } else { Some(u) }
+                    if u.is_empty() {
+                        None
+                    } else {
+                        Some(u)
+                    }
                 };
                 let proxy_password = {
                     let p = self.proxy_password_input.read(cx).text().to_string();
-                    if p.is_empty() { None } else { Some(p) }
+                    if p.is_empty() {
+                        None
+                    } else {
+                        Some(p)
+                    }
                 };
                 let proxy_type = match self.proxy_type {
                     ProxyTypeSelection::Socks5 => StorageProxyType::Socks5,
@@ -629,7 +655,8 @@ impl SshFormWindow {
                 let mut client = RusshClient::connect(config).await?;
                 client.disconnect().await?;
                 Ok::<(), anyhow::Error>(())
-            }).await;
+            })
+            .await;
 
             let test_result: Result<(), String> = match spawn_result {
                 Ok(task) => Ok(task),
@@ -661,7 +688,7 @@ impl SshFormWindow {
 
         let workspace_id = self.get_workspace_id(cx);
         let mut conn = StoredConnection::new_ssh(name, params, workspace_id);
-        conn.sync_enabled = self.sync_enabled;  // 设置同步状态
+        conn.sync_enabled = self.sync_enabled; // 设置同步状态
         if self.is_editing {
             conn.id = self.editing_id;
             conn.cloud_id = self.editing_cloud_id.clone();
@@ -783,10 +810,9 @@ impl SshFormWindow {
                 ))
             })
             .when(auth_method == AuthMethodSelection::PrivateKey, |this| {
-                this.child(self.render_form_row(
-                    &t!("SSH.key_path"),
-                    Input::new(&self.key_path_input),
-                ))
+                this.child(
+                    self.render_form_row(&t!("SSH.key_path"), Input::new(&self.key_path_input)),
+                )
                 .child(self.render_form_row(
                     &t!("SSH.passphrase"),
                     Input::new(&self.passphrase_input).mask_toggle(),
@@ -827,10 +853,9 @@ impl SshFormWindow {
                 &t!("SSH.default_directory"),
                 Input::new(&self.default_directory_input),
             ))
-            .child(self.render_form_row(
-                &t!("SSH.init_script"),
-                Input::new(&self.init_script_input),
-            ))
+            .child(
+                self.render_form_row(&t!("SSH.init_script"), Input::new(&self.init_script_input)),
+            )
     }
 
     /// 渲染跳板机标签页
@@ -851,14 +876,12 @@ impl SshFormWindow {
                 ),
             )
             .when(enable_jump, |this| {
-                this.child(self.render_form_row(
-                    &t!("SSH.jump_host"),
-                    Input::new(&self.jump_host_input),
-                ))
-                .child(self.render_form_row(
-                    &t!("SSH.jump_port"),
-                    Input::new(&self.jump_port_input),
-                ))
+                this.child(
+                    self.render_form_row(&t!("SSH.jump_host"), Input::new(&self.jump_host_input)),
+                )
+                .child(
+                    self.render_form_row(&t!("SSH.jump_port"), Input::new(&self.jump_port_input)),
+                )
                 .child(self.render_form_row(
                     &t!("SSH.jump_username"),
                     Input::new(&self.jump_username_input),
@@ -914,14 +937,12 @@ impl SshFormWindow {
                             ),
                     ),
                 )
-                .child(self.render_form_row(
-                    &t!("SSH.proxy_host"),
-                    Input::new(&self.proxy_host_input),
-                ))
-                .child(self.render_form_row(
-                    &t!("SSH.proxy_port"),
-                    Input::new(&self.proxy_port_input),
-                ))
+                .child(
+                    self.render_form_row(&t!("SSH.proxy_host"), Input::new(&self.proxy_host_input)),
+                )
+                .child(
+                    self.render_form_row(&t!("SSH.proxy_port"), Input::new(&self.proxy_port_input)),
+                )
                 .child(self.render_form_row(
                     &t!("SSH.proxy_username"),
                     Input::new(&self.proxy_username_input),

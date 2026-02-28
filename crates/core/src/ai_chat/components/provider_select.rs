@@ -2,11 +2,13 @@
 //!
 //! 提供可复用的 Provider 和 Model 选择功能。
 
-use gpui::{px, App, AppContext, Context, Entity, IntoElement, ParentElement, SharedString, Styled, Subscription, Window};
+use gpui::{
+    App, AppContext, Context, Entity, IntoElement, ParentElement, SharedString, Styled,
+    Subscription, Window, px,
+};
 use gpui_component::{
-    h_flex,
+    IndexPath, Sizable, Size, h_flex,
     select::{Select, SelectEvent, SelectItem, SelectState},
-    IndexPath, Sizable, Size,
 };
 use rust_i18n::t;
 
@@ -185,7 +187,8 @@ impl ProviderSelectState {
         on_event: impl Fn(ProviderSelectEvent, &mut T, &mut Window, &mut Context<T>) + 'static,
     ) -> Self {
         // 创建 Provider 选择器
-        let provider_select = cx.new(|cx| SelectState::new(Vec::<ProviderItem>::new(), None, window, cx));
+        let provider_select =
+            cx.new(|cx| SelectState::new(Vec::<ProviderItem>::new(), None, window, cx));
 
         // 创建 Model 选择器
         let model_select = cx.new(|cx| SelectState::new(Vec::<ModelItem>::new(), None, window, cx));
@@ -256,14 +259,16 @@ impl ProviderSelectState {
 
     /// 获取当前选中的 Provider Item
     pub fn selected_provider_item(&self) -> Option<&ProviderItem> {
-        self.selected_provider.as_ref().and_then(|id| {
-            self.providers.iter().find(|p| &p.id == id)
-        })
+        self.selected_provider
+            .as_ref()
+            .and_then(|id| self.providers.iter().find(|p| &p.id == id))
     }
 
     /// 获取 Provider ID（解析为 i64）
     pub fn selected_provider_id(&self) -> Option<i64> {
-        self.selected_provider.as_ref().and_then(|id| id.parse().ok())
+        self.selected_provider
+            .as_ref()
+            .and_then(|id| id.parse().ok())
     }
 
     /// 获取当前选中的 Provider 配置
@@ -504,7 +509,10 @@ impl ProviderSelectState {
     }
 
     /// 从 ProviderConfig 确定默认选中的模型
-    pub fn resolve_default_model_from_config(config: &ProviderConfig, models: &[String]) -> Option<String> {
+    pub fn resolve_default_model_from_config(
+        config: &ProviderConfig,
+        models: &[String],
+    ) -> Option<String> {
         let item = ProviderItem::from_config(config);
         Self::resolve_default_model(&item, models)
     }

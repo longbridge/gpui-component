@@ -2,18 +2,21 @@
 //!
 //! 支持命令的新增、置顶、删除功能
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
     div, px, uniform_list, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, ParentElement, Render,
     SharedString, Styled, UniformListScrollHandle, Window,
 };
-use gpui::prelude::FluentBuilder;
 use gpui_component::{
     button::{Button, ButtonVariants},
+    h_flex,
     input::{Input, InputEvent, InputState},
-    v_flex, ActiveTheme, h_flex, Icon, IconName, Sizable, Size,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
 };
-use one_core::storage::{traits::Repository, GlobalStorageState, QuickCommand, QuickCommandRepository};
+use one_core::storage::{
+    traits::Repository, GlobalStorageState, QuickCommand, QuickCommandRepository,
+};
 use std::ops::Range;
 
 /// 快捷命令面板事件
@@ -52,20 +55,11 @@ pub struct QuickCommandPanel {
 }
 
 impl QuickCommandPanel {
-    pub fn new(
-        connection_id: Option<i64>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let search_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Search")
-        });
+    pub fn new(connection_id: Option<i64>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let search_input_state = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
 
-        let add_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Enter command...")
-        });
+        let add_input_state =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Enter command..."));
 
         let mut subscriptions = Vec::new();
 
@@ -221,12 +215,10 @@ impl QuickCommandPanel {
                     cmd.pinned = !cmd.pinned;
                 }
 
-                self.commands.sort_by(|a, b| {
-                    match (a.pinned, b.pinned) {
-                        (true, false) => std::cmp::Ordering::Less,
-                        (false, true) => std::cmp::Ordering::Greater,
-                        _ => a.sort_order.cmp(&b.sort_order),
-                    }
+                self.commands.sort_by(|a, b| match (a.pinned, b.pinned) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.sort_order.cmp(&b.sort_order),
                 });
 
                 self.filter_commands();
@@ -244,12 +236,21 @@ impl QuickCommandPanel {
             self.filtered_commands = self.commands.clone();
         } else {
             let query = self.search_query.to_lowercase();
-            self.filtered_commands = self.commands
+            self.filtered_commands = self
+                .commands
                 .iter()
                 .filter(|cmd| {
                     cmd.command.to_lowercase().contains(&query)
-                        || cmd.name.as_ref().map(|n| n.to_lowercase().contains(&query)).unwrap_or(false)
-                        || cmd.description.as_ref().map(|d| d.to_lowercase().contains(&query)).unwrap_or(false)
+                        || cmd
+                            .name
+                            .as_ref()
+                            .map(|n| n.to_lowercase().contains(&query))
+                            .unwrap_or(false)
+                        || cmd
+                            .description
+                            .as_ref()
+                            .map(|d| d.to_lowercase().contains(&query))
+                            .unwrap_or(false)
                 })
                 .cloned()
                 .collect();
@@ -284,15 +285,15 @@ impl QuickCommandPanel {
                     .child(
                         Icon::new(IconName::SquareTerminal)
                             .with_size(Size::Small)
-                            .text_color(fg)
+                            .text_color(fg),
                     )
                     .child(
                         div()
                             .text_sm()
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .text_color(fg)
-                            .child("Quick Commands")
-                    )
+                            .child("Quick Commands"),
+                    ),
             )
             .child(
                 h_flex()
@@ -305,7 +306,7 @@ impl QuickCommandPanel {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.show_add_input = true;
                                 cx.notify();
-                            }))
+                            })),
                     )
                     .child(
                         Button::new("close-quick-command-panel")
@@ -314,8 +315,8 @@ impl QuickCommandPanel {
                             .xsmall()
                             .on_click(cx.listener(|_this, _, _, cx| {
                                 cx.emit(QuickCommandPanelEvent::Close);
-                            }))
-                    )
+                            })),
+                    ),
             )
     }
 
@@ -333,11 +334,7 @@ impl QuickCommandPanel {
             .items_center()
             .border_b_1()
             .border_color(border)
-            .child(
-                Icon::new(IconName::Search)
-                    .xsmall()
-                    .text_color(muted_fg),
-            )
+            .child(Icon::new(IconName::Search).xsmall().text_color(muted_fg))
             .child(
                 div().flex_1().child(
                     Input::new(&self.search_input_state)
@@ -364,11 +361,9 @@ impl QuickCommandPanel {
             .border_color(border)
             .bg(muted_bg)
             .child(
-                div().flex_1().child(
-                    Input::new(&self.add_input_state)
-                        .appearance(false)
-                        .xsmall(),
-                ),
+                div()
+                    .flex_1()
+                    .child(Input::new(&self.add_input_state).appearance(false).xsmall()),
             )
             .child(
                 Button::new("cancel-add")
@@ -381,7 +376,7 @@ impl QuickCommandPanel {
                         });
                         this.show_add_input = false;
                         cx.notify();
-                    }))
+                    })),
             )
             .child(
                 Button::new("confirm-add")
@@ -396,12 +391,17 @@ impl QuickCommandPanel {
                                 state.set_value("", window, cx);
                             });
                         }
-                    }))
+                    })),
             )
     }
 
     /// 渲染单个命令项（供 uniform_list 使用）
-    fn render_command_item(&self, index: usize, cmd: &QuickCommand, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_command_item(
+        &self,
+        index: usize,
+        cmd: &QuickCommand,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let command = cmd.command.clone();
         let command_for_paste = command.clone();
         let command_for_paste2 = command.clone();
@@ -423,9 +423,12 @@ impl QuickCommandPanel {
             .rounded_md()
             .cursor_pointer()
             .hover(|s| s.bg(muted_bg))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
-                this.paste_command(command_for_paste.clone(), cx);
-            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, cx| {
+                    this.paste_command(command_for_paste.clone(), cx);
+                }),
+            )
             .child(
                 h_flex()
                     .w_full()
@@ -441,7 +444,7 @@ impl QuickCommandPanel {
                                 this.child(
                                     Icon::new(IconName::Star)
                                         .with_size(Size::XSmall)
-                                        .text_color(pin_color)
+                                        .text_color(pin_color),
                                 )
                             })
                             .child(
@@ -451,8 +454,8 @@ impl QuickCommandPanel {
                                     .text_sm()
                                     .overflow_hidden()
                                     .text_ellipsis()
-                                    .child(command)
-                            )
+                                    .child(command),
+                            ),
                     )
                     .child(
                         h_flex()
@@ -466,13 +469,17 @@ impl QuickCommandPanel {
                             })
                             .child(
                                 Button::new(SharedString::from(format!("pin-{}", index)))
-                                    .icon(if is_pinned { IconName::StarOff } else { IconName::Star })
+                                    .icon(if is_pinned {
+                                        IconName::StarOff
+                                    } else {
+                                        IconName::Star
+                                    })
                                     .ghost()
                                     .xsmall()
                                     .when(is_pinned, |this| this.text_color(pin_color))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.toggle_pin(id, cx);
-                                    }))
+                                    })),
                             )
                             .child(
                                 Button::new(SharedString::from(format!("delete-{}", index)))
@@ -482,7 +489,7 @@ impl QuickCommandPanel {
                                     .text_color(muted_fg)
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.delete_command(id, cx);
-                                    }))
+                                    })),
                             )
                             .child(
                                 Button::new(SharedString::from(format!("paste-{}", index)))
@@ -491,9 +498,9 @@ impl QuickCommandPanel {
                                     .xsmall()
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.paste_command(command_for_paste2.clone(), cx);
-                                    }))
-                            )
-                    )
+                                    })),
+                            ),
+                    ),
             )
     }
 
@@ -512,18 +519,13 @@ impl QuickCommandPanel {
             .child(
                 Icon::new(IconName::SquareTerminal)
                     .with_size(Size::Large)
-                    .text_color(muted_fg)
+                    .text_color(muted_fg),
             )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(muted_fg)
-                    .child(if search_empty {
-                        "No commands yet. Click + to add one."
-                    } else {
-                        "No matching commands"
-                    })
-            )
+            .child(div().text_sm().text_color(muted_fg).child(if search_empty {
+                "No commands yet. Click + to add one."
+            } else {
+                "No matching commands"
+            }))
     }
 
     /// 渲染加载状态
@@ -540,14 +542,9 @@ impl QuickCommandPanel {
             .child(
                 Icon::new(IconName::Loader)
                     .with_size(Size::Medium)
-                    .text_color(muted_fg)
+                    .text_color(muted_fg),
             )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(muted_fg)
-                    .child("Loading...")
-            )
+            .child(div().text_sm().text_color(muted_fg).child("Loading..."))
     }
 }
 
@@ -572,12 +569,8 @@ impl Render for QuickCommandPanel {
             .text_color(cx.theme().foreground)
             .child(self.render_header(cx))
             .child(self.render_search_bar(cx))
-            .when(show_add, |this| {
-                this.child(self.render_add_input(cx))
-            })
-            .when(is_loading, |this| {
-                this.child(self.render_loading_state(cx))
-            })
+            .when(show_add, |this| this.child(self.render_add_input(cx)))
+            .when(is_loading, |this| this.child(self.render_loading_state(cx)))
             .when(!is_loading && commands_empty, |this| {
                 this.child(self.render_empty_state(cx))
             })

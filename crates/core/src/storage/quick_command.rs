@@ -303,7 +303,9 @@ impl Repository for QuickCommandRepository {
     }
 
     fn update(&self, item: &Self::Entity) -> Result<()> {
-        let id = item.id.ok_or_else(|| anyhow::anyhow!("Cannot update without ID"))?;
+        let id = item
+            .id
+            .ok_or_else(|| anyhow::anyhow!("Cannot update without ID"))?;
         let ts = now();
         let pinned = if item.pinned { 1 } else { 0 };
 
@@ -362,7 +364,8 @@ impl Repository for QuickCommandRepository {
 
     fn count(&self) -> Result<i64> {
         self.conn.with_connection(|conn| {
-            let count: i64 = conn.query_row("SELECT COUNT(*) FROM quick_commands", [], |row| row.get(0))?;
+            let count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM quick_commands", [], |row| row.get(0))?;
             Ok(count)
         })
     }

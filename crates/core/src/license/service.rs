@@ -300,23 +300,20 @@ impl LicenseService {
         let payload_base64 = document.payload.trim();
         let signature_base64 = document.signature.trim();
 
-        let payload_bytes = BASE64.decode(payload_base64.as_bytes()).map_err(|e| {
-            LicenseError::InvalidOfflineLicense(format!("payload 解码失败: {}", e))
-        })?;
-        let signature_bytes = BASE64.decode(signature_base64.as_bytes()).map_err(|e| {
-            LicenseError::InvalidOfflineLicense(format!("签名解码失败: {}", e))
-        })?;
+        let payload_bytes = BASE64
+            .decode(payload_base64.as_bytes())
+            .map_err(|e| LicenseError::InvalidOfflineLicense(format!("payload 解码失败: {}", e)))?;
+        let signature_bytes = BASE64
+            .decode(signature_base64.as_bytes())
+            .map_err(|e| LicenseError::InvalidOfflineLicense(format!("签名解码失败: {}", e)))?;
 
-        let public_key_bytes: [u8; 32] = public_key.try_into().map_err(|_| {
-            LicenseError::InvalidOfflineLicense("公钥长度错误".to_string())
-        })?;
-        let verifying_key =
-            VerifyingKey::from_bytes(&public_key_bytes).map_err(|_| {
-                LicenseError::InvalidOfflineLicense("公钥无效".to_string())
-            })?;
-        let signature = Signature::from_slice(&signature_bytes).map_err(|_| {
-            LicenseError::InvalidOfflineLicense("签名格式错误".to_string())
-        })?;
+        let public_key_bytes: [u8; 32] = public_key
+            .try_into()
+            .map_err(|_| LicenseError::InvalidOfflineLicense("公钥长度错误".to_string()))?;
+        let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
+            .map_err(|_| LicenseError::InvalidOfflineLicense("公钥无效".to_string()))?;
+        let signature = Signature::from_slice(&signature_bytes)
+            .map_err(|_| LicenseError::InvalidOfflineLicense("签名格式错误".to_string()))?;
 
         verifying_key
             .verify_strict(&payload_bytes, &signature)

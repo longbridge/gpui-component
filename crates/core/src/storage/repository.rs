@@ -4,9 +4,9 @@ use rusqlite::params;
 
 use crate::storage::connection::SqliteConnection;
 use crate::storage::manager::{GlobalStorageState, now};
+use crate::storage::quick_command::QuickCommandRepository;
 use crate::storage::row_mapping::FromSqliteRow;
 use crate::storage::traits::Repository;
-use crate::storage::quick_command::QuickCommandRepository;
 use crate::storage::{ConnectionType, StoredConnection, Workspace};
 
 struct ConnectionRow {
@@ -34,7 +34,10 @@ impl FromSqliteRow for ConnectionRow {
             workspace_id: row.get("workspace_id")?,
             selected_databases: row.get("selected_databases")?,
             remark: row.get("remark")?,
-            sync_enabled: row.get::<_, i64>("sync_enabled").map(|v| v != 0).unwrap_or(true),
+            sync_enabled: row
+                .get::<_, i64>("sync_enabled")
+                .map(|v| v != 0)
+                .unwrap_or(true),
             cloud_id: row.get("cloud_id")?,
             last_synced_at: row.get("last_synced_at")?,
             created_at: row.get("created_at")?,
@@ -229,10 +232,7 @@ impl Repository for ConnectionRepository {
 }
 
 impl ConnectionRepository {
-    pub fn list_by_workspace(
-        &self,
-        workspace_id: Option<i64>,
-    ) -> Result<Vec<StoredConnection>> {
+    pub fn list_by_workspace(&self, workspace_id: Option<i64>) -> Result<Vec<StoredConnection>> {
         self.conn.with_connection(|conn| {
             let sql = if workspace_id.is_some() {
                 "SELECT id, name, connection_type, params, workspace_id, selected_databases, remark, sync_enabled, cloud_id, last_synced_at, created_at, updated_at FROM connections WHERE workspace_id = ?1 ORDER BY updated_at DESC"

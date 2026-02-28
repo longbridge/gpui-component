@@ -259,7 +259,10 @@ impl CloudSyncService {
             id: cloud_conn.local_id,
             name: cloud_conn.name.clone(),
             connection_type,
-            workspace_id: cloud_conn.workspace_id.as_ref().and_then(|s| s.parse().ok()),
+            workspace_id: cloud_conn
+                .workspace_id
+                .as_ref()
+                .and_then(|s| s.parse().ok()),
             params: decrypted_params,
             selected_databases: None,
             remark: None,
@@ -290,11 +293,8 @@ impl CloudSyncService {
 
         // 重新加密每个连接
         for cloud_conn in cloud_connections {
-            let re_encrypted_params = re_encrypt_json_passwords(
-                &cloud_conn.encrypted_params,
-                old_key,
-                new_key,
-            )?;
+            let re_encrypted_params =
+                re_encrypt_json_passwords(&cloud_conn.encrypted_params, old_key, new_key)?;
 
             re_encrypted_connections.push(CloudConnection {
                 id: cloud_conn.id.clone(),
@@ -359,8 +359,7 @@ fn decrypt_json_passwords_with_key(json_str: &str, master_key: &str) -> Result<S
     match serde_json::from_str::<Value>(json_str) {
         Ok(mut value) => {
             decrypt_value_with_key(&mut value, master_key)?;
-            serde_json::to_string(&value)
-                .map_err(|e| SyncError::DataFormatError(e.to_string()))
+            serde_json::to_string(&value).map_err(|e| SyncError::DataFormatError(e.to_string()))
         }
         Err(e) => Err(SyncError::DataFormatError(e.to_string())),
     }
@@ -375,8 +374,7 @@ fn re_encrypt_json_passwords(
     match serde_json::from_str::<Value>(json_str) {
         Ok(mut value) => {
             re_encrypt_value(&mut value, old_key, new_key)?;
-            serde_json::to_string(&value)
-                .map_err(|e| SyncError::DataFormatError(e.to_string()))
+            serde_json::to_string(&value).map_err(|e| SyncError::DataFormatError(e.to_string()))
         }
         Err(e) => Err(SyncError::DataFormatError(e.to_string())),
     }
@@ -464,7 +462,8 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt_json() {
-        let json = r#"{"host":"localhost","password":"secret123","nested":{"passphrase":"key456"}}"#;
+        let json =
+            r#"{"host":"localhost","password":"secret123","nested":{"passphrase":"key456"}}"#;
         let master_key = "test_master_key";
 
         let encrypted = encrypt_json_passwords_with_key(json, master_key);
@@ -476,7 +475,10 @@ mod tests {
 
         assert_eq!(original["host"], result["host"]);
         assert_eq!(original["password"], result["password"]);
-        assert_eq!(original["nested"]["passphrase"], result["nested"]["passphrase"]);
+        assert_eq!(
+            original["nested"]["passphrase"],
+            result["nested"]["passphrase"]
+        );
     }
 
     #[test]

@@ -4,8 +4,8 @@ use lsp_types::CodeAction;
 use std::ops::Range;
 
 use crate::input::{
-    popovers::{CodeActionItem, CodeActionMenu, ContextMenu},
     InputState, ToggleCodeActions,
+    popovers::{CodeActionItem, CodeActionMenu, ContextMenu},
 };
 
 pub trait CodeActionProvider {

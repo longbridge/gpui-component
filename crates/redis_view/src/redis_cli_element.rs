@@ -130,7 +130,11 @@ impl TextSelection {
         }
 
         let start_col = if line == start.line { start.column } else { 0 };
-        let end_col = if line == end.line { end.column } else { line_len };
+        let end_col = if line == end.line {
+            end.column
+        } else {
+            line_len
+        };
 
         let start_col = start_col.min(line_len);
         let end_col = end_col.min(line_len);
@@ -155,7 +159,12 @@ pub enum CliLineType {
     /// 欢迎信息行
     Welcome { text: String },
     /// 当前输入行（带光标）
-    Input { prompt: String, text: String, cursor_pos: usize, hint: Option<String> },
+    Input {
+        prompt: String,
+        text: String,
+        cursor_pos: usize,
+        hint: Option<String>,
+    },
 }
 
 /// CLI 渲染行
@@ -457,25 +466,23 @@ impl Element for RedisCliElementImpl {
 
         for (line_idx, line) in self.lines.iter().enumerate() {
             // 检查是否在可见区域
-            let in_viewport = y + line_height >= bounds.origin.y
-                && y <= bounds.origin.y + bounds.size.height;
+            let in_viewport =
+                y + line_height >= bounds.origin.y && y <= bounds.origin.y + bounds.size.height;
 
             if in_viewport {
                 // 获取该行的选择范围
                 let line_text = self.text_lines.get(line_idx).cloned().unwrap_or_default();
                 let line_cell_len = cell_len(&line_text);
-                let line_selection = self.selection.as_ref().and_then(|s| {
-                    s.get_line_selection(line_idx, line_cell_len)
-                });
+                let line_selection = self
+                    .selection
+                    .as_ref()
+                    .and_then(|s| s.get_line_selection(line_idx, line_cell_len));
 
                 // 绘制选择背景
                 if let Some((sel_start, sel_end)) = line_selection {
                     let sel_x = x_base + char_width * sel_start as f32;
                     let sel_w = char_width * sel_end.saturating_sub(sel_start) as f32;
-                    let sel_rect = Bounds::new(
-                        Point::new(sel_x, y),
-                        size(sel_w, line_height),
-                    );
+                    let sel_rect = Bounds::new(Point::new(sel_x, y), size(sel_w, line_height));
                     window.paint_quad(fill(sel_rect, self.theme.selection_background));
                 }
 
@@ -526,7 +533,9 @@ impl Element for RedisCliElementImpl {
                             &fonts.normal,
                             char_width,
                             line_height,
-                            line_selection.map(|sel| self.clip_selection(sel, cmd_offset, cmd_offset + command_cell_len)),
+                            line_selection.map(|sel| {
+                                self.clip_selection(sel, cmd_offset, cmd_offset + command_cell_len)
+                            }),
                             window,
                             cx,
                         );
@@ -565,7 +574,12 @@ impl Element for RedisCliElementImpl {
                             cx,
                         );
                     }
-                    CliLineType::Input { prompt, text, cursor_pos, hint } => {
+                    CliLineType::Input {
+                        prompt,
+                        text,
+                        cursor_pos,
+                        hint,
+                    } => {
                         let prompt_cell_len = cell_len(prompt);
                         let text_cell_len = cell_len(text);
 
@@ -596,7 +610,13 @@ impl Element for RedisCliElementImpl {
                                 &fonts.normal,
                                 char_width,
                                 line_height,
-                                line_selection.map(|sel| self.clip_selection(sel, text_offset, text_offset + text_cell_len)),
+                                line_selection.map(|sel| {
+                                    self.clip_selection(
+                                        sel,
+                                        text_offset,
+                                        text_offset + text_cell_len,
+                                    )
+                                }),
                                 window,
                                 cx,
                             );
@@ -624,10 +644,8 @@ impl Element for RedisCliElementImpl {
                         if self.cursor_visible {
                             let cursor_cell = cell_column_for_char_index(text, *cursor_pos);
                             let cursor_x = text_x + char_width * cursor_cell as f32;
-                            let cursor_rect = Bounds::new(
-                                Point::new(cursor_x, y),
-                                size(px(2.0), line_height),
-                            );
+                            let cursor_rect =
+                                Bounds::new(Point::new(cursor_x, y), size(px(2.0), line_height));
                             window.paint_quad(fill(cursor_rect, self.theme.cursor));
                         }
                     }
@@ -777,22 +795,18 @@ fn paint_text_with_cell_width(
             underline: None,
             strikethrough: None,
         }],
-        Some(cell_width),  // 使用 cell_width 确保等宽渲染
+        Some(cell_width), // 使用 cell_width 确保等宽渲染
     );
 
     let _ = shaped.paint(origin, line_height, TextAlign::Left, None, window, cx);
 }
-
 
 pub fn cell_len(text: &str) -> usize {
     text.chars().map(cell_width_for_char).sum()
 }
 
 pub fn cell_column_for_char_index(text: &str, char_index: usize) -> usize {
-    text.chars()
-        .take(char_index)
-        .map(cell_width_for_char)
-        .sum()
+    text.chars().take(char_index).map(cell_width_for_char).sum()
 }
 
 pub fn char_index_for_cell_column(text: &str, column: usize) -> usize {
@@ -823,11 +837,7 @@ pub fn expand_text_for_cells(text: &str) -> String {
 }
 
 fn cell_width_for_char(ch: char) -> usize {
-    if is_wide_char(ch) {
-        2
-    } else {
-        1
-    }
+    if is_wide_char(ch) { 2 } else { 1 }
 }
 
 fn is_wide_char(ch: char) -> bool {

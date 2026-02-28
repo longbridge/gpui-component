@@ -1,12 +1,17 @@
 //! 创建键对话框视图
 
-use gpui::{App, Context, Entity, Render, SharedString, Window, div, AppContext, IntoElement, Styled, ParentElement};
 use gpui::prelude::FluentBuilder;
+use gpui::{
+    App, AppContext, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled,
+    Window, div,
+};
 use gpui_component::{
-    ActiveTheme, IndexPath, Sizable, Size, h_flex, v_flex,
+    ActiveTheme, IndexPath, Sizable, Size,
     button::{Button, ButtonVariants as _},
+    h_flex,
     input::{Input, InputState},
     select::{Select, SelectEvent, SelectItem, SelectState},
+    v_flex,
 };
 use rust_i18n::t;
 
@@ -53,8 +58,7 @@ pub struct CreateKeyDialog {
 impl CreateKeyDialog {
     pub fn new(db_index: u8, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let key_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("CreateKey.key_placeholder").to_string())
+            InputState::new(window, cx).placeholder(t!("CreateKey.key_placeholder").to_string())
         });
         let ttl_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
@@ -179,7 +183,11 @@ impl Render for CreateKeyDialog {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_sm().child(t!("CreateKey.label_type").to_string()))
+                    .child(
+                        div()
+                            .text_sm()
+                            .child(t!("CreateKey.label_type").to_string()),
+                    )
                     .child(
                         Select::new(&self.type_select)
                             .w_full()
@@ -188,36 +196,41 @@ impl Render for CreateKeyDialog {
             )
             // TTL
             .child(
-                v_flex()
-                    .gap_1()
-                    .child(div().text_sm().child("TTL:"))
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(Input::new(&self.ttl_input).flex_1())
-                            .child(div().text_sm().child(t!("CreateKey.unit_seconds").to_string()))
-                            .child(
-                                Button::new("ttl-permanent")
-                                    .label(t!("CreateKey.ttl_permanent").to_string())
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click({
-                                        let ttl_input = self.ttl_input.clone();
-                                        move |_, window, cx| {
-                                            ttl_input.update(cx, |state: &mut InputState, cx| {
-                                                state.set_value("-1", window, cx);
-                                            });
-                                        }
-                                    }),
-                            ),
-                    ),
+                v_flex().gap_1().child(div().text_sm().child("TTL:")).child(
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .child(Input::new(&self.ttl_input).flex_1())
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("CreateKey.unit_seconds").to_string()),
+                        )
+                        .child(
+                            Button::new("ttl-permanent")
+                                .label(t!("CreateKey.ttl_permanent").to_string())
+                                .ghost()
+                                .xsmall()
+                                .on_click({
+                                    let ttl_input = self.ttl_input.clone();
+                                    move |_, window, cx| {
+                                        ttl_input.update(cx, |state: &mut InputState, cx| {
+                                            state.set_value("-1", window, cx);
+                                        });
+                                    }
+                                }),
+                        ),
+                ),
             )
             // 值
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_sm().child(t!("CreateKey.label_value").to_string()))
+                    .child(
+                        div()
+                            .text_sm()
+                            .child(t!("CreateKey.label_value").to_string()),
+                    )
                     .child(Input::new(&self.value_input).w_full()),
             )
             // Hash 字段名（Hash 类型专用）
@@ -225,7 +238,11 @@ impl Render for CreateKeyDialog {
                 this.child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child(t!("CreateKey.label_hash_field").to_string()))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("CreateKey.label_hash_field").to_string()),
+                        )
                         .child(Input::new(&self.hash_field_input).w_full()),
                 )
             })
@@ -234,7 +251,11 @@ impl Render for CreateKeyDialog {
                 this.child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_sm().child(t!("CreateKey.label_zset_score").to_string()))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("CreateKey.label_zset_score").to_string()),
+                        )
                         .child(Input::new(&self.zset_score_input).w_full()),
                 )
             })

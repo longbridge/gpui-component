@@ -1524,7 +1524,11 @@ pub trait DatabasePlugin: Send + Sync {
                 .enumerate()
                 .map(|(i, val)| {
                     let col_name = self.quote_identifier(
-                        request.column_names.get(i).map(|s| s.as_str()).unwrap_or(""),
+                        request
+                            .column_names
+                            .get(i)
+                            .map(|s| s.as_str())
+                            .unwrap_or(""),
                     );
                     let col_info = request.columns.get(i);
                     let value = self.format_copy_value(val, col_info);
@@ -1605,9 +1609,21 @@ pub trait DatabasePlugin: Send + Sync {
     /// Check if data type is numeric
     fn is_numeric_type(&self, data_type: &str) -> bool {
         let numeric_types = [
-            "INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT",
-            "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE", "REAL", "NUMBER",
-            "MONEY", "SMALLMONEY", "BIT",
+            "INT",
+            "INTEGER",
+            "BIGINT",
+            "SMALLINT",
+            "TINYINT",
+            "MEDIUMINT",
+            "DECIMAL",
+            "NUMERIC",
+            "FLOAT",
+            "DOUBLE",
+            "REAL",
+            "NUMBER",
+            "MONEY",
+            "SMALLMONEY",
+            "BIT",
         ];
         numeric_types.iter().any(|t| data_type.contains(t))
     }

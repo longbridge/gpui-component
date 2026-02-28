@@ -11,13 +11,15 @@ mod settings_panel;
 pub use quick_command_panel::QuickCommandPanel;
 pub use settings_panel::SettingsPanel;
 
-use gpui::{px, App, AppContext, AnyElement, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Pixels, Render, SharedString, Styled, Window, InteractiveElement, StatefulInteractiveElement, div, Subscription};
-use gpui::prelude::FluentBuilder;
-use gpui_component::{
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
-};
-use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use crate::theme::{TerminalColors, TerminalTheme};
+use gpui::prelude::FluentBuilder;
+use gpui::{
+    div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window,
+};
+use gpui_component::{v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
+use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use rust_i18n::t;
 
 /// 侧边栏面板类型
@@ -102,7 +104,7 @@ pub struct TerminalSidebar {
     /// 终端主题配色（用于侧边栏工具栏）
     colors: TerminalColors,
     /// 订阅句柄
-    _subs: Vec<Subscription>
+    _subs: Vec<Subscription>,
 }
 
 impl TerminalSidebar {
@@ -141,8 +143,9 @@ impl TerminalSidebar {
         });
 
         // 订阅设置面板事件
-        let set_sub = cx.subscribe(&settings_panel, |this, _, event: &settings_panel::SettingsPanelEvent, cx| {
-            match event {
+        let set_sub = cx.subscribe(
+            &settings_panel,
+            |this, _, event: &settings_panel::SettingsPanelEvent, cx| match event {
                 settings_panel::SettingsPanelEvent::Close => {
                     this.set_active_panel(None, cx);
                 }
@@ -168,20 +171,21 @@ impl TerminalSidebar {
                 settings_panel::SettingsPanelEvent::CursorBlinkChanged(enabled) => {
                     cx.emit(TerminalSidebarEvent::CursorBlinkChanged(*enabled));
                 }
-            }
-        });
+            },
+        );
 
         // 订阅快捷命令面板事件
-        let quick_sub = cx.subscribe(&quick_command_panel, |this, _, event: &quick_command_panel::QuickCommandPanelEvent, cx| {
-            match event {
+        let quick_sub = cx.subscribe(
+            &quick_command_panel,
+            |this, _, event: &quick_command_panel::QuickCommandPanelEvent, cx| match event {
                 quick_command_panel::QuickCommandPanelEvent::Close => {
                     this.set_active_panel(None, cx);
                 }
                 quick_command_panel::QuickCommandPanelEvent::ExecuteCommand(cmd) => {
                     cx.emit(TerminalSidebarEvent::ExecuteCommand(cmd.clone()));
                 }
-            }
-        });
+            },
+        );
 
         // 订阅 AI 聊天面板关闭事件
         let ai_chat_sub = cx.subscribe(&ai_chat_panel, |this, _, event: &AiChatPanelEvent, cx| {
@@ -232,7 +236,12 @@ impl TerminalSidebar {
     }
 
     /// 更新设置面板的当前主题
-    pub fn update_current_theme(&mut self, theme: &TerminalTheme, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn update_current_theme(
+        &mut self,
+        theme: &TerminalTheme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.colors = theme.colors();
         // 更新设置面板（会同时更新颜色和主题）
         let theme_clone = theme.clone();
@@ -300,19 +309,15 @@ impl TerminalSidebar {
             .justify_center()
             .rounded_md()
             .cursor_pointer()
-            .when(is_active, |this| {
-                this.bg(accent_color)
-            })
-            .when(!is_active, |this| {
-                this.hover(|s| s.bg(muted_bg))
-            })
+            .when(is_active, |this| this.bg(accent_color))
+            .when(!is_active, |this| this.hover(|s| s.bg(muted_bg)))
             .on_click(cx.listener(move |this, _event, _window, cx| {
                 this.toggle_panel(panel, cx);
             }))
             .child(
                 Icon::new(panel.icon())
                     .with_size(Size::Medium)
-                    .text_color(if is_active { accent_fg } else { muted_fg })
+                    .text_color(if is_active { accent_fg } else { muted_fg }),
             )
     }
 
@@ -338,17 +343,16 @@ impl TerminalSidebar {
     }
 
     /// 渲染面板内容
-    pub fn render_panel_content(&self, panel: SidebarPanel, _window: &mut Window, _cx: &mut Context<Self>) -> AnyElement {
+    pub fn render_panel_content(
+        &self,
+        panel: SidebarPanel,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> AnyElement {
         match panel {
-            SidebarPanel::Settings => {
-                self.settings_panel.clone().into_any_element()
-            }
-            SidebarPanel::QuickCommand => {
-                self.quick_command_panel.clone().into_any_element()
-            }
-            SidebarPanel::AiChat => {
-                self.ai_chat_panel.clone().into_any_element()
-            }
+            SidebarPanel::Settings => self.settings_panel.clone().into_any_element(),
+            SidebarPanel::QuickCommand => self.quick_command_panel.clone().into_any_element(),
+            SidebarPanel::AiChat => self.ai_chat_panel.clone().into_any_element(),
         }
     }
 }

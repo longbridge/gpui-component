@@ -138,10 +138,7 @@ impl CopyFormatter {
 
         // 数据行
         for row in data {
-            let escaped: Vec<String> = row
-                .iter()
-                .map(|cell| cell.replace('|', "\\|"))
-                .collect();
+            let escaped: Vec<String> = row.iter().map(|cell| cell.replace('|', "\\|")).collect();
             result.push_str(&format!("| {} |", escaped.join(" | ")));
             result.push('\n');
         }

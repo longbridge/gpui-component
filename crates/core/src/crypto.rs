@@ -110,8 +110,7 @@ fn save_verification_data(data: &str) -> bool {
 
 /// 从文件读取密钥验证数据
 fn load_verification_data() -> Option<String> {
-    get_verification_file_path()
-        .and_then(|p| fs::read_to_string(p).ok())
+    get_verification_file_path().and_then(|p| fs::read_to_string(p).ok())
 }
 
 /// 从用户主密钥派生 AES-256 密钥
@@ -173,11 +172,9 @@ pub fn verify_master_key(master_key: &str, verification_data: &str) -> bool {
     let ciphertext = &combined[12..];
 
     match cipher.decrypt(nonce, ciphertext) {
-        Ok(plaintext) => {
-            String::from_utf8(plaintext)
-                .map(|s| s == VERIFICATION_MAGIC)
-                .unwrap_or(false)
-        }
+        Ok(plaintext) => String::from_utf8(plaintext)
+            .map(|s| s == VERIFICATION_MAGIC)
+            .unwrap_or(false),
         Err(_) => false,
     }
 }
@@ -256,10 +253,7 @@ pub fn has_master_key() -> bool {
 /// 返回设置的原始主密钥字符串，用于云同步等需要原始密钥的场景。
 /// 如果未设置主密钥，返回 None。
 pub fn get_raw_master_key() -> Option<String> {
-    RAW_MASTER_KEY
-        .read()
-        .ok()
-        .and_then(|guard| guard.clone())
+    RAW_MASTER_KEY.read().ok().and_then(|guard| guard.clone())
 }
 
 /// 加密密码
@@ -407,7 +401,9 @@ pub fn decrypt_with_key(encrypted: &str, master_key: &str) -> Result<String, Cry
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
 
     let encoded = &encrypted[ENCRYPTED_PREFIX.len()..];
-    let combined = BASE64.decode(encoded).map_err(|_| CryptoError::EncodingFailed)?;
+    let combined = BASE64
+        .decode(encoded)
+        .map_err(|_| CryptoError::EncodingFailed)?;
 
     if combined.len() < 12 {
         return Err(CryptoError::InvalidDataFormat);
@@ -417,9 +413,7 @@ pub fn decrypt_with_key(encrypted: &str, master_key: &str) -> Result<String, Cry
     let ciphertext = &combined[12..];
 
     match cipher.decrypt(nonce, ciphertext) {
-        Ok(plaintext) => {
-            String::from_utf8(plaintext).map_err(|_| CryptoError::EncodingFailed)
-        }
+        Ok(plaintext) => String::from_utf8(plaintext).map_err(|_| CryptoError::EncodingFailed),
         Err(_) => Err(CryptoError::DecryptionFailed),
     }
 }
@@ -559,7 +553,10 @@ pub fn try_restore_master_key() -> bool {
     let master_key = match storage.load() {
         Some(key) => key,
         None => {
-            tracing::warn!("[密钥恢复] 从「{}」读取失败，需要用户手动输入", storage.name());
+            tracing::warn!(
+                "[密钥恢复] 从「{}」读取失败，需要用户手动输入",
+                storage.name()
+            );
             return false;
         }
     };

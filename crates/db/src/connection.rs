@@ -50,8 +50,9 @@ impl DbError {
     where
         E: std::error::Error + Send + Sync + 'static,
     {
+        let message = format!("{}: {}", message.into(), source);
         Self::Connection {
-            message: message.into(),
+            message,
             source: Some(Box::new(source)),
         }
     }
@@ -67,8 +68,9 @@ impl DbError {
     where
         E: std::error::Error + Send + Sync + 'static,
     {
+        let message = format!("{}: {}", message.into(), source);
         Self::Query {
-            message: message.into(),
+            message,
             source: Some(Box::new(source)),
         }
     }
@@ -84,8 +86,9 @@ impl DbError {
     where
         E: std::error::Error + Send + Sync + 'static,
     {
+        let message = format!("{}: {}", message.into(), source);
         Self::Transaction {
-            message: message.into(),
+            message,
             source: Some(Box::new(source)),
         }
     }

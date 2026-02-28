@@ -1,9 +1,9 @@
-use crate::cloud_sync::engine::{SyncEngine, SyncHandler, SyncFuture};
+use crate::cloud_sync::engine::{SyncEngine, SyncFuture, SyncHandler};
 use crate::cloud_sync::models::{CloudWorkspace, SyncResult, WorkspaceSyncPlan};
 use crate::cloud_sync::queue::SyncOperation;
 use crate::cloud_sync::service::SyncError;
-use crate::storage::{PendingCloudDeletionRepository, Workspace, WorkspaceRepository};
 use crate::storage::traits::Repository;
+use crate::storage::{PendingCloudDeletionRepository, Workspace, WorkspaceRepository};
 use std::collections::{HashMap, HashSet};
 
 const WORKSPACE_QUEUE_KEY: &str = "workspace";
@@ -26,12 +26,16 @@ impl SyncEngine {
         let mut result = SyncResult::default();
 
         let pending_deletions = self.process_pending_workspace_deletions().await;
-        tracing::info!("[工作空间] 处理待删除列表完成: {} 个", pending_deletions.len());
+        tracing::info!(
+            "[工作空间] 处理待删除列表完成: {} 个",
+            pending_deletions.len()
+        );
 
         let local_workspaces = self.get_local_workspaces()?;
         tracing::info!("[工作空间] 本地工作空间: {} 个", local_workspaces.len());
 
-        let cloud_workspaces = self.cloud_client
+        let cloud_workspaces = self
+            .cloud_client
             .list_workspaces()
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
@@ -40,7 +44,10 @@ impl SyncEngine {
         let deleted_count =
             self.process_cloud_soft_deleted_workspaces(&cloud_workspaces, &local_workspaces)?;
         if deleted_count > 0 {
-            tracing::info!("[工作空间] 处理云端软删除: 删除了 {} 个本地工作空间", deleted_count);
+            tracing::info!(
+                "[工作空间] 处理云端软删除: 删除了 {} 个本地工作空间",
+                deleted_count
+            );
             result.deleted += deleted_count;
         }
 
@@ -48,9 +55,13 @@ impl SyncEngine {
             .into_iter()
             .filter(|ws| ws.deleted_at.is_none())
             .collect();
-        tracing::info!("[工作空间] 活跃云端工作空间: {} 个", active_cloud_workspaces.len());
+        tracing::info!(
+            "[工作空间] 活跃云端工作空间: {} 个",
+            active_cloud_workspaces.len()
+        );
 
-        let plan = self.calculate_workspace_sync_plan(&local_workspaces, &active_cloud_workspaces)?;
+        let plan =
+            self.calculate_workspace_sync_plan(&local_workspaces, &active_cloud_workspaces)?;
         tracing::info!(
             "[工作空间计划] 上传: {}, 更新云端: {}, 下载: {}, 更新本地: {}",
             plan.to_upload.len(),
@@ -86,9 +97,10 @@ impl SyncEngine {
                     cloud_id: cloud_ws.id.clone(),
                 });
             } else {
-                result
-                    .errors
-                    .push(format!("更新云端工作空间失败 {}: 缺少本地 ID", local_ws.name));
+                result.errors.push(format!(
+                    "更新云端工作空间失败 {}: 缺少本地 ID",
+                    local_ws.name
+                ));
             }
         }
 
@@ -103,9 +115,10 @@ impl SyncEngine {
                     cloud_id: cloud_ws.id.clone(),
                 });
             } else {
-                result
-                    .errors
-                    .push(format!("更新本地工作空间失败 {}: 缺少本地 ID", cloud_ws.name));
+                result.errors.push(format!(
+                    "更新本地工作空间失败 {}: 缺少本地 ID",
+                    cloud_ws.name
+                ));
             }
         }
 
@@ -131,10 +144,8 @@ impl SyncEngine {
                                 tracing::info!("[上传工作空间] 成功: {}", local_ws.name);
                             }
                             Err(e) => {
-                                let error_message = format!(
-                                    "上传工作空间失败 {}: {}",
-                                    local_ws.name, e
-                                );
+                                let error_message =
+                                    format!("上传工作空间失败 {}: {}", local_ws.name, e);
                                 result.errors.push(error_message.clone());
                                 queue.mark_failed(queued_operation, error_message);
                             }
@@ -149,17 +160,15 @@ impl SyncEngine {
                 }
                 SyncOperation::UpdateCloud { local_id, cloud_id } => {
                     let Some(local_ws) = local_workspace_map.get(&local_id) else {
-                        result.errors.push(format!(
-                            "更新云端工作空间失败 {}: 本地数据不存在",
-                            local_id
-                        ));
+                        result
+                            .errors
+                            .push(format!("更新云端工作空间失败 {}: 本地数据不存在", local_id));
                         continue;
                     };
                     let Some(cloud_ws) = cloud_workspace_map.get(&cloud_id) else {
-                        result.errors.push(format!(
-                            "更新云端工作空间失败 {}: 云端数据不存在",
-                            cloud_id
-                        ));
+                        result
+                            .errors
+                            .push(format!("更新云端工作空间失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
 
@@ -178,17 +187,15 @@ impl SyncEngine {
                 }
                 SyncOperation::UpdateLocal { local_id, cloud_id } => {
                     let Some(local_ws) = local_workspace_map.get(&local_id) else {
-                        result.errors.push(format!(
-                            "更新本地工作空间失败 {}: 本地数据不存在",
-                            local_id
-                        ));
+                        result
+                            .errors
+                            .push(format!("更新本地工作空间失败 {}: 本地数据不存在", local_id));
                         continue;
                     };
                     let Some(cloud_ws) = cloud_workspace_map.get(&cloud_id) else {
-                        result.errors.push(format!(
-                            "更新本地工作空间失败 {}: 云端数据不存在",
-                            cloud_id
-                        ));
+                        result
+                            .errors
+                            .push(format!("更新本地工作空间失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
 
@@ -233,8 +240,7 @@ impl SyncEngine {
                             tracing::info!("[删除云端工作空间] 成功: {}", cloud_id);
                         }
                         Err(e) => {
-                            let error_message =
-                                format!("删除云端工作空间失败 {}: {}", cloud_id, e);
+                            let error_message = format!("删除云端工作空间失败 {}: {}", cloud_id, e);
                             result.errors.push(error_message.clone());
                             queue.mark_failed(queued_operation, error_message);
                         }
@@ -247,8 +253,7 @@ impl SyncEngine {
                             tracing::info!("[删除本地工作空间] 成功: {}", local_id);
                         }
                         Err(e) => {
-                            let error_message =
-                                format!("删除本地工作空间失败 {}: {}", local_id, e);
+                            let error_message = format!("删除本地工作空间失败 {}: {}", local_id, e);
                             result.errors.push(error_message.clone());
                             queue.mark_failed(queued_operation, error_message);
                         }
@@ -299,9 +304,11 @@ impl SyncEngine {
                         let cloud_updated = cloud_ws.updated_at / 1000;
 
                         if local_updated > cloud_updated {
-                            plan.to_update_cloud.push((local_ws.clone(), (*cloud_ws).clone()));
+                            plan.to_update_cloud
+                                .push((local_ws.clone(), (*cloud_ws).clone()));
                         } else if cloud_updated > local_updated {
-                            plan.to_update_local.push(((*cloud_ws).clone(), local_ws.clone()));
+                            plan.to_update_local
+                                .push(((*cloud_ws).clone(), local_ws.clone()));
                         }
                     }
                 }
@@ -330,14 +337,16 @@ impl SyncEngine {
                         cloud_ws.id,
                         local_ws.id
                     );
-                    plan.to_update_local.push((cloud_ws.clone(), (*local_ws).clone()));
+                    plan.to_update_local
+                        .push((cloud_ws.clone(), (*local_ws).clone()));
                 } else if let Some(local_ws) = local_all_by_name.get(cloud_ws.name.as_str()) {
                     let local_cloud_id_is_valid = local_ws
                         .cloud_id
                         .as_ref()
                         .is_some_and(|cloud_id| cloud_map.contains_key(cloud_id.as_str()));
                     if !local_cloud_id_is_valid {
-                        plan.to_update_local.push((cloud_ws.clone(), (*local_ws).clone()));
+                        plan.to_update_local
+                            .push((cloud_ws.clone(), (*local_ws).clone()));
                     }
                 } else {
                     plan.to_download.push(cloud_ws.clone());
@@ -407,7 +416,8 @@ impl SyncEngine {
         cloud_workspaces: &[CloudWorkspace],
         local_workspaces: &[Workspace],
     ) -> Result<usize, SyncError> {
-        let repo = self.storage
+        let repo = self
+            .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 
@@ -426,11 +436,7 @@ impl SyncEngine {
                             local_id
                         );
                         if let Err(e) = repo.delete(local_id) {
-                            tracing::error!(
-                                "[软删除] 删除本地工作空间失败: {} - {}",
-                                local_id,
-                                e
-                            );
+                            tracing::error!("[软删除] 删除本地工作空间失败: {} - {}", local_id, e);
                         } else {
                             deleted_count += 1;
                         }
@@ -455,7 +461,8 @@ impl SyncEngine {
     }
 
     fn get_local_workspaces(&self) -> Result<Vec<Workspace>, SyncError> {
-        let repo = self.storage
+        let repo = self
+            .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 
@@ -474,7 +481,8 @@ impl SyncEngine {
             deleted_at: None,
         };
 
-        let created = self.cloud_client
+        let created = self
+            .cloud_client
             .create_workspace(&cloud_ws)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
@@ -516,11 +524,13 @@ impl SyncEngine {
             cloud_id: Some(cloud_ws.id.clone()),
         };
 
-        let repo = self.storage
+        let repo = self
+            .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 
-        let new_id = repo.insert(&mut local_ws)
+        let new_id = repo
+            .insert(&mut local_ws)
             .map_err(|e| SyncError::StorageError(e.to_string()))?;
 
         let updated_cloud_ws = CloudWorkspace {
@@ -556,7 +566,8 @@ impl SyncEngine {
             cloud_id: Some(cloud_ws.id.clone()),
         };
 
-        let repo = self.storage
+        let repo = self
+            .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 
@@ -576,7 +587,8 @@ impl SyncEngine {
     }
 
     fn delete_local_workspace(&self, local_id: i64) -> Result<(), SyncError> {
-        let repo = self.storage
+        let repo = self
+            .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 
@@ -585,7 +597,8 @@ impl SyncEngine {
     }
 
     fn update_workspace_cloud_id(&self, local_id: i64, cloud_id: &str) -> Result<(), SyncError> {
-        let repo = self.storage
+        let repo = self
+            .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 

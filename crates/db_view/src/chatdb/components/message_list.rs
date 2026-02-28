@@ -8,28 +8,27 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, px, AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement, ScrollHandle,
-    StatefulInteractiveElement, Styled,
+    AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement, ScrollHandle,
+    StatefulInteractiveElement, Styled, div, px,
 };
 use gpui_component::{
+    ActiveTheme,
     button::{Button, ButtonVariants},
     h_flex,
     highlighter::HighlightTheme,
     scroll::Scrollbar,
-    v_flex, ActiveTheme,
+    v_flex,
 };
 use rust_i18n::t;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::chatdb::chat_markdown::{parse_sql_code_blocks, SqlCodeBlock};
+use crate::chatdb::chat_markdown::{SqlCodeBlock, parse_sql_code_blocks};
 use crate::chatdb::chat_sql_block::SqlBlockResultState;
 use crate::chatdb::chat_sql_result::ChatSqlResultView;
 
 // 复用核心库的类型和常量
-pub use one_core::ai_chat::{
-    ChatRole, MessageVariant, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP,
-};
+pub use one_core::ai_chat::{ChatRole, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP, MessageVariant};
 
 // 使用核心库的泛型消息类型
 use one_core::{ChatMessageUIGeneric, MessageExtension};
@@ -187,45 +186,34 @@ impl MessageListRenderer {
         F: Fn() + 'static,
         G: Fn() + 'static,
     {
-        h_flex()
-            .w_full()
-            .justify_center()
-            .gap_2()
-            .child(
-                h_flex()
-                    .gap_2()
-                    .when(hidden_count > 0, move |this| {
-                        this.child(
-                            Button::new("chat-load-more")
-                                .ghost()
-                                .label(
-                                    t!(
-                                        "ChatMessageList.load_more",
-                                        hidden_count = hidden_count
-                                    )
-                                    .to_string()
-                                )
-                                .on_click(move |_, _, _| on_load_more()),
-                        )
-                    })
-                    .when(can_collapse, move |this| {
-                        this.child(
-                            Button::new("chat-collapse-history")
-                                .ghost()
-                                .label(t!("ChatMessageList.collapse_history").to_string())
-                                .on_click(move |_, _, _| on_collapse()),
-                        )
-                    }),
-            )
+        h_flex().w_full().justify_center().gap_2().child(
+            h_flex()
+                .gap_2()
+                .when(hidden_count > 0, move |this| {
+                    this.child(
+                        Button::new("chat-load-more")
+                            .ghost()
+                            .label(
+                                t!("ChatMessageList.load_more", hidden_count = hidden_count)
+                                    .to_string(),
+                            )
+                            .on_click(move |_, _, _| on_load_more()),
+                    )
+                })
+                .when(can_collapse, move |this| {
+                    this.child(
+                        Button::new("chat-collapse-history")
+                            .ghost()
+                            .label(t!("ChatMessageList.collapse_history").to_string())
+                            .on_click(move |_, _, _| on_collapse()),
+                    )
+                }),
+        )
     }
 
     /// 渲染单条消息
     /// 委托用户/系统消息到 ChatMessageRenderer，保留 SQL 特有的渲染逻辑
-    fn render_message(
-        msg: &ChatMessageUI,
-        ctx: &MessageListContext,
-        cx: &App,
-    ) -> AnyElement {
+    fn render_message(msg: &ChatMessageUI, ctx: &MessageListContext, cx: &App) -> AnyElement {
         use one_core::ChatMessageRenderer;
 
         match msg.role {
@@ -267,10 +255,7 @@ impl MessageListRenderer {
     /// 渲染 SQL 结果消息
     fn render_sql_result_message(msg_id: &str, ctx: &MessageListContext, _cx: &App) -> AnyElement {
         if let Some(result_view) = ctx.sql_result_views.get(msg_id) {
-            div()
-                .w_full()
-                .child(result_view.clone())
-                .into_any_element()
+            div().w_full().child(result_view.clone()).into_any_element()
         } else {
             div()
                 .w_full()

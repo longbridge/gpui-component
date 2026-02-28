@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{theme::DEFAULT_THEME_COLORS, ThemeMode};
+use crate::{ThemeMode, theme::DEFAULT_THEME_COLORS};
 
 use gpui::Hsla;
 use schemars::JsonSchema;

@@ -3,15 +3,19 @@ use std::rc::Rc;
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
 use crate::actions::{Cancel, Confirm};
 use crate::button::{Button, ButtonVariants};
-use crate::input::{clear_button, Delete, InputEvent, InputState, MaskPattern, NumberInputEvent, StepAction, StepperNumberInput};
-use crate::{h_flex, v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized, StyledExt};
+use crate::input::{
+    Delete, InputEvent, InputState, MaskPattern, NumberInputEvent, StepAction, StepperNumberInput,
+    clear_button,
+};
+use crate::{
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h_flex, v_flex,
+};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use gpui::{
-    anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, ClickEvent, Context,
-    ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable
-    , InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement as _, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Subscription, Window,
+    App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
+    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
@@ -205,7 +209,7 @@ impl DateTimePickerState {
         });
     }
 
-    fn on_escape(&mut self, _: &Cancel, window: &mut Window , cx: &mut Context<Self>) {
+    fn on_escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
             return;
@@ -353,18 +357,18 @@ impl DateTimePickerState {
         if self.updating_inputs {
             return;
         }
-        match event { NumberInputEvent::Step(action) => {
-            let current = self.unit_value(unit);
-            let max = unit.max_value();
-            let next = match action {
-                StepAction::Increment => current.saturating_add(1) % max,
-                StepAction::Decrement => current.checked_sub(1).unwrap_or(max - 1),
-            };
-            self.set_unit_value(unit, next, cx);
-            self.sync_inputs(window, cx);
-            } 
+        match event {
+            NumberInputEvent::Step(action) => {
+                let current = self.unit_value(unit);
+                let max = unit.max_value();
+                let next = match action {
+                    StepAction::Increment => current.saturating_add(1) % max,
+                    StepAction::Decrement => current.checked_sub(1).unwrap_or(max - 1),
+                };
+                self.set_unit_value(unit, next, cx);
+                self.sync_inputs(window, cx);
+            }
         }
-       
     }
 
     fn set_unit_value(&mut self, unit: TimeUnit, value: u32, cx: &mut Context<Self>) {

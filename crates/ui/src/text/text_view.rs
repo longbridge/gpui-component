@@ -158,9 +158,10 @@ impl TextView {
             + 'static,
         E: IntoElement,
     {
-        self.code_block_renderer = Some(Arc::new(move |code_block, options, element, window, cx| {
-            f(code_block, options, element, window, cx).into_any_element()
-        }));
+        self.code_block_renderer =
+            Some(Arc::new(move |code_block, options, element, window, cx| {
+                f(code_block, options, element, window, cx).into_any_element()
+            }));
         self
     }
 }

@@ -2,8 +2,22 @@
 
 use std::collections::{HashMap, HashSet};
 
-use gpui::{AnyElement, App, AppContext, AsyncApp, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString, Styled, Subscription, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, uniform_list};
-use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, dialog::DialogButtonProps, h_flex, input::{Input, InputEvent, InputState}, menu::{ContextMenuExt, PopupMenu, PopupMenuItem}, notification::Notification, spinner::Spinner, v_flex, WindowExt as _};
+use gpui::{
+    AnyElement, App, AppContext, AsyncApp, ClipboardItem, Context, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
+    SharedString, Styled, Subscription, UniformListScrollHandle, Window, div,
+    prelude::FluentBuilder, px, uniform_list,
+};
+use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable, Size, WindowExt as _,
+    dialog::DialogButtonProps,
+    h_flex,
+    input::{Input, InputEvent, InputState},
+    menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
+    notification::Notification,
+    spinner::Spinner,
+    v_flex,
+};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::{ActiveConnections, StoredConnection};
 use rust_i18n::t;
@@ -93,17 +107,20 @@ impl MongoTreeView {
     }
 
     pub fn add_stored_connection(&mut self, connection: StoredConnection, cx: &mut Context<Self>) {
-        let connection_id = connection
-            .id
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| format!("temp-{}", std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()));
+        let connection_id = connection.id.map(|id| id.to_string()).unwrap_or_else(|| {
+            format!(
+                "temp-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            )
+        });
 
         let node = MongoNode::new_connection(connection_id.clone(), connection.name.clone());
         self.nodes.insert(connection_id.clone(), node);
-        self.stored_connections.insert(connection_id.clone(), connection);
+        self.stored_connections
+            .insert(connection_id.clone(), connection);
         if !self.connection_order.contains(&connection_id) {
             self.connection_order.push(connection_id);
         }
@@ -137,11 +154,7 @@ impl MongoTreeView {
         let Some(connection) = self.stored_connections.get(&node_id).cloned() else {
             warn!(
                 "{}",
-                t!(
-                    "MongoTree.connection_config_not_found",
-                    node_id = node_id
-                )
-                .to_string()
+                t!("MongoTree.connection_config_not_found", node_id = node_id).to_string()
             );
             return;
         };
@@ -191,7 +204,8 @@ impl MongoTreeView {
                         view.connected_nodes.insert(node_id.clone());
                         view.expand_node(&node_id);
                         if let Some(connection_numeric_id) = connection_id {
-                            cx.global_mut::<ActiveConnections>().add(connection_numeric_id);
+                            cx.global_mut::<ActiveConnections>()
+                                .add(connection_numeric_id);
                         }
                         cx.emit(MongoTreeViewEvent::ConnectionEstablished {
                             node_id: node_id.clone(),
@@ -325,7 +339,12 @@ impl MongoTreeView {
         .detach();
     }
 
-    fn set_node_children(&mut self, node_id: &str, children: Vec<MongoNode>, cx: &mut Context<Self>) {
+    fn set_node_children(
+        &mut self,
+        node_id: &str,
+        children: Vec<MongoNode>,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.set_children(children.clone());
         }
@@ -413,9 +432,7 @@ impl MongoTreeView {
                 }
                 !node.children_loaded || !node.children.is_empty()
             }
-            MongoNodeType::Database => {
-                !node.children_loaded || !node.children.is_empty()
-            }
+            MongoNodeType::Database => !node.children_loaded || !node.children.is_empty(),
             MongoNodeType::Collection => false,
         }
     }
@@ -624,7 +641,7 @@ impl MongoTreeView {
                     if name.is_empty() {
                         window.push_notification(
                             Notification::warning(
-                                t!("MongoTree.collection_name_required").to_string()
+                                t!("MongoTree.collection_name_required").to_string(),
                             )
                             .autohide(true),
                             cx,
@@ -681,7 +698,11 @@ impl MongoTreeView {
                         .gap_2()
                         .child(div().text_sm().child(t!("MongoTree.database_name_label")))
                         .child(Input::new(&database_input).w_full())
-                        .child(div().text_sm().child(t!("MongoTree.initial_collection_label")))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("MongoTree.initial_collection_label")),
+                        )
                         .child(Input::new(&collection_input).w_full()),
                 )
                 .confirm()
@@ -698,7 +719,7 @@ impl MongoTreeView {
                     if database_name.is_empty() || collection_name.is_empty() {
                         window.push_notification(
                             Notification::warning(
-                                t!("MongoTree.database_and_collection_required").to_string()
+                                t!("MongoTree.database_and_collection_required").to_string(),
                             )
                             .autohide(true),
                             cx,
@@ -749,11 +770,8 @@ impl MongoTreeView {
                     v_flex()
                         .gap_2()
                         .child(
-                            t!(
-                                "MongoTree.confirm_delete_database",
-                                name = database_name
-                            )
-                            .to_string()
+                            t!("MongoTree.confirm_delete_database", name = database_name)
+                                .to_string(),
                         )
                         .child(t!("Common.irreversible").to_string()),
                 )
@@ -790,11 +808,7 @@ impl MongoTreeView {
             Ok(config) => config,
             Err(error) => {
                 Self::notify_error(
-                    &t!(
-                        "MongoTree.read_connection_info_failed",
-                        error = error
-                    )
-                    .to_string(),
+                    &t!("MongoTree.read_connection_info_failed", error = error).to_string(),
                     cx,
                 );
                 return;
@@ -804,11 +818,7 @@ impl MongoTreeView {
             Ok(params) => params,
             Err(error) => {
                 Self::notify_error(
-                    &t!(
-                        "MongoTree.parse_connection_params_failed",
-                        error = error
-                    )
-                    .to_string(),
+                    &t!("MongoTree.parse_connection_params_failed", error = error).to_string(),
                     cx,
                 );
                 return;
@@ -820,9 +830,7 @@ impl MongoTreeView {
         let connection_name = stored.name.clone();
         let connection_string = config.connection_string.clone();
         let connection_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx)
-                .multi_line(true)
-                .auto_grow(2, 4);
+            let mut state = InputState::new(window, cx).multi_line(true).auto_grow(2, 4);
             state.set_value(connection_string.clone(), window, cx);
             state
         });
@@ -848,26 +856,29 @@ impl MongoTreeView {
                     v_flex()
                         .gap_3()
                         .child(
-                            div()
-                                .text_sm()
-                                .child(
-                                    t!(
-                                        "MongoTree.connection_name_display",
-                                        name = connection_name
-                                    )
-                                    .to_string()
-                                )
+                            div().text_sm().child(
+                                t!("MongoTree.connection_name_display", name = connection_name)
+                                    .to_string(),
+                            ),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("MongoTree.connection_string_label")))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("MongoTree.connection_string_label")),
+                                )
                                 .child(Input::new(&connection_input).w_full().disabled(true)),
                         )
                         .child(
                             v_flex()
                                 .gap_1()
-                                .child(div().text_sm().child(t!("MongoTree.connection_params_label")))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .child(t!("MongoTree.connection_params_label")),
+                                )
                                 .child(Input::new(&params_input).w_full().disabled(true)),
                         ),
                 )
@@ -878,14 +889,10 @@ impl MongoTreeView {
                         .cancel_text(t!("Common.close").to_string()),
                 )
                 .on_ok(move |_, window, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(
-                        connection_string.clone(),
-                    ));
+                    cx.write_to_clipboard(ClipboardItem::new_string(connection_string.clone()));
                     window.push_notification(
-                        Notification::success(
-                            t!("MongoTree.connection_string_copied").to_string()
-                        )
-                        .autohide(true),
+                        Notification::success(t!("MongoTree.connection_string_copied").to_string())
+                            .autohide(true),
                         cx,
                     );
                     window.close_dialog(cx);
@@ -914,7 +921,8 @@ impl MongoTreeView {
                     .create_collection(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
@@ -953,7 +961,8 @@ impl MongoTreeView {
                     .create_collection(&database_name, &collection_name)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
@@ -993,7 +1002,8 @@ impl MongoTreeView {
                     .drop_database(&database_name_for_task)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| match result {
                 Ok(_) => {
@@ -1034,17 +1044,15 @@ impl MongoTreeView {
                     .remove_connection(&connection_id_for_task)
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
-            }).await;
+            })
+            .await;
 
             _ = this.update(cx, |view, cx| {
                 view.loading_nodes.remove(&connection_id_for_update);
                 match result {
                     Ok(_) => {
                         view.clear_connection_state(&connection_id_for_update, cx);
-                        Self::notify_success(
-                            t!("MongoTree.connection_disconnected").as_ref(),
-                            cx,
-                        );
+                        Self::notify_success(t!("MongoTree.connection_disconnected").as_ref(), cx);
                     }
                     Err(error) => {
                         Self::notify_error(
@@ -1079,7 +1087,9 @@ impl MongoTreeView {
         self.error_nodes.remove(connection_id);
         self.loading_nodes.remove(connection_id);
         if let Some(selected_id) = self.selected_node.clone() {
-            if selected_id == connection_id || selected_id.starts_with(&format!("{}:", connection_id)) {
+            if selected_id == connection_id
+                || selected_id.starts_with(&format!("{}:", connection_id))
+            {
                 self.selected_node = None;
             }
         }
@@ -1155,7 +1165,12 @@ impl MongoTreeView {
         }
     }
 
-    fn render_item(&mut self, index: usize, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_item(
+        &mut self,
+        index: usize,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let entry = match self.flat_entries.get(index).cloned() {
             Some(entry) => entry,
             None => return div().into_any_element(),
@@ -1177,7 +1192,8 @@ impl MongoTreeView {
             MongoNodeType::Connection => IconName::MongoDB,
             MongoNodeType::Database => IconName::Database,
             MongoNodeType::Collection => IconName::Table,
-        }.color();
+        }
+        .color();
 
         let indent = px((entry.depth as f32) * 12.0);
         let click_node_id = node_id.clone();
@@ -1198,12 +1214,8 @@ impl MongoTreeView {
             .px_2()
             .py_1()
             .cursor_pointer()
-            .when(is_selected, |this| {
-                this.bg(cx.theme().list_active)
-            })
-            .when(!is_selected, |this| {
-                this.text_color(cx.theme().foreground)
-            })
+            .when(is_selected, |this| this.bg(cx.theme().list_active))
+            .when(!is_selected, |this| this.text_color(cx.theme().foreground))
             .on_mouse_down(MouseButton::Left, move |event, _window, cx| {
                 if event.click_count == 2 {
                     view_for_double_click.update(cx, |view, cx| {
@@ -1260,12 +1272,7 @@ impl MongoTreeView {
                 this.child(Spinner::new().with_size(Size::Small))
             })
             .when_some(error_message, |this, error| {
-                this.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
+                this.child(div().text_xs().text_color(cx.theme().danger).child(error))
             })
             .context_menu({
                 move |menu, window, cx| {
@@ -1299,21 +1306,21 @@ impl MongoTreeView {
                 let node_id_for_action = node_id.to_string();
                 if !is_connected {
                     menu = menu.item(
-                        PopupMenuItem::new(t!("MongoTree.menu_connect").to_string()).on_click(window.listener_for(
-                            &view_for_action,
-                            move |view, _, _, cx| {
+                        PopupMenuItem::new(t!("MongoTree.menu_connect").to_string()).on_click(
+                            window.listener_for(&view_for_action, move |view, _, _, cx| {
                                 view.connect_node(node_id_for_action.clone(), cx);
-                            },
-                        )),
+                            }),
+                        ),
                     );
                 } else {
                     menu = menu.item(
-                        PopupMenuItem::new(t!("MongoTree.menu_refresh_databases").to_string()).on_click(window.listener_for(
-                            &view_for_action,
-                            move |view, _, _, cx| {
-                                view.refresh_connection(&node_id_for_action, cx);
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_refresh_databases").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_action,
+                                move |view, _, _, cx| {
+                                    view.refresh_connection(&node_id_for_action, cx);
+                                },
+                            )),
                     );
                 }
             }
@@ -1336,95 +1343,97 @@ impl MongoTreeView {
 
                 menu = menu
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_create_collection").to_string()).on_click(window.listener_for(
-                            &view_for_create_collection,
-                            move |view, _, window, cx| {
-                                view.open_create_collection_dialog(
-                                    node_id_for_create_collection.clone(),
-                                    window,
-                                    cx,
-                                );
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_create_collection").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_create_collection,
+                                move |view, _, window, cx| {
+                                    view.open_create_collection_dialog(
+                                        node_id_for_create_collection.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
                     )
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_create_database").to_string()).on_click(window.listener_for(
-                            &view_for_create_database,
-                            move |view, _, window, cx| {
-                                view.open_create_database_dialog(
-                                    connection_id_for_create_database.clone(),
-                                    window,
-                                    cx,
-                                );
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_create_database").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_create_database,
+                                move |view, _, window, cx| {
+                                    view.open_create_database_dialog(
+                                        connection_id_for_create_database.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
                     )
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_delete_database").to_string()).on_click(window.listener_for(
-                            &view_for_drop_database,
-                            move |view, _, window, cx| {
-                                view.open_drop_database_dialog(
-                                    node_id_for_drop_database.clone(),
-                                    window,
-                                    cx,
-                                );
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_delete_database").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_drop_database,
+                                move |view, _, window, cx| {
+                                    view.open_drop_database_dialog(
+                                        node_id_for_drop_database.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
                     )
                     .separator()
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_open_shell").to_string()).on_click(window.listener_for(
-                            &view_for_shell,
-                            move |_, _, _, cx| {
+                        PopupMenuItem::new(t!("MongoTree.menu_open_shell").to_string()).on_click(
+                            window.listener_for(&view_for_shell, move |_, _, _, cx| {
                                 Self::notify_info(
                                     t!("MongoTree.shell_not_implemented").as_ref(),
                                     cx,
                                 );
-                            },
-                        )),
+                            }),
+                        ),
                     )
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_show_metrics").to_string()).on_click(window.listener_for(
-                            &view_for_metrics,
-                            move |_, _, _, cx| {
+                        PopupMenuItem::new(t!("MongoTree.menu_show_metrics").to_string()).on_click(
+                            window.listener_for(&view_for_metrics, move |_, _, _, cx| {
                                 Self::notify_info(
                                     t!("MongoTree.metrics_not_implemented").as_ref(),
                                     cx,
                                 );
-                            },
-                        )),
+                            }),
+                        ),
                     )
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_show_connection_info").to_string()).on_click(window.listener_for(
-                            &view_for_connection_info,
-                            move |view, _, window, cx| {
-                                view.open_connection_info_dialog(
-                                    connection_id_for_connection_info.clone(),
-                                    window,
-                                    cx,
-                                );
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_show_connection_info").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_connection_info,
+                                move |view, _, window, cx| {
+                                    view.open_connection_info_dialog(
+                                        connection_id_for_connection_info.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            )),
                     )
                     .separator()
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_refresh_databases").to_string()).on_click(window.listener_for(
-                            &view_for_refresh,
-                            move |view, _, _, cx| {
-                                view.refresh_connection(&connection_id_for_refresh, cx);
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_refresh_databases").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_refresh,
+                                move |view, _, _, cx| {
+                                    view.refresh_connection(&connection_id_for_refresh, cx);
+                                },
+                            )),
                     )
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_disconnect").to_string()).on_click(window.listener_for(
-                            &view_for_disconnect,
-                            move |view, _, _, cx| {
+                        PopupMenuItem::new(t!("MongoTree.menu_disconnect").to_string()).on_click(
+                            window.listener_for(&view_for_disconnect, move |view, _, _, cx| {
                                 view.disconnect_connection(
                                     connection_id_for_disconnect.clone(),
                                     cx,
                                 );
-                            },
-                        )),
+                            }),
+                        ),
                     );
             }
             MongoNodeType::Collection => {
@@ -1434,20 +1443,19 @@ impl MongoTreeView {
                 let node_id_for_tab = node_id.to_string();
                 menu = menu
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_open_collection").to_string()).on_click(window.listener_for(
-                            &view_for_action,
-                            move |view, _, _, cx| {
-                                view.open_collection(&node_id_for_action, cx);
-                            },
-                        )),
+                        PopupMenuItem::new(t!("MongoTree.menu_open_collection").to_string())
+                            .on_click(window.listener_for(
+                                &view_for_action,
+                                move |view, _, _, cx| {
+                                    view.open_collection(&node_id_for_action, cx);
+                                },
+                            )),
                     )
                     .item(
-                        PopupMenuItem::new(t!("MongoTree.menu_open_in_new_tab").to_string()).on_click(window.listener_for(
-                            &view_for_tab,
-                            move |view, _, _, cx| {
+                        PopupMenuItem::new(t!("MongoTree.menu_open_in_new_tab").to_string())
+                            .on_click(window.listener_for(&view_for_tab, move |view, _, _, cx| {
                                 view.open_collection_in_tab(&node_id_for_tab, cx);
-                            },
-                        )),
+                            })),
                     );
             }
         }
@@ -1487,24 +1495,20 @@ impl Render for MongoTreeView {
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_1()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(t!("MongoTree.connections_header").to_string())
-                                    .child(format!("({})", connection_count)),
-                            ),
+                        h_flex().items_center().justify_between().child(
+                            h_flex()
+                                .items_center()
+                                .gap_1()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(t!("MongoTree.connections_header").to_string())
+                                .child(format!("({})", connection_count)),
+                        ),
                     )
                     .child(
                         Input::new(&self.search_input)
                             .prefix(
-                                Icon::new(IconName::Search)
-                                    .text_color(cx.theme().muted_foreground),
+                                Icon::new(IconName::Search).text_color(cx.theme().muted_foreground),
                             )
                             .cleanable(true)
                             .small()
@@ -1532,7 +1536,10 @@ impl Render for MongoTreeView {
                                 "mongo-tree-list",
                                 entry_count,
                                 cx.processor(
-                                    move |this: &mut Self, visible_range: std::ops::Range<usize>, window, cx| {
+                                    move |this: &mut Self,
+                                          visible_range: std::ops::Range<usize>,
+                                          window,
+                                          cx| {
                                         visible_range
                                             .map(|ix| this.render_item(ix, window, cx))
                                             .collect()

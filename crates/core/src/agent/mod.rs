@@ -6,7 +6,9 @@ pub mod types;
 
 pub use dispatcher::{AgentDispatcher, SessionAffinity};
 pub use registry::AgentRegistry;
-pub use types::{Agent, AgentContext, AgentDescriptor, AgentEvent, AgentResult, Artifact, DynAgent};
+pub use types::{
+    Agent, AgentContext, AgentDescriptor, AgentEvent, AgentResult, Artifact, DynAgent,
+};
 
 use gpui::App;
 

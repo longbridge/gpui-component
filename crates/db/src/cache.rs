@@ -300,7 +300,9 @@ impl NodeCache {
     pub async fn clear_connection_cache(&self, ctx: &CacheContext) {
         let prefix = format!("{}_", ctx.cache_key_prefix());
         // moka 没有 retain，需要收集匹配的 key 后逐个 invalidate
-        let keys_to_remove: Vec<Arc<String>> = self.memory_cache.iter()
+        let keys_to_remove: Vec<Arc<String>> = self
+            .memory_cache
+            .iter()
             .filter(|(k, _)| k.starts_with(&prefix))
             .map(|(k, _)| k)
             .collect();

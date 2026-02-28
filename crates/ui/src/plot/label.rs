@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use gpui::{
-    point, px, App, Bounds, FontWeight, Hsla, Pixels, Point, SharedString, TextAlign, TextRun,
-    Window,
+    App, Bounds, FontWeight, Hsla, Pixels, Point, SharedString, TextAlign, TextRun, Window, point,
+    px,
 };
 
 use super::origin_point;

@@ -1167,7 +1167,8 @@ fn split_trailing_number(candidate: &str) -> Option<(&str, u32)> {
 }
 
 fn trim_trailing_punctuation(candidate: &str) -> String {
-    let trimmed = candidate.trim_end_matches(|char: char| matches!(char, ')' | ']' | '}' | ',' | ';'));
+    let trimmed =
+        candidate.trim_end_matches(|char: char| matches!(char, ')' | ']' | '}' | ',' | ';'));
     trimmed.to_string()
 }
 

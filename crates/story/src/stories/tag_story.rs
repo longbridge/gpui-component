@@ -1,9 +1,9 @@
 use gpui::{
-    px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window, px,
 };
 
-use gpui_component::{h_flex, indigo_50, indigo_500, tag::Tag, v_flex, ColorName, Sizable};
+use gpui_component::{ColorName, Sizable, h_flex, indigo_50, indigo_500, tag::Tag, v_flex};
 
 use crate::section;
 

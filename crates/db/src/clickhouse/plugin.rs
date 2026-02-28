@@ -1,7 +1,7 @@
 use anyhow::Result;
-use std::collections::HashMap;
 use gpui_component::table::Column;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
+use std::collections::HashMap;
 
 use crate::clickhouse::connection::ClickHouseDbConnection;
 use crate::connection::{DbConnection, DbError};
@@ -459,10 +459,7 @@ impl DatabasePlugin for ClickHousePlugin {
                 ) {
                     let granularity = row.get(3).and_then(|v| v.clone());
 
-                    let columns = expr
-                        .as_ref()
-                        .map(|e| vec![e.clone()])
-                        .unwrap_or_default();
+                    let columns = expr.as_ref().map(|e| vec![e.clone()]).unwrap_or_default();
 
                     let index_type_str = index_type.as_deref().unwrap_or("minmax");
 
@@ -494,9 +491,7 @@ impl DatabasePlugin for ClickHousePlugin {
     ) -> Result<ObjectView> {
         use gpui::px;
 
-        let indexes = self
-            .list_indexes(connection, database, None, table)
-            .await?;
+        let indexes = self.list_indexes(connection, database, None, table).await?;
 
         let columns = vec![
             Column::new("name", "Name").width(px(150.0)),
@@ -667,7 +662,6 @@ impl DatabasePlugin for ClickHousePlugin {
     fn supports_procedures(&self) -> bool {
         false
     }
-
 
     async fn list_procedures(
         &self,
@@ -844,7 +838,8 @@ impl DatabasePlugin for ClickHousePlugin {
                             let mut metadata = folder_metadata.clone();
                             metadata.insert("type".to_string(), c.data_type);
                             metadata.insert("is_nullable".to_string(), c.is_nullable.to_string());
-                            metadata.insert("is_primary_key".to_string(), c.is_primary_key.to_string());
+                            metadata
+                                .insert("is_primary_key".to_string(), c.is_primary_key.to_string());
                             metadata
                         })
                     })

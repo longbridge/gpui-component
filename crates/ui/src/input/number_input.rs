@@ -1,8 +1,15 @@
-use gpui::{AnyElement, App, Context, Corners, Edges, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, actions, prelude::FluentBuilder as _, div, px};
+use gpui::{
+    AnyElement, App, Context, Corners, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, actions, div, prelude::FluentBuilder as _, px,
+};
 
-use crate::{ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex, v_flex, Icon};
-use crate::button::ButtonVariants;
 use super::{Input, InputState};
+use crate::button::ButtonVariants;
+use crate::{
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyledExt as _, button::Button,
+    h_flex, v_flex,
+};
 
 actions!(number_input, [Increment, Decrement]);
 
@@ -89,11 +96,21 @@ impl Disableable for NumberInput {
 }
 
 impl InputState {
-    pub(crate) fn on_action_increment(&mut self, _: &Increment, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn on_action_increment(
+        &mut self,
+        _: &Increment,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.on_number_input_step(StepAction::Increment, window, cx);
     }
 
-    pub(crate) fn on_action_decrement(&mut self, _: &Decrement, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn on_action_decrement(
+        &mut self,
+        _: &Decrement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.on_number_input_step(StepAction::Decrement, window, cx);
     }
 
@@ -282,8 +299,6 @@ impl Styled for StepperNumberInput {
     }
 }
 
-
-
 impl RenderOnce for StepperNumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
@@ -296,19 +311,16 @@ impl RenderOnce for StepperNumberInput {
             .refine_style(&self.style)
             .when(self.disabled, |this| this.bg(cx.theme().muted))
             .child(
-                div()
-                    .flex_1()
-                    .min_w(px(52.))
-                    .child(
-                        Input::new(&self.state)
-                            .appearance(self.appearance)
-                            .with_size(self.size)
-                            .disabled(self.disabled)
-                            .gap_0()
-                            .rounded_none()
-                            .flex_1()
-                            .w_full(),
-                    ),
+                div().flex_1().min_w(px(52.)).child(
+                    Input::new(&self.state)
+                        .appearance(self.appearance)
+                        .with_size(self.size)
+                        .disabled(self.disabled)
+                        .gap_0()
+                        .rounded_none()
+                        .flex_1()
+                        .w_full(),
+                ),
             )
             .child(
                 v_flex()

@@ -710,11 +710,8 @@ impl DataExportView {
                             logs_clone.update(cx, |l, cx| {
                                 l.push(LogEntry {
                                     table: table.clone(),
-                                    message: t!(
-                                        "ImportExport.transfer_records",
-                                        rows = rows
-                                    )
-                                    .to_string(),
+                                    message: t!("ImportExport.transfer_records", rows = rows)
+                                        .to_string(),
                                 });
                                 cx.notify();
                             });

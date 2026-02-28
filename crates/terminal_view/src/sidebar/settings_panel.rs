@@ -2,20 +2,25 @@
 //!
 //! 提供搜索、字体设置和主题切换功能
 
-use gpui::{div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString, Styled, Subscription, Window};
 use gpui::prelude::FluentBuilder;
 use gpui::FontWeight;
+use gpui::{
+    div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString, Styled,
+    Subscription, Window,
+};
 use gpui_component::{
     button::{Button, ButtonVariants},
+    h_flex,
     input::{Input, InputEvent, InputState, NumberInput, NumberInputEvent, StepAction},
     scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectState},
     switch::Switch,
-    h_flex, ActiveTheme, v_flex, Icon, IconName, Sizable, Size,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
 };
 use rust_i18n::t;
 
-use crate::theme::{TerminalTheme, MIN_FONT_SIZE, MAX_FONT_SIZE};
+use crate::theme::{TerminalTheme, MAX_FONT_SIZE, MIN_FONT_SIZE};
 
 /// 设置面板事件
 #[derive(Clone, Debug)]
@@ -58,17 +63,11 @@ pub struct SettingsPanel {
 
 impl SettingsPanel {
     pub fn new(initial_theme: &TerminalTheme, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Search...")
-        });
+        let search_input_state = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
 
         // 字体大小输入框
         let font_size = f32::from(initial_theme.font_size);
-        let font_size_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("13")
-        });
+        let font_size_input_state = cx.new(|cx| InputState::new(window, cx).placeholder("13"));
         font_size_input_state.update(cx, |state: &mut InputState, cx| {
             state.set_value(&format!("{:.0}", font_size), window, cx);
         });
@@ -81,14 +80,13 @@ impl SettingsPanel {
 
         // 找到当前字体的索引
         let current_font = initial_theme.font_family.to_string();
-        let selected_index = fonts.iter()
+        let selected_index = fonts
+            .iter()
             .position(|f| f.as_ref() == current_font)
             .map(|i| gpui_component::IndexPath::default().row(i));
 
-        let font_select_state = cx.new(|cx| {
-            SelectState::new(fonts, selected_index, window, cx)
-                .searchable(true)
-        });
+        let font_select_state =
+            cx.new(|cx| SelectState::new(fonts, selected_index, window, cx).searchable(true));
 
         let mut subscriptions = Vec::new();
 
@@ -97,21 +95,19 @@ impl SettingsPanel {
         subscriptions.push(cx.subscribe_in(
             &search_input_state,
             window,
-            move |_this, _state, event, _window, cx| {
-                match event {
-                    InputEvent::Change => {
-                        let value = input_entity.read(cx).value().to_string();
-                        cx.emit(SettingsPanelEvent::SearchPatternChanged(value));
-                    }
-                    InputEvent::PressEnter { secondary } => {
-                        if *secondary {
-                            cx.emit(SettingsPanelEvent::SearchPrevious);
-                        } else {
-                            cx.emit(SettingsPanelEvent::SearchNext);
-                        }
-                    }
-                    _ => {}
+            move |_this, _state, event, _window, cx| match event {
+                InputEvent::Change => {
+                    let value = input_entity.read(cx).value().to_string();
+                    cx.emit(SettingsPanelEvent::SearchPatternChanged(value));
                 }
+                InputEvent::PressEnter { secondary } => {
+                    if *secondary {
+                        cx.emit(SettingsPanelEvent::SearchPrevious);
+                    } else {
+                        cx.emit(SettingsPanelEvent::SearchNext);
+                    }
+                }
+                _ => {}
             },
         ));
 
@@ -120,18 +116,16 @@ impl SettingsPanel {
         subscriptions.push(cx.subscribe_in(
             &font_size_input_state,
             window,
-            move |this, _state, event: &InputEvent, _window, cx| {
-                match event {
-                    InputEvent::Change => {
-                        let value = font_size_entity.read(cx).value().to_string();
-                        if let Ok(size) = value.parse::<f32>() {
-                            let clamped: f32 = size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
-                            this.current_theme.font_size = px(clamped);
-                            cx.emit(SettingsPanelEvent::FontSizeChanged(clamped));
-                        }
+            move |this, _state, event: &InputEvent, _window, cx| match event {
+                InputEvent::Change => {
+                    let value = font_size_entity.read(cx).value().to_string();
+                    if let Ok(size) = value.parse::<f32>() {
+                        let clamped: f32 = size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
+                        this.current_theme.font_size = px(clamped);
+                        cx.emit(SettingsPanelEvent::FontSizeChanged(clamped));
                     }
-                    _ => {}
                 }
+                _ => {}
             },
         ));
 
@@ -140,20 +134,18 @@ impl SettingsPanel {
         subscriptions.push(cx.subscribe_in(
             &font_size_input_state,
             window,
-            move |this, _state, event: &NumberInputEvent, window, cx| {
-                match event {
-                    NumberInputEvent::Step(action) => {
-                        let current = f32::from(this.current_theme.font_size);
-                        let new_size = match action {
-                            StepAction::Increment => (current + 1.0).min(MAX_FONT_SIZE),
-                            StepAction::Decrement => (current - 1.0).max(MIN_FONT_SIZE),
-                        };
-                        this.current_theme.font_size = px(new_size);
-                        font_size_entity2.update(cx, |state: &mut InputState, cx| {
-                            state.set_value(&format!("{:.0}", new_size), window, cx);
-                        });
-                        cx.emit(SettingsPanelEvent::FontSizeChanged(new_size));
-                    }
+            move |this, _state, event: &NumberInputEvent, window, cx| match event {
+                NumberInputEvent::Step(action) => {
+                    let current = f32::from(this.current_theme.font_size);
+                    let new_size = match action {
+                        StepAction::Increment => (current + 1.0).min(MAX_FONT_SIZE),
+                        StepAction::Decrement => (current - 1.0).max(MIN_FONT_SIZE),
+                    };
+                    this.current_theme.font_size = px(new_size);
+                    font_size_entity2.update(cx, |state: &mut InputState, cx| {
+                        state.set_value(&format!("{:.0}", new_size), window, cx);
+                    });
+                    cx.emit(SettingsPanelEvent::FontSizeChanged(new_size));
                 }
             },
         ));
@@ -182,7 +174,12 @@ impl SettingsPanel {
     }
 
     /// 设置当前主题
-    pub fn set_current_theme(&mut self, theme: TerminalTheme, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_current_theme(
+        &mut self,
+        theme: TerminalTheme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // 更新字体大小输入框
         let font_size = f32::from(theme.font_size);
         self.font_size_input_state.update(cx, |state, cx| {
@@ -243,15 +240,15 @@ impl SettingsPanel {
                     .child(
                         Icon::new(IconName::Settings)
                             .with_size(Size::Small)
-                            .text_color(fg)
+                            .text_color(fg),
                     )
                     .child(
                         div()
                             .text_sm()
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(fg)
-                            .child("Settings")
-                    )
+                            .child("Settings"),
+                    ),
             )
             .child(
                 Button::new("close-settings-panel")
@@ -260,7 +257,7 @@ impl SettingsPanel {
                     .xsmall()
                     .on_click(cx.listener(|_this, _, _, cx| {
                         cx.emit(SettingsPanelEvent::Close);
-                    }))
+                    })),
             )
     }
 
@@ -268,53 +265,46 @@ impl SettingsPanel {
     fn render_search_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let muted_fg = cx.theme().muted_foreground;
 
-        v_flex()
-            .gap_3()
-            .p_3()
-            .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(muted_fg)
-                            .child("SEARCH")
-                    )
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Input::new(&self.search_input_state)
-                                    .small()
-                                    .w_full()
-                            )
-                            .child(
-                                Button::new("search-prev")
-                                    .icon(IconName::ChevronUp)
-                                    .ghost()
-                                    .small()
-                                    .on_click(cx.listener(|_this, _, _window, cx| {
-                                        cx.emit(SettingsPanelEvent::SearchPrevious);
-                                    }))
-                            )
-                            .child(
-                                Button::new("search-next")
-                                    .icon(IconName::ChevronDown)
-                                    .ghost()
-                                    .small()
-                                    .on_click(cx.listener(|_this, _, _window, cx| {
-                                        cx.emit(SettingsPanelEvent::SearchNext);
-                                    }))
-                            )
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(muted_fg)
-                            .child("Press ⌘G for next, ⇧⌘G for previous")
-                    )
-            )
+        v_flex().gap_3().p_3().child(
+            v_flex()
+                .gap_2()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(muted_fg)
+                        .child("SEARCH"),
+                )
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child(Input::new(&self.search_input_state).small().w_full())
+                        .child(
+                            Button::new("search-prev")
+                                .icon(IconName::ChevronUp)
+                                .ghost()
+                                .small()
+                                .on_click(cx.listener(|_this, _, _window, cx| {
+                                    cx.emit(SettingsPanelEvent::SearchPrevious);
+                                })),
+                        )
+                        .child(
+                            Button::new("search-next")
+                                .icon(IconName::ChevronDown)
+                                .ghost()
+                                .small()
+                                .on_click(cx.listener(|_this, _, _window, cx| {
+                                    cx.emit(SettingsPanelEvent::SearchNext);
+                                })),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(muted_fg)
+                        .child("Press ⌘G for next, ⇧⌘G for previous"),
+                ),
+        )
     }
 
     /// 渲染主题项
@@ -339,16 +329,14 @@ impl SettingsPanel {
             .py_2()
             .rounded_md()
             .cursor_pointer()
-            .when(is_current, |style| {
-                style.bg(accent)
-                    .text_color(accent_fg)
-            })
-            .when(!is_current, |style| {
-                style.hover(|s| s.bg(muted))
-            })
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _window, cx| {
-                this.set_theme(theme_for_click.clone(), cx);
-            }))
+            .when(is_current, |style| style.bg(accent).text_color(accent_fg))
+            .when(!is_current, |style| style.hover(|s| s.bg(muted)))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _, _window, cx| {
+                    this.set_theme(theme_for_click.clone(), cx);
+                }),
+            )
             // 颜色预览
             .child(
                 h_flex()
@@ -360,7 +348,7 @@ impl SettingsPanel {
                             .rounded_md()
                             .bg(theme.background)
                             .border_1()
-                            .border_color(border)
+                            .border_color(border),
                     )
                     .child(
                         div()
@@ -369,21 +357,13 @@ impl SettingsPanel {
                             .rounded_md()
                             .bg(theme.foreground)
                             .border_1()
-                            .border_color(border)
-                    )
+                            .border_color(border),
+                    ),
             )
             // 主题名称
-            .child(
-                div()
-                    .flex_1()
-                    .text_sm()
-                    .child(theme_display_name)
-            )
+            .child(div().flex_1().text_sm().child(theme_display_name))
             .when(is_current, |item| {
-                item.child(
-                    Icon::new(IconName::Check)
-                        .with_size(Size::Small)
-                )
+                item.child(Icon::new(IconName::Check).with_size(Size::Small))
             })
             .into_any_element()
     }
@@ -408,18 +388,13 @@ impl SettingsPanel {
                             .text_xs()
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(muted_fg)
-                            .child("FONT SIZE")
+                            .child("FONT SIZE"),
                     )
                     .child(
                         NumberInput::new(&self.font_size_input_state)
                             .small()
-                            .suffix(
-                                div()
-                                    .text_xs()
-                                    .text_color(muted_fg)
-                                    .child("px")
-                            )
-                    )
+                            .suffix(div().text_xs().text_color(muted_fg).child("px")),
+                    ),
             )
             // 字体选择
             .child(
@@ -430,14 +405,14 @@ impl SettingsPanel {
                             .text_xs()
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(muted_fg)
-                            .child("FONT FAMILY")
+                            .child("FONT FAMILY"),
                     )
                     .child(
                         Select::new(&self.font_select_state)
                             .small()
                             .text_color(fg)
-                            .placeholder("Select font...")
-                    )
+                            .placeholder("Select font..."),
+                    ),
             )
     }
 
@@ -460,17 +435,13 @@ impl SettingsPanel {
                             .text_xs()
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(muted_fg)
-                            .child(t!("Settings.cursor").to_uppercase())
+                            .child(t!("Settings.cursor").to_uppercase()),
                     )
                     .child(
                         h_flex()
                             .items_center()
                             .justify_between()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .child(t!("Settings.cursor_blink"))
-                            )
+                            .child(div().text_sm().child(t!("Settings.cursor_blink")))
                             .child(
                                 Switch::new("cursor-blink-switch")
                                     .checked(cursor_blink)
@@ -478,9 +449,9 @@ impl SettingsPanel {
                                     .on_click(cx.listener(|this, checked: &bool, _window, cx| {
                                         this.cursor_blink = *checked;
                                         cx.emit(SettingsPanelEvent::CursorBlinkChanged(*checked));
-                                    }))
-                            )
-                    )
+                                    })),
+                            ),
+                    ),
             )
     }
 
@@ -506,7 +477,7 @@ impl SettingsPanel {
                     .text_xs()
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(muted_fg)
-                    .child("THEME")
+                    .child("THEME"),
             )
             .child(
                 div()
@@ -516,7 +487,7 @@ impl SettingsPanel {
                     .rounded_md()
                     .bg(muted)
                     .p_1()
-                    .children(theme_items)
+                    .children(theme_items),
             )
     }
 }
@@ -545,7 +516,7 @@ impl Render for SettingsPanel {
                     .child(self.render_search_section(cx))
                     .child(self.render_font_section(cx))
                     .child(self.render_cursor_section(cx))
-                    .child(self.render_theme_section(cx))
+                    .child(self.render_theme_section(cx)),
             )
     }
 }

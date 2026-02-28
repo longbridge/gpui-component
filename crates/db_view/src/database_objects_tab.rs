@@ -1,18 +1,21 @@
 use crate::database_view_plugin::{DatabaseViewPluginRegistry, ToolbarButtonType};
 use crate::db_tree_view::get_icon_for_node_type;
 use db::{DbNode, DbNodeType, GlobalDbState, ObjectView};
-use gpui::{AnyElement, App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Render, SharedString, Styled, Subscription, WeakEntity, Window, div, px, uniform_list, AppContext, InteractiveElement, StatefulInteractiveElement};
-use gpui_component::{InteractiveElementExt, WindowExt};
+use gpui::prelude::FluentBuilder;
+use gpui::{
+    AnyElement, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
+    WeakEntity, Window, div, px, uniform_list,
+};
 use gpui_component::button::Button;
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::label::Label;
 use gpui_component::notification::Notification;
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size, h_flex,
-    table::Column,
-    tooltip::Tooltip,
-    v_flex,
+    ActiveTheme, Icon, IconName, Sizable, Size, h_flex, table::Column, tooltip::Tooltip, v_flex,
 };
+use gpui_component::{InteractiveElementExt, WindowExt};
 use one_core::storage::manager::get_queries_dir;
 use one_core::storage::{
     ConnectionRepository, DatabaseType, DbConnectionConfig, GlobalStorageState, StorageManager,
@@ -22,10 +25,9 @@ use one_core::tab_container::{TabContent, TabContentEvent};
 use one_core::utils::debouncer::Debouncer;
 use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::ops::Range;
+use std::sync::Arc;
 use std::time::Duration;
-use gpui::prelude::FluentBuilder;
 
 fn format_timestamp(ts: i64) -> String {
     use chrono::{DateTime, Local};
@@ -173,8 +175,7 @@ impl DatabaseObjects {
         let storage_manager = cx.global::<GlobalStorageState>().storage.clone();
         let clone_workspace = workspace.clone();
         cx.spawn(async move |entity: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let result =
-                Self::load_connection_list_view(storage_manager, clone_workspace);
+            let result = Self::load_connection_list_view(storage_manager, clone_workspace);
             if let Some(view) = result {
                 let columns = view.columns.clone();
                 let rows = view.rows.clone();
@@ -239,9 +240,15 @@ impl DatabaseObjects {
 
         let mut current_metadata: HashMap<String, String> = current_node.metadata.clone();
 
-        current_metadata.entry("database".to_string()).or_insert_with(|| current_node.get_database_name().unwrap_or_default());
-        current_metadata.entry("schema".to_string()).or_insert_with(|| current_node.get_schema_name().unwrap_or_default());
-        current_metadata.entry("table".to_string()).or_insert_with(|| current_node.get_table_name().unwrap_or_default());
+        current_metadata
+            .entry("database".to_string())
+            .or_insert_with(|| current_node.get_database_name().unwrap_or_default());
+        current_metadata
+            .entry("schema".to_string())
+            .or_insert_with(|| current_node.get_schema_name().unwrap_or_default());
+        current_metadata
+            .entry("table".to_string())
+            .or_insert_with(|| current_node.get_table_name().unwrap_or_default());
 
         let node_id = match db_node_type {
             DbNodeType::Table => {
@@ -811,7 +818,9 @@ impl DatabaseObjects {
                     .text_ellipsis()
                     .whitespace_nowrap()
                     .when(!tooltip_text.is_empty(), |el| {
-                        el.tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
+                        el.tooltip(move |window, cx| {
+                            Tooltip::new(tooltip_text.clone()).build(window, cx)
+                        })
                     })
                     .child(cell),
             );
@@ -907,7 +916,7 @@ impl DatabaseObjects {
                                         window.push_notification(
                                             Notification::warning(
                                                 t!("DatabaseObjects.batch_not_supported")
-                                                    .to_string()
+                                                    .to_string(),
                                             ),
                                             cx,
                                         );
@@ -972,37 +981,29 @@ impl Render for DatabaseObjects {
                     .into_any_element(),
             )
             .child(
-                v_flex()
-                    .size_full()
-                    .gap_2()
-                    .child(header)
-                    .child(
-                        div().flex_1().overflow_hidden().child(
-                            uniform_list("database-objects-list", row_count, {
-                                cx.processor(
-                                    move |state: &mut Self,
-                                          range: Range<usize>,
-                                          _window,
-                                          cx| {
-                                        let db_node_type = state.db_node_type.clone();
-                                        let show_row_number = true;
-                                        range
-                                            .map(|list_ix| {
-                                                let Some(original_row) =
-                                                    state.filtered_rows.get(list_ix).copied()
-                                                else {
-                                                    return div().id(list_ix).into_any_element();
-                                                };
-                                                let Some(row_values) =
-                                                    state.rows.get(original_row)
-                                                else {
-                                                    return div().id(list_ix).into_any_element();
-                                                };
+                v_flex().size_full().gap_2().child(header).child(
+                    div().flex_1().overflow_hidden().child(
+                        uniform_list("database-objects-list", row_count, {
+                            cx.processor(
+                                move |state: &mut Self, range: Range<usize>, _window, cx| {
+                                    let db_node_type = state.db_node_type.clone();
+                                    let show_row_number = true;
+                                    range
+                                        .map(|list_ix| {
+                                            let Some(original_row) =
+                                                state.filtered_rows.get(list_ix).copied()
+                                            else {
+                                                return div().id(list_ix).into_any_element();
+                                            };
+                                            let Some(row_values) = state.rows.get(original_row)
+                                            else {
+                                                return div().id(list_ix).into_any_element();
+                                            };
 
-                                                let is_selected =
-                                                    state.selected_indices.contains(&list_ix);
-                                                let row_ix = list_ix;
-                                                div()
+                                            let is_selected =
+                                                state.selected_indices.contains(&list_ix);
+                                            let row_ix = list_ix;
+                                            div()
                                                     .id(list_ix)
                                                     .cursor_pointer()
                                                     .on_mouse_down(
@@ -1040,16 +1041,16 @@ impl Render for DatabaseObjects {
                                                         cx,
                                                     ))
                                                     .into_any_element()
-                                            })
-                                            .collect()
-                                    },
-                                )
-                            })
-                            .flex_grow()
-                            .size_full()
-                            .with_sizing_behavior(ListSizingBehavior::Auto),
-                        ),
+                                        })
+                                        .collect()
+                                },
+                            )
+                        })
+                        .flex_grow()
+                        .size_full()
+                        .with_sizing_behavior(ListSizingBehavior::Auto),
                     ),
+                ),
             )
             .child(div().p_2().text_sm().child(title))
     }

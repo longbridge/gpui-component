@@ -1,6 +1,6 @@
+use gpui::{App, AsyncApp, BackgroundExecutor};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use gpui::{App, AsyncApp, BackgroundExecutor};
 
 /// A simple debouncer that delays execution until a period of inactivity.
 ///

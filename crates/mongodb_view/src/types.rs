@@ -155,15 +155,17 @@ impl MongoNode {
     }
 
     pub fn is_expandable(&self) -> bool {
-        matches!(self.node_type, MongoNodeType::Connection | MongoNodeType::Database)
+        matches!(
+            self.node_type,
+            MongoNodeType::Connection | MongoNodeType::Database
+        )
     }
 }
 
 pub fn document_to_pretty_json(document: &Document) -> Result<String, MongoError> {
-    let bson = mongodb::bson::to_bson(document)
-        .map_err(|e| MongoError::Serialization(e.to_string()))?;
-    serde_json::to_string_pretty(&bson)
-        .map_err(|e| MongoError::Serialization(e.to_string()))
+    let bson =
+        mongodb::bson::to_bson(document).map_err(|e| MongoError::Serialization(e.to_string()))?;
+    serde_json::to_string_pretty(&bson).map_err(|e| MongoError::Serialization(e.to_string()))
 }
 
 pub fn bson_to_string(value: &Bson) -> String {

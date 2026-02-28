@@ -227,11 +227,9 @@ async fn connect_via_proxy(
         }
         ProxyType::Http => {
             // HTTP CONNECT代理实现
-            let stream = TcpStream::connect(&proxy_addr)
-                .await
-                .map_err(|e| {
-                    anyhow::anyhow!(t!("Ssh.http_proxy_connect_failed", error = e).to_string())
-                })?;
+            let stream = TcpStream::connect(&proxy_addr).await.map_err(|e| {
+                anyhow::anyhow!(t!("Ssh.http_proxy_connect_failed", error = e).to_string())
+            })?;
 
             // 发送CONNECT请求
             let connect_request = if let (Some(username), Some(password)) =
@@ -260,12 +258,10 @@ async fn connect_via_proxy(
             reader.read_line(&mut response_line).await?;
 
             if !response_line.contains("200") {
-                anyhow::bail!(
-                    t!(
-                        "Ssh.http_proxy_connection_failed",
-                        response = response_line.trim()
-                    )
-                );
+                anyhow::bail!(t!(
+                    "Ssh.http_proxy_connection_failed",
+                    response = response_line.trim()
+                ));
             }
 
             // 读取剩余的响应头
@@ -349,11 +345,7 @@ impl SshClient for RusshClient {
             authenticate(&mut jump_session, &jump.username, &jump.auth).await?;
 
             // 通过跳板机建立到目标服务器的端口转发
-            tracing::info!(
-                "通过跳板机转发到目标服务器 {}:{}",
-                config.host,
-                config.port
-            );
+            tracing::info!("通过跳板机转发到目标服务器 {}:{}", config.host, config.port);
             let forwarded_channel = jump_session
                 .channel_open_direct_tcpip(&config.host, config.port as u32, "127.0.0.1", 0)
                 .await?;

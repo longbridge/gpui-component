@@ -621,9 +621,10 @@ impl DbTreeView {
                 schema: _,
             } => {
                 // DDL 变更后自动刷新受影响连接的树节点
-                if self.tracked_connection_ids.contains(
-                    &connection_id.parse::<i64>().unwrap_or(-1),
-                ) {
+                if self
+                    .tracked_connection_ids
+                    .contains(&connection_id.parse::<i64>().unwrap_or(-1))
+                {
                     // 找到该连接下对应数据库节点并刷新
                     let target_node_id = self.find_database_node(connection_id, database);
                     if let Some(node_id) = target_node_id {
@@ -2402,12 +2403,14 @@ impl DbTreeView {
         // 添加通用的刷新菜单项
         let view_ref = view.clone();
         let node_id_for_refresh = node_id.to_string();
-        menu.item(PopupMenuItem::new(t!("Common.refresh")).on_click(window.listener_for(
-            &view_ref,
-            move |this, _, _, cx| {
-                this.refresh_tree(node_id_for_refresh.clone(), cx);
-            },
-        )))
+        menu.item(
+            PopupMenuItem::new(t!("Common.refresh")).on_click(window.listener_for(
+                &view_ref,
+                move |this, _, _, cx| {
+                    this.refresh_tree(node_id_for_refresh.clone(), cx);
+                },
+            )),
+        )
     }
 }
 

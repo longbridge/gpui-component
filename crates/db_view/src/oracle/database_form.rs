@@ -79,8 +79,7 @@ impl OracleDatabaseForm {
             cx.new(|cx| SelectState::new(charset_items, Some(IndexPath::new(0)), window, cx));
 
         let tablespace_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("Connection.tablespace_users").to_string())
+            InputState::new(window, cx).placeholder(t!("Connection.tablespace_users").to_string())
         });
 
         let name_sub = cx.observe(&name_input, |this, _, cx| {

@@ -10,10 +10,10 @@ use gpui_component::{
     tooltip::Tooltip,
     v_flex,
 };
+use rust_i18n::t;
 use std::collections::HashSet;
 use std::ops::Range;
 use std::time::SystemTime;
-use rust_i18n::t;
 
 #[derive(Clone, Debug)]
 pub struct FileItem {
@@ -491,7 +491,7 @@ impl FileListPanel {
                             IconName::File
                         })
                         .with_size(Size::Large)
-                            .color(),
+                        .color(),
                     )
                     .child({
                         let tooltip_name = name.clone();
@@ -564,11 +564,7 @@ impl FileListPanel {
                     .w(px(250.))
                     .gap_2()
                     .items_center()
-                    .child(
-                        Icon::new(IconName::Folder1)
-                            .with_size(Size::Large)
-                            .color(),
-                    )
+                    .child(Icon::new(IconName::Folder1).with_size(Size::Large).color())
                     .child(div().text_base().child("..")),
             )
             .child(div().w(px(180.)).px_2())
@@ -620,9 +616,11 @@ impl FileListPanel {
                 .item(
                     PopupMenuItem::new(t!("File.new_folder").to_string())
                         .icon(IconName::Folder)
-                        .on_click(window.listener_for(&view_new_folder, move |_this, _, _, cx| {
-                            cx.emit(FileListPanelEvent::NewFolder);
-                        })),
+                        .on_click(
+                            window.listener_for(&view_new_folder, move |_this, _, _, cx| {
+                                cx.emit(FileListPanelEvent::NewFolder);
+                            }),
+                        ),
                 )
                 .separator();
         }
@@ -673,12 +671,14 @@ impl FileListPanel {
             menu = menu.item(
                 PopupMenuItem::new(t!("File.change_permission").to_string())
                     .icon(IconName::Key)
-                    .on_click(window.listener_for(&view_permissions, move |_this, _, _, cx| {
-                        cx.emit(FileListPanelEvent::ChangePermissions {
-                            name: name_for_permissions.clone(),
-                            full_path: path_for_permissions.clone(),
-                        });
-                    })),
+                    .on_click(
+                        window.listener_for(&view_permissions, move |_this, _, _, cx| {
+                            cx.emit(FileListPanelEvent::ChangePermissions {
+                                name: name_for_permissions.clone(),
+                                full_path: path_for_permissions.clone(),
+                            });
+                        }),
+                    ),
             );
         }
 
@@ -692,13 +692,14 @@ impl FileListPanel {
                 .item(
                     PopupMenuItem::new(t!("Terminal.open_here").to_string())
                         .icon(IconName::Terminal)
-                        .on_click(
-                            window.listener_for(&view_terminal_at, move |_this, _, _, cx| {
+                        .on_click(window.listener_for(
+                            &view_terminal_at,
+                            move |_this, _, _, cx| {
                                 cx.emit(FileListPanelEvent::OpenInTerminalAt {
                                     full_path: path_for_terminal.clone(),
                                 });
-                            }),
-                        ),
+                            },
+                        )),
                 )
                 .item(
                     PopupMenuItem::new(t!("Terminal.open_in_current").to_string())
@@ -717,20 +718,24 @@ impl FileListPanel {
             .item(
                 PopupMenuItem::new(t!("File.copy_name").to_string())
                     .icon(IconName::Copy)
-                    .on_click(window.listener_for(&view_copy_name, move |_this, _, _, cx| {
-                        cx.emit(FileListPanelEvent::CopyFileName {
-                            name: name_for_copy.clone(),
-                        });
-                    })),
+                    .on_click(
+                        window.listener_for(&view_copy_name, move |_this, _, _, cx| {
+                            cx.emit(FileListPanelEvent::CopyFileName {
+                                name: name_for_copy.clone(),
+                            });
+                        }),
+                    ),
             )
             .item(
                 PopupMenuItem::new(t!("File.copy_path").to_string())
                     .icon(IconName::Copy)
-                    .on_click(window.listener_for(&view_copy_path, move |_this, _, _, cx| {
-                        cx.emit(FileListPanelEvent::CopyAbsolutePath {
-                            full_path: path_for_copy.clone(),
-                        });
-                    })),
+                    .on_click(
+                        window.listener_for(&view_copy_path, move |_this, _, _, cx| {
+                            cx.emit(FileListPanelEvent::CopyAbsolutePath {
+                                full_path: path_for_copy.clone(),
+                            });
+                        }),
+                    ),
             );
 
         // 删除（通用）
@@ -756,20 +761,22 @@ impl FileListPanel {
                 .item(
                     PopupMenuItem::new(t!("File.upload_file").to_string())
                         .icon(IconName::ArrowUp)
-                        .on_click(
-                            window.listener_for(&view_upload_file, move |_this, _, _, cx| {
+                        .on_click(window.listener_for(
+                            &view_upload_file,
+                            move |_this, _, _, cx| {
                                 cx.emit(FileListPanelEvent::UploadFile);
-                            }),
-                        ),
+                            },
+                        )),
                 )
                 .item(
                     PopupMenuItem::new(t!("File.upload_folder").to_string())
                         .icon(IconName::FolderOpen)
-                        .on_click(
-                            window.listener_for(&view_upload_folder, move |_this, _, _, cx| {
+                        .on_click(window.listener_for(
+                            &view_upload_folder,
+                            move |_this, _, _, cx| {
                                 cx.emit(FileListPanelEvent::UploadFolder);
-                            }),
-                        ),
+                            },
+                        )),
                 );
         }
 
@@ -809,21 +816,39 @@ pub enum FileListPanelEvent {
     /// 新建文件夹
     NewFolder,
     /// 重命名文件/文件夹
-    Rename { name: String, full_path: String },
+    Rename {
+        name: String,
+        full_path: String,
+    },
     /// 下载文件/文件夹
-    Download { name: String, full_path: String },
+    Download {
+        name: String,
+        full_path: String,
+    },
     /// 修改权限
-    ChangePermissions { name: String, full_path: String },
+    ChangePermissions {
+        name: String,
+        full_path: String,
+    },
     /// 在终端中打开当前目录
     OpenInTerminal,
     /// 在终端中打开到文件/文件夹
-    OpenInTerminalAt { full_path: String },
+    OpenInTerminalAt {
+        full_path: String,
+    },
     /// 复制文件名
-    CopyFileName { name: String },
+    CopyFileName {
+        name: String,
+    },
     /// 复制绝对路径
-    CopyAbsolutePath { full_path: String },
+    CopyAbsolutePath {
+        full_path: String,
+    },
     /// 删除文件/文件夹
-    Delete { name: String, full_path: String },
+    Delete {
+        name: String,
+        full_path: String,
+    },
     /// 上传文件
     UploadFile,
     /// 上传文件夹
@@ -918,10 +943,7 @@ impl Render for DraggedFileItems {
                 .border_color(cx.theme().border)
                 .rounded_md()
                 .shadow_md()
-                .child(
-                    Icon::new(IconName::Folder1)
-                        .text_color(cx.theme().link),
-                )
+                .child(Icon::new(IconName::Folder1).text_color(cx.theme().link))
                 .child(
                     div()
                         .text_sm()
@@ -1030,9 +1052,12 @@ impl Render for FileListPanel {
                                 // 构建拖拽项目列表
                                 // 如果当前文件在选中列表中且有多个选中项，则拖拽所有选中项
                                 // 否则只拖拽当前文件
-                                let drag_items = if state.selected_indices.contains(&filtered_ix) && state.selected_indices.len() > 1 {
+                                let drag_items = if state.selected_indices.contains(&filtered_ix)
+                                    && state.selected_indices.len() > 1
+                                {
                                     // 拖拽所有选中的文件
-                                    let items: Vec<DraggedFileItem> = state.selected_indices
+                                    let items: Vec<DraggedFileItem> = state
+                                        .selected_indices
                                         .iter()
                                         .filter_map(|&idx| {
                                             state.filtered_indices.get(idx).and_then(|&real_ix| {
@@ -1041,7 +1066,10 @@ impl Render for FileListPanel {
                                                         if current_path.ends_with('/') {
                                                             format!("{}{}", current_path, item.name)
                                                         } else {
-                                                            format!("{}/{}", current_path, item.name)
+                                                            format!(
+                                                                "{}/{}",
+                                                                current_path, item.name
+                                                            )
                                                         }
                                                     } else {
                                                         std::path::Path::new(&current_path)

@@ -11,8 +11,8 @@ pub mod services;
 pub mod sql_query_detector;
 
 // 重导出常用类型
-pub use components::{ChatMessageUI, ChatRole, MessageVariant, SqlExtension, MESSAGE_RENDER_LIMIT};
+pub use components::{ChatMessageUI, ChatRole, MESSAGE_RENDER_LIMIT, MessageVariant, SqlExtension};
 // 从核心库重导出模型设置组件和会话服务
 pub use one_core::ai_chat::components::{ModelSettings, ModelSettingsEvent, ModelSettingsPanel};
-pub use one_core::ai_chat::services::{SessionService, SessionError, extract_session_name};
+pub use one_core::ai_chat::services::{SessionError, SessionService, extract_session_name};
 pub use services::SqlService;

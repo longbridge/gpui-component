@@ -103,7 +103,8 @@ impl TerminalBackend for SshBackend {
     fn resize(&self, size: TerminalSize) {
         tracing::info!(
             "SshBackend::resize: 发送 resize 命令到远程 PTY: {}x{}",
-            size.cols, size.rows
+            size.cols,
+            size.rows
         );
         let _ = self.command_tx.send(SshCommand::Resize(size));
     }

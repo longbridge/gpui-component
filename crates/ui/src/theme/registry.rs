@@ -1,4 +1,4 @@
-use crate::{highlighter::HighlightTheme, Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeSet};
+use crate::{Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeSet, highlighter::HighlightTheme};
 use anyhow::Result;
 use gpui::{App, Global, SharedString};
 use notify::Watcher as _;

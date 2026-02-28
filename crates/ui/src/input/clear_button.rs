@@ -1,8 +1,8 @@
 use gpui::{App, Styled};
 
 use crate::{
-    button::{Button, ButtonVariants as _},
     ActiveTheme as _, Icon, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
 };
 
 #[inline]

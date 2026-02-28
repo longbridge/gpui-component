@@ -1,10 +1,10 @@
 use gpui::{
-    div, prelude::FluentBuilder, relative, AnyElement, App, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder, relative,
 };
 use smallvec::SmallVec;
 
-use crate::{v_flex, ActiveTheme, StyledExt as _};
+use crate::{ActiveTheme, StyledExt as _, v_flex};
 
 /// The variant of the GroupBox.
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Hash)]

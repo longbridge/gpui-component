@@ -1,7 +1,11 @@
-use gpui::{div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window};
 use gpui::prelude::FluentBuilder;
-use gpui_component::{v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
-use one_core::ai_chat::ask_ai::{get_ask_ai_notifier, AskAiEvent};
+use gpui::{
+    AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window, div, px,
+};
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, v_flex};
+use one_core::ai_chat::ask_ai::{AskAiEvent, get_ask_ai_notifier};
 use one_core::ai_chat::{AiChatPanel, AiChatPanelEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,24 +46,25 @@ impl MongoSidebar {
 
         let mut subs = Vec::new();
 
-        subs.push(cx.subscribe(
-            &ai_chat_panel,
-            |this, _, event: &AiChatPanelEvent, cx| {
+        subs.push(
+            cx.subscribe(&ai_chat_panel, |this, _, event: &AiChatPanelEvent, cx| {
                 if let AiChatPanelEvent::Close = event {
                     this.active_panel = None;
                     cx.emit(MongoSidebarEvent::PanelChanged);
                     cx.notify();
                 }
-            },
-        ));
+            }),
+        );
 
         if let Some(notifier) = get_ask_ai_notifier(cx) {
-            subs.push(cx.subscribe(&notifier, move |this, _, event: &AskAiEvent, cx| {
-                if this.is_active {
-                    let AskAiEvent::Request(message) = event;
-                    this.ask_ai(message.clone(), cx);
-                }
-            }));
+            subs.push(
+                cx.subscribe(&notifier, move |this, _, event: &AskAiEvent, cx| {
+                    if this.is_active {
+                        let AskAiEvent::Request(message) = event;
+                        this.ask_ai(message.clone(), cx);
+                    }
+                }),
+            );
         }
 
         Self {
@@ -122,7 +127,10 @@ impl MongoSidebar {
         let muted_bg = cx.theme().muted;
 
         div()
-            .id(SharedString::from(format!("mongodb-sidebar-btn-{:?}", panel)))
+            .id(SharedString::from(format!(
+                "mongodb-sidebar-btn-{:?}",
+                panel
+            )))
             .w(px(36.0))
             .h(px(36.0))
             .flex()

@@ -139,22 +139,20 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
                     )
                 })
                 .map(|this| match self.placement {
-                    Some(HandlePlacement::Left) => {
-                        this.cursor_col_resize()
-                            .top_0()
-                            .right(px(1.))
-                            .h_full()
-                            .w(HANDLE_SIZE)
-                            .pl(HANDLE_PADDING)
-                    }
-                    Some(HandlePlacement::Right) => {
-                        this.cursor_col_resize()
-                            .top_0()
-                            .left(px(1.))
-                            .h_full()
-                            .w(HANDLE_SIZE)
-                            .pr(HANDLE_PADDING)
-                    }
+                    Some(HandlePlacement::Left) => this
+                        .cursor_col_resize()
+                        .top_0()
+                        .right(px(1.))
+                        .h_full()
+                        .w(HANDLE_SIZE)
+                        .pl(HANDLE_PADDING),
+                    Some(HandlePlacement::Right) => this
+                        .cursor_col_resize()
+                        .top_0()
+                        .left(px(1.))
+                        .h_full()
+                        .w(HANDLE_SIZE)
+                        .pr(HANDLE_PADDING),
                     None => this
                         .when(is_horizontal, |this| {
                             this.cursor_col_resize()

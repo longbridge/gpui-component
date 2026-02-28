@@ -3,26 +3,30 @@
 use db::GlobalDbState;
 use db::plugin::SqlCompletionInfo;
 use gpui::prelude::FluentBuilder;
-use gpui::{div, px, App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, Styled, Subscription, Window};
-use gpui_component::{
-    button::Button,
-    h_flex,
-    input::InputEvent,
-    popover::Popover,
-    v_flex, ActiveTheme, IconName, Sizable, Size,
+use gpui::{
+    App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable,
+    IntoElement, ParentElement, Render, Styled, Subscription, Window, div, px,
 };
 use gpui_component::button::ButtonVariants;
+use gpui_component::{
+    ActiveTheme, IconName, Sizable, Size, button::Button, h_flex, input::InputEvent,
+    popover::Popover, v_flex,
+};
 use rust_i18n::t;
 use std::rc::Rc;
 
 // 从核心库导入可复用组件
 use one_core::ai_chat::components::{
-    ProviderItem, ProviderSelectEvent, ProviderSelectState, SendButton, SendButtonState,
-    ModelSettings, ModelSettingsPanel, ModelSettingsEvent, ModelSettingsLabels,
+    ModelSettings, ModelSettingsEvent, ModelSettingsLabels, ModelSettingsPanel, ProviderItem,
+    ProviderSelectEvent, ProviderSelectState, SendButton, SendButtonState,
 };
 
-use crate::chatdb::db_connection_selector::{ConnectionItem, DbConnectionSelector, DbConnectionSelectorEvent};
-use crate::sql_editor::{DefaultSqlCompletionProvider, SqlEditor, SqlSchema, TableMentionCompletionProvider};
+use crate::chatdb::db_connection_selector::{
+    ConnectionItem, DbConnectionSelector, DbConnectionSelectorEvent,
+};
+use crate::sql_editor::{
+    DefaultSqlCompletionProvider, SqlEditor, SqlSchema, TableMentionCompletionProvider,
+};
 
 // ============================================================================
 // 数据类型定义
@@ -59,17 +63,27 @@ impl InputMode {
 /// AI 输入框事件
 #[derive(Clone, Debug)]
 pub enum AIInputEvent {
-    Submit { content: String },
-    ProviderChanged { provider_id: String },
-    ModelChanged { model: String },
+    Submit {
+        content: String,
+    },
+    ProviderChanged {
+        provider_id: String,
+    },
+    ModelChanged {
+        model: String,
+    },
     ExecuteSql {
         sql: String,
         connection_id: String,
         database: Option<String>,
         schema: Option<String>,
     },
-    ModeChanged { mode: InputMode },
-    SettingsChanged { settings: ModelSettings },
+    ModeChanged {
+        mode: InputMode,
+    },
+    SettingsChanged {
+        settings: ModelSettings,
+    },
     /// 取消当前操作
     Cancel,
 }
@@ -121,12 +135,15 @@ impl AIInput {
         let sql_editor = cx.new(|cx| SqlEditor::new(window, cx));
 
         // Provider 选择器（回调直接接收 &mut Self，避免重复借用）
-        let provider_select_state = ProviderSelectState::new(window, cx, |event, this, window, cx| {
-            match event {
+        let provider_select_state =
+            ProviderSelectState::new(window, cx, |event, this, window, cx| match event {
                 ProviderSelectEvent::ProviderChanged { provider_id, .. } => {
                     this.selected_provider = Some(provider_id.clone());
-                    this.selected_model = this.provider_select_state
-                        .update_models_for_provider(&provider_id, window, cx);
+                    this.selected_model = this.provider_select_state.update_models_for_provider(
+                        &provider_id,
+                        window,
+                        cx,
+                    );
                     cx.emit(AIInputEvent::ProviderChanged {
                         provider_id: provider_id.clone(),
                     });
@@ -138,8 +155,7 @@ impl AIInput {
                     this.selected_model = Some(model.clone());
                     cx.emit(AIInputEvent::ModelChanged { model });
                 }
-            }
-        });
+            });
 
         // 数据源选择器
         let db_selector = cx.new(|cx| DbConnectionSelector::new(window, cx));
@@ -156,9 +172,8 @@ impl AIInput {
             max_tokens_desc: t!("ModelSettings.max_tokens_desc").to_string(),
             footer_notice: t!("ModelSettings.footer_notice").to_string(),
         };
-        let settings_panel = cx.new(|cx| {
-            ModelSettingsPanel::with_labels(model_settings.clone(), labels, window, cx)
-        });
+        let settings_panel = cx
+            .new(|cx| ModelSettingsPanel::with_labels(model_settings.clone(), labels, window, cx));
 
         let send_button_state = SendButtonState::new()
             .with_send_label(t!("AIInput.send").to_string())
@@ -251,7 +266,11 @@ impl AIInput {
             return Some((conn.id.clone(), None, Some(schema)));
         }
         let database = self.selected_database.clone()?;
-        Some((conn.id.clone(), Some(database), self.selected_schema.clone()))
+        Some((
+            conn.id.clone(),
+            Some(database),
+            self.selected_schema.clone(),
+        ))
     }
 
     /// 获取模型设置
@@ -266,8 +285,12 @@ impl AIInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.provider_select_state
-            .set_providers_optional_builtin(providers, include_builtin, window, cx);
+        self.provider_select_state.set_providers_optional_builtin(
+            providers,
+            include_builtin,
+            window,
+            cx,
+        );
         self.selected_provider = self.provider_select_state.selected_provider().cloned();
         self.selected_model = self.provider_select_state.selected_model().cloned();
 
@@ -304,21 +327,13 @@ impl AIInput {
         match self.mode {
             InputMode::Agent => {
                 self.sql_editor.update(cx, |editor, cx| {
-                    editor.set_placeholder(
-                        t!("AIInput.placeholder_agent").to_string(),
-                        window,
-                        cx
-                    );
+                    editor.set_placeholder(t!("AIInput.placeholder_agent").to_string(), window, cx);
                 });
                 self.send_button_state.send_label = t!("AIInput.send").to_string();
             }
             InputMode::Sql => {
                 self.sql_editor.update(cx, |editor, cx| {
-                    editor.set_placeholder(
-                        t!("AIInput.placeholder_sql").to_string(),
-                        window,
-                        cx
-                    );
+                    editor.set_placeholder(t!("AIInput.placeholder_sql").to_string(), window, cx);
                 });
                 self.send_button_state.send_label = t!("AIInput.execute").to_string();
             }
@@ -501,22 +516,16 @@ impl AIInput {
     }
 
     fn render_input_area(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .w_full()
-            .px_3()
-            .pt_2()
-            .pb_2()
-            .min_h(px(80.0))
-            .child(
-                div()
-                    .w_full()
-                    .h(px(120.0))
-                    .rounded(cx.theme().radius)
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .overflow_hidden()
-                    .child(self.sql_editor.clone()),
-            )
+        div().w_full().px_3().pt_2().pb_2().min_h(px(80.0)).child(
+            div()
+                .w_full()
+                .h(px(120.0))
+                .rounded(cx.theme().radius)
+                .border_1()
+                .border_color(cx.theme().border)
+                .overflow_hidden()
+                .child(self.sql_editor.clone()),
+        )
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -557,34 +566,30 @@ impl AIInput {
                                 .ghost()
                                 .with_size(Size::Small),
                         )
-                        .content(move |_state, _window, _cx| {
-                            settings_panel.clone()
-                        }),
+                        .content(move |_state, _window, _cx| settings_panel.clone()),
                 )
             })
             // 弹性空间
             .child(div().flex_1())
             // 发送按钮（或终止按钮）
-            .child(
-                SendButton::render(
-                    &send_button_state,
-                    move |window, app| {
-                        if let Some(entity) = submit_entity.upgrade() {
-                            let _ = entity.update(app, |this, cx| {
-                                this.submit(window, cx);
-                            });
-                        }
-                    },
-                    move |window, app| {
-                        if let Some(entity) = cancel_entity.upgrade() {
-                            let _ = entity.update(app, |this, cx| {
-                                cx.emit(AIInputEvent::Cancel);
-                                this.set_loading(false, window, cx);
-                            });
-                        }
-                    },
-                ),
-            )
+            .child(SendButton::render(
+                &send_button_state,
+                move |window, app| {
+                    if let Some(entity) = submit_entity.upgrade() {
+                        let _ = entity.update(app, |this, cx| {
+                            this.submit(window, cx);
+                        });
+                    }
+                },
+                move |window, app| {
+                    if let Some(entity) = cancel_entity.upgrade() {
+                        let _ = entity.update(app, |this, cx| {
+                            cx.emit(AIInputEvent::Cancel);
+                            this.set_loading(false, window, cx);
+                        });
+                    }
+                },
+            ))
     }
 }
 

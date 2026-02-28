@@ -9,11 +9,11 @@ mod text_view;
 mod utils;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+pub use markdown::*;
+pub use node::{CodeBlock, CodeBlockRenderOptions, CodeBlockRenderer, Span};
 pub use state::*;
 pub use style::*;
 pub use text_view::*;
-pub use markdown::*;
-pub use node::{CodeBlock, CodeBlockRenderOptions, CodeBlockRenderer, Span};
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);

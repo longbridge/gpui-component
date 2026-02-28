@@ -2,10 +2,11 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, Sizable, Size, TitleBar,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
@@ -13,9 +14,9 @@ use gpui_component::{
     radio::Radio,
     select::{Select, SelectItem, SelectState},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, Disableable, Sizable, Size, TitleBar,
+    v_flex,
 };
-use one_core::connection_notifier::{get_notifier, ConnectionDataEvent};
+use one_core::connection_notifier::{ConnectionDataEvent, get_notifier};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{
@@ -145,8 +146,14 @@ impl RedisFormWindow {
     pub fn new(config: RedisFormWindowConfig, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let is_editing = config.editing_connection.is_some();
         let editing_id = config.editing_connection.as_ref().and_then(|c| c.id);
-        let editing_cloud_id = config.editing_connection.as_ref().and_then(|c| c.cloud_id.clone());
-        let editing_last_synced_at = config.editing_connection.as_ref().and_then(|c| c.last_synced_at);
+        let editing_cloud_id = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.cloud_id.clone());
+        let editing_last_synced_at = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.last_synced_at);
 
         let title: SharedString = if is_editing {
             t!("Redis.edit").to_string()
@@ -226,8 +233,8 @@ impl RedisFormWindow {
 
         // 哨兵配置
         let sentinel_master_name_input = cx.new(|cx| {
-            let mut state =
-                InputState::new(window, cx).placeholder(t!("Redis.sentinel_master_name_placeholder"));
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("Redis.sentinel_master_name_placeholder"));
             if let Some(ref p) = existing_params {
                 if let Some(ref sentinel) = p.sentinel {
                     state.set_value(sentinel.master_name.clone(), window, cx);
@@ -388,19 +395,11 @@ impl RedisFormWindow {
             .unwrap_or(6379);
         let password = {
             let pwd = self.password_input.read(cx).text().to_string();
-            if pwd.is_empty() {
-                None
-            } else {
-                Some(pwd)
-            }
+            if pwd.is_empty() { None } else { Some(pwd) }
         };
         let username = {
             let user = self.username_input.read(cx).text().to_string();
-            if user.is_empty() {
-                None
-            } else {
-                Some(user)
-            }
+            if user.is_empty() { None } else { Some(user) }
         };
         let db_index: u8 = self
             .db_index_input
@@ -428,11 +427,7 @@ impl RedisFormWindow {
                 .collect();
             let sentinel_password = {
                 let pwd = self.sentinel_password_input.read(cx).text().to_string();
-                if pwd.is_empty() {
-                    None
-                } else {
-                    Some(pwd)
-                }
+                if pwd.is_empty() { None } else { Some(pwd) }
             };
 
             if !master_name.is_empty() && !sentinels.is_empty() {
@@ -542,11 +537,7 @@ impl RedisFormWindow {
         let workspace_id = self.get_workspace_id(cx);
         let remark = {
             let r = self.remark_input.read(cx).text().to_string();
-            if r.is_empty() {
-                None
-            } else {
-                Some(r)
-            }
+            if r.is_empty() { None } else { Some(r) }
         };
         let sync_enabled = self.sync_enabled;
         let is_editing = self.is_editing;

@@ -11,8 +11,8 @@ use crate::metadata_cache::{
     CacheKey, CacheLevel, MetadataCacheConfig, MetadataCacheManager, MetadataEntry,
 };
 use crate::types::{
-    ColumnInfo, DbNode, ForeignKeyDefinition, FunctionInfo, IndexInfo, SequenceInfo,
-    TableInfo, TriggerInfo, ViewInfo,
+    ColumnInfo, DbNode, ForeignKeyDefinition, FunctionInfo, IndexInfo, SequenceInfo, TableInfo,
+    TriggerInfo, ViewInfo,
 };
 use anyhow::Result;
 use gpui::{App, Global};
@@ -82,7 +82,9 @@ impl GlobalNodeCache {
 
     /// 递归使节点及其所有后代的缓存失效
     pub async fn invalidate_node_recursive(&self, ctx: &CacheContext, node_id: &str) {
-        self.node_cache.invalidate_node_recursive(ctx, node_id).await;
+        self.node_cache
+            .invalidate_node_recursive(ctx, node_id)
+            .await;
     }
 
     /// 清除指定连接的所有节点缓存
@@ -120,7 +122,11 @@ impl GlobalNodeCache {
     pub async fn cache_databases(&self, connection_id: &str, databases: Vec<String>) {
         let key = CacheKey::databases(connection_id);
         self.metadata_cache
-            .set(&key, MetadataEntry::Databases(databases), CacheLevel::Connection)
+            .set(
+                &key,
+                MetadataEntry::Databases(databases),
+                CacheLevel::Connection,
+            )
             .await;
     }
 
@@ -134,15 +140,14 @@ impl GlobalNodeCache {
     }
 
     /// 缓存 Schema 列表
-    pub async fn cache_schemas(
-        &self,
-        connection_id: &str,
-        database: &str,
-        schemas: Vec<String>,
-    ) {
+    pub async fn cache_schemas(&self, connection_id: &str, database: &str, schemas: Vec<String>) {
         let key = CacheKey::schemas(connection_id, database);
         self.metadata_cache
-            .set(&key, MetadataEntry::Schemas(schemas), CacheLevel::Connection)
+            .set(
+                &key,
+                MetadataEntry::Schemas(schemas),
+                CacheLevel::Connection,
+            )
             .await;
     }
 
@@ -318,7 +323,11 @@ impl GlobalNodeCache {
     ) {
         let key = CacheKey::functions(connection_id, database);
         self.metadata_cache
-            .set(&key, MetadataEntry::Functions(functions), CacheLevel::Database)
+            .set(
+                &key,
+                MetadataEntry::Functions(functions),
+                CacheLevel::Database,
+            )
             .await;
     }
 
@@ -374,7 +383,11 @@ impl GlobalNodeCache {
     ) {
         let key = CacheKey::triggers(connection_id, database);
         self.metadata_cache
-            .set(&key, MetadataEntry::Triggers(triggers), CacheLevel::Database)
+            .set(
+                &key,
+                MetadataEntry::Triggers(triggers),
+                CacheLevel::Database,
+            )
             .await;
     }
 
@@ -454,35 +467,54 @@ impl GlobalNodeCache {
     /// 从 DDL 事件中提取数据库和 schema 信息
     fn extract_ddl_scope(event: &DdlEvent) -> (String, Option<String>) {
         match event {
-            DdlEvent::CreateTable { database, schema, .. }
-            | DdlEvent::AlterTable { database, schema, .. }
-            | DdlEvent::DropTable { database, schema, .. }
-            | DdlEvent::TruncateTable { database, schema, .. }
-            | DdlEvent::RenameTable { database, schema, .. }
-            | DdlEvent::CreateIndex { database, schema, .. }
-            | DdlEvent::DropIndex { database, schema, .. }
-            | DdlEvent::CreateView { database, schema, .. }
-            | DdlEvent::DropView { database, schema, .. }
-            | DdlEvent::CreateTrigger { database, schema, .. }
-            | DdlEvent::DropTrigger { database, schema, .. }
-            | DdlEvent::CreateSequence { database, schema, .. }
-            | DdlEvent::DropSequence { database, schema, .. } => {
-                (database.clone(), schema.clone())
+            DdlEvent::CreateTable {
+                database, schema, ..
             }
+            | DdlEvent::AlterTable {
+                database, schema, ..
+            }
+            | DdlEvent::DropTable {
+                database, schema, ..
+            }
+            | DdlEvent::TruncateTable {
+                database, schema, ..
+            }
+            | DdlEvent::RenameTable {
+                database, schema, ..
+            }
+            | DdlEvent::CreateIndex {
+                database, schema, ..
+            }
+            | DdlEvent::DropIndex {
+                database, schema, ..
+            }
+            | DdlEvent::CreateView {
+                database, schema, ..
+            }
+            | DdlEvent::DropView {
+                database, schema, ..
+            }
+            | DdlEvent::CreateTrigger {
+                database, schema, ..
+            }
+            | DdlEvent::DropTrigger {
+                database, schema, ..
+            }
+            | DdlEvent::CreateSequence {
+                database, schema, ..
+            }
+            | DdlEvent::DropSequence {
+                database, schema, ..
+            } => (database.clone(), schema.clone()),
             DdlEvent::CreateSchema { database, schema }
-            | DdlEvent::DropSchema { database, schema } => {
-                (database.clone(), Some(schema.clone()))
-            }
-            DdlEvent::CreateDatabase { database }
-            | DdlEvent::DropDatabase { database } => {
+            | DdlEvent::DropSchema { database, schema } => (database.clone(), Some(schema.clone())),
+            DdlEvent::CreateDatabase { database } | DdlEvent::DropDatabase { database } => {
                 (database.clone(), None)
             }
             DdlEvent::CreateFunction { database, .. }
             | DdlEvent::DropFunction { database, .. }
             | DdlEvent::CreateProcedure { database, .. }
-            | DdlEvent::DropProcedure { database, .. } => {
-                (database.clone(), None)
-            }
+            | DdlEvent::DropProcedure { database, .. } => (database.clone(), None),
         }
     }
 
@@ -557,13 +589,11 @@ impl GlobalNodeCache {
                 warn!("Error during cache cleanup of {}: {}", dir.display(), e);
             }
             removed_count
-        }).await;
+        })
+        .await;
 
         if result > 0 {
-            info!(
-                "Cache cleanup: removed {} expired files",
-                result
-            );
+            info!("Cache cleanup: removed {} expired files", result);
         }
     }
 
@@ -584,7 +614,11 @@ impl GlobalNodeCache {
             } else if path.extension().and_then(|e| e.to_str()) == Some("json") {
                 if Self::is_cache_file_expired_sync(&path) {
                     if let Err(e) = std::fs::remove_file(&path) {
-                        warn!("Failed to remove expired cache file {}: {}", path.display(), e);
+                        warn!(
+                            "Failed to remove expired cache file {}: {}",
+                            path.display(),
+                            e
+                        );
                     } else {
                         *removed_count += 1;
                     }
@@ -675,7 +709,9 @@ pub trait CachedDatabaseOps {
             let databases = self.list_databases(connection).await?;
 
             // 写入缓存
-            cache.cache_databases(connection_id, databases.clone()).await;
+            cache
+                .cache_databases(connection_id, databases.clone())
+                .await;
 
             Ok(databases)
         }
@@ -695,13 +731,17 @@ pub trait CachedDatabaseOps {
     {
         async move {
             // 尝试从缓存获取
-            if let Some(tables) = cache.get_tables(connection_id, database, schema.as_deref()).await
+            if let Some(tables) = cache
+                .get_tables(connection_id, database, schema.as_deref())
+                .await
             {
                 return Ok(tables);
             }
 
             // 从数据库查询
-            let tables = self.list_tables(connection, database, schema.clone()).await?;
+            let tables = self
+                .list_tables(connection, database, schema.clone())
+                .await?;
 
             // 写入缓存
             cache
@@ -852,12 +892,17 @@ pub trait CachedDatabaseOps {
     {
         async move {
             // 尝试从缓存获取
-            if let Some(views) = cache.get_views(connection_id, database, schema.as_deref()).await {
+            if let Some(views) = cache
+                .get_views(connection_id, database, schema.as_deref())
+                .await
+            {
                 return Ok(views);
             }
 
             // 从数据库查询
-            let views = self.list_views(connection, database, schema.clone()).await?;
+            let views = self
+                .list_views(connection, database, schema.clone())
+                .await?;
 
             // 写入缓存
             cache
@@ -983,7 +1028,12 @@ pub trait CachedDatabaseOps {
 
             // 写入缓存
             cache
-                .cache_sequences(connection_id, database, schema.as_deref(), sequences.clone())
+                .cache_sequences(
+                    connection_id,
+                    database,
+                    schema.as_deref(),
+                    sequences.clone(),
+                )
                 .await;
 
             Ok(sequences)

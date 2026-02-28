@@ -1,13 +1,16 @@
 //! Chat SQL Result - 可复用的 SQL 结果展示组件
 
-use gpui::{div, px, AnyElement, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window};
 use gpui::prelude::FluentBuilder;
+use gpui::{
+    AnyElement, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Window, div, px,
+};
 use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable, Size,
     button::Button,
     h_flex,
     tab::{Tab, TabBar},
     v_flex,
-    ActiveTheme, Icon, IconName, Sizable, Size,
 };
 use one_ui::edit_table::Column;
 
@@ -124,7 +127,9 @@ impl ChatSqlResultView {
     }
 
     pub fn has_query_results(&self) -> bool {
-        self.results.iter().any(|r| matches!(r.result, SqlResult::Query(_)))
+        self.results
+            .iter()
+            .any(|r| matches!(r.result, SqlResult::Query(_)))
     }
 
     fn release_query_grids(&mut self) {
@@ -135,7 +140,12 @@ impl ChatSqlResultView {
         }
     }
 
-    fn ensure_query_grid(&mut self, result_idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn ensure_query_grid(
+        &mut self,
+        result_idx: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(item) = self.results.get_mut(result_idx) else {
             return;
         };
@@ -161,10 +171,14 @@ impl ChatSqlResultView {
 
         let data_grid = cx.new(|cx| DataGrid::new(config, window, cx));
 
-        let columns: Vec<Column> = q.columns.iter()
+        let columns: Vec<Column> = q
+            .columns
+            .iter()
             .map(|h| Column::new(h.clone(), h.clone()))
             .collect();
-        let rows: Vec<Vec<Option<String>>> = q.rows.iter()
+        let rows: Vec<Vec<Option<String>>> = q
+            .rows
+            .iter()
             .map(|row| row.iter().cloned().collect())
             .collect();
 
@@ -175,7 +189,12 @@ impl ChatSqlResultView {
         item.data_grid = Some(data_grid);
     }
 
-    fn render_query_result(&mut self, result_idx: usize, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_query_result(
+        &mut self,
+        result_idx: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         self.ensure_query_grid(result_idx, window, cx);
         let Some(item) = self.results.get(result_idx) else {
             return div().into_any_element();
@@ -196,7 +215,9 @@ impl ChatSqlResultView {
     fn render_summary(&self, cx: &mut Context<Self>) -> AnyElement {
         let collapsed = self.collapsed;
         let has_data = self.has_query_results();
-        let rows_info = self.results.iter()
+        let rows_info = self
+            .results
+            .iter()
             .filter_map(|r| match &r.result {
                 SqlResult::Query(q) => Some(q.rows.len()),
                 _ => None,
@@ -221,9 +242,15 @@ impl ChatSqlResultView {
                         Button::new("sql-result-toggle")
                             .ghost()
                             .xsmall()
-                            .icon(Icon::new(if collapsed { IconName::ChevronRight } else { IconName::ChevronDown })
+                            .icon(
+                                Icon::new(if collapsed {
+                                    IconName::ChevronRight
+                                } else {
+                                    IconName::ChevronDown
+                                })
                                 .with_size(Size::Small)
-                                .text_color(cx.theme().muted_foreground))
+                                .text_color(cx.theme().muted_foreground),
+                            )
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.collapsed = !this.collapsed;
                                 if this.collapsed {
@@ -236,38 +263,34 @@ impl ChatSqlResultView {
                         h_flex()
                             .items_center()
                             .gap_1()
-                            .child(Icon::new(IconName::Check).with_size(Size::Small).text_color(cx.theme().success))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(cx.theme().success)
-                                            .child(
-                                                t!(
-                                                    "ChatSqlResult.success_count",
-                                                    count = self.success_count
-                                                )
-                                                .to_string()
-                                            )
+                            .child(
+                                Icon::new(IconName::Check)
+                                    .with_size(Size::Small)
+                                    .text_color(cx.theme().success),
                             )
+                            .child(
+                                div().text_sm().text_color(cx.theme().success).child(
+                                    t!("ChatSqlResult.success_count", count = self.success_count)
+                                        .to_string(),
+                                ),
+                            ),
                     )
                     .when(self.error_count > 0, |this| {
                         this.child(
                             h_flex()
                                 .items_center()
                                 .gap_1()
-                                .child(Icon::new(IconName::Close).with_size(Size::Small).text_color(cx.theme().danger))
                                 .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().danger)
-                                        .child(
-                                            t!(
-                                                "ChatSqlResult.error_count",
-                                                count = self.error_count
-                                            )
-                                            .to_string()
-                                        )
+                                    Icon::new(IconName::Close)
+                                        .with_size(Size::Small)
+                                        .text_color(cx.theme().danger),
                                 )
+                                .child(
+                                    div().text_sm().text_color(cx.theme().danger).child(
+                                        t!("ChatSqlResult.error_count", count = self.error_count)
+                                            .to_string(),
+                                    ),
+                                ),
                         )
                     })
                     .when(has_data && rows_info > 0, |this| {
@@ -275,15 +298,15 @@ impl ChatSqlResultView {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(t!("ChatSqlResult.rows_info", rows = rows_info).to_string())
+                                .child(t!("ChatSqlResult.rows_info", rows = rows_info).to_string()),
                         )
                     })
                     .child(
                         div()
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("{:.3}s", self.total_elapsed_ms as f64 / 1000.0))
-                    )
+                            .child(format!("{:.3}s", self.total_elapsed_ms as f64 / 1000.0)),
+                    ),
             )
             .into_any_element()
     }
@@ -291,63 +314,60 @@ impl ChatSqlResultView {
     fn render_exec_result(&self, idx: usize, cx: &mut Context<Self>) -> AnyElement {
         let item = &self.results[idx];
         match &item.result {
-            SqlResult::Exec(e) => {
-                v_flex()
-                    .w_full()
-                    .p_4()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(Icon::new(IconName::Check).with_size(Size::Small).text_color(cx.theme().success))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .child(
-                                        t!(
-                                            "ChatSqlResult.exec_success_rows",
-                                            rows = e.rows_affected
-                                        )
-                                        .to_string()
-                                    )
-                            )
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(
-                                t!("ChatSqlResult.elapsed_ms", ms = e.elapsed_ms).to_string()
-                            )
-                    )
-                    .into_any_element()
-            }
-            SqlResult::Error(e) => {
-                v_flex()
-                    .w_full()
-                    .p_4()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(Icon::new(IconName::Close).with_size(Size::Small).text_color(cx.theme().danger))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(cx.theme().danger)
-                                    .child(t!("ChatSqlResult.exec_failed"))
-                            )
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().danger)
-                            .child(e.message.clone())
-                    )
-                    .into_any_element()
-            }
+            SqlResult::Exec(e) => v_flex()
+                .w_full()
+                .p_4()
+                .gap_2()
+                .child(
+                    h_flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            Icon::new(IconName::Check)
+                                .with_size(Size::Small)
+                                .text_color(cx.theme().success),
+                        )
+                        .child(
+                            div().text_sm().child(
+                                t!("ChatSqlResult.exec_success_rows", rows = e.rows_affected)
+                                    .to_string(),
+                            ),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(t!("ChatSqlResult.elapsed_ms", ms = e.elapsed_ms).to_string()),
+                )
+                .into_any_element(),
+            SqlResult::Error(e) => v_flex()
+                .w_full()
+                .p_4()
+                .gap_2()
+                .child(
+                    h_flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            Icon::new(IconName::Close)
+                                .with_size(Size::Small)
+                                .text_color(cx.theme().danger),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().danger)
+                                .child(t!("ChatSqlResult.exec_failed")),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().danger)
+                        .child(e.message.clone()),
+                )
+                .into_any_element(),
             _ => div().into_any_element(),
         }
     }
@@ -356,7 +376,9 @@ impl ChatSqlResultView {
 impl Render for ChatSqlResultView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let collapsed = self.collapsed;
-        let query_indices: Vec<usize> = self.results.iter()
+        let query_indices: Vec<usize> = self
+            .results
+            .iter()
             .enumerate()
             .filter(|(_, r)| matches!(r.result, SqlResult::Query(_)))
             .map(|(idx, _)| idx)
@@ -370,34 +392,28 @@ impl Render for ChatSqlResultView {
                 let has_tabs = query_indices.len() > 1;
                 let active_tab = self.active_tab.min(query_indices.len().saturating_sub(1));
 
-                this
-                    .when(has_tabs, |this| {
-                        this.child(
-                            TabBar::new("sql-result-tabs")
-                                .w_full()
-                                .underline()
-                                .with_size(Size::Small)
-                                .selected_index(active_tab)
-                                .children(
-                                    query_indices.iter().enumerate().map(|(tab_idx, _)| {
-                                        Tab::new().label(
-                                            t!(
-                                                "ChatSqlResult.result_tab",
-                                                index = tab_idx + 1
-                                            )
-                                            .to_string()
-                                        )
-                                    })
+                this.when(has_tabs, |this| {
+                    this.child(
+                        TabBar::new("sql-result-tabs")
+                            .w_full()
+                            .underline()
+                            .with_size(Size::Small)
+                            .selected_index(active_tab)
+                            .children(query_indices.iter().enumerate().map(|(tab_idx, _)| {
+                                Tab::new().label(
+                                    t!("ChatSqlResult.result_tab", index = tab_idx + 1).to_string(),
                                 )
-                        )
-                    })
-                    .when(!query_indices.is_empty(), |this| {
-                        let result_idx = *query_indices.get(active_tab).unwrap_or(&query_indices[0]);
-                        this.child(self.render_query_result(result_idx, window, cx))
-                    })
-                    .when(query_indices.is_empty() && !self.results.is_empty(), |this| {
-                        this.child(self.render_exec_result(0, cx))
-                    })
+                            })),
+                    )
+                })
+                .when(!query_indices.is_empty(), |this| {
+                    let result_idx = *query_indices.get(active_tab).unwrap_or(&query_indices[0]);
+                    this.child(self.render_query_result(result_idx, window, cx))
+                })
+                .when(
+                    query_indices.is_empty() && !self.results.is_empty(),
+                    |this| this.child(self.render_exec_result(0, cx)),
+                )
             })
     }
 }

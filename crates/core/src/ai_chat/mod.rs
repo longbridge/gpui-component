@@ -51,30 +51,22 @@
 //! let button = SendButton::render(&state, || submit(), || cancel());
 //! ```
 
-mod panel;
-mod types;
-pub mod engine;
-pub mod rendering;
-pub mod stream;
-pub mod components;
 pub mod ask_ai;
+pub mod components;
+pub mod engine;
+mod panel;
+pub mod rendering;
 pub mod services;
+pub mod stream;
+mod types;
 
 // 导出面板相关
 pub use panel::*;
 
 // 导出共享类型
 pub use types::{
-    ChatMessageUI,
-    ChatMessageUIGeneric,
-    ChatRole,
-    MessageExtension,
-    MessageVariant,
-    NoExtension,
-    ProviderSelectItem,
-    ModelSelectItem,
-    MESSAGE_RENDER_LIMIT,
-    MESSAGE_RENDER_STEP,
+    ChatMessageUI, ChatMessageUIGeneric, ChatRole, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP,
+    MessageExtension, MessageVariant, ModelSelectItem, NoExtension, ProviderSelectItem,
 };
 
 // 导出引擎
@@ -84,10 +76,10 @@ pub use engine::ChatEngine;
 pub use rendering::ChatMessageRenderer;
 
 // 导出流式处理器
-pub use stream::{ChatStreamProcessor, StreamEvent as CoreStreamEvent, StreamError};
+pub use stream::{ChatStreamProcessor, StreamError, StreamEvent as CoreStreamEvent};
 
 // 重导出常用组件（方便使用）
-pub use components::{ProviderItem, ModelItem};
+pub use components::{ModelItem, ProviderItem};
 
 // 导出服务层
-pub use services::{SessionService, SessionError, extract_session_name};
+pub use services::{SessionError, SessionService, extract_session_name};

@@ -1372,14 +1372,22 @@ mod tests {
             "users".to_string(),
             vec![
                 ("id".to_string(), "INT".to_string(), "用户ID".to_string()),
-                ("name".to_string(), "VARCHAR".to_string(), "用户名".to_string()),
+                (
+                    "name".to_string(),
+                    "VARCHAR".to_string(),
+                    "用户名".to_string(),
+                ),
             ],
         );
         columns_by_table.insert(
             "orders".to_string(),
             vec![
                 ("id".to_string(), "INT".to_string(), "订单ID".to_string()),
-                ("user_id".to_string(), "INT".to_string(), "用户外键".to_string()),
+                (
+                    "user_id".to_string(),
+                    "INT".to_string(),
+                    "用户外键".to_string(),
+                ),
             ],
         );
 
@@ -1468,33 +1476,46 @@ mod tests {
     /// 测试：with_table_columns_typed 保存类型信息
     #[test]
     fn test_with_table_columns_typed() {
-        let schema = SqlSchema::default()
-            .with_table_columns_typed(
-                "users",
-                [
-                    ("id", "INT", "用户ID"),
-                    ("name", "VARCHAR(255)", "用户名"),
-                    ("email", "VARCHAR(100)", "邮箱"),
-                ],
-            );
+        let schema = SqlSchema::default().with_table_columns_typed(
+            "users",
+            [
+                ("id", "INT", "用户ID"),
+                ("name", "VARCHAR(255)", "用户名"),
+                ("email", "VARCHAR(100)", "邮箱"),
+            ],
+        );
 
         let cols = schema.columns_by_table.get("users").unwrap();
         assert_eq!(cols.len(), 3);
 
         // 验证类型信息
-        assert_eq!(cols[0], ("id".to_string(), "INT".to_string(), "用户ID".to_string()));
-        assert_eq!(cols[1], ("name".to_string(), "VARCHAR(255)".to_string(), "用户名".to_string()));
-        assert_eq!(cols[2], ("email".to_string(), "VARCHAR(100)".to_string(), "邮箱".to_string()));
+        assert_eq!(
+            cols[0],
+            ("id".to_string(), "INT".to_string(), "用户ID".to_string())
+        );
+        assert_eq!(
+            cols[1],
+            (
+                "name".to_string(),
+                "VARCHAR(255)".to_string(),
+                "用户名".to_string()
+            )
+        );
+        assert_eq!(
+            cols[2],
+            (
+                "email".to_string(),
+                "VARCHAR(100)".to_string(),
+                "邮箱".to_string()
+            )
+        );
     }
 
     /// 测试：with_table_columns 向后兼容（类型为空）
     #[test]
     fn test_with_table_columns_backward_compat() {
         let schema = SqlSchema::default()
-            .with_table_columns(
-                "users",
-                [("id", "用户ID"), ("name", "用户名")],
-            );
+            .with_table_columns("users", [("id", "用户ID"), ("name", "用户名")]);
 
         let cols = schema.columns_by_table.get("users").unwrap();
         assert_eq!(cols.len(), 2);
@@ -1531,7 +1552,10 @@ mod tests {
             .find(|(k, _)| k.to_lowercase() == lower)
             .map(|(_, v)| v);
 
-        assert!(found.is_some(), "Should find columns with case-insensitive table lookup");
+        assert!(
+            found.is_some(),
+            "Should find columns with case-insensitive table lookup"
+        );
     }
 
     /// 测试：别名大小写不敏感
@@ -1576,7 +1600,8 @@ mod tests {
         assert!(
             data_type_score < keyword_score,
             "In CreateTable context, data types (score={}) should rank above keywords (score={})",
-            data_type_score, keyword_score
+            data_type_score,
+            keyword_score
         );
     }
 
@@ -1592,10 +1617,7 @@ mod tests {
         );
 
         // 数据类型基础分数应该是 1500
-        assert_eq!(
-            data_type_score, 1500,
-            "Base data type score should be 1500"
-        );
+        assert_eq!(data_type_score, 1500, "Base data type score should be 1500");
     }
 
     /// 测试：CreateTable 上下文中数据类型获得加成
@@ -1621,12 +1643,14 @@ mod tests {
         assert!(
             boosted_score < base_score,
             "In CreateTable context, data types should be boosted: boosted={} < base={}",
-            boosted_score, base_score
+            boosted_score,
+            base_score
         );
 
         // 验证：加成值应该是 CONTEXT_BOOST (2500)
         assert_eq!(
-            base_score - boosted_score, 2500,
+            base_score - boosted_score,
+            2500,
             "Data type boost should be 2500"
         );
     }
@@ -1652,7 +1676,8 @@ mod tests {
         assert!(
             score_with_prefix < score_no_prefix,
             "Prefix match should boost data types: with_prefix={} < no_prefix={}",
-            score_with_prefix, score_no_prefix
+            score_with_prefix,
+            score_no_prefix
         );
     }
 

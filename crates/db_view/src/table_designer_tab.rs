@@ -1330,27 +1330,22 @@ impl ColumnsEditor {
     }
 
     fn add_column(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder(t!("Table.column_name").to_string())
-        });
+        let name_input = cx
+            .new(|cx| InputState::new(window, cx).placeholder(t!("Table.column_name").to_string()));
         let type_items = SearchableVec::new(self.data_types.clone());
         let type_select = cx.new(|cx| {
             SelectState::new(type_items, Some(IndexPath::new(0)), window, cx).searchable(true)
         });
         let length_input =
             cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.length").to_string()));
-        let scale_input =
-            cx.new(|cx| {
-                InputState::new(window, cx).placeholder(t!("Table.decimal_places").to_string())
-            });
-        let default_input =
-            cx.new(|cx| {
-                InputState::new(window, cx).placeholder(t!("Table.default_value").to_string())
-            });
+        let scale_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.decimal_places").to_string())
+        });
+        let default_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.default_value").to_string())
+        });
         let comment_input =
-            cx.new(|cx| {
-                InputState::new(window, cx).placeholder(t!("Table.comment").to_string())
-            });
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Table.comment").to_string()));
 
         let charset_items: Vec<CharsetSelectItem> = std::iter::once(CharsetSelectItem {
             info: CharsetInfo {
@@ -1380,10 +1375,9 @@ impl ColumnsEditor {
             SelectState::new(items, Some(IndexPath::new(0)), window, cx)
         });
 
-        let enum_values_input =
-            cx.new(|cx| {
-                InputState::new(window, cx).placeholder(t!("Table.value_list_hint").to_string())
-            });
+        let enum_values_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.value_list_hint").to_string())
+        });
 
         let name_sub = cx.subscribe_in(
             &name_input,
@@ -1721,8 +1715,8 @@ impl ColumnsEditor {
             });
 
             let enum_values_input = cx.new(|cx| {
-                let mut input =
-                    InputState::new(window, cx).placeholder(t!("Table.value_list_hint").to_string());
+                let mut input = InputState::new(window, cx)
+                    .placeholder(t!("Table.value_list_hint").to_string());
                 if let Some(values) = Self::extract_enum_values(&col.data_type) {
                     input.set_value(values, window, cx);
                 }
@@ -2179,9 +2173,9 @@ impl ColumnsEditor {
                         .items_center()
                         .child(
                             div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("{}:", t!("Table.value"))),
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("{}:", t!("Table.value"))),
                         )
                         .child(Input::new(&row.enum_values_input).w(px(400.)).small()),
                 )
@@ -2269,13 +2263,10 @@ impl IndexesEditor {
     }
 
     fn add_index(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name_input =
-            cx.new(|cx| {
-                InputState::new(window, cx).placeholder(t!("Table.index_name").to_string())
-            });
+        let name_input = cx
+            .new(|cx| InputState::new(window, cx).placeholder(t!("Table.index_name").to_string()));
         let columns_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(t!("Table.columns_comma_separated").to_string())
+            InputState::new(window, cx).placeholder(t!("Table.columns_comma_separated").to_string())
         });
 
         // Subscribe to input changes
@@ -2381,9 +2372,8 @@ impl IndexesEditor {
 
             let columns_str = idx.columns.join(", ");
             let columns_input = cx.new(|cx| {
-                let mut input =
-                    InputState::new(window, cx)
-                        .placeholder(t!("Table.columns_comma_separated").to_string());
+                let mut input = InputState::new(window, cx)
+                    .placeholder(t!("Table.columns_comma_separated").to_string());
                 input.set_value(columns_str, window, cx);
                 input
             });
@@ -2659,10 +2649,9 @@ impl TableOptionsEditor {
             )
         });
 
-        let comment_input =
-            cx.new(|cx| {
-                InputState::new(window, cx).placeholder(t!("Table.table_comment").to_string())
-            });
+        let comment_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("Table.table_comment").to_string())
+        });
 
         let engine_sub = cx.observe(&engine_select, |_this, _, cx| {
             cx.emit(TableOptionsEvent::Changed);

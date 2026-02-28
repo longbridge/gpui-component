@@ -836,10 +836,7 @@ impl Element for TerminalElementImpl {
         _cx: &mut App,
     ) -> Self::PrepaintState {
         // 预创建所有字体变体，避免在 paint 中逐次创建
-        let fonts = FontVariants::new(
-            self.font_family.clone(),
-            self.font_fallbacks.clone(),
-        );
+        let fonts = FontVariants::new(self.font_family.clone(), self.font_fallbacks.clone());
 
         let line_height = self.font_size * self.line_height_scale;
         // 使用由 view.rs 传入的 cell_width，确保与 resize 使用完全相同的值
@@ -945,48 +942,49 @@ impl Element for TerminalElementImpl {
         // Paint cursor (if visible and in visible range)
         if self.cursor_visible {
             if let Some(cursor) = &self.cursor {
-            if cursor.line >= first_visible
-                && cursor.line < visible_end
-                && cursor.column < self.num_cols
-            {
-                let cursor_color = self.custom_cursor;
-                let cursor_bounds = tb.cell_rect(cursor.line, cursor.column);
+                if cursor.line >= first_visible
+                    && cursor.line < visible_end
+                    && cursor.column < self.num_cols
+                {
+                    let cursor_color = self.custom_cursor;
+                    let cursor_bounds = tb.cell_rect(cursor.line, cursor.column);
 
-                match cursor.shape {
-                    CursorShape::Block => {
-                        window.paint_quad(fill(cursor_bounds, cursor_color));
-                    }
-                    CursorShape::Underline => {
-                        let h = px(2.0);
-                        let underline = Bounds::new(
-                            Point::new(
-                                cursor_bounds.origin.x,
-                                cursor_bounds.origin.y + tb.cell_height - h,
-                            ),
-                            size(tb.cell_width, h),
-                        );
-                        window.paint_quad(fill(underline, cursor_color));
-                    }
-                    CursorShape::Beam => {
-                        let beam = Bounds::new(cursor_bounds.origin, size(px(2.0), tb.cell_height));
-                        window.paint_quad(fill(beam, cursor_color));
-                    }
-                    CursorShape::HollowBlock => {
-                        window.paint_quad(quad(
-                            cursor_bounds,
-                            Corners::default(),
-                            hsla(0.0, 0.0, 0.0, 0.0),
-                            Edges::all(px(1.0)),
-                            cursor_color,
-                            BorderStyle::Solid,
-                        ));
-                    }
-                    _ => {
-                        window.paint_quad(fill(cursor_bounds, cursor_color));
+                    match cursor.shape {
+                        CursorShape::Block => {
+                            window.paint_quad(fill(cursor_bounds, cursor_color));
+                        }
+                        CursorShape::Underline => {
+                            let h = px(2.0);
+                            let underline = Bounds::new(
+                                Point::new(
+                                    cursor_bounds.origin.x,
+                                    cursor_bounds.origin.y + tb.cell_height - h,
+                                ),
+                                size(tb.cell_width, h),
+                            );
+                            window.paint_quad(fill(underline, cursor_color));
+                        }
+                        CursorShape::Beam => {
+                            let beam =
+                                Bounds::new(cursor_bounds.origin, size(px(2.0), tb.cell_height));
+                            window.paint_quad(fill(beam, cursor_color));
+                        }
+                        CursorShape::HollowBlock => {
+                            window.paint_quad(quad(
+                                cursor_bounds,
+                                Corners::default(),
+                                hsla(0.0, 0.0, 0.0, 0.0),
+                                Edges::all(px(1.0)),
+                                cursor_color,
+                                BorderStyle::Solid,
+                            ));
+                        }
+                        _ => {
+                            window.paint_quad(fill(cursor_bounds, cursor_color));
+                        }
                     }
                 }
             }
-        }
         }
     }
 }

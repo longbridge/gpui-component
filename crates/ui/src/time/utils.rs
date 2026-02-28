@@ -89,7 +89,7 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 mod tests {
     use chrono::{Datelike, NaiveDate};
 
-    use super::{days_in_month, NaiveDateExt};
+    use super::{NaiveDateExt, days_in_month};
 
     #[test]
     fn test_days_in_month() {

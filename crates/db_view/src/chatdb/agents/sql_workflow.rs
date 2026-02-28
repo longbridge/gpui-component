@@ -7,16 +7,16 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::StreamExt;
+use rust_i18n::t;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
-use rust_i18n::t;
 
 use one_core::agent::types::{Agent, AgentContext, AgentDescriptor, AgentEvent, AgentResult};
 use one_core::llm::{ChatRequest, Message, Role};
 
 use crate::chatdb::query_workflow::{
-    build_table_selection_prompt, parse_table_selection_response, parse_user_input,
-    QueryContext, TableBrief, TABLE_COUNT_THRESHOLD,
+    QueryContext, TABLE_COUNT_THRESHOLD, TableBrief, build_table_selection_prompt,
+    parse_table_selection_response, parse_user_input,
 };
 
 use super::db_metadata::{CAP_DB_METADATA, DatabaseMetadataProvider};
@@ -28,8 +28,20 @@ static DESCRIPTOR: AgentDescriptor = AgentDescriptor {
                   metadata fetching, and SQL generation. Use when the user wants to query, \
                   analyze, or manipulate database data.",
     keywords: &[
-        "@", "sql", "query", "select", "insert", "update", "delete",
-        "查询", "统计", "表", "数据库", "筛选", "排序", "分组",
+        "@",
+        "sql",
+        "query",
+        "select",
+        "insert",
+        "update",
+        "delete",
+        "查询",
+        "统计",
+        "表",
+        "数据库",
+        "筛选",
+        "排序",
+        "分组",
     ],
     command_prefix: Some("/sql"),
     examples: &[
@@ -58,11 +70,7 @@ impl Agent for SqlWorkflowAgent {
 }
 
 impl SqlWorkflowAgent {
-    async fn run(
-        &self,
-        ctx: AgentContext,
-        tx: &mpsc::Sender<AgentEvent>,
-    ) -> Result<(), String> {
+    async fn run(&self, ctx: AgentContext, tx: &mpsc::Sender<AgentEvent>) -> Result<(), String> {
         // Check cancellation
         if ctx.cancel_token.is_cancelled() {
             let _ = tx.send(AgentEvent::Cancelled).await;
@@ -89,7 +97,9 @@ impl SqlWorkflowAgent {
         } else {
             // Need to discover tables
             let _ = tx
-                .send(AgentEvent::Progress(t!("SqlWorkflow.fetch_tables").to_string()))
+                .send(AgentEvent::Progress(
+                    t!("SqlWorkflow.fetch_tables").to_string(),
+                ))
                 .await;
 
             if ctx.cancel_token.is_cancelled() {
@@ -110,7 +120,7 @@ impl SqlWorkflowAgent {
                         count = table_count,
                         threshold = TABLE_COUNT_THRESHOLD
                     )
-                    .to_string()
+                    .to_string(),
                 )
             } else {
                 None
@@ -118,12 +128,12 @@ impl SqlWorkflowAgent {
 
             // AI selects relevant tables
             let _ = tx
-                .send(AgentEvent::Progress(t!("SqlWorkflow.ai_select_tables").to_string()))
+                .send(AgentEvent::Progress(
+                    t!("SqlWorkflow.ai_select_tables").to_string(),
+                ))
                 .await;
 
-            let selected = self
-                .ai_select_tables(&ctx, &tables, &user_question)
-                .await?;
+            let selected = self.ai_select_tables(&ctx, &tables, &user_question).await?;
 
             if selected.is_empty() {
                 return Err(t!("SqlWorkflow.no_tables_selected").to_string());
@@ -150,7 +160,7 @@ impl SqlWorkflowAgent {
                         current = i + 1,
                         total = total
                     )
-                    .to_string()
+                    .to_string(),
                 ))
                 .await;
 
@@ -186,7 +196,9 @@ impl SqlWorkflowAgent {
         // Step 5: Send workflow summary as prefix, then stream SQL generation
         let workflow_summary = context.to_workflow_summary();
         if !workflow_summary.is_empty() {
-            let _ = tx.send(AgentEvent::TextDelta(workflow_summary.clone())).await;
+            let _ = tx
+                .send(AgentEvent::TextDelta(workflow_summary.clone()))
+                .await;
         }
 
         self.stream_sql_generation(&ctx, &context, &workflow_summary, tx)

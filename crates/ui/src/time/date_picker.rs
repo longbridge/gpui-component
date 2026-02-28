@@ -1,16 +1,21 @@
 use std::rc::Rc;
 
 use chrono::NaiveDate;
-use gpui::{anchored, deferred, div, prelude::FluentBuilder as _, px, App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window};
+use gpui::{
+    App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
+    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
+};
 use rust_i18n::t;
 
 use crate::{
-    actions::{Cancel, Confirm}, button::{Button, ButtonVariants as _}, h_flex, input::{clear_button, Delete}, v_flex, ActiveTheme, Disableable, Icon,
-    IconName,
-    Sizable,
-    Size,
-    StyleSized as _,
-    StyledExt as _,
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
+    actions::{Cancel, Confirm},
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    input::{Delete, clear_button},
+    v_flex,
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
@@ -111,7 +116,7 @@ impl DatePickerState {
             |this, _, ev: &CalendarEvent, window, cx| match ev {
                 CalendarEvent::Selected(date) => {
                     this.update_date(*date, true, window, cx);
-                    this.focus_handle.focus(window,cx);
+                    this.focus_handle.focus(window, cx);
                 }
             },
         )];
@@ -222,7 +227,7 @@ impl DatePickerState {
 
         if let Some(focused) = window.focused(cx) {
             if focused.contains(&self.focus_handle, window) {
-                self.focus_handle.focus(window,cx);
+                self.focus_handle.focus(window, cx);
             }
         }
     }
@@ -246,7 +251,7 @@ impl DatePickerState {
     fn confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = false;
         cx.emit(DatePickerEvent::Change(self.date));
-        self.focus_handle.focus(window,cx);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 

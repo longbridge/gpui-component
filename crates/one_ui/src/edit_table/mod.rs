@@ -9,22 +9,19 @@ mod state;
 use gpui::{App, KeyBinding};
 use gpui_component::Size;
 
+pub(crate) use column::{ColGroup, DragColumn, DragSelectCell, ResizeColumn};
 pub use column::{Column, ColumnFixed, ColumnSort};
 pub use delegate::{CellEditor, EditTableDelegate};
 pub use filter_panel::FilterValue;
 pub use filter_state::FilterState;
 pub use selection::{CellCoord, CellRange, TableSelection};
 pub use state::{EditTableEvent, EditTableState, TableVisibleRange};
-pub(crate) use column::{ColGroup, DragColumn, DragSelectCell, ResizeColumn};
 
 use state::{Copy, Paste, SelectAll};
 
 const CONTEXT: &str = "EditTable";
 
-gpui::actions!(
-    edit_table,
-    [SelectPrevColumn, SelectNextColumn]
-);
+gpui::actions!(edit_table, [SelectPrevColumn, SelectNextColumn]);
 
 /// 初始化 EditTable 的键盘绑定
 pub fn init(cx: &mut App) {
@@ -34,13 +31,11 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-c", Copy, Some(CONTEXT)),
-
         // 粘贴 (Ctrl+V / Cmd+V)
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-v", Paste, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-v", Paste, Some(CONTEXT)),
-
         // 全选 (Ctrl+A / Cmd+A)
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-a", SelectAll, Some(CONTEXT)),
@@ -91,7 +86,9 @@ impl Default for TableOptions {
 pub struct EditTable;
 
 impl EditTable {
-    pub fn new<D: EditTableDelegate>(state: &gpui::Entity<EditTableState<D>>) -> gpui::Entity<EditTableState<D>> {
+    pub fn new<D: EditTableDelegate>(
+        state: &gpui::Entity<EditTableState<D>>,
+    ) -> gpui::Entity<EditTableState<D>> {
         state.clone()
     }
 }
