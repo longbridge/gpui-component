@@ -337,48 +337,97 @@ impl DatabasePlugin for OraclePlugin {
     ) -> Result<ObjectView> {
         use gpui::px;
 
-        // Try Oracle 12c+ query first, fallback to compatible query for older versions
-        let sql_12c = r#"
-            SELECT
-                u.username,
-                u.created,
-                u.default_tablespace,
-                u.temporary_tablespace,
-                u.account_status
-            FROM dba_users u
-            WHERE u.oracle_maintained = 'N'
-            ORDER BY u.username
-        "#;
+        // 先尝试高权限视图，再逐步降级到低权限可用视图，避免普通账号 ORA-00942。
+        let schema_queries = [
+            (
+                "dba_users",
+                r#"
+                SELECT
+                    u.username,
+                    u.created,
+                    u.default_tablespace,
+                    u.temporary_tablespace,
+                    u.account_status
+                FROM dba_users u
+                WHERE u.oracle_maintained = 'N'
+                ORDER BY u.username
+            "#,
+            ),
+            (
+                "all_users",
+                r#"
+                SELECT
+                    u.username,
+                    u.created,
+                    '-' AS default_tablespace,
+                    '-' AS temporary_tablespace,
+                    'UNKNOWN' AS account_status
+                FROM all_users u
+                ORDER BY u.username
+            "#,
+            ),
+            (
+                "current_user",
+                r#"
+                SELECT
+                    USER AS username,
+                    '-' AS created,
+                    '-' AS default_tablespace,
+                    '-' AS temporary_tablespace,
+                    'UNKNOWN' AS account_status
+                FROM dual
+            "#,
+            ),
+        ];
 
-        let result = connection
-            .query(sql_12c)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to list schemas: {}", e))?;
-        let rows: Vec<Vec<String>> = if let SqlResult::Query(query_result) = result {
-            query_result
-                .rows
-                .iter()
-                .map(|row| {
-                    vec![
-                        row.get(0).and_then(|v| v.clone()).unwrap_or_default(),
-                        row.get(1)
-                            .and_then(|v| v.clone())
-                            .unwrap_or("-".to_string()),
-                        row.get(2)
-                            .and_then(|v| v.clone())
-                            .unwrap_or("-".to_string()),
-                        row.get(3)
-                            .and_then(|v| v.clone())
-                            .unwrap_or("-".to_string()),
-                        row.get(4)
-                            .and_then(|v| v.clone())
-                            .unwrap_or("-".to_string()),
-                    ]
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+        let mut rows: Vec<Vec<String>> = Vec::new();
+        let mut last_err: Option<String> = None;
+        for (name, sql) in schema_queries {
+            match connection.query(sql).await {
+                Ok(SqlResult::Query(query_result)) => {
+                    rows = query_result
+                        .rows
+                        .iter()
+                        .map(|row| {
+                            vec![
+                                row.get(0).and_then(|v| v.clone()).unwrap_or_default(),
+                                row.get(1)
+                                    .and_then(|v| v.clone())
+                                    .unwrap_or("-".to_string()),
+                                row.get(2)
+                                    .and_then(|v| v.clone())
+                                    .unwrap_or("-".to_string()),
+                                row.get(3)
+                                    .and_then(|v| v.clone())
+                                    .unwrap_or("-".to_string()),
+                                row.get(4)
+                                    .and_then(|v| v.clone())
+                                    .unwrap_or("-".to_string()),
+                            ]
+                        })
+                        .collect();
+                    if !rows.is_empty() {
+                        break;
+                    }
+                }
+                Ok(_) => {
+                    tracing::warn!(
+                        "[Oracle] list_schemas_view {} returned non-query result",
+                        name
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("[Oracle] list_schemas_view {} failed: {}", name, e);
+                    last_err = Some(e.to_string());
+                }
+            }
+        }
+
+        if rows.is_empty() {
+            if let Some(err) = last_err {
+                return Err(anyhow::anyhow!("Failed to list schemas: {}", err));
+            }
+        }
 
         let columns = vec![
             Column::new("name", "Schema").width(px(180.0)),
