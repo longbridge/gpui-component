@@ -1,8 +1,12 @@
 use crate::home_tab::HomePage;
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, KeyBinding, ParentElement, Render, Styled, Task,
-    Window, div, px,
+    Window, div
 };
+
+#[cfg(target_os = "macos")]
+use gpui::px;
+
 use gpui_component::dock::{ClosePanel, ToggleZoom};
 use gpui_component::{ActiveTheme, Root};
 use one_core::llm::manager::GlobalProviderState;
