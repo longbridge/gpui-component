@@ -159,6 +159,14 @@ impl ClickHouseDbConnection {
             serde_json::Value::Object(_) => Some(value.to_string()),
         }
     }
+
+    fn configured_database(config: &DbConnectionConfig) -> Option<String> {
+        config
+            .database
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -190,15 +198,21 @@ impl DbConnection for ClickHouseDbConnection {
         let config = &self.config;
         info!("[ClickHouse] Connecting to {}:{}", config.host, config.port);
 
-        let url = format!("http://{}:{}", config.host, config.port);
+        let protocol = config
+            .get_param("schema")
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| matches!(value.as_str(), "http" | "https"))
+            .unwrap_or_else(|| "http".to_string());
+
+        let url = format!("{}://{}:{}", protocol, config.host, config.port);
 
         let mut client = Client::default()
             .with_url(&url)
             .with_user(&config.username)
             .with_password(&config.password);
 
-        if let Some(ref db) = config.database {
-            client = client.with_database(db);
+        if let Some(db) = Self::configured_database(config) {
+            client = client.with_database(&db);
             debug!("[ClickHouse] Using database: {}", db);
         }
 
@@ -310,18 +324,18 @@ impl DbConnection for ClickHouseDbConnection {
                         return Ok(Some(name.clone()));
                     }
                 }
-                Ok(self.config.database.clone())
+                Ok(Self::configured_database(&self.config))
             }
             Ok(other) => {
                 error!(
                     "[ClickHouse] Unexpected result when querying current database: {:?}",
                     other
                 );
-                Ok(self.config.database.clone())
+                Ok(Self::configured_database(&self.config))
             }
             Err(e) => {
                 error!("[ClickHouse] Failed to query current database: {}", e);
-                Ok(self.config.database.clone())
+                Ok(Self::configured_database(&self.config))
             }
         }
     }

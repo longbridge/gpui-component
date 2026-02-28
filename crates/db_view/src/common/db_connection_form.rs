@@ -2,16 +2,19 @@ use anyhow::Error;
 use db::{GlobalDbState, oracle};
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    ParentElement, PathPromptOptions, Render, SharedString, Styled, Window, div, prelude::*, px,
+    App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    IntoElement, ParentElement, PathPromptOptions, Render, SharedString, Styled, Window, div,
+    prelude::*, px,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, IndexPath, Sizable, Size,
+    ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
+    clipboard::Clipboard,
     form::{field, v_form},
     h_flex,
     input::{Input, InputEvent, InputState},
+    popover::Popover,
     scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectItem, SelectState},
     tab::{Tab, TabBar},
@@ -534,8 +537,8 @@ impl DbFormConfig {
                         .placeholder("localhost")
                         .default("localhost"),
                     FormField::new("port", t!("ConnectionForm.port"), FormFieldType::Number)
-                        .placeholder("9000")
-                        .default("9000"),
+                        .placeholder("8123 (HTTP port)")
+                        .default("8123"),
                     FormField::new(
                         "username",
                         t!("ConnectionForm.username"),
@@ -558,6 +561,23 @@ impl DbFormConfig {
                     .placeholder("database name (optional)"),
                 ]),
                 TabGroup::new("advanced", t!("ConnectionForm.advanced")).fields(vec![
+                    FormField::new(
+                        "schema",
+                        t!("ConnectionForm.schema"),
+                        FormFieldType::Select,
+                    )
+                    .optional()
+                    .default("http")
+                    .options(vec![
+                        (
+                            "http".to_string(),
+                            t!("ConnectionForm.schema_http").to_string(),
+                        ),
+                        (
+                            "https".to_string(),
+                            t!("ConnectionForm.schema_https").to_string(),
+                        ),
+                    ]),
                     FormField::new(
                         "connect_timeout",
                         t!("ConnectionForm.connect_timeout"),
@@ -842,14 +862,15 @@ impl DbConnectionForm {
         if !has_error {
             return None;
         }
-
-        let guide = match std::env::consts::OS {
-            "windows" => t!("ConnectionForm.oracle_client_guide_windows").to_string(),
-            "macos" => t!("ConnectionForm.oracle_client_guide_macos").to_string(),
-            "linux" => t!("ConnectionForm.oracle_client_guide_linux").to_string(),
-            _ => t!("ConnectionForm.oracle_client_guide_other").to_string(),
-        };
-        Some(guide)
+        
+        #[cfg(target_os = "windows")]
+        return Some(t!("ConnectionForm.oracle_client_guide_windows").to_string());
+        #[cfg(target_os = "macos")]
+        return Some(t!("ConnectionForm.oracle_client_guide_macos").to_string());
+        #[cfg(target_os = "linux")]
+        return Some(t!("ConnectionForm.oracle_client_guide_linux").to_string());
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        return Some(t!("ConnectionForm.oracle_client_guide_other").to_string());
     }
 
     fn oracle_client_download_url(&self, cx: &App) -> Option<&'static str> {
@@ -862,19 +883,7 @@ impl DbConnectionForm {
             return None;
         }
 
-        let url = match std::env::consts::OS {
-            "windows" => {
-                "https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html"
-            }
-            "macos" => {
-                "https://www.oracle.com/database/technologies/instant-client/macos-intel-x86-downloads.html"
-            }
-            "linux" => {
-                "https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html"
-            }
-            _ => "https://oracle.github.io/odpi/doc/installation.html",
-        };
-        Some(url)
+        Some("https://www.oracle.com/database/technologies/instant-client/downloads.html")
     }
 
     pub fn set_workspaces(
@@ -1494,6 +1503,13 @@ impl Render for DbConnectionForm {
                                             ),
                                     )
                                     .when(db_type == DatabaseType::Oracle, |form| {
+                                        let has_error = matches!(
+                                            &oracle_client_status,
+                                            Some(Err(_))
+                                        );
+                                        let oracle_client_guide = oracle_client_guide.clone();
+                                        let oracle_client_download_url = oracle_client_download_url;
+
                                         form.child(
                                             field()
                                                 .label(
@@ -1503,124 +1519,159 @@ impl Render for DbConnectionForm {
                                                 .items_center()
                                                 .label_justify_end()
                                                 .child(
-                                                    v_flex()
+                                                    h_flex()
                                                         .w_full()
-                                                        .gap_1()
+                                                        .items_center()
+                                                        .gap_2()
                                                         .child(
-                                                            h_flex()
-                                                                .w_full()
-                                                                .justify_between()
-                                                                .gap_2()
-                                                                .child(
-                                                                    div().text_sm().when(
-                                                                        is_checking,
-                                                                        |div| {
-                                                                            div.text_color(
+                                                            div()
+                                                                .text_sm()
+                                                                .overflow_hidden()
+                                                                .text_ellipsis()
+                                                                .whitespace_nowrap()
+                                                                .flex_shrink()
+                                                                .min_w_0()
+                                                                .when(is_checking, |div| {
+                                                                    div.text_color(
+                                                                        cx.theme()
+                                                                            .muted_foreground,
+                                                                    )
+                                                                    .child(
+                                                                        t!("ConnectionForm.oracle_client_checking")
+                                                                            .to_string(),
+                                                                    )
+                                                                })
+                                                                .when(!is_checking, |div| {
+                                                                    match &oracle_client_status {
+                                                                        Some(Ok(version)) => div
+                                                                            .text_color(gpui::rgb(0x166534))
+                                                                            .child(
+                                                                                t!(
+                                                                                    "ConnectionForm.oracle_client_available",
+                                                                                    version = version
+                                                                                )
+                                                                                .to_string(),
+                                                                            ),
+                                                                        Some(Err(error)) => div
+                                                                            .text_color(gpui::rgb(0x991b1b))
+                                                                            .child(
+                                                                                t!(
+                                                                                    "ConnectionForm.oracle_client_unavailable",
+                                                                                    error = error
+                                                                                )
+                                                                                .to_string(),
+                                                                            ),
+                                                                        None => div
+                                                                            .text_color(
                                                                                 cx.theme()
                                                                                     .muted_foreground,
                                                                             )
-                                                                            .child(
-                                                                                t!(
-                                                                                    "ConnectionForm.oracle_client_checking"
-                                                                                )
-                                                                                .to_string(),
-                                                                            )
-                                                                        },
-                                                                    )
-                                                                    .when(
-                                                                        !is_checking,
-                                                                        |div| match oracle_client_status {
-                                                                            Some(Ok(version)) => div
-                                                                                .text_color(gpui::rgb(
-                                                                                    0x166534,
-                                                                                ))
-                                                                                .child(
-                                                                                    t!(
-                                                                                        "ConnectionForm.oracle_client_available",
-                                                                                        version = version
-                                                                                    )
-                                                                                    .to_string(),
-                                                                                ),
-                                                                            Some(Err(error)) => div
-                                                                                .text_color(gpui::rgb(
-                                                                                    0x991b1b,
-                                                                                ))
-                                                                                .child(
-                                                                                    t!(
-                                                                                        "ConnectionForm.oracle_client_unavailable",
-                                                                                        error = error
-                                                                                    )
-                                                                                    .to_string(),
-                                                                                ),
-                                                                            None => div
-                                                                                .text_color(
-                                                                                    cx.theme()
-                                                                                        .muted_foreground,
-                                                                                )
-                                                                                .child("-"),
-                                                                        },
-                                                                    ),
-                                                                )
-                                                                .child(
-                                                                    Button::new(
-                                                                        "oracle-client-status-refresh",
-                                                                    )
-                                                                    .small()
-                                                                    .ghost()
-                                                                    .label(
-                                                                        t!("Common.refresh")
-                                                                            .to_string(),
-                                                                    )
-                                                                    .disabled(is_checking)
-                                                                    .on_click(cx.listener(
-                                                                        |this, _, _window, cx| {
-                                                                            this.refresh_oracle_client_status(cx);
-                                                                        },
-                                                                    )),
-                                                                ),
+                                                                            .child("-"),
+                                                                    }
+                                                                }),
                                                         )
-                                                        .when_some(
-                                                            oracle_client_guide,
-                                                            |this, guide| {
-                                                                this.child(
-                                                                    div()
-                                                                        .text_sm()
-                                                                        .text_color(
-                                                                            cx.theme()
-                                                                                .muted_foreground,
-                                                                        )
-                                                                        .child(guide),
+                                                        .child(
+                                                            div().flex_shrink_0().child(
+                                                                Button::new(
+                                                                    "oracle-client-status-refresh",
                                                                 )
-                                                                .when_some(
-                                                                    oracle_client_download_url,
-                                                                    |this, download_url| {
-                                                                        this.child(
-                                                                            h_flex()
-                                                                                .w_full()
-                                                                                .justify_end()
-                                                                                .child(
-                                                                                    Button::new(
-                                                                                        "oracle-client-download-page",
-                                                                                    )
-                                                                                    .small()
-                                                                                    .outline()
-                                                                                    .label(
-                                                                                        t!(
-                                                                                            "ConnectionForm.oracle_client_open_download"
-                                                                                        )
+                                                                .small()
+                                                                .ghost()
+                                                                .icon(IconName::Refresh)
+                                                                .disabled(is_checking)
+                                                                .on_click(cx.listener(
+                                                                    |this, _, _window, cx| {
+                                                                        this.refresh_oracle_client_status(cx);
+                                                                    },
+                                                                )),
+                                                            ),
+                                                        )
+                                                        .when(has_error, |this| {
+                                                            let guide = oracle_client_guide.clone();
+                                                            let download_url = oracle_client_download_url;
+                                                            this.child(
+                                                                div().flex_shrink_0().child(
+                                                                    Popover::new("oracle-client-guide-popover")
+                                                                        .trigger(
+                                                                            Button::new("oracle-client-guide-btn")
+                                                                                .small()
+                                                                                .ghost()
+                                                                                .icon(IconName::Info)
+                                                                                .label(
+                                                                                    t!("ConnectionForm.oracle_client_guide_label")
                                                                                         .to_string(),
-                                                                                    )
-                                                                                    .on_click(cx.listener(
-                                                                                        move |_, _, _window, cx| {
-                                                                                            cx.open_url(download_url);
-                                                                                        },
-                                                                                    )),
                                                                                 ),
                                                                         )
-                                                                    },
-                                                                )
-                                                            },
-                                                        ),
+                                                                        .content(move |_state, _window, cx| {
+                                                                            v_flex()
+                                                                                .gap_2()
+                                                                                .max_w(px(360.))
+                                                                                .child(
+                                                                                    h_flex()
+                                                                                        .items_center()
+                                                                                        .gap_1()
+                                                                                        .child(
+                                                                                            Icon::new(IconName::Info)
+                                                                                                .with_size(Size::Small)
+                                                                                                .text_color(cx.theme().muted_foreground),
+                                                                                        )
+                                                                                        .child(
+                                                                                            div()
+                                                                                                .text_sm()
+                                                                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                                                                .child(
+                                                                                                    t!("ConnectionForm.oracle_client_guide_title")
+                                                                                                        .to_string(),
+                                                                                                ),
+                                                                                        ),
+                                                                                )
+                                                                                .when_some(guide.clone(), |this, guide| {
+                                                                                    this.child(
+                                                                                        div()
+                                                                                            .text_sm()
+                                                                                            .text_color(
+                                                                                                cx.theme()
+                                                                                                    .muted_foreground,
+                                                                                            )
+                                                                                            .child(guide),
+                                                                                    )
+                                                                                })
+                                                                                .when_some(download_url, |this, url| {
+                                                                                    this.child(
+                                                                                        h_flex()
+                                                                                            .w_full()
+                                                                                            .justify_end()
+                                                                                            .gap_2()
+                                                                                            .child(
+                                                                                                Clipboard::new(
+                                                                                                    "oracle-client-copy-url",
+                                                                                                )
+                                                                                                .value(SharedString::from(url)),
+                                                                                            )
+                                                                                            .child(
+                                                                                                Button::new(
+                                                                                                    "oracle-client-download-page",
+                                                                                                )
+                                                                                                .small()
+                                                                                                .outline()
+                                                                                                .label(
+                                                                                                    t!(
+                                                                                                        "ConnectionForm.oracle_client_open_download"
+                                                                                                    )
+                                                                                                    .to_string(),
+                                                                                                )
+                                                                                                .on_click(
+                                                                                                    move |_, _window, cx| {
+                                                                                                        cx.open_url(url);
+                                                                                                    },
+                                                                                                ),
+                                                                                            ),
+                                                                                    )
+                                                                                })
+                                                                        }),
+                                                                ),
+                                                            )
+                                                        }),
                                                 ),
                                         )
                                     })
