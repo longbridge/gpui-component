@@ -1,37 +1,32 @@
-use anyhow::anyhow;
-use gpui::{AssetSource, Result, SharedString};
-use rust_embed::RustEmbed;
-use std::borrow::Cow;
-
 /// Embed application assets for GPUI Component.
 ///
 /// This assets provides icons svg files for [IconName](https://docs.rs/gpui-component/latest/gpui_component/enum.IconName.html).
 ///
-/// ```
+/// ## Usage
+///
+/// ```rust,no_run
 /// use gpui::*;
 /// use gpui_component_assets::Assets;
 ///
 /// let app = gpui_platform::application().with_assets(Assets);
 /// ```
-#[derive(RustEmbed)]
-#[folder = "assets"]
-#[include = "icons/**/*.svg"]
-pub struct Assets;
+///
+/// ## Platform Differences
+///
+/// - **Native (Desktop)**: Icons are embedded in the binary using RustEmbed
+/// - **WASM (Web)**: Icons are downloaded from CDN using web_sys::Request
+///   - This significantly reduces WASM bundle size
+///   - Icons are downloaded on-demand when first used
+///   - Downloaded icons are cached in memory
 
-impl AssetSource for Assets {
-    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if path.is_empty() {
-            return Ok(None);
-        }
+#[cfg(not(target_arch = "wasm32"))]
+mod native_assets;
 
-        Self::get(path)
-            .map(|f| Some(f.data))
-            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
-    }
+#[cfg(target_arch = "wasm32")]
+mod wasm_assets;
 
-    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(Self::iter()
-            .filter_map(|p| p.starts_with(path).then(|| p.into()))
-            .collect())
-    }
-}
+#[cfg(not(target_arch = "wasm32"))]
+pub use native_assets::Assets;
+
+#[cfg(target_arch = "wasm32")]
+pub use wasm_assets::Assets;

@@ -1,5 +1,4 @@
-use std::time::Duration;
-
+use instant::Duration;
 use crate::{Icon, IconName, Sizable, Size};
 use gpui::{
     div, ease_in_out, percentage, prelude::FluentBuilder as _, Animation, AnimationExt as _, App,

@@ -17,4 +17,12 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
-rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
+log.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rust-embed = { version = "8.7.2", features = ["interpolate-folder-path", "include-exclude"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { workspace = true }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"

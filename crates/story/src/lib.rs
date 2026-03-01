@@ -17,13 +17,14 @@ use gpui_component::{
     v_flex,
 };
 use serde::{Deserialize, Serialize};
-use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 mod app_menus;
+mod gallery;
 mod stories;
 mod themes;
 mod title_bar;
 pub use crate::title_bar::AppTitleBar;
+pub use gallery::Gallery;
 pub use stories::*;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -151,13 +152,31 @@ pub fn create_new_window_with_size<F, E>(
 impl Global for AppState {}
 
 pub fn init(cx: &mut App) {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("gpui_component=trace".parse().unwrap()),
-        )
-        .init();
+    // Try to initialize tracing subscriber, but ignore if already initialized
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+        let _ = tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer())
+            .with(
+                tracing_subscriber::EnvFilter::from_default_env()
+                    .add_directive("gpui_component=trace".parse().unwrap()),
+            )
+            .try_init();
+    }
+
+    // For WASM, use a subscriber without time support
+    #[cfg(target_arch = "wasm32")]
+    {
+        use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+        let _ = tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().without_time())
+            .with(
+                tracing_subscriber::EnvFilter::from_default_env()
+                    .add_directive("gpui_component=trace".parse().unwrap()),
+            )
+            .try_init();
+    }
 
     gpui_component::init(cx);
     AppState::init(cx);
@@ -165,7 +184,7 @@ pub fn init(cx: &mut App) {
     stories::init(cx);
 
     let http_client = std::sync::Arc::new(
-        reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap(),
+        reqwest_client::HttpClient::user_agent("gpui-component/story").unwrap(),
     );
     cx.set_http_client(http_client);
 
@@ -591,10 +610,10 @@ impl Render for StoryContainer {
     }
 }
 
-struct StoryRoot {
-    focus_handle: FocusHandle,
-    title_bar: Entity<AppTitleBar>,
-    view: AnyView,
+pub struct StoryRoot {
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) title_bar: Entity<AppTitleBar>,
+    pub(crate) view: AnyView,
 }
 
 impl StoryRoot {
