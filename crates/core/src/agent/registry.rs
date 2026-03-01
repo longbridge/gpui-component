@@ -7,6 +7,7 @@ use super::builtin::GeneralChatAgent;
 use super::types::{Agent, AgentContext, DynAgent};
 
 /// Global registry that holds all available agents.
+#[derive(Clone)]
 pub struct AgentRegistry {
     agents: HashMap<&'static str, DynAgent>,
     /// Agent IDs sorted by priority (ascending = higher priority first).

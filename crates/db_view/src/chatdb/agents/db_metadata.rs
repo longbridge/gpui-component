@@ -5,7 +5,7 @@
 use db::GlobalDbState;
 use one_core::storage::DatabaseType;
 
-use crate::chatdb::query_workflow::{ColumnMeta, TableBrief, TableMeta};
+use crate::chatdb::agents::query_workflow::{ColumnMeta, TableBrief, TableMeta};
 
 /// Capability key for database metadata access.
 pub const CAP_DB_METADATA: &str = "database_metadata";

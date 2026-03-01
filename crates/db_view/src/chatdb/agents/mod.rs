@@ -6,8 +6,9 @@
 
 pub mod db_metadata;
 pub mod sql_workflow;
+pub mod query_workflow;
 
-pub use db_metadata::{CAP_DB_METADATA, DatabaseMetadataProvider};
+pub use db_metadata::{DatabaseMetadataProvider, CAP_DB_METADATA};
 pub use sql_workflow::SqlWorkflowAgent;
 
 use gpui::{App, BorrowAppContext};

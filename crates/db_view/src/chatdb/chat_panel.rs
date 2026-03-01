@@ -652,12 +652,7 @@ impl ChatPanel {
         self.cancel_token = Some(cancel_token.clone());
 
         // 获取 AgentRegistry 快照
-        let registry = cx.global::<AgentRegistry>();
-        let agents: Vec<_> = registry
-            .sorted_ids()
-            .iter()
-            .filter_map(|id| registry.get(id).cloned())
-            .collect();
+        let registry = cx.global::<AgentRegistry>().clone();
 
         let mut affinity = self.session_affinity.clone();
 
@@ -771,11 +766,7 @@ impl ChatPanel {
             }
 
             // 使用 AgentDispatcher 进行路由和执行
-            let mut local_registry = AgentRegistry::new();
-            for agent in agents {
-                local_registry.register_arc(agent);
-            }
-            let mut rx = AgentDispatcher::dispatch(ctx_agent, &local_registry, &mut affinity).await;
+            let mut rx = AgentDispatcher::dispatch(ctx_agent, &registry, &mut affinity).await;
 
             // 回写亲和性状态
             if let Some(entity) = this.upgrade() {

@@ -14,7 +14,7 @@ use tracing::{info, warn};
 use one_core::agent::types::{Agent, AgentContext, AgentDescriptor, AgentEvent, AgentResult};
 use one_core::llm::{ChatRequest, Message, Role};
 
-use crate::chatdb::query_workflow::{
+use crate::chatdb::agents::query_workflow::{
     QueryContext, TABLE_COUNT_THRESHOLD, TableBrief, build_table_selection_prompt,
     parse_table_selection_response, parse_user_input,
 };
