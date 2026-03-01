@@ -104,6 +104,8 @@ impl ConflictResolver {
                 name: local.name.clone(),
                 connection_type: local.connection_type.to_string(),
                 workspace_id: local.workspace_id.map(|id| id.to_string()),
+                selected_databases: local.selected_databases.clone(),
+                remark: local.remark.clone(),
                 encrypted_params: String::new(),
                 key_version: 0,
                 updated_at: 0,

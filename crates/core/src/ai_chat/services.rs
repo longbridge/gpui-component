@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn test_extract_session_name_long() {
-        let long_text = "这是一个非常长的会话标题，需要被截断";
+        let long_text = "这是一个非常长的会话标题，需要被截断，并且应该带有省略号";
         let result = extract_session_name(long_text);
         assert!(result.ends_with("..."));
         assert!(result.chars().count() <= 20);

@@ -803,6 +803,10 @@ struct ConnectionRow {
     name: String,
     connection_type: String,
     workspace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_databases: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remark: Option<String>,
     encrypted_params: String,
     key_version: i32,
     checksum: String,
@@ -823,6 +827,8 @@ impl From<ConnectionRow> for CloudConnection {
             name: row.name,
             connection_type: row.connection_type,
             workspace_id: row.workspace_id,
+            selected_databases: row.selected_databases,
+            remark: row.remark,
             encrypted_params: row.encrypted_params,
             key_version: row.key_version as u32,
             updated_at: row
@@ -852,6 +858,8 @@ impl From<&CloudConnection> for ConnectionRow {
             name: conn.name.clone(),
             connection_type: conn.connection_type.clone(),
             workspace_id: conn.workspace_id.clone(),
+            selected_databases: conn.selected_databases.clone(),
+            remark: conn.remark.clone(),
             encrypted_params: conn.encrypted_params.clone(),
             key_version: conn.key_version as i32,
             checksum: conn.checksum.clone(),
@@ -1905,6 +1913,8 @@ mod tests {
             name: "Test Connection".to_string(),
             connection_type: "Database".to_string(),
             workspace_id: Some("ws-1".to_string()),
+            selected_databases: None,
+            remark: None,
             encrypted_params: "ENC:xxx".to_string(),
             key_version: 1,
             updated_at: 1234567890,

@@ -67,6 +67,12 @@ fn calculate_checksum(conn: &StoredConnection) -> String {
     hasher.update(conn.name.as_bytes());
     hasher.update(conn.connection_type.to_string().as_bytes());
     hasher.update(conn.params.as_bytes());
+    if let Some(ref dbs) = conn.selected_databases {
+        hasher.update(dbs.as_bytes());
+    }
+    if let Some(ref remark) = conn.remark {
+        hasher.update(remark.as_bytes());
+    }
     format!("{:x}", hasher.finalize())
 }
 
@@ -220,6 +226,8 @@ impl CloudSyncService {
             name: conn.name.clone(),
             connection_type: conn.connection_type.to_string(),
             workspace_id: conn.workspace_id.map(|id| id.to_string()),
+            selected_databases: conn.selected_databases.clone(),
+            remark: conn.remark.clone(),
             encrypted_params,
             key_version: self.key_version,
             updated_at: current_timestamp(),
@@ -264,8 +272,8 @@ impl CloudSyncService {
                 .as_ref()
                 .and_then(|s| s.parse().ok()),
             params: decrypted_params,
-            selected_databases: None,
-            remark: None,
+            selected_databases: cloud_conn.selected_databases.clone(),
+            remark: cloud_conn.remark.clone(),
             sync_enabled: true,
             cloud_id: Some(cloud_conn.id.clone()),
             last_synced_at: Some(cloud_conn.updated_at),
@@ -302,6 +310,8 @@ impl CloudSyncService {
                 name: cloud_conn.name.clone(),
                 connection_type: cloud_conn.connection_type.clone(),
                 workspace_id: cloud_conn.workspace_id.clone(),
+                selected_databases: cloud_conn.selected_databases.clone(),
+                remark: cloud_conn.remark.clone(),
                 encrypted_params: re_encrypted_params,
                 key_version: new_version,
                 updated_at: current_timestamp(),

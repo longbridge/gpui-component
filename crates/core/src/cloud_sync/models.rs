@@ -30,6 +30,12 @@ pub struct CloudConnection {
     /// 工作区 ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
+    /// 已选中的数据库列表（JSON数组）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_databases: Option<String>,
+    /// 备注
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remark: Option<String>,
     /// 加密的连接参数（ENC:base64...）
     pub encrypted_params: String,
     /// 加密时使用的密钥版本

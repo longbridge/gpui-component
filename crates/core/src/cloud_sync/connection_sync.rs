@@ -452,6 +452,8 @@ impl SyncEngine {
                                 name: local_conn.name.clone(),
                                 connection_type: local_conn.connection_type.to_string(),
                                 workspace_id: local_conn.workspace_id.map(|id| id.to_string()),
+                                selected_databases: local_conn.selected_databases.clone(),
+                                remark: local_conn.remark.clone(),
                                 encrypted_params: String::new(),
                                 key_version: 0,
                                 updated_at: 0,

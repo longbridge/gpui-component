@@ -107,7 +107,7 @@ pub fn show_upgrade_dialog<V: 'static>(window: &mut Window, cx: &mut Context<V>)
             .button_props(DialogButtonProps::default().ok_text(t!("License.upgrade_button")))
             .on_ok(|_, _, cx| {
                 // 打开购买页面
-                cx.open_url("https://onehub.app/pricing");
+                cx.open_url("https://onetcli.app/pricing");
                 true
             })
     });

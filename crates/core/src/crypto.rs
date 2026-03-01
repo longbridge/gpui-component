@@ -586,9 +586,16 @@ pub fn try_restore_master_key() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn test_mutex() -> &'static Mutex<()> {
+        static MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+        MUTEX.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn test_encrypt_decrypt() {
+        let _guard = test_mutex().lock().unwrap();
         set_master_key("test_key_123");
 
         let original = "my_secret_password";
@@ -605,6 +612,7 @@ mod tests {
 
     #[test]
     fn test_key_verification() {
+        let _guard = test_mutex().lock().unwrap();
         let master_key = "test_key_123";
         let verification = generate_key_verification(master_key);
 
@@ -614,6 +622,7 @@ mod tests {
 
     #[test]
     fn test_empty_password() {
+        let _guard = test_mutex().lock().unwrap();
         set_master_key("test_key");
 
         let encrypted = encrypt_password("");
@@ -627,6 +636,7 @@ mod tests {
 
     #[test]
     fn test_no_master_key() {
+        let _guard = test_mutex().lock().unwrap();
         clear_master_key();
 
         let original = "password123";
@@ -641,6 +651,7 @@ mod tests {
 
     #[test]
     fn test_already_encrypted() {
+        let _guard = test_mutex().lock().unwrap();
         set_master_key("test_key");
 
         let original = "password";
