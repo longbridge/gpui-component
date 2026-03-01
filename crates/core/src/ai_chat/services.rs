@@ -192,9 +192,15 @@ impl SessionService {
 // 会话标题工具函数
 // ============================================================================
 
-/// 从消息内容提取会话名称（取前 20 个字符）
+/// 从消息内容提取会话名称（取前 20 个字符，去掉换行）
 pub fn extract_session_name(content: &str) -> String {
-    let clean_content = content.trim();
+    let clean_content = content
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let clean_content = clean_content.trim();
     if clean_content.chars().count() <= 20 {
         clean_content.to_string()
     } else {
@@ -218,5 +224,12 @@ mod tests {
         let result = extract_session_name(long_text);
         assert!(result.ends_with("..."));
         assert!(result.chars().count() <= 20);
+    }
+
+    #[test]
+    fn test_extract_session_name_with_newlines() {
+        assert_eq!(extract_session_name("Hello\nWorld"), "Hello World");
+        assert_eq!(extract_session_name("Line1\n\nLine2\nLine3"), "Line1 Line2 Line3");
+        assert_eq!(extract_session_name("\n  Hello  \n"), "Hello");
     }
 }

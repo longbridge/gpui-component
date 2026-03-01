@@ -1264,7 +1264,7 @@ impl EditTableDelegate for EditorTableDelegate {
         match field_type {
             FieldType::Date => {
                 let input = cx.new(|cx| {
-                    let mut state = InputState::new(window, cx);
+                    let mut state = InputState::new(window, cx).multi_line(true).rows(1);
                     state.set_value(edit_value.clone(), window, cx);
                     state.focus(window, cx);
                     state
@@ -1348,7 +1348,7 @@ impl EditTableDelegate for EditorTableDelegate {
                     (edit_value.clone(), None)
                 };
                 let input = cx.new(|cx| {
-                    let mut state = InputState::new(window, cx);
+                    let mut state = InputState::new(window, cx).multi_line(true).rows(1);
                     state.set_value(initial_value, window, cx);
                     state.focus(window, cx);
                     state
@@ -1494,7 +1494,8 @@ impl EditTableDelegate for EditorTableDelegate {
                     (edit_value.clone(), None)
                 };
                 let input = cx.new(|cx| {
-                    let mut state = InputState::new(window, cx);
+                    let mut state = InputState::new(window, cx).multi_line(true).rows(1);
+
                     state.set_value(initial_value, window, cx);
                     state.focus(window, cx);
                     state
@@ -1597,8 +1598,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         }
                         _ => InputState::new(window, cx)
                             .multi_line(true)
-                            .rows(1)
-                            .auto_grow(1, 1),
+                            .rows(1),
                     };
                     state.set_value(edit_value, window, cx);
                     state.focus(window, cx);

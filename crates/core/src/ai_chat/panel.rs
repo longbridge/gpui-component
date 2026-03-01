@@ -685,6 +685,8 @@ impl AiChatPanel {
     ) {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
+                .multi_line(true)
+                .rows(1)
                 .default_value(&current_name)
                 .placeholder(t!("AiChat.session_name_placeholder").to_string())
         });
