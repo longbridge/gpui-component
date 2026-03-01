@@ -65,7 +65,12 @@ impl Language {
 
     pub fn name(&self) -> &'static str {
         #[cfg(not(feature = "tree-sitter-languages"))]
-        return "json";
+        match self {
+            Self::Plain => "text",
+            Self::Bash => "bash",
+            Self::Json => "json",
+            Self::Sql => "sql",
+        }
 
         #[cfg(feature = "tree-sitter-languages")]
         match self {

@@ -7,9 +7,9 @@ use crate::key_value_view::KeyValueView;
 use crate::redis_tree_event::RedisEventHandler;
 use crate::redis_tree_view::RedisTreeView;
 use crate::sidebar::{
-    RedisSidebar, RedisSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH,
-    TOOLBAR_WIDTH,
+    RedisSidebar, RedisSidebarEvent,
 };
+use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     App, AppContext, Axis, Bounds, Context, Element, Entity, EventEmitter, FocusHandle, Focusable,

@@ -20,9 +20,9 @@ use crate::collection_view::CollectionView;
 use crate::mongo_tree_event::MongoEventHandler;
 use crate::mongo_tree_view::MongoTreeView;
 use crate::sidebar::{
-    MongoSidebar, MongoSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH,
-    TOOLBAR_WIDTH,
+    MongoSidebar, MongoSidebarEvent,
 };
+use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
 const TREE_PANEL_DEFAULT_SIZE: Pixels = px(250.0);

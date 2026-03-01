@@ -1,12 +1,13 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, v_flex};
 use one_core::ai_chat::ask_ai::{AskAiEvent, get_ask_ai_notifier};
 use one_core::ai_chat::{AiChatPanel, AiChatPanelEvent};
+use one_core::layout::TOOLBAR_WIDTH;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarPanel {
@@ -20,11 +21,6 @@ impl SidebarPanel {
         }
     }
 }
-
-pub const SIDEBAR_DEFAULT_WIDTH: Pixels = px(400.0);
-pub const SIDEBAR_MIN_WIDTH: Pixels = px(250.0);
-pub const SIDEBAR_MAX_WIDTH: Pixels = px(600.0);
-pub const TOOLBAR_WIDTH: Pixels = px(48.0);
 
 #[derive(Clone, Debug)]
 pub enum RedisSidebarEvent {

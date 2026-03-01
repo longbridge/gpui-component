@@ -19,9 +19,9 @@ use crate::addon::{
 };
 use crate::blink_manager::BlinkManager;
 use crate::sidebar::{
-    SidebarPanel, TerminalSidebar, TerminalSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH,
-    SIDEBAR_MIN_WIDTH,
+    SidebarPanel, TerminalSidebar, TerminalSidebarEvent,
 };
+use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
 use crate::terminal_element::{RenderCache, TerminalElement};
 use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 use one_core::storage::models::StoredConnection;
@@ -270,7 +270,7 @@ impl TerminalView {
             terminal.read(cx).connection_kind() == TerminalConnectionKind::Local;
 
         // 创建默认主题（需要在创建侧边栏之前）
-        let default_theme = TerminalTheme::midnight();
+        let default_theme = TerminalTheme::ocean();
 
         // 创建侧边栏
         let sidebar = cx.new(|cx| TerminalSidebar::new(connection_id, &default_theme, window, cx));

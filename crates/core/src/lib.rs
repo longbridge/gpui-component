@@ -9,6 +9,7 @@ pub mod config;
 pub mod connection_notifier;
 pub mod crypto;
 pub mod gpui_tokio;
+pub mod layout;
 pub mod key_storage;
 pub mod license;
 pub mod llm;

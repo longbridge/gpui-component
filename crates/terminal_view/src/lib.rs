@@ -11,9 +11,9 @@ pub mod view;
 
 pub use addon::{AddonManager, HoveredLink, SearchAddon, TerminalAddon, WebLinksAddon};
 pub use blink_manager::BlinkManager;
+pub use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
 pub use sidebar::{
-    SettingsPanel, SidebarPanel, TerminalSidebar, TerminalSidebarEvent, SIDEBAR_DEFAULT_WIDTH,
-    SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH,
+    SettingsPanel, SidebarPanel, TerminalSidebar, TerminalSidebarEvent,
 };
 pub use ssh_form_window::{SshFormWindow, SshFormWindowConfig};
 pub use terminal::terminal::{ConnectionState, SshTerminalConfig, Terminal, TerminalModelEvent};

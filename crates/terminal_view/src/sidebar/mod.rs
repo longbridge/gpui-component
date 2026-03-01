@@ -15,10 +15,11 @@ use crate::theme::{TerminalColors, TerminalTheme};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, Window,
 };
 use gpui_component::{v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
+use one_core::layout::TOOLBAR_WIDTH;
 use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use rust_i18n::t;
 
@@ -52,15 +53,6 @@ impl SidebarPanel {
         }
     }
 }
-
-/// 侧边栏默认宽度
-pub const SIDEBAR_DEFAULT_WIDTH: Pixels = px(380.0);
-/// 侧边栏最小宽度
-pub const SIDEBAR_MIN_WIDTH: Pixels = px(220.0);
-/// 侧边栏最大宽度
-pub const SIDEBAR_MAX_WIDTH: Pixels = px(500.0);
-/// 工具栏宽度
-pub const TOOLBAR_WIDTH: Pixels = px(44.0);
 
 /// 终端侧边栏事件
 #[derive(Clone, Debug)]

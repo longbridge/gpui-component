@@ -4,9 +4,9 @@ use crate::database_objects_tab::DatabaseObjectsPanel;
 use crate::db_tree_event::DatabaseEventHandler;
 use crate::db_tree_view::DbTreeView;
 use crate::sidebar::{
-    DatabaseSidebar, DatabaseSidebarEvent, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH,
-    SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH,
+    DatabaseSidebar, DatabaseSidebarEvent,
 };
+use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
 use crate::sql_editor_view::SqlEditorTab;
 use db::GlobalDbState;
 use gpui::{
