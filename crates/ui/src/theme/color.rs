@@ -41,6 +41,10 @@ pub trait Colorize: Sized {
 
     /// Mix two colors together, the `factor` is a value between 0.0 and 1.0 for first color.
     fn mix(&self, other: Self, factor: f32) -> Self;
+    /// Mix two colors together in Oklab color space, the `factor` is a value between 0.0 and 1.0 for first color.
+    ///
+    /// This is similar to CSS `color-mix(in oklab, color1 factor%, color2)`.
+    fn mix_oklab(&self, other: Self, factor: f32) -> Self;
     /// Change the `Hue` of the color by the given in range: 0.0 .. 1.0
     fn hue(&self, hue: f32) -> Self;
     /// Change the `Saturation` of the color by the given value in range: 0.0 .. 1.0
@@ -52,6 +56,82 @@ pub trait Colorize: Sized {
     fn to_hex(&self) -> String;
     /// Parse a hex string to a color.
     fn parse_hex(hex: &str) -> Result<Self>;
+}
+
+/// Helper functions for Oklab color space conversions
+mod oklab {
+    use gpui::Rgba;
+
+    /// Convert sRGB component to linear RGB
+    #[inline]
+    fn to_linear(c: f32) -> f32 {
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    /// Convert linear RGB component to sRGB
+    #[inline]
+    fn from_linear(c: f32) -> f32 {
+        if c <= 0.0031308 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    }
+
+    /// Convert RGB to Oklab color space
+    #[allow(non_snake_case)]
+    pub fn rgb_to_oklab(rgb: Rgba) -> (f32, f32, f32) {
+        // sRGB to linear RGB
+        let lr = to_linear(rgb.r);
+        let lg = to_linear(rgb.g);
+        let lb = to_linear(rgb.b);
+
+        // Linear RGB to LMS
+        let l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+        let m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+        let s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+
+        // LMS to Oklab (using cube root)
+        let l_ = l.cbrt();
+        let m_ = m.cbrt();
+        let s_ = s.cbrt();
+
+        let L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
+        let a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
+        let b = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
+
+        (L, a, b)
+    }
+
+    /// Convert Oklab to RGB color space
+    #[allow(non_snake_case)]
+    pub fn oklab_to_rgb(L: f32, a: f32, b: f32) -> Rgba {
+        // Oklab to LMS
+        let l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+        let m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+        let s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+        let l = l_ * l_ * l_;
+        let m = m_ * m_ * m_;
+        let s = s_ * s_ * s_;
+
+        // LMS to Linear RGB
+        let lr = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+        let lg = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+        let lb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+
+        // Linear RGB to sRGB
+        Rgba {
+            r: from_linear(lr).clamp(0.0, 1.0),
+            g: from_linear(lg).clamp(0.0, 1.0),
+            b: from_linear(lb).clamp(0.0, 1.0),
+            a: 1.0,
+        }
+    }
 }
 
 impl Colorize for Hsla {
@@ -124,6 +204,64 @@ impl Colorize for Hsla {
             l: self.l * factor + other.l * inv,
             a: self.a * factor + other.a * inv,
         }
+    }
+
+    #[allow(non_snake_case)]
+    fn mix_oklab(&self, other: Self, factor: f32) -> Self {
+        let factor = factor.clamp(0.0, 1.0);
+        let inv = 1.0 - factor;
+
+        // Interpolate alpha first
+        let result_alpha = self.a * factor + other.a * inv;
+
+        // Handle the case where result alpha is zero
+        if result_alpha == 0.0 {
+            return Self {
+                h: 0.0,
+                s: 0.0,
+                l: 0.0,
+                a: 0.0,
+            };
+        }
+
+        // Convert both colors to RGB
+        let rgb1 = self.to_rgb();
+        let rgb2 = other.to_rgb();
+
+        // Convert to Oklab color space
+        let (l1, a1, b1) = oklab::rgb_to_oklab(rgb1);
+        let (l2, a2, b2) = oklab::rgb_to_oklab(rgb2);
+
+        // Premultiply alpha in Oklab space (using alpha-premultiplied interpolation)
+        // This matches CSS color-mix behavior
+        let alpha1 = self.a;
+        let alpha2 = other.a;
+
+        // Premultiply
+        let l1_pm = l1 * alpha1;
+        let a1_pm = a1 * alpha1;
+        let b1_pm = b1 * alpha1;
+
+        let l2_pm = l2 * alpha2;
+        let a2_pm = a2 * alpha2;
+        let b2_pm = b2 * alpha2;
+
+        // Interpolate premultiplied values
+        let L_pm = l1_pm * factor + l2_pm * inv;
+        let a_pm = a1_pm * factor + a2_pm * inv;
+        let b_pm = b1_pm * factor + b2_pm * inv;
+
+        // Unpremultiply
+        let L = L_pm / result_alpha;
+        let a = a_pm / result_alpha;
+        let b = b_pm / result_alpha;
+
+        // Convert back to RGB
+        let mut rgb = oklab::oklab_to_rgb(L, a, b);
+        rgb.a = result_alpha;
+
+        // Convert RGB to HSLA
+        rgb.into()
     }
 
     fn to_hex(&self) -> String {
@@ -217,6 +355,9 @@ mod color_scales {
 /// Enum representing the available color names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ColorName {
+    White,
+    Black,
+    Neutral,
     Gray,
     Red,
     Orange,
@@ -248,6 +389,9 @@ impl TryFrom<&str> for ColorName {
     type Error = anyhow::Error;
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
+            "white" => Ok(ColorName::White),
+            "black" => Ok(ColorName::Black),
+            "neutral" => Ok(ColorName::Neutral),
             "gray" => Ok(ColorName::Gray),
             "red" => Ok(ColorName::Red),
             "orange" => Ok(ColorName::Orange),
@@ -280,8 +424,9 @@ impl TryFrom<SharedString> for ColorName {
 
 impl ColorName {
     /// Returns all available color names.
-    pub fn all() -> [Self; 18] {
+    pub fn all() -> [Self; 19] {
         [
+            ColorName::Neutral,
             ColorName::Gray,
             ColorName::Red,
             ColorName::Orange,
@@ -308,7 +453,15 @@ impl ColorName {
     /// The `scale` is any of `[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]`
     /// falls back to 500 if out of range.
     pub fn scale(&self, scale: usize) -> Hsla {
+        if self == &ColorName::White {
+            return DEFAULT_COLORS.white.hsla;
+        }
+        if self == &ColorName::Black {
+            return DEFAULT_COLORS.black.hsla;
+        }
+
         let colors = match self {
+            ColorName::Neutral => &DEFAULT_COLORS.neutral,
             ColorName::Gray => &DEFAULT_COLORS.gray,
             ColorName::Red => &DEFAULT_COLORS.red,
             ColorName::Orange => &DEFAULT_COLORS.orange,
@@ -327,6 +480,7 @@ impl ColorName {
             ColorName::Fuchsia => &DEFAULT_COLORS.fuchsia,
             ColorName::Pink => &DEFAULT_COLORS.pink,
             ColorName::Rose => &DEFAULT_COLORS.rose,
+            _ => unreachable!(),
         };
 
         if let Some(color) = colors.get(&scale) {
@@ -661,6 +815,57 @@ mod tests {
         assert_eq!(red.mix(blue, 0.5).to_hex(), "#FF00FF");
         assert_eq!(green.mix(red, 0.5).to_hex(), "#FFFF00");
         assert_eq!(blue.mix(yellow, 0.2).to_hex(), "#0098FF");
+    }
+
+    #[test]
+    fn test_mix_oklab() {
+        let red = Hsla::parse_hex("#FF0000").unwrap();
+        let blue = Hsla::parse_hex("#0000FF").unwrap();
+        let transparent = gpui::Hsla {
+            h: 0.0,
+            s: 0.0,
+            l: 0.0,
+            a: 0.0,
+        };
+
+        // Test mixing red with transparent (similar to CSS color-mix example)
+        // color-mix(in oklab, red 20%, transparent) should give red with 20% opacity
+        let result = red.mix_oklab(transparent, 0.2);
+        assert!((result.a - 0.2).abs() < 0.01); // Alpha should be 20%
+
+        // The color should remain red (hue should be preserved)
+        let rgb_result = result.to_rgb();
+        let rgb_red = red.to_rgb();
+        // Allow some tolerance due to color space conversions
+        assert!(
+            (rgb_result.r - rgb_red.r).abs() < 0.05,
+            "Red channel should be preserved"
+        );
+        assert!(rgb_result.g < 0.05, "Green channel should be near 0");
+        assert!(rgb_result.b < 0.05, "Blue channel should be near 0");
+
+        // Test basic color mixing in Oklab space
+        let purple = red.mix_oklab(blue, 0.5);
+        // Oklab mixing should produce different results than HSL mixing
+        let purple_hsl = red.mix(blue, 0.5);
+        assert_ne!(purple.to_hex(), purple_hsl.to_hex());
+
+        // Test factor boundaries (allowing small floating point errors)
+        let result_0 = red.mix_oklab(blue, 0.0);
+        let result_1 = red.mix_oklab(blue, 1.0);
+
+        // Check that result is close to expected (within 1 color unit per channel)
+        let rgb_0 = result_0.to_rgb();
+        let rgb_blue = blue.to_rgb();
+        assert!((rgb_0.r - rgb_blue.r).abs() < 0.01);
+        assert!((rgb_0.g - rgb_blue.g).abs() < 0.01);
+        assert!((rgb_0.b - rgb_blue.b).abs() < 0.01);
+
+        let rgb_1 = result_1.to_rgb();
+        let rgb_red = red.to_rgb();
+        assert!((rgb_1.r - rgb_red.r).abs() < 0.01);
+        assert!((rgb_1.g - rgb_red.g).abs() < 0.01);
+        assert!((rgb_1.b - rgb_red.b).abs() < 0.01);
     }
 
     #[test]

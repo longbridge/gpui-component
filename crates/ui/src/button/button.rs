@@ -502,10 +502,12 @@ impl RenderOnce for Button {
             .when(self.border_corners.bottom_right, |this| {
                 this.rounded_br(rounding)
             })
-            .when(self.border_edges.left, |this| this.border_l_1())
-            .when(self.border_edges.right, |this| this.border_r_1())
-            .when(self.border_edges.top, |this| this.border_t_1())
-            .when(self.border_edges.bottom, |this| this.border_b_1())
+            .when(self.outline, |this| {
+                this.when(self.border_edges.left, |this| this.border_l_1())
+                    .when(self.border_edges.right, |this| this.border_r_1())
+                    .when(self.border_edges.top, |this| this.border_t_1())
+                    .when(self.border_edges.bottom, |this| this.border_b_1())
+            })
             .text_color(normal_style.fg)
             .when(self.selected, |this| {
                 let selected_style = style.selected(self.outline, cx);
@@ -638,12 +640,12 @@ impl ButtonVariant {
         match self {
             Self::Primary => cx.theme().primary,
             Self::Secondary => cx.theme().secondary,
-            Self::Danger => cx.theme().danger,
-            Self::Warning => cx.theme().warning,
-            Self::Success => cx.theme().success,
-            Self::Info => cx.theme().info,
+            Self::Danger => cx.theme().danger.mix_oklab(cx.theme().transparent, 0.2),
+            Self::Warning => cx.theme().warning.mix_oklab(cx.theme().transparent, 0.2),
+            Self::Success => cx.theme().success.mix_oklab(cx.theme().transparent, 0.2),
+            Self::Info => cx.theme().info.mix_oklab(cx.theme().transparent, 0.2),
             Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => colors.color,
+            Self::Custom(colors) => colors.color.mix_oklab(cx.theme().transparent, 0.2),
         }
     }
 
@@ -657,92 +659,26 @@ impl ButtonVariant {
                 }
             }
             Self::Secondary | Self::Ghost => cx.theme().secondary_foreground,
-            Self::Danger => {
-                if outline {
-                    cx.theme().danger
-                } else {
-                    cx.theme().danger_foreground
-                }
-            }
-            Self::Warning => {
-                if outline {
-                    cx.theme().warning
-                } else {
-                    cx.theme().warning_foreground
-                }
-            }
-            Self::Success => {
-                if outline {
-                    cx.theme().success
-                } else {
-                    cx.theme().success_foreground
-                }
-            }
-            Self::Info => {
-                if outline {
-                    cx.theme().info
-                } else {
-                    cx.theme().info_foreground
-                }
-            }
+            Self::Danger => cx.theme().danger,
+            Self::Warning => cx.theme().warning,
+            Self::Success => cx.theme().success,
+            Self::Info => cx.theme().info,
             Self::Link => cx.theme().link,
             Self::Text => cx.theme().foreground,
-            Self::Custom(colors) => {
-                if outline {
-                    colors.color
-                } else {
-                    colors.foreground
-                }
-            }
+            Self::Custom(colors) => colors.color,
         }
     }
 
-    fn border_color(&self, bg: Hsla, outline: bool, cx: &mut App) -> Hsla {
+    fn border_color(&self, _bg: Hsla, _outline: bool, cx: &mut App) -> Hsla {
         match self {
-            Self::Secondary => {
-                if outline {
-                    cx.theme().border
-                } else {
-                    bg
-                }
-            }
-            Self::Primary => {
-                if outline {
-                    cx.theme().primary
-                } else {
-                    bg
-                }
-            }
-            Self::Danger => {
-                if outline {
-                    cx.theme().danger
-                } else {
-                    bg
-                }
-            }
-            Self::Info => {
-                if outline {
-                    cx.theme().info
-                } else {
-                    bg
-                }
-            }
-            Self::Warning => {
-                if outline {
-                    cx.theme().warning
-                } else {
-                    bg
-                }
-            }
-            Self::Success => {
-                if outline {
-                    cx.theme().success
-                } else {
-                    bg
-                }
-            }
+            Self::Secondary => cx.theme().border,
+            Self::Primary => cx.theme().primary,
+            Self::Danger => cx.theme().danger,
+            Self::Info => cx.theme().info,
+            Self::Warning => cx.theme().warning,
+            Self::Success => cx.theme().success,
             Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => colors.border,
+            Self::Custom(colors) => colors.color,
         }
     }
 
@@ -781,7 +717,7 @@ impl ButtonVariant {
         let bg = match self {
             Self::Primary => {
                 if outline {
-                    cx.theme().primary.opacity(0.1)
+                    cx.theme().primary.mix_oklab(cx.theme().transparent, 0.2)
                 } else {
                     cx.theme().primary_hover
                 }
@@ -789,37 +725,37 @@ impl ButtonVariant {
             Self::Secondary => cx.theme().secondary_hover,
             Self::Danger => {
                 if outline {
-                    cx.theme().danger.opacity(0.1)
+                    cx.theme().danger.mix_oklab(cx.theme().transparent, 0.2)
                 } else {
-                    cx.theme().danger_hover
+                    cx.theme().danger.mix_oklab(cx.theme().transparent, 0.3)
                 }
             }
             Self::Warning => {
                 if outline {
-                    cx.theme().warning.opacity(0.1)
+                    cx.theme().warning.mix_oklab(cx.theme().transparent, 0.2)
                 } else {
-                    cx.theme().warning_hover
+                    cx.theme().warning.mix_oklab(cx.theme().transparent, 0.3)
                 }
             }
             Self::Success => {
                 if outline {
-                    cx.theme().success.opacity(0.1)
+                    cx.theme().success.mix_oklab(cx.theme().transparent, 0.2)
                 } else {
-                    cx.theme().success_hover
+                    cx.theme().success.mix_oklab(cx.theme().transparent, 0.3)
                 }
             }
             Self::Info => {
                 if outline {
-                    cx.theme().info.opacity(0.1)
+                    cx.theme().info.mix_oklab(cx.theme().transparent, 0.2)
                 } else {
-                    cx.theme().info_hover
+                    cx.theme().info.mix_oklab(cx.theme().transparent, 0.3)
                 }
             }
             Self::Custom(colors) => {
                 if outline {
-                    colors.color.opacity(0.1)
+                    colors.color.mix_oklab(cx.theme().transparent, 0.2)
                 } else {
-                    colors.hover
+                    colors.color.mix_oklab(cx.theme().transparent, 0.3)
                 }
             }
             Self::Ghost => {
@@ -855,7 +791,7 @@ impl ButtonVariant {
         let bg = match self {
             Self::Primary => {
                 if outline {
-                    cx.theme().primary_active.opacity(0.1)
+                    cx.theme().primary.mix_oklab(cx.theme().transparent, 0.4)
                 } else {
                     cx.theme().primary_active
                 }
@@ -868,43 +804,13 @@ impl ButtonVariant {
                     cx.theme().secondary.darken(0.2).opacity(0.8)
                 }
             }
-            Self::Danger => {
-                if outline {
-                    cx.theme().danger_active.opacity(0.1)
-                } else {
-                    cx.theme().danger_active
-                }
-            }
-            Self::Warning => {
-                if outline {
-                    cx.theme().warning_active.opacity(0.1)
-                } else {
-                    cx.theme().warning_active
-                }
-            }
-            Self::Success => {
-                if outline {
-                    cx.theme().success_active.opacity(0.1)
-                } else {
-                    cx.theme().success_active
-                }
-            }
-            Self::Info => {
-                if outline {
-                    cx.theme().info_active.opacity(0.1)
-                } else {
-                    cx.theme().info_active
-                }
-            }
+            Self::Danger => cx.theme().danger.mix_oklab(cx.theme().transparent, 0.4),
+            Self::Warning => cx.theme().warning.mix_oklab(cx.theme().transparent, 0.4),
+            Self::Success => cx.theme().success.mix_oklab(cx.theme().transparent, 0.4),
+            Self::Info => cx.theme().info.mix_oklab(cx.theme().transparent, 0.4),
+            Self::Custom(colors) => colors.color.mix_oklab(cx.theme().transparent, 0.4),
             Self::Link => cx.theme().transparent,
             Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => {
-                if outline {
-                    colors.active.opacity(0.1)
-                } else {
-                    colors.active
-                }
-            }
         };
         let border = self.border_color(bg, outline, cx);
         let fg = match self {
