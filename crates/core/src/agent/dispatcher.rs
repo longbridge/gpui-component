@@ -50,11 +50,11 @@ impl SessionAffinity {
     }
 }
 
-/// Three-level agent dispatcher:
+/// Agent dispatcher (LLM-first routing):
 ///
-/// 1. **Rule match** — command prefix, keywords, session affinity
-/// 2. **Single-candidate shortcut** — if only 0 or 1 agent is available, skip LLM routing
-/// 3. **LLM intent routing** — ask the LLM to pick the best agent
+/// 1. **Single-candidate shortcut** — if only 0 or 1 agent is available, skip routing
+/// 2. **LLM intent routing** — ask the LLM to pick the best agent
+/// 3. **Rule-based fallback** — used only when LLM routing is unavailable/failed
 pub struct AgentDispatcher;
 
 impl AgentDispatcher {
@@ -78,19 +78,7 @@ impl AgentDispatcher {
             return rx;
         }
 
-        // --- Level 1: Rule-based matching ---
-        if let Some(agent) = Self::rule_match(&ctx.user_input, &available, affinity) {
-            let agent_id = agent.descriptor().id;
-            info!(agent = agent_id, "Dispatched via rule match");
-            affinity.bind(agent_id);
-            let agent = Arc::clone(agent);
-            tokio::spawn(async move {
-                agent.execute(ctx, tx).await;
-            });
-            return rx;
-        }
-
-        // --- Level 2: Single candidate shortcut ---
+        // --- Level 1: Single candidate shortcut ---
         if available.len() == 1 {
             let agent = available[0];
             let agent_id = agent.descriptor().id;
@@ -103,7 +91,7 @@ impl AgentDispatcher {
             return rx;
         }
 
-        // --- Level 3: LLM intent routing ---
+        // --- Level 2: LLM intent routing ---
         let provider_result = ctx
             .provider_state
             .manager()
@@ -136,16 +124,10 @@ impl AgentDispatcher {
                             Arc::clone(available[0])
                         }
                     }
-                    Err(e) => {
-                        warn!(error = %e, "LLM routing failed, falling back to first available");
-                        Arc::clone(available[0])
-                    }
+                    Err(e) => Self::fallback_agent(&ctx.user_input, &available, affinity, &e),
                 }
             }
-            Err(e) => {
-                warn!(error = %e, "Failed to get provider for routing, falling back");
-                Arc::clone(available[0])
-            }
+            Err(e) => Self::fallback_agent(&ctx.user_input, &available, affinity, &e),
         };
 
         let agent_id = agent.descriptor().id;
@@ -155,6 +137,22 @@ impl AgentDispatcher {
         });
 
         rx
+    }
+
+    fn fallback_agent<'a>(
+        user_input: &str,
+        available: &[&'a DynAgent],
+        affinity: &SessionAffinity,
+        error: &impl std::fmt::Display,
+    ) -> DynAgent {
+        warn!(error = %error, "LLM routing unavailable, falling back to rule-based routing");
+        if let Some(agent) = Self::rule_match(user_input, available, affinity) {
+            let agent_id = agent.descriptor().id;
+            info!(agent = agent_id, "Dispatched via rule fallback");
+            Arc::clone(agent)
+        } else {
+            Arc::clone(available[0])
+        }
     }
 
     /// Level 1: Rule-based matching.

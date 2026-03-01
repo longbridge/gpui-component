@@ -36,11 +36,11 @@ pub enum SidebarPanel {
 
 impl SidebarPanel {
     /// 获取面板图标
-    pub fn icon(&self) -> IconName {
+    pub fn icon(&self) -> Icon {
         match self {
-            SidebarPanel::Settings => IconName::Settings,
-            SidebarPanel::QuickCommand => IconName::SquareTerminal,
-            SidebarPanel::AiChat => IconName::Bot,
+            SidebarPanel::Settings => IconName::Settings.mono(),
+            SidebarPanel::QuickCommand => IconName::SquareTerminal.mono(),
+            SidebarPanel::AiChat => IconName::AI.color(),
         }
     }
 

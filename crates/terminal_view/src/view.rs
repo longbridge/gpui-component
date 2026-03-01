@@ -1012,7 +1012,7 @@ impl TerminalView {
             let sidebar_clone = sidebar.clone();
             menu = menu.separator().item(
                 PopupMenuItem::new(t!("ContextMenu.ask_ai"))
-                    .icon(IconName::Bot)
+                    .icon(IconName::AI.color())
                     .on_click(move |_, _window, cx| {
                         sidebar_clone.update(cx, |sidebar, cx| {
                             sidebar.ask_ai(message.clone(), cx);

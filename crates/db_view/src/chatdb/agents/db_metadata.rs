@@ -2,7 +2,7 @@
 //!
 //! 封装 GlobalDbState 的纯 async 方法，作为 AgentContext 的 capability 注入。
 
-use db::GlobalDbState;
+use db::{ExecOptions, GlobalDbState, QueryResult, SqlResult};
 use one_core::storage::DatabaseType;
 
 use crate::chatdb::agents::query_workflow::{ColumnMeta, TableBrief, TableMeta};
@@ -77,7 +77,40 @@ impl DatabaseMetadataProvider {
                     comment: c.comment,
                     is_primary_key: c.is_primary_key,
                 })
-                .collect(),
+            .collect(),
         })
+    }
+
+    /// Execute a query and return the first query result set.
+    pub async fn execute_query_preview(
+        &self,
+        sql: &str,
+        max_rows: usize,
+    ) -> anyhow::Result<QueryResult> {
+        let opts = ExecOptions {
+            max_rows: Some(max_rows),
+            ..Default::default()
+        };
+
+        let results = self
+            .global_db_state
+            .execute_script_direct(
+                &self.connection_id,
+                sql,
+                Some(self.database.clone()),
+                self.schema.clone(),
+                Some(opts),
+            )
+            .await?;
+
+        for result in results {
+            match result {
+                SqlResult::Query(query) => return Ok(query),
+                SqlResult::Error(err) => return Err(anyhow::anyhow!(err.message)),
+                SqlResult::Exec(_) => continue,
+            }
+        }
+
+        Err(anyhow::anyhow!("No query result returned"))
     }
 }

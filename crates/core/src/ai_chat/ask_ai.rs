@@ -114,7 +114,7 @@ impl IntoElement for AskAiButton {
         let message = self.format_message();
 
         Button::new(self.id)
-            .icon(IconName::Bot)
+            .icon(IconName::AI.color())
             .label(t!("AiChat.ask_ai_button").to_string())
             .ghost()
             .with_size(self.size)

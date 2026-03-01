@@ -56,3 +56,35 @@
 - 通过：`cargo check -p db_view`
 - 通过：`cargo test -p db_view query_workflow -- --nocapture`（8 个测试）
 - 备注：测试首次在沙箱环境失败，原因是 clang 缓存目录权限；提权后执行通过
+
+---
+
+## 审查报告
+时间：2026-03-01 11:05:46 +0800
+任务：chatbi-agent-chart
+
+### 技术维度评分
+- 代码质量：92/100（新增 Agent/协议/渲染分层清晰）
+- 测试覆盖：88/100（新增 chart JSON 单测并通过，未覆盖端到端 LLM 路径）
+- 规范遵循：93/100（沿用 chatdb 事件流和渲染扩展方式）
+
+### 战略维度评分
+- 需求匹配：94/100（已实现取数后分析并输出 JSON 代码块图表）
+- 架构一致：92/100（Agent + capability + code_block_renderer 一致）
+- 风险评估：89/100（模型输出格式漂移由 fallback JSON 缓解）
+
+### 综合评分
+- 92/100
+- 建议：通过
+
+### 审查清单
+- 需求字段完整性：已覆盖目标、范围、交付物与审查要点
+- 原始意图覆盖：已覆盖 chatbi Agent + 图表 JSON 渲染链路
+- 交付物映射：代码、上下文摘要、操作日志、验证报告已更新
+- 依赖与风险：已识别 direct 执行、JSON 解析和渲染匹配风险
+- 结论留痕：已记录时间戳与评分
+
+### 本地验证结果
+- 通过：`cargo check -p db_view`
+- 通过：`cargo test -p db_view chart_json -- --nocapture`（2/2）
+- 备注：测试在沙箱首次失败（clang 缓存权限），提权后通过

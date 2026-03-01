@@ -13,8 +13,7 @@ use futures::AsyncReadExt;
 use futures_util::StreamExt;
 use futures_util::stream;
 use gpui::http_client::{AsyncBody, HttpClient, Method, Request, Response, StatusCode};
-use llm_connector::types::MessageBlock;
-use llm_connector::{ChatRequest, ChatResponse, StreamingResponse};
+use llm_connector::{ChatRequest, StreamingResponse};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -1752,32 +1751,68 @@ impl CloudApiClient for SupabaseClient {
 
     async fn chat(&self, request: &ChatRequest) -> Result<String, CloudApiError> {
         let url = self.functions_url("ai-proxy");
+
+        // 使用 serde_json::Value 手动解析，兼容 content 为字符串或数组两种格式
         let (status, response) = self
-            .post_json_with_retry::<ChatResponse, ChatRequest>(&url, vec![], request)
+            .post_json_with_retry::<serde_json::Value, ChatRequest>(&url, vec![], request)
             .await?;
 
-        let mut chat_resp = response.map_err(|e| CloudApiError::ParseError(e))?;
+        let json_val = response.map_err(|e| CloudApiError::ParseError(e))?;
 
-        if status.is_success() {
-            if chat_resp.choices.is_empty() {
-                return Ok("".to_string());
+        if !status.is_success() {
+            return Err(CloudApiError::ServerError("接口请求失败".to_string()));
+        }
+
+        // 从顶层 content 字段取值（部分代理会填充此字段）
+        if let Some(content) = json_val.get("content").and_then(|v| v.as_str()) {
+            if !content.is_empty() {
+                return Ok(content.to_string());
             }
-            // 按优先级获取内容：content > reasoning_content > reasoning > thought > thinking
-            if chat_resp.content.is_empty() {
-                if let Some(choice) = chat_resp.choices.first() {
-                    if let Some(content) = choice.message.content.first() {
-                        chat_resp.content = match content {
-                            MessageBlock::Text { text } => text.to_string(),
-                            MessageBlock::Image { .. } => "".to_string(),
-                            MessageBlock::ImageUrl { .. } => "".to_string(),
+        }
+
+        // 从 choices[0].message 中提取
+        let choices = json_val.get("choices").and_then(|v| v.as_array());
+        let Some(choices) = choices else {
+            return Ok(String::new());
+        };
+        let Some(first_choice) = choices.first() else {
+            return Ok(String::new());
+        };
+        let Some(message) = first_choice.get("message") else {
+            return Ok(String::new());
+        };
+
+        // content 可能是字符串（OpenAI 标准格式）或数组（多模态格式）
+        if let Some(content) = message.get("content") {
+            if let Some(text) = content.as_str() {
+                return Ok(text.to_string());
+            }
+            if let Some(arr) = content.as_array() {
+                for block in arr {
+                    if block.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                            return Ok(text.to_string());
                         }
                     }
                 }
             }
-            Ok(chat_resp.content)
-        } else {
-            Err(CloudApiError::ServerError("接口请求失败".to_string()))
         }
+
+        // 按优先级尝试 reasoning 字段
+        for key in &[
+            "reasoning_content",
+            "reasoning",
+            "thought",
+            "thinking",
+        ] {
+            if let Some(val) = message.get(*key).and_then(|v| v.as_str()) {
+                if !val.is_empty() {
+                    return Ok(val.to_string());
+                }
+            }
+        }
+
+        Ok(String::new())
     }
 
     async fn chat_stream(&self, request: &ChatRequest) -> Result<ChatStream, CloudApiError> {

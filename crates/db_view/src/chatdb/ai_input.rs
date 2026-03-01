@@ -50,7 +50,7 @@ impl InputMode {
 
     pub fn icon(&self) -> IconName {
         match self {
-            InputMode::Agent => IconName::Bot,
+            InputMode::Agent => IconName::AI,
             InputMode::Sql => IconName::Database,
         }
     }

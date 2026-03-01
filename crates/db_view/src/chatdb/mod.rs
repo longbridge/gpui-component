@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod ai_input;
+pub mod chart_json;
 pub mod chat_markdown;
 pub mod chat_panel;
 pub mod chat_sql_block;

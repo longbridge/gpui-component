@@ -1,0 +1,40 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect x="8" y="8" width="112" height="112" rx="28" fill="#8B7CF6"/>
+
+    <!-- Main sparkle -->
+    <path d="M64 34 
+           L70 54 
+           L90 60 
+           L70 66 
+           L64 86 
+           L58 66 
+           L38 60 
+           L58 54 Z"
+          fill="none"
+          stroke="white"
+          stroke-width="4"
+          stroke-linejoin="round"/>
+
+    <!-- Small sparkle top right -->
+    <path d="M92 36 
+           L95 44 
+           L103 47 
+           L95 50 
+           L92 58 
+           L89 50 
+           L81 47 
+           L89 44 Z"
+          fill="white"/>
+
+    <!-- Small sparkle bottom left -->
+    <path d="M36 78 
+           L39 86 
+           L47 89 
+           L39 92 
+           L36 100 
+           L33 92 
+           L25 89 
+           L33 86 Z"
+          fill="white"/>
+</svg>

@@ -15,9 +15,9 @@ pub enum SidebarPanel {
 }
 
 impl SidebarPanel {
-    pub fn icon(&self) -> IconName {
+    pub fn icon(&self) -> Icon {
         match self {
-            SidebarPanel::AiChat => IconName::Bot,
+            SidebarPanel::AiChat => IconName::AI.color(),
         }
     }
 }

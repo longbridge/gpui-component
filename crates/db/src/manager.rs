@@ -2210,6 +2210,57 @@ impl GlobalDbState {
 
         result
     }
+
+    /// Pure async SQL execution version — can be called from any tokio context
+    /// without `AsyncApp`. Skips cache invalidation and notifier side effects.
+    pub async fn execute_script_direct(
+        &self,
+        connection_id: &str,
+        script: &str,
+        database: Option<String>,
+        schema: Option<String>,
+        opts: Option<ExecOptions>,
+    ) -> anyhow::Result<Vec<SqlResult>> {
+        let mut config = self
+            .get_config(connection_id)
+            .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
+            .clone();
+
+        // For non-Oracle databases, switch database through config override.
+        if config.database_type != DatabaseType::Oracle {
+            if let Some(db) = database {
+                config.database = Some(db);
+            }
+        }
+
+        let plugin = self.get_plugin(&config.database_type)?;
+        let session_id = self
+            .connection_manager
+            .create_session(config, &self.db_manager)
+            .await?;
+
+        let result = {
+            let mut guard = self
+                .connection_manager
+                .get_session_connection(&session_id)
+                .await?;
+            let conn = guard
+                .connection()
+                .ok_or_else(|| anyhow::anyhow!("Session connection not found"))?;
+
+            if let Some(schema) = &schema {
+                conn.switch_schema(schema)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to switch schema: {}", e))?;
+            }
+
+            conn.execute(plugin.as_ref(), script, opts.unwrap_or_default())
+                .await
+        };
+
+        self.connection_manager.close_session(&session_id).await?;
+        result.map_err(|e| anyhow::anyhow!("{}", e))
+    }
 }
 
 impl Default for GlobalDbState {

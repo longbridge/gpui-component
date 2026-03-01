@@ -9,6 +9,7 @@
 
 use crate::chatdb::agents::{CAP_DB_METADATA, DatabaseMetadataProvider};
 use crate::chatdb::ai_input::{AIInput, AIInputEvent};
+use crate::chatdb::chart_json::{ChartJsonBlock, ChartType, parse_chart_json_block};
 use crate::chatdb::chat_markdown::SqlCodeBlock;
 use crate::chatdb::chat_sql_block::SqlBlockResultState;
 use crate::chatdb::chat_sql_result::ChatSqlResultView;
@@ -27,6 +28,7 @@ use gpui_component::button::ButtonVariants;
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size, WindowExt as _,
     button::Button,
+    chart::{BarChart, LineChart, PieChart},
     clipboard::Clipboard,
     dialog::DialogButtonProps,
     h_flex,
@@ -1644,6 +1646,16 @@ impl ChatPanel {
                         let message_id = message_id.clone();
                         let panel_for_collapse = panel_for_render.clone();
                         move |code_block, options, default_element, _window, cx| {
+                            if let Some(chart_block) = parse_chart_json_block(
+                                &code_block.code(),
+                                code_block.lang().as_deref().map(|v| &**v),
+                            )
+                            {
+                                let content = panel_for_collapse.read(cx);
+                                return content
+                                    .render_chart_block_container(&chart_block, default_element, cx);
+                            }
+
                             let block = SqlCodeBlock::from_code_block(code_block, options.index);
                             if !block.is_sql {
                                 return default_element;
@@ -1660,6 +1672,83 @@ impl ChatPanel {
                         }
                     }),
                 ),
+            )
+            .into_any_element()
+    }
+
+    fn render_chart_block_container(
+        &self,
+        chart_block: &ChartJsonBlock,
+        default_element: AnyElement,
+        cx: &App,
+    ) -> AnyElement {
+        let title = chart_block
+            .title
+            .clone()
+            .unwrap_or_else(|| "数据图表".to_string());
+        let description = chart_block.description.clone();
+
+        let chart_element = match chart_block.chart_type {
+            ChartType::Line => {
+                let points = chart_block.to_xy_points();
+                if points.is_empty() {
+                    return default_element;
+                }
+                LineChart::new(points)
+                    .x(|d| d.x.clone())
+                    .y(|d| d.y)
+                    .dot()
+                    .into_any_element()
+            }
+            ChartType::Bar => {
+                let points = chart_block.to_xy_points();
+                if points.is_empty() {
+                    return default_element;
+                }
+                BarChart::new(points)
+                    .x(|d| d.x.clone())
+                    .y(|d| d.y)
+                    .into_any_element()
+            }
+            ChartType::Pie => {
+                let points = chart_block.to_pie_points();
+                if points.is_empty() {
+                    return default_element;
+                }
+                PieChart::new(points)
+                    .value(|d| d.value as f32)
+                    .inner_radius(50.0)
+                    .outer_radius(96.0)
+                    .into_any_element()
+            }
+        };
+
+        // 图表成功渲染后，只显示图表容器，不再显示原始 JSON 代码块
+        v_flex()
+            .w_full()
+            .child(
+                v_flex()
+                    .w_full()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded_lg()
+                    .p_3()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(title),
+                    )
+                    .when_some(description, |this, desc| {
+                        this.child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(desc),
+                        )
+                    })
+                    .child(div().w_full().h(px(280.0)).child(chart_element)),
             )
             .into_any_element()
     }

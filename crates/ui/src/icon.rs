@@ -190,6 +190,7 @@ pub enum IconName {
     TableDesign,
     Server,
     Export,
+    AI
 }
 
 impl IconName {
@@ -369,6 +370,7 @@ impl IconNamed for IconName {
             Self::TableDesign => "icons/table-design.svg",
             Self::Server => "icons/server.svg",
             Self::Export => "icons/export.svg",
+            Self::AI => "icons/ai.svg",
         }
         .into()
     }

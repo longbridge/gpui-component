@@ -60,3 +60,37 @@
 ### 4. 未重复造轮子的证明
 - 移除 chat_panel 内重复构建 local registry 的中间层
 - 直接复用全局 AgentRegistry 快照，无新增并行路由实现
+
+## 编码前检查 - chatbi-agent-chart
+时间：2026-03-01 10:50:45 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-chatbi-agent-chart.md`
+- 将复用组件：
+  - `SqlWorkflowAgent`（Agent 事件与多阶段执行模式）
+  - `chat_panel` 代码块渲染拦截（`code_block_renderer`）
+  - `gpui_component::chart`（Line/Bar/Pie）
+- 将遵循命名约定：Rust snake_case / PascalCase
+- 将遵循代码风格：早返回 + 分层函数
+- 不重复造轮子证明：基于现有 Agent/Chart 组件扩展，不引入新渲染框架
+
+## 编码后声明 - chatbi-agent-chart
+时间：2026-03-01 11:05:46 +0800
+
+### 1. 复用了以下既有组件
+- `SqlWorkflowAgent` 的选表与元数据处理模式
+- `chat_panel` 的代码块级渲染拦截机制
+- `gpui_component::chart::{LineChart, BarChart, PieChart}`
+
+### 2. 遵循了以下项目约定
+- 命名约定：沿用 chatdb agent 模块命名方式
+- 代码风格：保持 AgentEvent 分阶段状态推送
+- 文件组织：新增 `chatdb/agents/chat_bi.rs` 与 `chatdb/chart_json.rs`
+
+### 3. 对比了以下相似实现
+- `chatdb/agents/sql_workflow.rs`：沿用 capability 驱动 Agent 设计
+- `chat_panel.rs`：沿用 `code_block_renderer` 渲染注入点
+- `story/chart_story.rs`：沿用 chart 组件数据绑定方式
+
+### 4. 未重复造轮子的证明
+- 图表渲染直接复用现有 `gpui_component::chart`
+- SQL 执行新增 `execute_script_direct` 以复用 DB session 执行链，无新 DB 客户端
