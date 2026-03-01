@@ -94,7 +94,8 @@ impl Root {
         self
     }
 
-    pub fn window_border_size(mut self, size: impl Into<Pixels>) -> Self {
+    /// Set window border radius.
+    pub fn window_border_radius(mut self, size: impl Into<Pixels>) -> Self {
         self.window_border_radius = size.into();
         self
     }
