@@ -113,6 +113,26 @@ Home:
     en: "%{count} sync conflicts need to be resolved"
     zh-CN: "%{count} 个同步冲突需要解决"
     zh-HK: "%{count} 個同步衝突需要解決"
+  sync_conflict_type:
+    en: "Conflict type: %{conflict_type}"
+    zh-CN: "冲突类型: %{conflict_type}"
+    zh-HK: "衝突類型: %{conflict_type}"
+  sync_conflict_dialog_title:
+    en: "Sync conflicts (%{count})"
+    zh-CN: "同步冲突（%{count} 个）"
+    zh-HK: "同步衝突（%{count} 個）"
+  sync_conflict_apply_all:
+    en: "After selecting a resolution strategy, it will be applied to all conflicts automatically."
+    zh-CN: "选择解决策略后，将自动应用到所有冲突"
+    zh-HK: "選擇解決策略後，將自動套用到所有衝突"
+  sync_conflict_use_cloud:
+    en: Use cloud version
+    zh-CN: 使用云端版本
+    zh-HK: 使用雲端版本
+  sync_conflict_use_local:
+    en: Use local version
+    zh-CN: 使用本地版本
+    zh-HK: 使用本地版本
   ai_assistant:
     en: AI Assistant
     zh-CN: AI 助手
@@ -371,10 +391,6 @@ Encryption:
     en: "Sensitive information is encrypted end-to-end using the master key to ensure it is not leaked"
     zh-CN: "使用主密钥对敏感信息使用端对端加密，确保敏感信息不被泄露"
     zh-HK: "使用主密鑰對敏感信息使用端對端加密，確保敏感信息不被洩露"
-  encryption_scheme_link:
-    en: "Encryption scheme details?"
-    zh-CN: "具体加密方案？"
-    zh-HK: "具體加密方案？"
   key_empty:
     en: "Master key cannot be empty"
     zh-CN: "主密钥不能为空"

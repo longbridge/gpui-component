@@ -59,7 +59,6 @@ pub struct HomePage {
     selected_filter: ConnectionType,
     pub(crate) workspaces: Vec<Workspace>,
     pub(crate) connections: Vec<StoredConnection>,
-    _selected_workspace_id: Option<i64>,
     pub(crate) tab_container: Entity<TabContainer>,
     search_input: Entity<InputState>,
     search_query: Entity<String>,
@@ -124,7 +123,6 @@ impl HomePage {
             selected_filter: ConnectionType::All,
             workspaces: Vec::new(),
             connections: Vec::new(),
-            _selected_workspace_id: None,
             tab_container,
             search_input,
             search_query,
@@ -410,7 +408,10 @@ impl HomePage {
                             div()
                                 .text_xs()
                                 .text_color(gpui::hsla(0.0, 0.0, 0.5, 1.0))
-                                .child(format!("冲突类型: {}", conflict_type)),
+                                .child(
+                                    t!("Home.sync_conflict_type", conflict_type = conflict_type)
+                                        .to_string(),
+                                ),
                         )
                         .into_any_element()
                 })
@@ -420,7 +421,11 @@ impl HomePage {
             let view_for_cancel = view.clone();
 
             dialog
-                .title(format!("同步冲突 ({} 个)", conflicts_count).into_any_element())
+                .title(
+                    t!("Home.sync_conflict_dialog_title", count = conflicts_count)
+                        .to_string()
+                        .into_any_element(),
+                )
                 .child(
                     div()
                         .flex()
@@ -433,14 +438,14 @@ impl HomePage {
                                 .mt_4()
                                 .text_sm()
                                 .text_color(gpui::hsla(0.0, 0.0, 0.5, 1.0))
-                                .child("选择解决策略后，将自动应用到所有冲突"),
+                                .child(t!("Home.sync_conflict_apply_all").to_string()),
                         )
                         .into_any_element(),
                 )
                 .button_props(
                     gpui_component::dialog::DialogButtonProps::default()
-                        .ok_text("使用云端版本")
-                        .cancel_text("使用本地版本"),
+                        .ok_text(t!("Home.sync_conflict_use_cloud"))
+                        .cancel_text(t!("Home.sync_conflict_use_local")),
                 )
                 .on_ok(move |_event, _window, cx| {
                     view_clone.update(cx, |this, cx| {
@@ -1093,9 +1098,9 @@ impl HomePage {
 
         open_popup_window(
             PopupWindowOptions::new(if config.editing_connection.is_some() {
-                "编辑 Redis 连接".to_string()
+                t!("Connection.edit", db_type = "Redis").to_string()
             } else {
-                "新建 Redis 连接".to_string()
+                t!("Connection.new", db_type = "Redis").to_string()
             })
             .size(700.0, 650.0),
             move |window, cx| cx.new(|cx| RedisFormWindow::new(config, window, cx)),
@@ -1120,9 +1125,9 @@ impl HomePage {
 
         open_popup_window(
             PopupWindowOptions::new(if config.editing_connection.is_some() {
-                "编辑 MongoDB 连接".to_string()
+                t!("Connection.edit", db_type = "MongoDB").to_string()
             } else {
-                "新建 MongoDB 连接".to_string()
+                t!("Connection.new", db_type = "MongoDB").to_string()
             })
             .size(700.0, 520.0),
             move |window, cx| cx.new(|cx| MongoFormWindow::new(config, window, cx)),
@@ -1384,13 +1389,6 @@ impl HomePage {
                                         .text_sm()
                                         .child(t!("Encryption.e2e_encryption_desc").to_string()),
                                 )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().link)
-                                        .cursor_pointer()
-                                        .child(t!("Encryption.encryption_scheme_link").to_string()),
-                                ),
                         )
                         // 错误提示
                         .when_some(error_msg_for_render.read(cx).clone(), |this, msg| {
