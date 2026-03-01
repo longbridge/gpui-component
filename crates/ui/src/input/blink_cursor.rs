@@ -17,7 +17,7 @@ pub(super) const CURSOR_WIDTH: Pixels = px(1.5);
 /// Every loop will notify the view to update the `visible`, and Input will observe this update to touch repaint.
 ///
 /// The input painter will check if this in visible state, then it will draw the cursor.
-pub(crate) struct BlinkCursor {
+pub struct BlinkCursor {
     visible: bool,
     paused: bool,
     epoch: usize,

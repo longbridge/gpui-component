@@ -9,14 +9,14 @@ use crate::redis_cli_element::{
 };
 use crate::{GlobalRedisState, RedisValue};
 use gpui::{
-    App, AsyncApp, Bounds, ClipboardItem, Context, ElementInputHandler, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, FontFallbacks, InteractiveElement, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, ScrollWheelEvent, SharedString, Styled, Task, UTF16Selection, Window, actions,
-    canvas, div, px, rgb, size,
+    App, AppContext as _, AsyncApp, Bounds, ClipboardItem, Context, ElementInputHandler, Entity,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontFallbacks, InteractiveElement,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Render, ScrollWheelEvent, SharedString, Styled, Task,
+    UTF16Selection, Window, actions, canvas, div, px, rgb, size,
 };
 use gpui_component::{
-    Icon, IconName, Sizable, Size,
+    BlinkCursor, Icon, IconName, Sizable, Size,
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
 };
 use one_core::gpui_tokio::Tokio;
@@ -24,7 +24,7 @@ use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 actions!(
     redis_cli,
@@ -53,7 +53,6 @@ actions!(
 );
 
 const REDIS_CLI_CONTEXT: &str = "RedisCli";
-const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 /// 双击判定时间（毫秒）
 const DOUBLE_CLICK_THRESHOLD_MS: u128 = 500;
 
@@ -241,64 +240,6 @@ pub enum RedisCliViewEvent {
     CommandExecuted { command: String },
 }
 
-/// 光标闪烁管理器
-struct BlinkManager {
-    blink_epoch: usize,
-    blinking_paused: bool,
-    visible: bool,
-    enabled: bool,
-}
-
-impl BlinkManager {
-    fn new() -> Self {
-        Self {
-            blink_epoch: 0,
-            blinking_paused: false,
-            visible: true,
-            enabled: false,
-        }
-    }
-
-    fn enable(&mut self) {
-        self.enabled = true;
-        self.visible = true;
-    }
-
-    fn disable(&mut self) {
-        self.enabled = false;
-        self.visible = true;
-    }
-
-    fn pause_blinking(&mut self) {
-        self.visible = true;
-        self.blinking_paused = true;
-    }
-
-    fn resume_blinking(&mut self, epoch: usize) {
-        if epoch == self.blink_epoch {
-            self.blinking_paused = false;
-        }
-    }
-
-    fn visible(&self) -> bool {
-        self.visible
-    }
-
-    fn next_epoch(&mut self) -> usize {
-        self.blink_epoch += 1;
-        self.blink_epoch
-    }
-
-    fn blink(&mut self, epoch: usize) -> bool {
-        if epoch == self.blink_epoch && self.enabled && !self.blinking_paused {
-            self.visible = !self.visible;
-            true
-        } else {
-            false
-        }
-    }
-}
-
 /// Redis CLI 视图
 pub struct RedisCliView {
     /// 当前连接 ID
@@ -328,7 +269,7 @@ pub struct RedisCliView {
     /// 最大输出条目数
     max_output_entries: usize,
     /// 光标闪烁管理器
-    blink_manager: BlinkManager,
+    blink_manager: Entity<BlinkCursor>,
     /// 终端边界
     terminal_bounds: Bounds<Pixels>,
     /// 主题
@@ -343,6 +284,8 @@ pub struct RedisCliView {
     cell_width: Pixels,
     /// IME 标记文本范围（UTF16）
     ime_marked_range: Option<std::ops::Range<usize>>,
+    /// 订阅
+    _subscriptions: Vec<gpui::Subscription>,
 }
 
 impl RedisCliView {
@@ -355,8 +298,13 @@ impl RedisCliView {
     ) -> Self {
         let focus_handle = cx.focus_handle();
 
+        let blink_manager = cx.new(|_| BlinkCursor::new());
+        let blink_subscription = cx.observe(&blink_manager, |_, _, cx| {
+            cx.notify();
+        });
+
         // 启动闪烁定时器
-        let mut this = Self {
+        let this = Self {
             connection_id,
             db_index,
             input_text: String::new(),
@@ -370,7 +318,7 @@ impl RedisCliView {
             is_executing: false,
             max_history: 1000,
             max_output_entries: 500,
-            blink_manager: BlinkManager::new(),
+            blink_manager,
             terminal_bounds: Bounds::default(),
             theme: CliTheme::default(),
             selection: None,
@@ -378,9 +326,9 @@ impl RedisCliView {
             cell_width: px(7.8), // 默认值，会在渲染时更新
             ime_marked_range: None,
             owns_connection,
+            _subscriptions: vec![blink_subscription],
         };
 
-        this.start_blink_timer(cx);
         this
     }
 
@@ -420,29 +368,6 @@ impl RedisCliView {
         }
     }
 
-    /// 启动光标闪烁定时器
-    fn start_blink_timer(&mut self, cx: &mut Context<Self>) {
-        let epoch = self.blink_manager.next_epoch();
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(CURSOR_BLINK_INTERVAL).await;
-                let should_continue = this.update(cx, |view, cx| {
-                    if view.blink_manager.blink(epoch) {
-                        cx.notify();
-                        true
-                    } else {
-                        false
-                    }
-                });
-                match should_continue {
-                    Ok(true) => continue,
-                    _ => break,
-                }
-            }
-        })
-        .detach();
-    }
-
     /// 获取提示符
     fn get_prompt(&self) -> String {
         format!("{}:db{}>", "redis", self.db_index)
@@ -457,20 +382,7 @@ impl RedisCliView {
         cx: &mut Context<Self>,
     ) {
         // 暂停闪烁
-        self.blink_manager.pause_blinking();
-        let epoch = self.blink_manager.next_epoch();
-
-        // 延迟恢复闪烁
-        cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(500))
-                .await;
-            let _ = this.update(cx, |view, cx| {
-                view.blink_manager.resume_blinking(epoch);
-                view.start_blink_timer(cx);
-            });
-        })
-        .detach();
+        self.blink_manager.update(cx, BlinkCursor::pause);
 
         // 只处理特殊键，普通字符输入由 EntityInputHandler::replace_text_in_range 处理
         match event.keystroke.key.as_str() {
@@ -1623,10 +1535,10 @@ impl RedisCliView {
     }
 
     /// 渲染终端（使用 RedisCliElement 进行精确渲染）
-    fn render_terminal(&mut self, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_terminal(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let lines = self.build_render_lines();
         let text_lines = self.build_text_lines();
-        let cursor_visible = self.blink_manager.visible();
+        let cursor_visible = self.blink_manager.read(cx).visible();
         let selection = self.selection;
         let theme = self.theme.clone();
         let cell_width = self.cell_width;
@@ -1745,9 +1657,9 @@ impl Render for RedisCliView {
 
         // 焦点变化时更新闪烁状态
         if focus_handle.is_focused(window) {
-            self.blink_manager.enable();
+            self.blink_manager.update(cx, BlinkCursor::start);
         } else {
-            self.blink_manager.disable();
+            self.blink_manager.update(cx, BlinkCursor::stop);
         }
 
         // 精确计算字符宽度（复用 terminal_view 的方法）

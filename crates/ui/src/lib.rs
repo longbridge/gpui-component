@@ -82,7 +82,7 @@ pub use focus_trap::FocusTrapElement;
 pub use geometry::*;
 pub use icon::*;
 pub use index_path::IndexPath;
-pub use input::{Rope, RopeExt, RopeLines};
+pub use input::{BlinkCursor, Rope, RopeExt, RopeLines};
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use inspector::*;
 pub use root::Root;

@@ -18,6 +18,7 @@ mod selection;
 mod state;
 mod text_wrapper;
 
+pub use blink_cursor::BlinkCursor;
 pub(crate) use clear_button::*;
 pub use cursor::*;
 pub use indent::TabSize;

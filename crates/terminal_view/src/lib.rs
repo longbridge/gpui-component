@@ -1,7 +1,6 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod addon;
-pub mod blink_manager;
 pub mod keys;
 pub mod sidebar;
 pub mod ssh_form_window;
@@ -10,7 +9,6 @@ pub mod theme;
 pub mod view;
 
 pub use addon::{AddonManager, HoveredLink, SearchAddon, TerminalAddon, WebLinksAddon};
-pub use blink_manager::BlinkManager;
 pub use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
 pub use sidebar::{
     SettingsPanel, SidebarPanel, TerminalSidebar, TerminalSidebarEvent,

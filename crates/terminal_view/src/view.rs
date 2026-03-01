@@ -7,7 +7,7 @@ use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
-use gpui_component::{Icon, IconName, Sizable, Size};
+use gpui_component::{BlinkCursor, Icon, IconName, Sizable, Size};
 use std::borrow::Cow;
 use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
@@ -17,7 +17,6 @@ use crate::addon::{
     register_default_addons, AddonManager, SearchAddon, TerminalAddonFrameContext,
     TerminalAddonMouseContext,
 };
-use crate::blink_manager::BlinkManager;
 use crate::sidebar::{
     SidebarPanel, TerminalSidebar, TerminalSidebarEvent,
 };
@@ -89,7 +88,7 @@ pub struct TerminalView {
     /// 本地终端工作目录
     local_working_dir: Option<PathBuf>,
     /// 光标闪烁管理器
-    blink_manager: Entity<BlinkManager>,
+    blink_manager: Entity<BlinkCursor>,
     /// 侧边栏
     sidebar: Entity<TerminalSidebar>,
 
@@ -262,7 +261,7 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<Self> {
-        let blink_manager = cx.new(|_| BlinkManager::new());
+        let blink_manager = cx.new(|_| BlinkCursor::new());
 
         // 获取初始颜色
         let colors = terminal.read(cx).term().lock().colors().clone();
@@ -281,7 +280,7 @@ impl TerminalView {
         // 订阅 Terminal 事件
         let terminal_subscription = cx.subscribe(&terminal, Self::handle_terminal_event);
 
-        // 订阅 BlinkManager 变化
+        // 订阅 BlinkCursor 变化
         let blink_subscription = cx.observe(&blink_manager, |this, _, cx| {
             cx.notify();
             let _ = this;
@@ -292,12 +291,12 @@ impl TerminalView {
         // 焦点获得/失去订阅
         let focus_subscription = cx.on_focus(&focus_handle, window, |this, _window, cx| {
             if this.cursor_blink_enabled {
-                this.blink_manager.update(cx, BlinkManager::enable);
+                this.blink_manager.update(cx, BlinkCursor::start);
             }
         });
         let blur_subscription = cx.on_blur(&focus_handle, window, |this, _window, cx| {
             if this.cursor_blink_enabled {
-                this.blink_manager.update(cx, BlinkManager::disable);
+                this.blink_manager.update(cx, BlinkCursor::stop);
             }
         });
 
@@ -396,9 +395,9 @@ impl TerminalView {
             TerminalSidebarEvent::CursorBlinkChanged(enabled) => {
                 self.cursor_blink_enabled = *enabled;
                 if *enabled {
-                    self.blink_manager.update(cx, BlinkManager::enable);
+                    self.blink_manager.update(cx, BlinkCursor::start);
                 } else {
-                    self.blink_manager.update(cx, BlinkManager::disable);
+                    self.blink_manager.update(cx, BlinkCursor::stop);
                 }
             }
         }
@@ -576,7 +575,7 @@ impl TerminalView {
     ) {
         // 输入时暂停闪烁
         if self.cursor_blink_enabled {
-            self.blink_manager.update(cx, BlinkManager::pause_blinking);
+            self.blink_manager.update(cx, BlinkCursor::pause);
         }
 
         if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
