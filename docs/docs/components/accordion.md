@@ -121,7 +121,7 @@ Accordion::new("my-accordion")
 Accordion::new("outer")
     .item(|item| {
         item.title("Parent Section")
-            .content(
+            .child(
                 Accordion::new("inner")
                     .item(|item| item.title("Child 1").child("Content"))
                     .item(|item| item.title("Child 2").child("Content"))
