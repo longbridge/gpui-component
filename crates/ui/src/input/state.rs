@@ -865,6 +865,12 @@ impl InputState {
         SharedString::new(self.text.to_string())
     }
 
+    /// Return the portion of the value within the input field that
+    /// is selected by the user
+    pub fn selected_value(&self) -> SharedString {
+        SharedString::new(self.selected_text().to_string())
+    }
+
     /// Return the value without mask.
     pub fn unmask_value(&self) -> SharedString {
         self.mask_pattern.unmask(&self.text.to_string()).into()
