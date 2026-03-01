@@ -1,21 +1,8 @@
 //! 密钥存储模块
 //!
-//! 提供统一的密钥持久化接口，支持多种存储后端：
-//! - `LocalFileStorage`: 本地文件存储（开发环境推荐）
-//! - `KeychainStorage`: 系统 Keychain 存储（生产环境推荐）
-//!
-//! # 使用方式
-//!
-//! ```rust,ignore
-//! use onetcli_core::key_storage::{KeyStorage, LocalFileStorage, set_key_storage};
-//! use std::sync::Arc;
-//!
-//! // 设置全局存储后端（应用启动时调用一次）
-//! set_key_storage(Arc::new(LocalFileStorage));
-//!
-//! // 或者切换到 Keychain
-//! // set_key_storage(Arc::new(KeychainStorage));
-//! ```
+//! 提供统一的密钥持久化接口。
+//! 当前仅保留 `LocalFileStorage`：将主密钥使用程序内置固定 key
+//! 进行 AES-256-GCM 加密后写入本地文件。
 
 use aes_gcm::{
     Aes256Gcm, Nonce,
@@ -26,12 +13,6 @@ use rand::rngs::OsRng;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-
-/// Keychain 服务名称
-const KEYCHAIN_SERVICE: &str = "com.onetcli.master-key";
-
-/// Keychain 用户名
-const KEYCHAIN_USER: &str = "onetcli-user";
 
 /// 本地加密密钥文件名
 const KEY_STORAGE_FILE: &str = "key_storage";
@@ -47,9 +28,6 @@ static KEY_STORAGE: RwLock<Option<Arc<dyn KeyStorage>>> = RwLock::new(None);
 // ============================================================================
 
 /// 密钥存储后端 trait
-///
-/// 统一封装不同的密钥持久化方式（本地文件、系统 Keychain 等）。
-/// 通过 `set_key_storage` 设置全局使用的存储后端。
 pub trait KeyStorage: Send + Sync {
     /// 存储后端名称，用于日志标识
     fn name(&self) -> &'static str;
@@ -74,7 +52,6 @@ pub trait KeyStorage: Send + Sync {
 /// 本地文件存储实现
 ///
 /// 使用固定密钥对主密钥进行 AES-256-GCM 加密后保存到本地文件。
-/// 适用于开发环境，避免 Keychain 在 IDE 中反复编译导致的权限问题。
 pub struct LocalFileStorage;
 
 impl KeyStorage for LocalFileStorage {
@@ -148,95 +125,10 @@ impl KeyStorage for LocalFileStorage {
 }
 
 // ============================================================================
-// KeychainStorage 实现
-// ============================================================================
-
-/// 系统 Keychain 存储实现
-///
-/// 使用 macOS Keychain / Windows Credential Manager 存储密钥。
-/// 适用于已签名的生产环境应用。
-pub struct KeychainStorage;
-
-impl KeyStorage for KeychainStorage {
-    fn name(&self) -> &'static str {
-        "Keychain"
-    }
-
-    fn save(&self, master_key: &str) -> Result<(), String> {
-        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
-            .map_err(|e| format!("创建 Keychain 条目失败: {}", e))?;
-
-        entry
-            .set_password(master_key)
-            .map_err(|e| format!("保存到 Keychain 失败: {}", e))?;
-
-        tracing::info!("[Keychain] 主密钥已保存");
-        Ok(())
-    }
-
-    fn load(&self) -> Option<String> {
-        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER).ok()?;
-
-        match entry.get_password() {
-            Ok(key) => {
-                tracing::info!("[Keychain] 成功读取密钥");
-                Some(key)
-            }
-            Err(keyring::Error::NoEntry) => {
-                tracing::debug!("[Keychain] 没有保存的密钥");
-                None
-            }
-            Err(e) => {
-                tracing::warn!("[Keychain] 读取密钥失败: {}", e);
-                None
-            }
-        }
-    }
-
-    fn delete(&self) -> Result<(), String> {
-        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
-            .map_err(|e| format!("创建 Keychain 条目失败: {}", e))?;
-
-        match entry.delete_credential() {
-            Ok(()) => {
-                tracing::info!("[Keychain] 已删除密钥");
-                Ok(())
-            }
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!("从 Keychain 删除失败: {}", e)),
-        }
-    }
-
-    fn exists(&self) -> bool {
-        let entry = match keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER) {
-            Ok(e) => e,
-            Err(_) => return false,
-        };
-        entry.get_password().is_ok()
-    }
-}
-
-// ============================================================================
 // 全局存储后端管理
 // ============================================================================
 
 /// 设置全局密钥存储后端
-///
-/// 在应用启动时调用一次，选择使用哪种存储方式。
-/// 默认使用 `LocalFileStorage`（开发环境）。
-///
-/// # 示例
-///
-/// ```rust,ignore
-/// use onetcli_core::key_storage::{set_key_storage, LocalFileStorage, KeychainStorage};
-/// use std::sync::Arc;
-///
-/// // 开发环境：使用本地文件
-/// set_key_storage(Arc::new(LocalFileStorage));
-///
-/// // 生产环境：使用 Keychain
-/// set_key_storage(Arc::new(KeychainStorage));
-/// ```
 pub fn set_key_storage(storage: Arc<dyn KeyStorage>) {
     if let Ok(mut guard) = KEY_STORAGE.write() {
         tracing::info!("[密钥存储] 切换到「{}」后端", storage.name());

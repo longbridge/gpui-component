@@ -9,8 +9,8 @@
 //! 2. 指定密钥模式：使用 encrypt_with_key/decrypt_with_key 直接传入密钥
 //!
 //! 密钥持久化：
-//! - 支持本地文件存储（开发环境）和系统 Keychain（生产环境）
-//! - 通过 key_storage 模块的 KeyStorage trait 统一接口，可灵活切换存储后端
+//! - 使用本地文件存储，主密钥会以固定 key 加密后落盘
+//! - 通过 key_storage 模块统一封装存储后端接口
 //! - 应用启动时可自动从存储后端恢复密钥
 
 use aes_gcm::{

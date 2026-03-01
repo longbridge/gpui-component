@@ -835,7 +835,6 @@ impl GlobalDbState {
 
     /// Register a connection configuration
     pub fn register_connection(&mut self, config: DbConnectionConfig) {
-        info!("register_connection: {:?}", config);
         self.connections.insert(config.id.clone(), config);
     }
 

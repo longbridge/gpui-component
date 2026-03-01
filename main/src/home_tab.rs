@@ -30,13 +30,13 @@ use one_core::cloud_sync::{
 };
 use one_core::connection_notifier::{ConnectionDataEvent, emit_connection_event, get_notifier};
 use one_core::crypto;
+use one_core::key_storage;
 use one_core::license::Feature;
 use one_core::popup_window::{PopupWindowOptions, open_popup_window};
 use one_core::storage::traits::Repository;
 use one_core::storage::{
     ActiveConnections, ConnectionRepository, ConnectionType, DatabaseType, GlobalStorageState,
-    PendingCloudDeletionRepository, RedisMode, StorageManager, StoredConnection, Workspace,
-    WorkspaceRepository,
+    PendingCloudDeletionRepository, RedisMode, StoredConnection, Workspace, WorkspaceRepository,
 };
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::themes::SwitchThemeMode;
@@ -150,8 +150,8 @@ impl HomePage {
         page.load_connections(cx);
 
         // 尝试从存储后端恢复主密钥
-        let keychain_restored = crypto::try_restore_master_key();
-        if keychain_restored {
+        let key_restored = crypto::try_restore_master_key();
+        if key_restored {
             tracing::info!("已恢复主密钥");
         } else if crypto::has_repo_password_set() {
             // 有验证文件但恢复失败，提示用户需要重新输入密钥
@@ -1027,9 +1027,15 @@ impl HomePage {
     fn show_connection_form(
         &mut self,
         db_type: DatabaseType,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.editing_connection_id.is_none()
+            && !self.ensure_master_key_ready_for_new_connection(window, cx)
+        {
+            return;
+        }
+
         let editing_conn = self
             .editing_connection_id
             .and_then(|id| self.connections.iter().find(|c| c.id == Some(id)).cloned());
@@ -1054,7 +1060,13 @@ impl HomePage {
         );
     }
 
-    fn show_ssh_form(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn show_ssh_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing_connection_id.is_none()
+            && !self.ensure_master_key_ready_for_new_connection(window, cx)
+        {
+            return;
+        }
+
         let editing_conn = self.editing_connection_id.and_then(|id| {
             self.connections
                 .iter()
@@ -1081,7 +1093,13 @@ impl HomePage {
         );
     }
 
-    fn show_redis_form(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn show_redis_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing_connection_id.is_none()
+            && !self.ensure_master_key_ready_for_new_connection(window, cx)
+        {
+            return;
+        }
+
         let editing_conn = self.editing_connection_id.and_then(|id| {
             self.connections
                 .iter()
@@ -1108,7 +1126,13 @@ impl HomePage {
         );
     }
 
-    fn show_mongodb_form(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn show_mongodb_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing_connection_id.is_none()
+            && !self.ensure_master_key_ready_for_new_connection(window, cx)
+        {
+            return;
+        }
+
         let editing_conn = self.editing_connection_id.and_then(|id| {
             self.connections
                 .iter()
@@ -1135,89 +1159,70 @@ impl HomePage {
         );
     }
 
+    fn ensure_master_key_ready_for_new_connection(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if crypto::has_repo_password_set() {
+            return true;
+        }
+
+        self.show_encryption_key_dialog(window, cx);
+        false
+    }
+
     fn show_encryption_key_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let view = cx.entity();
         let has_password_set = crypto::has_repo_password_set();
         let has_key_in_memory = crypto::has_master_key();
-
-        // 三种模式：
-        // 1. 首次设置：!has_password_set
-        // 2. 解锁验证：has_password_set && !has_key_in_memory
-        // 3. 修改密码：has_password_set && has_key_in_memory
-        let is_change_mode = has_password_set && has_key_in_memory;
         let is_first_setup = !has_password_set;
-
-        // 旧密码输入框（仅修改模式）
-        let old_key_input = if is_change_mode {
-            Some(cx.new(|cx| {
-                InputState::new(window, cx)
-                    .placeholder(t!("Encryption.old_password_placeholder"))
-                    .masked(true)
-            }))
-        } else {
-            None
-        };
-
-        // 新密码输入框
-        let key_input = cx.new(|cx| {
-            let placeholder = if is_change_mode {
-                t!("Encryption.new_password_placeholder")
-            } else {
-                t!("Encryption.repo_password_placeholder")
-            };
-            InputState::new(window, cx)
-                .placeholder(placeholder)
-                .masked(true)
+        let is_change_mode = has_password_set && has_key_in_memory;
+        let initial_master_key = crypto::get_raw_master_key().or_else(|| {
+            let storage = key_storage::get_key_storage();
+            storage.load()
         });
 
-        // 确认密码输入框（首次设置和修改模式）
-        let confirm_input = if is_first_setup || is_change_mode {
-            Some(cx.new(|cx| {
-                InputState::new(window, cx)
-                    .placeholder(t!("Encryption.confirm_password_placeholder"))
-                    .masked(true)
-            }))
-        } else {
-            None
-        };
+        let key_input = cx.new(|cx| {
+            let mut state = InputState::new(window, cx)
+                .placeholder(t!("Encryption.repo_password_placeholder"))
+                .masked(true);
+
+            if let Some(ref value) = initial_master_key {
+                state = state.default_value(value);
+            }
+
+            state
+        });
 
         let error_message = cx.new(|_| Option::<String>::None);
 
-        let old_key_input_for_ok = old_key_input.clone();
         let key_input_for_ok = key_input.clone();
-        let confirm_input_for_ok = confirm_input.clone();
         let error_msg_for_ok = error_message.clone();
 
-        let old_key_input_for_render = old_key_input.clone();
         let key_input_for_render = key_input.clone();
-        let confirm_input_for_render = confirm_input.clone();
         let error_msg_for_render = error_message.clone();
 
-        let dialog_title = if is_change_mode {
-            t!("Encryption.change_repo_password")
-        } else if is_first_setup {
+        let dialog_title = if is_first_setup {
             t!("Encryption.set_repo_password")
+        } else if is_change_mode {
+            t!("Encryption.change_repo_password")
         } else {
             t!("Encryption.unlock_repo_password")
         };
 
         window.open_dialog(cx, move |dialog, _window, cx| {
-            let old_key_input_ok = old_key_input_for_ok.clone();
             let key_input_ok = key_input_for_ok.clone();
-            let confirm_input_ok = confirm_input_for_ok.clone();
             let error_msg_ok = error_msg_for_ok.clone();
-            let old_key_input_render = old_key_input_for_render.clone();
-            let confirm_input_render = confirm_input_for_render.clone();
 
             dialog
                 .title(dialog_title.to_string())
                 .width(px(450.))
                 .confirm()
                 .on_ok(move |_, _window, cx| {
-                    let new_key = key_input_ok.read(cx).text().to_string();
+                    let input_key = key_input_ok.read(cx).text().to_string();
 
-                    // 验证新密码不为空
-                    if new_key.is_empty() {
+                    if input_key.is_empty() {
                         error_msg_ok.update(cx, |msg, cx| {
                             *msg = Some(t!("Encryption.key_empty").to_string());
                             cx.notify();
@@ -1225,84 +1230,71 @@ impl HomePage {
                         return false;
                     }
 
+                    if is_first_setup {
+                        crypto::set_master_key(&input_key);
+                        return true;
+                    }
+
                     if is_change_mode {
-                        // 修改密码模式
-                        let old_key = old_key_input_ok
-                            .as_ref()
-                            .map(|i| i.read(cx).text().to_string())
-                            .unwrap_or_default();
-                        let confirm_key = confirm_input_ok
-                            .as_ref()
-                            .map(|i| i.read(cx).text().to_string())
-                            .unwrap_or_default();
-
-                        // 验证两次新密码一致
-                        if new_key != confirm_key {
-                            error_msg_ok.update(cx, |msg, cx| {
-                                *msg = Some(t!("Encryption.key_mismatch").to_string());
-                                cx.notify();
-                            });
-                            return false;
-                        }
-
-                        // 调用修改密钥函数
-                        match crypto::change_master_key(&old_key, &new_key, &confirm_key) {
-                            Ok(()) => {
-                                // 密钥已在内存中更新，重新加密所有本地连接
-                                let storage = cx.global::<GlobalStorageState>().storage.clone();
-                                match re_encrypt_all_connections(&storage, &old_key, &new_key) {
-                                    Ok(count) => {
-                                        tracing::info!("密钥修改成功，已重新加密 {} 个连接", count);
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("重新加密连接失败: {}", e);
-                                    }
-                                }
-                                true
-                            }
-                            Err(e) => {
-                                error_msg_ok.update(cx, |msg, cx| {
-                                    *msg = Some(e.to_string());
-                                    cx.notify();
-                                });
-                                false
-                            }
-                        }
-                    } else if is_first_setup {
-                        // 首次设置模式
-                        let confirm_key = confirm_input_ok
-                            .as_ref()
-                            .map(|i| i.read(cx).text().to_string())
-                            .unwrap_or_default();
-
-                        if new_key != confirm_key {
-                            error_msg_ok.update(cx, |msg, cx| {
-                                *msg = Some(t!("Encryption.key_mismatch").to_string());
-                                cx.notify();
-                            });
-                            return false;
-                        }
-
-                        crypto::set_master_key(&new_key);
-                        true
-                    } else {
-                        // 解锁验证模式
-                        match crypto::verify_and_set_master_key(&new_key) {
-                            Ok(()) => true,
-                            Err(_) => {
+                        let old_key = match crypto::get_raw_master_key() {
+                            Some(key) if !key.is_empty() => key,
+                            _ => {
                                 error_msg_ok.update(cx, |msg, cx| {
                                     *msg = Some(t!("Encryption.password_incorrect").to_string());
                                     cx.notify();
                                 });
-                                false
+                                return false;
                             }
+                        };
+
+                        if input_key != old_key {
+                            match crypto::change_master_key(&old_key, &input_key, &input_key) {
+                                Ok(()) => {
+                                    let storage = cx.global::<GlobalStorageState>().storage.clone();
+                                    match re_encrypt_all_connections(&storage) {
+                                        Ok(count) => {
+                                            tracing::info!(
+                                                "主密钥修改成功，已重新加密 {} 个本地连接",
+                                                count
+                                            );
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("重新加密本地连接失败: {}", e);
+                                            error_msg_ok.update(cx, |msg, cx| {
+                                                *msg = Some(e.to_string());
+                                                cx.notify();
+                                            });
+                                            return false;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error_msg_ok.update(cx, |msg, cx| {
+                                        *msg = Some(e.to_string());
+                                        cx.notify();
+                                    });
+                                    return false;
+                                }
+                            }
+                        }
+
+                        return true;
+                    }
+
+                    match crypto::verify_and_set_master_key(&input_key) {
+                        Ok(()) => true,
+                        Err(_) => {
+                            error_msg_ok.update(cx, |msg, cx| {
+                                *msg = Some(t!("Encryption.password_incorrect").to_string());
+                                cx.notify();
+                            });
+                            false
                         }
                     }
                 })
                 .on_close({
                     let view_for_sync = view.clone();
                     move |_window, _result, cx| {
-                        // 密钥设置/解锁成功后，如果已登录则自动触发同步
                         if crypto::has_master_key() {
                             view_for_sync.update(cx, |this, cx| {
                                 if this.current_user.is_some() {
@@ -1317,59 +1309,19 @@ impl HomePage {
                     v_flex()
                         .gap_4()
                         .p_4()
-                        // 旧密码输入框（仅修改模式）
-                        .when_some(old_key_input_render, |this, old_state| {
-                            this.child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_3()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .flex_shrink_0()
-                                            .w(px(80.))
-                                            .child(t!("Encryption.old_password_label").to_string()),
-                                    )
-                                    .child(Input::new(&old_state).mask_toggle().w_full()),
-                            )
-                        })
-                        // 新密码/密码输入框
                         .child(
                             h_flex()
                                 .items_center()
                                 .gap_3()
-                                .child(div().text_sm().flex_shrink_0().w(px(80.)).child(
-                                    if is_change_mode {
-                                        t!("Encryption.new_password_label").to_string()
-                                    } else {
-                                        t!("Encryption.repo_password_label").to_string()
-                                    },
-                                ))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .flex_shrink_0()
+                                        .w(px(80.))
+                                        .child(t!("Encryption.repo_password_label").to_string()),
+                                )
                                 .child(Input::new(&key_input_for_render).mask_toggle().w_full()),
                         )
-                        // 确认密码输入框（首次设置和修改模式）
-                        .when_some(confirm_input_render, |this, confirm_state| {
-                            this.child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_3()
-                                    .child(
-                                        div().text_sm().flex_shrink_0().w(px(80.)).child(
-                                            t!("Encryption.confirm_password_label").to_string(),
-                                        ),
-                                    )
-                                    .child(Input::new(&confirm_state).mask_toggle().w_full()),
-                            )
-                        })
-                        // "什么是主密钥？"链接
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().link)
-                                .cursor_pointer()
-                                .child(t!("Encryption.what_is_repo_password").to_string()),
-                        )
-                        // 提示区域
                         .child(
                             v_flex()
                                 .gap_2()
@@ -1388,9 +1340,8 @@ impl HomePage {
                                     div()
                                         .text_sm()
                                         .child(t!("Encryption.e2e_encryption_desc").to_string()),
-                                )
+                                ),
                         )
-                        // 错误提示
                         .when_some(error_msg_for_render.read(cx).clone(), |this, msg| {
                             this.child(div().text_sm().text_color(cx.theme().danger).child(msg))
                         }),
@@ -2684,33 +2635,20 @@ impl Render for HomePage {
     }
 }
 
-// ============================================================================
-// 辅助函数
-// ============================================================================
-
-/// 重新加密所有本地连接
-///
-/// 在密钥已更新的前提下，读取所有连接（Repository 自动用旧密钥解密），
-/// 然后重新保存（Repository 自动用新密钥加密）。
-fn re_encrypt_all_connections(
-    storage: &StorageManager,
-    _old_key: &str,
-    _new_key: &str,
-) -> anyhow::Result<usize> {
+/// 使用当前主密钥重新加密并保存所有连接。
+fn re_encrypt_all_connections(storage: &one_core::storage::StorageManager) -> anyhow::Result<usize> {
     let conn_repo = storage
         .get::<ConnectionRepository>()
         .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
 
-    // 获取所有连接（已解密状态）
     let connections = conn_repo.list()?;
     let mut count = 0;
 
     for conn in connections {
-        // 连接已经是解密状态（Repository 自动解密）
-        // 重新保存会自动用当前密钥（新密钥）加密
         conn_repo.update(&conn)?;
         count += 1;
     }
 
     Ok(count)
 }
+

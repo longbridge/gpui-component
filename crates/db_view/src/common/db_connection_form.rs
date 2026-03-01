@@ -225,8 +225,7 @@ impl DbFormConfig {
                         t!("ConnectionForm.password"),
                         FormFieldType::Password,
                     )
-                    .placeholder("Enter password")
-                    .default("hf123456"),
+                    .placeholder("Enter password"),
                     FormField::new(
                         "database",
                         t!("ConnectionForm.database"),

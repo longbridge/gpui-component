@@ -375,10 +375,6 @@ Encryption:
     en: Enter your new master key
     zh-CN: 输入新主密钥
     zh-HK: 輸入新主密鑰
-  what_is_repo_password:
-    en: "What is the master key?"
-    zh-CN: "什么是主密钥？"
-    zh-HK: "什麼是主密鑰？"
   remember_password_title:
     en: "Please remember your master key"
     zh-CN: "请牢记你的主密钥"
