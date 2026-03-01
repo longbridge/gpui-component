@@ -1,6 +1,6 @@
 use tokio_util::sync::CancellationToken;
 
-use crate::llm::{ChatRequest, LlmProvider, Message, Role};
+use crate::llm::{ChatRequest, LlmProvider, Message, ProviderConfig, Role};
 
 use super::types::DynAgent;
 
@@ -49,6 +49,7 @@ impl IntentRouter {
         user_input: &str,
         chat_history: &[Message],
         provider: &dyn LlmProvider,
+        provider_config: &ProviderConfig,
         cancel_token: &CancellationToken,
     ) -> Result<RoutingDecision, RouterError> {
         if cancel_token.is_cancelled() {
@@ -70,7 +71,7 @@ impl IntentRouter {
         messages.push(Message::text(Role::User, user_input));
 
         let request = ChatRequest {
-            model: String::new(), // Use provider's default model
+            model: provider_config.model.clone(),
             messages,
             max_tokens: Some(50),
             temperature: Some(0.0),

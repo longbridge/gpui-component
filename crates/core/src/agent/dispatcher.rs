@@ -105,6 +105,7 @@ impl AgentDispatcher {
                     &ctx.user_input,
                     &ctx.chat_history,
                     provider.as_ref(),
+                    &ctx.provider_config,
                     &ctx.cancel_token,
                 )
                 .await
