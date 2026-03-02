@@ -22,7 +22,12 @@ build-wasm-dev: ## Build WASM (debug mode)
 build-web: ## Build frontend
 	@cd www && bun run build
 
+build-web-prod: ## Build frontend for production (GitHub Pages)
+	@cd www && NODE_ENV=production bun run build
+
 build: build-wasm build-web ## Build complete project (WASM + frontend)
+
+build-prod: build-wasm build-web-prod ## Build complete project for production
 
 dev: build-wasm-dev ## Start development server
 	@cd www && bun install && bun run dev

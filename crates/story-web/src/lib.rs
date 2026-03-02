@@ -16,7 +16,12 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
 
     gpui_platform::application()
         .with_assets(Assets::new(
-            "https://huacnlee.github.io/gpui-component-story-web/",
+            // if release
+            if cfg!(debug_assertions) {
+                "http://localhost:3000/gpui-component/gallery/"
+            } else {
+                "https://longbridge.github.io/gpui-component/gallery/"
+            },
         ))
         .run(|cx: &mut App| {
             gpui_component_story::init(cx);
