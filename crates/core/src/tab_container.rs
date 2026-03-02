@@ -1979,20 +1979,9 @@ impl TabContainer {
                 }
             })
             .when(is_windows, move |this| {
+                // Windows 依赖系统原生标题栏控件行为：
+                // 仅声明 control area，避免手动 on_click 干扰最大化/还原切换。
                 this.window_control_area(control_area)
-                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                    })
-                    .on_click(move |_, window, cx| {
-                        cx.stop_propagation();
-                        match control_area {
-                            WindowControlArea::Min => window.minimize_window(),
-                            WindowControlArea::Max => window.zoom_window(),
-                            WindowControlArea::Close => window.remove_window(),
-                            _ => {}
-                        }
-                    })
             })
             .when(is_linux, move |this| {
                 this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
