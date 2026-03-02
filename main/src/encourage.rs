@@ -125,6 +125,7 @@ impl EncourageDialog {
             .w(size)
             .gap_2()
             .items_center()
+            .flex_shrink_0()
             .child(
                 div()
                     .text_sm()
@@ -149,29 +150,35 @@ impl EncourageDialog {
         size: gpui::Pixels,
     ) -> AnyElement {
         let offline_for_fallback = offline_image.clone();
-        let styled_offline = move |image: Arc<Image>| {
-            img(image)
+        let styled_offline = move |image: Arc<Image>| img(image).max_w(size).max_h(size);
+
+        let frame = move |content: AnyElement| {
+            div()
                 .w(size)
                 .h(size)
                 .rounded_md()
                 .border_1()
                 .border_color(border)
                 .bg(background)
+                .overflow_hidden()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(content)
+                .into_any_element()
         };
 
         match online_url {
-            Some(url) => img(url)
-                .w(size)
-                .h(size)
-                .rounded_md()
-                .border_1()
-                .border_color(border)
-                .bg(background)
-                .with_fallback(move || {
-                    styled_offline(offline_for_fallback.clone()).into_any_element()
-                })
-                .into_any_element(),
-            None => styled_offline(offline_image).into_any_element(),
+            Some(url) => frame(
+                img(url)
+                    .max_w(size)
+                    .max_h(size)
+                    .with_fallback(move || {
+                        styled_offline(offline_for_fallback.clone()).into_any_element()
+                    })
+                    .into_any_element(),
+            ),
+            None => frame(styled_offline(offline_image).into_any_element()),
         }
     }
 }

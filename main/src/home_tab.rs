@@ -664,7 +664,7 @@ impl HomePage {
         window.open_dialog(cx, move |dialog, _window, _cx| {
             dialog
                 .title(t!("Encourage.title").to_string())
-                .w(px(620.0))
+                .w(px(760.0))
                 .child(dialog_view.clone())
                 .alert()
                 .button_props(
