@@ -1,17 +1,17 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
-    HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
-    Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative,
-    size,
+    App, Bounds, Corners, Element, ElementId, ElementInputHandler,
+    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, HitboxBehavior, Hsla,
+    InteractiveElement, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels, Point,
+    ShapedLine, SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle,
+    UnderlineStyle, Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
+    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _, Size as ComponentSize,
     button::{Button, ButtonVariants as _},
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
 };
@@ -35,6 +35,10 @@ struct FoldIconLayout {
 pub(super) struct TextElement {
     pub(crate) state: Entity<InputState>,
     placeholder: SharedString,
+    /// The size for calculating default padding
+    size: ComponentSize,
+    /// Custom padding from refine_style
+    custom_padding: Option<gpui::EdgesRefinement<gpui::DefiniteLength>>,
 }
 
 impl TextElement {
@@ -42,6 +46,62 @@ impl TextElement {
         Self {
             state,
             placeholder: SharedString::default(),
+            size: ComponentSize::Medium,
+            custom_padding: None,
+        }
+    }
+
+    /// Set the size for calculating default padding.
+    pub(super) fn with_size(mut self, size: ComponentSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Set custom padding from refine_style.
+    pub(super) fn with_custom_padding(
+        mut self,
+        padding: gpui::EdgesRefinement<gpui::DefiniteLength>,
+    ) -> Self {
+        self.custom_padding = Some(padding);
+        self
+    }
+
+    /// Calculate the final padding combining size-based defaults and custom padding.
+    fn calculate_padding(&self, window: &Window) -> gpui::Edges<Pixels> {
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+
+        // Calculate default padding based on size
+        let default_paddings = gpui::Edges {
+            left: self.size.input_px(),
+            right: self.size.input_px(),
+            top: self.size.input_py(),
+            bottom: self.size.input_py(),
+        };
+
+        // If no custom padding, use defaults
+        let Some(custom_padding) = &self.custom_padding else {
+            return default_paddings;
+        };
+
+        // Merge with custom padding (custom padding takes precedence)
+        gpui::Edges {
+            left: custom_padding
+                .left
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.left),
+            right: custom_padding
+                .right
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.right),
+            top: custom_padding
+                .top
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.top),
+            bottom: custom_padding
+                .bottom
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.bottom),
         }
     }
 
@@ -1104,6 +1164,8 @@ pub(super) struct PrepaintState {
     hover_definition_hitbox: Option<Hitbox>,
     indent_guides_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
+    /// The original input bounds (including padding).
+    input_bounds: Bounds<Pixels>,
     /// Fold icon layout data
     fold_icon_layout: FoldIconLayout,
     // Inline completion rendering data
@@ -1199,8 +1261,9 @@ impl Element for TextElement {
                 style.min_size.height = line_height.into();
             }
         } else {
-            // For single-line inputs, the minimum height should be the line height
-            style.size.height = line_height.into();
+            // For single-line inputs, fill the available height so that padding
+            // can be applied internally in prepaint to vertically center the text.
+            style.size.height = relative(1.).into();
         };
 
         (window.request_layout(style, [], cx), ())
@@ -1210,7 +1273,7 @@ impl Element for TextElement {
         &mut self,
         _id: Option<&GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
-        bounds: Bounds<Pixels>,
+        input_bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
@@ -1219,13 +1282,37 @@ impl Element for TextElement {
         let font = style.font();
         let text_size = style.font_size.to_pixels(window.rem_size());
 
+        // Calculate padding and adjust bounds for content area.
+        // For single-line mode, the vertical padding is computed dynamically to
+        // vertically center the text within the available height, rather than
+        // using the fixed input_py value which may not match the actual line height.
+        let padding = self.calculate_padding(window);
+        let line_height = window.line_height();
+        let is_multi_line = self.state.read(cx).mode.is_multi_line();
+        let (padding_top, padding_bottom) = if !is_multi_line {
+            // Center the single line of text vertically within the element.
+            let v = ((input_bounds.size.height - line_height) / 2.).max(px(0.));
+            (v, v)
+        } else {
+            (padding.top, padding.bottom)
+        };
+        let bounds = Bounds {
+            origin: point(
+                input_bounds.origin.x + padding.left,
+                input_bounds.origin.y + padding_top,
+            ),
+            size: size(
+                (input_bounds.size.width - padding.left - padding.right).max(px(0.)),
+                (input_bounds.size.height - padding_top - padding_bottom).max(px(0.)),
+            ),
+        };
+
         self.state.update(cx, |state, cx| {
             state.display_map.set_font(font, text_size, cx);
             state.display_map.ensure_text_prepared(&state.text, cx);
         });
 
         let state = self.state.read(cx);
-        let line_height = window.line_height();
 
         let (visible_range, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
@@ -1540,6 +1627,7 @@ impl Element for TextElement {
 
         PrepaintState {
             bounds,
+            input_bounds,
             last_layout,
             scroll_size,
             line_numbers,
@@ -1634,13 +1722,13 @@ impl Element for TextElement {
             for (ix, lines) in line_numbers.iter().enumerate() {
                 let row = visible_range.start + ix;
                 let is_active = prepaint.current_row == Some(row);
-                let p = point(input_bounds.origin.x, origin.y + offset_y);
+                let p = point(prepaint.input_bounds.origin.x, origin.y + offset_y);
                 let height = line_height * lines.len() as f32;
                 // Paint the current line background
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            Bounds::new(p, size(bounds.size.width, height)),
+                            Bounds::new(p, size(prepaint.input_bounds.size.width, height)),
                             bg_color,
                         ));
                     }

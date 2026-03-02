@@ -165,7 +165,8 @@ impl Input {
 
     /// This method must after the refine_style.
     fn render_editor(
-        paddings: EdgesRefinement<DefiniteLength>,
+        size: Size,
+        custom_padding: Option<EdgesRefinement<DefiniteLength>>,
         input_state: &Entity<InputState>,
         state: &InputState,
         window: &Window,
@@ -174,23 +175,34 @@ impl Input {
         let base_size = window.text_style().font_size;
         let rem_size = window.rem_size();
 
-        let paddings = Edges {
-            left: paddings
-                .left
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-            right: paddings
-                .right
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-            top: paddings
-                .top
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-            bottom: paddings
-                .bottom
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
+        // Compute effective padding: default size-based padding overridden by any custom padding
+        let default_padding = Edges {
+            left: size.input_px(),
+            right: size.input_px(),
+            top: size.input_py(),
+            bottom: size.input_py(),
+        };
+        let paddings = if let Some(custom) = custom_padding {
+            Edges {
+                left: custom
+                    .left
+                    .map(|v| v.to_pixels(base_size, rem_size))
+                    .unwrap_or(default_padding.left),
+                right: custom
+                    .right
+                    .map(|v| v.to_pixels(base_size, rem_size))
+                    .unwrap_or(default_padding.right),
+                top: custom
+                    .top
+                    .map(|v| v.to_pixels(base_size, rem_size))
+                    .unwrap_or(default_padding.top),
+                bottom: custom
+                    .bottom
+                    .map(|v| v.to_pixels(base_size, rem_size))
+                    .unwrap_or(default_padding.bottom),
+            }
+        } else {
+            default_padding
         };
 
         v_flex()
@@ -201,7 +213,8 @@ impl Input {
                     let left = if last_layout.line_number_width.is_zero() {
                         px(0.)
                     } else {
-                        // Align left edge to the Line number.
+                        // Align left edge to the line-number area.
+                        // `paddings.left` accounts for the TextElement's internal left padding.
                         paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
                     };
 
@@ -216,13 +229,15 @@ impl Input {
                         Scrollbar::vertical(&state.scroll_handle)
                     };
 
+                    // Padding is now handled by TextElement internally, so the scrollbar
+                    // fills the container without negative offsets.
                     this.relative().child(
                         div()
                             .absolute()
-                            .top(-paddings.top)
+                            .top_0()
                             .left(left)
-                            .right(-paddings.right)
-                            .bottom(-paddings.bottom)
+                            .right_0()
+                            .bottom_0()
                             .child(scrollbar.scroll_size(scroll_size)),
                     )
                 } else {
@@ -243,9 +258,20 @@ impl RenderOnce for Input {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
 
+        // Extract custom padding before the builder chain so it can be passed to render_editor
+        // and to InputState (for TextElement to apply internally).
+        // Padding is NOT applied to the outer div; it is handled entirely by TextElement.
+        let custom_padding = if self.style.padding.is_some() {
+            Some(self.style.padding.clone())
+        } else {
+            None
+        };
+
+        // Store custom padding in state for element.rs to use
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
+            state.custom_padding = custom_padding.clone();
             // Only for single line mode
             if state.mode.is_single_line() {
                 state.text_align = text_align;
@@ -366,8 +392,8 @@ impl RenderOnce for Input {
             .on_scroll_wheel(window.listener_for(&self.state, InputState::on_scroll_wheel))
             .size_full()
             .line_height(LINE_HEIGHT)
-            .input_px(self.size)
-            .input_py(self.size)
+            // .input_px(self.size)
+            // .input_py(self.size)
             .input_h(self.size)
             .input_text_size(self.size)
             .cursor_text()
@@ -390,12 +416,17 @@ impl RenderOnce for Input {
             })
             .items_center()
             .gap(gap_x)
-            .refine_style(&self.style)
+            .map(|this| {
+                // Apply style without padding: padding is handled by TextElement internally.
+                let mut outer_style = self.style.clone();
+                outer_style.padding = EdgesRefinement::default();
+                this.refine_style(&outer_style)
+            })
             .children(prefix)
-            .when(state.mode.is_multi_line(), |mut this| {
-                let paddings = this.style().padding.clone();
+            .when(state.mode.is_multi_line(), |this| {
                 this.child(Self::render_editor(
-                    paddings,
+                    self.size,
+                    custom_padding,
                     &self.state,
                     &state,
                     window,
