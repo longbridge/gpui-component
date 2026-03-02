@@ -23,7 +23,6 @@ use super::{
     DisplayMap, MASK_CHAR, blink_cursor::BlinkCursor, change::Change, element::TextElement,
     mask_pattern::MaskPattern, mode::InputMode, number_input,
 };
-use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::highlighter::DiagnosticSet;
 #[cfg(not(target_family = "wasm"))]
@@ -39,6 +38,7 @@ use crate::input::{
 };
 use crate::menu::PopupMenu;
 use crate::{Root, history::History};
+use crate::Size;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -321,6 +321,8 @@ pub struct InputState {
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
     pub(super) size: Size,
+    /// Custom padding from refine_style in Input render
+    pub(super) custom_padding: Option<gpui::EdgesRefinement<gpui::DefiniteLength>>,
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -461,6 +463,7 @@ impl InputState {
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
             size: Size::default(),
+            custom_padding: None,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
@@ -2526,10 +2529,18 @@ impl Render for InputState {
         div()
             .id("input-state")
             .flex_1()
-            .when(self.mode.is_multi_line(), |this| this.h_full())
+            .h_full()
             .flex_grow()
             .overflow_x_hidden()
-            .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
+            .child({
+                let mut text_element = TextElement::new(cx.entity().clone())
+                    .placeholder(self.placeholder.clone())
+                    .with_size(self.size);
+                if let Some(padding) = &self.custom_padding {
+                    text_element = text_element.with_custom_padding(padding.clone());
+                }
+                text_element
+            })
             .children(self.diagnostic_popover.clone())
             .children(self.context_menu_content.as_ref().map(|menu| menu.render()))
             .children(self.hover_popover.clone())
