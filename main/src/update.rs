@@ -214,9 +214,21 @@ fn show_update_dialog(window: &mut Window, info: UpdateDialogInfo, cx: &mut App)
     let view_for_ok = view.clone();
     let view_for_cancel = view.clone();
 
-    window.open_dialog(cx, move |dialog, _window, _cx| {
+    window.open_dialog(cx, move |dialog, _window, cx| {
         let view_for_ok = view_for_ok.clone();
         let view_for_cancel = view_for_cancel.clone();
+        let ok_text = {
+            let state = view.read(cx);
+            if state.applying {
+                t!("Update.action_applying")
+            } else if state.downloading {
+                t!("Update.action_downloading")
+            } else if state.completed {
+                t!("Update.action_install")
+            } else {
+                t!("Update.action_download")
+            }
+        };
         dialog
             .title(t!("Update.title").to_string())
             .width(px(460.))
@@ -224,17 +236,18 @@ fn show_update_dialog(window: &mut Window, info: UpdateDialogInfo, cx: &mut App)
             .confirm()
             .button_props(
                 DialogButtonProps::default()
-                    .ok_text(t!("Update.action"))
+                    .ok_text(ok_text)
                     .cancel_text(t!("Update.later")),
             )
             .on_ok(move |_, window, cx| {
                 view_for_ok.clone().update(cx, |view, cx| {
-                    view.start_download(window, cx);
+                    view.on_ok_action(window, cx);
                 });
                 false
             })
             .on_cancel(move |_, window, cx| {
-                if view_for_cancel.clone().read(cx).downloading {
+                let state = view_for_cancel.clone().read(cx);
+                if state.downloading || state.applying {
                     window.push_notification(t!("Update.downloading_blocked").to_string(), cx);
                     return false;
                 }
@@ -246,10 +259,12 @@ fn show_update_dialog(window: &mut Window, info: UpdateDialogInfo, cx: &mut App)
 struct UpdateDialogView {
     info: UpdateDialogInfo,
     downloading: bool,
+    applying: bool,
     completed: bool,
     progress: f32,
     downloaded_bytes: u64,
     total_bytes: Option<u64>,
+    downloaded_path: Option<PathBuf>,
     status_message: String,
     error_message: Option<String>,
 }
@@ -259,17 +274,33 @@ impl UpdateDialogView {
         Self {
             info,
             downloading: false,
+            applying: false,
             completed: false,
             progress: 0.0,
             downloaded_bytes: 0,
             total_bytes: None,
+            downloaded_path: None,
             status_message: t!("Update.ready").to_string(),
             error_message: None,
         }
     }
 
+    fn on_ok_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.downloading {
+            window.push_notification(t!("Update.downloading_blocked").to_string(), cx);
+            return;
+        }
+
+        if self.completed {
+            self.apply_downloaded_update(cx);
+            return;
+        }
+
+        self.start_download(window, cx);
+    }
+
     fn start_download(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if self.downloading || self.completed {
+        if self.downloading || self.completed || self.applying {
             return;
         }
 
@@ -295,6 +326,7 @@ impl UpdateDialogView {
         self.progress = 0.0;
         self.downloaded_bytes = 0;
         self.total_bytes = None;
+        self.downloaded_path = None;
         self.error_message = None;
         self.status_message = t!("Update.downloading").to_string();
         cx.notify();
@@ -319,36 +351,67 @@ impl UpdateDialogView {
                     let _ = this.update(cx, |view, cx| {
                         view.completed = true;
                         view.downloading = false;
+                        view.applying = false;
                         view.progress = 100.0;
+                        view.downloaded_path = Some(download_path.clone());
                         view.status_message = t!("Update.download_complete").to_string();
                         cx.notify();
                     });
-
-                    match start_install_update(download_path.clone()) {
-                        Ok(UpdateInstallAction::Quit) => {
-                            let _ = cx.update(|cx| {
-                                cx.quit();
-                            });
-                        }
-                        Ok(UpdateInstallAction::Noop) => {}
-                        Err(err) => {
-                            let _ = this.update(cx, |view, cx| {
-                                view.error_message = Some(err);
-                                view.status_message = t!("Update.apply_failed").to_string();
-                                view.completed = false;
-                                cx.notify();
-                            });
-                        }
-                    }
                 }
                 Err(err) => {
                     let _ = this.update(cx, |view, cx| {
                         view.downloading = false;
+                        view.applying = false;
+                        view.downloaded_path = None;
                         view.error_message = Some(err);
                         view.status_message = t!("Update.download_failed").to_string();
                         cx.notify();
                     });
                 }
+            }
+        })
+        .detach();
+    }
+
+    fn apply_downloaded_update(&mut self, cx: &mut Context<Self>) {
+        if self.downloading || self.applying {
+            return;
+        }
+
+        let Some(download_path) = self.downloaded_path.clone() else {
+            self.error_message = Some(t!("Update.missing_download_file").to_string());
+            self.status_message = t!("Update.apply_failed").to_string();
+            self.completed = false;
+            self.downloaded_path = None;
+            cx.notify();
+            return;
+        };
+
+        self.applying = true;
+        self.error_message = None;
+        self.status_message = t!("Update.applying").to_string();
+        cx.notify();
+
+        cx.spawn(async move |this, cx| match start_install_update(download_path) {
+            Ok(UpdateInstallAction::Quit) => {
+                let _ = cx.update(|cx| {
+                    cx.quit();
+                });
+            }
+            Ok(UpdateInstallAction::Noop) => {
+                let _ = this.update(cx, |view, cx| {
+                    view.applying = false;
+                    view.status_message = t!("Update.download_complete").to_string();
+                    cx.notify();
+                });
+            }
+            Err(err) => {
+                let _ = this.update(cx, |view, cx| {
+                    view.applying = false;
+                    view.error_message = Some(err);
+                    view.status_message = t!("Update.apply_failed").to_string();
+                    cx.notify();
+                });
             }
         })
         .detach();

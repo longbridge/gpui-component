@@ -695,10 +695,22 @@ Update:
     en: "已发布新版本 %{latest}（当前 %{current}），是否立即更新？"
     zh-CN: "已发布新版本 %{latest}（当前 %{current}），是否立即更新？"
     zh-HK: "已發布新版本 %{latest}（當前 %{current}），是否立即更新？"
-  action:
+  action_download:
+    en: 下载更新
+    zh-CN: 下载更新
+    zh-HK: 下載更新
+  action_install:
     en: 立即更新
     zh-CN: 立即更新
     zh-HK: 立即更新
+  action_downloading:
+    en: 下载中...
+    zh-CN: 下载中...
+    zh-HK: 下載中...
+  action_applying:
+    en: 更新中...
+    zh-CN: 更新中...
+    zh-HK: 更新中...
   later:
     en: 稍后再说
     zh-CN: 稍后再说
@@ -716,9 +728,13 @@ Update:
     zh-CN: 正在下载更新，请稍候...
     zh-HK: 正在下載更新，請稍候...
   download_complete:
-    en: 下载完成，正在更新...
-    zh-CN: 下载完成，正在更新...
-    zh-HK: 下載完成，正在更新...
+    en: 下载完成，请点击“立即更新”开始安装。
+    zh-CN: 下载完成，请点击“立即更新”开始安装。
+    zh-HK: 下載完成，請點擊「立即更新」開始安裝。
+  applying:
+    en: 正在安装更新，请稍候...
+    zh-CN: 正在安装更新，请稍候...
+    zh-HK: 正在安裝更新，請稍候...
   download_failed:
     en: 下载失败，请重试。
     zh-CN: 下载失败，请重试。
@@ -735,6 +751,10 @@ Update:
     en: 缺少下载地址，无法更新。
     zh-CN: 缺少下载地址，无法更新。
     zh-HK: 缺少下載地址，無法更新。
+  missing_download_file:
+    en: 未找到下载文件，请重新下载后再更新。
+    zh-CN: 未找到下载文件，请重新下载后再更新。
+    zh-HK: 未找到下載文件，請重新下載後再更新。
   downloading_blocked:
     en: 正在下载更新，请稍后关闭。
     zh-CN: 正在下载更新，请稍后关闭。
