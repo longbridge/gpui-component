@@ -208,12 +208,12 @@ pub fn init(cx: &mut App) {
         if let Some(window) = cx.active_window().and_then(|w| w.downcast::<Root>()) {
             cx.defer(move |cx| {
                 window
-                    .update(cx, |root, window, cx| {
-                        root.push_notification(
-                            "GPUI Component Storybook\nVersion 0.1.0",
-                            window,
-                            cx,
-                        );
+                    .update(cx, |_, window, cx| {
+                        window.open_alert_dialog(cx, |alert, _, _| {
+                            alert
+                                .title("About")
+                                .description("GPUI Component Storybook\nVersion 0.1.0")
+                        });
                     })
                     .unwrap();
             });

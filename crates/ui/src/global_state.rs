@@ -1,4 +1,4 @@
-use gpui::{App, ElementId, Entity, FocusHandle, Global};
+use gpui::{App, ElementId, Entity, FocusHandle, Global, OwnedMenu};
 use std::collections::HashSet;
 
 use crate::text::TextViewState;
@@ -9,12 +9,14 @@ pub(crate) fn init(cx: &mut App) {
 
 impl Global for GlobalState {}
 
-pub(crate) struct GlobalState {
+pub struct GlobalState {
     pub(crate) text_view_state_stack: Vec<Entity<TextViewState>>,
     /// Set of open popover IDs that use deferred rendering.
     /// When this set is not empty, we are inside at least one deferred context.
     /// This is used to prevent double-deferred elements which would cause GPUI to panic.
     open_deferred_popovers: HashSet<ElementId>,
+    /// Application menus storage
+    app_menus: Vec<OwnedMenu>,
 }
 
 impl GlobalState {
@@ -22,14 +24,15 @@ impl GlobalState {
         Self {
             text_view_state_stack: Vec::new(),
             open_deferred_popovers: HashSet::new(),
+            app_menus: Vec::new(),
         }
     }
 
-    pub(crate) fn global(cx: &App) -> &Self {
+    pub fn global(cx: &App) -> &Self {
         cx.global::<Self>()
     }
 
-    pub(crate) fn global_mut(cx: &mut App) -> &mut Self {
+    pub fn global_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<Self>()
     }
 
@@ -52,5 +55,15 @@ impl GlobalState {
     pub(crate) fn unregister_deferred_popover(&mut self, focus_handle: &FocusHandle) {
         let element_id: ElementId = format!("{focus_handle:?}").into();
         self.open_deferred_popovers.remove(&element_id);
+    }
+
+    /// Get the application menus
+    pub fn app_menus(&self) -> &[OwnedMenu] {
+        &self.app_menus
+    }
+
+    /// Set the application menus
+    pub fn set_app_menus(&mut self, menus: Vec<OwnedMenu>) {
+        self.app_menus = menus;
     }
 }

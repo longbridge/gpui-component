@@ -2,6 +2,7 @@ use crate::{
     Selectable, Sizable,
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
+    global_state::GlobalState,
     h_flex,
     menu::PopupMenu,
 };
@@ -43,9 +44,12 @@ impl AppMenuBar {
     /// Reload the menus from the app.
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         let menu_bar = cx.entity();
-        self.menus = cx
-            .get_menus()
-            .unwrap_or_default()
+        let menus: Vec<OwnedMenu> = GlobalState::global(cx)
+            .app_menus()
+            .iter()
+            .cloned()
+            .collect();
+        self.menus = menus
             .iter()
             .enumerate()
             .map(|(ix, menu)| AppMenu::new(ix, menu, menu_bar.clone(), cx))
