@@ -23,7 +23,7 @@ build-web: ## Build frontend
 	@cd www && bun run build
 
 build-web-prod: ## Build frontend for production (GitHub Pages)
-	@cd www && NODE_ENV=production bun run build
+	@cd www && bun install && NODE_ENV=production bun run build
 
 build: build-wasm build-web ## Build complete project (WASM + frontend)
 
