@@ -99,7 +99,7 @@ impl HomePage {
     ) -> Self {
         let search_query = cx.new(|_| String::new());
         let search_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Home.search_placeholder")));
+            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Home.search_placeholder")).clean_on_escape());
 
         // 订阅搜索输入变化
         let query_clone = search_query.clone();
@@ -309,6 +309,9 @@ impl HomePage {
             return;
         }
 
+        let storage = cx.global::<GlobalStorageState>().storage.clone();
+        self.log_sync_decrypt_health(&storage, "常规同步");
+
         if self.syncing {
             self.sync_requested = true;
             return;
@@ -321,7 +324,6 @@ impl HomePage {
 
         let cloud_client = self.auth_service.cloud_client();
         let sync_service = self.cloud_sync_service.clone();
-        let storage = cx.global::<GlobalStorageState>().storage.clone();
 
         // 创建同步引擎
         let engine = SyncEngine::new(cloud_client, sync_service, storage);
@@ -372,6 +374,38 @@ impl HomePage {
             });
         })
         .detach();
+    }
+
+    /// 同步前记录本地连接解密状态，用于提示哪些连接会被引擎按连接粒度跳过。
+    fn log_sync_decrypt_health(
+        &self,
+        storage: &one_core::storage::StorageManager,
+        scene: &str,
+    ) {
+        if let Some(repo) = storage.get::<ConnectionRepository>() {
+            match repo.list_sync_decrypt_failures() {
+                Ok(failures) if !failures.is_empty() => {
+                    let preview = failures
+                        .iter()
+                        .take(5)
+                        .map(|(id, name)| format!("{}:{}", id, name))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    tracing::warn!(
+                        "{}检测到 {} 个连接解密失败：将由同步引擎跳过这些连接，其它连接继续同步和拉取。失败连接: {}",
+                        scene,
+                        failures.len(),
+                        preview
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!("{}前解密状态检查失败，将继续执行同步流程: {}", scene, e);
+                }
+            }
+        } else {
+            tracing::warn!("{}前解密状态检查失败：ConnectionRepository 不存在，将继续执行同步流程", scene);
+        }
     }
 
     /// 显示冲突解决对话框
@@ -482,6 +516,7 @@ impl HomePage {
         let cloud_client = self.auth_service.cloud_client();
         let sync_service = self.cloud_sync_service.clone();
         let storage = cx.global::<GlobalStorageState>().storage.clone();
+        self.log_sync_decrypt_health(&storage, "冲突解决");
         self.syncing = true;
         self.sync_requested = false;
         self.cloud_error = None;
@@ -1557,6 +1592,7 @@ impl HomePage {
                     // 搜索框
                     .child(
                         Input::new(&self.search_input)
+                            .cleanable(true)
                             .w(px(240.0))
                             .bg(cx.theme().muted),
                     )

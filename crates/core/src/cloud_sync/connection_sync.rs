@@ -37,6 +37,22 @@ impl SyncEngine {
             sync_enabled_count
         );
 
+        let decrypt_failures = self.get_local_decrypt_failures()?;
+        let failure_ids: HashSet<i64> = decrypt_failures.iter().map(|(id, _)| *id).collect();
+        if !decrypt_failures.is_empty() {
+            let preview = decrypt_failures
+                .iter()
+                .take(5)
+                .map(|(id, name)| format!("{}:{}", id, name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            tracing::warn!(
+                "[同步] 检测到 {} 个本地连接解密失败，将跳过其上传与拉取更新: {}",
+                decrypt_failures.len(),
+                preview
+            );
+        }
+
         tracing::info!("[同步] 正在获取云端连接列表...");
         let cloud_connections = self
             .cloud_client
@@ -68,8 +84,22 @@ impl SyncEngine {
             plan.conflicts.len()
         );
 
-        let resolved_conflicts = self.resolve_conflicts(&plan.conflicts)?;
-        result.conflicts = plan.conflicts.clone();
+        let active_conflicts: Vec<_> = plan
+            .conflicts
+            .iter()
+            .filter(|conflict| match conflict.local.id {
+                Some(id) => !failure_ids.contains(&id),
+                None => true,
+            })
+            .cloned()
+            .collect();
+        let skipped_conflicts = plan.conflicts.len().saturating_sub(active_conflicts.len());
+        if skipped_conflicts > 0 {
+            tracing::warn!("[同步] 跳过 {} 个与解密失败连接相关的冲突", skipped_conflicts);
+        }
+
+        let resolved_conflicts = self.resolve_conflicts(&active_conflicts)?;
+        result.conflicts = active_conflicts;
 
         let local_connection_map: HashMap<i64, StoredConnection> = local_connections
             .iter()
@@ -83,6 +113,10 @@ impl SyncEngine {
         let mut operations = Vec::new();
         for local_conn in &plan.to_upload {
             if let Some(local_id) = local_conn.id {
+                if failure_ids.contains(&local_id) {
+                    tracing::warn!("[同步] 跳过上传（解密失败）: {} ({})", local_conn.name, local_id);
+                    continue;
+                }
                 operations.push(SyncOperation::Upload { local_id });
             } else {
                 result
@@ -93,6 +127,14 @@ impl SyncEngine {
 
         for (local_conn, cloud_conn) in &plan.to_update_cloud {
             if let Some(local_id) = local_conn.id {
+                if failure_ids.contains(&local_id) {
+                    tracing::warn!(
+                        "[同步] 跳过更新云端（解密失败）: {} ({})",
+                        local_conn.name,
+                        local_id
+                    );
+                    continue;
+                }
                 operations.push(SyncOperation::UpdateCloud {
                     local_id,
                     cloud_id: cloud_conn.id.clone(),
@@ -110,6 +152,14 @@ impl SyncEngine {
 
         for (cloud_conn, local_conn) in &plan.to_update_local {
             if let Some(local_id) = local_conn.id {
+                if failure_ids.contains(&local_id) {
+                    tracing::warn!(
+                        "[同步] 跳过拉取更新（解密失败）: {} ({})",
+                        local_conn.name,
+                        local_id
+                    );
+                    continue;
+                }
                 operations.push(SyncOperation::UpdateLocal {
                     local_id,
                     cloud_id: cloud_conn.id.clone(),
@@ -292,6 +342,16 @@ impl SyncEngine {
             .ok_or_else(|| SyncError::StorageError("ConnectionRepository not found".to_string()))?;
 
         repo.list()
+            .map_err(|e| SyncError::StorageError(e.to_string()))
+    }
+
+    fn get_local_decrypt_failures(&self) -> Result<Vec<(i64, String)>, SyncError> {
+        let repo = self
+            .storage
+            .get::<ConnectionRepository>()
+            .ok_or_else(|| SyncError::StorageError("ConnectionRepository not found".to_string()))?;
+
+        repo.list_sync_decrypt_failures()
             .map_err(|e| SyncError::StorageError(e.to_string()))
     }
 

@@ -694,6 +694,33 @@ fn decrypt_value(value: &mut Value) {
     }
 }
 
+/// 检测 params 中是否存在“已加密字段解密失败”的情况。
+///
+/// 规则：敏感字段（password/passphrase）若以 ENC: 开头，且解密结果为空，视为失败。
+pub fn has_decrypt_failure_in_sensitive_fields(json_str: &str) -> bool {
+    match serde_json::from_str::<Value>(json_str) {
+        Ok(value) => has_decrypt_failure_in_value(&value),
+        Err(_) => false,
+    }
+}
+
+fn has_decrypt_failure_in_value(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, val)| {
+            if is_sensitive_field(key) {
+                if let Value::String(s) = val {
+                    return crypto::is_encrypted(s) && crypto::decrypt_password(s).is_empty();
+                }
+                false
+            } else {
+                has_decrypt_failure_in_value(val)
+            }
+        }),
+        Value::Array(arr) => arr.iter().any(has_decrypt_failure_in_value),
+        _ => false,
+    }
+}
+
 /// Generic key-value storage model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyValue {

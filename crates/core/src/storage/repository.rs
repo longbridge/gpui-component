@@ -7,6 +7,7 @@ use crate::storage::manager::{GlobalStorageState, now};
 use crate::storage::quick_command::QuickCommandRepository;
 use crate::storage::row_mapping::FromSqliteRow;
 use crate::storage::traits::Repository;
+use crate::storage::models::has_decrypt_failure_in_sensitive_fields;
 use crate::storage::{ConnectionType, StoredConnection, Workspace};
 
 struct ConnectionRow {
@@ -306,6 +307,32 @@ impl ConnectionRepository {
             } else {
                 Ok(None)
             }
+        })
+    }
+
+    /// 检测启用同步的连接中是否存在解密失败的数据。
+    ///
+    /// 返回值为 (id, name) 列表，便于上层记录日志与阻断同步。
+    pub fn list_sync_decrypt_failures(&self) -> Result<Vec<(i64, String)>> {
+        self.conn.with_connection(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, params FROM connections WHERE sync_enabled = 1 ORDER BY updated_at DESC",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                let id: i64 = row.get("id")?;
+                let name: String = row.get("name")?;
+                let params: String = row.get("params")?;
+                Ok((id, name, params))
+            })?;
+
+            let mut failures = Vec::new();
+            for row in rows {
+                let (id, name, params) = row?;
+                if has_decrypt_failure_in_sensitive_fields(&params) {
+                    failures.push((id, name));
+                }
+            }
+            Ok(failures)
         })
     }
 }
