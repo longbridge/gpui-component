@@ -10,6 +10,9 @@ use gpui_component::{ActiveTheme, h_flex, v_flex};
 use rust_i18n::t;
 use std::sync::Arc;
 
+
+// TODO 修改赞赏码和地址
+
 const WECHAT_QR_ENV: &str = "ONETCLI_WECHAT_QR_URL";
 const ALIPAY_QR_ENV: &str = "ONETCLI_ALIPAY_QR_URL";
 const PAYPAL_QR_ENV: &str = "ONETCLI_PAYPAL_QR_URL";
@@ -18,9 +21,9 @@ const WECHAT_QR_BUILD: Option<&str> = option_env!("ONETCLI_WECHAT_QR_URL");
 const ALIPAY_QR_BUILD: Option<&str> = option_env!("ONETCLI_ALIPAY_QR_URL");
 const PAYPAL_QR_BUILD: Option<&str> = option_env!("ONETCLI_PAYPAL_QR_URL");
 
-const WECHAT_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/wechat.svg");
-const ALIPAY_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/alipay.svg");
-const PAYPAL_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/paypal.svg");
+const WECHAT_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/wechat.png");
+const ALIPAY_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/alipay.png");
+const PAYPAL_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/paypal.png");
 
 pub struct EncourageDialog {
     focus_handle: FocusHandle,
@@ -257,13 +260,13 @@ struct EncourageQrImages {
 impl EncourageQrImages {
     fn load() -> Self {
         Self {
-            wechat: Self::load_svg(WECHAT_QR_OFFLINE),
-            alipay: Self::load_svg(ALIPAY_QR_OFFLINE),
-            paypal: Self::load_svg(PAYPAL_QR_OFFLINE),
+            wechat: Self::load_png(WECHAT_QR_OFFLINE),
+            alipay: Self::load_png(ALIPAY_QR_OFFLINE),
+            paypal: Self::load_png(PAYPAL_QR_OFFLINE),
         }
     }
 
-    fn load_svg(bytes: &'static [u8]) -> Arc<Image> {
-        Arc::new(Image::from_bytes(ImageFormat::Svg, bytes.to_vec()))
+    fn load_png(bytes: &'static [u8]) -> Arc<Image> {
+        Arc::new(Image::from_bytes(ImageFormat::Png, bytes.to_vec()))
     }
 }
