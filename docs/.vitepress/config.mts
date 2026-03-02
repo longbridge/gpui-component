@@ -60,7 +60,7 @@ const config: UserConfig = {
       copyright: `
         <a href="https://gpui.rs">GPUI</a>
         |
-        <a href="/gpui-component/gallery/">Gallery</a>
+        <a href="/gpui-component/gallery/" target="_blank">Gallery</a>
         |
         <a href="/gpui-component/contributors">Contributors</a>
         |
@@ -81,7 +81,7 @@ const config: UserConfig = {
       { text: "Home", link: "/" },
       { text: "Getting Started", link: "/docs/getting-started" },
       { text: "Components", link: "/docs/components" },
-      { text: "Gallery", link: "/gallery/" },
+      { text: "Gallery", link: "/gallery/", target: "_blank" },
       { text: "API Doc", link: "https://docs.rs/gpui-component" },
       {
         text: "Resources",
