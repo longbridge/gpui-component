@@ -526,6 +526,7 @@ where
         .await
         .map_err(|e| format!("同步更新文件失败: {}", e))?;
 
+    #[cfg(unix)]
     set_executable_permission(download_path)?;
 
     Ok(())
@@ -628,7 +629,7 @@ fn apply_update_windows(download_path: &Path, target_path: &Path) -> Result<(), 
             }
             Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
                 last_error = Some(err);
-                std::thread::sleep(Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(500));
                 continue;
             }
             Err(err) => return Err(format!("替换更新文件失败: {}", err)),
@@ -681,8 +682,9 @@ fn apply_update_unix_with_target(download_path: &Path, target_path: &Path) -> Re
         }
         Err(err) => return Err(format!("替换更新文件失败: {}", err)),
     }
-
+    #[cfg(unix)]
     set_executable_permission(target_path)?;
+
     restart_application(target_path)?;
     Ok(())
 }
@@ -699,8 +701,9 @@ fn is_cross_device_link_error(err: &std::io::Error) -> bool {
     err.raw_os_error() == Some(18)
 }
 
+#[cfg(unix)]
 fn set_executable_permission(path: &Path) -> Result<(), String> {
-    #[cfg(unix)]
+
     {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = std::fs::metadata(path)
