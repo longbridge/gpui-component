@@ -1,5 +1,3 @@
-extern crate markup5ever_rcdom as rcdom;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;

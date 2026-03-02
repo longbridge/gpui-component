@@ -1,9 +1,9 @@
 use crate::{Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeSet, highlighter::HighlightTheme};
+#[allow(unused)]
 use anyhow::Result;
 use gpui::{App, Global, SharedString};
 use std::{
     collections::HashMap,
-    fs,
     path::PathBuf,
     rc::Rc,
     sync::{Arc, LazyLock},
@@ -94,6 +94,7 @@ impl ThemeRegistry {
     /// Watch themes directory.
     ///
     /// And reload themes to trigger the `on_load` callback.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn watch_dir<F>(themes_dir: PathBuf, cx: &mut App, on_load: F) -> Result<()>
     where
         F: Fn(&mut App) + 'static,
@@ -147,6 +148,18 @@ impl ThemeRegistry {
         &self.default_themes[&ThemeMode::Dark]
     }
 
+    pub fn load_themes_from_str(&mut self, content: &str) -> anyhow::Result<()> {
+        let theme_set = serde_json::from_str::<ThemeSet>(content)?;
+        for theme in theme_set.themes {
+            if !self.themes.contains_key(&theme.name) {
+                let theme_name = theme.name.clone();
+                self.themes.insert(theme_name, Rc::new(theme));
+                self.has_custom_themes = true;
+            }
+        }
+        Ok(())
+    }
+
     fn init_default_themes(&mut self) {
         let default_themes: Vec<ThemeConfig> = serde_json::from_str::<ThemeSet>(DEFAULT_THEME)
             .expect("failed to parse default theme.")
@@ -158,6 +171,7 @@ impl ThemeRegistry {
                 self.default_themes.insert(ThemeMode::Light, Rc::new(theme));
             }
         }
+        self.themes_dir = PathBuf::from("./themes");
         self.themes = self
             .default_themes
             .values()
@@ -168,14 +182,10 @@ impl ThemeRegistry {
             .collect();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn _watch_themes_dir(themes_dir: PathBuf, cx: &mut App) -> anyhow::Result<()> {
-        if cfg!(target_arch = "wasm32") {
-            tracing::warn!("Watching themes directory is not supported on wasm.");
-            return Ok(());
-        }
-
         if !themes_dir.exists() {
-            fs::create_dir_all(&themes_dir)?;
+            std::fs::create_dir_all(&themes_dir)?;
         }
 
         let (tx, rx) = smol::channel::bounded(100);
@@ -212,6 +222,7 @@ impl ThemeRegistry {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn reload_themes(cx: &mut App) {
         let registry = Self::global_mut(cx);
         match registry.reload() {
@@ -222,16 +233,17 @@ impl ThemeRegistry {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Reload themes from the `themes_dir`.
     fn reload(&mut self) -> Result<()> {
         let mut themes = vec![];
 
         if self.themes_dir.exists() {
-            for entry in fs::read_dir(&self.themes_dir)? {
+            for entry in std::fs::read_dir(&self.themes_dir)? {
                 let entry = entry?;
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    let file_content = fs::read_to_string(path.clone())?;
+                    let file_content = std::fs::read_to_string(path.clone())?;
 
                     match serde_json::from_str::<ThemeSet>(&file_content) {
                         Ok(theme_set) => {

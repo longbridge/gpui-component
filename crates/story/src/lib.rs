@@ -19,6 +19,7 @@ use gpui_component::{
 use serde::{Deserialize, Serialize};
 
 mod app_menus;
+mod embedded_themes;
 mod gallery;
 mod stories;
 mod themes;
