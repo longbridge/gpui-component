@@ -70,11 +70,12 @@ impl Render for AvatarStory {
                             .large(),
                     )
                     .child(
-                        Avatar::new().src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                        Avatar::new()
+                            .src("https://avatars.githubusercontent.com/u/10757551?s=64&v=4"),
                     )
                     .child(
                         Avatar::new()
-                            .src("https://avatars.githubusercontent.com/u/22312482?v=4")
+                            .src("https://avatars.githubusercontent.com/u/20092316?v=4")
                             .small(),
                     )
                     .child(
