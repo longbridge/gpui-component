@@ -103,7 +103,6 @@ impl ThemeRegistry {
         // Load theme in the background.
         cx.spawn(async move |cx| {
             _ = cx.update(|cx| {
-                #[cfg(not(target_arch = "wasm32"))]
                 if let Err(err) = Self::_watch_themes_dir(themes_dir, cx) {
                     tracing::error!("Failed to watch themes directory: {}", err);
                 }
@@ -169,8 +168,12 @@ impl ThemeRegistry {
             .collect();
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn _watch_themes_dir(themes_dir: PathBuf, cx: &mut App) -> anyhow::Result<()> {
+        if cfg!(target_arch = "wasm32") {
+            tracing::warn!("Watching themes directory is not supported on wasm.");
+            return Ok(());
+        }
+
         if !themes_dir.exists() {
             fs::create_dir_all(&themes_dir)?;
         }

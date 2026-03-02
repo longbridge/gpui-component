@@ -22,10 +22,14 @@ impl Default for State {
 }
 
 pub fn init(cx: &mut App) {
-    // Load last theme state
-    let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
-    tracing::info!("Load themes...");
-    let state = serde_json::from_str::<State>(&json).unwrap_or_default();
+    let state = if cfg!(not(target_arch = "wasm32")) {
+        // Load last theme state
+        let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
+        serde_json::from_str::<State>(&json).unwrap_or_default()
+    } else {
+        State::default()
+    };
+
     if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
         if let Some(theme) = ThemeRegistry::global(cx)
             .themes()
@@ -49,6 +53,7 @@ pub fn init(cx: &mut App) {
             scrollbar_show: Some(cx.theme().scrollbar_show),
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
         if let Ok(json) = serde_json::to_string_pretty(&state) {
             // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
             let _ = std::fs::write(STATE_FILE, json);

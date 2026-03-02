@@ -24,7 +24,8 @@ pub use theme_color::*;
 pub fn init(cx: &mut App) {
     registry::init(cx);
 
-    Theme::sync_system_appearance(None, cx);
+    // Ensure theme is loaded directly on startup for WASM compatibility
+    Theme::change(ThemeMode::Light, None, cx);
     Theme::sync_scrollbar_appearance(cx);
 }
 
