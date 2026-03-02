@@ -89,7 +89,6 @@ impl Render for ButtonStory {
         let custom_variant = ButtonCustomVariant::new(cx)
             .color(cx.theme().magenta)
             .foreground(cx.theme().magenta)
-            .border(cx.theme().magenta)
             .hover(cx.theme().magenta.opacity(0.1))
             .active(cx.theme().magenta);
 
