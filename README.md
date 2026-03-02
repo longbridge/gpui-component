@@ -20,6 +20,8 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 
 ## Showcase
 
+https://longbridge.github.io/gpui-component/gallery/
+
 Here is the first application: [Longbridge Pro](https://longbridge.com/desktop), built using GPUI Component.
 
 <img width="1763" alt="Image" src="https://github.com/user-attachments/assets/e1ecb9c3-2dd3-431e-bd97-5a819c30e551" />
