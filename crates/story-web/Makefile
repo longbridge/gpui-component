@@ -25,7 +25,7 @@ build-web: ## Build frontend
 build: build-wasm build-web ## Build complete project (WASM + frontend)
 
 dev: build-wasm-dev ## Start development server
-	@cd www && bun run dev
+	@cd www && bun install && bun run dev
 
 preview: ## Preview production build
 	@cd www && bun run preview
