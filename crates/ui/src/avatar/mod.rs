@@ -13,7 +13,7 @@ pub(super) fn avatar_size(size: Size) -> Pixels {
         Size::Large => px(80.),
         Size::Medium => px(48.),
         Size::Small => px(24.),
-        Size::XSmall => px(20.),
+        Size::XSmall => px(16.),
         Size::Size(size) => size,
     }
 }
