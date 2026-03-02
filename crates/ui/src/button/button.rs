@@ -8,7 +8,7 @@ use gpui::{
     Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
     Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px, relative,
+    prelude::FluentBuilder as _, px, relative, transparent_white,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -31,7 +31,6 @@ impl From<Pixels> for ButtonRounded {
 pub struct ButtonCustomVariant {
     color: Hsla,
     foreground: Hsla,
-    border: Hsla,
     shadow: bool,
     hover: Hsla,
     active: Hsla,
@@ -96,7 +95,6 @@ impl ButtonCustomVariant {
         Self {
             color: cx.theme().transparent,
             foreground: cx.theme().foreground,
-            border: cx.theme().transparent,
             hover: cx.theme().transparent,
             active: cx.theme().transparent,
             shadow: false,
@@ -112,12 +110,6 @@ impl ButtonCustomVariant {
     /// Set foreground color, default is theme foreground.
     pub fn foreground(mut self, color: Hsla) -> Self {
         self.foreground = color;
-        self
-    }
-
-    /// Set border color, default is transparent.
-    pub fn border(mut self, color: Hsla) -> Self {
-        self.border = color;
         self
     }
 
@@ -682,17 +674,47 @@ impl ButtonVariant {
         }
     }
 
-    fn border_color(&self, _bg: Hsla, _outline: bool, cx: &mut App) -> Hsla {
+    fn border_color(&self, _bg: Hsla, outline: bool, cx: &mut App) -> Hsla {
         match self {
             Self::Default => cx.theme().border,
             Self::Secondary => cx.theme().border,
             Self::Primary => cx.theme().primary,
-            Self::Danger => cx.theme().danger,
-            Self::Info => cx.theme().info,
-            Self::Warning => cx.theme().warning,
-            Self::Success => cx.theme().success,
+            Self::Danger => {
+                if outline {
+                    cx.theme().danger.mix_oklab(transparent_white(), 0.4)
+                } else {
+                    cx.theme().danger
+                }
+            }
+            Self::Info => {
+                if outline {
+                    cx.theme().info.mix_oklab(transparent_white(), 0.4)
+                } else {
+                    cx.theme().info
+                }
+            }
+            Self::Warning => {
+                if outline {
+                    cx.theme().warning.mix_oklab(transparent_white(), 0.4)
+                } else {
+                    cx.theme().warning
+                }
+            }
+            Self::Success => {
+                if outline {
+                    cx.theme().success.mix_oklab(transparent_white(), 0.4)
+                } else {
+                    cx.theme().success
+                }
+            }
             Self::Ghost | Self::Link | Self::Text => cx.theme().transparent,
-            Self::Custom(colors) => colors.color,
+            Self::Custom(colors) => {
+                if outline {
+                    colors.color.mix_oklab(transparent_white(), 0.4)
+                } else {
+                    colors.color
+                }
+            }
         }
     }
 
