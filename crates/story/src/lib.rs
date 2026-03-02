@@ -14,6 +14,7 @@ use gpui_component::{
     menu::PopupMenu,
     notification::Notification,
     scroll::{ScrollableElement as _, ScrollbarShow},
+    text::markdown,
     v_flex,
 };
 use serde::{Deserialize, Serialize};
@@ -210,10 +211,14 @@ pub fn init(cx: &mut App) {
             cx.defer(move |cx| {
                 window
                     .update(cx, |_, window, cx| {
-                        window.open_alert_dialog(cx, |alert, _, _| {
-                            alert
-                                .title("About")
-                                .description("GPUI Component Storybook\nVersion 0.1.0")
+                        window.defer(cx, |window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert.title("About").description(markdown(
+                                    "GPUI Component Storybook\n\n\
+                                    Version 0.1.0\n\n\
+                                    https://longbridge.github.io/gpui-component",
+                                ))
+                            });
                         });
                     })
                     .unwrap();
