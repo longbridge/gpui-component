@@ -1,5 +1,4 @@
-use std::time::Duration;
-
+use instant::Duration;
 use anyhow::Result;
 use gpui::{App, Context, Task, Window};
 use ropey::Rope;

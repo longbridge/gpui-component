@@ -7,7 +7,9 @@ use gpui::{
 use ropey::Rope;
 use smallvec::SmallVec;
 
-use crate::input::{LastLayout, RopeExt, WhitespaceIndicators};
+use crate::input::{
+    LastLayout, Point as TreeSitterPoint, RopeExt, WhitespaceIndicators,
+};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
@@ -304,12 +306,12 @@ impl TextWrapper {
         return self.text.len();
     }
 
-    pub(crate) fn display_point_to_point(&self, point: WrapDisplayPoint) -> tree_sitter::Point {
+    pub(crate) fn display_point_to_point(&self, point: WrapDisplayPoint) -> TreeSitterPoint {
         let offset = self.display_point_to_offset(point);
         self.text.offset_to_point(offset)
     }
 
-    pub(crate) fn point_to_display_point(&self, point: tree_sitter::Point) -> WrapDisplayPoint {
+    pub(crate) fn point_to_display_point(&self, point: TreeSitterPoint) -> WrapDisplayPoint {
         let offset = self.text.point_to_offset(point);
         self.offset_to_display_point(offset)
     }

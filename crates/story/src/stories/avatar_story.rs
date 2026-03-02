@@ -1,11 +1,12 @@
 use gpui::{
-    px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window, px,
 };
 use gpui_component::{
+    ActiveTheme, IconName, Sizable as _, StyledExt,
     avatar::{Avatar, AvatarGroup},
     dock::PanelControl,
-    v_flex, ActiveTheme, IconName, Sizable as _, StyledExt,
+    v_flex,
 };
 
 use crate::section;
@@ -60,13 +61,28 @@ impl Render for AvatarStory {
                     .child(
                         Avatar::new()
                             .name("Jason lee")
-                            .src("https://i.pravatar.cc/200?u=a")
+                            .src("https://avatars.githubusercontent.com/u/5518?v=4")
                             .with_size(px(100.)),
                     )
-                    .child(Avatar::new().src("https://i.pravatar.cc/200?u=b").large())
-                    .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
-                    .child(Avatar::new().src("https://i.pravatar.cc/200?u=d").small())
-                    .child(Avatar::new().src("https://i.pravatar.cc/200?u=e").xsmall()),
+                    .child(
+                        Avatar::new()
+                            .src("https://avatars.githubusercontent.com/u/28998859?v=4")
+                            .large(),
+                    )
+                    .child(
+                        Avatar::new()
+                            .src("https://avatars.githubusercontent.com/u/10757551?s=64&v=4"),
+                    )
+                    .child(
+                        Avatar::new()
+                            .src("https://avatars.githubusercontent.com/u/20092316?v=4")
+                            .small(),
+                    )
+                    .child(
+                        Avatar::new()
+                            .src("https://avatars.githubusercontent.com/u/150917089?v=4")
+                            .xsmall(),
+                    ),
             )
             .child(
                 section("Avatar with text")
@@ -91,51 +107,135 @@ impl Render for AvatarStory {
                     .max_w_md()
                     .child(
                         AvatarGroup::new()
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=b"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=d"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=e"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=f")),
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/28998859?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/22312482?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/150917089?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/1253486?v=4"),
+                            ),
                     )
                     .child(
                         AvatarGroup::new()
                             .small()
                             .limit(5)
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=b"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=d"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=e"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=f"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=g"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=h"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=i"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=j"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=k")),
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/28998859?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/22312482?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/150917089?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20337280?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/629429?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/583231?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/1264109?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/2936367?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/1253486?v=4"),
+                            ),
                     )
                     .child(
                         AvatarGroup::new()
                             .xsmall()
                             .limit(6)
                             .ellipsis()
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=a"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=b"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=c"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=d"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=e"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=f"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=g"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=h"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=i"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=j"))
-                            .child(Avatar::new().src("https://i.pravatar.cc/200?u=k")),
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/28998859?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/22312482?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/150917089?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/20337280?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/2936367?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/583231?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/1264109?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/10757551?v=4"),
+                            )
+                            .child(
+                                Avatar::new()
+                                    .src("https://avatars.githubusercontent.com/u/1506323?v=4"),
+                            ),
                     ),
             )
             .child(
                 section("Custom rounded").child(
                     Avatar::new()
-                        .src("https://i.pravatar.cc/200?u=a")
+                        .src("https://avatars.githubusercontent.com/u/5518?v=4")
                         .with_size(px(100.))
                         .rounded(px(20.)),
                 ),
@@ -143,7 +243,7 @@ impl Render for AvatarStory {
             .child(
                 section("Custom Style").child(
                     Avatar::new()
-                        .src("https://i.pravatar.cc/200?u=c")
+                        .src("https://avatars.githubusercontent.com/u/20092316?v=4")
                         .with_size(px(100.))
                         .border_3()
                         .border_color(cx.theme().foreground)

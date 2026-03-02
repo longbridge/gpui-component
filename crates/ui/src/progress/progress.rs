@@ -4,7 +4,7 @@ use gpui::{
     ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
     relative,
 };
-use std::time::Duration;
+use instant::Duration;
 
 use super::ProgressState;
 

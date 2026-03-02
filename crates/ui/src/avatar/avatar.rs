@@ -103,7 +103,7 @@ impl RenderOnce for Avatar {
             .bg(cx.theme().secondary)
             .text_color(cx.theme().background)
             .border_1()
-            .border_color(cx.theme().background)
+            .border_color(cx.theme().border)
             .when(self.name.is_none() && self.src.is_none(), |this| {
                 this.text_size(avatar_size(self.size) * 0.6)
                     .child(self.placeholder)

@@ -6,3 +6,13 @@ target/
 index.scip
 *.log
 node_modules/
+
+# WASM build artifacts
+crates/story-web/www/src/wasm/*.js
+crates/story-web/www/src/wasm/*.wasm
+crates/story-web/www/src/wasm/*.ts
+!crates/story-web/www/src/wasm/.gitkeep
+
+# Frontend build artifacts
+crates/story-web/www/dist/
+crates/story-web/www/bun.lockb

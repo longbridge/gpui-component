@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build outputs
+dist/
+*.local
+
+# WASM generated files
+src/wasm/
+!src/wasm/.gitkeep
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

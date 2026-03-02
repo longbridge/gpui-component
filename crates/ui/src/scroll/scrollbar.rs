@@ -3,8 +3,9 @@ use std::{
     ops::Deref,
     panic::Location,
     rc::Rc,
-    time::{Duration, Instant},
 };
+
+use instant::{Duration, Instant};
 
 use crate::{ActiveTheme, AxisExt};
 use gpui::{
@@ -183,7 +184,7 @@ impl ScrollbarStateInner {
         let mut state = *self;
         state.hovered_axis = axis;
         if axis.is_some() {
-            state.last_scroll_time = Some(std::time::Instant::now());
+            state.last_scroll_time = Some(Instant::now());
         }
         state
     }
@@ -193,7 +194,7 @@ impl ScrollbarStateInner {
         state.hovered_on_thumb = axis;
         if self.is_scrollbar_visible() {
             if axis.is_some() {
-                state.last_scroll_time = Some(std::time::Instant::now());
+                state.last_scroll_time = Some(Instant::now());
             }
         }
         state

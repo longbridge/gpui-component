@@ -1,8 +1,12 @@
-use std::path::PathBuf;
-
 use gpui::{Action, App, SharedString};
-use gpui_component::{ActiveTheme, Theme, ThemeMode, ThemeRegistry, scroll::ScrollbarShow};
+use gpui_component::{Theme, ThemeMode, ThemeRegistry, scroll::ScrollbarShow};
 use serde::{Deserialize, Serialize};
+
+#[cfg(not(target_arch = "wasm32"))]
+use gpui_component::ActiveTheme;
+
+#[cfg(target_arch = "wasm32")]
+use crate::embedded_themes;
 
 const STATE_FILE: &str = "target/state.json";
 
@@ -22,19 +26,40 @@ impl Default for State {
 }
 
 pub fn init(cx: &mut App) {
-    // Load last theme state
-    let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
-    tracing::info!("Load themes...");
-    let state = serde_json::from_str::<State>(&json).unwrap_or_default();
-    if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
-        if let Some(theme) = ThemeRegistry::global(cx)
-            .themes()
-            .get(&state.theme)
-            .cloned()
-        {
-            Theme::global_mut(cx).apply_config(&theme);
+    #[cfg(target_arch = "wasm32")]
+    {
+        tracing::info!("Loading embedded themes for WASM...");
+        let embedded = embedded_themes::embedded_themes();
+        let registry = ThemeRegistry::global_mut(cx);
+
+        for (name, content) in embedded {
+            if let Err(e) = registry.load_themes_from_str(content) {
+                tracing::error!("Failed to load embedded theme {}: {}", name, e);
+            } else {
+                tracing::info!("Loaded embedded theme: {}", name);
+            }
         }
-    }) {
+    }
+
+    let state = if cfg!(not(target_arch = "wasm32")) {
+        let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
+        serde_json::from_str::<State>(&json).unwrap_or_default()
+    } else {
+        State::default()
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Err(err) =
+        ThemeRegistry::watch_dir(std::path::PathBuf::from("./themes"), cx, move |cx| {
+            if let Some(theme) = ThemeRegistry::global(cx)
+                .themes()
+                .get(&state.theme)
+                .cloned()
+            {
+                Theme::global_mut(cx).apply_config(&theme);
+            }
+        })
+    {
         tracing::error!("Failed to watch themes directory: {}", err);
     }
 
@@ -43,6 +68,7 @@ pub fn init(cx: &mut App) {
     }
     cx.refresh_windows();
 
+    #[cfg(not(target_arch = "wasm32"))]
     cx.observe_global::<Theme>(|cx| {
         let state = State {
             theme: cx.theme().theme_name().clone(),

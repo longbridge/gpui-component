@@ -19,21 +19,51 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+
       - uses: oven-sh/setup-bun@v1
-      - name: Install
-        working-directory: docs
-        run: bun install
-      - name: Build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install -f wasm-bindgen-cli --version 0.2.113
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Story Web (WASM)
+        working-directory: crates/story-web
+        run: |
+          make build-prod
+
+      - name: Build Docs
         working-directory: docs
         run: |
+          bun install
           bun run build
           cp .vitepress/dist/index.html .vitepress/dist/404.html
+
+      - name: Copy Story Web to Docs
+        run: |
+          mkdir -p docs/.vitepress/dist/gallery
+          cp -r crates/story-web/www/dist/* docs/.vitepress/dist/gallery/
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: "docs/.vitepress/dist"
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
