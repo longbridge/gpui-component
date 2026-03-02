@@ -1,3 +1,5 @@
+_version: 2
+
 Sftp:
   auth_password_failed:
     en: Password authentication failed

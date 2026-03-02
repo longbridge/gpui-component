@@ -1098,9 +1098,9 @@ impl TerminalView {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(0xffffff))
                                     .child(if is_connecting {
-                                        "Connecting..."
+                                        t!("SshSession.connecting")
                                     } else {
-                                        "Connection Lost"
+                                        t!("SshSession.connection_lost")
                                     }),
                             ),
                     )
@@ -1120,15 +1120,15 @@ impl TerminalView {
                             .text_sm()
                             .text_color(rgb(0x9ca3af))
                             .child(if is_connecting {
-                                "Establishing SSH connection..."
+                                t!("SshSession.establishing")
                             } else {
-                                "The SSH session has been disconnected."
+                                t!("SshSession.disconnected")
                             }),
                     )
                     .when(can_reconnect && !is_connecting, |this| {
                         this.child(
                             Button::new("reconnect-btn")
-                                .label("Reconnect")
+                                .label(t!("SshSession.reconnect"))
                                 .primary()
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.reconnect(window, cx);

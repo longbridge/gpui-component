@@ -357,3 +357,26 @@ TerminalSidebar:
     en: "Paste to terminal"
     zh-CN: "粘贴到终端"
     zh-HK: "貼上到終端"
+
+# SSH 会话状态
+SshSession:
+  connecting:
+    en: Connecting...
+    zh-CN: 连接中...
+    zh-HK: 連接中...
+  connection_lost:
+    en: Connection Lost
+    zh-CN: 连接已断开
+    zh-HK: 連接已斷開
+  establishing:
+    en: Establishing SSH connection...
+    zh-CN: 正在建立 SSH 连接...
+    zh-HK: 正在建立 SSH 連接...
+  disconnected:
+    en: The SSH session has been disconnected.
+    zh-CN: SSH 会话已断开连接。
+    zh-HK: SSH 工作階段已斷開連接。
+  reconnect:
+    en: Reconnect
+    zh-CN: 重新连接
+    zh-HK: 重新連接
