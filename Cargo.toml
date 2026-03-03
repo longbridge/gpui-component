@@ -132,6 +132,7 @@ bytes = "1.5"
 mongodb = "3.5.1"
 futures-util="0.3.31"
 url = "2.5.4"
+percent-encoding = "2.3.1"
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
 version = "0.58.0"

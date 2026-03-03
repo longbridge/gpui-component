@@ -5,9 +5,21 @@ use crate::types::{MongoConnectionConfig, MongoError};
 use dashmap::DashMap;
 use gpui::Global;
 use one_core::storage::MongoDBParams;
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use rust_i18n::t;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use url::form_urlencoded;
+
+const MONGO_USERINFO_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b':')
+    .add(b'/')
+    .add(b'?')
+    .add(b'#')
+    .add(b'[')
+    .add(b']')
+    .add(b'@');
+const MONGO_PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS.add(b'/').add(b'?').add(b'#');
 
 /// MongoDB 连接存储
 type ConnectionMap = DashMap<String, Arc<RwLock<Box<dyn MongoConnection>>>>;
@@ -136,10 +148,14 @@ impl MongoManager {
             .unwrap_or("");
 
         if !username_value.is_empty() {
-            connection_string.push_str(username_value);
+            connection_string.push_str(
+                &utf8_percent_encode(username_value, MONGO_USERINFO_ENCODE_SET).to_string(),
+            );
             if !password_value.is_empty() {
                 connection_string.push(':');
-                connection_string.push_str(password_value);
+                connection_string.push_str(
+                    &utf8_percent_encode(password_value, MONGO_USERINFO_ENCODE_SET).to_string(),
+                );
             }
             connection_string.push('@');
         }
@@ -158,7 +174,9 @@ impl MongoManager {
             .unwrap_or("");
         if !database_value.is_empty() {
             connection_string.push('/');
-            connection_string.push_str(database_value);
+            connection_string.push_str(
+                &utf8_percent_encode(database_value, MONGO_PATH_SEGMENT_ENCODE_SET).to_string(),
+            );
         }
 
         let mut query_pairs: Vec<(String, String)> = Vec::new();
@@ -220,11 +238,11 @@ impl MongoManager {
                 connection_string.push('/');
             }
             connection_string.push('?');
-            let query_string = query_pairs
-                .into_iter()
-                .map(|(key, value)| format!("{}={}", key, value))
-                .collect::<Vec<String>>()
-                .join("&");
+            let mut query_serializer = form_urlencoded::Serializer::new(String::new());
+            for (key, value) in query_pairs {
+                query_serializer.append_pair(&key, &value);
+            }
+            let query_string = query_serializer.finish();
             connection_string.push_str(&query_string);
         }
 
@@ -254,5 +272,59 @@ impl MongoManager {
             name: stored.name.clone(),
             connection_string,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MongoManager;
+    use one_core::storage::MongoDBParams;
+
+    #[test]
+    fn build_connection_string_encodes_userinfo_and_query_values() {
+        let params = MongoDBParams {
+            connection_string: String::new(),
+            host: "localhost".to_string(),
+            port: Some(27017),
+            database: Some("app/db".to_string()),
+            username: Some("user:name".to_string()),
+            password: Some("p@ss/word?#[]".to_string()),
+            auth_source: Some("admin db".to_string()),
+            replica_set: Some("rs 0".to_string()),
+            read_preference: Some("secondary preferred".to_string()),
+            use_srv_record: false,
+            direct_connection: true,
+            use_tls: true,
+            connect_timeout_seconds: Some(3),
+            application_name: Some("onet cli".to_string()),
+        };
+
+        let uri = MongoManager::build_connection_string(&params).expect("构造连接串失败");
+        assert_eq!(
+            uri,
+            "mongodb://user%3Aname:p%40ss%2Fword%3F%23%5B%5D@localhost:27017/app%2Fdb?authSource=admin+db&replicaSet=rs+0&readPreference=secondary+preferred&directConnection=true&tls=true&connectTimeoutMS=3000&appName=onet+cli"
+        );
+    }
+
+    #[test]
+    fn build_connection_string_returns_raw_connection_string_when_provided() {
+        let params = MongoDBParams {
+            connection_string: "mongodb://raw-host:27017/?authSource=admin".to_string(),
+            host: "ignored".to_string(),
+            port: Some(27017),
+            database: None,
+            username: None,
+            password: None,
+            auth_source: None,
+            replica_set: None,
+            read_preference: None,
+            use_srv_record: false,
+            direct_connection: false,
+            use_tls: false,
+            connect_timeout_seconds: None,
+            application_name: None,
+        };
+        let uri = MongoManager::build_connection_string(&params).expect("应返回原始连接串");
+        assert_eq!(uri, "mongodb://raw-host:27017/?authSource=admin");
     }
 }

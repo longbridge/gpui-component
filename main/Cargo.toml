@@ -34,7 +34,7 @@ mongodb_view = { workspace = true }
 one-core.workspace = true
 one-ui.workspace = true
 reqwest_client.workspace = true
-
+db.workspace = true
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource = "0.1"
 

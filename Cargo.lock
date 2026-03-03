@@ -5535,6 +5535,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "db",
  "db_view",
  "dirs 6.0.0",
  "dotenvy",
@@ -5912,11 +5913,13 @@ dependencies = [
  "mongodb",
  "one-core",
  "one-ui",
+ "percent-encoding",
  "rust-i18n",
  "serde_json",
  "thiserror 2.0.14",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]

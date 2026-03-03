@@ -495,10 +495,14 @@ impl MongoFormWindow {
             let test_result: Result<(), String> = Tokio::spawn_result(cx, async move {
                 MongoManager::test_parameters(test_name, &parameters)
                     .await
-                    .map_err(|e| anyhow::anyhow!("{}", e))
+                    .map_err(anyhow::Error::new)
             })
             .await
-            .map_err(|error| error.to_string());
+            .map_err(|error| {
+                let detailed = format!("{:#}", error);
+                error!("MongoDB 连接测试失败: {}", detailed);
+                detailed
+            });
 
             let _ = this.update(cx, |this, cx| {
                 this.is_testing = false;
