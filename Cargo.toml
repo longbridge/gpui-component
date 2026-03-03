@@ -100,14 +100,10 @@ once_cell = "1.21"
 proptest = "1.4"
 mysql_async = "0.36.1"
 tokio-postgres = { version = "0.7.15",features = ["with-serde_json-1", "with-chrono-0_4", "with-uuid-1"] }
-postgres-types = { version = "0.2.11",features = [ "with-chrono-0_4", "with-uuid-1"] }
-deadpool-postgres = "0.14.1"
 rusqlite = { version = "0.38", features = ["bundled", "column_decltype"] }
-bb8-tiberius = "0.16.0"
 clickhouse = "0.14.1"
 sqlformat = "0.5.0"
 sqlparser = "0.60.0"
-unicode_categories = "0.1.1"
 uuid = { version = "1.18.0", features = ["v4", "serde"] }
 dashmap = "5.5.3"
 moka = { version = "0.12", features = ["sync"] }
@@ -135,7 +131,7 @@ parking_lot = "0.12"
 bytes = "1.5"
 mongodb = "3.5.1"
 futures-util="0.3.31"
-
+url = "2.5.4"
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
 version = "0.58.0"

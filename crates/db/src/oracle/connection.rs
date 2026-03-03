@@ -11,11 +11,14 @@ use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
+use crate::ssh_tunnel::resolve_connection_target;
 use crate::{format_message, truncate_str, DatabasePlugin};
+use ssh::LocalPortForwardTunnel;
 
 pub struct OracleDbConnection {
     config: DbConnectionConfig,
     conn: Arc<Mutex<Option<oracle::Connection>>>,
+    tunnel: Option<LocalPortForwardTunnel>,
 }
 
 impl OracleDbConnection {
@@ -23,17 +26,18 @@ impl OracleDbConnection {
         Self {
             config,
             conn: Arc::new(Mutex::new(None)),
+            tunnel: None,
         }
     }
 
-    fn build_connect_string(config: &DbConnectionConfig) -> String {
+    fn build_connect_string(config: &DbConnectionConfig, host: &str, port: u16) -> String {
         if let Some(ref service) = config.service_name {
-            format!("//{}:{}/{}", config.host, config.port, service)
+            format!("//{}:{}/{}", host, port, service)
         } else {
             format!(
                 "//{}:{}/{}",
-                config.host,
-                config.port,
+                host,
+                port,
                 config.sid.clone().unwrap_or_default()
             )
         }
@@ -202,8 +206,10 @@ impl DbConnection for OracleDbConnection {
     async fn connect(&mut self) -> Result<(), DbError> {
         let config = self.config.clone();
         info!("[Oracle] Connecting to {}:{}", config.host, config.port);
+        let target = resolve_connection_target(&config).await?;
+        self.tunnel = target.tunnel;
 
-        let connect_string = Self::build_connect_string(&config);
+        let connect_string = Self::build_connect_string(&config, &target.host, target.port);
         debug!("[Oracle] Connect string: {}", connect_string);
         let username = config.username.clone();
         let password = config.password.clone();
@@ -248,6 +254,7 @@ impl DbConnection for OracleDbConnection {
         }
 
         info!("[Oracle] Disconnected");
+        self.tunnel = None;
         Ok(())
     }
 

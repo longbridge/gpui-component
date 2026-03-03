@@ -18,12 +18,10 @@ use crate::addon::{
     register_default_addons, AddonManager, SearchAddon, TerminalAddonFrameContext,
     TerminalAddonMouseContext,
 };
-use crate::sidebar::{
-    SidebarPanel, TerminalSidebar, TerminalSidebarEvent,
-};
-use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
+use crate::sidebar::{SidebarPanel, TerminalSidebar, TerminalSidebarEvent};
 use crate::terminal_element::{RenderCache, TerminalElement};
 use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
+use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
 use one_core::storage::models::StoredConnection;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
@@ -763,9 +761,7 @@ impl TerminalView {
 
         let mode = self.terminal.read(cx).mode();
         let is_multiline = text.lines().filter(|line| !line.trim().is_empty()).count() > 1;
-        if self.confirm_multiline_paste
-            && is_multiline
-            && !mode.contains(TermMode::BRACKETED_PASTE)
+        if self.confirm_multiline_paste && is_multiline && !mode.contains(TermMode::BRACKETED_PASTE)
         {
             self.show_paste_confirm_dialog(
                 text.to_string(),
@@ -807,11 +803,7 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let preview = text
-            .lines()
-            .take(6)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let preview = text.lines().take(6).collect::<Vec<_>>().join("\n");
         let has_more = text.lines().count() > 6;
         let view = cx.entity().clone();
 
@@ -875,10 +867,8 @@ impl TerminalView {
                 || cmd.starts_with("chmod -r 777 /")
                 || cmd.starts_with("chown -r ")
                 || cmd.contains(":(){")
-                || cmd.contains("curl ")
-                    && (cmd.contains("| sh") || cmd.contains("| bash"))
-                || cmd.contains("wget ")
-                    && (cmd.contains("| sh") || cmd.contains("| bash"))
+                || cmd.contains("curl ") && (cmd.contains("| sh") || cmd.contains("| bash"))
+                || cmd.contains("wget ") && (cmd.contains("| sh") || cmd.contains("| bash"))
         })
     }
 

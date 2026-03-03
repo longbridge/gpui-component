@@ -1596,9 +1596,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         FieldType::Integer | FieldType::Decimal => {
                             InputState::new(window, cx).mask_pattern(MaskPattern::number(None))
                         }
-                        _ => InputState::new(window, cx)
-                            .multi_line(true)
-                            .rows(1),
+                        _ => InputState::new(window, cx).multi_line(true).rows(1),
                     };
                     state.set_value(edit_value, window, cx);
                     state.focus(window, cx);

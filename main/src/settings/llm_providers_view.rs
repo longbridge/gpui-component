@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AppContext, AsyncApp, Context, EventEmitter, FocusHandle, Focusable,
-    IntoElement, ParentElement, Render, SharedString, Styled, WeakEntity, Window, div, px,
+    App, AppContext, AsyncApp, Context, EventEmitter, FocusHandle, Focusable, IntoElement,
+    ParentElement, Render, SharedString, Styled, WeakEntity, Window, div, px,
 };
 use gpui_component::{
     ActiveTheme, WindowExt,
@@ -136,10 +136,7 @@ impl LlmProvidersView {
                                 if item.id != config.id && item.is_default {
                                     item.is_default = false;
                                     if let Err(e) = repo.update(&item) {
-                                        tracing::error!(
-                                            "Failed to unset default provider: {}",
-                                            e
-                                        );
+                                        tracing::error!("Failed to unset default provider: {}", e);
                                     }
                                 }
                             }
@@ -169,7 +166,11 @@ impl LlmProvidersView {
 
     fn delete_provider(&mut self, provider_id: i64, cx: &mut Context<Self>) {
         // 内置 provider 不可删除
-        if self.providers.iter().any(|p| p.id == provider_id && p.is_builtin()) {
+        if self
+            .providers
+            .iter()
+            .any(|p| p.id == provider_id && p.is_builtin())
+        {
             return;
         }
         let repo = self
@@ -327,13 +328,8 @@ impl LlmProvidersView {
             self.render_builtin_actions(&provider_for_default, cx)
                 .into_any_element()
         } else {
-            self.render_custom_actions(
-                provider_id,
-                &provider_for_toggle,
-                &provider_for_default,
-                cx,
-            )
-            .into_any_element()
+            self.render_custom_actions(provider_id, &provider_for_toggle, &provider_for_default, cx)
+                .into_any_element()
         };
 
         div()
@@ -437,9 +433,7 @@ impl LlmProvidersView {
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child(
-                            t!("LlmProviders.api_base", value = base.as_str()).to_string(),
-                        ),
+                        .child(t!("LlmProviders.api_base", value = base.as_str()).to_string()),
                 )
             })
             .when_some(api_version_display, |this, version| {

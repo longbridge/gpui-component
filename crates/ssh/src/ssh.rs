@@ -1,12 +1,15 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use russh::keys::*;
 use russh::*;
 use rust_i18n::t;
-use tokio::net::TcpStream;
+use tokio::io::copy_bidirectional;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{Mutex, oneshot};
 
 #[derive(Clone)]
 pub struct SshConnectConfig {
@@ -139,6 +142,41 @@ pub struct RusshClient {
     session: client::Handle<RusshHandler>,
     /// 跳板机会话（如果使用跳板机连接）
     _jump_session: Option<client::Handle<RusshHandler>>,
+}
+
+pub struct LocalPortForwardTunnel {
+    local_addr: SocketAddr,
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    accept_task: Option<tokio::task::JoinHandle<()>>,
+    client: Arc<Mutex<RusshClient>>,
+}
+
+impl LocalPortForwardTunnel {
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
+
+    pub async fn close(&mut self) -> Result<()> {
+        if let Some(tx) = self.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(task) = self.accept_task.take() {
+            let _ = task.await;
+        }
+        let mut guard = self.client.lock().await;
+        guard.disconnect().await
+    }
+}
+
+impl Drop for LocalPortForwardTunnel {
+    fn drop(&mut self) {
+        if let Some(tx) = self.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(task) = self.accept_task.take() {
+            task.abort();
+        }
+    }
 }
 
 /// 执行SSH认证
@@ -310,6 +348,106 @@ fn base64_encode(input: &str) -> String {
     }
 
     String::from_utf8(result).unwrap()
+}
+
+impl RusshClient {
+    pub async fn open_direct_tcpip_channel(
+        &mut self,
+        target_host: &str,
+        target_port: u16,
+        origin_host: &str,
+        origin_port: u16,
+    ) -> Result<Channel<client::Msg>> {
+        let channel = self
+            .session
+            .channel_open_direct_tcpip(
+                target_host,
+                target_port as u32,
+                origin_host,
+                origin_port as u32,
+            )
+            .await?;
+        Ok(channel)
+    }
+}
+
+pub async fn start_local_port_forward(
+    config: SshConnectConfig,
+    target_host: impl Into<String>,
+    target_port: u16,
+) -> Result<LocalPortForwardTunnel> {
+    let target_host = target_host.into();
+    let bind_addr = "127.0.0.1:0";
+    let listener = TcpListener::bind(bind_addr)
+        .await
+        .with_context(|| format!("failed to bind local address: {bind_addr}"))?;
+    let local_addr = listener.local_addr()?;
+
+    let client = <RusshClient as SshClient>::connect(config).await?;
+    let client = Arc::new(Mutex::new(client));
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+    let client_for_task = Arc::clone(&client);
+    let target_host_for_task = target_host.clone();
+
+    let accept_task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => {
+                    break;
+                }
+                accept_result = listener.accept() => {
+                    let (mut inbound, inbound_addr) = match accept_result {
+                        Ok(result) => result,
+                        Err(err) => {
+                            tracing::error!("本地端口转发 accept 失败: {}", err);
+                            break;
+                        }
+                    };
+
+                    let client_for_conn = Arc::clone(&client_for_task);
+                    let target_host_for_conn = target_host_for_task.clone();
+                    tokio::spawn(async move {
+                        let origin_host = match inbound_addr {
+                            SocketAddr::V4(v4) => v4.ip().to_string(),
+                            SocketAddr::V6(v6) => v6.ip().to_string(),
+                        };
+                        let origin_port = inbound_addr.port();
+
+                        let direct_channel = {
+                            let mut guard = client_for_conn.lock().await;
+                            match guard
+                                .open_direct_tcpip_channel(
+                                    &target_host_for_conn,
+                                    target_port,
+                                    &origin_host,
+                                    origin_port,
+                                )
+                                .await
+                            {
+                                Ok(channel) => channel,
+                                Err(err) => {
+                                    tracing::error!("打开 SSH direct-tcpip 通道失败: {}", err);
+                                    return;
+                                }
+                            }
+                        };
+
+                        let mut outbound = direct_channel.into_stream();
+                        if let Err(err) = copy_bidirectional(&mut inbound, &mut outbound).await {
+                            tracing::debug!("SSH 端口转发连接结束: {}", err);
+                        }
+                    });
+                }
+            }
+        }
+    });
+
+    Ok(LocalPortForwardTunnel {
+        local_addr,
+        shutdown_tx: Some(shutdown_tx),
+        accept_task: Some(accept_task),
+        client,
+    })
 }
 
 #[async_trait]

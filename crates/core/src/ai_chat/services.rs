@@ -229,7 +229,10 @@ mod tests {
     #[test]
     fn test_extract_session_name_with_newlines() {
         assert_eq!(extract_session_name("Hello\nWorld"), "Hello World");
-        assert_eq!(extract_session_name("Line1\n\nLine2\nLine3"), "Line1 Line2 Line3");
+        assert_eq!(
+            extract_session_name("Line1\n\nLine2\nLine3"),
+            "Line1 Line2 Line3"
+        );
         assert_eq!(extract_session_name("\n  Hello  \n"), "Hello");
     }
 }

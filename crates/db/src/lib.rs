@@ -10,6 +10,7 @@ pub mod manager;
 pub mod metadata_cache;
 pub mod plugin;
 pub mod sql_format;
+pub mod ssh_tunnel;
 pub mod streaming_parser;
 pub mod types;
 
@@ -33,6 +34,7 @@ pub use manager::*;
 pub use metadata_cache::*;
 pub use plugin::*;
 pub use sql_format::*;
+pub use ssh_tunnel::*;
 pub use streaming_parser::*;
 pub use types::*;
 

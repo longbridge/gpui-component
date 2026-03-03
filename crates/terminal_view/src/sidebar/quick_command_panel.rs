@@ -300,8 +300,17 @@ impl QuickCommandPanel {
                         .flex()
                         .flex_col()
                         .gap_2()
-                        .child(div().text_sm().child(t!("QuickCommand.delete_confirm_message")))
-                        .child(div().text_xs().text_color(gpui::rgb(0x9ca3af)).child(preview))
+                        .child(
+                            div()
+                                .text_sm()
+                                .child(t!("QuickCommand.delete_confirm_message")),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(gpui::rgb(0x9ca3af))
+                                .child(preview),
+                        )
                         .into_any_element(),
                 )
                 .button_props(
@@ -542,13 +551,11 @@ impl QuickCommandPanel {
                                     })
                                     .ghost()
                                     .xsmall()
-                                    .tooltip(
-                                        if is_pinned {
-                                            t!("QuickCommand.unpin_tooltip").to_string()
-                                        } else {
-                                            t!("QuickCommand.pin_tooltip").to_string()
-                                        },
-                                    )
+                                    .tooltip(if is_pinned {
+                                        t!("QuickCommand.unpin_tooltip").to_string()
+                                    } else {
+                                        t!("QuickCommand.pin_tooltip").to_string()
+                                    })
                                     .when(is_pinned, |this| this.text_color(pin_color))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.toggle_pin(id, cx);

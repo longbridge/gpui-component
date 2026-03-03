@@ -4,10 +4,10 @@ use rusqlite::params;
 
 use crate::storage::connection::SqliteConnection;
 use crate::storage::manager::{GlobalStorageState, now};
+use crate::storage::models::has_decrypt_failure_in_sensitive_fields;
 use crate::storage::quick_command::QuickCommandRepository;
 use crate::storage::row_mapping::FromSqliteRow;
 use crate::storage::traits::Repository;
-use crate::storage::models::has_decrypt_failure_in_sensitive_fields;
 use crate::storage::{ConnectionType, StoredConnection, Workspace};
 
 struct ConnectionRow {

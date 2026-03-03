@@ -10,7 +10,6 @@ use gpui_component::{ActiveTheme, h_flex, v_flex};
 use rust_i18n::t;
 use std::sync::Arc;
 
-
 // TODO 修改赞赏码和地址
 
 const WECHAT_QR_ENV: &str = "ONETCLI_WECHAT_QR_URL";

@@ -94,3 +94,37 @@
 ### 4. 未重复造轮子的证明
 - 图表渲染直接复用现有 `gpui_component::chart`
 - SQL 执行新增 `execute_script_direct` 以复用 DB session 执行链，无新 DB 客户端
+
+## 编码前检查 - db_connection_form-ssh_tunnel
+时间：2026-03-03
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-ssh-tunnel.md`
+- 将复用组件：
+  - `crates/ssh/src/ssh.rs` 的 `RusshClient` 与 `channel_open_direct_tcpip`
+  - `crates/core/src/storage/models.rs` 的 `DbConnectionConfig.extra_params`
+  - `crates/db_view/src/common/db_connection_form.rs` 的表单字段映射
+- 将遵循命名约定：沿用 `ssh_*` 前缀写入 `extra_params`
+- 将遵循代码风格：连接器 `connect/disconnect` 生命周期内持有资源句柄
+- 确认不重复造轮子：不新增 SSH 客户端实现，直接复用仓库 `ssh` crate
+
+## 编码后声明 - db_connection_form-ssh_tunnel
+时间：2026-03-03
+
+### 1. 复用了以下既有组件
+- `crates/ssh/src/ssh.rs`：复用 `RusshClient` 和 `channel_open_direct_tcpip`，新增本地端口转发包装
+- `crates/db_view/src/common/db_connection_form.rs`：复用动态表单字段与 `extra_params` 映射
+- `crates/core/src/storage/models.rs`：复用 `DbConnectionConfig.extra_params` 存储隧道配置
+
+### 2. 遵循了以下项目约定
+- 命名约定：SSH 表单字段统一 `ssh_*`，与 `extra_params` key 对齐
+- 代码风格：连接器在 `connect/disconnect` 里成对管理资源句柄
+- 文件组织：`ssh` 负责传输，`db` 负责连接消费，`db_view` 负责配置采集
+
+### 3. 对比了以下相似实现
+- `crates/ssh/src/ssh.rs`：沿用已有认证/代理/跳板连接方式
+- `crates/db/src/mysql/connection.rs`：沿用原有驱动参数组装，仅替换目标 host/port
+- `crates/db_view/src/common/db_connection_form.rs`：沿用 tab + field 结构扩展 SSH 页面
+
+### 4. 未重复造轮子的证明
+- 未引入第三方 SSH 客户端，直接扩展仓库既有 `ssh` crate
+- 未重写数据库驱动协议层，采用本地转发端口兼容所有现有 TCP 驱动

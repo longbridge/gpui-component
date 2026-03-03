@@ -14,11 +14,14 @@ use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
+use crate::ssh_tunnel::resolve_connection_target;
 use crate::{format_message, truncate_str, DatabasePlugin};
+use ssh::LocalPortForwardTunnel;
 
 pub struct MssqlDbConnection {
     config: DbConnectionConfig,
     client: Arc<Mutex<Option<Client<Compat<TcpStream>>>>>,
+    tunnel: Option<LocalPortForwardTunnel>,
 }
 
 impl MssqlDbConnection {
@@ -26,6 +29,7 @@ impl MssqlDbConnection {
         Self {
             config,
             client: Arc::new(Mutex::new(None)),
+            tunnel: None,
         }
     }
 
@@ -221,10 +225,12 @@ impl DbConnection for MssqlDbConnection {
     async fn connect(&mut self) -> Result<(), DbError> {
         let config = &self.config;
         info!("[MSSQL] Connecting to {}:{}", config.host, config.port);
+        let target = resolve_connection_target(config).await?;
+        self.tunnel = target.tunnel;
 
         let mut tiberius_config = Config::new();
-        tiberius_config.host(&config.host);
-        tiberius_config.port(config.port);
+        tiberius_config.host(&target.host);
+        tiberius_config.port(target.port);
         tiberius_config.authentication(AuthMethod::sql_server(&config.username, &config.password));
 
         if config
@@ -291,6 +297,7 @@ impl DbConnection for MssqlDbConnection {
         debug!("[MSSQL] Disconnecting...");
         let mut guard = self.client.lock().await;
         *guard = None;
+        self.tunnel = None;
         info!("[MSSQL] Disconnected");
         Ok(())
     }

@@ -1,7 +1,7 @@
 use crate::home_tab::HomePage;
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, KeyBinding, ParentElement, Render, Styled, Task,
-    Window, div
+    Window, div,
 };
 
 #[cfg(target_os = "macos")]

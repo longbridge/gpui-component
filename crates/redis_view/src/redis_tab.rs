@@ -6,10 +6,7 @@ use crate::GlobalRedisState;
 use crate::key_value_view::KeyValueView;
 use crate::redis_tree_event::RedisEventHandler;
 use crate::redis_tree_view::RedisTreeView;
-use crate::sidebar::{
-    RedisSidebar, RedisSidebarEvent,
-};
-use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
+use crate::sidebar::{RedisSidebar, RedisSidebarEvent};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     App, AppContext, Axis, Bounds, Context, Element, Entity, EventEmitter, FocusHandle, Focusable,
@@ -18,6 +15,9 @@ use gpui::{
 };
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, h_flex};
 use one_core::gpui_tokio::Tokio;
+use one_core::layout::{
+    SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH,
+};
 use one_core::storage::{ActiveConnections, StoredConnection, Workspace};
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent, TabItem};
 use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};

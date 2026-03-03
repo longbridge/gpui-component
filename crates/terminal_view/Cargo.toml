@@ -17,8 +17,6 @@ one-ui = { workspace = true }
 alacritty_terminal.workspace = true
 
 # Async
-tokio = { workspace = true }
-futures = { workspace = true }
 regex = { workspace = true }
 # Utilities
 anyhow = { workspace = true }
@@ -26,4 +24,4 @@ serde_json = { workspace = true }
 once_cell .workspace = true
 tracing = { workspace = true }
 rust-i18n = { workspace = true }
-url = "2.5.4"
+url.workspace = true

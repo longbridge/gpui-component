@@ -2,12 +2,14 @@ use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
+use crate::ssh_tunnel::resolve_connection_target;
 use crate::{format_message, truncate_str, DatabasePlugin};
 
 use async_trait::async_trait;
 use clickhouse::Client;
 use one_core::storage::DbConnectionConfig;
 use serde::Deserialize;
+use ssh::LocalPortForwardTunnel;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
@@ -15,6 +17,7 @@ use tracing::{debug, error, info};
 pub struct ClickHouseDbConnection {
     config: DbConnectionConfig,
     client: Option<Client>,
+    tunnel: Option<LocalPortForwardTunnel>,
 }
 
 impl ClickHouseDbConnection {
@@ -22,6 +25,7 @@ impl ClickHouseDbConnection {
         Self {
             config,
             client: None,
+            tunnel: None,
         }
     }
 
@@ -197,6 +201,8 @@ impl DbConnection for ClickHouseDbConnection {
     async fn connect(&mut self) -> Result<(), DbError> {
         let config = &self.config;
         info!("[ClickHouse] Connecting to {}:{}", config.host, config.port);
+        let target = resolve_connection_target(config).await?;
+        self.tunnel = target.tunnel;
 
         let protocol = config
             .get_param("schema")
@@ -204,7 +210,7 @@ impl DbConnection for ClickHouseDbConnection {
             .filter(|value| matches!(value.as_str(), "http" | "https"))
             .unwrap_or_else(|| "http".to_string());
 
-        let url = format!("{}://{}:{}", protocol, config.host, config.port);
+        let url = format!("{}://{}:{}", protocol, target.host, target.port);
 
         let mut client = Client::default()
             .with_url(&url)
@@ -242,6 +248,7 @@ impl DbConnection for ClickHouseDbConnection {
     async fn disconnect(&mut self) -> Result<(), DbError> {
         debug!("[ClickHouse] Disconnecting...");
         self.client = None;
+        self.tunnel = None;
         info!("[ClickHouse] Disconnected");
         Ok(())
     }

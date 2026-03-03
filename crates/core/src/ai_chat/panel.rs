@@ -2,6 +2,7 @@
 
 use crate::cloud_sync::GlobalCloudUser;
 use crate::gpui_tokio::Tokio;
+use crate::llm::chat_history::ChatMessage;
 use crate::llm::{
     Message, Role,
     chat_history::{MessageRepository, SessionRepository},
@@ -28,7 +29,6 @@ use rust_i18n::t;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
-use crate::llm::chat_history::ChatMessage;
 // 使用引擎和渲染器
 use super::engine::ChatEngine;
 use super::rendering::ChatMessageRenderer;
@@ -933,8 +933,7 @@ impl AiChatPanel {
                             let msg_id = assistant_msg_id.clone();
                             cx.update(|cx| {
                                 entity.update(cx, |this, cx| {
-                                    this.engine
-                                        .update_streaming_content(&msg_id, full_content);
+                                    this.engine.update_streaming_content(&msg_id, full_content);
                                     this.engine.scroll_to_bottom();
                                     cx.notify();
                                 })
@@ -961,12 +960,11 @@ impl AiChatPanel {
                                         let storage = storage_for_save;
                                         cx.spawn(async move |_this, _cx: &mut AsyncApp| {
                                             if let Some(repo) = storage.get::<MessageRepository>() {
-                                                let mut msg =
-                                                    ChatMessage::new(
-                                                        sid,
-                                                        "assistant".to_string(),
-                                                        content_to_save,
-                                                    );
+                                                let mut msg = ChatMessage::new(
+                                                    sid,
+                                                    "assistant".to_string(),
+                                                    content_to_save,
+                                                );
                                                 if let Err(e) = repo.insert(&mut msg) {
                                                     warn!(
                                                         "Failed to save assistant message: {}",

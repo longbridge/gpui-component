@@ -6,7 +6,7 @@ edition.workspace = true
 
 [dependencies]
 # Async runtime
-tokio = { workspace = true, features = ["fs", "net"] }
+tokio = { workspace = true, features = ["fs", "net", "io-util"] }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

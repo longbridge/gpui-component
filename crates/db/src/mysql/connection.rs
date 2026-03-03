@@ -12,11 +12,14 @@ use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
+use crate::ssh_tunnel::resolve_connection_target;
 use crate::{format_message, truncate_str, DatabasePlugin};
+use ssh::LocalPortForwardTunnel;
 
 pub struct MysqlDbConnection {
     config: DbConnectionConfig,
     conn: Arc<Mutex<Option<Conn>>>,
+    tunnel: Option<LocalPortForwardTunnel>,
 }
 
 impl MysqlDbConnection {
@@ -24,6 +27,7 @@ impl MysqlDbConnection {
         Self {
             config,
             conn: Arc::new(Mutex::new(None)),
+            tunnel: None,
         }
     }
 
@@ -240,10 +244,12 @@ impl DbConnection for MysqlDbConnection {
     async fn connect(&mut self) -> Result<(), DbError> {
         let config = &self.config;
         info!("[MySQL] Connecting to {}:{}", config.host, config.port);
+        let target = resolve_connection_target(config).await?;
+        self.tunnel = target.tunnel;
 
         let mut opts_builder = OptsBuilder::default()
-            .ip_or_hostname(&config.host)
-            .tcp_port(config.port)
+            .ip_or_hostname(&target.host)
+            .tcp_port(target.port)
             .user(Some(&config.username))
             .pass(Some(&config.password));
 
@@ -293,6 +299,7 @@ impl DbConnection for MysqlDbConnection {
         }
 
         info!("[MySQL] Disconnected");
+        self.tunnel = None;
         Ok(())
     }
 

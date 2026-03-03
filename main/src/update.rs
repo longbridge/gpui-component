@@ -392,28 +392,30 @@ impl UpdateDialogView {
         self.status_message = t!("Update.applying").to_string();
         cx.notify();
 
-        cx.spawn(async move |this, cx| match start_install_update(download_path) {
-            Ok(UpdateInstallAction::Quit) => {
-                let _ = cx.update(|cx| {
-                    cx.quit();
-                });
-            }
-            Ok(UpdateInstallAction::Noop) => {
-                let _ = this.update(cx, |view, cx| {
-                    view.applying = false;
-                    view.status_message = t!("Update.download_complete").to_string();
-                    cx.notify();
-                });
-            }
-            Err(err) => {
-                let _ = this.update(cx, |view, cx| {
-                    view.applying = false;
-                    view.error_message = Some(err);
-                    view.status_message = t!("Update.apply_failed").to_string();
-                    cx.notify();
-                });
-            }
-        })
+        cx.spawn(
+            async move |this, cx| match start_install_update(download_path) {
+                Ok(UpdateInstallAction::Quit) => {
+                    let _ = cx.update(|cx| {
+                        cx.quit();
+                    });
+                }
+                Ok(UpdateInstallAction::Noop) => {
+                    let _ = this.update(cx, |view, cx| {
+                        view.applying = false;
+                        view.status_message = t!("Update.download_complete").to_string();
+                        cx.notify();
+                    });
+                }
+                Err(err) => {
+                    let _ = this.update(cx, |view, cx| {
+                        view.applying = false;
+                        view.error_message = Some(err);
+                        view.status_message = t!("Update.apply_failed").to_string();
+                        cx.notify();
+                    });
+                }
+            },
+        )
         .detach();
     }
 
@@ -766,7 +768,6 @@ fn is_cross_device_link_error(err: &std::io::Error) -> bool {
 
 #[cfg(unix)]
 fn set_executable_permission(path: &Path) -> Result<(), String> {
-
     {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = std::fs::metadata(path)

@@ -251,6 +251,62 @@ ConnectionForm:
     en: Application Name
     zh-CN: 应用名称
     zh-HK: 應用名稱
+  ssh_tunnel_enabled:
+    en: Enable SSH Tunnel
+    zh-CN: 启用 SSH 隧道
+    zh-HK: 啟用 SSH 通道
+  ssh_host:
+    en: SSH Host
+    zh-CN: SSH 主机
+    zh-HK: SSH 主機
+  ssh_port:
+    en: SSH Port
+    zh-CN: SSH 端口
+    zh-HK: SSH 端口
+  ssh_username:
+    en: SSH Username
+    zh-CN: SSH 用户名
+    zh-HK: SSH 使用者名稱
+  ssh_password:
+    en: SSH Password
+    zh-CN: SSH 密码
+    zh-HK: SSH 密碼
+  ssh_auth_type:
+    en: SSH Auth Type
+    zh-CN: SSH 认证类型
+    zh-HK: SSH 驗證類型
+  ssh_auth_password:
+    en: Password
+    zh-CN: 密码
+    zh-HK: 密碼
+  ssh_auth_private_key:
+    en: Private Key
+    zh-CN: 私钥
+    zh-HK: 私鑰
+  ssh_private_key_path:
+    en: Private Key Path
+    zh-CN: 私钥路径
+    zh-HK: 私鑰路徑
+  ssh_private_key_passphrase:
+    en: Key Passphrase
+    zh-CN: 私钥口令
+    zh-HK: 私鑰口令
+  ssh_target_host:
+    en: Tunnel Target Host
+    zh-CN: 隧道目标主机
+    zh-HK: 通道目標主機
+  ssh_target_port:
+    en: Tunnel Target Port
+    zh-CN: 隧道目标端口
+    zh-HK: 通道目標端口
+  ssh_tunnel_invalid:
+    en: Invalid SSH tunnel configuration
+    zh-CN: SSH 隧道配置无效
+    zh-HK: SSH 通道設定無效
+  ssh_missing_required:
+    en: "Missing required field: %{field}"
+    zh-CN: "缺少必填字段：%{field}"
+    zh-HK: "缺少必填欄位：%{field}"
 
   # Placeholder
   enter_connection_name:

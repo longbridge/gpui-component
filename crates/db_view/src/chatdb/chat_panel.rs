@@ -1651,11 +1651,13 @@ impl ChatPanel {
                             if let Some(chart_block) = parse_chart_json_block(
                                 &code_block.code(),
                                 code_block.lang().as_deref().map(|v| &**v),
-                            )
-                            {
+                            ) {
                                 let content = panel_for_collapse.read(cx);
-                                return content
-                                    .render_chart_block_container(&chart_block, default_element, cx);
+                                return content.render_chart_block_container(
+                                    &chart_block,
+                                    default_element,
+                                    cx,
+                                );
                             }
 
                             let block = SqlCodeBlock::from_code_block(code_block, options.index);

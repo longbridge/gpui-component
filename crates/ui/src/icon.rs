@@ -191,7 +191,7 @@ pub enum IconName {
     TableDesign,
     Server,
     Export,
-    AI
+    AI,
 }
 
 impl IconName {

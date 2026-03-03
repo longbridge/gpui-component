@@ -3,10 +3,7 @@ use std::ops::Deref;
 use crate::database_objects_tab::DatabaseObjectsPanel;
 use crate::db_tree_event::DatabaseEventHandler;
 use crate::db_tree_view::DbTreeView;
-use crate::sidebar::{
-    DatabaseSidebar, DatabaseSidebarEvent,
-};
-use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH};
+use crate::sidebar::{DatabaseSidebar, DatabaseSidebarEvent};
 use crate::sql_editor_view::SqlEditorTab;
 use db::GlobalDbState;
 use gpui::{
@@ -17,6 +14,9 @@ use gpui::{
 };
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use one_core::ai_chat::{CodeBlockAction, LanguageMatcher};
+use one_core::layout::{
+    SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, TOOLBAR_WIDTH,
+};
 use one_core::storage::{ActiveConnections, Workspace};
 use one_core::{
     storage::StoredConnection,

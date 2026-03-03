@@ -1,8 +1,8 @@
+use gpui::prelude::FluentBuilder;
 use gpui::{
     App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString,
     Styled, Window, div,
 };
-use gpui::prelude::FluentBuilder;
 use gpui_component::{
     ActiveTheme, Disableable, Sizable, TitleBar,
     button::{Button, ButtonVariants as _},

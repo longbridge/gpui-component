@@ -19,8 +19,7 @@ static SESSION_EXPIRED: AtomicBool = AtomicBool::new(false);
 use gpui_component::button::Button;
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::{
-    ActiveTheme, Disableable, Sizable, WindowExt,
-    h_flex,
+    ActiveTheme, Disableable, Sizable, WindowExt, h_flex,
     input::{Input, InputState},
     v_flex,
 };
@@ -154,12 +153,13 @@ impl AuthService {
             }
         } else {
             // 令牌未过期，先设置 auth state（含 expires_at）
-            self.client
-                .set_auth_with_expiry(access_token, refresh_token.clone(), user_id, expires_at);
-            info!(
-                "访问令牌有效（剩余 {}s），已设置认证状态",
-                expires_at - now
+            self.client.set_auth_with_expiry(
+                access_token,
+                refresh_token.clone(),
+                user_id,
+                expires_at,
             );
+            info!("访问令牌有效（剩余 {}s），已设置认证状态", expires_at - now);
 
             // 尝试在后台刷新令牌以获取最新 token
             match self.client.refresh_token(&refresh_token).await {

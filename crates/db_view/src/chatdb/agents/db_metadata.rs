@@ -77,7 +77,7 @@ impl DatabaseMetadataProvider {
                     comment: c.comment,
                     is_primary_key: c.is_primary_key,
                 })
-            .collect(),
+                .collect(),
         })
     }
 

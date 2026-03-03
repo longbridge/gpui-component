@@ -98,8 +98,11 @@ impl HomePage {
         cx: &mut Context<Self>,
     ) -> Self {
         let search_query = cx.new(|_| String::new());
-        let search_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder(t!("Home.search_placeholder")).clean_on_escape());
+        let search_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Home.search_placeholder"))
+                .clean_on_escape()
+        });
 
         // 订阅搜索输入变化
         let query_clone = search_query.clone();
@@ -377,11 +380,7 @@ impl HomePage {
     }
 
     /// 同步前记录本地连接解密状态，用于提示哪些连接会被引擎按连接粒度跳过。
-    fn log_sync_decrypt_health(
-        &self,
-        storage: &one_core::storage::StorageManager,
-        scene: &str,
-    ) {
+    fn log_sync_decrypt_health(&self, storage: &one_core::storage::StorageManager, scene: &str) {
         if let Some(repo) = storage.get::<ConnectionRepository>() {
             match repo.list_sync_decrypt_failures() {
                 Ok(failures) if !failures.is_empty() => {
@@ -404,7 +403,10 @@ impl HomePage {
                 }
             }
         } else {
-            tracing::warn!("{}前解密状态检查失败：ConnectionRepository 不存在，将继续执行同步流程", scene);
+            tracing::warn!(
+                "{}前解密状态检查失败：ConnectionRepository 不存在，将继续执行同步流程",
+                scene
+            );
         }
     }
 
@@ -2672,7 +2674,9 @@ impl Render for HomePage {
 }
 
 /// 使用当前主密钥重新加密并保存所有连接。
-fn re_encrypt_all_connections(storage: &one_core::storage::StorageManager) -> anyhow::Result<usize> {
+fn re_encrypt_all_connections(
+    storage: &one_core::storage::StorageManager,
+) -> anyhow::Result<usize> {
     let conn_repo = storage
         .get::<ConnectionRepository>()
         .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
@@ -2687,4 +2691,3 @@ fn re_encrypt_all_connections(storage: &one_core::storage::StorageManager) -> an
 
     Ok(count)
 }
-

@@ -491,7 +491,11 @@ impl SettingsPanel {
                         h_flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_sm().child(t!("Settings.confirm_multiline_paste")))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .child(t!("Settings.confirm_multiline_paste")),
+                            )
                             .child(
                                 Switch::new("confirm-multiline-paste-switch")
                                     .checked(confirm_multiline)
@@ -508,7 +512,11 @@ impl SettingsPanel {
                         h_flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_sm().child(t!("Settings.confirm_high_risk_command")))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .child(t!("Settings.confirm_high_risk_command")),
+                            )
                             .child(
                                 Switch::new("confirm-high-risk-command-switch")
                                     .checked(confirm_high_risk)

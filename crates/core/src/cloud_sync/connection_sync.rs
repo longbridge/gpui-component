@@ -95,7 +95,10 @@ impl SyncEngine {
             .collect();
         let skipped_conflicts = plan.conflicts.len().saturating_sub(active_conflicts.len());
         if skipped_conflicts > 0 {
-            tracing::warn!("[同步] 跳过 {} 个与解密失败连接相关的冲突", skipped_conflicts);
+            tracing::warn!(
+                "[同步] 跳过 {} 个与解密失败连接相关的冲突",
+                skipped_conflicts
+            );
         }
 
         let resolved_conflicts = self.resolve_conflicts(&active_conflicts)?;
@@ -114,7 +117,11 @@ impl SyncEngine {
         for local_conn in &plan.to_upload {
             if let Some(local_id) = local_conn.id {
                 if failure_ids.contains(&local_id) {
-                    tracing::warn!("[同步] 跳过上传（解密失败）: {} ({})", local_conn.name, local_id);
+                    tracing::warn!(
+                        "[同步] 跳过上传（解密失败）: {} ({})",
+                        local_conn.name,
+                        local_id
+                    );
                     continue;
                 }
                 operations.push(SyncOperation::Upload { local_id });

@@ -171,7 +171,9 @@ impl TerminalSidebar {
                     cx.emit(TerminalSidebarEvent::ConfirmMultilinePasteChanged(*enabled));
                 }
                 settings_panel::SettingsPanelEvent::ConfirmHighRiskCommandChanged(enabled) => {
-                    cx.emit(TerminalSidebarEvent::ConfirmHighRiskCommandChanged(*enabled));
+                    cx.emit(TerminalSidebarEvent::ConfirmHighRiskCommandChanged(
+                        *enabled,
+                    ));
                 }
             },
         );

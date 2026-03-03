@@ -726,31 +726,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bb8"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "457d7ed3f888dfd2c7af56d4975cade43c622f74bdcddfed6d4352f57acc6310"
-dependencies = [
- "futures-util",
- "parking_lot",
- "portable-atomic",
- "tokio",
-]
-
-[[package]]
-name = "bb8-tiberius"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a5023b318f47a294d02b46ce0d82ac8e7df0afce2257f041ba7316566d6cd56"
-dependencies = [
- "bb8",
- "thiserror 1.0.69",
- "tiberius",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "bcrypt-pbkdf"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2162,11 +2137,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bb8-tiberius",
  "chrono",
  "clickhouse",
  "dashmap",
- "deadpool-postgres",
  "gpui",
  "gpui-component",
  "hex",
@@ -2175,7 +2148,6 @@ dependencies = [
  "once_cell",
  "one-core",
  "oracle",
- "postgres-types",
  "proptest",
  "regex",
  "rusqlite",
@@ -2185,6 +2157,7 @@ dependencies = [
  "smol",
  "sqlformat",
  "sqlparser",
+ "ssh",
  "tempfile",
  "thiserror 2.0.14",
  "tiberius",
@@ -2192,7 +2165,6 @@ dependencies = [
  "tokio-postgres",
  "tokio-util",
  "tracing",
- "unicode_categories",
  "uuid",
 ]
 
@@ -2207,14 +2179,12 @@ dependencies = [
  "futures",
  "gpui",
  "gpui-component",
- "hex",
  "json5",
  "lsp-types 0.97.0",
  "once_cell",
  "one-core",
  "one-ui",
  "proptest",
- "rand 0.8.5",
  "regex",
  "rust-i18n",
  "serde",
@@ -2225,41 +2195,6 @@ dependencies = [
  "tracing",
  "uuid",
  "zed-sum-tree",
-]
-
-[[package]]
-name = "deadpool"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0be2b1d1d6ec8d846f05e137292d0b89133caf95ef33695424c09568bdd39b1b"
-dependencies = [
- "deadpool-runtime",
- "lazy_static",
- "num_cpus",
- "tokio",
-]
-
-[[package]]
-name = "deadpool-postgres"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d697d376cbfa018c23eb4caab1fd1883dd9c906a8c034e8d9a3cb06a7e0bef9"
-dependencies = [
- "async-trait",
- "deadpool",
- "getrandom 0.2.16",
- "tokio",
- "tokio-postgres",
- "tracing",
-]
-
-[[package]]
-name = "deadpool-runtime"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
-dependencies = [
- "tokio",
 ]
 
 [[package]]
@@ -5599,18 +5534,14 @@ name = "main"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "base64 0.22.1",
- "db",
  "db_view",
- "dirs 5.0.1",
+ "dirs 6.0.0",
  "dotenvy",
  "futures",
  "gpui",
  "gpui-component",
  "gpui-component-assets",
- "gpui-macros",
- "lsp-types 0.97.0",
  "mongodb_view",
  "one-core",
  "one-ui",
@@ -5622,7 +5553,6 @@ dependencies = [
  "serde_json",
  "sftp_view",
  "smol",
- "ssh",
  "terminal",
  "terminal_view",
  "tokio",
@@ -10156,7 +10086,6 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
- "futures",
  "gpui",
  "gpui-component",
  "once_cell",
@@ -10167,7 +10096,6 @@ dependencies = [
  "serde_json",
  "ssh",
  "terminal",
- "tokio",
  "tracing",
  "url",
 ]
@@ -10232,7 +10160,6 @@ dependencies = [
  "asynchronous-codec",
  "byteorder",
  "bytes",
- "chrono",
  "connection-string",
  "encoding_rs",
  "enumflags2",
@@ -10242,8 +10169,6 @@ dependencies = [
  "pin-project-lite",
  "pretty-hex",
  "thiserror 1.0.69",
- "tokio",
- "tokio-util",
  "tracing",
  "uuid",
  "winauth",
@@ -10383,7 +10308,6 @@ dependencies = [
  "io-uring",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "slab",

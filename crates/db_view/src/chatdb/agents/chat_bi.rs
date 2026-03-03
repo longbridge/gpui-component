@@ -27,7 +27,16 @@ static DESCRIPTOR: AgentDescriptor = AgentDescriptor {
     display_name: "Chat BI",
     description: "Data analysis agent that queries database, analyzes result, and returns chart JSON code block for rendering.",
     keywords: &[
-        "bi", "chart", "dashboard", "trend", "analysis", "同比", "环比", "趋势", "图表", "分析",
+        "bi",
+        "chart",
+        "dashboard",
+        "trend",
+        "analysis",
+        "同比",
+        "环比",
+        "趋势",
+        "图表",
+        "分析",
     ],
     command_prefix: Some("/bi"),
     examples: &[
@@ -67,7 +76,9 @@ impl ChatBiAgent {
             .clone();
 
         let _ = tx
-            .send(AgentEvent::Progress("正在识别分析问题与候选表...".to_string()))
+            .send(AgentEvent::Progress(
+                "正在识别分析问题与候选表...".to_string(),
+            ))
             .await;
 
         let parsed = parse_user_input(&ctx.user_input);
@@ -99,7 +110,8 @@ impl ChatBiAgent {
             t!("QueryWorkflow.source_ai").to_string()
         };
         let mut workflow_prefix = String::new();
-        workflow_prefix.push_str(t!("QueryWorkflow.related_tables_header", source = source).as_ref());
+        workflow_prefix
+            .push_str(t!("QueryWorkflow.related_tables_header", source = source).as_ref());
         workflow_prefix.push_str("```json\n");
         let json_array = serde_json::to_string(&selected_tables)
             .unwrap_or_else(|_| format!("{:?}", selected_tables));
@@ -130,7 +142,9 @@ impl ChatBiAgent {
         let _ = tx.send(AgentEvent::TextDelta(sql_block.clone())).await;
 
         let _ = tx
-            .send(AgentEvent::Progress("正在执行 SQL 获取分析数据...".to_string()))
+            .send(AgentEvent::Progress(
+                "正在执行 SQL 获取分析数据...".to_string(),
+            ))
             .await;
 
         let query_result = db_meta
@@ -139,7 +153,9 @@ impl ChatBiAgent {
             .map_err(|e| format!("执行分析 SQL 失败: {}", e))?;
 
         let _ = tx
-            .send(AgentEvent::Progress("正在生成 BI 分析与图表配置...".to_string()))
+            .send(AgentEvent::Progress(
+                "正在生成 BI 分析与图表配置...".to_string(),
+            ))
             .await;
 
         let analysis = self
@@ -158,9 +174,7 @@ impl ChatBiAgent {
 
         // 通过 TextDelta 发送分析结论与图表，chat_panel 的 full_content 会累积所有 TextDelta，
         // Completed 时优先使用 full_content，因此必须把全部内容都通过 TextDelta 发出
-        let _ = tx
-            .send(AgentEvent::TextDelta(analysis_with_chart))
-            .await;
+        let _ = tx.send(AgentEvent::TextDelta(analysis_with_chart)).await;
 
         tx.send(AgentEvent::Completed(AgentResult::default()))
             .await

@@ -934,7 +934,6 @@ impl From<&CloudWorkspace> for WorkspaceRow {
     }
 }
 
-
 /// 模型列表记录
 #[derive(Debug, Serialize, Deserialize)]
 struct ModelListRow {
@@ -948,7 +947,6 @@ impl From<ModelListRow> for String {
         row.model
     }
 }
-
 
 #[async_trait]
 impl CloudApiClient for SupabaseClient {
@@ -1117,9 +1115,7 @@ impl CloudApiClient for SupabaseClient {
 
         // 主动检查 token 是否即将过期
         if self.is_token_expiring_soon() {
-            info!(
-                "[supabase] proactive token refresh before get_current_user"
-            );
+            info!("[supabase] proactive token refresh before get_current_user");
             self.ensure_token_valid().await?;
         }
 
@@ -1807,12 +1803,7 @@ impl CloudApiClient for SupabaseClient {
         }
 
         // 按优先级尝试 reasoning 字段
-        for key in &[
-            "reasoning_content",
-            "reasoning",
-            "thought",
-            "thinking",
-        ] {
+        for key in &["reasoning_content", "reasoning", "thought", "thinking"] {
             if let Some(val) = message.get(*key).and_then(|v| v.as_str()) {
                 if !val.is_empty() {
                     return Ok(val.to_string());

@@ -2,9 +2,8 @@ use anyhow::Error;
 use db::{GlobalDbState, oracle};
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    IntoElement, ParentElement, PathPromptOptions, Render, SharedString, Styled, Window, div,
-    prelude::*, px,
+    App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    ParentElement, PathPromptOptions, Render, SharedString, Styled, Window, div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size,
@@ -193,6 +192,96 @@ pub struct DbFormConfig {
 }
 
 impl DbFormConfig {
+    fn ssh_tab_group() -> TabGroup {
+        TabGroup::new("ssh", t!("ConnectionForm.ssh")).fields(vec![
+            FormField::new(
+                "ssh_tunnel_enabled",
+                t!("ConnectionForm.ssh_tunnel_enabled"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("false")
+            .options(vec![
+                ("false".to_string(), t!("Common.no").to_string()),
+                ("true".to_string(), t!("Common.yes").to_string()),
+            ]),
+            FormField::new(
+                "ssh_host",
+                t!("ConnectionForm.ssh_host"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder("jump.example.com"),
+            FormField::new(
+                "ssh_port",
+                t!("ConnectionForm.ssh_port"),
+                FormFieldType::Number,
+            )
+            .optional()
+            .default("22")
+            .placeholder("22"),
+            FormField::new(
+                "ssh_username",
+                t!("ConnectionForm.ssh_username"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder("root"),
+            FormField::new(
+                "ssh_auth_type",
+                t!("ConnectionForm.ssh_auth_type"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("password")
+            .options(vec![
+                (
+                    "password".to_string(),
+                    t!("ConnectionForm.ssh_auth_password").to_string(),
+                ),
+                (
+                    "private_key".to_string(),
+                    t!("ConnectionForm.ssh_auth_private_key").to_string(),
+                ),
+            ]),
+            FormField::new(
+                "ssh_password",
+                t!("ConnectionForm.ssh_password"),
+                FormFieldType::Password,
+            )
+            .optional()
+            .placeholder("Enter SSH password"),
+            FormField::new(
+                "ssh_private_key_path",
+                t!("ConnectionForm.ssh_private_key_path"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder("~/.ssh/id_rsa"),
+            FormField::new(
+                "ssh_private_key_passphrase",
+                t!("ConnectionForm.ssh_private_key_passphrase"),
+                FormFieldType::Password,
+            )
+            .optional()
+            .placeholder("Enter key passphrase"),
+            FormField::new(
+                "ssh_target_host",
+                t!("ConnectionForm.ssh_target_host"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder("127.0.0.1"),
+            FormField::new(
+                "ssh_target_port",
+                t!("ConnectionForm.ssh_target_port"),
+                FormFieldType::Number,
+            )
+            .optional()
+            .placeholder("3306"),
+        ])
+    }
+
     /// MySQL form configuration
     pub fn mysql() -> Self {
         Self {
@@ -253,7 +342,7 @@ impl DbFormConfig {
                     .placeholder("28800"),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
-                TabGroup::new("ssh", t!("ConnectionForm.ssh")),
+                Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
                         "remark",
@@ -328,7 +417,7 @@ impl DbFormConfig {
                     .placeholder("Application Name"),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
-                TabGroup::new("ssh", t!("ConnectionForm.ssh")),
+                Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
                         "remark",
@@ -435,7 +524,7 @@ impl DbFormConfig {
                     .placeholder("Application Name"),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
-                TabGroup::new("ssh", t!("ConnectionForm.ssh")),
+                Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
                         "remark",
@@ -502,7 +591,7 @@ impl DbFormConfig {
                     .default("30"),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
-                TabGroup::new("ssh", t!("ConnectionForm.ssh")),
+                Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
                         "remark",
@@ -560,23 +649,19 @@ impl DbFormConfig {
                     .placeholder("database name (optional)"),
                 ]),
                 TabGroup::new("advanced", t!("ConnectionForm.advanced")).fields(vec![
-                    FormField::new(
-                        "schema",
-                        t!("ConnectionForm.schema"),
-                        FormFieldType::Select,
-                    )
-                    .optional()
-                    .default("http")
-                    .options(vec![
-                        (
-                            "http".to_string(),
-                            t!("ConnectionForm.schema_http").to_string(),
-                        ),
-                        (
-                            "https".to_string(),
-                            t!("ConnectionForm.schema_https").to_string(),
-                        ),
-                    ]),
+                    FormField::new("schema", t!("ConnectionForm.schema"), FormFieldType::Select)
+                        .optional()
+                        .default("http")
+                        .options(vec![
+                            (
+                                "http".to_string(),
+                                t!("ConnectionForm.schema_http").to_string(),
+                            ),
+                            (
+                                "https".to_string(),
+                                t!("ConnectionForm.schema_https").to_string(),
+                            ),
+                        ]),
                     FormField::new(
                         "connect_timeout",
                         t!("ConnectionForm.connect_timeout"),
@@ -598,7 +683,7 @@ impl DbFormConfig {
                     ]),
                 ]),
                 TabGroup::new("ssl", t!("ConnectionForm.ssl")),
-                TabGroup::new("ssh", t!("ConnectionForm.ssh")),
+                Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
                         "remark",
@@ -861,7 +946,7 @@ impl DbConnectionForm {
         if !has_error {
             return None;
         }
-        
+
         #[cfg(target_os = "windows")]
         return Some(t!("ConnectionForm.oracle_client_guide_windows").to_string());
         #[cfg(target_os = "macos")]
@@ -928,6 +1013,9 @@ impl DbConnectionForm {
             }
             if let Some(sid) = &params.sid {
                 self.set_field_value("sid", sid, window, cx);
+            }
+            for (key, value) in &params.extra_params {
+                self.set_field_value(key, value, window, cx);
             }
         }
 
@@ -1052,6 +1140,69 @@ impl DbConnectionForm {
         }
 
         self.validate_oracle_client(cx)?;
+        self.validate_ssh_tunnel(cx)?;
+        Ok(())
+    }
+
+    fn validate_ssh_tunnel(&self, cx: &App) -> Result<(), String> {
+        let enabled = self
+            .get_field_value("ssh_tunnel_enabled", cx)
+            .map(|value| value == "true" || value == "1")
+            .unwrap_or(false);
+        if !enabled {
+            return Ok(());
+        }
+
+        for field in ["ssh_host", "ssh_username"] {
+            let value = self
+                .get_field_value(field, cx)
+                .map(|value| value.trim().to_string())
+                .unwrap_or_default();
+            if value.is_empty() {
+                return Err(format!(
+                    "{}: {}",
+                    t!("ConnectionForm.ssh_tunnel_invalid"),
+                    t!("ConnectionForm.ssh_missing_required", field = field)
+                ));
+            }
+        }
+
+        let auth_type = self
+            .get_field_value("ssh_auth_type", cx)
+            .unwrap_or_else(|| "password".to_string());
+
+        if auth_type == "private_key" {
+            let key_path = self
+                .get_field_value("ssh_private_key_path", cx)
+                .map(|value| value.trim().to_string())
+                .unwrap_or_default();
+            if key_path.is_empty() {
+                return Err(format!(
+                    "{}: {}",
+                    t!("ConnectionForm.ssh_tunnel_invalid"),
+                    t!(
+                        "ConnectionForm.ssh_missing_required",
+                        field = "ssh_private_key_path"
+                    )
+                ));
+            }
+        } else {
+            let password = self
+                .get_field_value("ssh_password", cx)
+                .map(|value| value.trim().to_string())
+                .unwrap_or_default();
+            if password.is_empty() {
+                return Err(format!(
+                    "{}: {}",
+                    t!("ConnectionForm.ssh_tunnel_invalid"),
+                    t!(
+                        "ConnectionForm.ssh_missing_required",
+                        field = "ssh_password"
+                    )
+                ));
+            }
+        }
+
         Ok(())
     }
 
