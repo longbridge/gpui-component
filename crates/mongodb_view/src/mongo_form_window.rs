@@ -11,6 +11,7 @@ use gpui_component::{
     checkbox::Checkbox,
     h_flex,
     input::{Input, InputState},
+    scroll::ScrollableElement,
     select::{Select, SelectItem, SelectState},
     tab::{Tab, TabBar},
     v_flex,
@@ -76,7 +77,6 @@ pub struct MongoFormWindow {
     active_tab: usize,
 
     name_input: Entity<InputState>,
-    existing_connection_string: String,
     host_input: Entity<InputState>,
     port_input: Entity<InputState>,
     database_input: Entity<InputState>,
@@ -133,11 +133,6 @@ impl MongoFormWindow {
             }
             state
         });
-
-        let existing_connection_string = existing_parameters
-            .as_ref()
-            .map(|parameters| parameters.connection_string.clone())
-            .unwrap_or_default();
 
         let host_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
@@ -330,7 +325,6 @@ impl MongoFormWindow {
             editing_last_synced_at,
             active_tab: 0,
             name_input,
-            existing_connection_string,
             host_input,
             port_input,
             database_input,
@@ -363,7 +357,7 @@ impl MongoFormWindow {
     fn build_parameters(&self, cx: &App) -> Result<MongoDBParams, String> {
         let host_value = self.host_input.read(cx).text().to_string();
         let host_value = host_value.trim().to_string();
-        if host_value.is_empty() && self.existing_connection_string.is_empty() {
+        if host_value.is_empty() {
             return Err(t!("MongoForm.host_required").to_string());
         }
 
@@ -452,7 +446,7 @@ impl MongoFormWindow {
         };
 
         Ok(MongoDBParams {
-            connection_string: self.existing_connection_string.clone(),
+            connection_string: String::new(),
             host: host_value,
             port: port_value,
             database,
@@ -752,15 +746,24 @@ impl Render for MongoFormWindow {
         let test_result_element = match &self.test_result {
             Some(Ok(())) => Some(
                 div()
+                    .w_full()
+                    .px_6()
+                    .pb_2()
                     .text_sm()
                     .text_color(cx.theme().success)
                     .child(t!("MongoForm.test_success").to_string()),
             ),
             Some(Err(error)) => Some(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone()),
+                div().w_full().px_6().pb_2().child(
+                    div()
+                        .w_full()
+                        .max_h(px(120.0))
+                        .overflow_y_scrollbar()
+                        .whitespace_normal()
+                        .text_sm()
+                        .text_color(cx.theme().danger)
+                        .child(error.clone()),
+                ),
             ),
             None => None,
         };
@@ -811,9 +814,7 @@ impl Render for MongoFormWindow {
                         _ => div().into_any_element(),
                     }),
             )
-            .when_some(test_result_element, |this, elem| {
-                this.child(h_flex().justify_center().pb_2().child(elem))
-            })
+            .when_some(test_result_element, |this, elem| this.child(elem))
             .child(
                 h_flex()
                     .justify_end()

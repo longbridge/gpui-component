@@ -119,3 +119,31 @@
 ### 本地验证结果
 - 通过：`cargo check -p ssh -p db -p db_view`
 - 备注：当前为编译与静态验证，建议后续补一条真实 SSH 隧道集成测试
+
+## terminal-dropdown-render 审查报告
+时间：2026-03-03
+
+### 需求字段完整性
+- 目标：修复下拉选择时终端渲染错乱/残影
+- 范围：`crates/terminal_view/src/terminal_element.rs`
+- 交付物：代码修复 + 本地构建验证 + 操作日志留痕
+- 审查要点：是否消除字符擦除残影且不破坏增量渲染结构
+
+### 技术维度评分
+- 代码质量（29/30）：改动小且聚焦根因，字段透传清晰
+- 测试覆盖（25/30）：完成 `cargo check -p terminal_view`；缺少自动化 UI 回归测试
+- 规范遵循（30/30）：按仓库流程完成上下文、日志与验证留痕
+
+### 战略维度评分
+- 需求匹配（19/20）：直接命中用户反馈场景
+- 架构一致（19/20）：沿用现有 Element 渲染链路
+- 风险评估（9/10）：识别背景填充带来的轻微额外绘制成本
+
+### 综合评分
+- 总分：92/100
+- 建议：通过
+
+### 本地验证记录
+- 命令：`cd /Users/hufei/RustroverProjects/onetcli && cargo check -p terminal_view`
+- 结果：通过（2.06s）
+- 附注：出现既有 future-incompat 警告（`num-bigint-dig v0.8.4`），与本次改动无关

@@ -137,6 +137,51 @@ impl MongoConnectionImpl {
     fn client(&self) -> Result<&Client, MongoError> {
         self.client.as_ref().ok_or(MongoError::NotConnected)
     }
+
+    fn has_auth_source(connection_string: &str) -> bool {
+        connection_string
+            .to_ascii_lowercase()
+            .contains("authsource=")
+    }
+
+    fn has_credentials(connection_string: &str) -> bool {
+        connection_string.contains('@')
+    }
+
+    fn is_authentication_failed(error: &mongodb::error::Error) -> bool {
+        let message = error.to_string();
+        message.contains("SCRAM failure")
+            || message.contains("AuthenticationFailed")
+            || message.contains("code 18")
+    }
+
+    fn append_admin_auth_source(connection_string: &str) -> String {
+        if connection_string.contains('?') {
+            if connection_string.ends_with('?') || connection_string.ends_with('&') {
+                return format!("{}authSource=admin", connection_string);
+            }
+            return format!("{}&authSource=admin", connection_string);
+        }
+
+        let has_path = connection_string
+            .split_once("://")
+            .map(|(_, remaining)| remaining.contains('/'))
+            .unwrap_or(false);
+        if has_path {
+            format!("{}?authSource=admin", connection_string)
+        } else {
+            format!("{}/?authSource=admin", connection_string)
+        }
+    }
+
+    fn should_retry_with_admin_auth_source(
+        connection_string: &str,
+        error: &mongodb::error::Error,
+    ) -> bool {
+        !Self::has_auth_source(connection_string)
+            && Self::has_credentials(connection_string)
+            && Self::is_authentication_failed(error)
+    }
 }
 
 #[async_trait]
@@ -150,7 +195,8 @@ impl MongoConnection for MongoConnectionImpl {
             return Ok(());
         }
 
-        let client = Client::with_uri_str(&self.config.connection_string)
+        let connection_string = self.config.connection_string.clone();
+        let client = Client::with_uri_str(&connection_string)
             .await
             .map_err(|e| {
                 MongoError::connection_with_source(
@@ -158,8 +204,47 @@ impl MongoConnection for MongoConnectionImpl {
                     e,
                 )
             })?;
-        self.client = Some(client);
-        Ok(())
+
+        match client
+            .database("admin")
+            .run_command(doc! { "ping": 1 })
+            .await
+        {
+            Ok(_) => {
+                self.client = Some(client);
+                Ok(())
+            }
+            Err(error) if Self::should_retry_with_admin_auth_source(&connection_string, &error) => {
+                let retry_connection_string = Self::append_admin_auth_source(&connection_string);
+                let retry_client = Client::with_uri_str(&retry_connection_string)
+                    .await
+                    .map_err(|e| {
+                        MongoError::connection_with_source(
+                            t!("MongoConnection.connect_failed").to_string(),
+                            e,
+                        )
+                    })?;
+
+                retry_client
+                    .database("admin")
+                    .run_command(doc! { "ping": 1 })
+                    .await
+                    .map_err(|e| {
+                        MongoError::command_with_source(
+                            t!("MongoConnection.ping_failed").to_string(),
+                            e,
+                        )
+                    })?;
+
+                self.config.connection_string = retry_connection_string;
+                self.client = Some(retry_client);
+                Ok(())
+            }
+            Err(error) => Err(MongoError::command_with_source(
+                t!("MongoConnection.ping_failed").to_string(),
+                error,
+            )),
+        }
     }
 
     async fn disconnect(&mut self) -> Result<(), MongoError> {

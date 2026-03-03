@@ -114,11 +114,6 @@ impl MongoManager {
     }
 
     pub fn build_connection_string(params: &MongoDBParams) -> Result<String, MongoError> {
-        let raw_connection_string = params.connection_string.trim().to_string();
-        if !raw_connection_string.is_empty() {
-            return Ok(raw_connection_string);
-        }
-
         let host_value = params.host.trim().to_string();
         if host_value.is_empty() {
             return Err(MongoError::Internal(
@@ -307,15 +302,15 @@ mod tests {
     }
 
     #[test]
-    fn build_connection_string_returns_raw_connection_string_when_provided() {
+    fn build_connection_string_ignores_raw_connection_string_and_uses_fields() {
         let params = MongoDBParams {
             connection_string: "mongodb://raw-host:27017/?authSource=admin".to_string(),
-            host: "ignored".to_string(),
+            host: "localhost".to_string(),
             port: Some(27017),
-            database: None,
-            username: None,
-            password: None,
-            auth_source: None,
+            database: Some("app".to_string()),
+            username: Some("user".to_string()),
+            password: Some("pass".to_string()),
+            auth_source: Some("admin".to_string()),
             replica_set: None,
             read_preference: None,
             use_srv_record: false,
@@ -324,7 +319,10 @@ mod tests {
             connect_timeout_seconds: None,
             application_name: None,
         };
-        let uri = MongoManager::build_connection_string(&params).expect("应返回原始连接串");
-        assert_eq!(uri, "mongodb://raw-host:27017/?authSource=admin");
+        let uri = MongoManager::build_connection_string(&params).expect("应按字段拼接连接串");
+        assert_eq!(
+            uri,
+            "mongodb://user:pass@localhost:27017/app?authSource=admin"
+        );
     }
 }

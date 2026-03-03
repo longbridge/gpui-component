@@ -128,3 +128,37 @@
 ### 4. 未重复造轮子的证明
 - 未引入第三方 SSH 客户端，直接扩展仓库既有 `ssh` crate
 - 未重写数据库驱动协议层，采用本地转发端口兼容所有现有 TCP 驱动
+
+## 编码前检查 - terminal-dropdown-render
+时间：2026-03-03
+
+- 已查阅上下文摘要文件：`.claude/context-summary-terminal-dropdown-render.md`
+- 将使用以下可复用组件：
+  - `RenderCache -> TerminalElementImpl` 字段透传链路（`crates/terminal_view/src/terminal_element.rs`）
+  - `redis_cli_element` 的“先刷背景再绘制文本”模式（`crates/redis_view/src/redis_cli_element.rs`）
+  - `ui/input/element` 的“覆盖旧文本”策略（`crates/ui/src/input/element.rs:1609`）
+- 将遵循命名约定：Rust snake_case / PascalCase
+- 将遵循代码风格：最小侵入改动，保持现有渲染流程
+- 确认不重复造轮子：仅修复已有 `terminal_element` 绘制顺序，不引入新渲染系统
+
+## 编码后声明 - terminal-dropdown-render
+时间：2026-03-03
+
+### 1. 复用了以下既有组件
+- `RenderCache` 与 `TerminalElementImpl` 现有透传结构：新增背景字段透传，不改缓存重建逻辑
+- `redis_cli_element` 的先刷背景绘制顺序：用于消除旧文本残留
+- `ui/input/element` 的背景覆盖思路：用于处理字符被擦除后的可视残影
+
+### 2. 遵循了以下项目约定
+- 命名约定：字段命名使用 `custom_background` 与现有 `custom_cursor` 对齐
+- 代码风格：保留既有可见区裁剪和绘制顺序，仅在 paint 前置覆盖背景
+- 文件组织：仅修改 `crates/terminal_view/src/terminal_element.rs`
+
+### 3. 对比了以下相似实现
+- `crates/redis_view/src/redis_cli_element.rs:459`：保持先背景后文本策略一致
+- `crates/ui/src/input/element.rs:1609`：沿用“覆盖旧文本”理念
+- `crates/terminal_view/src/terminal_element.rs` 原逻辑：保持增量缓存与 cursor 渲染行为不变
+
+### 4. 未重复造轮子的证明
+- 未新增渲染模块或新依赖，仅复用现有字段与 paint 流程扩展
+- 未改动 addon、selection、damage 重建机制，问题在原模块内闭环修复
