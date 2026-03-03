@@ -2,6 +2,7 @@ use gpui::{
     App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString,
     Styled, Window, div,
 };
+use gpui::prelude::FluentBuilder;
 use gpui_component::{
     ActiveTheme, Disableable, Sizable, TitleBar,
     button::{Button, ButtonVariants as _},
@@ -129,6 +130,7 @@ impl Focusable for ConnectionFormWindow {
 impl Render for ConnectionFormWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_testing = self.form.read(cx).is_testing(cx);
+        let test_result_msg = self.form.read(cx).test_result_msg(cx);
 
         v_flex()
             .size_full()
@@ -152,6 +154,28 @@ impl Render for ConnectionFormWindow {
                     .overflow_y_scrollbar()
                     .child(self.form.clone()),
             )
+            .when_some(test_result_msg, |this, msg| {
+                let is_success = msg.starts_with("✓");
+                this.child(
+                    div()
+                        .mx_4()
+                        .mb_2()
+                        .px_3()
+                        .py_2()
+                        .rounded_md()
+                        .bg(if is_success {
+                            gpui::rgb(0xdcfce7)
+                        } else {
+                            gpui::rgb(0xfee2e2)
+                        })
+                        .text_color(if is_success {
+                            gpui::rgb(0x166534)
+                        } else {
+                            gpui::rgb(0x991b1b)
+                        })
+                        .child(msg),
+                )
+            })
             .child(
                 h_flex()
                     .justify_end()

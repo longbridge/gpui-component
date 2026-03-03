@@ -1201,6 +1201,15 @@ impl DbConnectionForm {
         *self.is_testing.read(cx)
     }
 
+    /// 返回测试连接结果的显示文字，无结果时返回 None
+    pub fn test_result_msg(&self, cx: &App) -> Option<String> {
+        self.test_result.read(cx).as_ref().map(|r| match r {
+            Ok(true) => format!("✓ {}", t!("ConnectionForm.test_success")),
+            Ok(false) => format!("✗ {}", t!("ConnectionForm.connection_failed")),
+            Err(e) => format!("✗ {}", e),
+        })
+    }
+
     pub fn set_test_result(&mut self, result: Result<bool, String>, cx: &mut Context<Self>) {
         self.is_testing.update(cx, |testing, cx| {
             *testing = false;
@@ -1328,12 +1337,6 @@ impl Render for DbConnectionForm {
             }
             self.pending_file_path.update(cx, |p, _| *p = None);
         }
-
-        let test_result_msg = self.test_result.read(cx).as_ref().map(|r| match r {
-            Ok(true) => format!("✓ {}", t!("ConnectionForm.test_success")),
-            Ok(false) => format!("✗ {}", t!("ConnectionForm.connection_failed")),
-            Err(e) => format!("✗ {}", e),
-        });
 
         // Calculate field input indices for current tab
         let mut field_input_offset = 0;
@@ -1686,34 +1689,6 @@ impl Render for DbConnectionForm {
                                 .h_full()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(t!("SqlEditor.no_settings").to_string()),
-                        )
-                    }),
-            )
-            .child(
-                // Test result message area
-                div()
-                    .h(px(40.))
-                    .flex()
-                    .items_center()
-                    .when_some(test_result_msg, |this, msg| {
-                        let is_success = msg.starts_with("✓");
-                        this.child(
-                            div()
-                                .w_full()
-                                .px_3()
-                                .py_2()
-                                .rounded_md()
-                                .bg(if is_success {
-                                    gpui::rgb(0xdcfce7)
-                                } else {
-                                    gpui::rgb(0xfee2e2)
-                                })
-                                .text_color(if is_success {
-                                    gpui::rgb(0x166534)
-                                } else {
-                                    gpui::rgb(0x991b1b)
-                                })
-                                .child(msg),
                         )
                     }),
             )
