@@ -106,7 +106,7 @@ lsp-types.workspace = true
 instant = { version = "0.1", features = ["wasm-bindgen"] }
 
 # Native-only dependencies (not available on WASM)
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 smol.workspace = true
 tree-sitter = "0.25.4"
 tree-sitter-astro-next = { version="0.1.1", optional = true }
