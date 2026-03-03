@@ -71,7 +71,7 @@ pub enum TerminalSidebarEvent {
     FontFamilyChanged(String),
     /// 主题变更
     ThemeChanged(TerminalTheme),
-    /// 执行命令
+    /// 粘贴命令到终端输入区（不自动回车）
     ExecuteCommand(String),
     /// 请求询问 AI
     AskAi,
@@ -79,6 +79,10 @@ pub enum TerminalSidebarEvent {
     PasteCodeToTerminal(String),
     /// 光标闪烁变更
     CursorBlinkChanged(bool),
+    /// 非 bracketed 模式下，多行粘贴确认开关
+    ConfirmMultilinePasteChanged(bool),
+    /// 高危命令确认开关
+    ConfirmHighRiskCommandChanged(bool),
 }
 
 /// 终端侧边栏组件
@@ -162,6 +166,12 @@ impl TerminalSidebar {
                 }
                 settings_panel::SettingsPanelEvent::CursorBlinkChanged(enabled) => {
                     cx.emit(TerminalSidebarEvent::CursorBlinkChanged(*enabled));
+                }
+                settings_panel::SettingsPanelEvent::ConfirmMultilinePasteChanged(enabled) => {
+                    cx.emit(TerminalSidebarEvent::ConfirmMultilinePasteChanged(*enabled));
+                }
+                settings_panel::SettingsPanelEvent::ConfirmHighRiskCommandChanged(enabled) => {
+                    cx.emit(TerminalSidebarEvent::ConfirmHighRiskCommandChanged(*enabled));
                 }
             },
         );

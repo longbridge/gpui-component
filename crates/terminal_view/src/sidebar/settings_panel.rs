@@ -41,6 +41,10 @@ pub enum SettingsPanelEvent {
     ThemeChanged(TerminalTheme),
     /// 光标闪烁变更
     CursorBlinkChanged(bool),
+    /// 非 bracketed 模式下，多行粘贴确认开关
+    ConfirmMultilinePasteChanged(bool),
+    /// 高危命令确认开关
+    ConfirmHighRiskCommandChanged(bool),
 }
 
 /// 设置面板组件
@@ -55,6 +59,10 @@ pub struct SettingsPanel {
     current_theme: TerminalTheme,
     /// 光标闪烁开关
     cursor_blink: bool,
+    /// 非 bracketed 模式下，多行粘贴确认
+    confirm_multiline_paste: bool,
+    /// 高危命令确认
+    confirm_high_risk_command: bool,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 订阅
@@ -168,6 +176,8 @@ impl SettingsPanel {
             font_select_state,
             current_theme: initial_theme.clone(),
             cursor_blink: false,
+            confirm_multiline_paste: true,
+            confirm_high_risk_command: true,
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
         }
@@ -455,6 +465,65 @@ impl SettingsPanel {
             )
     }
 
+    fn render_safety_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        let muted_fg = cx.theme().muted_foreground;
+
+        let confirm_multiline = self.confirm_multiline_paste;
+        let confirm_high_risk = self.confirm_high_risk_command;
+
+        v_flex()
+            .gap_3()
+            .p_3()
+            .border_t_1()
+            .border_color(border)
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(muted_fg)
+                            .child(t!("Settings.safety").to_uppercase()),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_sm().child(t!("Settings.confirm_multiline_paste")))
+                            .child(
+                                Switch::new("confirm-multiline-paste-switch")
+                                    .checked(confirm_multiline)
+                                    .small()
+                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
+                                        this.confirm_multiline_paste = *checked;
+                                        cx.emit(SettingsPanelEvent::ConfirmMultilinePasteChanged(
+                                            *checked,
+                                        ));
+                                    })),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_sm().child(t!("Settings.confirm_high_risk_command")))
+                            .child(
+                                Switch::new("confirm-high-risk-command-switch")
+                                    .checked(confirm_high_risk)
+                                    .small()
+                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
+                                        this.confirm_high_risk_command = *checked;
+                                        cx.emit(SettingsPanelEvent::ConfirmHighRiskCommandChanged(
+                                            *checked,
+                                        ));
+                                    })),
+                            ),
+                    ),
+            )
+    }
+
     /// 渲染主题选择区域
     fn render_theme_section(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
@@ -516,6 +585,7 @@ impl Render for SettingsPanel {
                     .child(self.render_search_section(cx))
                     .child(self.render_font_section(cx))
                     .child(self.render_cursor_section(cx))
+                    .child(self.render_safety_section(cx))
                     .child(self.render_theme_section(cx)),
             )
     }

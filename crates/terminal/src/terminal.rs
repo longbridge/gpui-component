@@ -71,6 +71,29 @@ pub struct SshTerminalConfig {
 const DEFAULT_COLS: usize = 80;
 const DEFAULT_ROWS: usize = 24;
 
+/// 将路径安全地转为 POSIX shell 单参数，避免命令注入。
+fn shell_escape_arg(arg: &str) -> String {
+    if arg.is_empty() {
+        return "''".to_string();
+    }
+
+    let mut escaped = String::with_capacity(arg.len() + 2);
+    escaped.push('\'');
+    for ch in arg.chars() {
+        if ch == '\'' {
+            escaped.push_str("'\"'\"'");
+        } else {
+            escaped.push(ch);
+        }
+    }
+    escaped.push('\'');
+    escaped
+}
+
+fn build_cd_command(dir: &str) -> String {
+    format!("cd -- {}", shell_escape_arg(dir))
+}
+
 /// 终端模型 Entity
 ///
 /// 负责管理终端的核心状态，包括：
@@ -234,12 +257,12 @@ impl Terminal {
         let init_commands = {
             let mut commands = Vec::new();
             if let Some(work_dir) = working_dir {
-                commands.push(format!("cd {}", work_dir));
+                commands.push(build_cd_command(work_dir));
             } else {
                 // 切换到默认目录
                 if let Some(ref dir) = ssh_params.default_directory {
                     if !dir.is_empty() {
-                        commands.push(format!("cd {}", dir));
+                        commands.push(build_cd_command(dir));
                     }
                 }
                 if let Some(ref script) = ssh_params.init_script {
@@ -758,6 +781,29 @@ impl Terminal {
 }
 
 impl EventEmitter<TerminalModelEvent> for Terminal {}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_cd_command, shell_escape_arg};
+
+    #[test]
+    fn shell_escape_arg_handles_single_quote() {
+        let escaped = shell_escape_arg("a'b");
+        assert_eq!(escaped, "'a'\"'\"'b'");
+    }
+
+    #[test]
+    fn build_cd_command_escapes_injection_chars() {
+        let cmd = build_cd_command("dir; rm -rf /");
+        assert_eq!(cmd, "cd -- 'dir; rm -rf /'");
+    }
+
+    #[test]
+    fn build_cd_command_escapes_newline() {
+        let cmd = build_cd_command("a\nb");
+        assert_eq!(cmd, "cd -- 'a\nb'");
+    }
+}
 
 impl Drop for Terminal {
     fn drop(&mut self) {

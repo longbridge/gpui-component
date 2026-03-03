@@ -287,6 +287,18 @@ Settings:
     en: Cursor Blink
     zh-CN: 光标闪烁
     zh-HK: 游標閃爍
+  safety:
+    en: Safety
+    zh-CN: 安全确认
+    zh-HK: 安全確認
+  confirm_multiline_paste:
+    en: Confirm multiline paste (non-bracketed)
+    zh-CN: 非 bracketed 多行粘贴需确认
+    zh-HK: 非 bracketed 多行貼上需確認
+  confirm_high_risk_command:
+    en: Confirm high-risk command paste
+    zh-CN: 高危命令粘贴需确认
+    zh-HK: 高危命令貼上需確認
 
 # 右键菜单
 ContextMenu:
@@ -351,12 +363,86 @@ TerminalView:
 ```
 %{content}
 ```"
+  multiline_paste_title:
+    en: Confirm Multiline Paste
+    zh-CN: 确认多行粘贴
+    zh-HK: 確認多行貼上
+  multiline_paste_message:
+    en: Bracketed paste is disabled. Multiline content may execute immediately. Continue?
+    zh-CN: 当前未开启 bracketed paste，多行内容可能立即执行。是否继续？
+    zh-HK: 當前未開啟 bracketed paste，多行內容可能立即執行。是否繼續？
+  high_risk_paste_title:
+    en: Confirm High-Risk Command
+    zh-CN: 确认高危命令
+    zh-HK: 確認高危命令
+  high_risk_paste_message:
+    en: Potentially destructive command detected. Please confirm before pasting.
+    zh-CN: 检测到可能破坏系统的命令，请确认后再粘贴。
+    zh-HK: 檢測到可能破壞系統的命令，請確認後再貼上。
+  paste_preview:
+    en: Paste preview
+    zh-CN: 粘贴预览
+    zh-HK: 貼上預覽
 
 TerminalSidebar:
   paste_to_terminal:
     en: "Paste to terminal"
     zh-CN: "粘贴到终端"
     zh-HK: "貼上到終端"
+
+QuickCommand:
+  copied:
+    en: Command copied to clipboard
+    zh-CN: 命令已复制到剪贴板
+    zh-HK: 命令已複製到剪貼板
+  copy_tooltip:
+    en: Copy to clipboard
+    zh-CN: 复制到剪贴板
+    zh-HK: 複製到剪貼板
+  paste_tooltip:
+    en: Paste to terminal input
+    zh-CN: 粘贴到终端输入框
+    zh-HK: 貼上到終端輸入框
+  pin_tooltip:
+    en: Pin command
+    zh-CN: 置顶命令
+    zh-HK: 置頂命令
+  unpin_tooltip:
+    en: Unpin command
+    zh-CN: 取消置顶命令
+    zh-HK: 取消置頂命令
+  delete_tooltip:
+    en: Delete command
+    zh-CN: 删除命令
+    zh-HK: 刪除命令
+  add_tooltip:
+    en: Add quick command
+    zh-CN: 添加快捷命令
+    zh-HK: 添加快捷命令
+  close_tooltip:
+    en: Close panel
+    zh-CN: 关闭面板
+    zh-HK: 關閉面板
+  cancel_tooltip:
+    en: Cancel adding command
+    zh-CN: 取消添加命令
+    zh-HK: 取消添加命令
+  confirm_add_tooltip:
+    en: Confirm add command
+    zh-CN: 确认添加命令
+    zh-HK: 確認添加命令
+  delete_confirm_title:
+    en: Confirm delete quick command
+    zh-CN: 确认删除快捷命令
+    zh-HK: 確認刪除快捷命令
+  delete_confirm_message:
+    en: This action cannot be undone. Continue?
+    zh-CN: 删除后不可恢复，是否继续？
+    zh-HK: 刪除後不可恢復，是否繼續？
+  delete_action:
+    en: Delete
+    zh-CN: 删除
+    zh-HK: 刪除
 
 # SSH 会话状态
 SshSession:

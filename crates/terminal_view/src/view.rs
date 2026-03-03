@@ -5,9 +5,10 @@ use alacritty_terminal::term::TermMode;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
-use gpui_component::{BlinkCursor, Icon, IconName, Sizable, Size};
+use gpui_component::{BlinkCursor, Icon, IconName, Sizable, Size, WindowExt};
 use std::borrow::Cow;
 use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
@@ -120,6 +121,10 @@ pub struct TerminalView {
 
     /// 是否启用光标闪烁
     cursor_blink_enabled: bool,
+    /// 非 bracketed 模式下，多行粘贴是否弹确认
+    confirm_multiline_paste: bool,
+    /// 高危命令是否弹确认
+    confirm_high_risk_command: bool,
 
     /// 侧边栏面板大小
     sidebar_panel_size: Pixels,
@@ -274,8 +279,8 @@ impl TerminalView {
         // 创建侧边栏
         let sidebar = cx.new(|cx| TerminalSidebar::new(connection_id, &default_theme, window, cx));
 
-        // 订阅侧边栏事件
-        let sidebar_subscription = cx.subscribe(&sidebar, Self::handle_sidebar_event);
+        // 订阅侧边栏事件（需要 window 以便弹确认对话框）
+        let sidebar_subscription = cx.subscribe_in(&sidebar, window, Self::handle_sidebar_event);
 
         // 订阅 Terminal 事件
         let terminal_subscription = cx.subscribe(&terminal, Self::handle_terminal_event);
@@ -340,6 +345,8 @@ impl TerminalView {
             current_theme: default_theme,
             tab_index,
             cursor_blink_enabled: false,
+            confirm_multiline_paste: true,
+            confirm_high_risk_command: true,
             sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
             resizing: None,
             view_bounds: Bounds::default(),
@@ -351,8 +358,9 @@ impl TerminalView {
     /// 处理侧边栏事件
     fn handle_sidebar_event(
         &mut self,
-        _sidebar: Entity<TerminalSidebar>,
+        _sidebar: &Entity<TerminalSidebar>,
         event: &TerminalSidebarEvent,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
@@ -379,14 +387,12 @@ impl TerminalView {
                 self.set_theme(theme.clone(), cx);
             }
             TerminalSidebarEvent::ExecuteCommand(command) => {
-                // 发送命令到终端
-                self.terminal.update(cx, |term, _cx| {
-                    term.write(format!("{}\n", command).as_bytes());
-                });
+                // 仅粘贴命令，不自动回车执行，降低误操作风险
+                self.paste_text(command, window, cx);
             }
             TerminalSidebarEvent::PasteCodeToTerminal(code) => {
                 // 粘贴代码块到终端（使用 bracketed paste 模式，不自动执行）
-                self.paste_code_block(&code, cx);
+                self.paste_code_block(&code, window, cx);
             }
             TerminalSidebarEvent::AskAi => {
                 // AI 请求已由 sidebar 内部处理，这里只需要通知刷新
@@ -399,6 +405,12 @@ impl TerminalView {
                 } else {
                     self.blink_manager.update(cx, BlinkCursor::stop);
                 }
+            }
+            TerminalSidebarEvent::ConfirmMultilinePasteChanged(enabled) => {
+                self.confirm_multiline_paste = *enabled;
+            }
+            TerminalSidebarEvent::ConfirmHighRiskCommandChanged(enabled) => {
+                self.confirm_high_risk_command = *enabled;
             }
         }
     }
@@ -726,7 +738,7 @@ impl TerminalView {
     fn paste(&mut self, _: &Paste, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
             if let Some(text) = clipboard.text() {
-                self.paste_text(&text, cx);
+                self.paste_text(&text, _window, cx);
             }
         }
     }
@@ -737,7 +749,38 @@ impl TerminalView {
     /// 1. 多行文本不会被立即执行（每一行都需要用户确认）
     /// 2. 保持文本的完整性，让用户可以检查后再执行
     /// 3. 避免意外执行危险命令
-    fn paste_text(&mut self, text: &str, cx: &mut Context<Self>) {
+    fn paste_text(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.confirm_high_risk_command && Self::contains_high_risk_command(text) {
+            self.show_paste_confirm_dialog(
+                text.to_string(),
+                t!("TerminalView.high_risk_paste_title").to_string(),
+                t!("TerminalView.high_risk_paste_message").to_string(),
+                window,
+                cx,
+            );
+            return;
+        }
+
+        let mode = self.terminal.read(cx).mode();
+        let is_multiline = text.lines().filter(|line| !line.trim().is_empty()).count() > 1;
+        if self.confirm_multiline_paste
+            && is_multiline
+            && !mode.contains(TermMode::BRACKETED_PASTE)
+        {
+            self.show_paste_confirm_dialog(
+                text.to_string(),
+                t!("TerminalView.multiline_paste_title").to_string(),
+                t!("TerminalView.multiline_paste_message").to_string(),
+                window,
+                cx,
+            );
+            return;
+        }
+
+        self.paste_text_unchecked(text, cx);
+    }
+
+    fn paste_text_unchecked(&mut self, text: &str, cx: &mut Context<Self>) {
         // 仅在应用请求 bracketed paste 模式时才包装，避免把控制序列
         // 原样送进不支持的程序（例如 Vim 未开启时可能导致光标/位置异常）。
         let mode = self.terminal.read(cx).mode();
@@ -752,8 +795,91 @@ impl TerminalView {
     /// 粘贴代码块到终端（用于AI生成的代码）
     ///
     /// 内部调用 paste_text，保持统一的粘贴行为
-    fn paste_code_block(&mut self, code: &str, cx: &mut Context<Self>) {
-        self.paste_text(code, cx);
+    fn paste_code_block(&mut self, code: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.paste_text(code, window, cx);
+    }
+
+    fn show_paste_confirm_dialog(
+        &mut self,
+        text: String,
+        title: String,
+        message: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let preview = text
+            .lines()
+            .take(6)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let has_more = text.lines().count() > 6;
+        let view = cx.entity().clone();
+
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let view_ok = view.clone();
+            let text_ok = text.clone();
+            let preview_text = if has_more {
+                format!("{}\n...", preview)
+            } else {
+                preview.clone()
+            };
+
+            dialog
+                .title(title.clone())
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(div().text_sm().child(message.clone()))
+                        .child(div().text_xs().child(t!("TerminalView.paste_preview")))
+                        .child(
+                            div()
+                                .max_h(px(180.0))
+                                .overflow_hidden()
+                                .text_xs()
+                                .child(preview_text),
+                        )
+                        .into_any_element(),
+                )
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("Common.ok"))
+                        .cancel_text(t!("Common.cancel")),
+                )
+                .on_ok(move |_event, _window, cx| {
+                    view_ok.update(cx, |this, cx| {
+                        this.paste_text_unchecked(&text_ok, cx);
+                    });
+                    true
+                })
+        });
+    }
+
+    fn contains_high_risk_command(text: &str) -> bool {
+        text.lines().any(|line| {
+            let cmd = line.trim().to_lowercase();
+            if cmd.is_empty() {
+                return false;
+            }
+
+            cmd.starts_with("rm -rf")
+                || cmd.contains(" rm -rf ")
+                || cmd.starts_with("mkfs")
+                || cmd.starts_with("dd if=")
+                || cmd.starts_with("shutdown ")
+                || cmd.starts_with("reboot")
+                || cmd.starts_with("poweroff")
+                || cmd.starts_with("systemctl stop ")
+                || cmd.starts_with("systemctl disable ")
+                || cmd.starts_with("chmod -r 777 /")
+                || cmd.starts_with("chown -r ")
+                || cmd.contains(":(){")
+                || cmd.contains("curl ")
+                    && (cmd.contains("| sh") || cmd.contains("| bash"))
+                || cmd.contains("wget ")
+                    && (cmd.contains("| sh") || cmd.contains("| bash"))
+        })
     }
 
     fn select_all(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {

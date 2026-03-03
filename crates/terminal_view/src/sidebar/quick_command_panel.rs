@@ -2,21 +2,25 @@
 //!
 //! 支持命令的新增、置顶、删除功能
 
-use gpui::prelude::FluentBuilder;
+use gpui::prelude::*;
 use gpui::{
-    div, px, uniform_list, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, ParentElement, Render,
-    SharedString, Styled, UniformListScrollHandle, Window,
+    div, px, uniform_list, App, AppContext, ClipboardItem, Context, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
+    ParentElement, Render, SharedString, Styled, UniformListScrollHandle, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
+    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputEvent, InputState},
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
+    notification::Notification,
+    tooltip::Tooltip,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, WindowExt,
 };
 use one_core::storage::{
     traits::Repository, GlobalStorageState, QuickCommand, QuickCommandRepository,
 };
+use rust_i18n::t;
 use std::ops::Range;
 
 /// 快捷命令面板事件
@@ -24,7 +28,7 @@ use std::ops::Range;
 pub enum QuickCommandPanelEvent {
     /// 关闭面板
     Close,
-    /// 执行命令（粘贴到终端）
+    /// 粘贴命令到终端输入区（不自动回车）
     ExecuteCommand(String),
 }
 
@@ -257,9 +261,61 @@ impl QuickCommandPanel {
         }
     }
 
-    /// 执行命令（粘贴到终端）
+    /// 粘贴命令到终端输入区（不自动回车）
     fn paste_command(&self, command: String, cx: &mut Context<Self>) {
         cx.emit(QuickCommandPanelEvent::ExecuteCommand(command));
+    }
+
+    /// 复制命令到系统剪贴板
+    fn copy_command(&self, command: &str, window: &mut Window, cx: &mut Context<Self>) {
+        cx.write_to_clipboard(ClipboardItem::new_string(command.to_string()));
+        window.push_notification(
+            Notification::success(t!("QuickCommand.copied").to_string()).autohide(true),
+            cx,
+        );
+    }
+
+    /// 二次确认后删除命令
+    fn confirm_delete_command(
+        &mut self,
+        id: i64,
+        command: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let view = cx.entity().clone();
+
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let view_ok = view.clone();
+            let preview = if command.chars().count() > 120 {
+                format!("{}...", command.chars().take(120).collect::<String>())
+            } else {
+                command.clone()
+            };
+
+            dialog
+                .title(t!("QuickCommand.delete_confirm_title").to_string())
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(div().text_sm().child(t!("QuickCommand.delete_confirm_message")))
+                        .child(div().text_xs().text_color(gpui::rgb(0x9ca3af)).child(preview))
+                        .into_any_element(),
+                )
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("QuickCommand.delete_action").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
+                )
+                .on_ok(move |_event, _window, cx| {
+                    view_ok.update(cx, |this, cx| {
+                        this.delete_command(id, cx);
+                    });
+                    true
+                })
+        });
     }
 
     /// 渲染头部
@@ -303,6 +359,7 @@ impl QuickCommandPanel {
                             .icon(IconName::Plus)
                             .ghost()
                             .xsmall()
+                            .tooltip(t!("QuickCommand.add_tooltip").to_string())
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.show_add_input = true;
                                 cx.notify();
@@ -313,6 +370,7 @@ impl QuickCommandPanel {
                             .icon(IconName::Close)
                             .ghost()
                             .xsmall()
+                            .tooltip(t!("QuickCommand.close_tooltip").to_string())
                             .on_click(cx.listener(|_this, _, _, cx| {
                                 cx.emit(QuickCommandPanelEvent::Close);
                             })),
@@ -370,6 +428,7 @@ impl QuickCommandPanel {
                     .label("Cancel")
                     .ghost()
                     .xsmall()
+                    .tooltip(t!("QuickCommand.cancel_tooltip").to_string())
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.add_input_state.update(cx, |state, cx| {
                             state.set_value("", window, cx);
@@ -383,6 +442,7 @@ impl QuickCommandPanel {
                     .label("Add")
                     .primary()
                     .xsmall()
+                    .tooltip(t!("QuickCommand.confirm_add_tooltip").to_string())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         let value = add_input.read(cx).value().to_string();
                         if !value.trim().is_empty() {
@@ -405,6 +465,9 @@ impl QuickCommandPanel {
         let command = cmd.command.clone();
         let command_for_paste = command.clone();
         let command_for_paste2 = command.clone();
+        let command_for_copy = command.clone();
+        let command_for_delete = command.clone();
+        let command_for_tooltip = command.clone();
         let id = cmd.id.unwrap_or(0);
         let is_pinned = cmd.pinned;
         let item_id = SharedString::from(format!("quick-cmd-item-{}", index));
@@ -412,7 +475,6 @@ impl QuickCommandPanel {
 
         let pin_color = cx.theme().warning;
         let muted_bg = cx.theme().muted;
-        let muted_fg = cx.theme().muted_foreground;
 
         div()
             .id(item_id)
@@ -449,11 +511,15 @@ impl QuickCommandPanel {
                             })
                             .child(
                                 div()
+                                    .id(SharedString::from(format!("quick-cmd-text-{}", index)))
                                     .flex_1()
                                     .min_w_0()
                                     .text_sm()
                                     .overflow_hidden()
                                     .text_ellipsis()
+                                    .tooltip(move |window, cx| {
+                                        Tooltip::new(command_for_tooltip.clone()).build(window, cx)
+                                    })
                                     .child(command),
                             ),
                     )
@@ -476,26 +542,49 @@ impl QuickCommandPanel {
                                     })
                                     .ghost()
                                     .xsmall()
+                                    .tooltip(
+                                        if is_pinned {
+                                            t!("QuickCommand.unpin_tooltip").to_string()
+                                        } else {
+                                            t!("QuickCommand.pin_tooltip").to_string()
+                                        },
+                                    )
                                     .when(is_pinned, |this| this.text_color(pin_color))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.toggle_pin(id, cx);
                                     })),
                             )
                             .child(
-                                Button::new(SharedString::from(format!("delete-{}", index)))
-                                    .icon(IconName::Remove)
+                                Button::new(SharedString::from(format!("copy-{}", index)))
+                                    .icon(IconName::Copy)
                                     .ghost()
                                     .xsmall()
-                                    .text_color(muted_fg)
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.delete_command(id, cx);
+                                    .tooltip(t!("QuickCommand.copy_tooltip").to_string())
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.copy_command(&command_for_copy, window, cx);
+                                    })),
+                            )
+                            .child(
+                                Button::new(SharedString::from(format!("delete-{}", index)))
+                                    .icon(IconName::Remove)
+                                    .danger()
+                                    .xsmall()
+                                    .tooltip(t!("QuickCommand.delete_tooltip").to_string())
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.confirm_delete_command(
+                                            id,
+                                            command_for_delete.clone(),
+                                            window,
+                                            cx,
+                                        );
                                     })),
                             )
                             .child(
                                 Button::new(SharedString::from(format!("paste-{}", index)))
-                                    .label("PASTE")
+                                    .icon(IconName::Paste)
                                     .ghost()
                                     .xsmall()
+                                    .tooltip(t!("QuickCommand.paste_tooltip").to_string())
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.paste_command(command_for_paste2.clone(), cx);
                                     })),

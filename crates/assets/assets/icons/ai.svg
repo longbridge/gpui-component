@@ -1,40 +1,44 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-    <!-- Background -->
-    <rect x="8" y="8" width="112" height="112" rx="28" fill="#8B7CF6"/>
+    <defs>
+        <!-- 背景渐变 -->
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#8E7CFF"/>
+            <stop offset="100%" stop-color="#6C5CE7"/>
+        </linearGradient>
+    </defs>
 
-    <!-- Main sparkle -->
-    <path d="M64 34 
-           L70 54 
-           L90 60 
-           L70 66 
-           L64 86 
-           L58 66 
-           L38 60 
-           L58 54 Z"
+    <!-- 圆角背景 -->
+    <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#bg)"/>
+
+    <!-- 主星形（流线型） -->
+    <path d="
+      M64 36
+      Q68 54 86 64
+      Q68 74 64 92
+      Q60 74 42 64
+      Q60 54 64 36 Z"
           fill="none"
           stroke="white"
           stroke-width="4"
+          stroke-linejoin="round"
+          stroke-linecap="round"/>
+
+    <!-- 右上小星（线性） -->
+    <path d="
+      M92 40
+      L95 48
+      L103 51
+      L95 54
+      L92 62
+      L89 54
+      L81 51
+      L89 48 Z"
+          fill="none"
+          stroke="white"
+          stroke-width="2"
           stroke-linejoin="round"/>
 
-    <!-- Small sparkle top right -->
-    <path d="M92 36 
-           L95 44 
-           L103 47 
-           L95 50 
-           L92 58 
-           L89 50 
-           L81 47 
-           L89 44 Z"
-          fill="white"/>
+    <!-- 左下小星（实心圆点） -->
+    <circle cx="38" cy="90" r="4" fill="white"/>
 
-    <!-- Small sparkle bottom left -->
-    <path d="M36 78 
-           L39 86 
-           L47 89 
-           L39 92 
-           L36 100 
-           L33 92 
-           L25 89 
-           L33 86 Z"
-          fill="white"/>
 </svg>
