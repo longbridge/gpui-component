@@ -23,6 +23,7 @@ use one_core::storage::{
     RedisClusterConfig, RedisMode, RedisParams, RedisSentinelConfig, StoredConnection, Workspace,
 };
 use rust_i18n::t;
+use tracing::error;
 
 use crate::{RedisConnectionConfig, RedisConnectionMode, RedisManager};
 
@@ -510,10 +511,14 @@ impl RedisFormWindow {
             let test_result: Result<(), String> = Tokio::spawn_result(cx, async move {
                 RedisManager::test_connection(&config)
                     .await
-                    .map_err(|e| anyhow::anyhow!("{}", e))
+                    .map_err(anyhow::Error::new)
             })
             .await
-            .map_err(|e| e.to_string());
+            .map_err(|e| {
+                let detailed = format!("{:#}", e);
+                error!("Redis 连接测试失败: {}", detailed);
+                detailed
+            });
 
             let _ = this.update(cx, |this, cx| {
                 this.is_testing = false;

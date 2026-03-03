@@ -23,7 +23,7 @@ use gpui_component::{
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::{ActiveConnections, StoredConnection};
 use rust_i18n::t;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::{GlobalRedisState, RedisKeyType, RedisManager, RedisNode, RedisNodeType};
 
@@ -284,7 +284,7 @@ impl RedisTreeView {
                     global_state
                         .create_connection(config)
                         .await
-                        .map_err(|e| anyhow::anyhow!("{}", e))
+                        .map_err(anyhow::Error::new)
                 }
             })
             .await;
@@ -305,7 +305,8 @@ impl RedisTreeView {
                     });
                 }
                 Err(e) => {
-                    let error_msg = e.to_string();
+                    let error_msg = format!("{:#}", e);
+                    error!("Redis 连接失败，节点 {}: {}", node_id, error_msg);
                     _ = this.update(cx, |view, cx| {
                         view.loading_nodes.remove(&node_id);
                         view.error_nodes.insert(node_id.clone(), error_msg);
