@@ -2,10 +2,10 @@ use gpui::{Action, App, SharedString};
 use gpui_component::{Theme, ThemeMode, ThemeRegistry, scroll::ScrollbarShow};
 use serde::{Deserialize, Serialize};
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use gpui_component::ActiveTheme;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 use crate::embedded_themes;
 
 const STATE_FILE: &str = "target/state.json";
@@ -26,7 +26,7 @@ impl Default for State {
 }
 
 pub fn init(cx: &mut App) {
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(target_family = "wasm")]
     {
         tracing::info!("Loading embedded themes for WASM...");
         let embedded = embedded_themes::embedded_themes();
@@ -41,14 +41,14 @@ pub fn init(cx: &mut App) {
         }
     }
 
-    let state = if cfg!(not(target_arch = "wasm32")) {
+    let state = if cfg!(not(target_family = "wasm")) {
         let json = std::fs::read_to_string(STATE_FILE).unwrap_or(String::default());
         serde_json::from_str::<State>(&json).unwrap_or_default()
     } else {
         State::default()
     };
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     if let Err(err) =
         ThemeRegistry::watch_dir(std::path::PathBuf::from("./themes"), cx, move |cx| {
             if let Some(theme) = ThemeRegistry::global(cx)
@@ -68,7 +68,7 @@ pub fn init(cx: &mut App) {
     }
     cx.refresh_windows();
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     cx.observe_global::<Theme>(|cx| {
         let state = State {
             theme: cx.theme().theme_name().clone(),

@@ -15,7 +15,6 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
-reqwest_client = { path = "../reqwest_client" }
 
 autocorrect = "2.14.2"
 chrono = "0.4"
@@ -34,10 +33,14 @@ rust-i18n.workspace = true
 dirs = "6.0.0"
 
 # Native-only dependencies (not available on WASM)
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+reqwest_client.workspace = true
 smol.workspace = true
 tree-sitter-navi = "0.2.2"
 color-lsp = "0.2.0"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+gpui_web.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

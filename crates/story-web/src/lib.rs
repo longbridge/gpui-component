@@ -14,21 +14,25 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     // Also initialize tracing for WASM
     tracing_wasm::set_as_global_default();
 
-    gpui_platform::application()
-        .with_assets(Assets::new(
-            "https://longbridge.github.io/gpui-component/gallery/",
-        ))
-        .run(|cx: &mut App| {
-            gpui_component_story::init(cx);
+    #[cfg(not(target_family = "wasm"))]
+    let app = gpui_platform::application();
+    #[cfg(target_family = "wasm")]
+    let app = gpui_platform::single_threaded_web();
 
-            cx.open_window(WindowOptions::default(), |window, cx| {
-                let view = Gallery::view(None, window, cx);
-                let story_root = cx.new(|cx| StoryRoot::new("GPUI Component", view, window, cx));
-                cx.new(|cx| Root::new(story_root, window, cx))
-            })
-            .expect("Failed to open window");
-            cx.activate(true);
-        });
+    app.with_assets(Assets::new(
+        "https://longbridge.github.io/gpui-component/gallery/",
+    ))
+    .run(|cx: &mut App| {
+        gpui_component_story::init(cx);
+
+        cx.open_window(WindowOptions::default(), |window, cx| {
+            let view = Gallery::view(None, window, cx);
+            let story_root = cx.new(|cx| StoryRoot::new("GPUI Component", view, window, cx));
+            cx.new(|cx| Root::new(story_root, window, cx))
+        })
+        .expect("Failed to open window");
+        cx.activate(true);
+    });
 
     Ok(())
 }

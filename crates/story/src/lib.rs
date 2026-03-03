@@ -155,7 +155,7 @@ impl Global for AppState {}
 
 pub fn init(cx: &mut App) {
     // Try to initialize tracing subscriber, but ignore if already initialized
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     {
         use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
         let _ = tracing_subscriber::registry()
@@ -168,7 +168,7 @@ pub fn init(cx: &mut App) {
     }
 
     // For WASM, use a subscriber without time support
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(target_family = "wasm")]
     {
         use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
         let _ = tracing_subscriber::registry()
@@ -185,10 +185,23 @@ pub fn init(cx: &mut App) {
     themes::init(cx);
     stories::init(cx);
 
-    let http_client = std::sync::Arc::new(
-        reqwest_client::HttpClient::user_agent("gpui-component/story").unwrap(),
-    );
-    cx.set_http_client(http_client);
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let http_client =
+            reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap();
+        cx.set_http_client(std::sync::Arc::new(http_client));
+    }
+
+    #[cfg(target_family = "wasm")]
+    {
+        // Safety: the web examples run single-threaded; the client is
+        // created and used exclusively on the main thread.
+        let http_client = unsafe {
+            gpui_web::FetchHttpClient::with_user_agent("gpui-component/story")
+                .expect("failed to create FetchHttpClient")
+        };
+        cx.set_http_client(std::sync::Arc::new(http_client));
+    }
 
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),

@@ -19,10 +19,10 @@ anyhow.workspace = true
 gpui.workspace = true
 log.workspace = true
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 rust-embed = { version = "8.7.2", features = ["interpolate-folder-path", "include-exclude"] }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target.'cfg(target_family = "wasm")'.dependencies]
 reqwest = { workspace = true }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
