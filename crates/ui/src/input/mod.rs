@@ -20,9 +20,9 @@ mod state;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
-pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange};
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 pub use display_map::folding::Tree;
+pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange};
 pub use indent::TabSize;
 pub use input::*;
 pub use lsp::*;

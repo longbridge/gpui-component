@@ -9,9 +9,9 @@
 /// about `BufferPoint ↔ DisplayPoint` mapping, without worrying about internal wrap/fold complexity.
 mod display_map;
 mod fold_map;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 mod folding;
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 pub mod folding;
 mod text_wrapper;
 mod wrap_map;

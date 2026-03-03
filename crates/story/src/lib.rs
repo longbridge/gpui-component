@@ -155,7 +155,7 @@ impl Global for AppState {}
 
 pub fn init(cx: &mut App) {
     // Try to initialize tracing subscriber, but ignore if already initialized
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     {
         use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
         let _ = tracing_subscriber::registry()
@@ -168,7 +168,7 @@ pub fn init(cx: &mut App) {
     }
 
     // For WASM, use a subscriber without time support
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(target_family = "wasm")]
     {
         use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
         let _ = tracing_subscriber::registry()

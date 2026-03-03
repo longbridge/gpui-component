@@ -18,14 +18,14 @@
 ///   - This significantly reduces WASM bundle size
 ///   - Icons are downloaded on-demand when first used
 ///   - Downloaded icons are cached in memory
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 mod native_assets;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 mod wasm_assets;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 pub use native_assets::Assets;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 pub use wasm_assets::Assets;

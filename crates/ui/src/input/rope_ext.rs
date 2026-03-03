@@ -3,10 +3,10 @@ use std::ops::Range;
 use ropey::{LineType, Rope, RopeSlice};
 use sum_tree::Bias;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use tree_sitter::{Point, InputEdit};
+#[cfg(not(target_family = "wasm"))]
+pub use tree_sitter::{InputEdit, Point};
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 /// Stub type for tree-sitter Point on WASM (tree-sitter not available).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -14,14 +14,14 @@ pub struct Point {
     pub column: usize,
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 impl Point {
     pub fn new(row: usize, column: usize) -> Self {
         Self { row, column }
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_family = "wasm")]
 /// Stub type for tree-sitter InputEdit on WASM (tree-sitter not available).
 #[derive(Debug, Clone, Copy)]
 pub struct InputEdit {
@@ -394,11 +394,7 @@ impl RopeExt for Rope {
 
         let end = offset + right.len();
 
-        if start == end {
-            None
-        } else {
-            Some(start..end)
-        }
+        if start == end { None } else { Some(start..end) }
     }
 
     fn word_at(&self, offset: usize) -> String {
@@ -466,7 +462,7 @@ mod tests {
     use sum_tree::Bias;
     use tree_sitter::Point;
 
-    use crate::{input::Position, RopeExt};
+    use crate::{RopeExt, input::Position};
 
     #[test]
     fn test_slice_line() {
