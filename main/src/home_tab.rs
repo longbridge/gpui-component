@@ -1442,9 +1442,8 @@ impl HomePage {
                                     .item(
                                         PopupMenuItem::new("SSH")
                                             .icon(
-                                                IconName::Terminal
-                                                    .mono()
-                                                    .text_color(gpui::rgb(0x8b5cf6))
+                                                IconName::TerminalColor
+                                                    .color()
                                                     .with_size(Size::Medium),
                                             )
                                             .on_click(window.listener_for(
@@ -1458,8 +1457,9 @@ impl HomePage {
                                     .item(
                                         PopupMenuItem::new("Terminal")
                                             .icon(
-                                                IconName::TerminalColor
-                                                    .color()
+                                                IconName::Terminal
+                                                    .mono()
+                                                    .text_color(gpui::rgb(0x8b5cf6))
                                                     .with_size(Size::Medium),
                                             )
                                             .on_click(window.listener_for(
