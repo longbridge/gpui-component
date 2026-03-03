@@ -63,6 +63,8 @@ smallvec = "1"
 smol = "2"
 tracing = "0.1.41"
 wasm-bindgen = "0.2.113"
+# Use errno stub for WASM
+errno = { version = "0.3.14", default-features = false }
 
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
@@ -119,5 +121,3 @@ ignored = ["log", "anyhow", "serde"]
 [patch.crates-io]
 # Use stacker's psm version which may have better WASM support
 psm = { git = "https://github.com/rust-lang/stacker", branch = "master" }
-# Use errno stub for WASM
-errno = { path = "crates/errno-stub" }
