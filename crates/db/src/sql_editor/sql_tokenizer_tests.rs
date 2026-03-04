@@ -244,7 +244,7 @@ mod keyword_ident_tests {
 
         /// Property 2a: Keywords are recognized regardless of case
         #[test]
-        fn prop_keywords_recognized_any_case((original, mixed) in keyword_with_case_strategy()) {
+        fn prop_keywords_recognized_any_case((_original, mixed) in keyword_with_case_strategy()) {
             let mut tokenizer = SqlTokenizer::new(&mixed);
             let tokens = tokenizer.tokenize();
 

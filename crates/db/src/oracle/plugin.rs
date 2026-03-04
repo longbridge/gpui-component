@@ -1836,7 +1836,7 @@ mod tests {
     #[test]
     fn test_build_column_def_number_with_precision() {
         let plugin = create_plugin();
-        let mut col = ColumnDefinition::new("price")
+        let col = ColumnDefinition::new("price")
             .data_type("NUMBER")
             .length(10)
             .nullable(false);
