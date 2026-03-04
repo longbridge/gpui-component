@@ -569,7 +569,7 @@ impl RenderOnce for Button {
             .child({
                 h_flex()
                     .id("label")
-                    .w_full()
+                    .size_full()
                     .items_center()
                     .justify_center()
                     .button_text_size(self.size)
