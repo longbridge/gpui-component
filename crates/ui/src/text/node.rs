@@ -240,6 +240,16 @@ impl TextMark {
         self.link = Some(link.into());
         self
     }
+
+    pub fn merge(&mut self, other: TextMark) {
+        self.bold |= other.bold;
+        self.italic |= other.italic;
+        self.strikethrough |= other.strikethrough;
+        self.code |= other.code;
+        if let Some(link) = other.link {
+            self.link = Some(link);
+        }
+    }
 }
 
 /// The bytes
