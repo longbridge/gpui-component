@@ -322,7 +322,11 @@ impl Root {
     ) where
         F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
-        let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
+        let previous_focused_handle = self
+            .active_sheet
+            .take()
+            .and_then(|s| s.previous_focused_handle)
+            .or_else(|| window.focused(cx).map(|h| h.downgrade()));
 
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
