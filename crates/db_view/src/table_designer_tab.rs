@@ -3283,4 +3283,126 @@ mod tests {
 
         assert_eq!(sql.trim(), base_sql.trim());
     }
+
+    /// 测试简单重命名场景：仅修改列名，不修改其他属性
+    #[test]
+    fn test_simple_rename_generates_rename_not_drop_add() {
+        let original = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
+        // 用户将 b 重命名为 b2，其他不变
+        let current = build_design(vec![build_col("a"), build_col("b2"), build_col("c")], vec![]);
+        let renames = vec![("b".to_string(), "b2".to_string())];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = TableDesigner::build_alter_table_sql_with_renames(
+                plugin.as_ref(),
+                database_type,
+                &original,
+                &current,
+                &renames,
+            );
+            // 不应包含 DROP COLUMN
+            let drop_b = format!("DROP COLUMN {}", plugin.quote_identifier("b"));
+            assert!(
+                !sql.contains(&drop_b),
+                "[{:?}] 简单重命名不应生成 DROP COLUMN: {sql}",
+                database_type
+            );
+            // 不应包含 ADD COLUMN b2
+            let add_b2 = format!("ADD COLUMN {}", plugin.quote_identifier("b2"));
+            // MySQL ADD COLUMN 可能不包含引号后的完整格式，用更宽松的匹配
+            let add_keyword = "ADD COLUMN";
+            if database_type != DatabaseType::SQLite {
+                assert!(
+                    !sql.contains(&add_b2) && (!sql.contains(add_keyword) || sql.contains("RENAME")),
+                    "[{:?}] 简单重命名不应生成 ADD COLUMN: {sql}",
+                    database_type
+                );
+            }
+            // 应包含 RENAME 相关语句
+            let has_rename = sql.contains("RENAME COLUMN")
+                || sql.contains("CHANGE COLUMN")
+                || sql.contains("sp_rename");
+            assert!(
+                has_rename,
+                "[{:?}] 应包含重命名SQL: {sql}",
+                database_type
+            );
+            println!("[{:?}] SQL: {}", database_type, sql);
+        }
+    }
+
+    /// 测试模拟真实场景：original_design 的 data_type 与 collect_design 的 data_type 大小写不同
+    #[test]
+    fn test_rename_with_type_case_mismatch_no_drop_add() {
+        // 模拟 build_original_design 返回小写 data_type（从DB解析得到）
+        let original = build_design(
+            vec![
+                ColumnDefinition {
+                    name: "id".to_string(),
+                    data_type: "integer".to_string(),
+                    is_nullable: false,
+                    is_primary_key: true,
+                    ..Default::default()
+                },
+                ColumnDefinition {
+                    name: "name".to_string(),
+                    data_type: "character varying".to_string(),
+                    length: Some(50),
+                    is_nullable: true,
+                    ..Default::default()
+                },
+            ],
+            vec![],
+        );
+        // 模拟 collect_design 返回大写 data_type（从下拉选择框获取）
+        let current = build_design(
+            vec![
+                ColumnDefinition {
+                    name: "id".to_string(),
+                    data_type: "INTEGER".to_string(),
+                    is_nullable: false,
+                    is_primary_key: true,
+                    ..Default::default()
+                },
+                ColumnDefinition {
+                    name: "username".to_string(),
+                    data_type: "VARCHAR".to_string(),
+                    length: Some(50),
+                    is_nullable: true,
+                    ..Default::default()
+                },
+            ],
+            vec![],
+        );
+        let renames = vec![("name".to_string(), "username".to_string())];
+
+        let plugin = PostgresPlugin::new();
+        let sql = TableDesigner::build_alter_table_sql_with_renames(
+            &plugin,
+            DatabaseType::PostgreSQL,
+            &original,
+            &current,
+            &renames,
+        );
+
+        println!("Type case mismatch SQL: {}", sql);
+
+        // 关键断言：不应包含 DROP COLUMN "name"
+        assert!(
+            !sql.contains("DROP COLUMN"),
+            "类型大小写不同时不应生成 DROP COLUMN: {sql}"
+        );
+        // 不应包含 ADD COLUMN
+        assert!(
+            !sql.contains("ADD COLUMN"),
+            "类型大小写不同时不应生成 ADD COLUMN: {sql}"
+        );
+        // 应包含 RENAME COLUMN
+        assert!(
+            sql.contains("RENAME COLUMN \"name\" TO \"username\""),
+            "应包含正确的 RENAME SQL: {sql}"
+        );
+    }
+
 }
