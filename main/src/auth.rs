@@ -95,6 +95,19 @@ impl AuthService {
             SESSION_EXPIRED.store(true, Ordering::SeqCst);
         });
         client.set_session_expired_callback(callback);
+        // 设置 token 刷新回调：确保自动刷新后的最新 refresh token 能落盘持久化
+        client.set_token_refreshed_callback(Arc::new(|auth_resp| {
+            save_auth_data(
+                &auth_resp.access_token,
+                &auth_resp.refresh_token,
+                &auth_resp.user_id,
+                auth_resp.expires_at,
+            );
+            info!(
+                "自动刷新令牌已持久化: user_id={} expires_at={}",
+                auth_resp.user_id, auth_resp.expires_at
+            );
+        }));
 
         Self { client }
     }
@@ -160,26 +173,6 @@ impl AuthService {
                 expires_at,
             );
             info!("访问令牌有效（剩余 {}s），已设置认证状态", expires_at - now);
-
-            // 尝试在后台刷新令牌以获取最新 token
-            match self.client.refresh_token(&refresh_token).await {
-                Ok(auth_resp) => {
-                    // refresh_token 内部已调用 set_auth_with_expiry 更新内存状态
-                    save_auth_data(
-                        &auth_resp.access_token,
-                        &auth_resp.refresh_token,
-                        &auth_resp.user_id,
-                        auth_resp.expires_at,
-                    );
-                    info!(
-                        "后台刷新令牌成功: user_id={} new_expires_at={}",
-                        auth_resp.user_id, auth_resp.expires_at
-                    );
-                }
-                Err(e) => {
-                    warn!("后台刷新令牌失败（将使用现有 token 继续）: {}", e);
-                }
-            }
         }
 
         // 获取用户信息

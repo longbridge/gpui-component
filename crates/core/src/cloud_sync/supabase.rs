@@ -45,6 +45,8 @@ struct AuthState {
 
 /// 会话过期事件回调类型
 pub type SessionExpiredCallback = Arc<dyn Fn() + Send + Sync>;
+/// 自动刷新成功回调类型
+pub type TokenRefreshedCallback = Arc<dyn Fn(AuthResponse) + Send + Sync>;
 
 /// Token 刷新状态
 struct RefreshState {
@@ -74,6 +76,8 @@ pub struct SupabaseClient {
     refresh_state: RefreshState,
     /// 会话过期回调
     on_session_expired: RwLock<Option<SessionExpiredCallback>>,
+    /// 自动刷新成功回调（用于持久化最新 token）
+    on_token_refreshed: RwLock<Option<TokenRefreshedCallback>>,
 }
 
 impl SupabaseClient {
@@ -90,12 +94,20 @@ impl SupabaseClient {
             }),
             refresh_state: RefreshState::default(),
             on_session_expired: RwLock::new(None),
+            on_token_refreshed: RwLock::new(None),
         }
     }
 
     /// 设置会话过期回调
     pub fn set_session_expired_callback(&self, callback: SessionExpiredCallback) {
         if let Ok(mut cb) = self.on_session_expired.write() {
+            *cb = Some(callback);
+        }
+    }
+
+    /// 设置自动刷新成功回调
+    pub fn set_token_refreshed_callback(&self, callback: TokenRefreshedCallback) {
+        if let Ok(mut cb) = self.on_token_refreshed.write() {
             *cb = Some(callback);
         }
     }
@@ -108,6 +120,15 @@ impl SupabaseClient {
                 callback();
             } else {
                 warn!("[supabase] no session expired callback registered");
+            }
+        }
+    }
+
+    /// 触发自动刷新成功回调
+    fn notify_token_refreshed(&self, auth: &AuthResponse) {
+        if let Ok(cb) = self.on_token_refreshed.read() {
+            if let Some(callback) = cb.as_ref() {
+                callback(auth.clone());
             }
         }
     }
@@ -321,13 +342,15 @@ impl SupabaseClient {
                 "[supabase] refresh token success: user_id={} expires_at={} expires_in={:?}",
                 auth.user.id, expires_at, auth.expires_in
             );
-            Ok(AuthResponse {
+            let auth_response = AuthResponse {
                 user_id: auth.user.id,
                 email: auth.user.email.unwrap_or_default(),
                 access_token: auth.access_token,
                 refresh_token: auth.refresh_token,
                 expires_at,
-            })
+            };
+            self.notify_token_refreshed(&auth_response);
+            Ok(auth_response)
         } else {
             let error_body = match &result {
                 Ok(_) => "parsed ok but status failed".to_string(),
