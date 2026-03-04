@@ -19,10 +19,12 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex,
 };
+use std::collections::HashSet;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use crate::database_view_plugin::{ColumnEditorCapabilities, DatabaseViewPluginRegistry};
+use db::plugin::DatabasePlugin;
 use db::GlobalDbState;
 use db::types::{
     CharsetInfo, CollationInfo, ColumnDefinition, ColumnInfo, IndexDefinition, IndexInfo,
@@ -399,8 +401,151 @@ impl TableDesigner {
         }
     }
 
+    fn collect_column_renames(&self, cx: &App) -> Vec<(String, String)> {
+        self.columns_editor.read(cx).get_column_renames(cx)
+    }
+
+    fn normalize_column_renames(
+        original: &TableDesign,
+        design: &TableDesign,
+        column_renames: &[(String, String)],
+    ) -> Vec<(String, String)> {
+        let original_names: HashSet<&str> = original.columns.iter().map(|col| col.name.as_str()).collect();
+        let current_names: HashSet<&str> = design.columns.iter().map(|col| col.name.as_str()).collect();
+        let mut seen_old = HashSet::new();
+        let mut seen_new = HashSet::new();
+
+        column_renames
+            .iter()
+            .filter_map(|(old_name, new_name)| {
+                if old_name.is_empty() || new_name.is_empty() || old_name == new_name {
+                    return None;
+                }
+                if !original_names.contains(old_name.as_str())
+                    || !current_names.contains(new_name.as_str())
+                {
+                    return None;
+                }
+                if seen_old.contains(old_name) || seen_new.contains(new_name) {
+                    return None;
+                }
+                seen_old.insert(old_name.clone());
+                seen_new.insert(new_name.clone());
+                Some((old_name.clone(), new_name.clone()))
+            })
+            .collect()
+    }
+
+    fn map_design_for_diff(
+        design: &TableDesign,
+        normalized_renames: &[(String, String)],
+    ) -> TableDesign {
+        let mut design_for_diff = design.clone();
+        for (old_name, new_name) in normalized_renames {
+            if let Some(column) = design_for_diff
+                .columns
+                .iter_mut()
+                .find(|column| column.name == *new_name)
+            {
+                column.name = old_name.clone();
+            }
+            for index in &mut design_for_diff.indexes {
+                for idx_col in &mut index.columns {
+                    if idx_col == new_name {
+                        *idx_col = old_name.clone();
+                    }
+                }
+            }
+        }
+        design_for_diff
+    }
+
+    fn build_column_rename_statements(
+        plugin: &dyn DatabasePlugin,
+        database_type: DatabaseType,
+        design: &TableDesign,
+        normalized_renames: &[(String, String)],
+    ) -> Vec<String> {
+        let table_name = &design.table_name;
+        let quoted_table = plugin.quote_identifier(table_name);
+
+        normalized_renames
+            .iter()
+            .map(|(old_name, new_name)| {
+                let quoted_old = plugin.quote_identifier(old_name);
+                let quoted_new = plugin.quote_identifier(new_name);
+                match database_type {
+                    DatabaseType::MySQL => {
+                        if let Some(col) = design.columns.iter().find(|col| col.name == *new_name) {
+                            let col_def = plugin.build_column_def(col);
+                            format!(
+                                "ALTER TABLE {} CHANGE COLUMN {} {};",
+                                quoted_table, quoted_old, col_def
+                            )
+                        } else {
+                            format!(
+                                "ALTER TABLE {} RENAME COLUMN {} TO {};",
+                                quoted_table, quoted_old, quoted_new
+                            )
+                        }
+                    }
+                    DatabaseType::MSSQL => {
+                        let table_column_ref = format!("{}.{}", quoted_table, quoted_old);
+                        format!(
+                            "EXEC sp_rename '{}', '{}', 'COLUMN';",
+                            table_column_ref.replace('\'', "''"),
+                            new_name.replace('\'', "''")
+                        )
+                    }
+                    DatabaseType::PostgreSQL
+                    | DatabaseType::SQLite
+                    | DatabaseType::Oracle
+                    | DatabaseType::ClickHouse => format!(
+                        "ALTER TABLE {} RENAME COLUMN {} TO {};",
+                        quoted_table, quoted_old, quoted_new
+                    ),
+                }
+            })
+            .collect()
+    }
+
+    fn merge_alter_sql(base_sql: String, rename_statements: Vec<String>) -> String {
+        let mut statements = Vec::new();
+        let trimmed = base_sql.trim();
+        if !trimmed.is_empty() && !trimmed.starts_with("-- No changes") {
+            statements.push(trimmed.to_string());
+        }
+        statements.extend(rename_statements);
+
+        if statements.is_empty() {
+            "-- No changes detected".to_string()
+        } else {
+            statements.join("\n")
+        }
+    }
+
+    fn build_alter_table_sql_with_renames(
+        plugin: &dyn DatabasePlugin,
+        database_type: DatabaseType,
+        original: &TableDesign,
+        design: &TableDesign,
+        column_renames: &[(String, String)],
+    ) -> String {
+        let normalized_renames = Self::normalize_column_renames(original, design, column_renames);
+        let design_for_diff = Self::map_design_for_diff(design, &normalized_renames);
+        let base_sql = plugin.build_alter_table_sql(original, &design_for_diff);
+        let rename_sql = Self::build_column_rename_statements(
+            plugin,
+            database_type,
+            design,
+            &normalized_renames,
+        );
+        Self::merge_alter_sql(base_sql, rename_sql)
+    }
+
     fn update_sql_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let design = self.collect_design(cx);
+        let column_renames = self.collect_column_renames(cx);
         let global_state = cx.global::<GlobalDbState>().clone();
 
         let sql = if let Ok(plugin) = global_state
@@ -408,7 +553,13 @@ impl TableDesigner {
             .get_plugin(&self.config.database_type)
         {
             if let Some(original) = &self.original_design {
-                plugin.build_alter_table_sql(original, &design)
+                Self::build_alter_table_sql_with_renames(
+                    plugin.as_ref(),
+                    self.config.database_type,
+                    original,
+                    &design,
+                    &column_renames,
+                )
             } else {
                 plugin.build_create_table_sql(&design)
             }
@@ -458,6 +609,7 @@ impl TableDesigner {
         let database_type = self.config.database_type;
         let schema = self.config.schema_name.clone();
         let original_design = self.original_design.clone();
+        let column_renames = self.collect_column_renames(cx);
         let is_new_table = original_design.is_none();
         let table_name = design.table_name.clone();
         let config_tab_id = self.config.tab_id.clone();
@@ -471,7 +623,13 @@ impl TableDesigner {
                 match plugin_result {
                     Ok(plugin) => {
                         if let Some(original) = &original_design {
-                            plugin.build_alter_table_sql(original, &design)
+                            Self::build_alter_table_sql_with_renames(
+                                plugin.as_ref(),
+                                database_type,
+                                original,
+                                &design,
+                                &column_renames,
+                            )
                         } else {
                             plugin.build_create_table_sql(&design)
                         }
@@ -632,12 +790,19 @@ impl TableDesigner {
                                 designer.original_design = Some(original_design);
 
                                 let design = designer.collect_design(cx);
+                                let column_renames = designer.collect_column_renames(cx);
                                 let global_state = cx.global::<GlobalDbState>().clone();
                                 if let Ok(plugin) =
                                     global_state.db_manager.get_plugin(&database_type)
                                 {
                                     if let Some(original) = &designer.original_design {
-                                        plugin.build_alter_table_sql(original, &design)
+                                        Self::build_alter_table_sql_with_renames(
+                                            plugin.as_ref(),
+                                            database_type,
+                                            original,
+                                            &design,
+                                            &column_renames,
+                                        )
                                     } else {
                                         plugin.build_create_table_sql(&design)
                                     }
@@ -767,6 +932,7 @@ impl TableDesigner {
         let database_type = self.config.database_type;
         let schema = self.config.schema_name.clone();
         let original_design = self.original_design.clone();
+        let column_renames = self.collect_column_renames(cx);
         let is_new_table = original_design.is_none();
         let table_name = design.table_name.clone();
         let tab_id = self.config.tab_id.clone();
@@ -780,7 +946,13 @@ impl TableDesigner {
                 match plugin_result {
                     Ok(plugin) => {
                         if let Some(original) = &original_design {
-                            plugin.build_alter_table_sql(original, &design)
+                            Self::build_alter_table_sql_with_renames(
+                                plugin.as_ref(),
+                                database_type,
+                                original,
+                                &design,
+                                &column_renames,
+                            )
                         } else {
                             plugin.build_create_table_sql(&design)
                         }
@@ -1227,6 +1399,7 @@ pub struct ColumnsEditor {
 }
 
 struct ColumnEditorRow {
+    source_name: Option<String>,
     name_input: Entity<InputState>,
     type_select: Entity<SelectState<SearchableVec<String>>>,
     length_input: Entity<InputState>,
@@ -1456,6 +1629,7 @@ impl ColumnsEditor {
         ]);
 
         self.columns.push(ColumnEditorRow {
+            source_name: None,
             name_input,
             type_select,
             length_input,
@@ -1601,6 +1775,21 @@ impl ColumnsEditor {
                     comment,
                     charset,
                     collation,
+                }
+            })
+            .collect()
+    }
+
+    pub fn get_column_renames(&self, cx: &App) -> Vec<(String, String)> {
+        self.columns
+            .iter()
+            .filter_map(|row| {
+                let old_name = row.source_name.as_ref()?;
+                let new_name = row.name_input.read(cx).text().to_string();
+                if old_name.is_empty() || new_name.is_empty() || old_name == &new_name {
+                    None
+                } else {
+                    Some((old_name.clone(), new_name))
                 }
             })
             .collect()
@@ -1800,6 +1989,7 @@ impl ColumnsEditor {
             ]);
 
             self.columns.push(ColumnEditorRow {
+                source_name: Some(col.name.clone()),
                 name_input,
                 type_select,
                 length_input,
@@ -1999,9 +2189,6 @@ impl ColumnsEditor {
                     this.select_row(idx, cx);
                 }),
             )
-            .on_drag(DragColumn::new(idx, name), |drag, _, _, cx| {
-                cx.new(|_| drag.clone())
-            })
             .drag_over::<DragColumn>(move |el, _, _, _cx| {
                 el.border_t_2().border_color(drag_border_color)
             })
@@ -2010,11 +2197,16 @@ impl ColumnsEditor {
             }))
             .child(
                 div()
+                    .id(("col-row-drag-handle", idx))
                     .w(px(24.))
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor_grab()
+                    .on_drag(DragColumn::new(idx, name), |drag, _, _, cx| {
+                        cx.stop_propagation();
+                        cx.new(|_| drag.clone())
+                    })
                     .child(
                         Icon::new(IconName::Menu)
                             .with_size(Size::Small)
@@ -2769,5 +2961,326 @@ impl Render for TableOptionsEditor {
                         .child(Input::new(&self.comment_input).w(px(300.))),
                 ),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use db::{
+        clickhouse::ClickHousePlugin, mssql::MsSqlPlugin, mysql::MySqlPlugin, oracle::OraclePlugin,
+        plugin::DatabasePlugin, postgresql::PostgresPlugin, sqlite::SqlitePlugin,
+    };
+
+    fn build_col(name: &str) -> ColumnDefinition {
+        ColumnDefinition {
+            name: name.to_string(),
+            data_type: "INT".to_string(),
+            is_nullable: false,
+            ..Default::default()
+        }
+    }
+
+    fn build_design(columns: Vec<ColumnDefinition>, index_columns: Vec<&str>) -> TableDesign {
+        let indexes = if index_columns.is_empty() {
+            vec![]
+        } else {
+            vec![IndexDefinition {
+                name: "idx_test".to_string(),
+                columns: index_columns
+                    .into_iter()
+                    .map(|name| name.to_string())
+                    .collect(),
+                is_unique: false,
+                is_primary: false,
+                index_type: None,
+                comment: String::new(),
+            }]
+        };
+
+        TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns,
+            indexes,
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        }
+    }
+
+    fn build_plugin(database_type: DatabaseType) -> Box<dyn DatabasePlugin> {
+        match database_type {
+            DatabaseType::MySQL => Box::new(MySqlPlugin::new()),
+            DatabaseType::PostgreSQL => Box::new(PostgresPlugin::new()),
+            DatabaseType::SQLite => Box::new(SqlitePlugin::new()),
+            DatabaseType::MSSQL => Box::new(MsSqlPlugin::new()),
+            DatabaseType::Oracle => Box::new(OraclePlugin::new()),
+            DatabaseType::ClickHouse => Box::new(ClickHousePlugin::new()),
+        }
+    }
+
+    fn build_delete_and_rename_conflict_case() -> (TableDesign, TableDesign, Vec<(String, String)>) {
+        let original = build_design(
+            vec![build_col("a"), build_col("b"), build_col("c")],
+            vec!["b"],
+        );
+        let current = build_design(vec![build_col("a"), build_col("c")], vec!["a"]);
+        let renames = vec![("b".to_string(), "a".to_string())];
+        (original, current, renames)
+    }
+
+    fn assert_contains_rename_sql(sql: &str, database_type: DatabaseType) {
+        match database_type {
+            DatabaseType::MySQL => {
+                assert!(sql.contains("CHANGE COLUMN"), "MySQL 应使用 CHANGE COLUMN: {sql}");
+                assert!(sql.contains("`b`"), "MySQL 重命名 SQL 应包含源列 b: {sql}");
+                assert!(sql.contains("`a`"), "MySQL 重命名 SQL 应包含目标列 a: {sql}");
+            }
+            DatabaseType::PostgreSQL => {
+                assert!(
+                    sql.contains("RENAME COLUMN \"b\" TO \"a\""),
+                    "PostgreSQL 应使用 RENAME COLUMN: {sql}"
+                );
+            }
+            DatabaseType::SQLite => {
+                assert!(
+                    sql.contains("RENAME COLUMN \"b\" TO \"a\""),
+                    "SQLite 应使用 RENAME COLUMN: {sql}"
+                );
+            }
+            DatabaseType::MSSQL => {
+                assert!(
+                    sql.contains("EXEC sp_rename '[users].[b]', 'a', 'COLUMN';"),
+                    "MSSQL 应使用 sp_rename COLUMN: {sql}"
+                );
+            }
+            DatabaseType::Oracle => {
+                assert!(
+                    sql.contains("RENAME COLUMN \"b\" TO \"a\""),
+                    "Oracle 应使用 RENAME COLUMN: {sql}"
+                );
+            }
+            DatabaseType::ClickHouse => {
+                assert!(
+                    sql.contains("RENAME COLUMN `b` TO `a`"),
+                    "ClickHouse 应使用 RENAME COLUMN: {sql}"
+                );
+            }
+        }
+    }
+
+    fn assert_not_drop_source_column(sql: &str, plugin: &dyn DatabasePlugin) {
+        let drop_source = format!("DROP COLUMN {}", plugin.quote_identifier("b"));
+        assert!(
+            !sql.contains(&drop_source),
+            "重命名来源列 b 不应被误删，出现 SQL: {drop_source} in {sql}"
+        );
+    }
+
+    #[test]
+    fn test_normalize_column_renames_filters_invalid_items() {
+        let original = build_design(
+            vec![build_col("a"), build_col("b"), build_col("c")],
+            vec!["a"],
+        );
+        let current = build_design(vec![build_col("a"), build_col("c")], vec!["a"]);
+
+        let normalized = TableDesigner::normalize_column_renames(
+            &original,
+            &current,
+            &[
+                ("b".to_string(), "a".to_string()),
+                ("x".to_string(), "z".to_string()),
+                ("b".to_string(), "a2".to_string()),
+                ("c".to_string(), "".to_string()),
+            ],
+        );
+
+        assert_eq!(normalized, vec![("b".to_string(), "a".to_string())]);
+    }
+
+    #[test]
+    fn test_map_design_for_diff_rewrites_column_and_index_names() {
+        let current = build_design(vec![build_col("a"), build_col("c")], vec!["a"]);
+        let mapped = TableDesigner::map_design_for_diff(
+            &current,
+            &[("b".to_string(), "a".to_string())],
+        );
+
+        let column_names: Vec<&str> = mapped.columns.iter().map(|col| col.name.as_str()).collect();
+        assert_eq!(column_names, vec!["b", "c"]);
+        assert_eq!(mapped.indexes[0].columns, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn test_merge_alter_sql_behaviour() {
+        let sql = TableDesigner::merge_alter_sql(
+            "-- No changes detected".to_string(),
+            vec!["ALTER TABLE \"users\" RENAME COLUMN \"b\" TO \"a\";".to_string()],
+        );
+        assert_eq!(sql, "ALTER TABLE \"users\" RENAME COLUMN \"b\" TO \"a\";");
+
+        let no_change = TableDesigner::merge_alter_sql(String::new(), Vec::new());
+        assert_eq!(no_change, "-- No changes detected");
+    }
+
+    #[test]
+    fn test_mysql_rename_sql_uses_change_column() {
+        let plugin = MySqlPlugin::new();
+        let design = build_design(vec![build_col("a")], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::MySQL,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("CHANGE COLUMN"));
+    }
+
+    #[test]
+    fn test_postgresql_rename_sql_uses_rename_column() {
+        let plugin = PostgresPlugin::new();
+        let design = build_design(vec![build_col("a")], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::PostgreSQL,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("RENAME COLUMN \"b\" TO \"a\""));
+    }
+
+    #[test]
+    fn test_sqlite_rename_sql_uses_rename_column() {
+        let plugin = SqlitePlugin::new();
+        let design = build_design(vec![build_col("a")], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::SQLite,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("RENAME COLUMN \"b\" TO \"a\""));
+    }
+
+    #[test]
+    fn test_mssql_rename_sql_uses_sp_rename_column() {
+        let plugin = MsSqlPlugin::new();
+        let design = build_design(vec![build_col("a")], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::MSSQL,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+        assert_eq!(statements.len(), 1);
+        assert_eq!(statements[0], "EXEC sp_rename '[users].[b]', 'a', 'COLUMN';");
+    }
+
+    #[test]
+    fn test_oracle_rename_sql_uses_rename_column() {
+        let plugin = OraclePlugin::new();
+        let design = build_design(vec![build_col("a")], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::Oracle,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("RENAME COLUMN \"b\" TO \"a\""));
+    }
+
+    #[test]
+    fn test_clickhouse_rename_sql_uses_rename_column() {
+        let plugin = ClickHousePlugin::new();
+        let design = build_design(vec![build_col("a")], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::ClickHouse,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("RENAME COLUMN `b` TO `a`"));
+    }
+
+    #[test]
+    fn test_mysql_change_column_keeps_new_definition() {
+        let plugin = MySqlPlugin::new();
+        let mut renamed_col = build_col("a");
+        renamed_col.data_type = "BIGINT".to_string();
+        renamed_col.is_nullable = true;
+
+        let design = build_design(vec![renamed_col], vec![]);
+        let statements = TableDesigner::build_column_rename_statements(
+            &plugin,
+            DatabaseType::MySQL,
+            &design,
+            &[("b".to_string(), "a".to_string())],
+        );
+
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("`a` BIGINT"));
+        assert!(
+            !statements[0].contains("NOT NULL"),
+            "nullable=true 时不应强制生成 NOT NULL: {}",
+            statements[0]
+        );
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_with_renames_contains_rename_for_all_databases() {
+        let (original, current, renames) = build_delete_and_rename_conflict_case();
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = TableDesigner::build_alter_table_sql_with_renames(
+                plugin.as_ref(),
+                database_type,
+                &original,
+                &current,
+                &renames,
+            );
+            assert_contains_rename_sql(&sql, database_type);
+        }
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_with_renames_not_drop_source_for_all_databases() {
+        let (original, current, renames) = build_delete_and_rename_conflict_case();
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = TableDesigner::build_alter_table_sql_with_renames(
+                plugin.as_ref(),
+                database_type,
+                &original,
+                &current,
+                &renames,
+            );
+            assert_not_drop_source_column(&sql, plugin.as_ref());
+        }
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_with_empty_renames_keeps_base_alter_sql() {
+        let original = build_design(vec![build_col("a")], vec![]);
+        let current = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let plugin = PostgresPlugin::new();
+
+        let base_sql = plugin.build_alter_table_sql(&original, &current);
+        let sql = TableDesigner::build_alter_table_sql_with_renames(
+            &plugin,
+            DatabaseType::PostgreSQL,
+            &original,
+            &current,
+            &[],
+        );
+
+        assert_eq!(sql.trim(), base_sql.trim());
     }
 }

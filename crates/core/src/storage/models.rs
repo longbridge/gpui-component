@@ -645,7 +645,10 @@ fn decrypt_json_passwords(json_str: &str) -> String {
 
 /// 判断字段名是否为敏感字段
 fn is_sensitive_field(key: &str) -> bool {
-    key == "password" || key == "passphrase"
+    key == "password"
+        || key == "passphrase"
+        || key.ends_with("_password")
+        || key.ends_with("_passphrase")
 }
 
 /// 递归遍历 JSON Value，加密敏感字段

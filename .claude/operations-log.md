@@ -194,3 +194,56 @@
 - 日志内容：content_mask / terminal_bounds / intersection / 可见行首 text_run 的 start_col 与首字符
 - 采样策略：每20帧输出一次，避免日志洪泛
 - 默认关闭：不开启环境变量时无额外日志
+
+## 编码前检查 - table-designer-drag-rename
+时间：2026-03-04 19:17:57 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-table-designer-drag-rename.md`
+- 将使用以下可复用组件：
+  - `crates/db_view/src/table_designer_tab.rs` 的 `DragColumn` 与 `move_column`
+  - `crates/ui/src/table/state.rs` 的 `on_drag + cx.stop_propagation` 事件处理模式
+  - `GlobalDbState -> plugin.build_alter_table_sql` 现有 SQL 生成链路
+- 将遵循命名约定：Rust `snake_case` / 类型 `PascalCase`
+- 将遵循代码风格：事件订阅驱动 + 局部最小改动
+- 确认不重复造轮子，证明：已检查 `db_view/table_designer_tab.rs`、`ui/table/state.rs`、`one_ui/edit_table/state.rs`，直接复用现有拖拽与 SQL 生成路径
+
+## 编码后声明 - table-designer-drag-rename
+时间：2026-03-04 19:24:36 +0800
+
+### 1. 复用了以下既有组件
+- `DragColumn` / `move_column`：继续使用原有列拖拽数据结构与排序逻辑
+- `GlobalDbState -> db_manager.get_plugin`：继续复用数据库插件 SQL 生成入口
+- `ui/table/state.rs` 与 `one_ui/edit_table/state.rs` 的 `on_drag + cx.stop_propagation` 事件模式
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增方法与字段采用 `snake_case`（如 `collect_column_renames`、`source_name`）
+- 代码风格：保持 `collect_design -> build sql -> execute` 既有链路，不新增全局状态
+- 文件组织：仅改动 `crates/db_view/src/table_designer_tab.rs`，不扩散到各数据库插件
+
+### 3. 对比了以下相似实现
+- `crates/ui/src/table/state.rs:1298`：拖拽开始时调用 `cx.stop_propagation`
+- `crates/one_ui/src/edit_table/state.rs:2045`：拖拽与 drop 绑定在可交互头部元素
+- `crates/db_view/src/table_designer_tab.rs:2171`：将拖拽触发从整行收敛到手柄元素
+
+### 4. 未重复造轮子的证明
+- 未重写数据库插件 `build_alter_table_sql`，而是在设计器层补充列来源映射并拼接重命名语句
+- 未新增拖拽框架，直接复用项目现有 GPUI 事件机制
+
+## 编码中调整 - table-designer-drag-rename
+时间：2026-03-04 19:24:36 +0800
+
+- 观察：MySQL `RENAME COLUMN` 在低版本可能存在兼容性风险
+- 调整：改为 `ALTER TABLE ... CHANGE COLUMN ...` 并复用 `plugin.build_column_def` 生成完整定义
+- 结果：`cargo check -p db_view` 与定向单测继续通过
+
+## 编码中调整 - table-designer-drag-rename（测试增强）
+时间：2026-03-04 19:34:39 +0800
+
+- 目标：增强“设计表字段修改 SQL 生成”在多数据库下的回归保障
+- 新增测试：`table_designer_tab::tests` 从 3 个扩展到 13 个
+- 覆盖范围：
+  - 各数据库列重命名 SQL 语法断言（MySQL/PostgreSQL/SQLite/MSSQL/Oracle/ClickHouse）
+  - 删除+重命名冲突场景（`a,b,c` 删除 `a`，`b -> a`）
+  - 空映射保持基线 SQL 不变
+  - MySQL `CHANGE COLUMN` 保留新列定义
+- 本地验证：`cargo test -p db_view table_designer_tab::tests -- --nocapture` 全通过

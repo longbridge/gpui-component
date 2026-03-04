@@ -392,7 +392,10 @@ fn re_encrypt_json_passwords(
 
 /// 判断字段名是否为敏感字段
 fn is_sensitive_field(key: &str) -> bool {
-    key == "password" || key == "passphrase"
+    key == "password"
+        || key == "passphrase"
+        || key.ends_with("_password")
+        || key.ends_with("_passphrase")
 }
 
 /// 递归加密 JSON Value 中的敏感字段
