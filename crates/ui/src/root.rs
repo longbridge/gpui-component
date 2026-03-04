@@ -36,6 +36,9 @@ pub struct Root {
     pub notification: Entity<NotificationList>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
+    /// The focus handle that will be restored after a dialog is closed with animation.
+    /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
+    pending_focus_restore: Option<WeakFocusHandle>,
 }
 
 #[derive(Clone)]
@@ -81,6 +84,7 @@ impl Root {
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
+            pending_focus_restore: None,
         }
     }
 
@@ -239,7 +243,14 @@ impl Root {
     where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
-        let previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
+        let mut previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
+
+        // Use pending focus restore if available to maintain correct focus chain
+        // when a new dialog is opened immediately after closing another dialog.
+        if let Some(pending_handle) = self.pending_focus_restore.take() {
+            previous_focused_handle = Some(pending_handle);
+        }
+
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
 
@@ -268,14 +279,23 @@ impl Root {
 
     pub(crate) fn defer_close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, Root>) {
         if let Some(handle) = self.close_dialog_internal() {
-            window
-                .spawn(cx, async move |cx| {
-                    cx.background_executor().timer(*ANIMATION_DURATION).await;
-                    _ = cx.update(|window, cx| {
+            let dialogs_count = self.active_dialogs.len();
+
+            // Save for new dialogs opened during animation to maintain focus chain
+            self.pending_focus_restore = Some(handle.downgrade());
+
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(*ANIMATION_DURATION).await;
+                let _ = this.update_in(cx, |this, window, cx| {
+                    let current_dialogs_count = this.active_dialogs.len();
+                    // Only restore focus if no new dialogs were opened during animation
+                    if current_dialogs_count == dialogs_count {
                         window.focus(&handle, cx);
-                    });
-                })
-                .detach();
+                    }
+                    this.pending_focus_restore = None;
+                });
+            })
+            .detach();
         }
         cx.notify();
     }
