@@ -122,6 +122,8 @@ pub struct Terminal {
     ssh_config: Option<SshTerminalConfig>,
     /// 事件发送器（用于 SSH 重连）
     event_tx: Option<UnboundedSender<TerminalEvent>>,
+    /// 事件代理（用于设置 PtyWrite 回写通道）
+    event_proxy: Option<GpuiEventProxy>,
     /// 连接 ID
     connection_id: Option<i64>,
     /// 连接名称
@@ -224,6 +226,7 @@ impl Terminal {
             rows: DEFAULT_ROWS,
             ssh_config: None,
             event_tx: Some(event_tx),
+            event_proxy: None, // 本地终端的 event_proxy 已在 LocalPtyBackend 中设置
             connection_id: None,
             connection_name: None,
             init_commands: None,
@@ -331,7 +334,7 @@ impl Terminal {
         let rows = config.pty_config.height as usize;
 
         let (event_tx, event_rx) = unbounded_channel::<TerminalEvent>();
-        let (term, _, _colors) = Self::create_term(cols, rows, event_tx.clone());
+        let (term, event_proxy, _colors) = Self::create_term(cols, rows, event_tx.clone());
         let (disconnect_tx, disconnect_rx) = tokio::sync::oneshot::channel::<()>();
 
         Self::spawn_disconnect_handler(disconnect_rx, cx);
@@ -339,6 +342,7 @@ impl Terminal {
         Self::spawn_ssh_connect(
             config.clone(),
             term.clone(),
+            event_proxy.clone(),
             event_tx.clone(),
             Some(disconnect_tx),
             cx,
@@ -354,6 +358,7 @@ impl Terminal {
             rows,
             ssh_config: Some(config),
             event_tx: Some(event_tx),
+            event_proxy: Some(event_proxy),
             connection_id: conn.id,
             connection_name: Some(conn.name),
             init_commands,
@@ -463,6 +468,7 @@ impl Terminal {
     fn spawn_ssh_connect(
         config: SshTerminalConfig,
         term: Arc<FairMutex<Term<GpuiEventProxy>>>,
+        event_proxy: GpuiEventProxy,
         event_tx: UnboundedSender<TerminalEvent>,
         on_disconnect: Option<tokio::sync::oneshot::Sender<()>>,
         cx: &mut Context<Self>,
@@ -492,6 +498,7 @@ impl Terminal {
                 config.ssh_config,
                 config.pty_config,
                 term,
+                event_proxy,
                 notify_tx,
                 disconnect_tx,
             )
@@ -680,12 +687,22 @@ impl Terminal {
         let Some(event_tx) = self.event_tx.clone() else {
             return;
         };
+        let Some(event_proxy) = self.event_proxy.clone() else {
+            return;
+        };
 
         self.connection_state = ConnectionState::Connecting;
 
         let (disconnect_tx, disconnect_rx) = tokio::sync::oneshot::channel::<()>();
         Self::spawn_disconnect_handler(disconnect_rx, cx);
-        Self::spawn_ssh_connect(config, self.term.clone(), event_tx, Some(disconnect_tx), cx);
+        Self::spawn_ssh_connect(
+            config,
+            self.term.clone(),
+            event_proxy,
+            event_tx,
+            Some(disconnect_tx),
+            cx,
+        );
 
         cx.emit(TerminalModelEvent::Wakeup);
     }

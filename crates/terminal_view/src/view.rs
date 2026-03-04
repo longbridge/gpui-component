@@ -968,15 +968,6 @@ impl TerminalView {
 
         let new_size = (cols, rows);
         if self.last_size != Some(new_size) {
-            tracing::info!(
-                "终端尺寸变化: {:?} -> {:?}, cell_width={:.2}, line_height={:.2}, bounds={:.0}x{:.0}",
-                self.last_size,
-                new_size,
-                self.cell_width,
-                self.line_height,
-                bounds.size.width,
-                bounds.size.height
-            );
             self.last_size = Some(new_size);
             self.terminal.update(cx, |terminal, _| {
                 terminal.resize(
@@ -1027,6 +1018,7 @@ impl TerminalView {
         {
             let term = self.terminal.read(cx).term().clone();
             let mut term = term.lock();
+
             self.render_cache
                 .update(&mut term, &self.addon_manager, &self.current_theme);
             term.reset_damage();
@@ -1659,13 +1651,6 @@ impl Render for TerminalView {
             .unwrap_or(self.current_theme.font_size * 0.6);
 
         if self.cell_width != new_cell_width {
-            tracing::info!(
-                "cell_width 变化: {:.2} -> {:.2}, font={}, size={:.1}",
-                self.cell_width,
-                new_cell_width,
-                self.current_theme.font_family,
-                self.current_theme.font_size
-            );
             self.cell_width = new_cell_width;
         }
 
@@ -1721,6 +1706,7 @@ impl Render for TerminalView {
                     .on_key_down(cx.listener(Self::handle_key_event))
                     .flex_1()
                     .relative()
+                    .overflow_hidden()
                     .on_scroll_wheel(cx.listener(Self::handle_scroll))
                     .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
                     .on_mouse_move(cx.listener(Self::handle_mouse_move))
@@ -1768,6 +1754,8 @@ impl Render for TerminalView {
                             .right(px(12.))
                             .top(px(12.))
                             .bottom(px(12.))
+                            .bg(self.current_theme.background)
+                            .overflow_hidden()
                             .child(self.render_terminal(cx))
                             .context_menu(move |menu, window, cx| {
                                 Self::build_context_menu(

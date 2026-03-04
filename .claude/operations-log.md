@@ -162,3 +162,35 @@
 ### 4. 未重复造轮子的证明
 - 未新增渲染模块或新依赖，仅复用现有字段与 paint 流程扩展
 - 未改动 addon、selection、damage 重建机制，问题在原模块内闭环修复
+
+## 编码中调整 - terminal-dropdown-render（二次修复）
+时间：2026-03-03
+
+- 观察：背景覆盖后仍有行首残留字符，表现为交互式菜单选择时行内容局部错乱
+- 新证据：错乱主要发生在交互式应用光标场景，疑似增量 damage 覆盖不完整
+- 调整策略：当 `TermMode::ALT_SCREEN` 或 `TermMode::APP_CURSOR` 启用时，跳过增量路径，改为每帧全量 `rebuild_all`
+- 保持不变：普通 shell 场景继续使用原增量渲染路径
+
+## 编码中调整 - terminal-dropdown-render（三次修复）
+时间：2026-03-03
+
+- 参考来源：`zed-industries/zed` 的 `crates/terminal_view/src/terminal_element.rs`（每帧基于当前 grid 重新布局）
+- 推断：当前残字更可能由增量 dirty 行漏刷导致，而非纯背景未覆盖
+- 调整：默认关闭增量路径，`RenderCache::update` 直接 `rebuild_all`；仅在设置 `ONETCLI_TERMINAL_INCREMENTAL=1` 时启用增量逻辑
+- 兼容：即使增量开启，`ALT_SCREEN/APP_CURSOR` 仍强制全量重建
+
+## 编码中调整 - terminal-dropdown-render（四次修复）
+时间：2026-03-03
+
+- 按用户要求恢复增量渲染主路径（移除默认全量重建开关）
+- 重点排查最左侧残留：怀疑 GPUI 文本绘制存在越界像素未被容器清理
+- 修复策略：在 `terminal_core` 及终端渲染容器添加 `.overflow_hidden()`，强制裁剪左边界外溢绘制
+- 验证：`cargo check -p terminal_view` 通过
+
+## 编码中调整 - terminal-dropdown-render（日志排障）
+时间：2026-03-03
+
+- 在 `terminal_element.rs` 增加左边缘诊断日志开关 `ONETCLI_TERMINAL_DEBUG_LEFT_EDGE=1`
+- 日志内容：content_mask / terminal_bounds / intersection / 可见行首 text_run 的 start_col 与首字符
+- 采样策略：每20帧输出一次，避免日志洪泛
+- 默认关闭：不开启环境变量时无额外日志

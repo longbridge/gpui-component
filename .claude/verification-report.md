@@ -147,3 +147,26 @@
 - 命令：`cd /Users/hufei/RustroverProjects/onetcli && cargo check -p terminal_view`
 - 结果：通过（2.06s）
 - 附注：出现既有 future-incompat 警告（`num-bigint-dig v0.8.4`），与本次改动无关
+
+### 二次修复补充（2026-03-03）
+- 问题反馈：首次修复后仍在交互式菜单场景出现行首/行内残留字符
+- 处理：在 `terminal_element` 中检测 `TermMode::ALT_SCREEN` 或 `TermMode::APP_CURSOR` 时强制全量 `rebuild_all`
+- 结果：`cargo check -p terminal_view` 通过
+- 风险：交互式场景下渲染开销上升（正确性优先），普通 shell 仍走增量路径
+
+### 三次修复补充（2026-03-03）
+- 依据：对照 Zed 终端渲染实现，优先每帧按当前终端内容重建渲染数据
+- 改动：默认全量重建，环境变量 `ONETCLI_TERMINAL_INCREMENTAL=1` 才启用增量
+- 验证：`cargo check -p terminal_view` 通过
+- 预期：彻底消除下拉/菜单交互过程中的残字与漏清理
+
+### 四次修复补充（2026-03-03）
+- 用户定位：问题集中在最左列未清理
+- 调整：恢复增量路径，同时在 `view.rs` 的终端容器启用 `overflow_hidden`
+- 目的：避免 GPUI 字形越界导致的左侧残影保留
+- 构建验证：`cargo check -p terminal_view` 通过
+
+### 日志排障补充（2026-03-03）
+- 新增调试开关：`ONETCLI_TERMINAL_DEBUG_LEFT_EDGE=1`
+- 目标：定位最左列残留是坐标/裁剪问题还是缓存内容问题
+- 构建验证：`cargo check -p terminal_view` 通过

@@ -2,13 +2,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-use alacritty_terminal::event::EventListener;
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::Term;
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 
 use ssh::{ChannelEvent, PtyConfig, RusshClient, SshChannel, SshClient, SshConnectConfig};
 
+use crate::pty_backend::GpuiEventProxy;
 use crate::{TerminalBackend, TerminalSize};
 
 enum SshCommand {
@@ -22,10 +22,11 @@ pub struct SshBackend {
 }
 
 impl SshBackend {
-    pub async fn connect<T: EventListener + Clone + Send + 'static>(
+    pub async fn connect(
         config: SshConnectConfig,
         pty_config: PtyConfig,
-        term: Arc<FairMutex<Term<T>>>,
+        term: Arc<FairMutex<Term<GpuiEventProxy>>>,
+        event_proxy: GpuiEventProxy,
         notify_tx: UnboundedSender<()>,
         on_disconnect: Option<UnboundedSender<()>>,
     ) -> anyhow::Result<Self> {
@@ -36,6 +37,10 @@ impl SshBackend {
         channel.request_shell().await?;
 
         let (command_tx, mut command_rx) = unbounded_channel::<SshCommand>();
+
+        // 创建 PtyWrite 回写通道
+        let (pty_write_tx, mut pty_write_rx) = unbounded_channel::<Vec<u8>>();
+        event_proxy.set_ssh_write_back(pty_write_tx);
 
         tokio::spawn(async move {
             let mut shutdown = false;
@@ -63,6 +68,16 @@ impl SshBackend {
                                 let _ = channel.close().await;
                                 break;
                             }
+                        }
+                    }
+                    Some(data) = pty_write_rx.recv() => {
+                        // DA 响应等回写数据
+                        let send_result = tokio::time::timeout(
+                            Duration::from_secs(30),
+                            channel.send_data(&data)
+                        ).await;
+                        if send_result.is_err() || send_result.is_ok_and(|r| r.is_err()) {
+                            break;
                         }
                     }
                     event = channel.recv() => {

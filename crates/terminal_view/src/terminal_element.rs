@@ -226,6 +226,9 @@ pub struct RenderCache {
 
     /// 上一帧的选择范围，用于增量更新
     last_selection: Option<SelectionRange>,
+
+    /// 左边缘列指纹（用于检测脏区漏报导致的首列残字）
+    left_edge_fingerprint: Vec<u64>,
 }
 
 #[derive(Clone)]
@@ -256,6 +259,7 @@ impl RenderCache {
             custom_background: rgb(0x1E1E1E).into(),
             custom_cursor: rgb(0xFFFFFF).into(),
             last_selection: None,
+            left_edge_fingerprint: vec![0; num_lines],
         }
     }
 
@@ -350,6 +354,12 @@ impl RenderCache {
             }
         }
 
+        // 首列兜底：检测左边缘变化但未被 damage 标记的行。
+        let edge_changed_lines = self.detect_left_edge_changed_lines(term, 4);
+        for line in &edge_changed_lines {
+            dirty_lines.insert(*line);
+        }
+
         // Rebuild dirty lines or just update cursor
         if dirty_lines.is_empty() {
             self.update_cursor(term);
@@ -369,6 +379,7 @@ impl RenderCache {
                 text_runs: Vec::new(),
             },
         );
+        self.left_edge_fingerprint.resize(num_lines, 0);
     }
 
     fn rebuild_all(&mut self, term: &Term<GpuiEventProxy>) {
@@ -504,6 +515,64 @@ impl RenderCache {
     fn update_last_selection(&mut self, term: &Term<GpuiEventProxy>) {
         let content = term.renderable_content();
         self.last_selection = content.selection.clone();
+    }
+
+    /// 计算并同步左边缘列指纹，返回发生变化的行。
+    ///
+    /// 目的：在某些复杂 ANSI 序列下，`TermDamage::Partial` 可能未覆盖到首列擦除场景，
+    /// 该指纹用于兜底发现“首几列变化但未标脏”的行，避免残字。
+    fn detect_left_edge_changed_lines(
+        &mut self,
+        term: &Term<GpuiEventProxy>,
+        probe_cols: usize,
+    ) -> Vec<usize> {
+        if self.num_lines == 0 || probe_cols == 0 {
+            return Vec::new();
+        }
+
+        let mut current = vec![0_u64; self.num_lines];
+        let content = term.renderable_content();
+        let display_offset = content.display_offset;
+
+        for cell in content.display_iter {
+            if cell.point.column.0 >= probe_cols {
+                continue;
+            }
+
+            let screen_line = cell.point.line.0 + display_offset as i32;
+            if screen_line < 0 || screen_line as usize >= self.num_lines {
+                continue;
+            }
+
+            let line_idx = screen_line as usize;
+            let code = cell.c as u32 as u64;
+            let col = cell.point.column.0 as u64;
+            let flags = cell.flags.bits() as u64;
+            // 仅用于变化检测，不追求密码学强度
+            let piece = col.wrapping_shl(56) ^ code.wrapping_shl(24) ^ flags;
+            current[line_idx] = current[line_idx]
+                .wrapping_mul(1099511628211)
+                .wrapping_add(piece.wrapping_add(1469598103934665603));
+        }
+
+        if self.left_edge_fingerprint.len() != self.num_lines {
+            self.left_edge_fingerprint.resize(self.num_lines, 0);
+        }
+
+        let mut changed = Vec::new();
+        for (line_idx, (old, new)) in self
+            .left_edge_fingerprint
+            .iter()
+            .zip(current.iter())
+            .enumerate()
+        {
+            if old != new {
+                changed.push(line_idx);
+            }
+        }
+
+        self.left_edge_fingerprint = current;
+        changed
     }
 
     fn build_line_cache(&mut self, line_idx: usize, mut cells: Vec<CellData>) {
@@ -731,6 +800,7 @@ impl<'a> IntoElement for TerminalElement<'a> {
             lines: self.cache.lines.clone(),
             cursor: self.cache.cursor.clone(),
             num_cols: self.cache.num_cols,
+            custom_background: self.cache.custom_background,
             custom_cursor: self.cache.custom_cursor,
             font_family: self.font_family,
             font_size: self.font_size,
@@ -746,6 +816,8 @@ pub struct TerminalElementImpl {
     lines: Vec<CachedLine>,
     cursor: Option<CachedCursor>,
     num_cols: usize,
+    /// 主题定义的背景色
+    custom_background: Hsla,
     /// 主题定义的光标颜色
     custom_cursor: Hsla,
     font_family: SharedString,
@@ -814,12 +886,15 @@ impl Element for TerminalElementImpl {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
+        // 关键：终端绘制元素必须填满父容器。
+        // 使用 flex+auto 在绝对定位父容器中可能得到 0 高度，导致 element_bounds 异常。
         let style = Style {
-            flex_grow: 1.0,
-            flex_shrink: 1.0,
-            size: Size {
-                width: Length::Auto,
-                height: Length::Auto,
+            position: Position::Absolute,
+            inset: Edges {
+                top: px(0.0).into(),
+                right: px(0.0).into(),
+                bottom: px(0.0).into(),
+                left: px(0.0).into(),
             },
             ..Default::default()
         };
@@ -877,6 +952,12 @@ impl Element for TerminalElementImpl {
         if intersection.size.height <= px(0.) || intersection.size.width <= px(0.) {
             return; // 完全不可见，跳过渲染
         }
+
+        // 背景覆盖整个 content_mask 可见区域，而非仅 terminal_bounds
+        // terminal_bounds 基于缓存尺寸 (num_cols * cell_width, num_lines * cell_height)，
+        // 在 resize 过渡期间或交互式程序重绘时可能小于实际可见区域，
+        // 导致边缘区域残留上一帧的文字。使用 content_mask 可确保全部区域被清除。
+        window.paint_quad(fill(content_mask, self.custom_background));
 
         let first_visible = ((intersection.origin.y - tb.origin.y) / tb.cell_height)
             .floor()
