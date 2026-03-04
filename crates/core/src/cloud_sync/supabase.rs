@@ -56,6 +56,8 @@ struct RefreshState {
     refresh_lock: AsyncMutex<()>,
     /// 刷新完成通知
     refresh_notify: Notify,
+    /// 最近一次刷新结果（用于并发等待方复用）
+    last_refresh_result: RwLock<Option<Result<AuthResponse, CloudApiError>>>,
 }
 
 impl Default for RefreshState {
@@ -64,6 +66,7 @@ impl Default for RefreshState {
             refreshing: AtomicBool::new(false),
             refresh_lock: AsyncMutex::new(()),
             refresh_notify: Notify::new(),
+            last_refresh_result: RwLock::new(None),
         }
     }
 }
@@ -304,7 +307,14 @@ impl SupabaseClient {
         let refresh_token = self
             .get_refresh_token()
             .ok_or(CloudApiError::NotAuthenticated)?;
+        self.refresh_token_internal_with(&refresh_token).await
+    }
 
+    /// 使用指定 refresh token 执行刷新（不通过拦截器，直接调用 API）
+    async fn refresh_token_internal_with(
+        &self,
+        refresh_token: &str,
+    ) -> Result<AuthResponse, CloudApiError> {
         #[derive(Serialize)]
         struct RefreshRequest<'a> {
             refresh_token: &'a str,
@@ -312,9 +322,7 @@ impl SupabaseClient {
 
         let url = self.auth_url("/token?grant_type=refresh_token");
         debug!("[supabase] refresh token: POST {}", url);
-        let body = RefreshRequest {
-            refresh_token: &refresh_token,
-        };
+        let body = RefreshRequest { refresh_token };
         let headers = self.common_headers();
 
         let (status, result) = self
@@ -366,6 +374,76 @@ impl SupabaseClient {
         }
     }
 
+    /// 读取最近一次刷新结果（用于并发刷新时复用首个结果）
+    fn last_refresh_result(&self) -> Result<AuthResponse, CloudApiError> {
+        self.refresh_state
+            .last_refresh_result
+            .read()
+            .ok()
+            .and_then(|r| r.clone())
+            .unwrap_or_else(|| Err(CloudApiError::AuthenticationFailed("令牌刷新状态未知".into())))
+    }
+
+    /// 刷新 token（单飞）：同一时刻只执行一次真实刷新，其它请求等待并复用结果
+    async fn refresh_token_singleflight(
+        &self,
+        refresh_token_override: Option<String>,
+    ) -> Result<AuthResponse, CloudApiError> {
+        // 若已有刷新进行中，等待后直接复用结果
+        if self.refresh_state.refreshing.load(Ordering::SeqCst) {
+            debug!("[supabase] token refresh in progress, waiting (singleflight)");
+            self.refresh_state.refresh_notify.notified().await;
+            return self.last_refresh_result();
+        }
+
+        // 获取刷新锁，确保同一时刻只有一个真实刷新请求
+        let _lock = self.refresh_state.refresh_lock.lock().await;
+
+        // 双重检查，避免等待锁期间被其它协程抢先刷新
+        if self.refresh_state.refreshing.load(Ordering::SeqCst) {
+            drop(_lock);
+            debug!("[supabase] token refresh in progress after lock, waiting (singleflight)");
+            self.refresh_state.refresh_notify.notified().await;
+            return self.last_refresh_result();
+        }
+
+        // 标记开始刷新并清空上一次结果
+        self.refresh_state.refreshing.store(true, Ordering::SeqCst);
+        if let Ok(mut result) = self.refresh_state.last_refresh_result.write() {
+            *result = None;
+        }
+        info!("[supabase] token refresh starting (singleflight)");
+
+        // 仅由拿到锁的协程发起真实刷新
+        let result = match refresh_token_override {
+            Some(refresh_token) => self.refresh_token_internal_with(&refresh_token).await,
+            None => self.refresh_token_internal().await,
+        };
+
+        // 结束刷新并保存结果，唤醒等待者
+        self.refresh_state.refreshing.store(false, Ordering::SeqCst);
+        if let Ok(mut last_result) = self.refresh_state.last_refresh_result.write() {
+            *last_result = Some(result.clone());
+        }
+        self.refresh_state.refresh_notify.notify_waiters();
+
+        match result {
+            Ok(auth_resp) => {
+                info!(
+                    "[supabase] token refresh succeeded (singleflight): user_id={} new_expires_at={}",
+                    auth_resp.user_id, auth_resp.expires_at
+                );
+                Ok(auth_resp)
+            }
+            Err(e) => {
+                error!("[supabase] token refresh failed (singleflight), clearing auth: {}", e);
+                self.clear_auth();
+                self.notify_session_expired();
+                Err(e)
+            }
+        }
+    }
+
     /// 检查 token 是否即将过期（提前 60 秒刷新）
     fn is_token_expiring_soon(&self) -> bool {
         if let Ok(state) = self.auth_state.read() {
@@ -394,64 +472,7 @@ impl SupabaseClient {
     /// 如果正在刷新，等待刷新完成；否则执行刷新。
     /// 使用锁确保同时只有一个刷新操作。
     async fn ensure_token_valid(&self) -> Result<(), CloudApiError> {
-        // 如果正在刷新，等待刷新完成
-        if self.refresh_state.refreshing.load(Ordering::SeqCst) {
-            debug!("[supabase] token refresh in progress, waiting");
-            self.refresh_state.refresh_notify.notified().await;
-            // 刷新完成后检查是否成功
-            return if self.get_access_token().is_some() {
-                Ok(())
-            } else {
-                warn!("[supabase] token refresh waited but no access token after refresh");
-                Err(CloudApiError::NotAuthenticated)
-            };
-        }
-
-        // 获取刷新锁
-        let _lock = self.refresh_state.refresh_lock.lock().await;
-
-        // 再次检查（可能在等待锁期间已被其他请求刷新）
-        if self.refresh_state.refreshing.load(Ordering::SeqCst) {
-            drop(_lock);
-            debug!("[supabase] token refresh in progress after lock, waiting");
-            self.refresh_state.refresh_notify.notified().await;
-            return if self.get_access_token().is_some() {
-                Ok(())
-            } else {
-                warn!("[supabase] token refresh waited (after lock) but no access token");
-                Err(CloudApiError::NotAuthenticated)
-            };
-        }
-
-        // 设置刷新中标志
-        self.refresh_state.refreshing.store(true, Ordering::SeqCst);
-        info!("[supabase] token refresh starting");
-
-        // 执行刷新
-        let result = self.refresh_token_internal().await;
-
-        // 清除刷新中标志
-        self.refresh_state.refreshing.store(false, Ordering::SeqCst);
-
-        // 通知所有等待的请求
-        self.refresh_state.refresh_notify.notify_waiters();
-
-        match result {
-            Ok(auth_resp) => {
-                info!(
-                    "[supabase] token refresh succeeded: user_id={} new_expires_at={}",
-                    auth_resp.user_id, auth_resp.expires_at
-                );
-                Ok(())
-            }
-            Err(e) => {
-                // 刷新失败，清除认证状态并通知 UI
-                error!("[supabase] token refresh failed, clearing auth: {}", e);
-                self.clear_auth();
-                self.notify_session_expired();
-                Err(e)
-            }
-        }
+        self.refresh_token_singleflight(None).await.map(|_| ())
     }
 
     /// 发送 POST 请求并返回 JSON 响应
@@ -1211,62 +1232,9 @@ impl CloudApiClient for SupabaseClient {
     }
 
     async fn refresh_token(&self, refresh_token: &str) -> Result<AuthResponse, CloudApiError> {
-        #[derive(Serialize)]
-        struct RefreshRequest<'a> {
-            refresh_token: &'a str,
-        }
-
-        let url = self.auth_url("/token?grant_type=refresh_token");
-        info!("[supabase] refresh_token (trait): POST {}", url);
-        let body = RefreshRequest { refresh_token };
-        let headers = self.common_headers();
-
-        let (status, result) = self
-            .post_json::<SupabaseAuthResponse, _>(&url, headers, &body)
-            .await?;
-
-        if status.is_success() {
-            let auth = result.map_err(|e| CloudApiError::ParseError(e))?;
-
-            let expires_at = auth.expires_at.unwrap_or_else(|| {
-                auth.expires_in
-                    .map(|e| chrono::Utc::now().timestamp() + e)
-                    .unwrap_or(0)
-            });
-
-            // 使用 set_auth_with_expiry 确保内存中 expires_at 正确
-            self.set_auth_with_expiry(
-                auth.access_token.clone(),
-                auth.refresh_token.clone(),
-                auth.user.id.clone(),
-                expires_at,
-            );
-
-            info!(
-                "[supabase] refresh_token (trait) success: user_id={} expires_at={} expires_in={:?}",
-                auth.user.id, expires_at, auth.expires_in
-            );
-
-            Ok(AuthResponse {
-                user_id: auth.user.id,
-                email: auth.user.email.unwrap_or_default(),
-                access_token: auth.access_token,
-                refresh_token: auth.refresh_token,
-                expires_at,
-            })
-        } else {
-            let error_body = match &result {
-                Ok(_) => "parsed ok but status failed".to_string(),
-                Err(e) => e.clone(),
-            };
-            error!(
-                "[supabase] refresh_token (trait) failed: status={} body={}",
-                status, error_body
-            );
-            Err(CloudApiError::AuthenticationFailed(
-                "令牌刷新失败".to_string(),
-            ))
-        }
+        info!("[supabase] refresh_token (trait): entering singleflight refresh");
+        self.refresh_token_singleflight(Some(refresh_token.to_string()))
+            .await
     }
 
     async fn sign_in_with_otp(&self, email: &str) -> Result<(), CloudApiError> {
