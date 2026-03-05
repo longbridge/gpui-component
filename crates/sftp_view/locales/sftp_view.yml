@@ -257,6 +257,10 @@ Error:
     en: "Failed to read directory: %{error}"
     zh-CN: "读取目录失败: %{error}"
     zh-HK: "讀取目錄失敗: %{error}"
+  invalid_name:
+    en: "Invalid name. Path separators and special names are not allowed."
+    zh-CN: "名称无效，不允许包含路径分隔符或特殊名称。"
+    zh-HK: "名稱無效，不允許包含路徑分隔符或特殊名稱。"
   create_file_failed:
     en: "Failed to create file: %{error}"
     zh-CN: "创建文件失败: %{error}"

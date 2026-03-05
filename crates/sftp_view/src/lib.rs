@@ -314,6 +314,15 @@ fn join_remote_path(base: &str, name: &str) -> String {
     }
 }
 
+fn is_valid_entry_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains('\0')
+}
+
 fn breadcrumb_item(label: impl Into<SharedString>) -> BreadcrumbItem {
     BreadcrumbItem::new(label)
         .flex_shrink()
@@ -1086,11 +1095,19 @@ impl SftpView {
                     Ok(Ok(entries)) => entries.into_iter().map(|e| e.name).collect(),
                     Ok(Err(e)) => {
                         tracing::error!("Failed to list remote directory: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                     Err(e) => {
                         tracing::error!("Task error: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                 };
 
@@ -1172,11 +1189,19 @@ impl SftpView {
                     Ok(Ok(entries)) => entries.into_iter().map(|e| e.name).collect(),
                     Ok(Err(e)) => {
                         tracing::error!("Failed to list remote directory: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                     Err(e) => {
                         tracing::error!("Task error: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                 };
 
@@ -2182,6 +2207,26 @@ impl SftpView {
         cx.notify();
     }
 
+    fn cancel_all_transfers(&mut self) {
+        self.transfer_queue.pending.clear();
+        for task in &mut self.transfer_queue.tasks {
+            match task.state {
+                TransferTaskState::Pending => {
+                    task.state = TransferTaskState::Cancelled;
+                    task.error = None;
+                }
+                TransferTaskState::Running => {
+                    task.shared_progress
+                        .cancelled
+                        .store(true, Ordering::Relaxed);
+                }
+                TransferTaskState::Completed
+                | TransferTaskState::Failed
+                | TransferTaskState::Cancelled => {}
+            }
+        }
+    }
+
     fn push_notification(&self, notification: Notification, cx: &mut Context<Self>) {
         if let Some(window) = cx.active_window() {
             if let Err(error) = window.update(cx, |_, window, cx| {
@@ -2205,14 +2250,19 @@ impl SftpView {
         let local_path = self.local_current_path.clone();
         let remote_path = self.remote_current_path.clone();
 
-        let local_names: std::collections::HashSet<String> = std::fs::read_dir(&local_path)
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .map(|e| e.file_name().to_string_lossy().to_string())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let local_names: std::collections::HashSet<String> = match std::fs::read_dir(&local_path) {
+            Ok(entries) => entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect(),
+            Err(e) => {
+                window.push_notification(
+                    Notification::error(t!("Error.read_dir_failed", error = e)),
+                    cx,
+                );
+                return;
+            }
+        };
 
         let mut pending_transfers: Vec<PendingTransfer> = Vec::new();
         let mut has_conflict = false;
@@ -2584,77 +2634,80 @@ impl SftpView {
                     if folder_name.is_empty() {
                         return false;
                     }
+                    if !is_valid_entry_name(&folder_name) {
+                        window.push_notification(Notification::error(t!("Error.invalid_name")), cx);
+                        return false;
+                    }
 
-                    let _ = view_clone.update(cx, |this, cx| {
-                        match side {
-                            PanelSide::Local => {
-                                let path = this.local_current_path.join(&folder_name);
-                                if let Err(e) = std::fs::create_dir(&path) {
-                                    tracing::error!(
-                                        "Failed to create folder {}: {}",
-                                        path.display(),
-                                        e
-                                    );
-                                    window.push_notification(
-                                        Notification::error(t!(
-                                            "Error.create_folder_failed",
-                                            error = e
-                                        )),
-                                        cx,
-                                    );
-                                } else {
-                                    window.close_dialog(cx);
-                                }
-                                this.refresh_local_dir(cx);
+                    let _ = view_clone.update(cx, |this, cx| match side {
+                        PanelSide::Local => {
+                            let path = this.local_current_path.join(&folder_name);
+                            if let Err(e) = std::fs::create_dir(&path) {
+                                tracing::error!(
+                                    "Failed to create folder {}: {}",
+                                    path.display(),
+                                    e
+                                );
+                                window.push_notification(
+                                    Notification::error(t!(
+                                        "Error.create_folder_failed",
+                                        error = e
+                                    )),
+                                    cx,
+                                );
+                            } else {
+                                window.close_dialog(cx);
                             }
-                            PanelSide::Remote => {
-                                let Some(client) = this.sftp_client.clone() else {
-                                    return;
-                                };
+                            this.refresh_local_dir(cx);
+                        }
+                        PanelSide::Remote => {
+                            let Some(client) = this.sftp_client.clone() else {
+                                return;
+                            };
 
-                                let remote_path =
-                                    join_remote_path(&this.remote_current_path, &folder_name);
+                            let remote_path =
+                                join_remote_path(&this.remote_current_path, &folder_name);
 
-                                let task = Tokio::spawn(cx, async move {
-                                    let mut client = client.lock().await;
-                                    client.mkdir(&remote_path).await
-                                });
+                            let task = Tokio::spawn(cx, async move {
+                                let mut client = client.lock().await;
+                                client.mkdir(&remote_path).await
+                            });
 
-                                let view = cx.entity().clone();
-                                window
-                                    .spawn(cx, async move |cx| {
-                                        match task.await {
-                                            Ok(Ok(_)) => {
-                                                let _ = view.update_in(cx, |this, window, cx| {
-                                                    window.close_dialog(cx);
-                                                    this.refresh_remote_dir(cx);
-                                                });
-                                            }
-                                            Ok(Err(e)) => {
-                                                tracing::error!(
-                                                    "Failed to create remote folder: {}",
-                                                    e
-                                                );
-                                                // cx.update(|window, cx| {
-                                                //     window.push_notification(
-                                                //         Notification::error(format!("创建文件夹失败: {}", e)),
-                                                //         cx,
-                                                //     );
-                                                // }).ok();
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Task error: {}", e);
-                                                // cx.update(|window, cx| {
-                                                //     window.push_notification(
-                                                //         Notification::error(format!("创建文件夹失败: {}", e)),
-                                                //         cx,
-                                                //     );
-                                                // }).ok();
-                                            }
-                                        }
-                                    })
-                                    .detach();
-                            }
+                            let view = cx.entity().clone();
+                            window
+                                .spawn(cx, async move |cx| match task.await {
+                                    Ok(Ok(_)) => {
+                                        let _ = view.update_in(cx, |this, window, cx| {
+                                            window.close_dialog(cx);
+                                            this.refresh_remote_dir(cx);
+                                        });
+                                    }
+                                    Ok(Err(e)) => {
+                                        tracing::error!("Failed to create remote folder: {}", e);
+                                        let _ = view.update_in(cx, |_this, window, cx| {
+                                            window.push_notification(
+                                                Notification::error(t!(
+                                                    "Error.create_folder_failed",
+                                                    error = e
+                                                )),
+                                                cx,
+                                            );
+                                        });
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Task error: {}", e);
+                                        let _ = view.update_in(cx, |_this, window, cx| {
+                                            window.push_notification(
+                                                Notification::error(t!(
+                                                    "Error.create_folder_failed",
+                                                    error = e
+                                                )),
+                                                cx,
+                                            );
+                                        });
+                                    }
+                                })
+                                .detach();
                         }
                     });
                     false
@@ -2760,11 +2813,19 @@ impl SftpView {
                     Ok(Ok(entries)) => entries.into_iter().map(|e| e.name).collect(),
                     Ok(Err(e)) => {
                         tracing::error!("Failed to list remote directory: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                     Err(e) => {
                         tracing::error!("Task error: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                 };
 
@@ -2837,14 +2898,19 @@ impl SftpView {
         };
 
         let local_path = self.local_current_path.clone();
-        let local_names: std::collections::HashSet<String> = std::fs::read_dir(&local_path)
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .map(|e| e.file_name().to_string_lossy().to_string())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let local_names: std::collections::HashSet<String> = match std::fs::read_dir(&local_path) {
+            Ok(entries) => entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect(),
+            Err(e) => {
+                window.push_notification(
+                    Notification::error(t!("Error.read_dir_failed", error = e)),
+                    cx,
+                );
+                return;
+            }
+        };
 
         let mut pending_transfers: Vec<PendingTransfer> = Vec::new();
         let mut has_conflict = false;
@@ -2934,11 +3000,19 @@ impl SftpView {
                     Ok(Ok(entries)) => entries.into_iter().map(|e| e.name).collect(),
                     Ok(Err(e)) => {
                         tracing::error!("Failed to list remote directory: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                     Err(e) => {
                         tracing::error!("Task error: {}", e);
-                        std::collections::HashSet::new()
+                        let error_msg = t!("Error.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
                     }
                 };
 
@@ -3833,6 +3907,10 @@ impl TabContent for SftpView {
             return cx.spawn(async move |this, cx| {
                 let confirmed = rx.await.unwrap_or(false);
                 if confirmed {
+                    let _ = this.update(cx, |this, cx| {
+                        this.cancel_all_transfers();
+                        cx.notify();
+                    });
                     // 用户确认关闭，断开连接
                     if let Some(task) = disconnect_task {
                         let _ = task.await;

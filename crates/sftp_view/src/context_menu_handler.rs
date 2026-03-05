@@ -16,6 +16,15 @@ use rust_i18n::t;
 use sftp::SftpClient;
 use std::path::PathBuf;
 
+fn is_valid_entry_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains('\0')
+}
+
 /// 右键菜单处理 trait
 /// 为 SftpView 实现右键菜单的各种功能
 pub trait ContextMenuHandler {
@@ -253,6 +262,10 @@ impl ContextMenuHandler for SftpView {
                     if file_name.is_empty() {
                         return false;
                     }
+                    if !is_valid_entry_name(&file_name) {
+                        window.push_notification(Notification::error(t!("Error.invalid_name")), cx);
+                        return false;
+                    }
 
                     let _ = view_clone.update(cx, |this, cx| {
                         match side {
@@ -301,9 +314,27 @@ impl ContextMenuHandler for SftpView {
                                         }
                                         Ok(Err(e)) => {
                                             tracing::error!("Failed to create remote file: {}", e);
+                                            let _ = view.update_in(cx, |_this, window, cx| {
+                                                window.push_notification(
+                                                    Notification::error(t!(
+                                                        "Error.create_file_failed",
+                                                        error = e
+                                                    )),
+                                                    cx,
+                                                );
+                                            });
                                         }
                                         Err(e) => {
                                             tracing::error!("Task error: {}", e);
+                                            let _ = view.update_in(cx, |_this, window, cx| {
+                                                window.push_notification(
+                                                    Notification::error(t!(
+                                                        "Error.create_file_failed",
+                                                        error = e
+                                                    )),
+                                                    cx,
+                                                );
+                                            });
                                         }
                                     })
                                     .detach();
@@ -360,6 +391,10 @@ impl ContextMenuHandler for SftpView {
                     if new_name.is_empty() {
                         return false;
                     }
+                    if !is_valid_entry_name(&new_name) {
+                        window.push_notification(Notification::error(t!("Error.invalid_name")), cx);
+                        return false;
+                    }
 
                     let _ = view_clone.update(cx, |this, cx| match side {
                         PanelSide::Local => {
@@ -413,9 +448,27 @@ impl ContextMenuHandler for SftpView {
                                     }
                                     Ok(Err(e)) => {
                                         tracing::error!("Failed to rename remote file: {}", e);
+                                        let _ = view.update_in(cx, |_this, window, cx| {
+                                            window.push_notification(
+                                                Notification::error(t!(
+                                                    "Error.rename_failed",
+                                                    error = e
+                                                )),
+                                                cx,
+                                            );
+                                        });
                                     }
                                     Err(e) => {
                                         tracing::error!("Task error: {}", e);
+                                        let _ = view.update_in(cx, |_this, window, cx| {
+                                            window.push_notification(
+                                                Notification::error(t!(
+                                                    "Error.rename_failed",
+                                                    error = e
+                                                )),
+                                                cx,
+                                            );
+                                        });
                                     }
                                 })
                                 .detach();

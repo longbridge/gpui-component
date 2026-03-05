@@ -218,6 +218,7 @@ impl FileListPanel {
     pub fn toggle_show_hidden(&mut self, cx: &mut Context<Self>) {
         self.show_hidden = !self.show_hidden;
         self.apply_filter();
+        self.selected_indices.clear();
         cx.notify();
     }
 
@@ -305,6 +306,7 @@ impl FileListPanel {
         }
         self.sort_items();
         self.apply_filter();
+        self.selected_indices.clear();
         cx.notify();
     }
 
