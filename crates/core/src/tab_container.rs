@@ -1637,6 +1637,33 @@ impl TabContainer {
                     // 仅在启用窗口控件时设置拖动区域（用于 Windows 原生拖动）
                     .when(show_window_controls, |this| {
                         this.window_control_area(WindowControlArea::Drag)
+                            .on_mouse_down_out(window.listener_for(
+                                &drag_state,
+                                |state, _, _, _| {
+                                    state.should_move = false;
+                                },
+                            ))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                window.listener_for(&drag_state, |state, _, _, _| {
+                                    state.should_move = true;
+                                }),
+                            )
+                            .on_mouse_up(
+                                MouseButton::Left,
+                                window.listener_for(&drag_state, |state, _, _, _| {
+                                    state.should_move = false;
+                                }),
+                            )
+                            .on_mouse_move(window.listener_for(
+                                &drag_state,
+                                |state, _, window, _| {
+                                    if state.should_move {
+                                        state.should_move = false;
+                                        window.start_window_move();
+                                    }
+                                },
+                            ))
                     })
                     .overflow_x_scroll()
                     .when(!is_macos && self.pinned_tab.is_none(), |this| {

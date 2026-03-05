@@ -247,3 +247,43 @@
   - 空映射保持基线 SQL 不变
   - MySQL `CHANGE COLUMN` 保留新列定义
 - 本地验证：`cargo test -p db_view table_designer_tab::tests -- --nocapture` 全通过
+
+## 编码前检查 - tab-container-windows-drag
+时间：2026-03-05 10:31:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-tab-container-windows-drag.md`
+- 将使用以下可复用组件：
+  - `crates/core/src/tab_container.rs` 的 `TabBarDragState`（窗口拖动状态）
+  - `crates/ui/src/title_bar.rs` 的拖动事件链（`on_mouse_down` → `start_window_move`）
+  - `render_control_button` 的 `window_control_area`（Windows 控件区）
+- 将遵循命名约定：Rust `snake_case` / 类型 `PascalCase`
+- 将遵循代码风格：GPUI 链式构建 + `.when(...)` 条件组合
+- 确认不重复造轮子，证明：已检查 `tab_container.rs`、`ui/title_bar.rs`、`zed platform_title_bar.rs`，采用现有模式最小修复。
+## 编码中调整 - tab-container-windows-drag
+时间：2026-03-05 10:34:00 +0800
+
+- 现象复核：`#tabs` 是 `overflow_x_scroll` 容器，可能吞掉鼠标按下事件，导致父层 `tab-bar` 的 `should_move` 未置位。
+- 修复动作：在 `#tabs` 的 `window_control_area(WindowControlArea::Drag)` 上补齐 `on_mouse_down_out/on_mouse_down/on_mouse_up/on_mouse_move`。
+- 设计约束：复用既有 `drag_state`，仅在 `show_window_controls` 为真时生效，不影响 macOS。
+
+## 编码后声明 - tab-container-windows-drag
+时间：2026-03-05 10:35:00 +0800
+
+### 1. 复用了以下既有组件
+- `TabBarDragState`：继续使用 `should_move` 控制窗口拖动启动。
+- `render_tab_bar` 现有 `window_control_area(WindowControlArea::Drag)`：未替换，仅增强事件链。
+- `render_control_button`：Windows 控件区逻辑未变。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增逻辑仅复用已有变量 `drag_state` 与 `should_move`。
+- 代码风格：延续 GPUI 链式 `.when(...).on_mouse_xxx(...)` 结构。
+- 文件组织：仅修改 `crates/core/src/tab_container.rs`。
+
+### 3. 对比了以下相似实现
+- `crates/ui/src/title_bar.rs:292`：标题栏 `down/up/move` 触发 `start_window_move`。
+- `zed-industries/zed/crates/platform_title_bar/src/platform_title_bar.rs`：统一拖动区域 + `should_move` 状态。
+- `crates/core/src/tab_container.rs:1540`：原有父层拖动状态管理。
+
+### 4. 未重复造轮子的证明
+- 未新增新的拖拽状态结构，仅复用 `TabBarDragState`。
+- 未引入新窗口拖动 API，仅复用 `window.start_window_move()`。
