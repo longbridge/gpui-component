@@ -1,11 +1,11 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    App, Bounds, Corners, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, Half, HighlightStyle, Hitbox, HitboxBehavior, Hsla,
-    InteractiveElement, IntoElement, LayoutId, MouseButton, MouseMoveEvent, Path, Pixels, Point,
-    ShapedLine, SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle,
-    UnderlineStyle, Window, fill, point, px, relative, size,
+    App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
+    HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
+    Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative,
+    size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -652,12 +652,11 @@ impl TextElement {
         window: &mut Window,
     ) -> (Pixels, usize) {
         let total_lines = text.lines_len();
-        let line_number_len = match total_lines {
-            0..=9999 => 5,
-            10000..=99999 => 6,
-            100000..=999999 => 7,
-            _ => 8,
-        };
+        // Compute the number of characters needed to display the largest line number,
+        // plus one leading space for visual padding. Use a minimum of 5 so the column
+        // is never too narrow for short files, and grows dynamically for arbitrarily
+        // large files (no fixed upper bound).
+        let line_number_len = (total_lines.max(1).ilog10() as usize + 2).max(5);
 
         let mut line_number_width = if state.mode.line_number() {
             let empty_line_number = window.text_system().shape_line(
@@ -839,6 +838,11 @@ impl TextElement {
     fn layout_fold_icons(
         &self,
         bounds: &Bounds<Pixels>,
+        // The x origin of the line-number column.  Line numbers are painted at
+        // input_bounds.origin.x, so fold icons must use the same reference to stay within
+        // the column.  This value is also not affected by horizontal scroll (unlike
+        // bounds.origin.x, which has the scroll offset applied after layout_cursor runs).
+        fixed_origin_x: Pixels,
         last_layout: &LastLayout,
         window: &mut Window,
         cx: &mut App,
@@ -851,9 +855,10 @@ impl TextElement {
             offset_y: Pixels,
         }
 
+        // The hitbox for the line-number column uses the fixed (non-scrolled) x origin.
         let line_number_hitbox = window.insert_hitbox(
             Bounds::new(
-                bounds.origin + point(px(0.), last_layout.visible_top),
+                point(fixed_origin_x, bounds.origin.y + last_layout.visible_top),
                 size(last_layout.line_number_width, bounds.size.height),
             ),
             HitboxBehavior::Normal,
@@ -898,20 +903,23 @@ impl TextElement {
 
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
-        let line_number_width = last_layout.line_number_width
-            - LINE_NUMBER_RIGHT_MARGIN.half()
-            - FOLD_ICON_HITBOX_WIDTH;
-        let icon_relative_pos = point(
-            (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
-            (line_height - FOLD_ICON_WIDTH).half(),
-        );
+
+        // The visible background column ends at (line_number_width - LINE_NUMBER_RIGHT_MARGIN).
+        // The fold-icon hitbox occupies the rightmost FOLD_ICON_HITBOX_WIDTH pixels of that
+        // column, so the icon never overflows into the transparent right-margin zone.
+        //
+        //  [  line number text  ][  fold icon (18 px)  ][ right margin (10 px) ][ text ]
+        //  ^- fixed_origin_x                            ^- bg column right
+        let bg_column_right =
+            fixed_origin_x + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN;
+        let hitbox_x = bg_column_right - FOLD_ICON_HITBOX_WIDTH;
 
         for (ix, info) in fold_infos.iter().enumerate() {
-            // Position fold icon to the right of line numbers
-            let fold_icon_bounds = Bounds::new(
-                bounds.origin + icon_relative_pos + point(line_number_width, info.offset_y),
-                size(FOLD_ICON_HITBOX_WIDTH, line_height),
-            );
+            // Hitbox: full FOLD_ICON_HITBOX_WIDTH × line_height cell, flush with the
+            // right edge of the visible background column.
+            let hitbox_origin = point(hitbox_x, bounds.origin.y + info.offset_y);
+            let fold_icon_bounds =
+                Bounds::new(hitbox_origin, size(FOLD_ICON_HITBOX_WIDTH, line_height));
 
             // Create and prepaint icon
             let mut icon = Button::new(("fold", ix))
@@ -940,8 +948,13 @@ impl TextElement {
                 .into_any_element();
 
             icon.prepaint_as_root(
-                fold_icon_bounds.origin,
-                fold_icon_bounds.size.into(),
+                // Center the 14 px visual icon inside the 18 px hitbox cell.
+                fold_icon_bounds.origin
+                    + point(
+                        (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
+                        (line_height - FOLD_ICON_WIDTH).half(),
+                    ),
+                size(FOLD_ICON_WIDTH, FOLD_ICON_WIDTH).into(),
                 window,
                 cx,
             );
@@ -1524,6 +1537,18 @@ impl Element for TextElement {
             scroll_size.width = longest_line_width + line_number_width;
         }
 
+        // For single-line mode, `update_scroll_offset` in state.rs clamps the scroll using
+        // `input_bounds.size.width` (the full element width including padding), while
+        // `layout_cursor` here uses `bounds.size.width` (the content area, after padding).
+        // Without correction these two disagree by `padding.left + padding.right`, which causes:
+        //   1. Over-scrolling that pushes the last characters beyond the visible right edge.
+        //   2. Oscillation (shaking) between the two mismatched scroll limits on every click.
+        // Adding the horizontal padding to scroll_size.width makes update_scroll_offset compute
+        // the same effective max-scroll as layout_cursor, eliminating both issues.
+        if !multi_line {
+            scroll_size.width += padding.left + padding.right;
+        }
+
         // `position_for_index` for example
         //
         // #### text
@@ -1623,7 +1648,18 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let fold_icon_layout = self.layout_fold_icons(&bounds, &last_layout, window, cx);
+        let fold_icon_layout = self.layout_fold_icons(
+            &bounds,
+            // Line numbers are painted at input_bounds.origin.x (not at the padded
+            // content-area origin). Fold icons must use the same reference so they stay
+            // within the line-number column and are not pushed into the text content area.
+            // input_bounds.origin.x is also unaffected by horizontal scroll, which is
+            // what prevents the icons from scrolling off-screen horizontally.
+            input_bounds.origin.x,
+            &last_layout,
+            window,
+            cx,
+        );
 
         PrepaintState {
             bounds,
@@ -1876,7 +1912,19 @@ impl Element for TextElement {
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            Bounds::new(p, size(prepaint.last_layout.line_number_width, height)),
+                            // Use the same width as the general gutter background
+                            // (line_number_width - LINE_NUMBER_RIGHT_MARGIN) so the
+                            // active-line highlight does not extend into the right-margin
+                            // gap and paint over content. The full-width active-line
+                            // highlight rendered before the text already covers that zone.
+                            Bounds::new(
+                                p,
+                                size(
+                                    prepaint.last_layout.line_number_width
+                                        - LINE_NUMBER_RIGHT_MARGIN,
+                                    height,
+                                ),
+                            ),
                             bg_color,
                         ));
                     }
