@@ -943,19 +943,23 @@ impl DatabasePlugin for SqlitePlugin {
     }
 
     fn drop_table(&self, _database: &str, _schema: Option<&str>, table: &str) -> String {
-        format!("DROP TABLE IF EXISTS \"{}\"", table)
+        format!("DROP TABLE IF EXISTS {}", self.quote_identifier(table))
     }
 
     fn truncate_table(&self, _database: &str, table: &str) -> String {
-        format!("DELETE FROM \"{}\"", table)
+        format!("DELETE FROM {}", self.quote_identifier(table))
     }
 
     fn rename_table(&self, _database: &str, old_name: &str, new_name: &str) -> String {
-        format!("ALTER TABLE \"{}\" RENAME TO \"{}\"", old_name, new_name)
+        format!(
+            "ALTER TABLE {} RENAME TO {}",
+            self.quote_identifier(old_name),
+            self.quote_identifier(new_name)
+        )
     }
 
     fn drop_view(&self, _database: &str, view: &str) -> String {
-        format!("DROP VIEW IF EXISTS \"{}\"", view)
+        format!("DROP VIEW IF EXISTS {}", self.quote_identifier(view))
     }
 
     fn build_column_def(&self, col: &ColumnDefinition) -> String {
@@ -1161,6 +1165,20 @@ mod tests {
         let sql = plugin.drop_view("main", "my_view");
         assert!(sql.contains("DROP VIEW"));
         assert!(sql.contains("\"my_view\""));
+    }
+
+    #[test]
+    fn test_drop_table_escapes_identifier() {
+        let plugin = create_plugin();
+        let sql = plugin.drop_table("main", None, "weird\"table");
+        assert_eq!(sql, "DROP TABLE IF EXISTS \"weird\"\"table\"");
+    }
+
+    #[test]
+    fn test_drop_view_escapes_identifier() {
+        let plugin = create_plugin();
+        let sql = plugin.drop_view("main", "my\"view");
+        assert_eq!(sql, "DROP VIEW IF EXISTS \"my\"\"view\"");
     }
 
     // ==================== Database Operations Tests ====================

@@ -1,29 +1,29 @@
 use crate::sql_editor::SqlEditor;
 use crate::sql_result_tab::SqlResultTabContainer;
-use db::{GlobalDbState, compress_sql, format_sql};
+use db::{compress_sql, format_sql, GlobalDbState};
 use gpui::prelude::*;
 use gpui::{
-    App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity, EventEmitter,
-    FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, SharedString, Styled, Task, WeakEntity, Window, div, px,
+    div, px, App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity,
+    EventEmitter, FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, Render, SharedString, Styled, Task, WeakEntity, Window,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::input::InputEvent;
+use gpui_component::input::{InputContextMenuItem, InputEvent};
 use gpui_component::select::{SearchableVec, Select, SelectEvent, SelectState};
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size, WindowExt, h_flex, v_flex,
+    h_flex, v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size, WindowExt,
 };
-use one_core::storage::DatabaseType;
 use one_core::storage::manager::get_queries_dir;
+use one_core::storage::DatabaseType;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
-use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
+use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use rust_i18n::t;
 use smol::Timer;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::log::error;
 
@@ -117,6 +117,7 @@ impl SqlEditorTab {
             is_dirty: is_dirty.clone(),
         };
 
+        instance.configure_editor_context_menu(cx);
         instance.bind_select_event(cx);
         instance.bind_auto_save(auto_save_seq, is_dirty, window, cx);
         instance.load_databases_async(
@@ -129,6 +130,26 @@ impl SqlEditorTab {
         );
 
         instance
+    }
+
+    fn configure_editor_context_menu(&self, cx: &mut Context<Self>) {
+        let view = cx.entity().clone();
+        self.editor.update(cx, |editor, cx| {
+            editor.set_mouse_context_menu_items(
+                vec![
+                    InputContextMenuItem::on_click(t!("Query.run_selected").to_string(), {
+                        let view = view.clone();
+                        move |_, window, cx| {
+                            let _ = view.update(cx, |this, cx| {
+                                this.handle_run_selected_query(window, cx);
+                            });
+                        }
+                    })
+                    .icon(IconName::ArrowRight),
+                ],
+                cx,
+            );
+        });
     }
 
     pub fn new_with_file_path(
@@ -360,9 +381,11 @@ impl SqlEditorTab {
                 let _ = cx.update_window(window_id, |_entity, window, cx| {
                     schema_select.update(cx, |state, cx| {
                         if schemas.is_empty() {
-                            let items = SearchableVec::new(vec![
-                                t!("Common.no_available", item = &t!("Schema.schema")).to_string(),
-                            ]);
+                            let items = SearchableVec::new(vec![t!(
+                                "Common.no_available",
+                                item = &t!("Schema.schema")
+                            )
+                            .to_string()]);
                             state.set_items(items, window, cx);
                             state.set_selected_index(None, window, cx);
                         } else {
@@ -458,10 +481,11 @@ impl SqlEditorTab {
                     cx.update_window(window_id, |_entity, window, cx| {
                         database_select.update(cx, |state, cx| {
                             if databases.is_empty() {
-                                let items = SearchableVec::new(vec![
-                                    t!("Common.no_available", item = &t!("Database.database"))
-                                        .to_string(),
-                                ]);
+                                let items = SearchableVec::new(vec![t!(
+                                    "Common.no_available",
+                                    item = &t!("Database.database")
+                                )
+                                .to_string()]);
                                 state.set_items(items, window, cx);
                                 state.set_selected_index(None, window, cx);
                             } else {
@@ -603,27 +627,7 @@ impl SqlEditorTab {
         self.editor.read(cx).get_text(cx)
     }
 
-    fn notify_async(cx: &mut AsyncApp, message: String) {
-        let _ = cx.update(|cx| {
-            if let Some(window_id) = cx.active_window() {
-                let notification = message.clone();
-                cx.update_window(window_id, move |_entity, window, cx| {
-                    window.push_notification(notification.clone(), cx);
-                })
-            } else {
-                Err(anyhow::anyhow!("No active window"))
-            }
-        });
-    }
-
-    fn handle_run_query(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let selected_text = self.editor.read(cx).get_selected_text(cx);
-        let sql = if selected_text.trim().is_empty() {
-            self.get_sql_text(cx)
-        } else {
-            selected_text
-        };
-
+    fn execute_sql_text(&mut self, sql: String, window: &mut Window, cx: &mut Context<Self>) {
         let connection_id = self.connection_id.clone();
         let sql_result_tab_container = self.sql_result_tab_container.clone();
 
@@ -662,6 +666,38 @@ impl SqlEditorTab {
                 cx,
             );
         })
+    }
+
+    fn notify_async(cx: &mut AsyncApp, message: String) {
+        let _ = cx.update(|cx| {
+            if let Some(window_id) = cx.active_window() {
+                let notification = message.clone();
+                cx.update_window(window_id, move |_entity, window, cx| {
+                    window.push_notification(notification.clone(), cx);
+                })
+            } else {
+                Err(anyhow::anyhow!("No active window"))
+            }
+        });
+    }
+
+    fn handle_run_query(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let selected_text = self.editor.read(cx).get_selected_text(cx);
+        let sql = if selected_text.trim().is_empty() {
+            self.get_sql_text(cx)
+        } else {
+            selected_text
+        };
+        self.execute_sql_text(sql, window, cx);
+    }
+
+    fn handle_run_selected_query(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let selected_text = self.editor.read(cx).get_selected_text(cx);
+        if selected_text.trim().is_empty() {
+            window.push_notification(t!("Query.please_select_sql_to_run").to_string(), cx);
+            return;
+        }
+        self.execute_sql_text(selected_text, window, cx);
     }
 
     fn handle_format_query(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {

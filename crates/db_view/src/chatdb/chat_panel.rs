@@ -7,26 +7,25 @@
 //! - 有数据库连接 → SqlWorkflowAgent（自动处理选表/元数据/SQL生成）
 //! - 无数据库连接 → GeneralChatAgent
 
-use crate::chatdb::agents::{CAP_DB_METADATA, DatabaseMetadataProvider};
+use crate::chatdb::agents::{DatabaseMetadataProvider, CAP_DB_METADATA};
 use crate::chatdb::ai_input::{AIInput, AIInputEvent};
-use crate::chatdb::chart_json::{ChartJsonBlock, ChartType, parse_chart_json_block};
+use crate::chatdb::chart_json::{parse_chart_json_block, ChartJsonBlock, ChartType};
 use crate::chatdb::chat_markdown::SqlCodeBlock;
 use crate::chatdb::chat_sql_block::SqlBlockResultState;
 use crate::chatdb::chat_sql_result::ChatSqlResultView;
 use crate::chatdb::components::{
-    ChatMessageUI, ChatRole, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP, MessageVariant,
-    SqlBlockCacheExt,
+    ChatMessageUI, ChatRole, MessageVariant, SqlBlockCacheExt, MESSAGE_RENDER_LIMIT,
+    MESSAGE_RENDER_STEP,
 };
-use db::{GlobalDbState, is_query_statement_fallback};
+use db::{is_query_statement_fallback, GlobalDbState};
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, div, px,
+    div, px, AnyElement, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
 };
 use gpui_component::button::ButtonVariants;
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size, WindowExt as _,
     button::Button,
     chart::{BarChart, LineChart, PieChart},
     clipboard::Clipboard,
@@ -36,19 +35,19 @@ use gpui_component::{
     list::{List, ListState},
     scroll::Scrollbar,
     text::TextView,
-    v_flex,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, WindowExt as _,
 };
 use one_core::agent::registry::AgentRegistry;
 use one_core::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
 use one_core::cloud_sync::GlobalCloudUser;
 use one_core::gpui_tokio::Tokio;
 use one_core::llm::{
-    Message, ProviderConfig, Role,
     chat_history::{ChatSession, MessageRepository},
     manager::GlobalProviderState,
     storage::ProviderRepository,
+    Message, ProviderConfig, Role,
 };
-use one_core::storage::{DatabaseType, GlobalStorageState, traits::Repository};
+use one_core::storage::{traits::Repository, DatabaseType, GlobalStorageState};
 use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
 use std::collections::HashMap;
@@ -61,7 +60,7 @@ use one_core::ai_chat::components::{
     ModelSettings, ProviderItem, SessionData, SessionListConfig, SessionListDelegate,
     SessionListHost,
 };
-use one_core::ai_chat::services::{SessionService, extract_session_name};
+use one_core::ai_chat::services::{extract_session_name, SessionService};
 
 // ============================================================================
 // 事件定义
@@ -1268,6 +1267,58 @@ impl ChatPanel {
         cx.notify();
     }
 
+    fn run_sql_block_with_guard(
+        &mut self,
+        message_id: &str,
+        block: &SqlCodeBlock,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let global_state = cx.global::<GlobalDbState>().clone();
+        let is_query = match self.ai_input.read(cx).get_connection_info() {
+            Some((connection_id, _, _)) => {
+                is_query_statement_for_connection(&global_state, &connection_id, &block.code)
+            }
+            None => is_query_statement_fallback(&block.code),
+        };
+
+        if is_query {
+            self.execute_sql_block(message_id, block, window, cx, true);
+            return;
+        }
+
+        let panel = cx.entity().clone();
+        let message_id = message_id.to_string();
+        let block_for_ok = block.clone();
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let panel_for_ok = panel.clone();
+            let message_id_for_ok = message_id.clone();
+            let block_for_ok = block_for_ok.clone();
+            dialog
+                .overlay(false)
+                .title(t!("Common.confirm").to_string())
+                .confirm()
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("ChatSqlBlock.run").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
+                )
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(t!("ChatSqlBlock.confirm_run_non_query_message").to_string())
+                        .child(t!("ChatSqlBlock.confirm_run_non_query_desc").to_string()),
+                )
+                .on_ok(move |_, window, cx| {
+                    panel_for_ok.update(cx, |view, cx| {
+                        view.execute_sql_block(&message_id_for_ok, &block_for_ok, window, cx, true);
+                    });
+                    false
+                })
+                .on_cancel(|_, _, _| true)
+        });
+    }
+
     // ========================================================================
     // 渲染
     // ========================================================================
@@ -1628,12 +1679,11 @@ impl ChatPanel {
                                                     let block_for_action = block_for_action.clone();
                                                     move |_, window, cx| {
                                                         panel.update(cx, |p, cx| {
-                                                            p.execute_sql_block(
+                                                            p.run_sql_block_with_guard(
                                                                 &message_id,
                                                                 &block_for_action,
                                                                 window,
                                                                 cx,
-                                                                true,
                                                             );
                                                         });
                                                     }

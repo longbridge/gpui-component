@@ -9,14 +9,14 @@ use crate::{
 };
 use db::{DbNode, DbNodeType, GlobalDbState, SqlResult};
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, ParentElement, PathPromptOptions, Styled,
-    Subscription, Window, div, px,
+    div, px, App, AppContext, AsyncApp, Context, Entity, ParentElement, PathPromptOptions, Styled,
+    Subscription, Window,
 };
 use gpui_component::dialog::DialogButtonProps;
-use gpui_component::{WindowExt, h_flex, notification::Notification, v_flex};
+use gpui_component::{h_flex, notification::Notification, v_flex, WindowExt};
 use one_core::gpui_tokio::Tokio;
 use one_core::{
-    popup_window::{PopupWindowOptions, open_popup_window},
+    popup_window::{open_popup_window, PopupWindowOptions},
     tab_container::{TabContainer, TabItem},
 };
 use rust_i18n::t;
@@ -1699,7 +1699,10 @@ impl DatabaseEventHandler {
                     let sql = state
                         .get_plugin(&database_type)
                         .map(|p| p.build_drop_schema_sql(&schema))
-                        .unwrap_or_else(|_| format!("DROP SCHEMA \"{}\"", schema));
+                        .unwrap_or_else(|_| {
+                            let escaped_schema = schema.replace('"', "\"\"");
+                            format!("DROP SCHEMA \"{}\"", escaped_schema)
+                        });
 
                     cx.spawn(async move |cx: &mut AsyncApp| {
                         let result = state
@@ -2101,7 +2104,10 @@ impl DatabaseEventHandler {
                             let sql = state
                                 .get_plugin(&database_type)
                                 .map(|p| p.build_drop_schema_sql(&schema_name))
-                                .unwrap_or_else(|_| format!("DROP SCHEMA \"{}\"", schema_name));
+                                .unwrap_or_else(|_| {
+                                    let escaped_schema = schema_name.replace('"', "\"\"");
+                                    format!("DROP SCHEMA \"{}\"", escaped_schema)
+                                });
 
                             let result = state
                                 .execute_single(
@@ -2640,8 +2646,8 @@ impl DatabaseEventHandler {
         cx: &mut App,
     ) {
         use gpui_component::{
-            WindowExt,
             input::{Input, InputState},
+            WindowExt,
         };
 
         let connection_id = node.connection_id.clone();
@@ -2992,8 +2998,8 @@ impl DatabaseEventHandler {
         cx: &mut App,
     ) {
         use gpui_component::{
-            WindowExt,
             input::{Input, InputState},
+            WindowExt,
         };
 
         let Some(path_str) = node.metadata.get("file_path") else {

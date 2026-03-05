@@ -4,17 +4,18 @@ use std::time::Instant;
 
 // 2. 外部 crate 导入（按字母顺序）
 use gpui::{
-    App, AppContext, AsyncApp, ClickEvent, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, PathPromptOptions, Render, Styled, Window, div,
-    prelude::FluentBuilder, px,
+    div, prelude::FluentBuilder, px, App, AppContext, AsyncApp, ClickEvent, Context, Entity,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, PathPromptOptions,
+    Render, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonVariants as _},
+    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputState},
     switch::Switch,
-    v_flex, v_virtual_list,
+    v_flex, v_virtual_list, ActiveTheme, Disableable, Sizable, VirtualListScrollHandle,
+    WindowExt as _,
 };
 use rust_i18n::t;
 use std::rc::Rc;
@@ -36,7 +37,6 @@ pub struct SqlRunView {
     file_path: Entity<InputState>,
     pending_file_path: Entity<Option<String>>,
     stop_on_error: Entity<bool>,
-    use_transaction: Entity<bool>,
 
     logs: Entity<Vec<LogEntry>>,
     scroll_handle: VirtualListScrollHandle,
@@ -69,7 +69,6 @@ impl SqlRunView {
             file_path: cx.new(|cx| InputState::new(window, cx)),
             pending_file_path: cx.new(|_| None),
             stop_on_error: cx.new(|_| false),
-            use_transaction: cx.new(|_| false),
 
             logs: cx.new(|_| Vec::new()),
             scroll_handle: VirtualListScrollHandle::new(),
@@ -111,7 +110,7 @@ impl SqlRunView {
         });
     }
 
-    fn select_file(&mut self, _window: &mut Window, cx: &mut App) {
+    fn select_file(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let pending = self.pending_file_path.clone();
         let logs = self.logs.clone();
         let scroll_handle = self.scroll_handle.clone();
@@ -122,7 +121,7 @@ impl SqlRunView {
             prompt: Some(t!("SqlRun.select_sql_file").into()),
         });
 
-        cx.spawn(async move |cx: &mut AsyncApp| {
+        cx.spawn(async move |_, cx: &mut AsyncApp| {
             if let Ok(Ok(Some(paths))) = future.await {
                 let mut path = String::new();
                 for (i, path_buf) in paths.iter().enumerate() {
@@ -150,7 +149,48 @@ impl SqlRunView {
         .detach();
     }
 
-    fn start_run(&mut self, _window: &mut Window, cx: &mut App) {
+    fn confirm_start_run(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let selected_files = self.file_path.read(cx).text().to_string();
+        let file_count = selected_files
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .count();
+
+        if file_count == 0 {
+            self.start_run(window, cx);
+            return;
+        }
+
+        let panel = cx.entity().clone();
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let panel_for_ok = panel.clone();
+            dialog
+                .overlay(false)
+                .title(t!("Common.confirm").to_string())
+                .confirm()
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("SqlRun.execute").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
+                )
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(t!("SqlRun.confirm_execute_message", count = file_count).to_string())
+                        .child(t!("SqlRun.confirm_execute_desc").to_string()),
+                )
+                .on_ok(move |_, window, cx| {
+                    panel_for_ok.update(cx, |view, cx| {
+                        view.start_run(window, cx);
+                    });
+                    false
+                })
+                .on_cancel(|_, _, _| true)
+        });
+    }
+
+    fn start_run(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if *self.is_running.read(cx) {
             return;
         }
@@ -168,7 +208,6 @@ impl SqlRunView {
         let schema = self.schema.clone();
         let file_path_str = self.file_path.read(cx).text().to_string();
         let stop_on_error = *self.stop_on_error.read(cx);
-        let transactional = *self.use_transaction.read(cx);
         let logs = self.logs.clone();
         let scroll_handle = self.scroll_handle.clone();
         let total_statements = self.total_statements.clone();
@@ -197,7 +236,7 @@ impl SqlRunView {
             return;
         }
 
-        cx.spawn(async move |cx: &mut AsyncApp| {
+        cx.spawn(async move |_, cx: &mut AsyncApp| {
             let files: Vec<String> = file_path_str
                 .split(';')
                 .map(|s| s.trim().to_string())
@@ -225,7 +264,7 @@ impl SqlRunView {
                 let conn_id = connection_id.clone();
                 let opts = ExecOptions {
                     stop_on_error,
-                    transactional,
+                    transactional: false,
                     max_rows: None,
                     streaming: false,
                 };
@@ -419,7 +458,6 @@ impl Clone for SqlRunView {
             file_path: self.file_path.clone(),
             pending_file_path: self.pending_file_path.clone(),
             stop_on_error: self.stop_on_error.clone(),
-            use_transaction: self.use_transaction.clone(),
 
             logs: self.logs.clone(),
             scroll_handle: self.scroll_handle.clone(),
@@ -488,42 +526,23 @@ impl Render for SqlRunView {
                     ),
             )
             .child(
-                h_flex()
-                    .gap_4()
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(
-                                Switch::new("stop_on_error")
-                                    .checked(*self.stop_on_error.read(cx))
-                                    .disabled(is_running)
-                                    .on_click(cx.listener(|view, checked, _, cx| {
-                                        view.stop_on_error.update(cx, |value, cx| {
-                                            *value = *checked;
-                                            cx.notify();
-                                        });
-                                    })),
-                            )
-                            .child(t!("SqlRun.stop_on_error").to_string()),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(
-                                Switch::new("use_transaction")
-                                    .checked(*self.use_transaction.read(cx))
-                                    .disabled(is_running)
-                                    .on_click(cx.listener(|view, checked, _, cx| {
-                                        view.use_transaction.update(cx, |value, cx| {
-                                            *value = *checked;
-                                            cx.notify();
-                                        });
-                                    })),
-                            )
-                            .child(t!("SqlRun.use_transaction").to_string()),
-                    ),
+                h_flex().gap_4().child(
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .child(
+                            Switch::new("stop_on_error")
+                                .checked(*self.stop_on_error.read(cx))
+                                .disabled(is_running)
+                                .on_click(cx.listener(|view, checked, _, cx| {
+                                    view.stop_on_error.update(cx, |value, cx| {
+                                        *value = *checked;
+                                        cx.notify();
+                                    });
+                                })),
+                        )
+                        .child(t!("SqlRun.stop_on_error").to_string()),
+                ),
             )
             .child(div().h_px().bg(cx.theme().border))
             .child(
@@ -689,7 +708,7 @@ impl Render for SqlRunView {
                                 .on_click(window.listener_for(
                                     &cx.entity(),
                                     |view, _: &ClickEvent, window, cx| {
-                                        view.start_run(window, cx);
+                                        view.confirm_start_run(window, cx);
                                     },
                                 )),
                         )

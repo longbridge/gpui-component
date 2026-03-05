@@ -2,18 +2,19 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    ParentElement, PathPromptOptions, Render, SharedString, StatefulInteractiveElement, Styled,
-    Window, div, prelude::FluentBuilder, px,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, PathPromptOptions, Render, SharedString,
+    StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, IndexPath, VirtualListScrollHandle,
     button::{Button, ButtonVariants as _},
+    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectItem, SelectState},
     switch::Switch,
-    v_flex, v_virtual_list,
+    v_flex, v_virtual_list, ActiveTheme, Disableable, IconName, IndexPath, VirtualListScrollHandle,
+    WindowExt as _,
 };
 use tokio::sync::mpsc;
 
@@ -296,7 +297,7 @@ impl TableImportView {
         });
     }
 
-    fn select_file(&mut self, _window: &mut Window, cx: &mut App) {
+    fn select_file(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let pending = self.pending_file_path.clone();
         let future = cx.prompt_for_paths(PathPromptOptions {
             files: true,
@@ -305,7 +306,7 @@ impl TableImportView {
             prompt: Some(t!("ImportExport.select_import_file").into()),
         });
 
-        cx.spawn(async move |cx| {
+        cx.spawn(async move |_, cx| {
             if let Ok(Ok(Some(paths))) = future.await {
                 if let Some(path_buf) = paths.first() {
                     let path = path_buf.to_string_lossy().to_string();
@@ -321,7 +322,49 @@ impl TableImportView {
         .detach();
     }
 
-    fn start_import(&mut self, _window: &mut Window, cx: &mut App) {
+    fn confirm_start_import(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !*self.truncate_before.read(cx) {
+            self.start_import(window, cx);
+            return;
+        }
+
+        let table = self.table.clone();
+        let panel = cx.entity().clone();
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let panel_for_ok = panel.clone();
+            let table_name = table.clone();
+            dialog
+                .overlay(false)
+                .title(t!("Common.confirm_clear").to_string())
+                .confirm()
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("Common.confirm").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
+                )
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            t!(
+                                "ImportExport.confirm_truncate_before_import_message",
+                                table = table_name
+                            )
+                            .to_string(),
+                        )
+                        .child(t!("ImportExport.confirm_truncate_before_import_desc").to_string()),
+                )
+                .on_ok(move |_, window, cx| {
+                    panel_for_ok.update(cx, |view, cx| {
+                        view.start_import(window, cx);
+                    });
+                    false
+                })
+                .on_cancel(|_, _, _| true)
+        });
+    }
+
+    fn start_import(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if *self.is_running.read(cx) {
             return;
         }
@@ -411,7 +454,7 @@ impl TableImportView {
         let is_finished = self.is_finished.clone();
         let start_time = self.start_time;
 
-        cx.spawn(async move |cx| {
+        cx.spawn(async move |_, cx| {
             Self::add_log(
                 &cx,
                 &logs,
@@ -1323,7 +1366,7 @@ impl Render for TableImportView {
                         |this| {
                             this.child(Button::new("start").primary().child(t!("ImportExport.start_import").to_string()).on_click(
                                 window.listener_for(&cx.entity(), |view, _, window, cx| {
-                                    view.start_import(window, cx);
+                                    view.confirm_start_import(window, cx);
                                 }),
                             ))
                         },

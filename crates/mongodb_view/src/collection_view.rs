@@ -24,6 +24,7 @@ use mongodb::options::FindOptions;
 use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
+use tracing::{error, info, warn};
 
 use crate::GlobalMongoState;
 use crate::types::{MongoError, bson_to_string, document_to_pretty_json};
@@ -1698,10 +1699,16 @@ impl CollectionView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let result = Tokio::spawn_result(cx, async move {
+                info!(
+                    "[run_query] 开始查询 db={}, collection={}, filter={:?}",
+                    database_name, collection_name, inputs.filter
+                );
                 let connection = global_state.get_connection(&connection_id).ok_or_else(|| {
                     anyhow::anyhow!(t!("MongoCollection.connection_missing").to_string())
                 })?;
                 let guard = connection.read().await;
+
+                info!("[run_query] 开始 find_documents");
                 let documents = guard
                     .find_documents(
                         &database_name,
@@ -1709,14 +1716,24 @@ impl CollectionView {
                         inputs.filter.clone(),
                         options,
                     )
-                    .await
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-                // count_documents 在某些系统集合（如 system.sessions）上可能失败，
-                // 失败时不阻断文档展示，总数显示为未知
+                    .await;
+                match &documents {
+                    Ok(docs) => info!("[run_query] find_documents 成功，返回 {} 条文档", docs.len()),
+                    Err(e) => error!("[run_query] find_documents 失败: {e}"),
+                }
+                let documents = documents.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                info!("[run_query] 开始 count_documents");
                 let total = guard
                     .count_documents(&database_name, &collection_name, inputs.filter)
-                    .await
-                    .ok();
+                    .await;
+                match &total {
+                    Ok(count) => info!("[run_query] count_documents 成功，total={count}"),
+                    Err(e) => warn!("[run_query] count_documents 失败（将忽略）: {e}"),
+                }
+                // count_documents 在某些系统集合（如 system.sessions）上可能失败，
+                // 失败时不阻断文档展示，总数显示为未知
+                let total = total.ok();
                 Ok((documents, total))
             })
             .await;
@@ -1724,6 +1741,7 @@ impl CollectionView {
             _ = this.update(cx, |view, cx| {
                 match result {
                     Ok((documents, total)) => {
+                        info!("[run_query] 异步结果成功，文档数={}, total={:?}", documents.len(), total);
                         let items_result: Result<Vec<DocumentItem>, MongoError> = documents
                             .into_iter()
                             .enumerate()
@@ -1769,6 +1787,7 @@ impl CollectionView {
                                 }
                             }
                             Err(error) => {
+                                error!("[run_query] 文档序列化失败: {error}");
                                 view.is_loading = false;
                                 view.error_message = Some(error.to_string());
                                 Self::notify_error(&error.to_string(), cx);
@@ -1776,6 +1795,7 @@ impl CollectionView {
                         }
                     }
                     Err(error) => {
+                        error!("[run_query] Tokio任务失败: {error}");
                         view.is_loading = false;
                         view.error_message = Some(error.to_string());
                         Self::notify_error(&error.to_string(), cx);

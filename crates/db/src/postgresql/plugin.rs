@@ -1253,43 +1253,44 @@ impl DatabasePlugin for PostgresPlugin {
         &self,
         request: &crate::plugin::DatabaseOperationRequest,
     ) -> String {
-        let db_name = &request.database_name;
+        let db_name = self.quote_identifier(&request.database_name);
         let encoding = request
             .field_values
             .get("encoding")
             .map(|s| s.as_str())
-            .unwrap_or("UTF8");
+            .unwrap_or("UTF8")
+            .replace('\'', "''");
 
-        format!("CREATE DATABASE \"{}\" ENCODING '{}';", db_name, encoding)
+        format!("CREATE DATABASE {} ENCODING '{}';", db_name, encoding)
     }
 
     fn build_modify_database_sql(
         &self,
         request: &crate::plugin::DatabaseOperationRequest,
     ) -> String {
-        let db_name = &request.database_name;
-        format!("ALTER DATABASE \"{}\" SET search_path = public;", db_name)
+        let db_name = self.quote_identifier(&request.database_name);
+        format!("ALTER DATABASE {} SET search_path = public;", db_name)
     }
 
     fn build_drop_database_sql(&self, database_name: &str) -> String {
-        format!("DROP DATABASE \"{}\";", database_name)
+        format!("DROP DATABASE {};", self.quote_identifier(database_name))
     }
 
     fn build_create_schema_sql(&self, schema_name: &str) -> String {
-        format!("CREATE SCHEMA \"{}\";", schema_name.replace("\"", "\"\""))
+        format!("CREATE SCHEMA {};", self.quote_identifier(schema_name))
     }
 
     fn build_drop_schema_sql(&self, schema_name: &str) -> String {
         format!(
-            "DROP SCHEMA \"{}\" CASCADE;",
-            schema_name.replace("\"", "\"\"")
+            "DROP SCHEMA {} CASCADE;",
+            self.quote_identifier(schema_name)
         )
     }
 
     fn build_comment_schema_sql(&self, schema_name: &str, comment: &str) -> Option<String> {
         Some(format!(
-            "COMMENT ON SCHEMA \"{}\" IS '{}';",
-            schema_name.replace("\"", "\"\""),
+            "COMMENT ON SCHEMA {} IS '{}';",
+            self.quote_identifier(schema_name),
             comment.replace("'", "''")
         ))
     }
@@ -1710,6 +1711,22 @@ mod tests {
     }
 
     #[test]
+    fn test_build_create_database_sql_escapes_identifier() {
+        let plugin = create_plugin();
+        let mut field_values = HashMap::new();
+        field_values.insert("encoding".to_string(), "UTF8".to_string());
+
+        let request = crate::plugin::DatabaseOperationRequest {
+            database_name: "new\"db".to_string(),
+            field_values,
+        };
+
+        let sql = plugin.build_create_database_sql(&request);
+        assert!(sql.contains("CREATE DATABASE"));
+        assert!(sql.contains("\"new\"\"db\""));
+    }
+
+    #[test]
     fn test_build_modify_database_sql() {
         let plugin = create_plugin();
         let field_values = HashMap::new();
@@ -1729,6 +1746,13 @@ mod tests {
         let plugin = create_plugin();
         let sql = plugin.build_drop_database_sql("old_db");
         assert_eq!(sql, "DROP DATABASE \"old_db\";");
+    }
+
+    #[test]
+    fn test_build_drop_database_sql_escapes_identifier() {
+        let plugin = create_plugin();
+        let sql = plugin.build_drop_database_sql("old\"db");
+        assert_eq!(sql, "DROP DATABASE \"old\"\"db\";");
     }
 
     // ==================== Schema Operations Tests ====================

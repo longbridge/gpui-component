@@ -10,7 +10,8 @@ use gpui::{
 };
 use gpui_component::highlighter::Language;
 use gpui_component::input::{
-    CodeActionProvider, CompletionProvider, HoverProvider, Input, InputEvent, InputState, TabSize,
+    CodeActionProvider, CompletionProvider, HoverProvider, Input, InputContextMenuItem, InputEvent,
+    InputState, TabSize,
 };
 use gpui_component::{Rope, RopeExt};
 use lsp_types::{
@@ -1375,6 +1376,17 @@ impl SqlEditor {
     /// Access underlying editor state.
     pub fn input(&self) -> Entity<InputState> {
         self.editor.clone()
+    }
+
+    /// 设置编辑器右键菜单的扩展项（支持一级和二级菜单）。
+    pub fn set_mouse_context_menu_items(
+        &mut self,
+        items: Vec<InputContextMenuItem>,
+        cx: &mut Context<Self>,
+    ) {
+        self.editor.update(cx, move |state, cx| {
+            state.set_mouse_context_menu_items(items, cx)
+        });
     }
 
     /// Replace default completion provider.

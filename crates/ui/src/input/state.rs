@@ -4,12 +4,12 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
-    Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
-    prelude::FluentBuilder as _, px,
+    actions, div, point, prelude::FluentBuilder as _, px, Action, App, AppContext, Bounds,
+    ClickEvent, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle,
+    Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
+    ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _, Subscription, Task,
+    TextAlign, UTF16Selection, Window,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -22,20 +22,21 @@ use super::{
     blink_cursor::BlinkCursor, change::Change, element::TextElement, mask_pattern::MaskPattern,
     mode::InputMode, number_input, text_wrapper::TextWrapper,
 };
-use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
-    HoverDefinition, Lsp, Position,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
     search::{self, SearchPanel},
     text_wrapper::LineLayout,
+    HoverDefinition, Lsp, Position,
 };
 use crate::input::{InlineCompletion, RopeExt as _, Selection};
-use crate::{Root, history::History};
+use crate::Icon;
+use crate::Size;
 use crate::{highlighter::DiagnosticSet, input::text_wrapper::LineItem};
+use crate::{history::History, Root};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -97,6 +98,106 @@ pub enum InputEvent {
     PressEnter { secondary: bool },
     Focus,
     Blur,
+}
+
+pub type InputContextMenuActionFactory = Rc<dyn Fn() -> Box<dyn Action>>;
+pub type InputContextMenuClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
+#[derive(Clone)]
+pub enum InputContextMenuItem {
+    Separator,
+    Item {
+        label: SharedString,
+        icon: Option<Icon>,
+        disabled: bool,
+        action: Option<InputContextMenuActionFactory>,
+        on_click: Option<InputContextMenuClickHandler>,
+    },
+    Submenu {
+        label: SharedString,
+        icon: Option<Icon>,
+        disabled: bool,
+        items: Vec<InputContextMenuItem>,
+    },
+}
+
+impl InputContextMenuItem {
+    pub fn separator() -> Self {
+        Self::Separator
+    }
+
+    pub fn action<A>(label: impl Into<SharedString>, action: A) -> Self
+    where
+        A: Action + Clone + 'static,
+    {
+        Self::action_factory(label, move || Box::new(action.clone()))
+    }
+
+    pub fn action_factory(
+        label: impl Into<SharedString>,
+        factory: impl Fn() -> Box<dyn Action> + 'static,
+    ) -> Self {
+        Self::Item {
+            label: label.into(),
+            icon: None,
+            disabled: false,
+            action: Some(Rc::new(factory)),
+            on_click: None,
+        }
+    }
+
+    pub fn on_click(
+        label: impl Into<SharedString>,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        Self::Item {
+            label: label.into(),
+            icon: None,
+            disabled: false,
+            action: None,
+            on_click: Some(Rc::new(handler)),
+        }
+    }
+
+    pub fn submenu(
+        label: impl Into<SharedString>,
+        items: impl IntoIterator<Item = InputContextMenuItem>,
+    ) -> Self {
+        Self::Submenu {
+            label: label.into(),
+            icon: None,
+            disabled: false,
+            items: items.into_iter().collect(),
+        }
+    }
+
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        match &mut self {
+            InputContextMenuItem::Item {
+                icon: item_icon, ..
+            }
+            | InputContextMenuItem::Submenu {
+                icon: item_icon, ..
+            } => *item_icon = Some(icon.into()),
+            InputContextMenuItem::Separator => {}
+        }
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        match &mut self {
+            InputContextMenuItem::Item {
+                disabled: is_disabled,
+                ..
+            }
+            | InputContextMenuItem::Submenu {
+                disabled: is_disabled,
+                ..
+            } => *is_disabled = disabled,
+            InputContextMenuItem::Separator => {}
+        }
+        self
+    }
 }
 
 pub(super) const CONTEXT: &str = "Input";
@@ -339,6 +440,7 @@ pub struct InputState {
     /// Completion/CodeAction context menu
     pub(super) context_menu: Option<ContextMenu>,
     pub(super) mouse_context_menu: Entity<MouseContextMenu>,
+    pub(super) mouse_context_menu_items: Vec<InputContextMenuItem>,
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
@@ -438,6 +540,7 @@ impl InputState {
             diagnostic_popover: None,
             context_menu: None,
             mouse_context_menu,
+            mouse_context_menu_items: vec![],
             completion_inserting: false,
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
@@ -522,6 +625,12 @@ impl InputState {
     /// Set placeholder
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
+        self
+    }
+
+    /// 为右键菜单设置额外菜单项，支持一级和二级菜单。
+    pub fn mouse_context_menu_items(mut self, items: Vec<InputContextMenuItem>) -> Self {
+        self.mouse_context_menu_items = items;
         self
     }
 
@@ -613,6 +722,32 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.placeholder = placeholder.into();
+        cx.notify();
+    }
+
+    /// 运行时更新右键菜单的额外菜单项。
+    pub fn set_mouse_context_menu_items(
+        &mut self,
+        items: Vec<InputContextMenuItem>,
+        cx: &mut Context<Self>,
+    ) {
+        self.mouse_context_menu_items = items;
+        cx.notify();
+    }
+
+    /// 追加一个右键菜单项。
+    pub fn add_mouse_context_menu_item(
+        &mut self,
+        item: InputContextMenuItem,
+        cx: &mut Context<Self>,
+    ) {
+        self.mouse_context_menu_items.push(item);
+        cx.notify();
+    }
+
+    /// 清空右键菜单的额外菜单项。
+    pub fn clear_mouse_context_menu_items(&mut self, cx: &mut Context<Self>) {
+        self.mouse_context_menu_items.clear();
         cx.notify();
     }
 

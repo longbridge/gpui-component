@@ -949,6 +949,10 @@ Query:
     en: Run Selected
     zh-CN: 运行选中
     zh-HK: 執行選取
+  please_select_sql_to_run:
+    en: Please select SQL to run
+    zh-CN: 请先选中要运行的 SQL
+    zh-HK: 請先選取要執行的 SQL
   save:
     en: Save
     zh-CN: 保存
@@ -1060,6 +1064,14 @@ ImportExport:
     en: Truncate Table Before Import
     zh-CN: 导入前清空表
     zh-HK: 匯入前清空表
+  confirm_truncate_before_import_message:
+    en: "Truncate table \"%{table}\" before import?"
+    zh-CN: "导入前先清空表 \"%{table}\"，是否继续？"
+    zh-HK: "匯入前先清空表 \"%{table}\"，是否繼續？"
+  confirm_truncate_before_import_desc:
+    en: This will remove existing table data before import and cannot be undone.
+    zh-CN: 此操作会在导入前删除表内现有数据，不可恢复。
+    zh-HK: 此操作會在匯入前刪除表內現有資料，不可恢復。
   delimiter_config:
     en: Delimiter Configuration
     zh-CN: 分隔符配置
@@ -2114,10 +2126,6 @@ SqlRun:
     en: Stop on error
     zh-CN: 遇错停止
     zh-HK: 遇錯停止
-  use_transaction:
-    en: Use transaction
-    zh-CN: 使用事务
-    zh-HK: 使用事務
   total_statements:
     en: "Total statements:"
     zh-CN: "总语句:"
@@ -2138,6 +2146,14 @@ SqlRun:
     en: Execute
     zh-CN: 执行
     zh-HK: 執行
+  confirm_execute_message:
+    en: "Execute %{count} SQL file(s)?"
+    zh-CN: "即将执行 %{count} 个 SQL 文件，是否继续？"
+    zh-HK: "即將執行 %{count} 個 SQL 檔案，是否繼續？"
+  confirm_execute_desc:
+    en: SQL files may include data-changing statements. Please confirm before running.
+    zh-CN: SQL 文件可能包含修改数据的语句，请确认后执行。
+    zh-HK: SQL 檔案可能包含修改資料的語句，請確認後執行。
   executing:
     en: Executing...
     zh-CN: 执行中...
@@ -2314,6 +2330,14 @@ ChatSqlBlock:
     en: Run
     zh-CN: 运行
     zh-HK: 執行
+  confirm_run_non_query_message:
+    en: This SQL may modify data. Continue execution?
+    zh-CN: 该 SQL 可能修改数据，是否继续执行？
+    zh-HK: 該 SQL 可能修改資料，是否繼續執行？
+  confirm_run_non_query_desc:
+    en: Please confirm the statement scope and target database before running.
+    zh-CN: 执行前请确认语句影响范围和目标数据库。
+    zh-HK: 執行前請確認語句影響範圍和目標資料庫。
   summary_success_error:
     en: "%{success} success, %{error} failed"
     zh-CN: "%{success} 成功, %{error} 失败"

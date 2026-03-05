@@ -1,14 +1,14 @@
 use gpui::{
-    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseDownEvent,
-    ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
-    div, prelude::FluentBuilder as _, px,
+    anchored, deferred, div, px, App, AppContext as _, Context, Corner, DismissEvent, Entity,
+    IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point, Render, Styled, Subscription,
+    Window,
 };
 use rust_i18n::t;
 
 use crate::{
+    input::{self, popovers::ContextMenu, InputContextMenuItem, InputState},
+    menu::{PopupMenu, PopupMenuItem},
     ActiveTheme as _,
-    input::{self, InputState, popovers::ContextMenu},
-    menu::PopupMenu,
 };
 
 /// Context menu for mouse right clicks.
@@ -22,6 +22,79 @@ pub(crate) struct MouseContextMenu {
 }
 
 impl InputState {
+    fn append_extra_mouse_context_menu_items(
+        mut menu: PopupMenu,
+        items: &[InputContextMenuItem],
+        window: &mut Window,
+        cx: &mut Context<PopupMenu>,
+    ) -> PopupMenu {
+        for item in items {
+            menu = Self::append_extra_mouse_context_menu_item(menu, item, window, cx);
+        }
+        menu
+    }
+
+    fn append_extra_mouse_context_menu_item(
+        mut menu: PopupMenu,
+        item: &InputContextMenuItem,
+        window: &mut Window,
+        cx: &mut Context<PopupMenu>,
+    ) -> PopupMenu {
+        match item {
+            InputContextMenuItem::Separator => menu.separator(),
+            InputContextMenuItem::Item {
+                label,
+                icon,
+                disabled,
+                action,
+                on_click,
+            } => {
+                let mut popup_item = PopupMenuItem::new(label.clone()).disabled(*disabled);
+                if let Some(icon) = icon.clone() {
+                    popup_item = popup_item.icon(icon);
+                }
+                if let Some(action) = action {
+                    popup_item = popup_item.action(action());
+                }
+                if let Some(on_click) = on_click {
+                    let on_click = on_click.clone();
+                    popup_item = popup_item.on_click(move |event, window, cx| {
+                        on_click(event, window, cx);
+                    });
+                }
+                menu.item(popup_item)
+            }
+            InputContextMenuItem::Submenu {
+                label,
+                icon,
+                disabled,
+                items,
+            } => {
+                let submenu_items = items.clone();
+                menu = menu.submenu_with_icon(icon.clone(), label.clone(), window, cx, {
+                    move |submenu, window, cx| {
+                        Self::append_extra_mouse_context_menu_items(
+                            submenu,
+                            &submenu_items,
+                            window,
+                            cx,
+                        )
+                    }
+                });
+
+                if *disabled {
+                    if let Some(PopupMenuItem::Submenu { disabled, .. }) =
+                        menu.menu_items.last_mut()
+                    {
+                        *disabled = true;
+                    }
+                }
+
+                menu
+            }
+        }
+    }
+
     pub(crate) fn handle_right_click_menu(
         &mut self,
         event: &MouseDownEvent,
@@ -42,29 +115,28 @@ impl InputState {
         }
 
         let is_enable = !self.disabled;
-        let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
-        let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
         let is_selected = !self.selected_range.is_empty();
         let has_paste = is_enable && cx.read_from_clipboard().is_some();
+        let extra_menu_items = self.mouse_context_menu_items.clone();
 
         let action_context = self.focus_handle.clone();
         self.mouse_context_menu.update(cx, |this, cx| {
             this.mouse_position = event.position;
             this.menu.update(cx, |menu, cx| {
-                let new_menu = PopupMenu::new(cx)
-                    .when(is_code_editor, |m| {
-                        m.menu_with_enable(
-                            t!("Input.Go to Definition"),
-                            Box::new(input::GoToDefinition),
-                            has_goto_definition,
-                        )
-                        .menu_with_enable(
-                            t!("Input.Show Code Actions"),
-                            Box::new(input::ToggleCodeActions),
-                            has_code_action,
-                        )
-                        .separator()
-                    })
+                let mut new_menu = PopupMenu::new(cx);
+
+                if !extra_menu_items.is_empty() {
+                    new_menu = new_menu.separator();
+                    new_menu = Self::append_extra_mouse_context_menu_items(
+                        new_menu,
+                        &extra_menu_items,
+                        window,
+                        cx,
+                    );
+                    new_menu = new_menu.separator();
+                }
+
+                new_menu = new_menu
                     .menu_with_enable(
                         t!("Input.Cut"),
                         Box::new(input::Cut),

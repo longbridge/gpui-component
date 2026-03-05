@@ -945,7 +945,7 @@ impl DatabasePlugin for MySqlPlugin {
         &self,
         request: &crate::plugin::DatabaseOperationRequest,
     ) -> String {
-        let db_name = &request.database_name;
+        let db_name = self.quote_identifier(&request.database_name);
         let charset = request
             .field_values
             .get("charset")
@@ -958,7 +958,7 @@ impl DatabasePlugin for MySqlPlugin {
             .unwrap_or("utf8mb4_general_ci");
 
         format!(
-            "CREATE DATABASE `{}` CHARACTER SET {} COLLATE {};",
+            "CREATE DATABASE {} CHARACTER SET {} COLLATE {};",
             db_name, charset, collation
         )
     }
@@ -967,7 +967,7 @@ impl DatabasePlugin for MySqlPlugin {
         &self,
         request: &crate::plugin::DatabaseOperationRequest,
     ) -> String {
-        let db_name = &request.database_name;
+        let db_name = self.quote_identifier(&request.database_name);
         let charset = request
             .field_values
             .get("charset")
@@ -980,13 +980,13 @@ impl DatabasePlugin for MySqlPlugin {
             .unwrap_or("utf8mb4_general_ci");
 
         format!(
-            "ALTER DATABASE `{}` CHARACTER SET {} COLLATE {};",
+            "ALTER DATABASE {} CHARACTER SET {} COLLATE {};",
             db_name, charset, collation
         )
     }
 
     fn build_drop_database_sql(&self, database_name: &str) -> String {
-        format!("DROP DATABASE `{}`;", database_name)
+        format!("DROP DATABASE {};", self.quote_identifier(database_name))
     }
 
     fn build_limit_clause(&self) -> String {
@@ -1839,6 +1839,23 @@ mod tests {
     }
 
     #[test]
+    fn test_build_create_database_sql_escapes_identifier() {
+        let plugin = create_plugin();
+        let mut field_values = HashMap::new();
+        field_values.insert("charset".to_string(), "utf8mb4".to_string());
+        field_values.insert("collation".to_string(), "utf8mb4_general_ci".to_string());
+
+        let request = crate::plugin::DatabaseOperationRequest {
+            database_name: "new`db".to_string(),
+            field_values,
+        };
+
+        let sql = plugin.build_create_database_sql(&request);
+        assert!(sql.contains("CREATE DATABASE"));
+        assert!(sql.contains("`new``db`"));
+    }
+
+    #[test]
     fn test_build_modify_database_sql() {
         let plugin = create_plugin();
         let mut field_values = HashMap::new();
@@ -1861,6 +1878,13 @@ mod tests {
         let plugin = create_plugin();
         let sql = plugin.build_drop_database_sql("old_db");
         assert_eq!(sql, "DROP DATABASE `old_db`;");
+    }
+
+    #[test]
+    fn test_build_drop_database_sql_escapes_identifier() {
+        let plugin = create_plugin();
+        let sql = plugin.build_drop_database_sql("old`db");
+        assert_eq!(sql, "DROP DATABASE `old``db`;");
     }
 
     // ==================== Column Definition Tests ====================
