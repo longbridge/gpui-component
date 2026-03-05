@@ -148,9 +148,8 @@ impl HomePage {
             auth_error: None,
         };
 
-        // 异步加载工作区和连接列表
+        // 异步加载工作区
         page.load_workspaces(cx);
-        page.load_connections(cx);
 
         // 尝试从存储后端恢复主密钥
         let key_restored = crypto::try_restore_master_key();
@@ -162,6 +161,9 @@ impl HomePage {
         } else {
             tracing::info!("首次使用，需要设置主密钥");
         }
+
+        // 在恢复主密钥后再加载连接，避免解密阶段出现空密码
+        page.load_connections(cx);
 
         // 尝试恢复登录会话
         page.try_restore_session(cx);
@@ -1334,6 +1336,8 @@ impl HomePage {
                     move |_window, _result, cx| {
                         if crypto::has_master_key() {
                             view_for_sync.update(cx, |this, cx| {
+                                // 密钥已就绪后刷新连接列表，修复启动时序导致的空密码回显
+                                this.load_connections(cx);
                                 if this.current_user.is_some() {
                                     tracing::info!("密钥设置/解锁成功，自动触发云同步");
                                     this.trigger_sync(cx);
