@@ -1711,10 +1711,12 @@ impl CollectionView {
                     )
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))?;
+                // count_documents 在某些系统集合（如 system.sessions）上可能失败，
+                // 失败时不阻断文档展示，总数显示为未知
                 let total = guard
                     .count_documents(&database_name, &collection_name, inputs.filter)
                     .await
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+                    .ok();
                 Ok((documents, total))
             })
             .await;
@@ -1746,7 +1748,7 @@ impl CollectionView {
                         match items_result {
                             Ok(items) => {
                                 view.documents = items;
-                                view.total_count = Some(total);
+                                view.total_count = total;
                                 view.is_loading = false;
                                 view.error_message = None;
 
