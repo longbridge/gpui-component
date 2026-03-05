@@ -344,7 +344,7 @@ You may have a complex field that you want to reuse, you may want split the elem
 
 In this case, the [SettingFieldElement] trait can help you to create a custom field element.
 
-````rust
+```rust
 use gpui_component::setting::{SettingFieldElement, RenderOptions};
 
 struct OpenURLSettingField {
@@ -496,4 +496,3 @@ Settings::new("app-settings")
 [NumberFieldOptions]: https://docs.rs/gpui-component/latest/gpui_component/setting/struct.NumberFieldOptions.html
 [GroupBox]: ./group-box.md
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html
-````
