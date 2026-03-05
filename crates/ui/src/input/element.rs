@@ -904,14 +904,13 @@ impl TextElement {
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
 
-        // The visible background column ends at (line_number_width - LINE_NUMBER_RIGHT_MARGIN).
+        // The visible background column ends at line_number_width.
         // The fold-icon hitbox occupies the rightmost FOLD_ICON_HITBOX_WIDTH pixels of that
         // column, so the icon never overflows into the transparent right-margin zone.
         //
         //  [  line number text  ][  fold icon (18 px)  ][ right margin (10 px) ][ text ]
         //  ^- fixed_origin_x                            ^- bg column right
-        let bg_column_right =
-            fixed_origin_x + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN;
+        let bg_column_right = fixed_origin_x + last_layout.line_number_width;
         let hitbox_x = bg_column_right - FOLD_ICON_HITBOX_WIDTH;
 
         for (ix, info) in fold_infos.iter().enumerate() {
@@ -1893,7 +1892,7 @@ impl Element for TextElement {
                 Bounds {
                     origin: input_bounds.origin,
                     size: size(
-                        prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN,
+                        prepaint.last_layout.line_number_width,
                         input_bounds.size.height + prepaint.ghost_lines_height,
                     ),
                 },
@@ -1912,19 +1911,7 @@ impl Element for TextElement {
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            // Use the same width as the general gutter background
-                            // (line_number_width - LINE_NUMBER_RIGHT_MARGIN) so the
-                            // active-line highlight does not extend into the right-margin
-                            // gap and paint over content. The full-width active-line
-                            // highlight rendered before the text already covers that zone.
-                            Bounds::new(
-                                p,
-                                size(
-                                    prepaint.last_layout.line_number_width
-                                        - LINE_NUMBER_RIGHT_MARGIN,
-                                    height,
-                                ),
-                            ),
+                            Bounds::new(p, size(prepaint.last_layout.line_number_width, height)),
                             bg_color,
                         ));
                     }
