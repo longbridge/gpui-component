@@ -135,7 +135,7 @@ impl FileListPanel {
             selected_indices: HashSet::new(),
             sort_column: SortColumn::Name,
             sort_order: SortOrder::Ascending,
-            show_hidden: true,
+            show_hidden: false,
             search_query: String::new(),
             search_input,
             path_editing: false,
