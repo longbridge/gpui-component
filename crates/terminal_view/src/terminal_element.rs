@@ -38,7 +38,7 @@ impl FontVariants {
             Some(FontFallbacks::from_fonts(fallbacks))
         };
 
-        // 只禁用 calt（上下文替代），与 Zed 保持一致
+        // 只禁用 calt（上下文替代），避免等宽字符出现连字影响栅格对齐
         let features = FontFeatures(Arc::new(vec![("calt".to_string(), 0)]));
 
         Self {
@@ -980,7 +980,7 @@ impl Element for TerminalElementImpl {
         }
 
         // Paint text (only visible lines, using cached fonts)
-        // 使用 cell_width 确保等宽渲染，与 Zed 保持一致
+        // 使用 cell_width 确保等宽渲染，避免字符布局漂移
         for line_idx in first_visible..visible_end {
             let line = &self.lines[line_idx];
             for run in &line.text_runs {
